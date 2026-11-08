@@ -148,7 +148,8 @@ public:
     bool EnableResultPosition = false;
     bool EnableCredentials = false;
     bool EnableQPlayer = false;
-    bool OptimizeLibs = true;
+    // Single-shot runners do not reuse mounted libraries across programs.
+    bool OptimizeLibs = false;
     bool CustomTests = false;
     bool EnableLineage = false;
     bool FuzzUntypedLambda = false;

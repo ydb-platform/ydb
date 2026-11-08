@@ -31,7 +31,7 @@ NNodes::TMaybeNode<NNodes::TExprBase> DqRewriteEquiJoin(const NNodes::TExprBase&
 
 NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage=true, bool useScalarHashJoinForMap = false);
 
-bool DqCanUseScalarHashJoinForMap(const NNodes::TDqJoin& join, TExprContext& ctx);
+bool DqCanUseScalarHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
 
 NNodes::TExprBase DqBuildJoin(
     const NNodes::TExprBase& node,
@@ -49,6 +49,7 @@ NNodes::TExprBase DqBuildJoin(
     bool shuffleEliminationWithMap = false,
     bool buildCollectStage=true,
     bool blockHashJoinBuildSideLeft = false,
+    bool useScalarHashJoin = false,
     bool useScalarHashJoinForMap = false
 );
 
@@ -61,7 +62,8 @@ NNodes::TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin = false,
-    bool blockHashJoinBuildSideLeft = false);
+    bool blockHashJoinBuildSideLeft = false,
+    bool useScalarHashJoin = false);
 
 TVector<NNodes::TCoNameValueTuple> BuildBlockHashJoinSettings(
     TPositionHandle pos,

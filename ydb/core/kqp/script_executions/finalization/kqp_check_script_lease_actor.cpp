@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/protos/config.pb.h>
+
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
@@ -12,7 +13,7 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-class TScriptExecutionLeaseCheckActor : public TActorBootstrapped<TScriptExecutionLeaseCheckActor> {
+class TScriptExecutionLeaseCheckActor: public TActorBootstrapped<TScriptExecutionLeaseCheckActor> {
     static constexpr TDuration CHECK_PERIOD = TDuration::Seconds(1);
     static constexpr TDuration REFRESH_NODES_PERIOD = TDuration::Minutes(1);
     static constexpr TDuration CREATE_TABLES_PERIOD = TDuration::Seconds(10);
@@ -25,11 +26,13 @@ class TScriptExecutionLeaseCheckActor : public TActorBootstrapped<TScriptExecuti
     };
 
 public:
-    TScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters)
+    TScriptExecutionLeaseCheckActor(
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters)
         : QueryServiceConfig(queryServiceConfig)
         , Counters(counters)
         , StartupTimeout(startupTimeout)
-    {}
+    {
+    }
 
     void Bootstrap() {
         YDB_LOG_DEBUG("Script execution lease check actor bootstrapped",
@@ -183,10 +186,11 @@ private:
     bool HasNodesInfo = false;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
-IActor* CreateScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters) {
+IActor* CreateScriptExecutionLeaseCheckActor(
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters) {
     return new TScriptExecutionLeaseCheckActor(queryServiceConfig, startupTimeout, counters);
 }
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

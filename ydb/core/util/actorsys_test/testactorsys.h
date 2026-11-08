@@ -640,6 +640,10 @@ public:
         GetNode(nodeId)->ActorSystem->RegisterLocalService(serviceId, actorId);
     }
 
+    void ReconnectNodes(ui32 nodeId, ui32 peerNodeId) {
+        InterconnectMock.Reconnect(nodeId, peerNodeId);
+    }
+
     bool HasImmediateEvents() const {
         for (const auto& [timestamp, items] : ScheduleQ) {
             if (!items.empty()) {

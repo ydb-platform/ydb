@@ -81,7 +81,7 @@ def write_huge_blobs(pool, table_path, count=1, size=2*1024*1024):
 
         for _ in range(count):
             key = random.randint(1, 2 ** 48)
-            value = ''.join(random.choice(string.ascii_lowercase) for _ in range(size))
+            value = ''.join(random.choices(string.ascii_lowercase, k=size))
             session.transaction().execute(
                 prepared, {'$key': key, '$value': value},
                 commit_tx=True,
@@ -607,10 +607,7 @@ TESTS = [
 
 class TestStorageConfig(TBaseTenant):
     LOG_SETTINGS = {
-        'LOCAL': LogLevels.DEBUG,
-        'TX_DATASHARD': LogLevels.DEBUG,
         'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
-        'TX_PROXY': LogLevels.DEBUG,
         'OPS_COMPACT': LogLevels.INFO,
     }
 
@@ -648,16 +645,17 @@ class TestStorageConfig(TBaseTenant):
         table_operations.create_and_wait_and_assert(table_path, options=creation_options)
 
         write_huge_blobs(self.pool, table_path)
+        tablet_ids = list_tablets_in_table(self.kikimr.client, table_path)
 
         assert_that(
             external_blobs_is_present(
                 self.kikimr.nodes[1].monitor,
-                list_tablets_in_table(self.kikimr.client, table_path)
+                tablet_ids
             ),
             equal_to(has_external)
         )
 
-        for tablet in list_tablets_in_table(self.kikimr.client, table_path):
+        for tablet in tablet_ids:
             schema = get_scheme(self.kikimr.client, tablet)
             logger.debug("%s", schema)
             assert_that(

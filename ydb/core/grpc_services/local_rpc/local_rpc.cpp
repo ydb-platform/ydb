@@ -36,4 +36,4 @@ Ydb::StatusIds::StatusCode GrpcStatusToYdbStatus(grpc::StatusCode status) {
     }
 }
 
-} // namespace NKikimr::NRpcService
+}   // namespace NKikimr::NRpcService

@@ -1,6 +1,8 @@
-#include "object.h"
 #include "behaviour.h"
+#include "object.h"
+
 #include <ydb/core/base/appdata.h>
+
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 namespace NKikimr::NMetadata::NInitializer {
@@ -31,4 +33,4 @@ IClassBehaviour::TPtr TDBInitialization::GetBehaviour() {
     return result;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NInitializer

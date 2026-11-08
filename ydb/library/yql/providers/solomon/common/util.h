@@ -1,11 +1,11 @@
 #pragma once
 
-#include <google/protobuf/map.h>
+#include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
 
+#include <google/protobuf/map.h>
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
 
 namespace NYql::NSo {
 
@@ -18,7 +18,7 @@ struct TSolomonRetryConfig {
     TDuration MinDelay;
     TDuration MinLongRetryDelay;
     TDuration MaxDelay;
-    size_t    MaxRetries;
+    size_t MaxRetries;
     TDuration MaxTime;
 };
 
@@ -71,9 +71,7 @@ struct TSolomonReadActorConfig {
     TSolomonRetryConfig RetryConfig;
 };
 
-TSolomonReadActorConfig ParseSolomonReadActorConfig(
-    const google::protobuf::Map<TString, TString>& settings);
-
+TSolomonReadActorConfig ParseSolomonReadActorConfig(const google::protobuf::Map<TString, TString>& settings);
 
 struct TSelector {
     TString Op;
@@ -119,7 +117,7 @@ TMaybe<TString> ParseSelectorValues(const TString& selectors, TSelectors& result
 TMaybe<TString> BuildSelectorValues(const NSo::NProto::TDqSolomonSource& source, const TString& selectors, TSelectors& result);
 
 TMaybe<TString> ParseLabelNames(const TString& labelNames, TVector<TString>& names, TVector<TString>& aliases);
-    
+
 NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonClusterType clusterType);
 
 // A Monium project is its own request scope and has no cloud folder. Marked in the
@@ -129,4 +127,4 @@ bool IsMoniumProject(const TSolomonClusterConfig& config);
 
 NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, const TString& project);
 
-} // namespace NYql::NSo
+}   // namespace NYql::NSo

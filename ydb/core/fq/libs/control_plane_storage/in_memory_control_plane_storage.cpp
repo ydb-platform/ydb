@@ -9,8 +9,7 @@
 
 namespace NFq {
 
-class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryControlPlaneStorageActor>,
-                                          public TControlPlaneStorageBase {
+class TInMemoryControlPlaneStorageActor: public NActors::TActor<TInMemoryControlPlaneStorageActor>, public TControlPlaneStorageBase {
     struct TScopeKey {
         TString Scope;
         TString Id;
@@ -176,16 +175,13 @@ class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryContro
     TComputeDatabases ComputeDatabases;
 
 public:
-    TInMemoryControlPlaneStorageActor(
-        const NConfig::TControlPlaneStorageConfig& config,
-        const NYql::TS3GatewayConfig& s3Config,
-        const NConfig::TCommonConfig& common,
-        const NConfig::TComputeConfig& computeConfig,
-        const ::NMonitoring::TDynamicCounterPtr& counters,
+    TInMemoryControlPlaneStorageActor(const NConfig::TControlPlaneStorageConfig& config, const NYql::TS3GatewayConfig& s3Config,
+        const NConfig::TCommonConfig& common, const NConfig::TComputeConfig& computeConfig, const ::NMonitoring::TDynamicCounterPtr& counters,
         const TString& tenantName)
         : TActor(&TThis::StateFunc)
         , TBase(config, s3Config, common, computeConfig, counters, tenantName)
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE";
 
@@ -233,8 +229,8 @@ private:
         using TResponse = TResultType::Type;
         using TAuditDetails = TResultType::TResponseAuditDetails;
 
-        TCommonRequestContext(TInMemoryControlPlaneStorageActor& self, TEvRequest::TPtr& ev, const TString& cloudId,
-            const TString& scope, const TString& logPrefix, const TString& requestStr, const TString& responseStr)
+        TCommonRequestContext(TInMemoryControlPlaneStorageActor& self, TEvRequest::TPtr& ev, const TString& cloudId, const TString& scope,
+            const TString& logPrefix, const TString& requestStr, const TString& responseStr)
             : StartTime(TInstant::Now())
             , Event(*ev->Get())
             , Request(Event.Request)
@@ -256,12 +252,14 @@ private:
             RequestCounters.Common->RequestBytes->Add(Event.GetByteSize());
         }
 
-        TCommonRequestContext(TInMemoryControlPlaneStorageActor& self, TEvRequest::TPtr& ev, const TString& requestStr, const TString& responseStr)
+        TCommonRequestContext(
+            TInMemoryControlPlaneStorageActor& self, TEvRequest::TPtr& ev, const TString& requestStr, const TString& responseStr)
             : TCommonRequestContext(self, ev, "", "", GetLogPrefix(ev), requestStr, responseStr)
-        {}
+        {
+        }
 
         virtual bool Validate() {
-            if constexpr(VALIDATE_REQUEST) {
+            if constexpr (VALIDATE_REQUEST) {
                 if (const auto& issues = Self.ValidateRequest(EventPtr)) {
                     Fail("query validation", issues);
                     return false;
@@ -291,16 +289,11 @@ private:
                 return;
             }
 
-            Self.SendResponse<TEvResponse, typename TEvResponse::TProto>(
-                TStringBuilder() << RequestStr << " - " << ResponseStr,
-                NActors::TActivationContext::ActorSystem(),
-                NThreading::MakeFuture(NYdb::TStatus(NYdb::EStatus::SUCCESS, {})),
-                Self.SelfId(),
-                std::move(EventPtr),
-                StartTime,
-                RequestCounters,
-                [response = Response] { return response; },
-                Self.Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{});
+            Self.SendResponse<TEvResponse, typename TEvResponse::TProto>(TStringBuilder() << RequestStr << " - " << ResponseStr,
+                NActors::TActivationContext::ActorSystem(), NThreading::MakeFuture(NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), Self.SelfId(),
+                std::move(EventPtr), StartTime, RequestCounters, [response = Response] {
+                    return response;
+                }, Self.Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{});
         }
 
         static TString GetLogPrefix(TEvRequest::TPtr& ev) {
@@ -324,7 +317,7 @@ private:
     };
 
     template <typename TEvRequest, typename TEvResponse, ERequestTypeScope TYPE_SCOPE, ERequestTypeCommon TYPE_COMMON, bool VALIDATE_REQUEST>
-    class TRequestContext : public TCommonRequestContext<TEvRequest, TEvResponse, TYPE_SCOPE, TYPE_COMMON, VALIDATE_REQUEST> {
+    class TRequestContext: public TCommonRequestContext<TEvRequest, TEvResponse, TYPE_SCOPE, TYPE_COMMON, VALIDATE_REQUEST> {
         using TBase = TCommonRequestContext<TEvRequest, TEvResponse, TYPE_SCOPE, TYPE_COMMON, VALIDATE_REQUEST>;
 
         Y_HAS_MEMBER(idempotency_key);
@@ -332,11 +325,8 @@ private:
 
     public:
         TRequestContext(TInMemoryControlPlaneStorageActor& self, TEvRequest::TPtr& ev, const TString& requestStr, const TString& responseStr)
-            : TBase(
-                self, ev, ev->Get()->CloudId, ev->Get()->Scope,
-                TStringBuilder() << TBase::GetLogPrefix(ev) << MakeUserInfo(ev->Get()->User, ev->Get()->Token),
-                requestStr, responseStr
-            )
+            : TBase(self, ev, ev->Get()->CloudId, ev->Get()->Scope,
+                  TStringBuilder() << TBase::GetLogPrefix(ev) << MakeUserInfo(ev->Get()->User, ev->Get()->Token), requestStr, responseStr)
             , CloudId(TBase::Event.CloudId)
             , Scope(TBase::Event.Scope)
             , User(TBase::Event.User)
@@ -357,10 +347,11 @@ private:
             }
             if constexpr (HasIdempotencyKey) {
                 if (const TString& idempotencyKey = TBase::Request.idempotency_key()) {
-                    if (const auto& value = TBase::Self.GetEntity(TBase::Self.IdempotencyKeys, {Scope, idempotencyKey})) {
+                    if (const auto& value = TBase::Self.GetEntity(TBase::Self.IdempotencyKeys, { Scope, idempotencyKey })) {
                         if (!TBase::Response.first.ParseFromString(value->Response)) {
                             TBase::RequestCounters.Common->ParseProtobufError->Inc();
-                            TBase::Fail("idempotency key parse", {NYql::TIssue("INTERNAL ERROR. Error parsing proto message for idempotency key request. Please contact internal support")});
+                            TBase::Fail("idempotency key parse", { NYql::TIssue("INTERNAL ERROR. Error parsing proto message for idempotency "
+                                                                                "key request. Please contact internal support") });
                         } else {
                             TBase::Response.second.IdempotencyResult = true;
                         }
@@ -378,10 +369,9 @@ private:
 
             if constexpr (HasIdempotencyKey) {
                 if (const TString& idempotencyKey = TBase::Request.idempotency_key()) {
-                    this->Self.AddEntity(this->Self.IdempotencyKeys, {this->Scope, idempotencyKey}, {
-                        .Response = TBase::Response.first.SerializeAsString(),
-                        .ExpireAt = TBase::StartTime + this->Self.Config->IdempotencyKeyTtl
-                    });
+                    this->Self.AddEntity(this->Self.IdempotencyKeys, { this->Scope, idempotencyKey },
+                        { .Response = TBase::Response.first.SerializeAsString(),
+                            .ExpireAt = TBase::StartTime + this->Self.Config->IdempotencyKeyTtl });
                 }
             }
         }
@@ -397,31 +387,33 @@ private:
         const FederatedQuery::Internal::ComputeDatabaseInternal ComputeDatabase;
     };
 
-#define HANDLE_CPS_REQUEST_IMPL(TEvRequest, TEvResponse, TContext, RTS_COUNTERS_ENUM, RTC_COUNTERS_ENUM, VALIDATE_REQUEST) \
-    using TContext##TEvRequest = TContext<                                                                                 \
-        TEvControlPlaneStorage::TEvRequest, TEvControlPlaneStorage::TEvResponse,                                           \
-        RTS_COUNTERS_ENUM, RTC_COUNTERS_ENUM, VALIDATE_REQUEST>;                                                           \
-    void Handle(TEvControlPlaneStorage::TEvRequest::TPtr& ev) {                                                            \
-        TContext##TEvRequest ctx(*this, ev, #TEvRequest, #TEvResponse);                                                    \
-        if (!ctx.Validate()) {                                                                                             \
-            return;                                                                                                        \
-        }                                                                                                                  \
-        try {                                                                                                              \
-            Process##TRequest(ctx);                                                                                        \
-        } catch (...) {                                                                                                    \
-            const auto& backtrace = TBackTrace::FromCurrentException().PrintToString();                                    \
-            const auto logError = TStringBuilder() << "pocess "#TEvRequest" call, back trace:\n" << backtrace;             \
-            ctx.Fail(logError, {NYql::TIssue(CurrentExceptionMessage())});                                                 \
-        }                                                                                                                  \
-    }                                                                                                                      \
+#define HANDLE_CPS_REQUEST_IMPL(TEvRequest, TEvResponse, TContext, RTS_COUNTERS_ENUM, RTC_COUNTERS_ENUM, VALIDATE_REQUEST)            \
+    using TContext##TEvRequest = TContext<TEvControlPlaneStorage::TEvRequest, TEvControlPlaneStorage::TEvResponse, RTS_COUNTERS_ENUM, \
+        RTC_COUNTERS_ENUM, VALIDATE_REQUEST>;                                                                                         \
+    void Handle(TEvControlPlaneStorage::TEvRequest::TPtr& ev) {                                                                       \
+        TContext##TEvRequest ctx(*this, ev, #TEvRequest, #TEvResponse);                                                               \
+        if (!ctx.Validate()) {                                                                                                        \
+            return;                                                                                                                   \
+        }                                                                                                                             \
+        try {                                                                                                                         \
+            Process##TRequest(ctx);                                                                                                   \
+        } catch (...) {                                                                                                               \
+            const auto& backtrace = TBackTrace::FromCurrentException().PrintToString();                                               \
+            const auto logError = TStringBuilder() << "pocess " #TEvRequest " call, back trace:\n" << backtrace;                      \
+            ctx.Fail(logError, { NYql::TIssue(CurrentExceptionMessage()) });                                                          \
+        }                                                                                                                             \
+    }                                                                                                                                 \
     void Process##TRequest(TContext##TEvRequest& ctx)
 
-#define HANDLE_CPS_REQUEST(TEvRequest, TEvResponse, COUNTERS_ENUM) HANDLE_CPS_REQUEST_IMPL(TEvRequest, TEvResponse, TRequestContext, RTS_##COUNTERS_ENUM, RTC_##COUNTERS_ENUM, true)
+#define HANDLE_CPS_REQUEST(TEvRequest, TEvResponse, COUNTERS_ENUM) \
+    HANDLE_CPS_REQUEST_IMPL(TEvRequest, TEvResponse, TRequestContext, RTS_##COUNTERS_ENUM, RTC_##COUNTERS_ENUM, true)
 
     HANDLE_CPS_REQUEST(TEvCreateQueryRequest, TEvCreateQueryResponse, CREATE_QUERY) {
         const auto& [query, job] = GetCreateQueryProtos(ctx.Request, ctx.User, ctx.StartTime);
         if (query.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            return ctx.Fail("query size validation", {NYql::TIssue(TStringBuilder() << "incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() <<  ". Please shorten your request")});
+            return ctx.Fail("query size validation",
+                { NYql::TIssue(TStringBuilder() << "incoming request exceeded the size limit: " << query.ByteSizeLong() << " of "
+                                                << Config->Proto.GetMaxRequestSize() << ". Please shorten your request") });
         }
         ctx.Response.second.After = query;
 
@@ -432,53 +424,43 @@ private:
         const auto queryType = ctx.Request.content().type();
         if (ctx.Request.execute_mode() != FederatedQuery::SAVE) {
             *queryInternal.mutable_compute_connection() = ctx.ComputeDatabase.connection();
-            FillConnectionsAndBindings(
-                Config,
-                queryInternal,
-                queryType,
-                GetEntities(Connections, ctx.Scope, ctx.User),
+            FillConnectionsAndBindings(Config, queryInternal, queryType, GetEntities(Connections, ctx.Scope, ctx.User),
                 GetEntitiesWithVisibilityPriority(Connections, ctx.Scope, ctx.User),
-                GetEntitiesWithVisibilityPriority(Bindings, ctx.Scope, ctx.User)
-            );
+                GetEntitiesWithVisibilityPriority(Bindings, ctx.Scope, ctx.User));
         }
         if (queryInternal.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            return ctx.Fail("query internal size validation", {NYql::TIssue(TStringBuilder() << "the size of all connections and bindings in the project exceeded the limit: " << queryInternal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings")});
+            return ctx.Fail("query internal size validation",
+                { NYql::TIssue(TStringBuilder() << "the size of all connections and bindings in the project exceeded the limit: "
+                                                << queryInternal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize()
+                                                << ". Please reduce the number of connections and bindings") });
         }
 
         const auto& jobId = job.meta().id();
         if (ctx.Request.execute_mode() != FederatedQuery::SAVE) {
-            AddEntity(Jobs, {ctx.Scope, queryId, jobId}, {job});
+            AddEntity(Jobs, { ctx.Scope, queryId, jobId }, { job });
 
             NKikimr::NKqp::TRetryLimiter retryLimiter;
             retryLimiter.Assign(0, ctx.StartTime, 0.0);
 
-            AddEntity(PendingQueries, {
-                .Tenant = ctx.TenantInfo->Assign(ctx.CloudId, ctx.Scope, queryType, TenantName).TenantName,
-                .Scope = ctx.Scope,
-                .QueryId = queryId
-            }, {.RetryLimiter = retryLimiter});
+            AddEntity(PendingQueries,
+                { .Tenant = ctx.TenantInfo->Assign(ctx.CloudId, ctx.Scope, queryType, TenantName).TenantName, .Scope = ctx.Scope,
+                    .QueryId = queryId },
+                { .RetryLimiter = retryLimiter });
         }
 
-        AddEntity(Queries, {ctx.Scope, queryId}, {
-            .Query = query,
-            .QueryInternal = queryInternal,
-            .LastJobId = jobId,
-            .User = ctx.User
-        });
+        AddEntity(Queries, { ctx.Scope, queryId }, { .Query = query, .QueryInternal = queryInternal, .LastJobId = jobId, .User = ctx.User });
     }
 
     void Handle(TEvControlPlaneStorage::TEvListQueriesRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyResponse<
-            TEvControlPlaneStorage::TEvListQueriesRequest::TPtr,
-            FederatedQuery::ListQueriesResult,
+        SendEmptyResponse<TEvControlPlaneStorage::TEvListQueriesRequest::TPtr, FederatedQuery::ListQueriesResult,
             TEvControlPlaneStorage::TEvListQueriesResponse>(ev, "ListQueriesRequest");
     }
 
     HANDLE_CPS_REQUEST(TEvDescribeQueryRequest, TEvDescribeQueryResponse, DESCRIBE_QUERY) {
-        const auto& query = GetEntity(Queries, {ctx.Scope, ctx.Request.query_id()});
+        const auto& query = GetEntity(Queries, { ctx.Scope, ctx.Request.query_id() });
         if (!query) {
-            return ctx.Fail("find query", {NYql::TIssue("Query does not exist")});
+            return ctx.Fail("find query", { NYql::TIssue("Query does not exist") });
         }
 
         *ctx.Response.mutable_query() = query->Query;
@@ -487,59 +469,51 @@ private:
 
     void Handle(TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr,
-            FederatedQuery::ModifyQueryResult,
-            TEvControlPlaneStorage::TEvModifyQueryResponse,
-            TAuditDetails<FederatedQuery::Query>>(ev, "ModifyQueryRequest");
+        SendEmptyAuditResponse<TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr, FederatedQuery::ModifyQueryResult,
+            TEvControlPlaneStorage::TEvModifyQueryResponse, TAuditDetails<FederatedQuery::Query>>(ev, "ModifyQueryRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr,
-            FederatedQuery::DeleteQueryResult,
-            TEvControlPlaneStorage::TEvDeleteQueryResponse,
-            TAuditDetails<FederatedQuery::Query>>(ev, "DeleteQueryRequest");
+        SendEmptyAuditResponse<TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr, FederatedQuery::DeleteQueryResult,
+            TEvControlPlaneStorage::TEvDeleteQueryResponse, TAuditDetails<FederatedQuery::Query>>(ev, "DeleteQueryRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvControlQueryRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvControlQueryRequest::TPtr,
-            FederatedQuery::ControlQueryResult,
-            TEvControlPlaneStorage::TEvControlQueryResponse,
-            TAuditDetails<FederatedQuery::Query>>(ev, "ControlQueryRequest");
+        SendEmptyAuditResponse<TEvControlPlaneStorage::TEvControlQueryRequest::TPtr, FederatedQuery::ControlQueryResult,
+            TEvControlPlaneStorage::TEvControlQueryResponse, TAuditDetails<FederatedQuery::Query>>(ev, "ControlQueryRequest");
     }
 
     HANDLE_CPS_REQUEST(TEvGetResultDataRequest, TEvGetResultDataResponse, GET_RESULT_DATA) {
-        const auto& query = GetEntity(Queries, {ctx.Scope, ctx.Request.query_id()});
+        const auto& query = GetEntity(Queries, { ctx.Scope, ctx.Request.query_id() });
         if (!query) {
-            return ctx.Fail("find query", {NYql::TIssue("Query does not exist")});
+            return ctx.Fail("find query", { NYql::TIssue("Query does not exist") });
         }
 
         if (!HasViewAccess(GetResultDataReadPerimssions(ctx.Event), query->Query.content().acl().visibility(), query->User, ctx.User)) {
-            return ctx.Fail("check ACL", {NYql::TIssue("Permission denied")});
+            return ctx.Fail("check ACL", { NYql::TIssue("Permission denied") });
         }
 
         const auto resultSetIndex = ctx.Request.result_set_index();
         const auto& resultSetMeta = query->Query.result_set_meta();
         if (resultSetIndex >= resultSetMeta.size()) {
-            return ctx.Fail("check result set index", {NYql::TIssue(TStringBuilder() << "Result set index out of bound: " << resultSetIndex << " >= " << resultSetMeta.size())});
+            return ctx.Fail("check result set index",
+                { NYql::TIssue(TStringBuilder() << "Result set index out of bound: " << resultSetIndex << " >= " << resultSetMeta.size()) });
         }
 
         const auto expireAt = query->ResultExpireAt;
         if (query->Query.meta().status() != FederatedQuery::QueryMeta::COMPLETED || !expireAt) {
-            return ctx.Fail("check status", {NYql::TIssue("Result doesn't exist")});
+            return ctx.Fail("check status", { NYql::TIssue("Result doesn't exist") });
         }
 
         if (expireAt < TInstant::Now()) {
-            return ctx.Fail("check expiration", {NYql::TIssue("Result removed by TTL")});
+            return ctx.Fail("check expiration", { NYql::TIssue("Result removed by TTL") });
         }
 
-        const auto& result = GetEntity(ResultSets, {query->ResultId, ctx.Request.result_set_index()});
+        const auto& result = GetEntity(ResultSets, { query->ResultId, ctx.Request.result_set_index() });
         if (!result) {
-            return ctx.Fail("get result", {NYql::TIssue("INTERNAL ERROR. Failed to find result set")});
+            return ctx.Fail("get result", { NYql::TIssue("INTERNAL ERROR. Failed to find result set") });
         }
 
         auto& resultSet = *ctx.Response.mutable_result_set();
@@ -554,9 +528,7 @@ private:
 
     void Handle(TEvControlPlaneStorage::TEvListJobsRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyResponse<
-            TEvControlPlaneStorage::TEvListJobsRequest::TPtr,
-            FederatedQuery::ListJobsResult,
+        SendEmptyResponse<TEvControlPlaneStorage::TEvListJobsRequest::TPtr, FederatedQuery::ListJobsResult,
             TEvControlPlaneStorage::TEvListJobsResponse>(ev, "ListJobsRequest");
     }
 
@@ -565,13 +537,15 @@ private:
         const auto visibility = content.acl().visibility();
         const auto& name = content.name();
         if (!CheckConnectionOrBindingName(Connections, ctx.Scope, ctx.User, visibility, name)) {
-            return ctx.Fail("check name", {NYql::TIssue("Connection with the same name already exists. Please choose another name")});
+            return ctx.Fail("check name", { NYql::TIssue("Connection with the same name already exists. Please choose another name") });
         }
         if (!CheckConnectionOrBindingName(Bindings, ctx.Scope, ctx.User, visibility, name)) {
-            return ctx.Fail("check name", {NYql::TIssue("Binding with the same name already exists. Please choose another name")});
+            return ctx.Fail("check name", { NYql::TIssue("Binding with the same name already exists. Please choose another name") });
         }
         if (GetNumberEntitiesByScope(Connections, ctx.Scope) >= Config->Proto.GetMaxCountConnections()) {
-            return ctx.Fail("check number", {NYql::TIssue(TStringBuilder() << "Too many connections in folder: " << Config->Proto.GetMaxCountConnections() << ". Please remove unused connections")});
+            return ctx.Fail(
+                "check number", { NYql::TIssue(TStringBuilder() << "Too many connections in folder: " << Config->Proto.GetMaxCountConnections()
+                                                                << ". Please remove unused connections") });
         }
 
         const auto& [connection, _] = GetCreateConnectionProtos(ctx.Request, ctx.CloudId, ctx.User, ctx.StartTime);
@@ -580,10 +554,7 @@ private:
         const TString& connectionId = connection.meta().id();
         ctx.Response.first.set_connection_id(connectionId);
 
-        AddEntity(Connections, {ctx.Scope, connectionId}, {
-            .Connection = connection,
-            .User = ctx.User
-        });
+        AddEntity(Connections, { ctx.Scope, connectionId }, { .Connection = connection, .User = ctx.User });
     }
 
     HANDLE_CPS_REQUEST(TEvListConnectionsRequest, TEvListConnectionsResponse, LIST_CONNECTIONS) {
@@ -607,7 +578,9 @@ private:
                 continue;
             }
 
-            if (filter.connection_type() != FederatedQuery::ConnectionSetting::CONNECTION_TYPE_UNSPECIFIED && content.setting().connection_case() != static_cast<FederatedQuery::ConnectionSetting::ConnectionCase>(filter.connection_type())) {
+            if (filter.connection_type() != FederatedQuery::ConnectionSetting::CONNECTION_TYPE_UNSPECIFIED &&
+                content.setting().connection_case() !=
+                    static_cast<FederatedQuery::ConnectionSetting::ConnectionCase>(filter.connection_type())) {
                 continue;
             }
 
@@ -625,14 +598,15 @@ private:
     }
 
     HANDLE_CPS_REQUEST(TEvDescribeConnectionRequest, TEvDescribeConnectionResponse, DESCRIBE_CONNECTION) {
-        const auto& connection = GetEntity(Connections, {ctx.Scope, ctx.Request.connection_id()});
+        const auto& connection = GetEntity(Connections, { ctx.Scope, ctx.Request.connection_id() });
         if (!connection) {
-            return ctx.Fail("find connection", {NYql::TIssue("Connection does not exist")});
+            return ctx.Fail("find connection", { NYql::TIssue("Connection does not exist") });
         }
 
         const auto& connectionProto = connection->Connection;
-        if (!HasViewAccess(GetPermissions(ctx.Permissions, ctx.User), connectionProto.content().acl().visibility(), connectionProto.meta().created_by(), ctx.User)) {
-            return ctx.Fail("check permissions", {NYql::TIssue("Permission denied")});
+        if (!HasViewAccess(GetPermissions(ctx.Permissions, ctx.User), connectionProto.content().acl().visibility(),
+                connectionProto.meta().created_by(), ctx.User)) {
+            return ctx.Fail("check permissions", { NYql::TIssue("Permission denied") });
         }
 
         *ctx.Response.mutable_connection() = connectionProto;
@@ -640,20 +614,14 @@ private:
 
     void Handle(TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr,
-            FederatedQuery::ModifyConnectionResult,
-            TEvControlPlaneStorage::TEvModifyConnectionResponse,
-            TAuditDetails<FederatedQuery::Connection>>(ev, "ModifyConnectionRequest");
+        SendEmptyAuditResponse<TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr, FederatedQuery::ModifyConnectionResult,
+            TEvControlPlaneStorage::TEvModifyConnectionResponse, TAuditDetails<FederatedQuery::Connection>>(ev, "ModifyConnectionRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr,
-            FederatedQuery::DeleteConnectionResult,
-            TEvControlPlaneStorage::TEvDeleteConnectionResponse,
-            TAuditDetails<FederatedQuery::Connection>>(ev, "DeleteConnectionRequest");
+        SendEmptyAuditResponse<TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr, FederatedQuery::DeleteConnectionResult,
+            TEvControlPlaneStorage::TEvDeleteConnectionResponse, TAuditDetails<FederatedQuery::Connection>>(ev, "DeleteConnectionRequest");
     }
 
     HANDLE_CPS_REQUEST(TEvCreateBindingRequest, TEvCreateBindingResponse, CREATE_BINDING) {
@@ -661,27 +629,30 @@ private:
         const auto visibility = content.acl().visibility();
         const auto& name = content.name();
         if (!CheckConnectionOrBindingName(Connections, ctx.Scope, ctx.User, visibility, name)) {
-            return ctx.Fail("check name", {NYql::TIssue("Connection with the same name already exists. Please choose another name")});
+            return ctx.Fail("check name", { NYql::TIssue("Connection with the same name already exists. Please choose another name") });
         }
         if (!CheckConnectionOrBindingName(Bindings, ctx.Scope, ctx.User, visibility, name)) {
-            return ctx.Fail("check name", {NYql::TIssue("Binding with the same name already exists. Please choose another name")});
+            return ctx.Fail("check name", { NYql::TIssue("Binding with the same name already exists. Please choose another name") });
         }
         if (GetNumberEntitiesByScope(Bindings, ctx.Scope) >= Config->Proto.GetMaxCountBindings()) {
-            return ctx.Fail("check number", {NYql::TIssue(TStringBuilder() << "Too many bindings in folder: " << Config->Proto.GetMaxCountBindings() << ". Please remove unused bindings")});
+            return ctx.Fail(
+                "check number", { NYql::TIssue(TStringBuilder() << "Too many bindings in folder: " << Config->Proto.GetMaxCountBindings()
+                                                                << ". Please remove unused bindings") });
         }
 
-        const auto& connection = GetEntity(Connections, {ctx.Scope, content.connection_id()});
+        const auto& connection = GetEntity(Connections, { ctx.Scope, content.connection_id() });
         if (!connection) {
-            return ctx.Fail("check connection", {NYql::TIssue("Connection for binding not found")});
+            return ctx.Fail("check connection", { NYql::TIssue("Connection for binding not found") });
         }
 
         const auto connectionVisibility = connection->Connection.content().acl().visibility();
         if (content.acl().visibility() == FederatedQuery::Acl::SCOPE && connectionVisibility == FederatedQuery::Acl::PRIVATE) {
-            return ctx.Fail("check connection ACL", {NYql::TIssue("Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility")});
+            return ctx.Fail(
+                "check connection ACL", { NYql::TIssue("Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility") });
         }
 
         if (!HasManageAccess(GetCreateBindingPerimssions(ctx.Event), connectionVisibility, connection->User, ctx.User)) {
-            return ctx.Fail("check connection ACL", {NYql::TIssue("Permission denied for binding connection")});
+            return ctx.Fail("check connection ACL", { NYql::TIssue("Permission denied for binding connection") });
         }
 
         const auto& [binding, _] = GetCreateBindingProtos(ctx.Request, ctx.CloudId, ctx.User, ctx.StartTime);
@@ -690,10 +661,7 @@ private:
         const TString& bindingId = binding.meta().id();
         ctx.Response.first.set_binding_id(bindingId);
 
-        AddEntity(Bindings, {ctx.Scope, bindingId}, {
-            .Binding = binding,
-            .User = ctx.User
-        });
+        AddEntity(Bindings, { ctx.Scope, bindingId }, { .Binding = binding, .User = ctx.User });
     }
 
     HANDLE_CPS_REQUEST(TEvListBindingsRequest, TEvListBindingsResponse, LIST_BINDINGS) {
@@ -755,35 +723,25 @@ private:
 
     void Handle(TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyResponse<
-            TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr,
-            FederatedQuery::DescribeBindingResult,
+        SendEmptyResponse<TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr, FederatedQuery::DescribeBindingResult,
             TEvControlPlaneStorage::TEvDescribeBindingResponse>(ev, "DescribeBindingRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr,
-            FederatedQuery::ModifyBindingResult,
-            TEvControlPlaneStorage::TEvModifyBindingResponse,
-            TAuditDetails<FederatedQuery::Binding>>(ev, "ModifyBindingRequest");
+        SendEmptyAuditResponse<TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr, FederatedQuery::ModifyBindingResult,
+            TEvControlPlaneStorage::TEvModifyBindingResponse, TAuditDetails<FederatedQuery::Binding>>(ev, "ModifyBindingRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr,
-            FederatedQuery::DeleteBindingResult,
-            TEvControlPlaneStorage::TEvDeleteBindingResponse,
-            TAuditDetails<FederatedQuery::Binding>>(ev, "DeleteBindingRequest");
+        SendEmptyAuditResponse<TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr, FederatedQuery::DeleteBindingResult,
+            TEvControlPlaneStorage::TEvDeleteBindingResponse, TAuditDetails<FederatedQuery::Binding>>(ev, "DeleteBindingRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyResponse<
-            TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr,
-            FederatedQuery::DescribeJobResult,
+        SendEmptyResponse<TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr, FederatedQuery::DescribeJobResult,
             TEvControlPlaneStorage::TEvDescribeJobResponse>(ev, "DescribeJobRequest");
     }
 
@@ -793,7 +751,7 @@ private:
         const auto offset = ctx.Request.offset();
         const auto& newRows = ctx.Request.result_set().rows();
 
-        auto& [resultRows, expireAt] = ResultSets.Values[{ctx.Request.result_id().value(), static_cast<i32>(ctx.Request.result_set_id())}];
+        auto& [resultRows, expireAt] = ResultSets.Values[{ ctx.Request.result_id().value(), static_cast<i32>(ctx.Request.result_set_id()) }];
         expireAt = NProtoInterop::CastFromProto(ctx.Request.deadline());
 
         resultRows.resize(std::max(offset + newRows.size(), resultRows.size()));
@@ -823,19 +781,19 @@ private:
         const auto& scope = ctx.Request.scope();
         const auto& queryId = ctx.Request.query_id().value();
 
-        auto query = GetEntity(Queries, {scope, queryId});
+        auto query = GetEntity(Queries, { scope, queryId });
         if (!query) {
-            return ctx.Fail("get query", {NYql::TIssue("INTERNAL ERROR. Query for ping task not found")});
+            return ctx.Fail("get query", { NYql::TIssue("INTERNAL ERROR. Query for ping task not found") });
         }
 
-        auto job = GetEntity(Jobs, {scope, queryId, query->LastJobId});
+        auto job = GetEntity(Jobs, { scope, queryId, query->LastJobId });
         if (!job) {
-            return ctx.Fail("get job", {NYql::TIssue("INTERNAL ERROR. Job for ping task not found")});
+            return ctx.Fail("get job", { NYql::TIssue("INTERNAL ERROR. Job for ping task not found") });
         }
 
-        auto pendingQuery = GetEntity(PendingQueries, {ctx.Request.tenant(), scope, queryId});
+        auto pendingQuery = GetEntity(PendingQueries, { ctx.Request.tenant(), scope, queryId });
         if (!pendingQuery) {
-            return ctx.Fail("get pending query", {NYql::TIssue("INTERNAL ERROR. Pending query for ping task not found")});
+            return ctx.Fail("get pending query", { NYql::TIssue("INTERNAL ERROR. Pending query for ping task not found") });
         }
 
         auto resuest = ctx.Request;
@@ -843,25 +801,24 @@ private:
 
         TDuration backoff = Config->TaskLeaseTtl;
         TInstant expireAt = ctx.StartTime + Config->AutomaticQueriesTtl;
-        UpdateTaskInfo(TActivationContext::ActorSystem(), Config, resuest, finalStatus, query->Query, query->QueryInternal, job->Job, pendingQuery->Owner, pendingQuery->RetryLimiter, backoff, expireAt);
+        UpdateTaskInfo(TActivationContext::ActorSystem(), Config, resuest, finalStatus, query->Query, query->QueryInternal, job->Job,
+            pendingQuery->Owner, pendingQuery->RetryLimiter, backoff, expireAt);
         PingTask(ctx, *query, *job, *pendingQuery, backoff, expireAt);
 
         if (IsTerminalStatus(ctx.Request.status())) {
             FillQueryStatistics(finalStatus, query->Query, query->QueryInternal, pendingQuery->RetryLimiter);
         }
-        Send(SelfId(), new TEvControlPlaneStorage::TEvFinalStatusReport(
-            queryId, finalStatus->JobId, finalStatus->CloudId, scope, std::move(finalStatus->FinalStatistics),
-            finalStatus->Status, finalStatus->StatusCode, finalStatus->QueryType, finalStatus->Issues, finalStatus->TransientIssues));
+        Send(SelfId(), new TEvControlPlaneStorage::TEvFinalStatusReport(queryId, finalStatus->JobId, finalStatus->CloudId, scope,
+                           std::move(finalStatus->FinalStatistics), finalStatus->Status, finalStatus->StatusCode, finalStatus->QueryType,
+                           finalStatus->Issues, finalStatus->TransientIssues));
     }
 
-    HANDLE_CPS_REQUEST_IMPL(TEvNodesHealthCheckRequest, TEvNodesHealthCheckResponse, TCommonRequestContext, RTS_MAX, RTC_NODES_HEALTH_CHECK, true) {
+    HANDLE_CPS_REQUEST_IMPL(
+        TEvNodesHealthCheckRequest, TEvNodesHealthCheckResponse, TCommonRequestContext, RTS_MAX, RTC_NODES_HEALTH_CHECK, true) {
         const auto& tenant = ctx.Request.tenant();
         const auto& node = ctx.Request.node();
 
-        AddEntity(Nodes, {tenant, node.node_id()}, {
-            .Node = node,
-            .ExpireAt = ctx.StartTime + TNodes::TTL
-        });
+        AddEntity(Nodes, { tenant, node.node_id() }, { .Node = node, .ExpireAt = ctx.StartTime + TNodes::TTL });
 
         for (const auto& [key, value] : Nodes.Values) {
             if (key.Tenant == tenant) {
@@ -872,25 +829,19 @@ private:
 
     void Handle(TEvControlPlaneStorage::TEvGetQueryStatusRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyResponse<
-            TEvControlPlaneStorage::TEvGetQueryStatusRequest::TPtr,
-            FederatedQuery::GetQueryStatusResult,
+        SendEmptyResponse<TEvControlPlaneStorage::TEvGetQueryStatusRequest::TPtr, FederatedQuery::GetQueryStatusResult,
             TEvControlPlaneStorage::TEvGetQueryStatusResponse>(ev, "GetQueryStatusRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyResponse<
-            TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest::TPtr,
-            Fq::Private::CreateRateLimiterResourceResult,
+        SendEmptyResponse<TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest::TPtr, Fq::Private::CreateRateLimiterResourceResult,
             TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse>(ev, "CreateRateLimiterResourceRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        SendEmptyResponse<
-            TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest::TPtr,
-            Fq::Private::DeleteRateLimiterResourceResult,
+        SendEmptyResponse<TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest::TPtr, Fq::Private::DeleteRateLimiterResourceResult,
             TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse>(ev, "DeleteRateLimiterResourceRequest");
     }
 
@@ -901,29 +852,30 @@ private:
 
     void Handle(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {
         YDB_LOG_CRIT("Unimplemented");
-        Send(ev->Sender, new TEvQuotaService::TQuotaLimitChangeResponse(ev->Get()->SubjectType, ev->Get()->SubjectId, ev->Get()->MetricName, ev->Get()->Limit, ev->Get()->LimitRequested));
+        Send(ev->Sender, new TEvQuotaService::TQuotaLimitChangeResponse(
+                             ev->Get()->SubjectType, ev->Get()->SubjectId, ev->Get()->MetricName, ev->Get()->Limit, ev->Get()->LimitRequested));
     }
 
-    HANDLE_CPS_REQUEST_IMPL(TEvCreateDatabaseRequest, TEvCreateDatabaseResponse, TCommonRequestContext, RTS_CREATE_DATABASE, RTC_CREATE_DATABASE, false) {
-        AddEntity(ComputeDatabases, {ctx.Event.Scope}, {
-            .Database = ctx.Request,
-            .LastAccessAt = TInstant::Now()
-        });
+    HANDLE_CPS_REQUEST_IMPL(
+        TEvCreateDatabaseRequest, TEvCreateDatabaseResponse, TCommonRequestContext, RTS_CREATE_DATABASE, RTC_CREATE_DATABASE, false) {
+        AddEntity(ComputeDatabases, { ctx.Event.Scope }, { .Database = ctx.Request, .LastAccessAt = TInstant::Now() });
     }
 
-    HANDLE_CPS_REQUEST_IMPL(TEvDescribeDatabaseRequest, TEvDescribeDatabaseResponse, TCommonRequestContext, RTS_DESCRIBE_DATABASE, RTC_DESCRIBE_DATABASE, false) {
-        const auto& database = GetEntity(ComputeDatabases, {ctx.Event.Scope});
+    HANDLE_CPS_REQUEST_IMPL(
+        TEvDescribeDatabaseRequest, TEvDescribeDatabaseResponse, TCommonRequestContext, RTS_DESCRIBE_DATABASE, RTC_DESCRIBE_DATABASE, false) {
+        const auto& database = GetEntity(ComputeDatabases, { ctx.Event.Scope });
         if (!database) {
             NYql::TIssue issue(TStringBuilder() << "Compute database does not exist for scope " << ctx.Event.Scope);
             issue.SetCode(TIssuesIds::ACCESS_DENIED, NYql::TSeverityIds::S_ERROR);
-            return ctx.Fail("find compute database", {issue});
+            return ctx.Fail("find compute database", { issue });
         }
 
         ctx.Response = database->Database;
     }
 
-    HANDLE_CPS_REQUEST_IMPL(TEvModifyDatabaseRequest, TEvModifyDatabaseResponse, TCommonRequestContext, RTS_MODIFY_DATABASE, RTC_MODIFY_DATABASE, false) {
-        const auto it = ComputeDatabases.Values.find({ctx.Event.Scope});
+    HANDLE_CPS_REQUEST_IMPL(
+        TEvModifyDatabaseRequest, TEvModifyDatabaseResponse, TCommonRequestContext, RTS_MODIFY_DATABASE, RTC_MODIFY_DATABASE, false) {
+        const auto it = ComputeDatabases.Values.find({ ctx.Event.Scope });
 
         if (const auto lastAccessAt = ctx.Event.LastAccessAt) {
             if (it != ComputeDatabases.Values.end()) {
@@ -935,7 +887,7 @@ private:
         if (it == ComputeDatabases.Values.end()) {
             NYql::TIssue issue(TStringBuilder() << "Compute database does not exist for scope " << ctx.Event.Scope);
             issue.SetCode(TIssuesIds::ACCESS_DENIED, NYql::TSeverityIds::S_ERROR);
-            return ctx.Fail("update compute database", {issue});
+            return ctx.Fail("update compute database", { issue });
         }
 
         if (const auto synchronized = ctx.Event.Synchronized) {
@@ -956,7 +908,7 @@ private:
         Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(str.Str()));
     }
 
-    template<typename TRequest, typename TResult, typename TEvResult>
+    template <typename TRequest, typename TResult, typename TEvResult>
     void SendEmptyResponse(TRequest& ev, std::string logText) {
         YDB_LOG_CRIT("SendEmptyResponse");
         YDB_LOG_INFO("",
@@ -967,7 +919,7 @@ private:
         NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
     }
 
-    template<typename TRequest, typename TResult, typename TEvResult, typename TAuditDetails>
+    template <typename TRequest, typename TResult, typename TEvResult, typename TAuditDetails>
     void SendEmptyAuditResponse(TRequest& ev, std::string logText) {
         YDB_LOG_CRIT("SendEmptyAuditResponse");
         YDB_LOG_INFO("",
@@ -996,7 +948,7 @@ private:
 
     template <typename TValue>
     auto GetScopeRange(const TMap<TScopeKey, TValue>& table, const TString& scope) const {
-        const auto startIt = table.lower_bound({scope, ""});
+        const auto startIt = table.lower_bound({ scope, "" });
 
         std::ranges::subrange range(startIt, table.end());
         return range | std::views::take_while([scope](auto element) {
@@ -1005,7 +957,8 @@ private:
     }
 
     template <typename TValue>
-    auto GetVisibleRange(const TMap<TScopeKey, TValue>& table, const TString& scope, const TString& user, std::optional<FederatedQuery::Acl::Visibility> visibility = std::nullopt) const {
+    auto GetVisibleRange(const TMap<TScopeKey, TValue>& table, const TString& scope, const TString& user,
+        std::optional<FederatedQuery::Acl::Visibility> visibility = std::nullopt) const {
         auto range = GetScopeRange(table, scope);
         return range | std::views::filter([user, visibility, ignorePrivate = Config->Proto.GetIgnorePrivateSources()](const auto& element) {
             const auto entityVisibility = element.second.GetEntity().content().acl().visibility();
@@ -1024,11 +977,12 @@ private:
         auto range = GetVisibleRange(table.Values, scope, user) | std::views::transform([](const auto& element) {
             return element.second.GetEntity();
         }) | std::views::common;
-        return {range.begin(), range.end()};
+        return { range.begin(), range.end() };
     }
 
     template <typename TTable>
-    THashMap<TString, typename TTable::TEntity> GetEntitiesWithVisibilityPriority(const TTable& table, const TString& scope, const TString& user) const {
+    THashMap<TString, typename TTable::TEntity> GetEntitiesWithVisibilityPriority(
+        const TTable& table, const TString& scope, const TString& user) const {
         THashMap<TString, typename TTable::TEntity> entities;
         for (const auto& [_, value] : GetVisibleRange(table.Values, scope, user)) {
             const auto& entity = value.GetEntity();
@@ -1046,7 +1000,8 @@ private:
     }
 
     template <typename TTable>
-    bool CheckConnectionOrBindingName(const TTable& table, const TString& scope, const TString& user, FederatedQuery::Acl::Visibility visibility, const TString& name) const {
+    bool CheckConnectionOrBindingName(
+        const TTable& table, const TString& scope, const TString& user, FederatedQuery::Acl::Visibility visibility, const TString& name) const {
         auto range = GetVisibleRange(table.Values, scope, user, visibility) | std::views::transform([](const auto& element) {
             return element.second.GetEntity().content().name();
         });
@@ -1060,9 +1015,7 @@ private:
     }
 
     TPermissions GetPermissions(const TPermissions& requestPermissions, const TString& user) const {
-        TPermissions permissions = Config->Proto.GetEnablePermissions()
-                    ? requestPermissions
-                    : TPermissions{TPermissions::VIEW_PUBLIC};
+        TPermissions permissions = Config->Proto.GetEnablePermissions() ? requestPermissions : TPermissions{ TPermissions::VIEW_PUBLIC };
         if (IsSuperUser(user)) {
             permissions.SetAll();
         }
@@ -1123,7 +1076,8 @@ private:
                     {"queryId", task.QueryId},
                     {"retryCounterUpdatedAt", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
                     {"lastSeenAt", query.LastSeenAt});
-                taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(query.LastSeenAt, Config->TaskLeaseRetryPolicy, ctx.StartTime);
+                taskInternal.ShouldAbortTask =
+                    !taskInternal.RetryLimiter.UpdateOnRetry(query.LastSeenAt, Config->TaskLeaseRetryPolicy, ctx.StartTime);
             }
             task.RetryCount = taskInternal.RetryLimiter.RetryCount;
 
@@ -1149,16 +1103,18 @@ private:
     std::optional<TTask> AssignTask(TCommonRequestContextTEvGetTaskRequest& ctx, TTaskInternal taskInternal) {
         auto& task = taskInternal.Task;
 
-        const auto& query = GetEntity(Queries, {task.Scope, task.QueryId});
+        const auto& query = GetEntity(Queries, { task.Scope, task.QueryId });
         if (!query) {
-            ctx.Fail("task build", {NYql::TIssue(TStringBuilder() << "INTERNAL ERROR. Not found query for task in scope " << task.Scope << " with query id " << task.QueryId)});
+            ctx.Fail("task build", { NYql::TIssue(TStringBuilder() << "INTERNAL ERROR. Not found query for task in scope " << task.Scope
+                                                                   << " with query id " << task.QueryId) });
             return std::nullopt;
         }
 
         task.Generation = query->Generation + 1;
         task.Query = query->Query;
         task.Internal = query->QueryInternal;
-        task.Deadline = TInstant::Now() + (task.Query.content().automatic() ? std::min(Config->AutomaticQueriesTtl, Config->ResultSetsTtl) : Config->ResultSetsTtl);
+        task.Deadline = TInstant::Now() + (task.Query.content().automatic() ? std::min(Config->AutomaticQueriesTtl, Config->ResultSetsTtl)
+                                                                            : Config->ResultSetsTtl);
         *task.Internal.mutable_result_ttl() = NProtoInterop::CastToProto(Config->ResultSetsTtl);
 
         if (Config->Proto.GetDisableCurrentIam()) {
@@ -1166,12 +1122,13 @@ private:
         }
 
         if (taskInternal.ShouldAbortTask) {
-            AddTransientIssues(task.Query.mutable_transient_issue(), {NYql::TIssue("Query was aborted by system due to high failure rate")});
+            AddTransientIssues(task.Query.mutable_transient_issue(), { NYql::TIssue("Query was aborted by system due to high failure rate") });
             task.Query.mutable_meta()->set_status(FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM);
         }
 
         if (const auto tenantInfo = ctx.Event.TenantInfo) {
-            const auto& mapResult = tenantInfo->Assign(task.Internal.cloud_id(), task.Scope, task.Query.content().type(), taskInternal.TenantName);
+            const auto& mapResult =
+                tenantInfo->Assign(task.Internal.cloud_id(), task.Scope, task.Query.content().type(), taskInternal.TenantName);
             if (mapResult.TenantName != taskInternal.TenantName) {
                 UpdateTaskState(ctx, taskInternal, mapResult.TenantName);
                 return std::nullopt;
@@ -1189,14 +1146,14 @@ private:
     void UpdateTaskState(const TCommonRequestContextTEvGetTaskRequest& ctx, const TTaskInternal& taskInternal, const TString& newTenant = "") {
         const auto& task = taskInternal.Task;
 
-        const auto queryIt = Queries.Values.find({task.Scope, task.QueryId});
+        const auto queryIt = Queries.Values.find({ task.Scope, task.QueryId });
         if (queryIt != Queries.Values.end()) {
             queryIt->second.Query = task.Query;
             queryIt->second.QueryInternal = task.Internal;
             queryIt->second.Generation = task.Generation;
         }
 
-        const auto pendingIt = PendingQueries.Values.find({taskInternal.TenantName, task.Scope, task.QueryId});
+        const auto pendingIt = PendingQueries.Values.find({ taskInternal.TenantName, task.Scope, task.QueryId });
         if (pendingIt != PendingQueries.Values.end()) {
             pendingIt->second.Owner = taskInternal.Owner;
             pendingIt->second.RetryLimiter = taskInternal.RetryLimiter;
@@ -1205,17 +1162,18 @@ private:
             if (newTenant) {
                 const auto value = pendingIt->second;
                 PendingQueries.Values.erase(pendingIt);
-                AddEntity(PendingQueries, {newTenant, task.Scope, task.QueryId}, value);
+                AddEntity(PendingQueries, { newTenant, task.Scope, task.QueryId }, value);
             }
         }
     }
 
-    void PingTask(const TCommonRequestContextTEvPingTaskRequest& ctx, const TQueries::TValue& query, const TJobs::TValue& job, const TPendingQueries::TValue& pendingQuery, TDuration backoff, TInstant expireAt) {
+    void PingTask(const TCommonRequestContextTEvPingTaskRequest& ctx, const TQueries::TValue& query, const TJobs::TValue& job,
+        const TPendingQueries::TValue& pendingQuery, TDuration backoff, TInstant expireAt) {
         const auto& scope = ctx.Request.scope();
         const auto& queryId = ctx.Request.query_id().value();
         const auto status = query.Query.meta().status();
 
-        const auto pendingIt = PendingQueries.Values.find({ctx.Request.tenant(), scope, queryId});
+        const auto pendingIt = PendingQueries.Values.find({ ctx.Request.tenant(), scope, queryId });
         if (pendingIt != PendingQueries.Values.end()) {
             if (IsTerminalStatus(status)) {
                 PendingQueries.Values.erase(pendingIt);
@@ -1226,19 +1184,20 @@ private:
         }
 
         const bool automaticFinished = IsTerminalStatus(status) && query.Query.content().automatic();
-        const auto jobIt = Jobs.Values.find({scope, queryId, job.Job.meta().id()});
+        const auto jobIt = Jobs.Values.find({ scope, queryId, job.Job.meta().id() });
         if (jobIt != Jobs.Values.end()) {
             jobIt->second = job;
             jobIt->second.ExpireAt = automaticFinished ? expireAt : TInstant::Zero();
         }
 
-        const auto queryIt = Queries.Values.find({scope, queryId});
+        const auto queryIt = Queries.Values.find({ scope, queryId });
         if (queryIt != Queries.Values.end()) {
             queryIt->second = query;
             if (ctx.Request.has_result_id()) {
                 queryIt->second.ResultId = ctx.Request.result_id().value();
             }
-            queryIt->second.ResultExpireAt = status == FederatedQuery::QueryMeta::COMPLETED ? NProtoInterop::CastFromProto(ctx.Request.deadline()) : TInstant::Zero();
+            queryIt->second.ResultExpireAt =
+                status == FederatedQuery::QueryMeta::COMPLETED ? NProtoInterop::CastFromProto(ctx.Request.deadline()) : TInstant::Zero();
             queryIt->second.ExpireAt = automaticFinished ? expireAt : TInstant::Zero();
         }
     }
@@ -1249,14 +1208,10 @@ NActors::TActorId ControlPlaneStorageServiceActorId(ui32 nodeId) {
     return NActors::TActorId(nodeId, name);
 }
 
-NActors::IActor* CreateInMemoryControlPlaneStorageServiceActor(
-    const NConfig::TControlPlaneStorageConfig& config,
-    const NYql::TS3GatewayConfig& s3Config,
-    const NConfig::TCommonConfig& common,
-    const NConfig::TComputeConfig& computeConfig,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    const TString& tenantName) {
+NActors::IActor* CreateInMemoryControlPlaneStorageServiceActor(const NConfig::TControlPlaneStorageConfig& config,
+    const NYql::TS3GatewayConfig& s3Config, const NConfig::TCommonConfig& common, const NConfig::TComputeConfig& computeConfig,
+    const ::NMonitoring::TDynamicCounterPtr& counters, const TString& tenantName) {
     return new TInMemoryControlPlaneStorageActor(config, s3Config, common, computeConfig, counters, tenantName);
 }
 
-} // NFq
+}   // namespace NFq

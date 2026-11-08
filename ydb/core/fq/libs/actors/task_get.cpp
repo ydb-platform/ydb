@@ -1,22 +1,21 @@
-#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
-#include "proxy_private.h"
 #include "proxy.h"
-
-#include <ydb/library/services/services.pb.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
-#include <library/cpp/yson/node/node_io.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
+#include "proxy_private.h"
 
 #include <ydb/core/fq/libs/common/entity_id.h>
-
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/security/util.h>
+#include <ydb/library/services/services.pb.h>
+
+#include <library/cpp/yson/node/node_io.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_PRIVATE_PROXY
 
@@ -25,25 +24,20 @@ namespace NFq {
 using namespace NActors;
 using namespace NMonitoring;
 
-class TGetTaskRequestActor
-    : public NActors::TActorBootstrapped<TGetTaskRequestActor>
-{
+class TGetTaskRequestActor: public NActors::TActorBootstrapped<TGetTaskRequestActor> {
 public:
-    TGetTaskRequestActor(
-        const NActors::TActorId& sender,
-        const ::NFq::TSigner::TPtr& signer,
-        TIntrusivePtr<ITimeProvider> timeProvider,
-        TAutoPtr<TEvents::TEvGetTaskRequest> ev,
-        TDynamicCounterPtr counters)
+    TGetTaskRequestActor(const NActors::TActorId& sender, const ::NFq::TSigner::TPtr& signer, TIntrusivePtr<ITimeProvider> timeProvider,
+        TAutoPtr<TEvents::TEvGetTaskRequest> ev, TDynamicCounterPtr counters)
         : Sender(sender)
         , TimeProvider(timeProvider)
         , Ev(std::move(ev))
         , Counters(std::move(counters->GetSubgroup("subsystem", "private_api")->GetSubgroup("subcomponent", "GetTask")))
-        , LifetimeDuration(Counters->GetHistogram("LifetimeDurationMs",  ExponentialHistogram(10, 2, 50)))
-        , RequestedMBytes(Counters->GetHistogram("RequestedMB",  ExponentialHistogram(6, 2, 3)))
+        , LifetimeDuration(Counters->GetHistogram("LifetimeDurationMs", ExponentialHistogram(10, 2, 50)))
+        , RequestedMBytes(Counters->GetHistogram("RequestedMB", ExponentialHistogram(6, 2, 3)))
         , StartTime(TInstant::Now())
         , Signer(signer)
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "YQ_PRIVATE_GET_TASK";
 
@@ -96,7 +90,7 @@ public:
     }
 
 private:
-    void HandleResponse(NFq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) { // YQ
+    void HandleResponse(NFq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) {   // YQ
         YDB_LOG_DEBUG("PrivateGetTask - Got CP::GetTask Response",
             {"owner", OwnerId},
             {"host", Host},
@@ -166,18 +160,9 @@ private:
     TString Tenant;
 };
 
-IActor* CreateGetTaskRequestActor(
-    const NActors::TActorId& sender,
-    const ::NFq::TSigner::TPtr& signer,
-    TIntrusivePtr<ITimeProvider> timeProvider,
-    TAutoPtr<TEvents::TEvGetTaskRequest> ev,
-    TDynamicCounterPtr counters) {
-    return new TGetTaskRequestActor(
-        sender,
-        signer,
-        timeProvider,
-        std::move(ev),
-        counters);
+IActor* CreateGetTaskRequestActor(const NActors::TActorId& sender, const ::NFq::TSigner::TPtr& signer, TIntrusivePtr<ITimeProvider> timeProvider,
+    TAutoPtr<TEvents::TEvGetTaskRequest> ev, TDynamicCounterPtr counters) {
+    return new TGetTaskRequestActor(sender, signer, timeProvider, std::move(ev), counters);
 }
 
-} /* NFq */
+}   // namespace NFq

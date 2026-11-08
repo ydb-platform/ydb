@@ -482,6 +482,17 @@ TSerializedTableRange MakeTestRange(
     return TSerializedTableRange(TConstArrayRef<TCell>(cellsFrom), inclusiveFrom, TConstArrayRef<TCell>(cellsTo), inclusiveTo);
 }
 
+NArrow::TSimpleRow MakeTestKey(const ui64 value, const std::vector<NArrow::NTest::TTestColumn>& pk) {
+    NArrow::TArrowBatchBuilder batchBuilder;
+    const auto startStatus = batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(pk));
+    UNIT_ASSERT_C(startStatus.ok(), startStatus.ToString());
+    std::vector<TString> mem;
+    std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(pk);
+    std::vector<TCell> cells = MakeTestCells(types, value, mem);
+    batchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));
+    return NArrow::TSimpleRow(batchBuilder.FlushBatch(false), 0);
+}
+
 THashMap<TString, NColumnShard::NTiers::TTierConfig> TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
     if (specials.Tiers.empty()) {
         return {};
@@ -592,6 +603,28 @@ void UpdateLocalDbTableRow(
         )
     )", keySpec.c_str(), valuesSpec.c_str(), tableName.c_str());
     Y_UNUSED(LocalMiniKQL(runtime, tabletId, query));
+}
+
+std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> ReadSchemaPresetVersions(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('Id (Null) (Void))
+                '('SinceStep (Null) (Void))
+                '('SinceTxId (Null) (Void))
+            ))
+            (let fields '('InfoProto))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'SchemaPresetVersionInfo range fields '()))
+            ))
+        )
+    )");
+    const auto rows = NClient::TValue::Create(result)[0]["List"];
+    std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> versions(rows.Size());
+    for (ui32 i = 0; i < rows.Size(); ++i) {
+        UNIT_ASSERT(versions[i].ParseFromString(TString(rows[i]["InfoProto"])));
+    }
+    return versions;
 }
 
 ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId) {

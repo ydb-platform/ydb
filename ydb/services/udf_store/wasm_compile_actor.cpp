@@ -1,6 +1,6 @@
+#include "blob_chunks.h"
 #include "wasm_compile_actor.h"
 
-#include "blob_chunks.h"
 #include "metadata_subscription/udf_module.h"
 #include "metadata_subscription/wasm_artifact.h"
 #include "wasm/compile.h"
@@ -34,10 +34,7 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
 
     switch (Step_) {
         case EStep::ReadModuleSource:
-            NTableQuery::SetSelectModuleByNameParams(
-                request,
-                Name_,
-                TUdfModule::TypeToString(EUdfType::WASM));
+            NTableQuery::SetSelectModuleByNameParams(request, Name_, TUdfModule::TypeToString(EUdfType::WASM));
             break;
         case EStep::EnsurePending:
         case EStep::MarkCompiling:
@@ -48,10 +45,7 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
             break;
         case EStep::ReadLibraryArtifact:
             NTableQuery::SetSelectArtifactParams(
-                request,
-                PendingLibraryName_,
-                WasmArtifactKindToString(EWasmArtifactKind::Library),
-                PendingLibraryUid_);
+                request, PendingLibraryName_, WasmArtifactKindToString(EWasmArtifactKind::Library), PendingLibraryUid_);
             break;
         case EStep::DeleteArtifactChunks:
             NTableQuery::SetDeleteArtifactChunksParams(request, Name_, ModuleKind_, ModuleSource_.Uid);
@@ -63,34 +57,19 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
             Y_ABORT_UNLESS(NextChunkWriteIndex_ < PendingChunkWrites_.size());
             const auto& chunk = PendingChunkWrites_[NextChunkWriteIndex_];
             NTableQuery::SetUpsertArtifactChunkParams(
-                request,
-                Name_,
-                ModuleKind_,
-                ModuleSource_.Uid,
-                chunk.BlobKind,
-                chunk.ChunkIdx,
-                chunk.Data);
+                request, Name_, ModuleKind_, ModuleSource_.Uid, chunk.BlobKind, chunk.ChunkIdx, chunk.Data);
             break;
         }
         case EStep::VerifyStillCurrent:
         case EStep::ConfirmStillCurrent:
-            NTableQuery::SetSelectModuleByNameParams(
-                request,
-                Name_,
-                TUdfModule::TypeToString(EUdfType::WASM));
+            NTableQuery::SetSelectModuleByNameParams(request, Name_, TUdfModule::TypeToString(EUdfType::WASM));
             break;
         case EStep::DeleteStaleArtifactChunks:
         case EStep::DeleteStaleArtifacts:
-            NTableQuery::SetDeleteStaleArtifactsParams(
-                request,
-                Name_,
-                ModuleKind_,
-                ModuleSource_.Uid,
-                TUdfModule::TypeToString(EUdfType::WASM));
+            NTableQuery::SetDeleteStaleArtifactsParams(request, Name_, ModuleKind_, ModuleSource_.Uid, TUdfModule::TypeToString(EUdfType::WASM));
             break;
         case EStep::MarkArtifactFailed:
-            NTableQuery::SetMarkArtifactFailedParams(
-                request, Name_, ModuleKind_, ModuleSource_.Uid, ErrorMessage_);
+            NTableQuery::SetMarkArtifactFailedParams(request, Name_, ModuleKind_, ModuleSource_.Uid, ErrorMessage_);
             break;
     }
 
@@ -98,8 +77,7 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
     NMetadata::NRequest::TYQLRequestExecutor::Execute(std::move(request), NACLib::TUserToken("metadata@system", {}), controller);
 }
 
-void TWasmCompileActor::HandleQueryResult(
-    NMetadata::NRequest::TEvRequestResult<NMetadata::NRequest::TDialogYQLRequest>::TPtr& ev)
+void TWasmCompileActor::HandleQueryResult(NMetadata::NRequest::TEvRequestResult<NMetadata::NRequest::TDialogYQLRequest>::TPtr& ev)
 {
     OnQuerySuccess(ev->Get()->GetResult());
 }
@@ -115,9 +93,8 @@ void TWasmCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed:
         ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
         return;
     }
-    const TString message = TStringBuilder()
-        << "YQL request failed at compile step " << static_cast<int>(Step_)
-        << ": " << ev->Get()->GetErrorMessage();
+    const TString message = TStringBuilder() << "YQL request failed at compile step " << static_cast<int>(Step_) << ": "
+                                             << ev->Get()->GetErrorMessage();
     if (Step_ == EStep::MarkArtifactFailed) {
         // A failure to persist must terminate instead of recursively retrying
         // the same update, and must keep the original compilation error.
@@ -140,9 +117,8 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
                 // the manifest declares; otherwise the artifact would be
                 // published under a name the loader never looks up.
                 if (ParsedManifest_.ModuleName != Name_) {
-                    ReplyError(TStringBuilder()
-                        << "WASM module row name=" << Name_
-                        << " does not match manifest module_name=" << ParsedManifest_.ModuleName);
+                    ReplyError(TStringBuilder() << "WASM module row name=" << Name_
+                                                << " does not match manifest module_name=" << ParsedManifest_.ModuleName);
                     return;
                 }
                 Step_ = EStep::EnsurePending;
@@ -165,23 +141,16 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
                     FailAndPersist(TStringBuilder() << "Failed to read module source chunks for name=" << Name_);
                     return;
                 }
-                if (SourceChunks_.size() - previousChunkCount == NTableQuery::ChunksPerRead
-                    && SourceChunks_.size() <= ModuleSource_.ChunkCount)
+                if (SourceChunks_.size() - previousChunkCount == NTableQuery::ChunksPerRead && SourceChunks_.size() <= ModuleSource_.ChunkCount)
                 {
                     ExecuteQuery(NTableQuery::BuildSelectSourceChunksQuery(ModuleChunksTablePath_), true);
                     return;
                 }
                 TString joinError;
                 if (!JoinAndVerifyBlobs(
-                        SourceChunks_,
-                        ModuleSource_.ChunkCount,
-                        ModuleSource_.Size,
-                        ModuleSource_.Md5,
-                        ModuleSource_.Body,
-                        joinError))
+                        SourceChunks_, ModuleSource_.ChunkCount, ModuleSource_.Size, ModuleSource_.Md5, ModuleSource_.Body, joinError))
                 {
-                    FailAndPersist(TStringBuilder()
-                        << "Module source is corrupted for name=" << Name_ << ": " << joinError);
+                    FailAndPersist(TStringBuilder() << "Module source is corrupted for name=" << Name_ << ": " << joinError);
                     return;
                 }
                 SourceChunks_.clear();
@@ -191,11 +160,9 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
             }
             case EStep::ReadLibraryArtifact: {
                 NTableQuery::TWasmArtifactRow artifact;
-                if (!NTableQuery::ParseArtifactResponse(response, artifact)
-                    || artifact.ObjectCodeChunkCount == 0)
+                if (!NTableQuery::ParseArtifactResponse(response, artifact) || artifact.ObjectCodeChunkCount == 0)
                 {
-                    ReplyDeferred(TStringBuilder()
-                        << "Compiled library artifact not ready for '" << PendingLibraryName_ << "'");
+                    ReplyDeferred(TStringBuilder() << "Compiled library artifact not ready for '" << PendingLibraryName_ << "'");
                     return;
                 }
                 ++NextLibraryIndex_;
@@ -221,8 +188,7 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
             case EStep::VerifyStillCurrent: {
                 NTableQuery::TModuleSourceRow current;
                 if (!NTableQuery::ParseModuleSourceResponse(response, current)) {
-                    ReplyDeferred(TStringBuilder()
-                        << "WASM module row disappeared while compiling name=" << Name_);
+                    ReplyDeferred(TStringBuilder() << "WASM module row disappeared while compiling name=" << Name_);
                     return;
                 }
                 if (current.Uid != ModuleSource_.Uid) {
@@ -230,9 +196,8 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
                     // more. Leave it alone: the compile of the current upload
                     // is the one entitled to clean up, and it will collect
                     // ours too.
-                    ReplyDeferred(TStringBuilder()
-                        << "WASM module name=" << Name_ << " was re-uploaded while compiling: uid="
-                        << ModuleSource_.Uid << " is now " << current.Uid);
+                    ReplyDeferred(TStringBuilder() << "WASM module name=" << Name_ << " was re-uploaded while compiling: uid="
+                                                   << ModuleSource_.Uid << " is now " << current.Uid);
                     return;
                 }
                 // Our upload is the current one, so every other artifact of
@@ -242,20 +207,12 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
                 // gated on modules.uid still matching, so a re-upload that
                 // lands after this read cannot be wiped by us.
                 Step_ = EStep::DeleteStaleArtifactChunks;
-                ExecuteQuery(
-                    NTableQuery::BuildDeleteStaleArtifactChunksQuery(
-                        ArtifactChunksTablePath_,
-                        ModulesTablePath_),
-                    false);
+                ExecuteQuery(NTableQuery::BuildDeleteStaleArtifactChunksQuery(ArtifactChunksTablePath_, ModulesTablePath_), false);
                 return;
             }
             case EStep::DeleteStaleArtifactChunks: {
                 Step_ = EStep::DeleteStaleArtifacts;
-                ExecuteQuery(
-                    NTableQuery::BuildDeleteStaleArtifactsQuery(
-                        ArtifactTablePath_,
-                        ModulesTablePath_),
-                    false);
+                ExecuteQuery(NTableQuery::BuildDeleteStaleArtifactsQuery(ArtifactTablePath_, ModulesTablePath_), false);
                 return;
             }
             case EStep::DeleteStaleArtifacts: {
@@ -269,14 +226,12 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
             case EStep::ConfirmStillCurrent: {
                 NTableQuery::TModuleSourceRow current;
                 if (!NTableQuery::ParseModuleSourceResponse(response, current)) {
-                    ReplyDeferred(TStringBuilder()
-                        << "WASM module row disappeared while compiling name=" << Name_);
+                    ReplyDeferred(TStringBuilder() << "WASM module row disappeared while compiling name=" << Name_);
                     return;
                 }
                 if (current.Uid != ModuleSource_.Uid) {
-                    ReplyDeferred(TStringBuilder()
-                        << "WASM module name=" << Name_ << " was re-uploaded while compiling: uid="
-                        << ModuleSource_.Uid << " is now " << current.Uid);
+                    ReplyDeferred(TStringBuilder() << "WASM module name=" << Name_ << " was re-uploaded while compiling: uid="
+                                                   << ModuleSource_.Uid << " is now " << current.Uid);
                     return;
                 }
                 ReplySuccess();
@@ -301,8 +256,7 @@ void TWasmCompileActor::StartNextLibrary() {
     if (!uid) {
         // The library was not in the snapshot this compile was queued from; a
         // later snapshot will re-queue it once it appears.
-        ReplyDeferred(TStringBuilder()
-            << "Library '" << PendingLibraryName_ << "' is not known yet");
+        ReplyDeferred(TStringBuilder() << "Library '" << PendingLibraryName_ << "' is not known yet");
         return;
     }
     PendingLibraryUid_ = *uid;
@@ -319,9 +273,7 @@ void TWasmCompileActor::ValidateExports() {
         }
         const auto* signature = exports.FindPtr(exportName);
         if (!signature) {
-            ythrow yexception()
-                << "Wasm module for UDF '" << Name_
-                << "' does not export function '" << exportName << "'";
+            ythrow yexception() << "Wasm module for UDF '" << Name_ << "' does not export function '" << exportName << "'";
         }
         return signature;
     };
@@ -333,32 +285,23 @@ void TWasmCompileActor::ValidateExports() {
     auto requireAbiTypes = [&](const NWasm::TWasmExportSignature& signature, const TString& exportName) {
         for (size_t i = 0; i < signature.ParamTypes.size(); ++i) {
             if (signature.ParamTypes[i] != NWasm::EWasmExportValueType::I64) {
-                ythrow yexception()
-                    << "Wasm export '" << exportName << "' for UDF '" << Name_
-                    << "' takes " << NWasm::WasmExportValueTypeAsStr(signature.ParamTypes[i])
-                    << " as parameter " << i << ", but every UDF export parameter must be i64";
+                ythrow yexception() << "Wasm export '" << exportName << "' for UDF '" << Name_ << "' takes "
+                                    << NWasm::WasmExportValueTypeAsStr(signature.ParamTypes[i]) << " as parameter " << i
+                                    << ", but every UDF export parameter must be i64";
             }
         }
         if (signature.ResultCount != 0) {
-            ythrow yexception()
-                << "Wasm export '" << exportName << "' for UDF '" << Name_
-                << "' returns " << signature.ResultCount
-                << " values, but a UDF export writes its result through the result pointer"
-                   " and must return none";
+            ythrow yexception() << "Wasm export '" << exportName << "' for UDF '" << Name_ << "' returns " << signature.ResultCount
+                                << " values, but a UDF export writes its result through the result pointer"
+                                   " and must return none";
         }
     };
 
-    auto requireArity = [&](
-        const NWasm::TWasmExportSignature& signature,
-        const TString& exportName,
-        size_t expectedParams,
-        TStringBuf shape)
+    auto requireArity = [&](const NWasm::TWasmExportSignature& signature, const TString& exportName, size_t expectedParams, TStringBuf shape)
     {
         if (signature.ParamCount != expectedParams) {
-            ythrow yexception()
-                << "Wasm export '" << exportName << "' for UDF '" << Name_
-                << "' has " << signature.ParamCount << " parameters, but needs "
-                << expectedParams << " (" << shape << ")";
+            ythrow yexception() << "Wasm export '" << exportName << "' for UDF '" << Name_ << "' has " << signature.ParamCount
+                                << " parameters, but needs " << expectedParams << " (" << shape << ")";
         }
     };
 
@@ -368,22 +311,19 @@ void TWasmCompileActor::ValidateExports() {
             // have a fixed shape; the call export's arity follows the method.
             if (const auto* createSignature = requireExport(descriptor.CreateExport)) {
                 requireAbiTypes(*createSignature, descriptor.CreateExport);
-                requireArity(*createSignature, descriptor.CreateExport, 3,
-                    "context, result pointer, type config");
+                requireArity(*createSignature, descriptor.CreateExport, 3, "context, result pointer, type config");
             }
             if (const auto* callSignature = requireExport(descriptor.CallExport)) {
                 requireAbiTypes(*callSignature, descriptor.CallExport);
                 // TWasmConfiguredCallable::Run passes the object handle ahead
                 // of the method arguments, so the export takes three fixed
                 // slots plus one per declared argument.
-                requireArity(*callSignature, descriptor.CallExport,
-                    3 + descriptor.ArgTypes.size(),
+                requireArity(*callSignature, descriptor.CallExport, 3 + descriptor.ArgTypes.size(),
                     "context, result pointer, object handle, one slot per argument");
             }
             if (const auto* destroySignature = requireExport(descriptor.DestroyExport)) {
                 requireAbiTypes(*destroySignature, descriptor.DestroyExport);
-                requireArity(*destroySignature, descriptor.DestroyExport, 3,
-                    "context, result pointer, object handle");
+                requireArity(*destroySignature, descriptor.DestroyExport, 3, "context, result pointer, object handle");
             }
             continue;
         }
@@ -400,13 +340,11 @@ void TWasmCompileActor::ValidateExports() {
         // it at registration beats a WAVM type error on the first row.
         const size_t expectedParams = descriptor.ArgTypes.size() + 2 + (descriptor.IsObjectConstructor ? 1 : 0);
         if (signature->ParamCount != expectedParams || signature->ResultCount != 0) {
-            ythrow yexception()
-                << "Wasm export '" << exportName << "' for UDF '" << Name_
-                << "' has " << signature->ParamCount << " parameters and "
-                << signature->ResultCount << " results, but bridge with " << descriptor.ArgTypes.size()
-                << " declared arguments needs " << expectedParams
-                << " parameters (context, result pointer, one per argument)"
-                   " and no results";
+            ythrow yexception() << "Wasm export '" << exportName << "' for UDF '" << Name_ << "' has " << signature -> ParamCount
+                                << " parameters and " << signature->ResultCount << " results, but bridge with " << descriptor.ArgTypes.size()
+                                << " declared arguments needs " << expectedParams
+                                << " parameters (context, result pointer, one per argument)"
+                                   " and no results";
         }
     }
 }
@@ -502,4 +440,4 @@ void TWasmCompileActor::ReplySuccess() {
     PassAway();
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

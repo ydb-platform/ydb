@@ -3013,26 +3013,26 @@ Y_UNIT_TEST(ProcessUserTypeAuth) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["YDB.PushData"]);
 }
 
-Y_UNIT_TEST(SelectStreamRtmr) {
+Y_UNIT_TEST(SelectStreamPq) {
     NYql::TAstParseResult res = SqlToYql(
         "USE plato; INSERT INTO Output SELECT STREAM key FROM Input;",
-        10, TString(NYql::RtmrProviderName));
+        10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     res = SqlToYql(
         "USE plato; INSERT INTO Output SELECT key FROM Input;",
-        10, TString(NYql::RtmrProviderName));
+        10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
-Y_UNIT_TEST(SelectStreamRtmrJoinWithYt) {
+Y_UNIT_TEST(SelectStreamPqJoinWithYt) {
     NYql::TAstParseResult res = SqlToYql(
         "USE plato; INSERT INTO Output SELECT STREAM key FROM Input LEFT JOIN hahn.ttt as t ON Input.key = t.Name;",
-        10, TString(NYql::RtmrProviderName));
+        10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
-Y_UNIT_TEST(SelectStreamNonRtmr) {
+Y_UNIT_TEST(SelectStreamNonStreamingSource) {
     NYql::TAstParseResult res = SqlToYql(
         "USE plato; INSERT INTO Output SELECT STREAM key FROM Input;",
         10);
@@ -3040,11 +3040,11 @@ Y_UNIT_TEST(SelectStreamNonRtmr) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:31: Error: SELECT STREAM is unsupported for non-streaming sources\n");
 }
 
-Y_UNIT_TEST(GroupByHopRtmr) {
+Y_UNIT_TEST(GroupByHopPq) {
     NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato; INSERT INTO Output SELECT key, SUM(value) AS value FROM Input
                 GROUP BY key, HOP(subkey, "PT10S", "PT30S", "PT20S");
-            )", 10, TString(NYql::RtmrProviderName));
+            )", 10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
@@ -3057,16 +3057,16 @@ Y_UNIT_TEST(DataWatermarksPragmaIsAccepted) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
-Y_UNIT_TEST(GroupByHopRtmrSubquery) {
+Y_UNIT_TEST(GroupByHopPqSubquery) {
     // 'use plato' intentially avoided
     NYql::TAstParseResult res = SqlToYql(R"(
                 SELECT COUNT(*) AS value FROM (SELECT * FROM plato.Input)
                 GROUP BY HOP(Data, "PT10S", "PT30S", "PT20S")
-            )", 10, TString(NYql::RtmrProviderName));
+            )", 10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
-Y_UNIT_TEST(GroupByHopRtmrSubqueryBinding) {
+Y_UNIT_TEST(GroupByHopPqSubqueryBinding) {
     NYql::TAstParseResult res = SqlToYql(R"(
         USE plato;
         $q = SELECT * FROM Input;
@@ -3074,15 +3074,15 @@ Y_UNIT_TEST(GroupByHopRtmrSubqueryBinding) {
             SELECT COUNT(*) AS value FROM $q
             GROUP BY HOP(Data, "PT10S", "PT30S", "PT20S")
         );
-    )", 10, TString(NYql::RtmrProviderName));
+    )", 10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
-Y_UNIT_TEST(GroupByNoHopRtmr) {
+Y_UNIT_TEST(GroupByNoHopPq) {
     NYql::TAstParseResult res = SqlToYql(R"(
             USE plato; INSERT INTO Output SELECT STREAM key, SUM(value) AS value FROM Input
             GROUP BY key;
-        )", 10, TString(NYql::RtmrProviderName));
+        )", 10, TString(NYql::PqProviderName));
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:22: Error: Streaming group by query must have a hopping window specification.\n");
 }
@@ -4344,13 +4344,12 @@ Y_UNIT_TEST(WindowPartitionByOrderByWindowFunctionIsNotAllowed) {
         "<main>:1:50: Error: Failed to use window function RowNumber without window specification or in wrong place\n");
 }
 
-Y_UNIT_TEST(PqReadByAfterUse) {
+Y_UNIT_TEST(PqReadByDq) {
     ExpectFailWithError("use plato; pragma PqReadBy='plato2';",
-                        "<main>:1:28: Error: Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: plato2 != plato\n");
+                        "<main>:1:28: Error: Expected 'dq' or an empty string for: PqReadBy\n");
 
-    UNIT_ASSERT(SqlToYql("pragma PqReadBy='plato2';").IsOk());
-    UNIT_ASSERT(SqlToYql("pragma PqReadBy='plato2'; use plato;").IsOk());
-    UNIT_ASSERT(SqlToYql("$x='plato'; use rtmr:$x; pragma PqReadBy='plato2';").IsOk());
+    UNIT_ASSERT(SqlToYql("pragma PqReadBy='dq';").IsOk());
+    UNIT_ASSERT(SqlToYql("pragma PqReadBy=''; use plato;").IsOk());
     UNIT_ASSERT(SqlToYql("use plato; pragma PqReadBy='dq';").IsOk());
 }
 
@@ -5898,6 +5897,89 @@ Y_UNIT_TEST(CreateAsyncReplicationParseSecretPathsCorrect) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(CreateAsyncReplicationAvailabilityPeriod) {
+    for (const auto& value : {"'UNLIMITED'", "'unlimited'", "Interval('PT0.000001S')", "Interval('PT10.001S')"}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (AVAILABILITY_PERIOD = " << value << ");");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "availability_period");
+            }
+        };
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationInvalidAvailabilityPeriod) {
+    for (const auto& value : {"'FOREVER'", "1", "TRUE", "NULL"}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (AVAILABILITY_PERIOD = " << value << ");");
+        UNIT_ASSERT(!res.IsOk());
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationDuplicateAvailabilityPeriod) {
+    const auto res = SqlToYql("USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                              "WITH (AVAILABILITY_PERIOD = 'UNLIMITED', availability_period = Interval('PT1S'));");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Duplicate replication setting");
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationAvailabilityPeriod) {
+    const auto res = SqlToYql("USE plato; ALTER ASYNC REPLICATION MyReplication SET (AVAILABILITY_PERIOD = 'UNLIMITED');");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "AVAILABILITY_PERIOD is not supported in ALTER");
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationInitialScan) {
+    for (const auto& value : {"TRUE", "FALSE", "true", "false"}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (INITIAL_SCAN = " << value << ");");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder()
+                                                      << "'('\"initial_scan\" (Bool '\"" << to_lower(TString(value)) << "\"))");
+            }
+        };
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationInvalidInitialScan) {
+    for (const auto& value : {"\"true\"", "1", "NULL", "TRUE AND FALSE"}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (INITIAL_SCAN = " << value << ");");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Literal of Bool type is expected for INITIAL_SCAN");
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationDuplicateInitialScan) {
+    const auto res = SqlToYql(
+        "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+        "WITH (INITIAL_SCAN = TRUE, initial_scan = FALSE);");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Duplicate replication setting: initial_scan");
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationInitialScan) {
+    const auto res = SqlToYql(
+        "USE plato; ALTER ASYNC REPLICATION MyReplication SET (INITIAL_SCAN = TRUE);");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "INITIAL_SCAN is not supported in ALTER");
+}
+
 Y_UNIT_TEST(CreateAsyncReplicationUnsupportedSettings) {
     const auto settings = THashMap<TString, TString>{
         {"STATE", "DONE"},
@@ -6149,45 +6231,70 @@ Y_UNIT_TEST(AsyncReplicationInvalidSettings) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:62: Error: Unknown replication setting: FOO\n");
 }
 
-Y_UNIT_TEST(DropAsyncReplicationParseCorrect) {
-    auto req = R"(
-            USE plato;
-            DROP ASYNC REPLICATION MyReplication;
-        )";
-    auto res = SqlToYql(req);
-    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+Y_UNIT_TEST(DropAsyncReplicationModes) {
+    for (const auto& [query, mode] : {
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication;", "drop"},
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication CASCADE;", "dropCascade"},
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication FORCE;", "dropForce"},
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication CASCADE FORCE;", "dropCascadeForce"}}) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << query << ": " << Err2Str(res));
 
-    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("drop"));
-        }
-    };
+        TVerifyLineFunc verifyLine = [mode](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(TStringBuilder() << "('mode '" << mode << ")"));
+            }
+        };
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    VerifyProgram(res, elementStat, verifyLine);
-
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
 }
 
-Y_UNIT_TEST(DropAsyncReplicationCascade) {
-    auto req = R"(
-            USE plato;
-            DROP ASYNC REPLICATION MyReplication CASCADE;
-        )";
-    auto res = SqlToYql(req);
+Y_UNIT_TEST(DropAsyncReplicationForceRejectsUnsupportedForms) {
+    for (const auto* query : {
+             "USE plato; DROP ASYNC REPLICATION MyReplication FORCE CASCADE;",
+             "USE plato; DROP ASYNC REPLICATION MyReplication FORCE FORCE;",
+             "USE plato; DROP ASYNC REPLICATION MyReplication WITH (FORCE = TRUE);",
+             "USE plato; DROP ASYNC REPLICATION MyReplication WITH (FORCE = FALSE);",
+             "USE plato; DROP TRANSFER MyTransfer FORCE;",
+             "USE plato; DROP TABLE MyTable FORCE;"}) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(!res.IsOk(), query);
+    }
+}
+
+Y_UNIT_TEST(ForceRemainsAnUnquotedIdentifier) {
+    for (const auto* query : {
+             "SELECT fOrCe FROM plato.Input;",
+             "SELECT value AS fOrCe FROM plato.Input;",
+             "SELECT * FROM plato.fOrCe AS fOrCe;",
+             "USE ydb; CREATE TABLE fOrCe (fOrCe Uint64, PRIMARY KEY (fOrCe));",
+             "USE plato; DROP ASYNC REPLICATION fOrCe;",
+             "USE plato; DROP ASYNC REPLICATION fOrCe FORCE;",
+             "USE plato; CREATE TOPIC fOrCe (CONSUMER fOrCe);",
+             "USE plato; ALTER TOPIC fOrCe ADD CONSUMER fOrCe;"}) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << query << ": " << Err2Str(res));
+    }
+}
+
+Y_UNIT_TEST(ForceConsumerReferencesRequireQuoting) {
+    const auto res = SqlToYql("USE plato; ALTER TOPIC t DROP CONSUMER `fOrCe`;");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    ExpectFailWithFuzzyError(
+        "USE plato; ALTER TOPIC t DROP CONSUMER fOrCe;",
+        "Error: (mismatched input|extraneous input|no viable alternative at input).*fOrCe");
+}
 
-    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropCascade"));
-        }
-    };
-
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    VerifyProgram(res, elementStat, verifyLine);
-
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+Y_UNIT_TEST(ForceRowPatternVariablesRequireQuoting) {
+    const auto res = SqlToYql("USE plato; SELECT * FROM Input MATCH_RECOGNIZE (PATTERN (`fOrCe`) DEFINE `fOrCe` AS true);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    ExpectFailWithFuzzyError(
+        "USE plato; SELECT * FROM Input MATCH_RECOGNIZE (PATTERN (fOrCe) DEFINE fOrCe AS true);",
+        "Error: (mismatched input|extraneous input|no viable alternative at input).*fOrCe");
 }
 
 Y_UNIT_TEST(PragmaCompactGroupBy) {

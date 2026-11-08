@@ -4,6 +4,7 @@
 
 #include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/protos/config.pb.h>
+
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/services/services.pb.h>
@@ -38,16 +39,21 @@ public:
         : ChoicesMap(std::move(choicesMap))
         , OptionName(optionName)
         , CheckRegister(checkRegister)
-    {}
+    {
+    }
 
     TResult operator()(TString choice) const {
         if (!CheckRegister) {
-            std::for_each(choice.begin(), choice.vend(), [](char& c) { c = std::tolower(c); });
+            std::for_each(choice.begin(), choice.vend(), [](char& c) {
+                c = std::tolower(c);
+            });
         }
 
         const auto it = ChoicesMap.find(choice);
         if (it == ChoicesMap.end()) {
-            auto error = yexception() << "Value '" << choice << "' is not allowed" << (OptionName ? TStringBuilder() << " for option " << OptionName : TStringBuilder()) << ", available variants:";
+            auto error = yexception() << "Value '" << choice << "' is not allowed"
+                                      << (OptionName ? TStringBuilder() << " for option " << OptionName : TStringBuilder())
+                                      << ", available variants:";
             for (const auto& [value, _] : ChoicesMap) {
                 error << " " << value;
             }
@@ -85,7 +91,8 @@ public:
 
     static void PrintTimeline(const TString& plan, IOutputStream& output);
 
-    void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, const TString& plan, IOutputStream& output) const;
+    void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat,
+        const TString& plan, IOutputStream& output) const;
 
     // Function adds thousands separators
     // 123456789 -> 123.456.789
@@ -115,7 +122,8 @@ TString LoadFile(const TString& file);
 
 NKikimrServices::EServiceKikimr GetLogService(const TString& serviceName);
 
-void ModifyLogPriorities(std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> logPriorities, NKikimrConfig::TLogConfig& logConfig);
+void ModifyLogPriorities(
+    std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> logPriorities, NKikimrConfig::TLogConfig& logConfig);
 
 void InitLogSettings(const NKikimrConfig::TLogConfig& logConfig, NActors::TTestActorRuntimeBase& runtime);
 
@@ -154,4 +162,4 @@ std::optional<NActors::NLog::EPriority> DefaultLogPriorityFromVerbosity(EVerbosi
     return std::nullopt;
 }
 
-}  // namespace NKikimrRun
+}   // namespace NKikimrRun

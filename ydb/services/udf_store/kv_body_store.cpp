@@ -1,7 +1,7 @@
 #include "kv_body_store.h"
 
-#include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <util/folder/dirut.h>
 #include <util/folder/path.h>
@@ -48,8 +48,7 @@ void TKvBodyReadActor::HandleNavigateResult(TEvTxProxySchemeCache::TEvNavigateKe
 
     auto& entry = request->ResultSet[0];
     if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-        ReplyError(TStringBuilder() << "SchemeCache resolve failed for path '" << VolumePath
-            << "', status: " << static_cast<int>(entry.Status));
+        ReplyError(TStringBuilder() << "SchemeCache resolve failed for path '" << VolumePath << "', status: " << static_cast<int>(entry.Status));
         return;
     }
 
@@ -95,9 +94,7 @@ void TKvBodyReadActor::CreatePipeAndSendRead() {
     Md5Ctx = MD5();
 
     NTabletPipe::TClientConfig cfg;
-    cfg.RetryPolicy = {
-        .RetryLimitCount = 3u
-    };
+    cfg.RetryPolicy = { .RetryLimitCount = 3u };
     PipeClient = Register(NTabletPipe::CreateClient(SelfId(), KVTabletId, cfg));
 
     SendNextChunkRead();
@@ -128,8 +125,7 @@ void TKvBodyReadActor::HandleReadResponse(TEvKeyValue::TEvReadResponse::TPtr& ev
     }
 
     if (status != NKikimrKeyValue::Statuses::RSTATUS_OK) {
-        TString msg = TStringBuilder() << "KV read failed with status: "
-            << static_cast<int>(status);
+        TString msg = TStringBuilder() << "KV read failed with status: " << static_cast<int>(status);
         if (!record.msg().empty()) {
             msg += " - " + record.msg();
         }
@@ -186,8 +182,7 @@ void TKvBodyReadActor::FinalizeAndSave() {
             {"actual", CurrentOffset});
         NFs::Remove(TmpFilePath);
         Send(ReplyTo, new TEvReadBodyResponse(false, Name, EUdfType::NATIVE_UNSAFE,
-            TStringBuilder() << "Size mismatch: expected=" << ExpectedSize
-            << ", actual=" << CurrentOffset));
+                          TStringBuilder() << "Size mismatch: expected=" << ExpectedSize << ", actual=" << CurrentOffset));
         PassAway();
         return;
     }
@@ -203,7 +198,7 @@ void TKvBodyReadActor::FinalizeAndSave() {
             {"computed", computedMd5});
         NFs::Remove(TmpFilePath);
         Send(ReplyTo, new TEvReadBodyResponse(false, Name, EUdfType::NATIVE_UNSAFE,
-            TStringBuilder() << "MD5 mismatch: stored=" << Md5 << ", computed=" << computedMd5));
+                          TStringBuilder() << "MD5 mismatch: stored=" << Md5 << ", computed=" << computedMd5));
         PassAway();
         return;
     }
@@ -213,8 +208,8 @@ void TKvBodyReadActor::FinalizeAndSave() {
         YDB_LOG_ERROR("TKvBodyReadActor: failed to rename tmp file for UDF",
             {"name", Name});
         NFs::Remove(TmpFilePath);
-        Send(ReplyTo, new TEvReadBodyResponse(false, Name, EUdfType::NATIVE_UNSAFE,
-            TStringBuilder() << "Failed to rename tmp file to '" << finalPath << "'"));
+        Send(ReplyTo, new TEvReadBodyResponse(
+                          false, Name, EUdfType::NATIVE_UNSAFE, TStringBuilder() << "Failed to rename tmp file to '" << finalPath << "'"));
         PassAway();
         return;
     }
@@ -222,7 +217,7 @@ void TKvBodyReadActor::FinalizeAndSave() {
     if (!LoadUdfIntoRegistry(finalPath)) {
         NFs::Remove(finalPath);
         Send(ReplyTo, new TEvReadBodyResponse(false, Name, EUdfType::NATIVE_UNSAFE,
-            TStringBuilder() << "Failed to load UDF '" << Name << "' into function registry"));
+                          TStringBuilder() << "Failed to load UDF '" << Name << "' into function registry"));
         PassAway();
         return;
     }
@@ -268,7 +263,10 @@ bool TKvBodyReadActor::LoadUdfIntoRegistry(const TString& finalPath) const {
 
 void TKvBodyReadActor::CleanupTmpFile() {
     if (TmpFile) {
-        try { TmpFile->Close(); } catch (...) {}
+        try {
+            TmpFile->Close();
+        } catch (...) {
+        }
         TmpFile.Reset();
     }
     if (!TmpFilePath.empty()) {
@@ -303,4 +301,4 @@ void TKvBodyReadActor::PassAway() {
     NActors::TActorBootstrapped<TKvBodyReadActor>::PassAway();
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

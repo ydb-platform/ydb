@@ -5,10 +5,9 @@
 #include <ydb/services/metadata/abstract/initialization.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
-class TResourcePoolClassifierBehaviour : public NMetadata::TClassBehaviour<TResourcePoolClassifierConfig> {
+class TResourcePoolClassifierBehaviour: public NMetadata::TClassBehaviour<TResourcePoolClassifierConfig> {
     static TFactory::TRegistrator<TResourcePoolClassifierBehaviour> Registrator;
 
 protected:
@@ -22,4 +21,4 @@ public:
     static IClassBehaviour::TPtr GetInstance();
 };
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

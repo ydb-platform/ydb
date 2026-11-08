@@ -11,6 +11,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -20,11 +21,10 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
 #include <util/generic/string.h>
 #include <util/string/builder.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <exception>
 #include <forward_list>
@@ -37,7 +37,7 @@ namespace {
 
 using namespace NPrivate;
 
-class TRunScriptActor final : public TActorBootstrapped<TRunScriptActor>, IActorExceptionHandler {
+class TRunScriptActor final: public TActorBootstrapped<TRunScriptActor>, IActorExceptionHandler {
     struct TSessionState {
         bool WaitCreation = false;
         bool SessionOpen = false;
@@ -71,12 +71,14 @@ class TRunScriptActor final : public TActorBootstrapped<TRunScriptActor>, IActor
 public:
     static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
 
-    TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig)
+    TRunScriptActor(
+        const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig)
         : Ctx(CreateExecutionContext(request, settings, queryServiceConfig))
         , QueryRequest(CreateQueryRequest(request, settings, queryServiceConfig))
         , QueryServiceConfig(std::move(queryServiceConfig))
         , TraceId(std::move(settings.TraceId))
-    {}
+    {
+    }
 
     void Bootstrap() {
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Bootstrap",
@@ -87,16 +89,14 @@ public:
     }
 
 private:
-    static TScriptExecutionContext::TPtr CreateExecutionContext(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+    static TScriptExecutionContext::TPtr CreateExecutionContext(const NKikimrKqp::TEvQueryRequest& request,
+        const TKqpRunScriptActorSettings& settings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
         const auto& traceId = request.GetTraceId();
-        auto userRequestContext = MakeIntrusive<TUserRequestContext>(
-            traceId,
-            settings.Database,
-            /* SessionId*/ "", // Will be set after session creation
-            settings.ExecutionId,
-            settings.CustomerSuppliedId ? settings.CustomerSuppliedId : traceId,
-            TActorId{} // Will be set in actor bootstrap
-        );
+        auto userRequestContext =
+            MakeIntrusive<TUserRequestContext>(traceId, settings.Database, /* SessionId*/ "",   // Will be set after session creation
+                settings.ExecutionId, settings.CustomerSuppliedId ? settings.CustomerSuppliedId : traceId,
+                TActorId{}   // Will be set in actor bootstrap
+            );
         userRequestContext->IsStreamingQuery = settings.SaveQueryPhysicalGraph;
         userRequestContext->CheckpointId = settings.CheckpointId;
         userRequestContext->StreamingQueryPath = settings.StreamingQueryPath;
@@ -111,11 +111,13 @@ private:
             .LeaseGeneration = settings.LeaseGeneration,
             .LeaseDuration = settings.LeaseDuration,
             .ResultsTtl = settings.ResultsTtl,
-            .Timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, request.GetRequest().GetTimeoutMs(), {}, queryServiceConfig, settings.DisableDefaultTimeout),
+            .Timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, request.GetRequest().GetTimeoutMs(), {}, queryServiceConfig,
+                settings.DisableDefaultTimeout),
         });
     }
 
-    static std::unique_ptr<TEvKqp::TEvQueryRequest> CreateQueryRequest(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+    static std::unique_ptr<TEvKqp::TEvQueryRequest> CreateQueryRequest(const NKikimrKqp::TEvQueryRequest& request,
+        const TKqpRunScriptActorSettings& settings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
         auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
         ev->Record = request;
         ev->SetSaveQueryPhysicalGraph(settings.SaveQueryPhysicalGraph);
@@ -126,7 +128,8 @@ private:
         }
 
         if (request.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-            ev->SetProgressStatsPeriod(settings.ProgressStatsPeriod ? settings.ProgressStatsPeriod : TDuration::MilliSeconds(queryServiceConfig.GetProgressStatsPeriodMs()));
+            ev->SetProgressStatsPeriod(settings.ProgressStatsPeriod ? settings.ProgressStatsPeriod
+                                                                    : TDuration::MilliSeconds(queryServiceConfig.GetProgressStatsPeriodMs()));
         }
 
         return ev;
@@ -151,7 +154,7 @@ private:
         if (FinishInfo.IsFinished()) {
             YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Script execution metadata saved after failure, continue finishing",
                 {"logPrefix", LogPrefix()});
-            Finish(); // Continue finishing
+            Finish();   // Continue finishing
             return;
         }
 
@@ -247,21 +250,24 @@ private:
             YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "New session started on unexpected node",
                 {"logPrefix", LogPrefix()},
                 {"node", session.GetNodeId()});
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Session created on wrong node " << session.GetNodeId() << ", expected local session on node " << SelfId().NodeId());
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Session created on wrong node " << session.GetNodeId()
+                                                                    << ", expected local session on node " << SelfId().NodeId());
             return;
         }
 
         Become(&TThis::StateFuncExecute);
 
         const auto& physicalGraph = QueryRequest->GetQueryPhysicalGraph();
-        ScriptResultHandlerActor.Id = RegisterWithSameMailbox(CreateScriptResultHandlerActor(Ctx, physicalGraph ? std::optional(*physicalGraph) : std::nullopt, QueryServiceConfig));
+        ScriptResultHandlerActor.Id = RegisterWithSameMailbox(
+            CreateScriptResultHandlerActor(Ctx, physicalGraph ? std::optional(*physicalGraph) : std::nullopt, QueryServiceConfig));
         YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Started query",
             {"logPrefix", LogPrefix()},
             {"scriptResultHandlerActor", ScriptResultHandlerActor.Id},
             {"hasPhysicalGraph", (physicalGraph ? "YES" : "NO")});
 
         Ctx->UserRequestContext->RunScriptActorId = ScriptResultHandlerActor.Id;
-        QueryRequest->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(*Ctx->UserRequestContext)); // Make copy of context, because it may be changed
+        QueryRequest->SetUserRequestContext(
+            MakeIntrusive<TUserRequestContext>(*Ctx->UserRequestContext));   // Make copy of context, because it may be changed
         ActorIdToProto(ScriptResultHandlerActor.Id, QueryRequest->Record.MutableRequestActorId());
         Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release(), 0, 0, NWilson::TTraceId(TraceId));
     }
@@ -276,7 +282,8 @@ private:
                 {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
-            Finish(status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));
+            Finish(
+                status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));
         } else {
             YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got lease watcher finish",
                 {"logPrefix", LogPrefix()},
@@ -369,10 +376,12 @@ private:
         const auto alreadyStopped = info.AlreadyStopped || FinishInfo.IsSuccess();
 
         for (auto& request : CancelRequests) {
-            Send(request->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(status, {
-                .ExecutionEntryExists = info.ExecutionEntryExists,
-                .AlreadyStopped = alreadyStopped,
-            }, issues), /* flags */ 0, request->Cookie);
+            Send(request->Sender,
+                new TEvKqp::TEvCancelScriptExecutionResponse(status,
+                    {
+                        .ExecutionEntryExists = info.ExecutionEntryExists,
+                        .AlreadyStopped = alreadyStopped,
+                    }, issues), /* flags */ 0, request->Cookie);
         }
 
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Exit",
@@ -387,7 +396,7 @@ private:
     }
 
     void Finish(const Ydb::StatusIds::StatusCode status, const TString& message) {
-        Finish(status, {NYql::TIssue(message)});
+        Finish(status, { NYql::TIssue(message) });
     }
 
     void Finish(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
@@ -444,9 +453,8 @@ private:
                 FinishInfo.Status = Ydb::StatusIds::CANCELLED;
             }
 
-            const auto finalizationStatus = FinishInfo.IsSuccess() || cancelledByUser
-                ? EFinalizationStatus::FS_COMMIT
-                : EFinalizationStatus::FS_ROLLBACK;
+            const auto finalizationStatus =
+                FinishInfo.IsSuccess() || cancelledByUser ? EFinalizationStatus::FS_COMMIT : EFinalizationStatus::FS_ROLLBACK;
 
             auto execStatus = Ydb::Query::EXEC_STATUS_COMPLETED;
             if ((FinishInfo.IsFailed() && cancelledByUser) || *FinishInfo.Status == Ydb::StatusIds::CANCELLED) {
@@ -455,11 +463,10 @@ private:
                 execStatus = Ydb::Query::EXEC_STATUS_FAILED;
             }
 
-            auto scriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
-                finalizationStatus, Ctx->UserRequestContext->CurrentExecutionId, Ctx->UserRequestContext->Database,
-                *FinishInfo.Status, execStatus, FinishInfo.Issues, std::move(ExecutionInfo.QueryStats),
-                std::move(ExecutionInfo.QueryPlan), std::move(ExecutionInfo.QueryAst), Ctx->LeaseGeneration, cancelledByUser
-            );
+            auto scriptFinalizeRequest =
+                std::make_unique<TEvScriptFinalizeRequest>(finalizationStatus, Ctx->UserRequestContext->CurrentExecutionId,
+                    Ctx->UserRequestContext->Database, *FinishInfo.Status, execStatus, FinishInfo.Issues, std::move(ExecutionInfo.QueryStats),
+                    std::move(ExecutionInfo.QueryPlan), std::move(ExecutionInfo.QueryAst), Ctx->LeaseGeneration, cancelledByUser);
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
             WaitFinalizationRequest = true;
         } else {
@@ -472,7 +479,8 @@ private:
     }
 
     TString LogPrefix() const {
-        return TStringBuilder() << "[" << ActorName << "] " << SelfId() << ". Ctx: " << *Ctx->UserRequestContext << ". LeaseGeneration: " << Ctx->LeaseGeneration << ". ";
+        return TStringBuilder() << "[" << ActorName << "] " << SelfId() << ". Ctx: " << *Ctx->UserRequestContext
+                                << ". LeaseGeneration: " << Ctx->LeaseGeneration << ". ";
     }
 
     const TScriptExecutionContext::TPtr Ctx;
@@ -489,10 +497,11 @@ private:
     bool WaitFinalizationRequest = false;
 };
 
-} // namespace
+}   // namespace
 
-IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
+IActor* CreateRunScriptActor(
+    const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
     return new TRunScriptActor(request, std::move(settings), std::move(queryServiceConfig));
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

@@ -1,8 +1,10 @@
 syntax = "proto3";
+import "yt_proto/yt/client/table_chunk_format/proto/chunk_meta.proto";
 package NYql.NQyt.NProto;
 message TSource {
     string Endpoint = 1;
     string Path = 2;
     string Consumer = 3;
     string Token = 4;
+    NYT.NTableClient.NProto.TTableSchemaExt Schema = 5;
 }

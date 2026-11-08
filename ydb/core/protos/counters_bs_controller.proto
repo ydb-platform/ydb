@@ -302,4 +302,8 @@ enum ETxTypes {
     TXTYPE_BLOB_CHECKER_UPDATE_GROUP_STATUS = 36 [(TxTypeOpts) = {Name: "TTxBlobCheckerUpdateGroupStatus"}];
     TXTYPE_LIST_DDISK_INFO_TABLETS = 37 [(TxTypeOpts) = {Name: "TTxListDDiskInfoTablets"}];
     TXTYPE_GET_DDISK_INFO_TABLET = 38 [(TxTypeOpts) = {Name: "TTxGetDDiskInfoTablet"}];
+    TXTYPE_CONVERT_TO_BRIDGE = 39 [(TxTypeOpts) = {Name: "TTxConvertToBridge"}];
+    TXTYPE_ADD_BRIDGE_PILE = 40 [(TxTypeOpts) = {Name: "TTxAddBridgePile"}];
+    TXTYPE_REMOVE_BRIDGE_PILE = 41 [(TxTypeOpts) = {Name: "TTxRemoveBridgePile"}];
+    TXTYPE_UPDATE_BRIDGE_GROUP_MODES = 42 [(TxTypeOpts) = {Name: "TTxUpdateBridgeGroupModes"}];
 }

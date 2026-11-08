@@ -2,6 +2,7 @@
 
 #include "bloom_filter_defaults.h"
 #include "flat_page_iface.h"
+#include "flat_part_slots.h"
 #include "flat_row_eggs.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -102,6 +103,7 @@ namespace NPage {
         IKeySpace* UnderlayMask = nullptr;
         ISplitKeys* SplitKeys = nullptr;
         TRowVersion MinRowVersion = TRowVersion::Min();
+        TPartLayout Layout;             /* Page collections of written parts, needs b-tree index only when separate */
 
         TVector<TGroupConf> Groups;
 

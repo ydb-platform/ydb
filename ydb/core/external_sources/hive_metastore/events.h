@@ -1,19 +1,20 @@
 #pragma once
 
 #include <ydb/core/external_sources/hive_metastore/hive_metastore_native/gen-cpp/ThriftHiveMetastore.h>
+
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
-#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <library/cpp/threading/future/core/future.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr::NExternalSource {
 
 struct TEvHiveMetastore {
     // Event ids.
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvGetTable = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvGetStatistics,
         EvGetPartitions,
@@ -57,6 +58,7 @@ struct TEvHiveMetastore {
             TString Location;
             std::vector<TString> Values;
         };
+
         std::vector<TPartition> Partitions;
     };
 
@@ -83,4 +85,4 @@ struct TEvHiveMetastore {
     };
 };
 
-}
+}   // namespace NKikimr::NExternalSource

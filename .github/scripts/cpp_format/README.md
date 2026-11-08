@@ -14,7 +14,7 @@ directory's `linters.make.inc`. Coverage applies to the listed subtrees.
 | --- | --- | --- | --- |
 | CS (`@ydb-platform/cs`) | `ydb/core/tx/columnshard` | Common | [.github/config/cpp_format/.clang-format](../../config/cpp_format/.clang-format) |
 | NBS (`@ydb-platform/nbs_yandex`) | `ydb/core/nbs` | Own | [ydb/core/nbs/.clang-format](../../../ydb/core/nbs/.clang-format) |
-| FQ (`@ydb-platform/fq`) | Not enabled yet; rollout per directory | Common (planned) | [.github/config/cpp_format/.clang-format](../../config/cpp_format/.clang-format) |
+| FQ (`@ydb-platform/fq`) | 61 FQ roots listed in [autoincludes.json](../../../build/internal/conf/autoincludes.json) | Common | [.github/config/cpp_format/.clang-format](../../config/cpp_format/.clang-format) |
 
 Update this table when enabling a team's directories or changing their style
 configuration. The examples below show CS's existing setup and how to enable an
@@ -52,7 +52,7 @@ directory's declared configuration.
 ## Enable checks for a directory
 
 Run the commands below from the repository root. The example uses
-`ydb/core/external_sources`, an FQ directory that can adopt the shared style.
+`ydb/core/external_sources`, an enabled FQ directory illustrating the shared-style setup.
 
 1. Add the directory to
    [autoincludes.json](../../../build/internal/conf/autoincludes.json), preserving
@@ -136,7 +136,7 @@ repeated. Newly configured FQ or other directories are discovered automatically.
 The helper supports the configuration template above, with or without the
 `MODULE_LANG == CPP` guard or the `SET` line. It rejects other formatting
 constructs and overlapping autoinclude roots before editing files. It does not
-evaluate arbitrary ymake code or module-specific settings.
+evaluate arbitrary ymake code. It recognizes the module exclusion described below.
 
 ### File selection and exclusions
 
@@ -157,12 +157,30 @@ It mirrors the common Ya exclusions used by the
 For example, vendored files under `ydb/core/nbs/cloud/contrib/vhost` are excluded
 when checking NBS.
 
+The helper also respects a literal, unconditional `NO_LINT()` in the nearest
+`ya.make` above a source or header. This excludes that module's files, including
+files in subdirectories without their own `ya.make`. A child directory with its
+own `ya.make` is a separate module and does not inherit the exclusion.
+`NO_LINT(ktlint)` does not disable C++ checks. Conditional `NO_LINT()` settings
+and settings supplied through includes remain the native Ya evaluator's
+responsibility; the helper does not apply them.
+
+The generated Thrift sources and headers under
+`ydb/core/external_sources/hive_metastore/hive_metastore_native/gen-cpp` are
+excluded by `NO_LINT()` in their module's `ya.make`. Add the exclusion to the
+owning module when opting in a subtree containing checked-in generated code,
+then verify its `--list` output before formatting.
+
 ### Formatter and exit status
 
 The helper resolves `./ya tool clang-format-18 --print-path`, using the same
 formatter resource as Ya's style tests. `--list` does not resolve or download the
 formatter. To reuse a previously resolved Ya binary offline, set
 `YDB_CLANG_FORMAT` to its executable path.
+
+Checks use a batch dry run first. If it fails, the helper compares each file's
+formatted output with its original bytes, matching the native Ya checker. This
+avoids false positives from clang-format replacements that leave the text unchanged.
 
 Exit status is 0 on success, 1 on formatting failures, and 2 for configuration or
 invocation errors.

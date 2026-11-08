@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -13,12 +14,11 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
-
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 #include <util/system/types.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <exception>
 
@@ -30,7 +30,7 @@ namespace {
 
 using namespace NActors;
 
-class TScriptLeaseWatcherActor final : public TActorBootstrapped<TScriptLeaseWatcherActor>, IActorExceptionHandler {
+class TScriptLeaseWatcherActor final: public TActorBootstrapped<TScriptLeaseWatcherActor>, IActorExceptionHandler {
     using TBase = TActorBootstrapped<TScriptLeaseWatcherActor>;
 
     static constexpr ui32 LEASE_UPDATE_FREQUENCY = 2;
@@ -106,7 +106,8 @@ private:
 
     void ScheduleLeaseUpdate(const TInstant currentDeadline) {
         LeaseUpdateScheduleTime = TInstant::Now();
-        const auto leaseUpdateTime = std::max(currentDeadline - Ctx->LeaseDuration / LEASE_UPDATE_FREQUENCY, TInstant::Now() + TDuration::Seconds(1));
+        const auto leaseUpdateTime =
+            std::max(currentDeadline - Ctx->LeaseDuration / LEASE_UPDATE_FREQUENCY, TInstant::Now() + TDuration::Seconds(1));
         YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Scheduling lease update",
             {"logPrefix", LogPrefix()},
             {"leaseUpdateTime", leaseUpdateTime});
@@ -115,7 +116,8 @@ private:
     }
 
     void StartLeaseUpdate() {
-        const auto& updaterId = Register(CreateScriptLeaseUpdateActor(SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId, Ctx->LeaseDuration, Ctx->LeaseGeneration));
+        const auto& updaterId = Register(CreateScriptLeaseUpdateActor(
+            SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId, Ctx->LeaseDuration, Ctx->LeaseGeneration));
         YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Run lease updater",
             {"logPrefix", LogPrefix()},
             {"updaterId", updaterId});
@@ -132,7 +134,7 @@ private:
     }
 
     void Finish(const Ydb::StatusIds::StatusCode status, const TString& message) {
-        Finish(status, {NYql::TIssue(message)});
+        Finish(status, { NYql::TIssue(message) });
     }
 
     void Finish(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
@@ -171,10 +173,10 @@ private:
     TInstant LeaseUpdateStartTime;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 IActor* CreateScriptLeaseWatcherActor(TScriptExecutionContext::TPtr ctx) {
     return new TScriptLeaseWatcherActor(std::move(ctx));
 }
 
-} // namespace NKikimr::NKqp::NPrivate
+}   // namespace NKikimr::NKqp::NPrivate

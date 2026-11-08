@@ -1,22 +1,22 @@
 #include "read_stream.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
+
+#include <arrow/api.h>
+#include <arrow/io/memory.h>
+#include <arrow/ipc/dictionary.h>
+#include <arrow/ipc/metadata_internal.h>
+#include <arrow/ipc/reader.h>
+#include <arrow/util/bitmap_ops.h>
+#include <util/generic/hash_set.h>
+#include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <arrow/api.h>
-#include <arrow/io/memory.h>
-#include <arrow/ipc/reader.h>
-#include <arrow/ipc/dictionary.h>
-#include <arrow/ipc/metadata_internal.h>
-#include <arrow/util/bitmap_ops.h>
-
-#include <util/generic/hash_set.h>
-#include <util/string/builder.h>
-#include <util/string/cast.h>
-#include <mutex>
 #include <cstring>
+#include <mutex>
 #include <optional>
 #include <utility>
 
@@ -30,20 +30,34 @@ std::shared_ptr<arrow::DataType> ArrowType(const Ydb::Type& type) {
     const auto& item = type.has_optional_type() ? type.optional_type().item() : type;
     YQL_ENSURE(item.has_type_id(), "YdbExternal only supports primitive and optional primitive columns");
     switch (item.type_id()) {
-        case Ydb::Type::BOOL: return arrow::uint8();
-        case Ydb::Type::INT8: return arrow::int8();
-        case Ydb::Type::INT16: return arrow::int16();
-        case Ydb::Type::INT32: return arrow::int32();
-        case Ydb::Type::INT64: return arrow::int64();
-        case Ydb::Type::UINT8: return arrow::uint8();
-        case Ydb::Type::UINT16: return arrow::uint16();
-        case Ydb::Type::UINT32: return arrow::uint32();
-        case Ydb::Type::UINT64: return arrow::uint64();
-        case Ydb::Type::FLOAT: return arrow::float32();
-        case Ydb::Type::DOUBLE: return arrow::float64();
-        case Ydb::Type::STRING: return arrow::binary();
-        case Ydb::Type::UTF8: return arrow::utf8();
-        default: ythrow yexception() << "YdbExternal column type is unsupported";
+        case Ydb::Type::BOOL:
+            return arrow::uint8();
+        case Ydb::Type::INT8:
+            return arrow::int8();
+        case Ydb::Type::INT16:
+            return arrow::int16();
+        case Ydb::Type::INT32:
+            return arrow::int32();
+        case Ydb::Type::INT64:
+            return arrow::int64();
+        case Ydb::Type::UINT8:
+            return arrow::uint8();
+        case Ydb::Type::UINT16:
+            return arrow::uint16();
+        case Ydb::Type::UINT32:
+            return arrow::uint32();
+        case Ydb::Type::UINT64:
+            return arrow::uint64();
+        case Ydb::Type::FLOAT:
+            return arrow::float32();
+        case Ydb::Type::DOUBLE:
+            return arrow::float64();
+        case Ydb::Type::STRING:
+            return arrow::binary();
+        case Ydb::Type::UTF8:
+            return arrow::utf8();
+        default:
+            ythrow yexception() << "YdbExternal column type is unsupported";
     }
 }
 
@@ -74,17 +88,21 @@ T Checked(arrow::Result<T> result) {
 
 // TResultSet copies share the immutable SDK implementation. Keep it alive while
 // Arrow views the IPC body; output compaction copies only rows actually delivered.
-class TResultBuffer final : public arrow::Buffer {
+class TResultBuffer final: public arrow::Buffer {
 public:
     TResultBuffer(const std::string& bytes, const NYdb::TResultSet& owner)
         : arrow::Buffer(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size())
-        , Owner_(owner) {}
+        , Owner_(owner)
+    {
+    }
+
 private:
     NYdb::TResultSet Owner_;
 };
 
-class TResponseError : public yexception {};
-class TResponseLimitError : public TResponseError {};
+class TResponseError: public yexception {};
+
+class TResponseLimitError: public TResponseError {};
 
 void CheckResponse(bool accepted, const char* category) {
     if (!accepted) {
@@ -94,8 +112,7 @@ void CheckResponse(bool accepted, const char* category) {
 
 void CheckLimit(bool accepted, const char* category, ui64 limit) {
     if (!accepted) {
-        ythrow TResponseLimitError() << "YdbExternal response limit exceeded: " << category
-            << " (limit " << limit << " bytes)";
+        ythrow TResponseLimitError() << "YdbExternal response limit exceeded: " << category << " (limit " << limit << " bytes)";
     }
 }
 
@@ -113,20 +130,17 @@ std::unique_ptr<arrow::ipc::Message> ReadIpcMessage(const std::string& bytes, co
     YQL_ENSURE(metadataSize % 8 == 0, "YdbExternal invalid Arrow IPC alignment");
     YQL_ENSURE(metadataSize && metadataSize <= bytes.size() - offset, "YdbExternal invalid Arrow IPC framing");
     const arrow::flatbuf::Message* flatMessage = nullptr;
-    YQL_ENSURE(arrow::ipc::internal::VerifyMessage(
-        reinterpret_cast<const ui8*>(bytes.data() + offset), metadataSize, &flatMessage).ok(),
+    YQL_ENSURE(arrow::ipc::internal::VerifyMessage(reinterpret_cast<const ui8*>(bytes.data() + offset), metadataSize, &flatMessage).ok(),
         "YdbExternal invalid Arrow IPC metadata");
-    YQL_ENSURE(!flatMessage->custom_metadata() || flatMessage->custom_metadata()->size() == 0,
-               "YdbExternal Arrow custom metadata is unsupported");
-    YQL_ENSURE(flatMessage->version() == arrow::flatbuf::MetadataVersion::V5,
-               "YdbExternal requires Arrow IPC metadata version 5");
+    YQL_ENSURE(
+        !flatMessage->custom_metadata() || flatMessage->custom_metadata()->size() == 0, "YdbExternal Arrow custom metadata is unsupported");
+    YQL_ENSURE(flatMessage->version() == arrow::flatbuf::MetadataVersion::V5, "YdbExternal requires Arrow IPC metadata version 5");
     const auto bodyOffset = offset + metadataSize;
-    YQL_ENSURE(flatMessage->bodyLength() >= 0 &&
-               static_cast<ui64>(flatMessage->bodyLength()) <= bytes.size() - bodyOffset,
-               "YdbExternal invalid Arrow IPC body size");
+    YQL_ENSURE(flatMessage->bodyLength() >= 0 && static_cast<ui64>(flatMessage->bodyLength()) <= bytes.size() - bodyOffset,
+        "YdbExternal invalid Arrow IPC body size");
     auto buffer = std::make_shared<TResultBuffer>(bytes, owner);
-    return Checked(arrow::ipc::Message::Open(arrow::SliceBuffer(buffer, offset, metadataSize),
-        arrow::SliceBuffer(buffer, bodyOffset, flatMessage->bodyLength())));
+    return Checked(arrow::ipc::Message::Open(
+        arrow::SliceBuffer(buffer, offset, metadataSize), arrow::SliceBuffer(buffer, bodyOffset, flatMessage->bodyLength())));
 }
 
 bool IsRetryable(NYdb::EStatus status) {
@@ -150,13 +164,16 @@ NNative::TReadResult Error(const NYdb::TStatus& status) {
     if (status.GetStatus() == NYdb::EStatus::BAD_REQUEST || status.GetStatus() == NYdb::EStatus::UNSUPPORTED) {
         message << "; verify the source schema and remote Query Service support for Arrow results";
     }
-    return {.Error = message, .Retryable = IsRetryable(status.GetStatus())};
+    return { .Error = message, .Retryable = IsRetryable(status.GetStatus()) };
 }
 
-class TYdbReadStream final : public NNative::IReadStream, public std::enable_shared_from_this<TYdbReadStream> {
+class TYdbReadStream final: public NNative::IReadStream, public std::enable_shared_from_this<TYdbReadStream> {
 public:
     TYdbReadStream(std::shared_ptr<NYdb::NQuery::TQueryClient> client, TSource source, NNative::TReadContext context)
-        : Client_(std::move(client)), Source_(std::move(source)), Context_(context) {
+        : Client_(std::move(client))
+        , Source_(std::move(source))
+        , Context_(context)
+    {
     }
 
     void SubscribeCancellation() {
@@ -181,15 +198,15 @@ public:
         {
             std::lock_guard lock(Mutex_);
             if (Cancelled_ || Context_.Cancellation.IsCancellationRequested()) {
-                promise.SetValue({.Error = "YdbExternal read cancelled"});
+                promise.SetValue({ .Error = "YdbExternal read cancelled" });
                 return promise.GetFuture();
             }
             if (TInstant::Now() >= Context_.Deadline) {
-                promise.SetValue({.Error = "YdbExternal read deadline exceeded"});
+                promise.SetValue({ .Error = "YdbExternal read deadline exceeded" });
                 return promise.GetFuture();
             }
             if (Pending_) {
-                promise.SetValue({.Error = "YdbExternal concurrent reads are unsupported"});
+                promise.SetValue({ .Error = "YdbExternal concurrent reads are unsupported" });
                 return promise.GetFuture();
             }
             Pending_ = promise;
@@ -205,7 +222,7 @@ public:
             } else {
                 const auto now = TInstant::Now();
                 if (now >= Context_.Deadline) {
-                    Complete(promise, {.Error = "YdbExternal read deadline exceeded"});
+                    Complete(promise, { .Error = "YdbExternal read deadline exceeded" });
                     return promise.GetFuture();
                 }
                 NYdb::NQuery::TExecuteQuerySettings settings;
@@ -215,8 +232,8 @@ public:
                 settings.Format(NYdb::TResultSet::EFormat::Arrow);
                 settings.SchemaInclusionMode(NYdb::NQuery::ESchemaInclusionMode::Always);
                 settings.ConcurrentResultSets(false);
-                settings.ArrowFormatSettings(NYdb::NQuery::TArrowFormatSettings().CompressionCodec(
-                    NYdb::NQuery::TArrowFormatSettings::TCompressionCodec().Type(
+                settings.ArrowFormatSettings(
+                    NYdb::NQuery::TArrowFormatSettings().CompressionCodec(NYdb::NQuery::TArrowFormatSettings::TCompressionCodec().Type(
                         NYdb::NQuery::TArrowFormatSettings::TCompressionCodec::EType::None)));
                 {
                     std::lock_guard lock(Mutex_);
@@ -238,7 +255,7 @@ public:
                         {
                             std::lock_guard lock(self->Mutex_);
                             if (self->Cancelled_ || self->Context_.Cancellation.IsCancellationRequested()) {
-                                return; // Dropping a late iterator requests SDK cleanup.
+                                return;   // Dropping a late iterator requests SDK cleanup.
                             }
                             self->Iterator_ = iterator;
                         }
@@ -248,14 +265,14 @@ public:
                             self->Read(iterator, promise);
                         }
                     } catch (...) {
-                        self->Complete(promise, {.Error = "YdbExternal could not open the query stream"});
+                        self->Complete(promise, { .Error = "YdbExternal could not open the query stream" });
                     }
                 });
             }
         } catch (const TResponseError& error) {
-            Complete(promise, {.Error = error.what()});
+            Complete(promise, { .Error = error.what() });
         } catch (...) {
-            Complete(promise, {.Error = "YdbExternal could not start the query read"});
+            Complete(promise, { .Error = "YdbExternal could not start the query read" });
         }
         return promise.GetFuture();
     }
@@ -272,7 +289,7 @@ public:
             BufferedOffset_ = 0;
         }
         if (pending) {
-            pending->TrySetValue({.Error = "YdbExternal read cancelled"});
+            pending->TrySetValue({ .Error = "YdbExternal read cancelled" });
         }
         // The existing SDK cancels on reader destruction. During initial open or
         // ReadNext it still owns the reader: the RPC can outlive local cancellation
@@ -280,8 +297,7 @@ public:
     }
 
 private:
-    void Deliver(std::shared_ptr<arrow::RecordBatch> batch, int64_t offset,
-                 NThreading::TPromise<NNative::TReadResult> promise) {
+    void Deliver(std::shared_ptr<arrow::RecordBatch> batch, int64_t offset, NThreading::TPromise<NNative::TReadResult> promise) {
         auto output = TakeOutputBatch(*batch, offset, Context_.MaxBatchBytes, MaxOutputRowBytes);
         offset += output->num_rows();
         {
@@ -292,24 +308,23 @@ private:
             }
         }
         const ui64 bytes = NUdf::GetSizeOfArrowBatchInBytes(*output);
-        Complete(promise, {.Batch = std::move(output), .Bytes = bytes});
+        Complete(promise, { .Batch = std::move(output), .Bytes = bytes });
     }
 
     void Complete(NThreading::TPromise<NNative::TReadResult> promise, NNative::TReadResult result) {
         {
             std::lock_guard lock(Mutex_);
             if (Cancelled_ || Context_.Cancellation.IsCancellationRequested()) {
-                result = {.Error = "YdbExternal read cancelled"};
+                result = { .Error = "YdbExternal read cancelled" };
             } else if (TInstant::Now() >= Context_.Deadline) {
-                result = {.Error = "YdbExternal read deadline exceeded"};
+                result = { .Error = "YdbExternal read deadline exceeded" };
             }
             Pending_.reset();
         }
         promise.TrySetValue(std::move(result));
     }
 
-    void Read(const std::shared_ptr<NYdb::NQuery::TExecuteQueryIterator>& iterator,
-              NThreading::TPromise<NNative::TReadResult> promise) {
+    void Read(const std::shared_ptr<NYdb::NQuery::TExecuteQueryIterator>& iterator, NThreading::TPromise<NNative::TReadResult> promise) {
         {
             std::lock_guard lock(Mutex_);
             if (Cancelled_ || Context_.Cancellation.IsCancellationRequested()) {
@@ -321,12 +336,12 @@ private:
                 {
                     std::lock_guard lock(self->Mutex_);
                     if (self->Cancelled_ || self->Context_.Cancellation.IsCancellationRequested()) {
-                        return; // Do not decode a late result after cancellation.
+                        return;   // Do not decode a late result after cancellation.
                     }
                 }
                 const auto& part = future.GetValue();
                 if (part.EOS()) {
-                    self->Complete(promise, {.Finished = true});
+                    self->Complete(promise, { .Finished = true });
                 } else if (!part.IsSuccess()) {
                     self->Complete(promise, Error(part));
                 } else if (part.HasResultSet()) {
@@ -337,9 +352,9 @@ private:
                     self->Complete(promise, {});
                 }
             } catch (const TResponseError& error) {
-                self->Complete(promise, {.Error = error.what()});
+                self->Complete(promise, { .Error = error.what() });
             } catch (...) {
-                self->Complete(promise, {.Error = "YdbExternal Arrow validation failed: malformed or unsupported response"});
+                self->Complete(promise, { .Error = "YdbExternal Arrow validation failed: malformed or unsupported response" });
             }
         });
     }
@@ -357,21 +372,20 @@ private:
     int64_t BufferedOffset_ = 0;
 };
 
-} // namespace
+}   // namespace
 
 void ValidateSource(const TSource& source) {
     YQL_ENSURE(source.GetVersion() == 1, "YdbExternal unsupported source payload version");
     YQL_ENSURE(!source.GetEndpoint().empty() && !source.GetDatabase().empty(), "YdbExternal endpoint and database are required");
     YQL_ENSURE(source.GetReadTimeoutMs() && source.GetReadTimeoutMs() <= 3600000, "YdbExternal invalid read timeout");
-    YQL_ENSURE(source.GetMaxBatchBytes() >= 1024 && source.GetMaxBatchBytes() <= 1024 * 1024,
-               "YdbExternal invalid output batch target");
+    YQL_ENSURE(source.GetMaxBatchBytes() >= 1024 && source.GetMaxBatchBytes() <= 1024 * 1024, "YdbExternal invalid output batch target");
     YQL_ENSURE(source.GetMaxRetries() <= 5, "YdbExternal invalid retry limit");
     YQL_ENSURE(source.ColumnsSize() && source.ColumnsSize() <= MaxColumns, "YdbExternal invalid column count");
     THashSet<TString> names;
     ui64 nameBytes = 0;
     for (const auto& column : source.GetColumns()) {
-        YQL_ENSURE(names.insert(column.GetName()).second && column.GetName() != BlockLengthColumnName,
-                   "YdbExternal invalid or reserved column name");
+        YQL_ENSURE(
+            names.insert(column.GetName()).second && column.GetName() != BlockLengthColumnName, "YdbExternal invalid or reserved column name");
         nameBytes += column.GetName().size();
         ArrowType(column.GetType());
     }
@@ -394,11 +408,10 @@ TString BuildReadQuery(const TSource& source) {
     return sql;
 }
 
-std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& result,
-    const TSource& source, ui64 maxDecodedBytes) {
+std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& result, const TSource& source, ui64 maxDecodedBytes) {
     YQL_ENSURE(!result.Truncated(), "YdbExternal returned a truncated result");
     CheckResponse(NYdb::TArrowAccessor::Format(result) == NYdb::TResultSet::EFormat::Arrow,
-                  "remote Query Service did not return the required Arrow format");
+        "remote Query Service did not return the required Arrow format");
     const auto& schemaBytes = NYdb::TArrowAccessor::GetArrowSchema(result);
     const auto& chunks = NYdb::TArrowAccessor::GetArrowBatches(result);
     YQL_ENSURE(schemaBytes.size() <= MaxSchemaBytes && !schemaBytes.empty(), "YdbExternal invalid Arrow schema size");
@@ -409,21 +422,20 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
     // nested children or compression are accepted. Aliases and Bool expansion are
     // accounted separately below, before Arrow opens or converts the batch.
     auto schemaMessage = ReadIpcMessage(schemaBytes, result);
-    YQL_ENSURE(schemaMessage && schemaMessage->type() == arrow::ipc::MessageType::SCHEMA && schemaMessage->header(), "YdbExternal expected Arrow schema");
+    YQL_ENSURE(schemaMessage && schemaMessage->type() == arrow::ipc::MessageType::SCHEMA && schemaMessage->header(),
+        "YdbExternal expected Arrow schema");
     const auto* flatSchema = static_cast<const arrow::flatbuf::Schema*>(schemaMessage->header());
-    CheckResponse(flatSchema->fields() && flatSchema->fields()->size() == source.ColumnsSize(),
-                  "schema column count changed; recompile the query");
-    YQL_ENSURE(!flatSchema->custom_metadata() || flatSchema->custom_metadata()->size() == 0,
-               "YdbExternal Arrow schema custom metadata is unsupported");
-    YQL_ENSURE(flatSchema->endianness() == arrow::flatbuf::Endianness::Little,
-               "YdbExternal big-endian Arrow responses are unsupported");
+    CheckResponse(
+        flatSchema->fields() && flatSchema->fields()->size() == source.ColumnsSize(), "schema column count changed; recompile the query");
+    YQL_ENSURE(
+        !flatSchema->custom_metadata() || flatSchema->custom_metadata()->size() == 0, "YdbExternal Arrow schema custom metadata is unsupported");
+    YQL_ENSURE(flatSchema->endianness() == arrow::flatbuf::Endianness::Little, "YdbExternal big-endian Arrow responses are unsupported");
     int fieldIndex = 0;
     for (const auto* field : *flatSchema->fields()) {
         YQL_ENSURE(field, "YdbExternal missing Arrow schema field");
-        YQL_ENSURE(!field->custom_metadata() || field->custom_metadata()->size() == 0,
-                   "YdbExternal Arrow field custom metadata is unsupported");
-        CheckResponse(field->name() && TStringBuf(field->name()->c_str(), field->name()->size()) ==
-                   source.GetColumns(fieldIndex++).GetName(), "schema column name changed; recompile the query");
+        YQL_ENSURE(!field->custom_metadata() || field->custom_metadata()->size() == 0, "YdbExternal Arrow field custom metadata is unsupported");
+        CheckResponse(field->name() && TStringBuf(field->name()->c_str(), field->name()->size()) == source.GetColumns(fieldIndex++).GetName(),
+            "schema column name changed; recompile the query");
         YQL_ENSURE(field->type(), "YdbExternal missing Arrow field type");
         switch (field->type_type()) {
             case arrow::flatbuf::Type::Int:
@@ -435,16 +447,16 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
             default:
                 ythrow TResponseError() << "YdbExternal response validation failed: unsupported Arrow type";
         }
-        YQL_ENSURE(!field->dictionary() && (!field->children() || field->children()->size() == 0), "YdbExternal nested Arrow types are unsupported");
+        YQL_ENSURE(
+            !field->dictionary() && (!field->children() || field->children()->size() == 0), "YdbExternal nested Arrow types are unsupported");
     }
     arrow::ipc::DictionaryMemo dictionary;
     auto schema = Checked(arrow::ipc::ReadSchema(*schemaMessage, &dictionary));
     for (int i = 0; i < schema->num_fields(); ++i) {
         const auto& column = source.GetColumns(i);
         const bool compatibleType = schema->field(i)->type()->Equals(ArrowType(column.GetType())) ||
-            (IsBool(column.GetType()) && schema->field(i)->type()->id() == arrow::Type::BOOL);
-        CheckResponse(schema->field(i)->name() == column.GetName() && compatibleType,
-                      "schema changed; recompile the query");
+                                    (IsBool(column.GetType()) && schema->field(i)->type()->id() == arrow::Type::BOOL);
+        CheckResponse(schema->field(i)->name() == column.GetName() && compatibleType, "schema changed; recompile the query");
     }
 
     if (chunks.empty()) {
@@ -455,24 +467,22 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
         return arrow::RecordBatch::Make(schema, 0, std::move(empty));
     }
     auto message = ReadIpcMessage(chunks.front(), result);
-    YQL_ENSURE(message && message->type() == arrow::ipc::MessageType::RECORD_BATCH && message->header(), "YdbExternal expected an Arrow record batch");
+    YQL_ENSURE(
+        message && message->type() == arrow::ipc::MessageType::RECORD_BATCH && message->header(), "YdbExternal expected an Arrow record batch");
     const auto* flatBatch = static_cast<const arrow::flatbuf::RecordBatch*>(message->header());
     YQL_ENSURE(!flatBatch->compression(), "YdbExternal compressed Arrow responses are unsupported");
-    YQL_ENSURE(flatBatch->length() >= 0 && static_cast<ui64>(flatBatch->length()) <= maxDecodedBytes,
-               "YdbExternal excessive Arrow batch row count");
-    YQL_ENSURE(flatBatch->nodes() && flatBatch->nodes()->size() == source.ColumnsSize() &&
-               flatBatch->buffers() && flatBatch->buffers()->size() <= MaxColumns * 3,
-               "YdbExternal invalid Arrow batch layout");
+    YQL_ENSURE(
+        flatBatch->length() >= 0 && static_cast<ui64>(flatBatch->length()) <= maxDecodedBytes, "YdbExternal excessive Arrow batch row count");
+    YQL_ENSURE(flatBatch->nodes() && flatBatch->nodes()->size() == source.ColumnsSize() && flatBatch->buffers() &&
+                   flatBatch->buffers()->size() <= MaxColumns * 3, "YdbExternal invalid Arrow batch layout");
     for (const auto* node : *flatBatch->nodes()) {
         YQL_ENSURE(node->length() == flatBatch->length() && node->null_count() >= 0 && node->null_count() <= node->length(),
-                   "YdbExternal invalid Arrow array length");
+            "YdbExternal invalid Arrow array length");
     }
     ui64 allocationBudget = 0;
     for (const auto* buffer : *flatBatch->buffers()) {
-        YQL_ENSURE(buffer->offset() >= 0 && buffer->length() >= 0 &&
-                   buffer->offset() <= message->body_length() &&
-                   buffer->length() <= message->body_length() - buffer->offset(),
-                   "YdbExternal invalid Arrow buffer bounds");
+        YQL_ENSURE(buffer->offset() >= 0 && buffer->length() >= 0 && buffer->offset() <= message->body_length() &&
+                       buffer->length() <= message->body_length() - buffer->offset(), "YdbExternal invalid Arrow buffer bounds");
         const ui64 alignedLength = (static_cast<ui64>(buffer->length()) + 63) & ~ui64(63);
         CheckLimit(alignedLength <= maxDecodedBytes - allocationBudget, "decoded buffers", maxDecodedBytes);
         allocationBudget += alignedLength;
@@ -481,8 +491,7 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
         if (field->type()->id() == arrow::Type::BOOL) {
             // Count each column, even when the wire buffers alias. Reserve the full
             // UInt8 replacement before any conversion can allocate its first column.
-            const ui64 expanded = ((flatBatch->length() + 63) & ~ui64(63)) +
-                                  (((flatBatch->length() + 7) / 8 + 63) & ~ui64(63));
+            const ui64 expanded = ((flatBatch->length() + 63) & ~ui64(63)) + (((flatBatch->length() + 7) / 8 + 63) & ~ui64(63));
             CheckLimit(expanded <= maxDecodedBytes - allocationBudget, "Bool expansion", maxDecodedBytes);
             allocationBudget += expanded;
         }
@@ -492,8 +501,8 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
     auto columns = batch->columns();
     auto fields = schema->fields();
     for (int i = 0; i < batch->num_columns(); ++i) {
-        YQL_ENSURE(source.GetColumns(i).GetType().has_optional_type() || columns[i]->null_count() == 0,
-                   "YdbExternal NULL in a non-optional column");
+        YQL_ENSURE(
+            source.GetColumns(i).GetType().has_optional_type() || columns[i]->null_count() == 0, "YdbExternal NULL in a non-optional column");
         if (IsBool(source.GetColumns(i).GetType()) && columns[i]->type_id() == arrow::Type::UINT8) {
             // Query Service and MiniKQL represent Bool as UInt8, with only 0 and 1 valid.
             const auto& input = static_cast<const arrow::UInt8Array&>(*columns[i]);
@@ -522,14 +531,14 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
     return output;
 }
 
-std::shared_ptr<arrow::RecordBatch> TakeOutputBatch(const arrow::RecordBatch& batch,
-    int64_t offset, ui64 targetBytes, ui64 maxRowBytes) {
-    YQL_ENSURE(offset >= 0 && offset <= batch.num_rows() && targetBytes && maxRowBytes,
-               "YdbExternal invalid output batch bounds");
+std::shared_ptr<arrow::RecordBatch> TakeOutputBatch(const arrow::RecordBatch& batch, int64_t offset, ui64 targetBytes, ui64 maxRowBytes) {
+    YQL_ENSURE(offset >= 0 && offset <= batch.num_rows() && targetBytes && maxRowBytes, "YdbExternal invalid output batch bounds");
     if (offset == batch.num_rows()) {
         return batch.Slice(offset, 0);
     }
-    const auto aligned = [](ui64 bytes) { return (bytes + 63) & ~ui64(63); };
+    const auto aligned = [](ui64 bytes) {
+        return (bytes + 63) & ~ui64(63);
+    };
     const auto isBinary = [](const arrow::Array& array) {
         return array.type_id() == arrow::Type::BINARY || array.type_id() == arrow::Type::STRING;
     };
@@ -589,8 +598,7 @@ std::shared_ptr<arrow::RecordBatch> TakeOutputBatch(const arrow::RecordBatch& ba
         if (column->null_count()) {
             auto bitmap = allocate((rows + 7) / 8);
             std::memset(bitmap->mutable_data(), 0, (rows + 7) / 8);
-            arrow::internal::CopyBitmap(column->null_bitmap_data(), column->offset() + offset,
-                rows, bitmap->mutable_data(), 0);
+            arrow::internal::CopyBitmap(column->null_bitmap_data(), column->offset() + offset, rows, bitmap->mutable_data(), 0);
             buffers.push_back(std::move(bitmap));
         } else {
             buffers.push_back(nullptr);
@@ -609,20 +617,19 @@ std::shared_ptr<arrow::RecordBatch> TakeOutputBatch(const arrow::RecordBatch& ba
         } else {
             const auto& type = static_cast<const arrow::FixedWidthType&>(*column->type());
             const auto width = type.bit_width() / 8;
-            buffers.push_back(copy(column->data()->buffers[1]->data() +
-                (column->offset() + offset) * width, rows * width));
+            buffers.push_back(copy(column->data()->buffers[1]->data() + (column->offset() + offset) * width, rows * width));
         }
-        columns.push_back(arrow::MakeArray(arrow::ArrayData::Make(column->type(), rows,
-            std::move(buffers), column->null_count() ? arrow::kUnknownNullCount : 0)));
+        columns.push_back(arrow::MakeArray(
+            arrow::ArrayData::Make(column->type(), rows, std::move(buffers), column->null_count() ? arrow::kUnknownNullCount : 0)));
     }
     return arrow::RecordBatch::Make(batch.schema(), rows, std::move(columns));
 }
 
-std::shared_ptr<NNative::IReadStream> CreateReadStream(std::shared_ptr<NYdb::NQuery::TQueryClient> client,
-    const TSource& source, const NNative::TReadContext& context) {
+std::shared_ptr<NNative::IReadStream> CreateReadStream(
+    std::shared_ptr<NYdb::NQuery::TQueryClient> client, const TSource& source, const NNative::TReadContext& context) {
     auto stream = std::make_shared<TYdbReadStream>(std::move(client), source, context);
     stream->SubscribeCancellation();
     return stream;
 }
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

@@ -13,7 +13,6 @@ using namespace NTestUtils;
 using namespace NFederatedQueryTest;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
-
     // Verifies that DROP STREAMING QUERY removes all checkpoint data from the metadata tables,
     // including after a query text change (ALTER ... FORCE = TRUE) that starts a new execution
     // but reuses the same CheckpointId / graphId.
@@ -36,10 +35,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
 
         // Helper to count rows in a checkpoint metadata table
         auto countRows = [&](const std::string& tablePath) -> ui64 {
-            const auto& result = ExecQuery(fmt::format(
-                "SELECT COUNT(*) AS cnt FROM `{table}`;",
-                "table"_a = tablePath
-            ));
+            const auto& result = ExecQuery(fmt::format("SELECT COUNT(*) AS cnt FROM `{table}`;", "table"_a = tablePath));
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
             ui64 cnt = 0;
             CheckScriptResult(result[0], 1, 1, [&cnt](NYdb::TResultSetParser& parser) {
@@ -61,12 +57,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
                         value String NOT NULL
                     )
                 )
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -78,8 +70,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
 
         // Send a message to trigger checkpoint creation
         WriteTopicMessage(inputTopicName, R"({"key": "k1", "value": "v1"})");
-        ReadTopicMessages(outputTopicName, {"k1v1"});
-        Sleep(CheckpointPeriod * 3);  // Wait for checkpoint to be committed
+        ReadTopicMessages(outputTopicName, { "k1v1" });
+        Sleep(CheckpointPeriod * 3);   // Wait for checkpoint to be committed
 
         // Wait until at least one checkpoint row appears in checkpoints_metadata
         WaitFor(TEST_OPERATION_TIMEOUT, "at least one checkpoint appears", [&]() {
@@ -102,32 +94,23 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
                         value String NOT NULL
                     )
                 )
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
         // 2 execution entries (original + new), 1 running lease
         CheckScriptExecutionsCount(2, 1);
         Sleep(TDuration::Seconds(1));
 
         ExecQuery(fmt::format(R"(
-            DROP STREAMING QUERY `{query_name}`;)",
-            "query_name"_a = queryName
-        ));
+            DROP STREAMING QUERY `{query_name}`;)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(0, 0);
 
         // Verify all checkpoint-related tables are empty after DROP
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            countRows(".metadata/streaming/checkpoints/checkpoints_metadata"), 0UL,
+        UNIT_ASSERT_VALUES_EQUAL_C(countRows(".metadata/streaming/checkpoints/checkpoints_metadata"), 0UL,
             "Expected checkpoints_metadata to be empty after DROP STREAMING QUERY");
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            countRows(".metadata/streaming/checkpoints/coordinators_sync"), 0UL,
+        UNIT_ASSERT_VALUES_EQUAL_C(countRows(".metadata/streaming/checkpoints/coordinators_sync"), 0UL,
             "Expected coordinators_sync to be empty after DROP STREAMING QUERY");
         UNIT_ASSERT_VALUES_EQUAL_C(
-            countRows(".metadata/streaming/checkpoints/states"), 0UL,
-            "Expected states to be empty after DROP STREAMING QUERY");
+            countRows(".metadata/streaming/checkpoints/states"), 0UL, "Expected states to be empty after DROP STREAMING QUERY");
     }
 
     // Verifies that DROP STREAMING QUERY removes all checkpoint data even when the query was
@@ -148,10 +131,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
 
         // Helper to count rows in a checkpoint metadata table
         auto countRows = [&](const std::string& tablePath) -> ui64 {
-            const auto& result = ExecQuery(fmt::format(
-                "SELECT COUNT(*) AS cnt FROM `{table}`;",
-                "table"_a = tablePath
-            ));
+            const auto& result = ExecQuery(fmt::format("SELECT COUNT(*) AS cnt FROM `{table}`;", "table"_a = tablePath));
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
             ui64 cnt = 0;
             CheckScriptResult(result[0], 1, 1, [&cnt](NYdb::TResultSetParser& parser) {
@@ -173,12 +153,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
                         value String NOT NULL
                     )
                 )
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -190,8 +166,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
 
         // Send a message to trigger checkpoint creation
         WriteTopicMessage(inputTopicName, R"({"key": "k2", "value": "v2"})");
-        ReadTopicMessages(outputTopicName, {"k2v2"});
-        Sleep(CheckpointPeriod * 3);  // Wait for checkpoint to be committed
+        ReadTopicMessages(outputTopicName, { "k2v2" });
+        Sleep(CheckpointPeriod * 3);   // Wait for checkpoint to be committed
 
         // Wait until at least one checkpoint row appears in checkpoints_metadata
         WaitFor(TEST_OPERATION_TIMEOUT, "at least one checkpoint appears", [&]() {
@@ -200,30 +176,23 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
 
         // Stop the query before dropping it
         ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
-            "query_name"_a = queryName
-        ));
-        CheckScriptExecutionsCount(1, 0);  // 1 execution entry, no running lease
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)", "query_name"_a = queryName));
+        CheckScriptExecutionsCount(1, 0);   // 1 execution entry, no running lease
 
         // Drop the already-stopped query
         ExecQuery(fmt::format(R"(
-            DROP STREAMING QUERY `{query_name}`;)",
-            "query_name"_a = queryName
-        ));
+            DROP STREAMING QUERY `{query_name}`;)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(0, 0);
 
         // Verify all checkpoint-related tables are empty after DROP
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            countRows(".metadata/streaming/checkpoints/checkpoints_metadata"), 0UL,
+        UNIT_ASSERT_VALUES_EQUAL_C(countRows(".metadata/streaming/checkpoints/checkpoints_metadata"), 0UL,
             "Expected checkpoints_metadata to be empty after DROP of stopped STREAMING QUERY");
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            countRows(".metadata/streaming/checkpoints/coordinators_sync"), 0UL,
+        UNIT_ASSERT_VALUES_EQUAL_C(countRows(".metadata/streaming/checkpoints/coordinators_sync"), 0UL,
             "Expected coordinators_sync to be empty after DROP of stopped STREAMING QUERY");
         UNIT_ASSERT_VALUES_EQUAL_C(
-            countRows(".metadata/streaming/checkpoints/states"), 0UL,
-            "Expected states to be empty after DROP of stopped STREAMING QUERY");
+            countRows(".metadata/streaming/checkpoints/states"), 0UL, "Expected states to be empty after DROP of stopped STREAMING QUERY");
     }
 
-} // Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints)
+}   // Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints)
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

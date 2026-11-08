@@ -10,6 +10,29 @@
 
 namespace NKikimr::NArrow::NSSA {
 
+TCoalesceKernelLogic::TCoalesceKernelLogic(const arrow::compute::ScalarKernel& kernel)
+    : TSimpleKernelLogic((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce)
+    , OutputType(kernel.signature->out_type().type()) {
+}
+
+TConclusion<bool> TCoalesceKernelLogic::DoExecute(
+    const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output, TAccessorsCollection& resources) const {
+    if (input.size() != 2 || output.size() != 1) {
+        return false;
+    }
+    const auto& first = resources.GetAccessorOptional(input.front().GetColumnId());
+    // Shortcut may be taken even in some cases where the types are not equal,
+    // but the exact set would require duplicating the kernel logic.
+    if (!first || !first->GetDataType()->Equals(*OutputType)) {
+        return false;
+    }
+    if (first->HasNulls() != false) {
+        return false;
+    }
+    resources.AddVerified(output.front().GetColumnId(), first, false);
+    return true;
+}
+
 TConclusion<bool> TGetJsonPath::DoExecute(
     const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output, TAccessorsCollection& resources) const {
     auto description = BuildDescription(input, resources);
@@ -39,18 +62,19 @@ TConclusion<bool> TGetJsonPath::DoExecute(
     return true;
 }
 
-std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
+std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(
+    const std::shared_ptr<IChunkedArray>& jsonAcc, const NAccessor::NSubColumns::TParsedJsonPath& path) const {
     std::shared_ptr<NAccessor::NSubColumns::TJsonPathAccessor> accessor;
 
     if (jsonAcc->GetType() == IChunkedArray::EType::SubColumnsArray) {
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsArray>(jsonAcc);
-        auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        auto accessorResult = accJsonArray->GetPathAccessor(path, jsonAcc->GetRecordsCount());
         AFL_VERIFY(accessorResult.IsSuccess());
         accessor = accessorResult.DetachResult();
     } else {
         AFL_VERIFY(jsonAcc->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(jsonAcc);
-        auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        auto accessorResult = accJsonArray->GetPathAccessor(path, jsonAcc->GetRecordsCount());
         AFL_VERIFY(accessorResult.IsSuccess());
         accessor = accessorResult.DetachResult();
     }
@@ -83,8 +107,8 @@ NAccessor::TCompositeChunkedArray::TBuilder TGetJsonPath::MakeCompositeBuilder()
 }
 
 std::shared_ptr<IChunkedArray> TExistsJsonPath::ExtractArray(
-    const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
-    auto arr = TBase::ExtractArray(jsonAcc, svPath);
+    const std::shared_ptr<IChunkedArray>& jsonAcc, const NAccessor::NSubColumns::TParsedJsonPath& path) const {
+    auto arr = TBase::ExtractArray(jsonAcc, path);
     auto chunkedArray = arr->GetChunkedArray();
     auto builder = NArrow::MakeBuilder(arrow::uint8(), arr->GetRecordsCount());
     for (auto&& i : chunkedArray->chunks()) {
@@ -97,6 +121,20 @@ std::shared_ptr<IChunkedArray> TExistsJsonPath::ExtractArray(
 
 NAccessor::TCompositeChunkedArray::TBuilder TExistsJsonPath::MakeCompositeBuilder() const {
     return NAccessor::TCompositeChunkedArray::TBuilder(arrow::uint8());
+}
+
+NJson::TJsonValue TLogicPatternMatch::DoDebugJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    result.InsertValue("class", GetClassName());
+    auto& hints = result.InsertValue("hints", NJson::JSON_ARRAY);
+    for (const auto& hint : Hints) {
+        NJson::TJsonValue item = NJson::JSON_MAP;
+        item.InsertValue("input", hint.InputIndex);
+        item.InsertValue("operation", hint.Operation.DebugString());
+        item.InsertValue("value", hint.Value);
+        hints.AppendValue(std::move(item));
+    }
+    return result;
 }
 
 TString TSimpleKernelLogic::SignalDescription() const {

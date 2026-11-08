@@ -13,17 +13,16 @@ private:
     using TDiagnosticsEvent = NColumnShard::TEvPrivate::TEvReportScanDiagnostics;
 
     const TEvColumnShard::TEvInternalScan::TPtr InternalScanEvent;
+    const TScanTarget Target;
     const ui32 ScanGen = 1;
     const ui32 ScanId = 1;
 
     void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;
 
     // Properties of the request. Each reads the request and the tablet, and nothing else.
-    TSnapshot GetSnapshot() const;
     ERequestSorting GetRequestSorting() const;
 
     // Steps building the read description
-    TConclusion<std::shared_ptr<ITableMetadataAccessor>> MakeTableAccessor(const TSnapshot& snapshot) const;
     TReadDescription MakeReadDescription(const TSnapshot& snapshot, const ERequestSorting requestSorting,
         const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const;
 
@@ -35,9 +34,10 @@ private:
 public:
     using TReadMetadataPtr = TReadMetadataBase::TConstPtr;
 
-    TTxInternalScan(NColumnShard::TColumnShard* self, TEvColumnShard::TEvInternalScan::TPtr& ev)
+    TTxInternalScan(NColumnShard::TColumnShard* self, TEvColumnShard::TEvInternalScan::TPtr& ev, TScanTarget&& target)
         : TBase(self)
         , InternalScanEvent(ev)
+        , Target(std::move(target))
     {
     }
 

@@ -31,4 +31,4 @@ bool TFinishInfo::IsFailed() const {
     return Status.has_value() && *Status != Ydb::StatusIds::SUCCESS;
 }
 
-} // namespace NKikimr::NKqp::NPrivate
+}   // namespace NKikimr::NKqp::NPrivate

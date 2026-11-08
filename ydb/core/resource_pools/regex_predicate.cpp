@@ -1,10 +1,8 @@
 #include "regex_predicate.h"
 
 #include <library/cpp/regex/pcre/regexp.h>
-
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
-
 
 namespace NKikimr::NResourcePool {
 
@@ -14,13 +12,13 @@ TRegexPredicate CompileAnchored(TStringBuf originalPattern, TStringBuf translate
     TString anchored = TStringBuilder() << "^(?:" << translated << ")$";
     try {
         auto compiled = std::make_shared<TRegExMatch>(anchored, REG_EXTENDED | REG_NOSUB);
-        return TRegexPredicate{TString(originalPattern), std::move(compiled)};
+        return TRegexPredicate{ TString(originalPattern), std::move(compiled) };
     } catch (...) {
         throw yexception() << "Failed to compile pattern '" << originalPattern << "': " << CurrentExceptionMessage();
     }
 }
 
-}  // namespace
+}   // namespace
 
 TRegexPredicate TRegexPredicate::FromGlob(TStringBuf glob) {
     if (glob.empty()) {
@@ -37,9 +35,18 @@ TRegexPredicate TRegexPredicate::FromGlob(TStringBuf glob) {
             case '?':
                 translated += '.';
                 break;
-            case '.': case '\\': case '+': case '(': case ')':
-            case '[': case ']': case '{': case '}':
-            case '|': case '^': case '$':
+            case '.':
+            case '\\':
+            case '+':
+            case '(':
+            case ')':
+            case '[':
+            case ']':
+            case '{':
+            case '}':
+            case '|':
+            case '^':
+            case '$':
                 translated += '\\';
                 translated += c;
                 break;
@@ -57,4 +64,4 @@ bool TRegexPredicate::Match(const TString& value) const {
     return Compiled->Match(value.c_str());
 }
 
-}  // namespace NKikimr::NResourcePool
+}   // namespace NKikimr::NResourcePool

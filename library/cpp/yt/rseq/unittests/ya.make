@@ -2,6 +2,8 @@ GTEST()
 
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
+INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/rseq/supported_arch.inc)
+
 SRCS(
     per_cpu_ut.cpp
 )

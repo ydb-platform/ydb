@@ -11,22 +11,22 @@ TString SanitizeLabel(const TString& value) {
 
     for (auto c : value) {
         switch (c) {
-        case '|':
-        case '*':
-        case '?':
-        case '"':
-        case '\'':
-        case '`':
-        case '\\':
-            continue;
-        default:
-            result.push_back(c);
-            if (result.size() == labelLengthLimit) {
-                return result;
-            }
+            case '|':
+            case '*':
+            case '?':
+            case '"':
+            case '\'':
+            case '`':
+            case '\\':
+                continue;
+            default:
+                result.push_back(c);
+                if (result.size() == labelLengthLimit) {
+                    return result;
+                }
         }
     }
     return result;
 }
 
-} // namespace NFq
+}   // namespace NFq

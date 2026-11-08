@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/utils/meta
     yql/essentials/minikql/runtime_settings/proto
     yql/essentials/providers/common/config
     yql/essentials/providers/common/activation
@@ -18,4 +19,7 @@ PEERDIR(
 
 END()
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(
+    benchmark
+    ut
+)

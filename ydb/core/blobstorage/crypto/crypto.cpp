@@ -76,28 +76,37 @@ TCypherKey::~TCypherKey() {
 // HashCalculator
 ////////////////////////////////////////////////////////////////////////////
 
-THashCalculator::THashCalculator() {
-    Poly = std::make_unique<Poly1305Vec>();
-    Clear();
+THashCalculator::THashCalculator() = default;
+
+void THashCalculator::EnsurePoly() {
+    if (!Poly) {
+        Poly = std::make_unique<Poly1305Vec>();
+        Poly->SetKey(Key, sizeof(Key));
+    }
 }
 
 void THashCalculator::Hash(const void* data, ui64 size) {
+    EnsurePoly();
     Poly->Update((const ui8*)data, size);
 }
 
 ui64 THashCalculator::GetHashResult() {
+    EnsurePoly();
     Poly->Finish(HashBytes);
     return HashResult[0];
 }
 
 ui64 THashCalculator::GetHashResult(ui64 *outHash2) {
+    EnsurePoly();
     Poly->Finish(HashBytes);
     *outHash2 = HashResult[1];
     return HashResult[0];
 }
 
 void THashCalculator::Clear() {
-    Poly->SetKey(Key, sizeof(Key));
+    if (Poly) {
+        Poly->SetKey(Key, sizeof(Key));
+    }
 }
 
 ui32 THashCalculator::GetKeySizeBytes() const {
@@ -106,6 +115,9 @@ ui32 THashCalculator::GetKeySizeBytes() const {
 
 void THashCalculator::SetKey(const ui8 *key, ui32 sizeBytes) {
     Y_ABORT_UNLESS(sizeBytes);
+    // SetKey changes the key for the next Clear, not the current message.
+    // Preserve that message's key even if no data has been hashed yet.
+    EnsurePoly();
     ui32 offset = 0;
     while (offset < GetKeySizeBytes()) {
         ui32 size = Min(GetKeySizeBytes() - offset, sizeBytes);

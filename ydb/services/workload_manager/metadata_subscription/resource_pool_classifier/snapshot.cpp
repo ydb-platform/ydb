@@ -1,6 +1,5 @@
 #include "snapshot.h"
 
-
 namespace NKikimr::NWorkloadManager {
 
 bool TResourcePoolClassifierSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) {
@@ -28,7 +27,8 @@ TString TResourcePoolClassifierSnapshot::DoSerializeToString() const {
     return result.GetStringRobust();
 }
 
-std::optional<TResourcePoolClassifierConfig> TResourcePoolClassifierSnapshot::GetClassifierConfig(const TString& database, const TString& name) const {
+std::optional<TResourcePoolClassifierConfig> TResourcePoolClassifierSnapshot::GetClassifierConfig(
+    const TString& database, const TString& name) const {
     const auto databaseIt = ResourcePoolClassifierConfigs.find(database);
     if (databaseIt == ResourcePoolClassifierConfigs.end()) {
         return std::nullopt;
@@ -40,4 +40,4 @@ std::optional<TResourcePoolClassifierConfig> TResourcePoolClassifierSnapshot::Ge
     return configIt->second;
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

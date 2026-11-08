@@ -271,9 +271,17 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         *outTx.MutableCreateTable() = std::move(implTableDesc);
         outTx.SetInternal(tx.GetInternal());
 
+        // Synchronous index tables are independent replication targets, including
+        // indexes populated by the builder during bootstrap import.
+        if (forReplication || (tableInfo->IsImportingReplica()
+            && (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobal
+                || GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalUnique)))
+        {
+            *outTx.MutableCreateTable()->MutableReplicationConfig() = tableInfo->ReplicationConfig();
+        }
+
         if (forReplication) {
             outTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
-            *outTx.MutableCreateTable()->MutableReplicationConfig() = tableInfo->ReplicationConfig();
             return CreateNewTable(NextPartId(opId, result), outTx, localSequences);
         }
 
@@ -369,7 +377,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
             if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
                 const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-                result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc, indexDesc.GetFulltextIndexDescription())));
+                result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
                 result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc, prefixColumns)));
             }
             break;
@@ -402,7 +410,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType, prefixColumns);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
-            result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc, indexDesc.GetFulltextIndexDescription())));
+            result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
             result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));
             result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc, prefixColumns)));
             break;

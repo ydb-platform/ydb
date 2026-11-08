@@ -1599,12 +1599,20 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::avg",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::base64",
     "kind": "Normal"
   },
   {
     "name": "Spark::bin",
     "kind": "Normal"
+  },
+  {
+    "name": "Spark::bit_and",
+    "kind": "Agg"
   },
   {
     "name": "Spark::bit_count",
@@ -1617,6 +1625,22 @@
   {
     "name": "Spark::bit_length",
     "kind": "Normal"
+  },
+  {
+    "name": "Spark::bit_or",
+    "kind": "Agg"
+  },
+  {
+    "name": "Spark::bit_xor",
+    "kind": "Agg"
+  },
+  {
+    "name": "Spark::bool_and",
+    "kind": "Agg"
+  },
+  {
+    "name": "Spark::bool_or",
+    "kind": "Agg"
   },
   {
     "name": "Spark::btrim",
@@ -1667,6 +1691,14 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::count",
+    "kind": "Agg"
+  },
+  {
+    "name": "Spark::count_if",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::crc32",
     "kind": "Normal"
   },
@@ -1693,6 +1725,10 @@
   {
     "name": "Spark::equal_null",
     "kind": "Normal"
+  },
+  {
+    "name": "Spark::every",
+    "kind": "Agg"
   },
   {
     "name": "Spark::exp",
@@ -1811,8 +1847,20 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::max",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::md5",
     "kind": "Normal"
+  },
+  {
+    "name": "Spark::mean",
+    "kind": "Agg"
+  },
+  {
+    "name": "Spark::min",
+    "kind": "Agg"
   },
   {
     "name": "Spark::mod",
@@ -1985,6 +2033,10 @@
   {
     "name": "Spark::substring",
     "kind": "Normal"
+  },
+  {
+    "name": "Spark::sum",
+    "kind": "Agg"
   },
   {
     "name": "Spark::tan",

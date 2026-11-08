@@ -13,8 +13,7 @@ namespace {
 
 using namespace NActors;
 
-void CheckDatabaseCreation(bool disableSlsCreating, bool hasRecord, bool databaseExists,
-                           ui32 storageError = TIssuesIds::ACCESS_DENIED) {
+void CheckDatabaseCreation(bool disableSlsCreating, bool hasRecord, bool databaseExists, ui32 storageError = TIssuesIds::ACCESS_DENIED) {
     const TString scope = "yandexcloud://folder";
     const TString databasePath = "/shared/query_folder";
     ui32 createDatabaseRequests = 0;
@@ -78,8 +77,8 @@ void CheckDatabaseCreation(bool disableSlsCreating, bool hasRecord, bool databas
                     ++createDatabaseRequests;
                     const auto* request = event->Get<TEvYdbCompute::TEvCreateDatabaseRequest>();
                     UNIT_ASSERT_VALUES_EQUAL(request->Path, databasePath);
-                    runtime.Send(new IEventHandle(event->Sender, event->Recipient,
-                        new TEvYdbCompute::TEvCreateDatabaseResponse(record), 0, event->Cookie));
+                    runtime.Send(new IEventHandle(
+                        event->Sender, event->Recipient, new TEvYdbCompute::TEvCreateDatabaseResponse(record), 0, event->Cookie));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
@@ -96,21 +95,20 @@ void CheckDatabaseCreation(bool disableSlsCreating, bool hasRecord, bool databas
     });
 
     const auto service = runtime.Register(CreateComputeDatabaseControlPlaneServiceActor(
-        config, NKikimr::CreateYdbCredentialsProviderFactory, {}, {}, {},
-        MakeIntrusive<NMonitoring::TDynamicCounters>()).release());
+        config, NKikimr::CreateYdbCredentialsProviderFactory, {}, {}, {}, MakeIntrusive<NMonitoring::TDynamicCounters>())
+                                              .release());
     runtime.Send(new IEventHandle(service, sender, new TEvYdbCompute::TEvCreateDatabaseRequest("cloud", scope)), 0, true);
 
     const auto describe = runtime.GrabEdgeEventRethrow<TEvControlPlaneStorage::TEvDescribeDatabaseRequest>(storage);
     requestActor = describe->Sender;
     UNIT_ASSERT_VALUES_EQUAL(describe->Get()->Scope, scope);
     if (hasRecord) {
-        runtime.Send(new IEventHandle(describe->Sender, storage,
-            new TEvControlPlaneStorage::TEvDescribeDatabaseResponse(record)));
+        runtime.Send(new IEventHandle(describe->Sender, storage, new TEvControlPlaneStorage::TEvDescribeDatabaseResponse(record)));
     } else {
         NYql::TIssue issue("Database does not exist or permission denied");
         issue.SetCode(storageError, NYql::TSeverityIds::S_ERROR);
-        runtime.Send(new IEventHandle(describe->Sender, storage,
-            new TEvControlPlaneStorage::TEvDescribeDatabaseResponse(NYql::TIssues{issue})));
+        runtime.Send(
+            new IEventHandle(describe->Sender, storage, new TEvControlPlaneStorage::TEvDescribeDatabaseResponse(NYql::TIssues{ issue })));
     }
 
     const bool rejected = !hasRecord && (disableSlsCreating || storageError != TIssuesIds::ACCESS_DENIED);
@@ -118,24 +116,22 @@ void CheckDatabaseCreation(bool disableSlsCreating, bool hasRecord, bool databas
         if (hasRecord) {
             const auto modify = runtime.GrabEdgeEventRethrow<TEvControlPlaneStorage::TEvModifyDatabaseRequest>(storage);
             UNIT_ASSERT(modify->Get()->LastAccessAt);
-            runtime.Send(new IEventHandle(modify->Sender, storage,
-                new TEvControlPlaneStorage::TEvModifyDatabaseResponse(), 0, modify->Cookie));
+            runtime.Send(new IEventHandle(modify->Sender, storage, new TEvControlPlaneStorage::TEvModifyDatabaseResponse(), 0, modify->Cookie));
             if (!databaseExists) {
                 const auto invalidate = runtime.GrabEdgeEventRethrow<TEvControlPlaneStorage::TEvModifyDatabaseRequest>(storage);
                 UNIT_ASSERT(invalidate->Get()->Synchronized.Defined());
                 UNIT_ASSERT(!*invalidate->Get()->Synchronized);
                 UNIT_ASSERT(invalidate->Get()->WorkloadManagerSynchronized.Defined());
                 UNIT_ASSERT(!*invalidate->Get()->WorkloadManagerSynchronized);
-                runtime.Send(new IEventHandle(invalidate->Sender, storage,
-                    new TEvControlPlaneStorage::TEvModifyDatabaseResponse(), 0, invalidate->Cookie));
+                runtime.Send(new IEventHandle(
+                    invalidate->Sender, storage, new TEvControlPlaneStorage::TEvModifyDatabaseResponse(), 0, invalidate->Cookie));
             }
         } else {
             const auto create = runtime.GrabEdgeEventRethrow<TEvControlPlaneStorage::TEvCreateDatabaseRequest>(storage);
             UNIT_ASSERT_VALUES_EQUAL(create->Get()->Scope, scope);
             UNIT_ASSERT_VALUES_EQUAL(create->Get()->Request.connection().database(), databasePath);
             UNIT_ASSERT_VALUES_EQUAL(createDatabaseRequests, 1);
-            runtime.Send(new IEventHandle(create->Sender, storage,
-                new TEvControlPlaneStorage::TEvCreateDatabaseResponse(), 0, create->Cookie));
+            runtime.Send(new IEventHandle(create->Sender, storage, new TEvControlPlaneStorage::TEvCreateDatabaseResponse(), 0, create->Cookie));
         }
     }
 
@@ -164,7 +160,7 @@ void CheckDatabaseCreation(bool disableSlsCreating, bool hasRecord, bool databas
     }
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TComputeDatabaseControlPlane) {
     Y_UNIT_TEST(NewScopeRejectedWhenSlsCreatingDisabled) {
@@ -190,4 +186,4 @@ Y_UNIT_TEST_SUITE(TComputeDatabaseControlPlane) {
     }
 }
 
-} // namespace NFq
+}   // namespace NFq

@@ -10,10 +10,11 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
-template <std::totally_ordered TKey, typename TPortion>
-struct Tiling: ICompactionUnit<TKey, TPortion> {
-    using TBase = ICompactionUnit<TKey, TPortion>;
+template <typename TPortion>
+struct Tiling: ICompactionUnit<TPortion> {
+    using TBase = ICompactionUnit<TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
+    using TKeyRef = typename TPortion::TKeyRef;
 
     using TAccumulatorSettings = NTiling::TAccumulatorSettings;
     using TLastLevelSettings = NTiling::TLastLevelSettings;
@@ -29,14 +30,14 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         , GeneratedTasksPriorityLevel(counters.GeneratedTasksPriorityLevel)
     {
         for (ui64 i = 2; i < Settings.MiddleLevelCount; ++i) {
-            MiddleLevels.emplace(i, MiddleLevel<TKey, TPortion>(Settings.MiddleLevelSettings, i, counters));
+            MiddleLevels.emplace(i, MiddleLevel<TPortion>(Settings.MiddleLevelSettings, i, counters));
         }
     }
 
     TilingSettings Settings;
-    Accumulator<TKey, TPortion> Accumulator;
-    LastLevel<TKey, TPortion> LastLevel;
-    THashMap<ui64, MiddleLevel<TKey, TPortion>> MiddleLevels;
+    Accumulator<TPortion> Accumulator;
+    LastLevel<TPortion> LastLevel;
+    THashMap<ui64, MiddleLevel<TPortion>> MiddleLevels;
     const NMonitoring::TDynamicCounters::TCounterPtr TasksSkippedByPriorityGap;
     const std::shared_ptr<NColumnShard::TDeriviativeHistogram> GeneratedTasksPriorityLevel;
 
@@ -61,7 +62,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     TOptimizationPriority OverloadPriority = TOptimizationPriority::Critical(0);
 
     void InitialAddPortions(const std::vector<typename TPortion::TPtr>& add) {
-        auto comparator = TPortionByIndexKeyEndComparator<TKey, TPortion>();
+        auto comparator = TPortionByIndexKeyEndComparator<TPortion>();
 
         auto sortedPortions = add;
         Sort(sortedPortions, comparator);
@@ -69,7 +70,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         std::vector<typename TPortion::TPtr> toLastLevel;
         std::vector<typename TPortion::TPtr> toAccumulator;
         std::vector<typename TPortion::TPtr> toMiddleLevels;
-        std::optional<TKey> lastKey;
+        std::optional<TKeyRef> lastKey;
 
         State = EState::COMPATIBILITY;
 
@@ -78,12 +79,12 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 toAccumulator.push_back(portion);
                 continue;
             }
-            if (lastKey && *lastKey >= portion->IndexKeyStart()) {
+            if (lastKey && *lastKey >= portion->IndexKeyStartRef()) {
                 toMiddleLevels.push_back(portion);
                 continue;
             }
             toLastLevel.push_back(portion);
-            lastKey = portion->IndexKeyEnd();
+            lastKey.emplace(portion->IndexKeyEndRef());
         }
 
         for (auto& portion : toLastLevel) {
@@ -354,10 +355,9 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         return LastLevel.DoGetNextOptimizationTask(isLocked).has_value();
     }
 
-    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
-        TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
-        std::optional<CompactionTask<TKey, TPortion>> result;
-        const auto consider = [&result](std::optional<CompactionTask<TKey, TPortion>>&& candidate) {
+    std::optional<CompactionTask<TPortion>> DoGetNextOptimizationTask(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
+        std::optional<CompactionTask<TPortion>> result;
+        const auto consider = [&result](std::optional<CompactionTask<TPortion>>&& candidate) {
             if (candidate && (!result || result->Priority < candidate->Priority)) {
                 result = std::move(candidate);
             }

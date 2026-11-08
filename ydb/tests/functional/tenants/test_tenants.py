@@ -19,19 +19,7 @@ logger = logging.getLogger(__name__)
 # local configuration for the ydb cluster (fetched by ydb_cluster_configuration fixture)
 CLUSTER_CONFIG = dict(
     additional_log_configs={
-        'TX_PROXY': LogLevels.DEBUG,
-        'KQP_PROXY': LogLevels.DEBUG,
-        'KQP_WORKER': LogLevels.DEBUG,
-        'KQP_GATEWAY': LogLevels.DEBUG,
-        'GRPC_PROXY': LogLevels.TRACE,
-        'TX_DATASHARD': LogLevels.DEBUG,
-        'TX_PROXY_SCHEME_CACHE': LogLevels.DEBUG,
-        'GRPC_SERVER': LogLevels.DEBUG,
-        # more logs
-        'FLAT_TX_SCHEMESHARD': LogLevels.TRACE,
-        'HIVE': LogLevels.TRACE,
-        'CMS_TENANTS': LogLevels.TRACE,
-        # less logs
+        'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
         'KQP_YQL': LogLevels.ERROR,
         'KQP_SESSION': LogLevels.CRIT,
         'KQP_COMPILE_ACTOR': LogLevels.CRIT,

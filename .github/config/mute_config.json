@@ -20,9 +20,7 @@
   "branch_overrides": {
     "main": [
       "relwithdebinfo",
-      "release-asan",
-      "release-tsan",
-      "release-msan"
+      "release-asan"
     ],
     "stable-26-4-1": [
       "relwithdebinfo",

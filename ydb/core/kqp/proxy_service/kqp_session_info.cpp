@@ -92,10 +92,15 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
         proto->SetUserSID(ClientSID);
     }
 
-    if (fieldsMap.NeedField(VSessions::WmPoolId::ColumnId)) { // 17
-        auto poolId = WmState->GetPoolId();
-        if (!poolId.empty()) {
-            proto->SetWmPoolId(std::move(poolId));
+    const bool needWmPoolId = fieldsMap.NeedField(VSessions::WmPoolId::ColumnId);
+    const bool needWmClassifiedBy = fieldsMap.NeedField(VSessions::WmClassifiedBy::ColumnId);
+    if (needWmPoolId || needWmClassifiedBy) {
+        auto ctx = WmState->GetPoolContext();
+        if (needWmPoolId && !ctx.PoolId.empty()) {                // 17
+            proto->SetWmPoolId(std::move(ctx.PoolId));
+        }
+        if (needWmClassifiedBy && !ctx.ClassifiedBy.empty()) {    // 22
+            proto->SetWmClassifiedBy(std::move(ctx.ClassifiedBy));
         }
     }
 
@@ -108,12 +113,6 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
         }
     }
 
-    if (fieldsMap.NeedField(VSessions::WmClassifiedBy::ColumnId)) { // 22
-        auto classifiedBy = WmState->GetClassifiedBy();
-        if (!classifiedBy.empty()) {
-            proto->SetWmClassifiedBy(std::move(classifiedBy));
-        }
-    }
     if (State == ESessionState::EXECUTING && !isInWmQueue) {
         if (fieldsMap.NeedField(VSessions::DurationUs::ColumnId)) {
             const auto now = TInstant::Now();

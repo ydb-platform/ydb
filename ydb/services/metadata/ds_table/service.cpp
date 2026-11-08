@@ -1,11 +1,11 @@
-#include "service.h"
-
 #include "accessor_subscribe.h"
 #include "behaviour_registrator_actor.h"
+#include "service.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/initializer/behaviour.h>
 #include <ydb/services/metadata/manager/abstract.h>
@@ -17,17 +17,18 @@ namespace NKikimr::NMetadata::NProvider {
 
 namespace {
 
-class TObjectTrackCommand final : public NModifications::IObjectModificationCommand {
+class TObjectTrackCommand final: public NModifications::IObjectModificationCommand {
     using TBase = NModifications::IObjectModificationCommand;
 
 public:
-    class TController final : public NModifications::IAlterController {
+    class TController final: public NModifications::IAlterController {
     public:
         TController(const TString& typeId, const TString& objectId, NModifications::IOperationsManager::TOperationTrackContext context)
             : TypeId(typeId)
             , ObjectId(objectId)
             , Context(std::move(context))
-        {}
+        {
+        }
 
     private:
         void OnAlteringProblem(const TString& errorMessage) final {
@@ -55,11 +56,14 @@ public:
         const NModifications::IOperationsManager::TOperationTrackContext Context;
     };
 
-    TObjectTrackCommand(const TString& objectId, IClassBehaviour::TPtr behaviour, TController::TPtr controller, const NModifications::IOperationsManager::TOperationTrackContext& context)
-        : TBase(std::vector<NInternal::TTableRecord>{}, std::move(behaviour), controller, NModifications::IOperationsManager::TInternalModificationContext(context.GetExternalData()))
+    TObjectTrackCommand(const TString& objectId, IClassBehaviour::TPtr behaviour, TController::TPtr controller,
+        const NModifications::IOperationsManager::TOperationTrackContext& context)
+        : TBase(std::vector<NInternal::TTableRecord>{}, std::move(behaviour), controller,
+              NModifications::IOperationsManager::TInternalModificationContext(context.GetExternalData()))
         , ObjectId(objectId)
         , Context(context)
-    {}
+    {
+    }
 
 private:
     void DoExecute() const final {
@@ -72,7 +76,7 @@ private:
     const NModifications::IOperationsManager::TOperationTrackContext Context;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 IActor* CreateService(const TConfig& config) {
     return new TService(config);
@@ -89,8 +93,8 @@ ui64 TService::TTrackOperationId::THash::operator()(const TTrackOperationId& id)
 }
 
 bool TService::TTrackOperationId::operator==(const TTrackOperationId& other) const {
-    return DatabaseId == other.DatabaseId && TypeId == other.TypeId && ObjectId == other.ObjectId
-        && PathId == other.PathId && ObjectGeneration == other.ObjectGeneration;
+    return DatabaseId == other.DatabaseId && TypeId == other.TypeId && ObjectId == other.ObjectId && PathId == other.PathId &&
+           ObjectGeneration == other.ObjectGeneration;
 }
 
 void TService::PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender) {
@@ -133,14 +137,14 @@ void TService::Handle(TEvSubscribeExternal::TPtr& ev) {
     const TActorId senderId = ev->Sender;
     ProcessEventWithFetcher(*ev, ev->Get()->GetFetcher(), [this, senderId](const TActorId& actorId) {
         Send<TEvSubscribe>(actorId, senderId);
-        });
+    });
 }
 
 void TService::Handle(TEvAskSnapshot::TPtr& ev) {
     const TActorId senderId = ev->Sender;
     ProcessEventWithFetcher(*ev, ev->Get()->GetFetcher(), [this, senderId](const TActorId& actorId) {
         Send<TEvAsk>(actorId, senderId);
-        });
+    });
 }
 
 void TService::Handle(TEvObjectsOperation::TPtr& ev) {
@@ -176,7 +180,7 @@ void TService::Handle(TEvResetManagerRegistration::TPtr& ev) {
     if (const auto it = RegistrationData->Registered.find(typeId); it != RegistrationData->Registered.end()) {
         RegistrationData->Registered.erase(it);
     } else if (const auto it = RegistrationData->InRegistration.find(typeId); it != RegistrationData->InRegistration.end()) {
-        PrepareManagers({manager}, ev->ReleaseBase(), ev->Sender);
+        PrepareManagers({ manager }, ev->ReleaseBase(), ev->Sender);
     }
 }
 
@@ -262,4 +266,4 @@ void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
     Send(SelfId(), new TEvSubscribeExternal(RegistrationData->GetInitializationFetcher()));
 }
 
-} // namespace NKikimr::NMetadata::NProvider
+}   // namespace NKikimr::NMetadata::NProvider

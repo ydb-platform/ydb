@@ -12,10 +12,13 @@ public:
     }
     static void TrackPath(TNodeWarden& warden, ui32 pdiskId) {
         const auto& record = warden.LocalPDisks.at(TPDiskKey(1, pdiskId)).Record;
-        warden.PDiskByPath.emplace(record.GetPath(), TNodeWarden::TPDiskByPathInfo{TPDiskKey(1, pdiskId), {}});
+        warden.PDiskByPath.emplace(record.GetPath(), TNodeWarden::TPDiskByPathInfo{.RunningPDiskId = TPDiskKey(1, pdiskId)});
     }
     static const auto& GetPDisk(TNodeWarden& warden, ui32 pdiskId) {
         return warden.LocalPDisks.at(TPDiskKey(1, pdiskId)).Record;
+    }
+    static ui32 GetPDiskRefCount(const TNodeWarden& warden, ui32 pdiskId) {
+        return warden.LocalPDisks.at(TPDiskKey(1, pdiskId)).RefCount;
     }
 };
 }

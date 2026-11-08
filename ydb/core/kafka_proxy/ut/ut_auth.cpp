@@ -4,6 +4,7 @@
 #include "kafka_test_client.h"
 #include "test_server.h"
 
+#include <ydb/core/base/ticket_parser.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/library/login/sasl/scram.h>
 #include <ydb/library/testlib/helpers.h>
@@ -13,7 +14,57 @@
 using namespace NKafka;
 using namespace NYdb;
 
+namespace {
+
+class TFailingTicketParser : public NActors::TActorBootstrapped<TFailingTicketParser> {
+public:
+    explicit TFailingTicketParser(bool retryable)
+        : Retryable(retryable)
+    {}
+
+    void Bootstrap() {
+        Become(&TFailingTicketParser::StateWork);
+    }
+
+private:
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NKikimr::TEvTicketParser::TEvAuthorizeTicket, Handle);
+        }
+    }
+
+    void Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TPtr& ev, const NActors::TActorContext& ctx) {
+        ctx.Send(ev->Sender, new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult(
+            ev->Get()->Ticket, NKikimr::TEvTicketParser::TError{.Retryable = Retryable}), 0, ev->Cookie);
+    }
+
+    const bool Retryable;
+};
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(KafkaPlainMessage) {
+    Y_UNIT_TEST_TWIN(TicketParserErrorAllowsAnonymousAuthentication, Retryable) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+            .TokenRecheckIntervalMs = 0,
+        });
+        auto* runtime = testServer.KikimrServer->GetRuntime();
+        runtime->GetAppData().EnforceUserTokenRequirement = false;
+        runtime->GetAppData().EnforceUserTokenCheckRequirement = false;
+        runtime->RegisterService(NKikimr::MakeTicketParserID(), runtime->Register(new TFailingTicketParser(Retryable)));
+
+        TKafkaTestClient client(testServer.Port);
+        client.SetSocketTimeout(10);
+        client.PlainAuthenticateToKafka();
+
+        // A subsequent request must succeed on the same connection after the
+        // rate-limiter context and authentication log have been initialized.
+        auto response = client.ApiVersions();
+        UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    }
+
     // Test PLAIN message with unsupported characters in username
     Y_UNIT_TEST(BadUsername) {
         TInsecureTestServer testServer("2");

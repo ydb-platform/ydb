@@ -1,38 +1,34 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/core/testlib/basics/runtime.h>
 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
 
 namespace NYql::NDq {
 
 using TMessage = std::pair<ui64, TString>;
-template<typename T>
+template <typename T>
 using TWatermarkOr = std::variant<T, TInstant>;
 
-NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
-    TString topic,
-    TMaybe<TDuration> watermarksPeriod = Nothing(),
-    TDuration lateArrivalDelay = TDuration::Seconds(2),
-    bool idlePartitionsEnabled = false,
-    bool streamingMode = true);
+NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(TString topic, TMaybe<TDuration> watermarksPeriod = Nothing(),
+    TDuration lateArrivalDelay = TDuration::Seconds(2), bool idlePartitionsEnabled = false, bool streamingMode = true);
 
 NYql::NPq::NProto::TDqPqTopicSink BuildPqTopicSinkSettings(TString topic);
 
 TString GetDefaultPqEndpoint();
 TString GetDefaultPqDatabase();
 
-struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
+struct TPqIoTestFixture: public NUnitTest::TBaseFixture {
     std::unique_ptr<TFakeCASetup> CaSetup;
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release())));
     NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory = NYql::CreateStructuredTokenCredentialsFactory();
@@ -40,28 +36,20 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     explicit TPqIoTestFixture(ui32 nodeCount = 1);
     ~TPqIoTestFixture();
 
-    template<typename T>
+    template <typename T>
     std::vector<TWatermarkOr<T>> SourceRead(const TReadValueParser<T> parser, i64 freeSpace = 12345) const {
         NThreading::TFuture<void> nextDataFutureOut;
         return CaSetup->AsyncInputRead(parser, nextDataFutureOut, freeSpace);
     }
 
-    template<typename T>
+    template <typename T>
     std::vector<TWatermarkOr<T>> SourceReadUntil(
-        const TReadValueParser<T> parser,
-        ui64 size,
-        i64 eachReadFreeSpace = 1000,
-        TDuration timeout = TDuration::Seconds(30)
-    ) const {
+        const TReadValueParser<T> parser, ui64 size, i64 eachReadFreeSpace = 1000, TDuration timeout = TDuration::Seconds(30)) const {
         return CaSetup->AsyncInputReadUntil(parser, size, eachReadFreeSpace, timeout, false);
     }
 
-    template<typename T>
-    std::vector<TWatermarkOr<T>> SourceReadDataUntil(
-        const TReadValueParser<T> parser,
-        ui64 size,
-        i64 eachReadFreeSpace = 1000
-    ) const {
+    template <typename T>
+    std::vector<TWatermarkOr<T>> SourceReadDataUntil(const TReadValueParser<T> parser, ui64 size, i64 eachReadFreeSpace = 1000) const {
         return CaSetup->AsyncInputReadUntil(parser, size, eachReadFreeSpace, TDuration::Seconds(30), true);
     }
 
@@ -76,14 +64,9 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
         Sleep(TDuration::Seconds(10));
     }
 
+    void InitAsyncOutput(NYql::NPq::NProto::TDqPqTopicSink&& settings, i64 freeSpace = 1_MB);
 
-    void InitAsyncOutput(
-        NYql::NPq::NProto::TDqPqTopicSink&& settings,
-        i64 freeSpace = 1_MB);
-
-    void InitAsyncOutput(
-        const TString& topic,
-        i64 freeSpace = 1_MB)
+    void InitAsyncOutput(const TString& topic, i64 freeSpace = 1_MB)
     {
         InitAsyncOutput(BuildPqTopicSinkSettings(topic), freeSpace);
     }
@@ -99,30 +82,19 @@ extern const TString DefaultPqConsumer;
 extern const TString DefaultPqCluster;
 
 // Write using YDB driver
-void PQWrite(
-    const std::vector<TString>& sequence,
-    const TString& topic,
-    const TString& endpoint = GetDefaultPqEndpoint());
+void PQWrite(const std::vector<TString>& sequence, const TString& topic, const TString& endpoint = GetDefaultPqEndpoint());
 
 // Read using YDB driver
 std::vector<TString> PQReadUntil(
-    const TString& topic,
-    ui64 size,
-    const TString& endpoint = GetDefaultPqEndpoint(),
-    TDuration timeout = TDuration::MilliSeconds(10000));
+    const TString& topic, ui64 size, const TString& endpoint = GetDefaultPqEndpoint(), TDuration timeout = TDuration::MilliSeconds(10000));
 
-void PQCreateStream(
-    const TString& streamName);
+void PQCreateStream(const TString& streamName);
 
-void AddReadRule(
-    NYdb::TDriver& driver,
-    const TString& streamName);
+void AddReadRule(NYdb::TDriver& driver, const TString& streamName);
 
-void ChangePartitionCount(
-    const TString& streamName,
-    ui32 partitionCount);
+void ChangePartitionCount(const TString& streamName, ui32 partitionCount);
 
 std::vector<TMessage> UVPairParser(const NUdf::TUnboxedValue& item);
 std::vector<TString> UVParser(const NUdf::TUnboxedValue& item);
 
-}
+}   // namespace NYql::NDq

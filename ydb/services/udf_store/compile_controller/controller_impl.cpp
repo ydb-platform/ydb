@@ -1,17 +1,16 @@
-#include "controller_impl.h"
 #include "compile_controller.h"
+#include "controller_impl.h"
 #include "reconcile_actor.h"
-
-#include <ydb/services/udf_store/metadata_subscription/fetcher.h>
-#include <ydb/services/udf_store/metadata_subscription/storage_paths.h>
-#include <ydb/services/udf_store/metadata_subscription/wasm_artifact.h>
-#include <ydb/services/udf_store/service.h>
-#include <ydb/services/udf_store/wasm/manifest.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/services/udf_store/metadata_subscription/fetcher.h>
+#include <ydb/services/udf_store/metadata_subscription/storage_paths.h>
+#include <ydb/services/udf_store/metadata_subscription/wasm_artifact.h>
+#include <ydb/services/udf_store/service.h>
+#include <ydb/services/udf_store/wasm/manifest.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
 
@@ -41,9 +40,7 @@ const TString& KindToString(NKikimrUdfStore::EArtifactKind kind) {
 }
 
 NKikimrUdfStore::EArtifactKind KindFromString(TStringBuf kind) {
-    return kind == LibraryKindString()
-        ? NKikimrUdfStore::ARTIFACT_KIND_LIBRARY
-        : NKikimrUdfStore::ARTIFACT_KIND_MODULE;
+    return kind == LibraryKindString() ? NKikimrUdfStore::ARTIFACT_KIND_LIBRARY : NKikimrUdfStore::ARTIFACT_KIND_MODULE;
 }
 
 TGapKey GapKeyFromProto(const NKikimrUdfStore::TArtifactKey& key) {
@@ -62,19 +59,14 @@ void FillProtoKey(NKikimrUdfStore::TArtifactKey& proto, const TGapKey& key) {
     proto.SetCpuSpec(key.CpuSpec);
 }
 
-} // namespace
+}   // namespace
 
-TWasmCompileController::TWasmCompileController(
-    const NActors::TActorId& tablet,
-    TTabletStorageInfo* info)
+TWasmCompileController::TWasmCompileController(const NActors::TActorId& tablet, TTabletStorageInfo* info)
     : NActors::TActor<TWasmCompileController>(&TThis::StateInit)
     , NTabletFlatExecutor::TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
-    TabletCountersPtr.Reset(new TProtobufTabletCounters<
-                            ESimpleCounters_descriptor,
-                            ECumulativeCounters_descriptor,
-                            EPercentileCounters_descriptor,
-                            ETxTypes_descriptor>());
+    TabletCountersPtr.Reset(new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,
+        EPercentileCounters_descriptor, ETxTypes_descriptor>());
     TabletCounters = TabletCountersPtr.Get();
 }
 
@@ -98,8 +90,7 @@ void TWasmCompileController::Cleanup() {
 
 void TWasmCompileController::OnActivateExecutor(const TActorContext& ctx) {
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
-    PlatformCountersRoot = GetServiceCounters(AppData(ctx)->Counters, "udf_store")
-        ->GetSubgroup("subsystem", "wasm_compile");
+    PlatformCountersRoot = GetServiceCounters(AppData(ctx)->Counters, "udf_store")->GetSubgroup("subsystem", "wasm_compile");
 
     // TUdfStoreConfig is not part of AppData, so until the console answers the
     // subscription the budgets stay at the proto defaults mirrored below.
@@ -144,21 +135,18 @@ void TWasmCompileController::ApplyConfig(const NKikimrConfig::TUdfStoreConfig& c
 }
 
 void TWasmCompileController::SubscribeForConfigChanges(const TActorContext& ctx) {
-    ctx.Send(NConsole::MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
-            (ui32)NKikimrConsole::TConfigItem::UdfStoreConfigItem,
-        }));
+    ctx.Send(NConsole::MakeConfigsDispatcherID(ctx.SelfID.NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+                                                                         (ui32)NKikimrConsole::TConfigItem::UdfStoreConfigItem,
+                                                                     }));
 }
 
-void TWasmCompileController::HandleConfig(
-    NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&)
+void TWasmCompileController::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&)
 {
     YDB_LOG_INFO("TWasmCompileController subscribed for config changes",
         {"tabletID", TabletID()});
 }
 
-void TWasmCompileController::HandleConfig(
-    NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
+void TWasmCompileController::HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
 {
     const auto& record = ev->Get()->Record;
     if (record.GetConfig().HasUdfStoreConfig()) {
@@ -169,8 +157,7 @@ void TWasmCompileController::HandleConfig(
 }
 
 void TWasmCompileController::Handle(TEvSubDomain::TEvConfigure::TPtr& ev) {
-    Send(ev->Sender, new TEvSubDomain::TEvConfigureStatus(
-        NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
+    Send(ev->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
 }
 
 void TWasmCompileController::SubscribeToSnapshot() {
@@ -178,8 +165,7 @@ void TWasmCompileController::SubscribeToSnapshot() {
         return;
     }
     SnapshotFetcher = std::make_shared<TSnapshotsFetcher>();
-    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-        new NMetadata::NProvider::TEvSubscribeExternal(SnapshotFetcher));
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(SnapshotFetcher));
 }
 
 void TWasmCompileController::UnsubscribeFromSnapshot() {
@@ -188,19 +174,16 @@ void TWasmCompileController::UnsubscribeFromSnapshot() {
     }
     // Without this the provider keeps this dead actor in its subscriber list
     // and broadcasts every refresh to it, once per leader generation forever.
-    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-        new NMetadata::NProvider::TEvUnsubscribeExternal(SnapshotFetcher));
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(SnapshotFetcher));
     SnapshotFetcher.reset();
 }
 
 void TWasmCompileController::ScheduleTick() {
-    NActors::TActor<TWasmCompileController>::Schedule(
-        TickInterval, new TEvControllerPrivate::TEvScheduleTick());
+    NActors::TActor<TWasmCompileController>::Schedule(TickInterval, new TEvControllerPrivate::TEvScheduleTick());
 }
 
 void TWasmCompileController::ScheduleReconcileTick() {
-    NActors::TActor<TWasmCompileController>::Schedule(
-        ReconcileInterval, new TEvControllerPrivate::TEvReconcileTick());
+    NActors::TActor<TWasmCompileController>::Schedule(ReconcileInterval, new TEvControllerPrivate::TEvReconcileTick());
 }
 
 void TWasmCompileController::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
@@ -285,8 +268,7 @@ void TWasmCompileController::StartReconcile(const TString& cpuSpec) {
     if (cpuSpec.empty() || ReconcileInFlight.contains(cpuSpec)) {
         return;
     }
-    ReconcileInFlight[cpuSpec] =
-        Register(CreateReconcileActor(SelfId(), cpuSpec, GetArtifactTablePath(cpuSpec)));
+    ReconcileInFlight[cpuSpec] = Register(CreateReconcileActor(SelfId(), cpuSpec, GetArtifactTablePath(cpuSpec)));
 }
 
 void TWasmCompileController::StopReconciles() {
@@ -372,11 +354,7 @@ void TWasmCompileController::Handle(TEvControllerPrivate::TEvHintTick::TPtr&) {
     ScheduleAssignments();
 }
 
-bool TWasmCompileController::HasArtifact(
-    const TString& cpuSpec,
-    const TString& name,
-    const TString& kind,
-    const TString& uid) const {
+bool TWasmCompileController::HasArtifact(const TString& cpuSpec, const TString& name, const TString& kind, const TString& uid) const {
     const auto it = ArtifactsByCpuSpec.find(cpuSpec);
     if (it == ArtifactsByCpuSpec.end()) {
         return false;
@@ -427,7 +405,7 @@ void TWasmCompileController::RebuildQueue() {
 
     // Libraries go in their own earlier pass: a module is only assignable once
     // the artifacts it links against exist on the very same platform.
-    for (const bool librariesPass : {true, false}) {
+    for (const bool librariesPass : { true, false }) {
         for (const auto& entry : Modules) {
             const bool isLibrary = entry.Kind == LibraryKindString();
             if (isLibrary != librariesPass) {
@@ -534,6 +512,7 @@ void TWasmCompileController::ReportCounters() {
         ui64 Queued = 0;
         ui64 Missing = 0;
     };
+
     THashMap<TString, TPlatformNumbers> byCpuSpec;
 
     // Platforms whose last worker left are walked too, otherwise their gauges
@@ -740,7 +719,8 @@ void TWasmCompileController::CollectStaleRows(TStateUpdate& update) {
 }
 
 void TWasmCompileController::ApplyStateUpdate(TStateUpdate&& update) {
-    if (update.ErasedAssignments.empty() && update.ErasedAttempts.empty() && update.UpdatedAttempts.empty() && update.ReadyBroadcasts.empty() && update.ErasedWorkers.empty())
+    if (update.ErasedAssignments.empty() && update.ErasedAttempts.empty() && update.UpdatedAttempts.empty() && update.ReadyBroadcasts.empty() &&
+        update.ErasedWorkers.empty())
     {
         return;
     }
@@ -787,9 +767,8 @@ void TWasmCompileController::Handle(TEvCompileController::TEvDescribeModule::TPt
     }
     auto result = std::make_unique<TEvCompileController::TEvDescribeModuleResult>();
     for (const auto& cpuSpec : platforms) {
-        const TGapKey key{request.GetName(),
-                          request.GetKind() == NKikimrUdfStore::ARTIFACT_KIND_LIBRARY ? "library" : "module",
-                          request.GetUid(), cpuSpec};
+        const TGapKey key{ request.GetName(), request.GetKind() == NKikimrUdfStore::ARTIFACT_KIND_LIBRARY ? "library" : "module",
+            request.GetUid(), cpuSpec };
         auto* platform = result->Record.AddPlatforms();
         platform->SetCpuSpec(cpuSpec);
         platform->SetCompiling(Assignments.contains(key));
@@ -844,8 +823,7 @@ void TWasmCompileController::Handle(TEvCompileController::TEvHeartbeat::TPtr& ev
 
     // Assignments the worker no longer claims can be handed out again even
     // before their deadline: it just told us it is not running them.
-    const THashSet<ui64> claimed(
-        record.GetActiveAssignmentIds().begin(), record.GetActiveAssignmentIds().end());
+    const THashSet<ui64> claimed(record.GetActiveAssignmentIds().begin(), record.GetActiveAssignmentIds().end());
     TStateUpdate update;
     update.Reason = "not claimed by the worker";
     for (const auto& [key, assignment] : Assignments) {
@@ -884,8 +862,7 @@ void TWasmCompileController::Handle(TEvCompileController::TEvNeedArtifact::TPtr&
     DirtyPlatforms.insert(key.CpuSpec);
     if (!HintTickScheduled) {
         HintTickScheduled = true;
-        NActors::TActor<TWasmCompileController>::Schedule(
-            HintCoalesceInterval, new TEvControllerPrivate::TEvHintTick());
+        NActors::TActor<TWasmCompileController>::Schedule(HintCoalesceInterval, new TEvControllerPrivate::TEvHintTick());
     }
 }
 
@@ -991,11 +968,9 @@ void TWasmCompileController::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
     ScheduleAssignments();
 }
 
-NActors::IActor* CreateWasmCompileController(
-    const NActors::TActorId& tablet,
-    TTabletStorageInfo* info)
+NActors::IActor* CreateWasmCompileController(const NActors::TActorId& tablet, TTabletStorageInfo* info)
 {
     return new TWasmCompileController(tablet, info);
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

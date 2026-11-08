@@ -1,9 +1,24 @@
-/* syntax version 1 */
-USE plato;
+$input = [
+    <|key: "1", subkey: "5", value: "a"|>,
+    <|key: "1", subkey: "2", value: "b"|>,
+    <|key: "1", subkey: "7", value: "c"|>,
+    <|key: "1", subkey: "4", value: "d"|>,
+    <|key: "1", subkey: "8", value: "e"|>,
+    <|key: "1", subkey: "13", value: "f"|>,
+    <|key: "2", subkey: "4", value: "a"|>,
+    <|key: "2", subkey: "6", value: "b"|>,
+    <|key: "2", subkey: "2", value: "c"|>,
+    <|key: "2", subkey: "9", value: "d"|>,
+    <|key: "2", subkey: "3", value: "e"|>,
+    <|key: "2", subkey: "9", value: "f"|>,
+    <|key: "2", subkey: "1", value: "g"|>,
+    <|key: "2", subkey: "9", value: "h"|>,
+    <|key: "3", subkey: "1", value: "a"|>,
+];
 
 SELECT
     key,
     TOP_BY(subkey || value, subkey, 6u)
-FROM Input
+FROM AS_TABLE($input)
 GROUP BY key
 ORDER BY key

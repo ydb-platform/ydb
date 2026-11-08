@@ -14,4 +14,4 @@ NYql::TIssue MakeWarningIssue(ui32 id, const TString& message);
 
 NYql::TIssue MakeInfoIssue(ui32 id, const TString& message);
 
-}
+}   // namespace NFq

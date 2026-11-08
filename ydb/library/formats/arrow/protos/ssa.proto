@@ -102,6 +102,41 @@ message TProgram {
             FUNC_STR_ENDS_WITH_IGNORE_CASE = 37;
         }
 
+        // Describes what a function computes about one of its arguments, in a form the shard can analyze.
+        // Advisory only: a shard that ignores it must produce the same rows. A shard that uses it may only
+        // skip data that provably cannot satisfy the function. Set only when the function result implies
+        // that Arguments[ArgumentIndex] matches Pattern (a positive LIKE/ILIKE match, not NOT/OR).
+        message TPatternHint {
+            // Index into TFunction.Arguments of the matched column. Ignored when out of range or when the
+            // argument is not an original string-like column (or a sub-column) of the table.
+            optional uint32 ArgumentIndex = 1;
+
+            // SQL LIKE / ILIKE pattern before conversion to a regular expression.
+            message TLikePattern {
+                // Literal as written in the query (raw bytes of the String or Utf8 literal).
+                // '%' matches any sequence, '_' matches one character; other bytes are literal
+                // unless preceded by Escape.
+                optional bytes Pattern = 1;
+                // ESCAPE character: empty when the query has no ESCAPE clause, otherwise one ASCII byte.
+                optional bytes Escape = 2;
+            }
+
+            // Reserved. A regular expression in RE2 syntax (phase 2).
+            message TRegexpPattern {
+                optional bytes Pattern = 1;
+                // true: whole-string match (Re2.Match). false: substring search (Re2.Grep).
+                optional bool FullMatch = 2 [default = true];
+            }
+
+            oneof Pattern {
+                TLikePattern Like = 2;
+                TRegexpPattern Regexp = 3;
+            }
+
+            // true for LIKE, false for ILIKE. Case-insensitive matching on the shard covers ASCII only.
+            optional bool CaseSensitive = 4 [default = true];
+        }
+
         message TFunction {
             optional uint32 Id = 1; // EFunction
             repeated TColumn Arguments = 2;
@@ -109,6 +144,7 @@ message TProgram {
             optional uint32 KernelIdx = 4;
             optional uint32 YqlOperationId = 5; // TKernelRequestBuilder::EBinaryOp
             optional string KernelName = 6;
+            optional TPatternHint PatternHint = 7;
         }
 
         message TExternalFunction {

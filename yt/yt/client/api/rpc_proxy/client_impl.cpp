@@ -49,6 +49,7 @@
 #include <yt/yt/core/rpc/stream.h>
 
 #include <yt/yt/core/ytree/convert.h>
+#include <yt/yt/core/ytree/fluent.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/yson/protobuf_helpers.h>
@@ -491,6 +492,7 @@ TFuture<void> TClient::ReshardTable(
     writer->WriteRowset(TRange(keys));
     req->Attachments() = writer->Finish();
 
+    ToProto(req->mutable_cumulative_data_weights(), options.CumulativeDataWeights);
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
 
@@ -517,6 +519,7 @@ TFuture<void> TClient::ReshardTable(
         req->set_slicing_accuracy(*options.SlicingAccuracy);
     }
 
+    ToProto(req->mutable_cumulative_data_weights(), options.CumulativeDataWeights);
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
 
@@ -998,6 +1001,7 @@ TFuture<TPullQueueResult> TClient::PullQueue(
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
         return TPullQueueResult{
             .Rowset = CreateQueueRowset(std::move(rowset), rsp->start_offset()),
+            .ResponseSizeLimitReached = YT_OPTIONAL_FROM_PROTO(*rsp, response_size_limit_reached),
         };
     }));
 }
@@ -1040,6 +1044,7 @@ TFuture<TPullQueueResult> TClient::PullQueueConsumer(
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
         return TPullQueueResult{
             .Rowset = CreateQueueRowset(std::move(rowset), rsp->start_offset()),
+            .ResponseSizeLimitReached = YT_OPTIONAL_FROM_PROTO(*rsp, response_size_limit_reached),
         };
     }));
 }
@@ -2892,6 +2897,9 @@ TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
             protoAccessControlObjects->add_items(aco);
         }
     }
+    if (options.MutationId) {
+        ToProto(req->mutable_mutating_options(), options);
+    }
 
     for (const auto& file : options.Files) {
         auto* protoFile = req->add_files();
@@ -3262,19 +3270,7 @@ TFuture<TGetPipelineDynamicSpecResult> TClient::GetPipelineDynamicSpec(
     const NYPath::TYPath& pipelinePath,
     const TGetPipelineDynamicSpecOptions& options)
 {
-    auto proxy = CreateApiServiceProxy();
-
-    auto req = proxy.GetPipelineDynamicSpec();
-    SetTimeoutOptions(*req, options);
-
-    req->set_pipeline_path(pipelinePath);
-
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineDynamicSpecPtr& rsp) {
-        return TGetPipelineDynamicSpecResult{
-            .Version = FromProto<NFlow::TVersion>(rsp->version()),
-            .Spec = TYsonString(rsp->spec()),
-        };
-    }));
+    return IFlowClient::GetPipelineDynamicSpec(pipelinePath, options);
 }
 
 TFuture<TSetPipelineDynamicSpecResult> TClient::SetPipelineDynamicSpec(

@@ -77,6 +77,7 @@ class TSchemeShard;
 struct TForceShardSplitSettings {
     ui64 ForceShardSplitDataSize;
     bool DisableForceShardSplit;
+    bool MergeBySizeEnabled;
 };
 
 struct TSplitSettings {
@@ -91,6 +92,7 @@ struct TSplitSettings {
     TControlWrapper ForceShardSplitDataSize;
     TControlWrapper DisableForceShardSplit;
     TControlWrapper EnableSplitMergeFairScheduling;
+    TControlWrapper MergeBySizeEnabled;
 
     TSplitSettings()
         : SplitMergePartCountLimit(2000, -1, 1000000)
@@ -104,6 +106,7 @@ struct TSplitSettings {
         , ForceShardSplitDataSize(2ULL * 1024 * 1024 * 1024, 10 * 1024 * 1024, 16ULL * 1024 * 1024 * 1024)
         , DisableForceShardSplit(0, 0, 1)
         , EnableSplitMergeFairScheduling(0, 0, 1)
+        , MergeBySizeEnabled(1, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -120,13 +123,15 @@ struct TSplitSettings {
         TControlBoard::RegisterSharedControl(ForceShardSplitDataSize,          icb->SchemeShardControls.ForceShardSplitDataSize);
         TControlBoard::RegisterSharedControl(DisableForceShardSplit,           icb->SchemeShardControls.DisableForceShardSplit);
 
-        TControlBoard::RegisterSharedControl(EnableSplitMergeFairScheduling,    icb->SchemeShardControls.EnableSplitMergeFairScheduling);
+        TControlBoard::RegisterSharedControl(EnableSplitMergeFairScheduling,   icb->SchemeShardControls.EnableSplitMergeFairScheduling);
+        TControlBoard::RegisterSharedControl(MergeBySizeEnabled,               icb->SchemeShardControls.MergeBySizeEnabled);
     }
 
     TForceShardSplitSettings GetForceShardSplitSettings() const {
         return TForceShardSplitSettings{
             .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
             .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
+            .MergeBySizeEnabled = ui64(MergeBySizeEnabled) != 0,
         };
     }
 };
@@ -147,6 +152,8 @@ struct TBackupToS3Settings {
     // System Views
     TControlWrapper EnableSysViewPermissionsExport;
     TControlWrapper EnableSysViewPermissionsImport;
+    // Coordination Nodes
+    TControlWrapper EnableKesusExport;
 
     TBackupToS3Settings()
         : EnableAsyncReplicationExport(1, 0, 1)
@@ -159,6 +166,7 @@ struct TBackupToS3Settings {
         , EnableExternalTableImport(1, 0, 1)
         , EnableSysViewPermissionsExport(1, 0, 1)
         , EnableSysViewPermissionsImport(1, 0, 1)
+        , EnableKesusExport(0, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -176,6 +184,8 @@ struct TBackupToS3Settings {
 
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsExport, icb->BackupControls.S3Controls.EnableSysViewPermissionsExport);
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsImport, icb->BackupControls.S3Controls.EnableSysViewPermissionsImport);
+
+        TControlBoard::RegisterSharedControl(EnableKesusExport, icb->BackupControls.S3Controls.EnableKesusExport);
     }
 };
 
@@ -1012,6 +1022,14 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         }
     }
 
+    bool IsWaitingImportReplica() const {
+        return ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT;
+    }
+
+    bool IsImportingReplica() const {
+        return ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING;
+    }
+
     bool HasIncrementalBackupConfig() const { return TableDescription.HasIncrementalBackupConfig(); }
     const NKikimrSchemeOp::TTableIncrementalBackupConfig& IncrementalBackupConfig() const { return TableDescription.GetIncrementalBackupConfig(); }
     NKikimrSchemeOp::TTableIncrementalBackupConfig& MutableIncrementalBackupConfig() { return *TableDescription.MutableIncrementalBackupConfig(); }
@@ -1416,6 +1434,10 @@ public:
     }
 
     bool IsMergeBySizeEnabled(const TForceShardSplitSettings& params) const {
+        // Global switch: merge by size can be disabled cluster-wide via ICB
+        if (!params.MergeBySizeEnabled) {
+            return false;
+        }
         // Auto merge is only enabled when auto split is also enabled
         if (!IsSplitBySizeEnabled(params)) {
             return false;
@@ -3954,6 +3976,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         BuildIndexes = 5,
         CreateChangefeed = 6,
         DownloadExportMetadata = 7,
+        DropPlaceholder = 8,
+        FinalizeImport = 9,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,
@@ -3989,6 +4013,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         NBackup::TMetadata Metadata;
         TVector<std::pair<NBackup::TIndexMetadata, Ydb::Table::CreateTableRequest>> MaterializedIndexes;
         NKikimrSchemeOp::TImportTableChangefeeds Changefeeds;
+        TMaybe<NKikimrSchemeOp::TTableReplicationConfig> ReplicationConfig;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;

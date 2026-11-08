@@ -134,6 +134,8 @@
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/udf_store/compile_controller/compile_controller.h>
 #include <ydb/services/view/grpc_service.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
+#include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
@@ -553,7 +555,7 @@ namespace Tests {
 
             const auto& pathMapping = Settings->AppConfig->GetResourcePathPrefixMapping();
             if (pathMapping.RulesSize()) {
-                appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping);
+                appData.SetPathNormalizer(std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping, appData.Counters));
             }
 
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
@@ -722,7 +724,7 @@ namespace Tests {
 
     void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId, const std::optional<TString>& tenant) {
         auto* grpcInfo = &TenantsGRpc[tenant ? *tenant : Settings->DomainName][grpcServiceNodeId];
-        grpcInfo->Shutdown();
+        grpcInfo->Shutdown(StoppedGRpcServers);
 
         grpcInfo->GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = grpcInfo->GRpcServerRootCounters;
@@ -1403,7 +1405,12 @@ namespace Tests {
         }
 
         {
-            const auto& appData = Runtime->GetAppData(nodeIdx);
+            auto& appData = Runtime->GetAppData(nodeIdx);
+            auto gateway = std::make_shared<NWorkloadManager::NPrivate::TWorkloadManagerGateway>();
+            appData.WorkloadManagerGateway = gateway;
+            TActorId stateActorId = Runtime->Register(NWorkloadManager::CreateWorkloadManagerStateActor(gateway), nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
+            Runtime->RegisterService(NWorkloadManager::MakeWorkloadManagerStateActorId(Runtime->GetNodeId(nodeIdx)), stateActorId, nodeIdx);
+
             IActor* workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData.Counters));
             TActorId workloadManagerId = Runtime->Register(workloadManager, nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
             Runtime->RegisterService(NWorkloadManager::MakeServiceId(Runtime->GetNodeId(nodeIdx)), workloadManagerId, nodeIdx);
@@ -1512,7 +1519,11 @@ namespace Tests {
             }
 
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, *Settings->AppConfig);
+            const auto& featureFlags = Runtime->GetAppData(nodeIdx).FeatureFlags;
+            auto schedulerAppConfig = *Settings->AppConfig;
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableResourcePoolsScheduler(featureFlags.GetEnableResourcePoolsScheduler());
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(featureFlags.GetEnableComputeSchedulerMemory());
+            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, schedulerAppConfig);
 
             if (!Settings->AppConfig->GetTableServiceConfig().HasEnableCompileCacheWarmup()) {
                 Settings->AppConfig->MutableTableServiceConfig()->SetEnableCompileCacheWarmup(false);

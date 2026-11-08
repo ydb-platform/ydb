@@ -1108,6 +1108,91 @@ void AssertReadMessage(
     UNIT_ASSERT_VALUES_EQUAL(actual.GetData(), expected.Data);
 }
 
+void TestMirroredOffsetSurvivesRestart(bool kafkaBatch) {
+    for (bool prefill : {false, true}) {
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        tc.Prepare();
+        tc.Runtime->SetScheduledLimit(50000);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+        SetEnableTopicMessagesBatching(tc);
+
+        TActorId partitionActor;
+        tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPQ::TEvInitComplete::EventType
+                && ev->Get<TEvPQ::TEvInitComplete>()->Partition == TPartitionId(0)) {
+                partitionActor = ev->Sender;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+        // No mirror rule: only KV can restore MirroredOffset after the restart.
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+        PQGetPartInfo(0, 0, tc);
+        UNIT_ASSERT(partitionActor);
+        tc.Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+
+        TVector<TExpectedReadMessage> expected;
+        if (prefill) {
+            CmdWrite(0, "sourceid_before_gap", {{1, "before-gap"}}, tc);
+            expected.push_back({.SeqNo = 1, .Offset = 0, .Data = "before-gap"});
+        }
+        constexpr ui64 mirroredOffset = 1000;
+        // Only an empty partition advances its boundaries to the replicated position.
+        const ui64 expectedStartOffset = prefill ? 0 : mirroredOffset;
+        const ui64 expectedEndOffset = prefill ? 1 : mirroredOffset;
+        auto replicationData = MakeHolder<TEvPQ::TEvReplicationData>();
+        replicationData->MirroredOffset = mirroredOffset;
+        tc.Runtime->Send(new IEventHandle(partitionActor, tc.Edge, replicationData.Release(), 0, 17));
+        tc.Runtime->SimulateSleep(TDuration::Seconds(1));
+        PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
+
+        const TVector<TString> values = {"after-gap", TString(1_MB, 'x')};
+        if (kafkaBatch) {
+            // No explicit write offset: both native and Kafka writes must use the restored floor.
+            CmdWriteKafkaBatch(0, "sourceid_after_gap", 1, values, tc);
+            NKikimrPQClient::TDataChunk chunk;
+            chunk.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
+            chunk.SetCodec(static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1));
+            chunk.SetData(MakeKafkaBatchPayload(values));
+            expected.push_back({.SeqNo = 1, .LogicalMessageCount = 2,
+                .Offset = mirroredOffset, .Data = chunk.SerializeAsString()});
+        } else {
+            CmdWrite(0, "sourceid_after_gap", {{1, values[0]}, {2, values[1]}}, tc);
+            expected.push_back({.SeqNo = 1, .Offset = mirroredOffset, .Data = values[0]});
+            expected.push_back({.SeqNo = 2, .Offset = mirroredOffset + 1, .Data = values[1]});
+        }
+
+        auto checkReads = [&] {
+            for (ui64 readOffset : {ui64(0), mirroredOffset / 2}) {
+                size_t index = prefill && readOffset > 0 ? 1 : 0;
+                while (index < expected.size()) {
+                    const auto result = CmdReadAndGetResult(MakeBatchAwareReadSettings(readOffset, mirroredOffset + 2), tc);
+                    UNIT_ASSERT(result.ResultSize() > 0);
+                    UNIT_ASSERT(index + result.ResultSize() <= expected.size());
+                    for (const auto& message : result.GetResult()) {
+                        AssertReadMessage(message, expected[index++]);
+                        readOffset = message.GetOffset() + message.GetLogicalMessageCount();
+                    }
+                }
+            }
+        };
+        checkReads();
+        PQTabletRestart(tc);
+        checkReads();
+    }
+}
+
+Y_UNIT_TEST(MirroredOffsetSurvivesRestart) {
+    TestMirroredOffsetSurvivesRestart(false);
+}
+
+Y_UNIT_TEST(MirroredOffsetSurvivesRestartKafkaBatch) {
+    TestMirroredOffsetSurvivesRestart(true);
+}
+
 void ReadAndAssertBatchAwareMessages(
     TTestContext& tc,
     const TVector<TExpectedReadMessage>& expected,
@@ -3031,6 +3116,53 @@ void TestWritePQImpl(bool fast) {
 Y_UNIT_TEST(TestWritePQ) {
     TestWritePQImpl(true);
     TestWritePQImpl(false);
+}
+
+Y_UNIT_TEST(TestWriteWithMinOffset) {
+    for (const size_t messageSize : {size_t(100), size_t(1_MB)}) {
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        tc.Prepare();
+        tc.Runtime->SetScheduledLimit(5000);
+        auto& config = tc.Runtime->GetAppData(0).PQConfig;
+        config.SetMinOffset(100);
+        PQTabletPrepare({.partitions = 1}, {{"user", true}}, tc);
+
+        const TString data(messageSize, 'x');
+        CmdWrite(0, "sourceid", {{1, data}, {2, data}}, tc);
+        CmdWrite(0, "sourceid", {{3, data}}, tc);
+        PQGetPartInfo(100, 103, tc);
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 3, false, tc, {100, 101, 102});
+
+        // Raising the minimum introduces a gap in an existing partition.
+        config.SetMinOffset(200);
+        CmdWrite(0, "sourceid", {{4, data}}, tc);
+        PQGetPartInfo(100, 201, tc);
+        CmdRead(0, 103, Max<i32>(), Max<i32>(), 1, false, tc, {200});
+
+        // A lower minimum must not move the next offset backwards, including after restart.
+        config.SetMinOffset(50);
+        PQTabletRestart(tc);
+        CmdWrite(0, "sourceid", {{5, data}}, tc);
+        PQGetPartInfo(100, 202, tc);
+        CmdRead(0, 201, Max<i32>(), Max<i32>(), 1, false, tc, {201});
+    }
+}
+
+Y_UNIT_TEST(TestWriteWithMinOffsetPreservesExplicitOffset) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->GetAppData(0).PQConfig.SetMinOffset(100);
+    PQTabletPrepare({.partitions = 1}, {{"user", true}}, tc);
+
+    CmdWrite({.Partition = 0, .SourceId = "sourceid", .Data = {{1, "data"}}, .TestContext = tc, .Offset = 10});
+    PQGetPartInfo(10, 11, tc);
+    CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {10});
+
+    CmdWrite(0, "sourceid", {{2, "data"}}, tc);
+    PQGetPartInfo(10, 101, tc);
+    CmdRead(0, 11, Max<i32>(), Max<i32>(), 1, false, tc, {100});
 }
 
 Y_UNIT_TEST(Read_From_Different_Zones_What_Was_Written_With_Gaps)

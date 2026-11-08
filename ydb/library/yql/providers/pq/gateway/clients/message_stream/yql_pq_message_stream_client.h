@@ -18,11 +18,12 @@ NYdb::NTopic::TReadSessionSettings ToSdkReadSettings(const TString& stream, cons
 NFq::TMessageStreamResult<NFq::TMessageStreamDescription> ToMessageStream(const NYdb::NTopic::TDescribeTopicResult& result);
 NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription> ToMessageStream(const NYdb::NTopic::TDescribeConsumerResult& result);
 NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription> ToMessageStream(const NYdb::NTopic::TDescribePartitionResult& result);
-NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition> ToMessageStreamConsumerPosition(const NYdb::TStatus& status, NFq::TMessageStreamPartitionId partitionId, ui64 offset);
+NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition> ToMessageStreamConsumerPosition(
+    const NYdb::TStatus& status, NFq::TMessageStreamPartitionId partitionId, ui64 offset);
 
 // Unknown has no server status code; callers choose their fallback.
 std::optional<Ydb::StatusIds::StatusCode> ToYdbStatus(NFq::EMessageStreamStatus status);
 
 NYdb::TStatus ToSdkStatus(NFq::EMessageStreamStatus status, const NYql::TIssues& issues);
 
-} // namespace NYql
+}   // namespace NYql

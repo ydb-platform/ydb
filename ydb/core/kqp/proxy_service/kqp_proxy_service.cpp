@@ -29,11 +29,14 @@
 #include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/script_executions/finalization/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -60,8 +63,7 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
-#include <ydb/services/workload_manager/events.h>
-#include <ydb/services/workload_manager/query_classifier.h>
+#include <ydb/services/metadata/service.h>
 
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -279,6 +281,7 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         ListScriptExecutionOperations,
         CancelScriptExecutionOperation,
         GetScriptExecutionPhysicalGraph,
+        FetchScriptResults,
     };
 
 public:
@@ -300,7 +303,6 @@ public:
         , QueryServiceConfig(queryServiceConfig)
         , TliConfig(tliConfig)
         , FeatureFlags()
-        , WorkloadManagerConfig()
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , FederatedQuerySetupFactory(federatedQuerySetupFactory)
         , QueryReplayFactory(std::move(queryReplayFactory))
@@ -319,7 +321,6 @@ public:
         ctx.Register(CreateVectorIndexLevelsCacheMaintainer(
             VectorIndexLevelsCache, GetKqpResourceManager(), TableServiceConfig.GetResourceManager()));
         FeatureFlags = AppData()->FeatureFlags;
-        WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
         WarmupApplicable = IsCompileCacheWarmupEnabled(TableServiceConfig, AppData()->TenantName,
             AppData()->DomainsInfo->Domain ? AppData()->DomainsInfo->Domain->Name : TString());
         WarmupGateOpen = !WarmupApplicable;
@@ -372,16 +373,14 @@ public:
         ui32 tableServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::TableServiceConfigItem;
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
         ui32 featureFlagsKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
-        ui32 workloadManagerKind = (ui32)NKikimrConsole::TConfigItem::WorkloadManagerConfigItem;
         ui32 queryServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::QueryServiceConfigItem;
         ui32 tliConfigKind = (ui32)NKikimrConsole::TConfigItem::TliConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-                {tableServiceConfigKind, logConfigKind, featureFlagsKind, workloadManagerKind, queryServiceConfigKind, tliConfigKind}),
+                {tableServiceConfigKind, logConfigKind, featureFlagsKind, queryServiceConfigKind, tliConfigKind}),
             IEventHandle::FlagTrackDelivery);
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
             SpillingService = TActivationContext::Register(NYql::NDq::CreateDqLocalFileSpillingService(
@@ -651,7 +650,6 @@ public:
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
         });
 
-        ResourcePoolsCache.UnsubscribeFromResourcePoolClassifiers(ActorContext());
         DatabasesCache.StopSubscriberActor(ActorContext());
 
         return TActor::PassAway();
@@ -682,9 +680,6 @@ public:
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvResetManagerRegistration(TStreamingQueryBehaviour::GetInstance()));
         }
 
-        WorkloadManagerConfig.Swap(event.MutableConfig()->MutableWorkloadManagerConfig());
-        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
-
         if (event.GetConfig().HasQueryServiceConfig()) {
             QueryServiceConfig.Swap(event.MutableConfig()->MutableQueryServiceConfig());
         }
@@ -694,13 +689,13 @@ public:
         }
 
         RebuildSharedServiceConfigs();
-
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
-        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
         InitSharedReading();
         InitCheckpointStorage();
         InitDescribeResourceIdService();
         InitAccessServiceService();
+
+        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -965,8 +960,6 @@ public:
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
         }
-
-        SetupWorkloadManagerQueryClassifier(ev, sessionInfo, requestId);
 
         TActorId targetId;
         if (sessionInfo) {
@@ -1773,14 +1766,14 @@ public:
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvGetScriptExecutionPhysicalGraph, Handle);
+            hFunc(NKqp::TEvFetchScriptResultsRequest, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
-            hFunc(NWorkloadManager::TEvUpdatePoolInfo, Handle);
             hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
             hFunc(TEvKqp::TEvDelayedRequestError, Handle);
-            hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
+            hFunc(TEvKqp::TEvGetVectorIndexLevelsCacheRequest, Handle)
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -2009,37 +2002,6 @@ private:
         }
     }
 
-    void SetupWorkloadManagerQueryClassifier(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 /*requestId*/) {
-        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
-        const auto& databaseId = ev->Get()->GetDatabaseId();
-
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)
-            || ev->Get()->IsInternalCall()
-            || ev->Get()->GetIsWarmupCompilation()) {
-            return;
-        }
-
-        auto poolId = ev->Get()->GetPoolId();
-        ResourcePoolsCache.GetPoolInfo(databaseId, poolId ? poolId : NResourcePool::DEFAULT_POOL_ID, ActorContext());
-
-        auto context = NWorkloadManager::TClassifyContext{
-            // This parameter is set when user creates a request with an explicit PoolId
-            .PoolId = poolId,
-            .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
-            .UserToken = ev->Get()->GetUserToken()
-        };
-
-        auto classifier = NWorkloadManager::CreateQueryClassifier(
-            ResourcePoolsCache.GetLastResourcePoolMapSnapshot(),
-            ResourcePoolsCache.GetClassifierViewFor(databaseId),
-            databaseId,
-            std::move(context),
-            *AppData()
-        );
-
-        ev->Get()->SetWmQueryClassifier(classifier);
-    }
-
     void UpdateYqlLogLevels() {
         const auto& kqpYqlName = NKikimrServices::EServiceKikimr_Name(NKikimrServices::KQP_YQL);
         for (auto &entry : LogConfig.GetEntry()) {
@@ -2093,6 +2055,10 @@ private:
 
             case EDelayedRequestType::GetScriptExecutionPhysicalGraph:
                 HandleDelayedScriptRequestError<TEvGetScriptPhysicalGraphResponse>(std::move(requestEvent), status, std::move(issues));
+                break;
+
+            case EDelayedRequestType::FetchScriptResults:
+                HandleDelayedScriptRequestError<TEvFetchScriptResultsResponse>(std::move(requestEvent), status, std::move(issues));
                 break;
         }
     }
@@ -2198,6 +2164,14 @@ private:
     void Handle(TEvGetScriptExecutionPhysicalGraph::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::GetScriptExecutionPhysicalGraph)) {
             Register(CreateGetScriptExecutionPhysicalGraphActor(ev->Sender, ev->Get()->Database, ev->Get()->ExecutionId));
+        }
+    }
+
+    void Handle(TEvFetchScriptResultsRequest::TPtr& ev) {
+        if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::FetchScriptResults)) {
+            auto& request = *ev->Get();
+            Register(CreateGetScriptExecutionResultActor(ev->Sender, std::move(request.Database), std::move(request.ExecutionId),
+                std::move(request.UserSID), request.ResultSetIndex, request.Offset, request.RowsLimit, request.SizeLimit, request.Deadline));
         }
     }
 
@@ -2307,13 +2281,8 @@ private:
         Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
-    void Handle(NWorkloadManager::TEvUpdatePoolInfo::TPtr& ev) {
-        ResourcePoolsCache.UpdatePoolInfo(ev->Get()->DatabaseId, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject, ActorContext());
-    }
-
     void Handle(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev) {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->DatabaseId, ev->Get()->Serverless);
             Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddDatabase(ev->Get()->DatabaseId));
         }
         DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
@@ -2323,8 +2292,10 @@ private:
         HandleDelayedRequestError(static_cast<EDelayedRequestType>(ev->Cookie), std::move(ev->Get()->RequestEvent), ev->Get()->Status, std::move(ev->Get()->Issues));
     }
 
-    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetValidatedSnapshotAs<NWorkloadManager::TResourcePoolClassifierSnapshot>(), ActorContext());
+    void Handle(TEvKqp::TEvGetVectorIndexLevelsCacheRequest::TPtr& ev) {
+        auto result = std::make_unique<TEvKqp::TEvGetVectorIndexLevelsCacheResponse>();
+        result->CachePtr = VectorIndexLevelsCache;
+        Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
     void InitSharedReading() {
@@ -2421,7 +2392,6 @@ private:
     std::shared_ptr<const NKikimrConfig::TQueryServiceConfig> SharedQueryServiceConfig;
     std::shared_ptr<const NKikimrConfig::TTliConfig> SharedTliConfig;
     NKikimrConfig::TFeatureFlags FeatureFlags;
-    NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusiveConstPtr<NYql::TKikimrConfiguration> KqpConfig;
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
@@ -2497,7 +2467,6 @@ private:
     ui64 ScriptExecutionsTalesGeneration = 0;
     TActorId KqpTempTablesAgentActor;
 
-    TResourcePoolsCache ResourcePoolsCache;
     TDatabasesCache DatabasesCache;
 
     std::unique_ptr<TEvKqp::TEvCloseSessionResponse> CreateEvCloseSessionResponse(

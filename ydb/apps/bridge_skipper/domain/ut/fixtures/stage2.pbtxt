@@ -1,0 +1,4 @@
+self_check_result: DEGRADED
+issue_log { id: "logical" status: ORANGE type: "STORAGE_GROUP" message: "Group failed in pile b" location { storage { pool { name: "/Root:test" group { id: "1" pile { name: "b" } } } } } reason: "part" }
+issue_log { id: "part" status: RED type: "BRIDGE_GROUP" message: "Group failed" location { storage { pool { name: "/Root:test" group { id: "1" pile { name: "b" } } } } } reason: "disk" }
+issue_log { id: "disk" status: RED type: "VDISK" message: "VDisk is not available" }

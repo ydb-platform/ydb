@@ -4,6 +4,7 @@ SIZE(SMALL)
 
 PEERDIR(
     ydb/core/formats/arrow/accessor/composite
+    ydb/core/formats/arrow/accessor/dictionary
     ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow
     ydb/core/formats/arrow/filter

@@ -1,7 +1,6 @@
 #include "initializer.h"
 #include "object.h"
 
-
 namespace NKikimr::NWorkloadManager {
 
 namespace {
@@ -16,7 +15,7 @@ void AddColumn(Ydb::Table::CreateTableRequest& request, const TString& name, Ydb
     column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(type);
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 void TResourcePoolClassifierInitializer::DoPrepare(NMetadata::NInitializer::IInitializerInput::TPtr controller) const {
     TVector<NMetadata::NInitializer::ITableModifier::TPtr> result;
@@ -28,14 +27,18 @@ void TResourcePoolClassifierInitializer::DoPrepare(NMetadata::NInitializer::IIni
         AddColumn(request, TResourcePoolClassifierConfig::TDecoder::Name, Ydb::Type::UTF8, true);
         AddColumn(request, TResourcePoolClassifierConfig::TDecoder::Rank, Ydb::Type::INT64);
         AddColumn(request, TResourcePoolClassifierConfig::TDecoder::ConfigJson, Ydb::Type::JSON_DOCUMENT);
-        result.emplace_back(std::make_shared<NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>>(request, "create"));
+        result.emplace_back(
+            std::make_shared<NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>>(request, "create"));
 
         auto historyRequest = TResourcePoolClassifierConfig::AddHistoryTableScheme(request);
-        result.emplace_back(std::make_shared<NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>>(historyRequest, "create_history"));
+        result.emplace_back(std::make_shared<NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>>(
+            historyRequest, "create_history"));
     }
-    result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(TResourcePoolClassifierConfig::GetBehaviour()->GetStorageTablePath(), "acl"));
-    result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(TResourcePoolClassifierConfig::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"));
+    result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(
+        TResourcePoolClassifierConfig::GetBehaviour()->GetStorageTablePath(), "acl"));
+    result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(
+        TResourcePoolClassifierConfig::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"));
     controller->OnPreparationFinished(result);
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

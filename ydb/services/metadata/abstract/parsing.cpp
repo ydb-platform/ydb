@@ -4,13 +4,15 @@ namespace NYql {
 
 using namespace NNodes;
 
-TObjectSettingsImpl::TObjectSettingsImpl(const TString& typeId, const TString& objectId, const THashMap<TString, TString>& features, const TResetFeatures& resetFeatures)
+TObjectSettingsImpl::TObjectSettingsImpl(
+    const TString& typeId, const TString& objectId, const THashMap<TString, TString>& features, const TResetFeatures& resetFeatures)
     : TypeId(typeId)
     , ObjectId(objectId)
     , Features(features.begin(), features.end())
     , ResetFeatures(resetFeatures)
     , FeaturesExtractor(std::make_shared<TFeaturesExtractor>(Features, ResetFeatures))
-{}
+{
+}
 
 TFeaturesExtractor& TObjectSettingsImpl::GetFeaturesExtractor() const {
     Y_ABORT_UNLESS(!!FeaturesExtractor);
@@ -30,7 +32,8 @@ void TObjectSettingsImpl::DeserializeFeatures(const TCoNameValueTupleList& featu
             }
             if (const auto& maybeAtom = value.Maybe<TCoAtom>()) {
                 result.emplace(name, maybeAtom.Cast());
-            } else if (value.Maybe<TCoIntegralCtor>() || value.Maybe<TCoBool>() || value.Maybe<TCoString>() || value.Maybe<TCoUtf8>() || value.Maybe<TCoTimestamp>()) {
+            } else if (value.Maybe<TCoIntegralCtor>() || value.Maybe<TCoBool>() || value.Maybe<TCoString>() || value.Maybe<TCoUtf8>() ||
+                       value.Maybe<TCoTimestamp>()) {
                 result.emplace(name, value.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>());
             } else if (const auto& maybeList = value.Maybe<TCoNameValueTupleList>()) {
                 TFeaturesExtractor::TFeatures features;
@@ -41,4 +44,4 @@ void TObjectSettingsImpl::DeserializeFeatures(const TCoNameValueTupleList& featu
     }
 }
 
-} // namespace NYql
+}   // namespace NYql

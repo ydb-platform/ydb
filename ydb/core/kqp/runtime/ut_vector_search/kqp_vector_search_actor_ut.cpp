@@ -136,8 +136,8 @@ namespace NKikimr::NKqp {
         }
 
         // Cached level rows have their own layout, narrower than the read row: [id, centroid].
-        TCachedLevelTableDataPtr CachedChildren(const TVector<std::pair<TClusterId, TString>>& children) {
-            auto data = MakeIntrusive<TCachedLevelTableData>();
+        TEvKqp::TCachedLevelTableDataPtr CachedChildren(const TVector<std::pair<TClusterId, TString>>& children) {
+            auto data = MakeIntrusive<TEvKqp::TCachedLevelTableData>();
             for (const auto& [child, centroid] : children) {
                 TCell cells[2] = {
                     TCell::Make(child),

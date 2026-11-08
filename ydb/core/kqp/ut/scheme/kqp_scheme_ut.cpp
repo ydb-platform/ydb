@@ -19,8 +19,11 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
@@ -30,6 +33,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
+#include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/types/binary_json/write.h>
@@ -5115,8 +5119,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 if (!BuildIndexEventIsIntercepted && event->Type == static_cast<ui32>(NKikimr::TEvDataShard::EvBuildIndexCreateRequest)) {
                     Cerr << "NKikimr::TEvDataShard::TEvBuildIndexCreateRequest is intercepted\n";
                     BuildIndexEventIsIntercepted = true;
-                    BuildIndexRequestPromise.SetValue();
                     BuildIndexRequestEvent.Swap(event);
+                    BuildIndexRequestPromise.SetValue();
                     return NActors::TTestActorRuntimeBase::EEventAction::DROP;
                 } else if (!ValidateIndexEventIsIntercepted &&
                     ((!PauseValidationResponse && event->Type == static_cast<ui32>(NKikimr::TEvDataShard::EvValidateUniqueIndexRequest)) ||
@@ -5125,8 +5129,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Cerr << "NKikimr::TEvDataShard validation "
                         << (PauseValidationResponse ? "response" : "request") << " is intercepted\n";
                     ValidateIndexEventIsIntercepted = true;
-                    ValidateIndexRequestPromise.SetValue();
                     ValidateIndexRequestEvent.Swap(event);
+                    ValidateIndexRequestPromise.SetValue();
                     return NActors::TTestActorRuntimeBase::EEventAction::DROP;
                 }
                 return NActors::TTestActorRuntimeBase::EEventAction::PROCESS;
@@ -5137,8 +5141,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             BuildIndexRequest.Wait();
         }
 
+        // Called from RunCall's pool thread while the main thread dispatches events: a plain Send would run
+        // the recipient right here, concurrently with the dispatcher. SendAsync only queues the event.
         void ContinueBuildIndex() {
-            GetTestServer().GetRuntime()->Send(BuildIndexRequestEvent.Release());
+            GetTestServer().GetRuntime()->SendAsync(BuildIndexRequestEvent.Release());
         }
 
         void WaitValidateIndex() {
@@ -5146,7 +5152,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         void ContinueValidateIndex() {
-            GetTestServer().GetRuntime()->Send(ValidateIndexRequestEvent.Release());
+            GetTestServer().GetRuntime()->SendAsync(ValidateIndexRequestEvent.Release());
         }
 
         ui64 GetValidateIndexTabletId() const {
@@ -9976,7 +9982,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         const TString tableName = inStore ? "/Root/tiering_store/tiering_tree" : "/Root/tiering_tree";
-        const auto checkTier = [&] {
+        const auto checkTier = [&](const std::optional<TString>& prefix) {
             const auto desc = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
             const auto ttl = desc.GetTableDescription().GetTtlSettings();
@@ -9984,23 +9990,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
             const auto& action = std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction());
             UNIT_ASSERT_VALUES_EQUAL(action.GetStorage(), "/Root/tier1");
-            UNIT_ASSERT_VALUES_EQUAL(action.GetObjectKeyPrefix().has_value(), enableTree);
-            if (enableTree) {
-                UNIT_ASSERT_VALUES_EQUAL(*action.GetObjectKeyPrefix(), "archive/data");
-            }
-        };
-        const auto rejectAlter = [&](const TString& suffix) {
-            const auto result = session.ExecuteSchemeQuery(TStringBuilder() << "ALTER TABLE `" << tableName << "` " << suffix)
-                .GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), suffix);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Changing tiering object key prefixes with ALTER is not supported");
-            checkTier();
+            UNIT_ASSERT(action.GetObjectKeyPrefix() == prefix);
         };
         const TString createBase = TStringBuilder() << "CREATE TABLE `" << tableName
             << "` (ts Timestamp NOT NULL, value String, PRIMARY KEY(ts))"
             << " WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1, TTL = ";
         const auto create = session.ExecuteSchemeQuery(createBase
             + R"(Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/tier1`.`archive/data` ON ts);)").GetValueSync();
+        std::optional<TString> currentPrefix;
         if (!enableTree) {
             UNIT_ASSERT_C(!create.IsSuccess(), create.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(create.GetIssues().ToString(), "Tree object keys are disabled");
@@ -10009,35 +10006,41 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(legacy.IsSuccess(), legacy.GetIssues().ToString());
         } else {
             UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+            currentPrefix = "archive/data";
         }
+        checkTier(currentPrefix);
 
-        checkTier();
-        for (auto&& prefix : {"another/path", ""}) {
-            rejectAlter(TStringBuilder() << "SET TTL Interval(\"P1D\") TO EXTERNAL DATA SOURCE `/Root/tier1`.`"
-                << prefix << "` ON ts;");
+        const auto alterPrefix = [&](const std::optional<TString>& prefix) {
+            const auto result = session.ExecuteSchemeQuery(TStringBuilder() << "ALTER TABLE `" << tableName
+                << "` SET TTL Interval(\"P2D\") TO EXTERNAL DATA SOURCE `/Root/tier1`"
+                << (prefix ? ".`" + *prefix + "`" : "") << " ON ts;").GetValueSync();
+            if (prefix && !enableTree) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Tree object keys are disabled");
+            } else if (prefix && prefix->size() > 800) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "must not exceed 800 bytes");
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                currentPrefix = prefix;
+            }
+            checkTier(currentPrefix);
+        };
+        alterPrefix(TString("another/path"));
+        alterPrefix(TString());
+        alterPrefix(std::nullopt);
+        alterPrefix(TString("archive/data"));
+        alterPrefix(TString(801, 'x'));
+
+        for (const TString& suffix : {TString(R"(SET TTL Interval("P1D") DELETE ON ts;)"), TString("RESET (TTL);")}) {
+            const auto result = session.ExecuteSchemeQuery(TStringBuilder() << "ALTER TABLE `" << tableName << "` " << suffix)
+                .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-
-        if (enableTree) {
-            rejectAlter(R"(SET TTL Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/tier1` ON ts;)");
-            rejectAlter(R"(SET TTL Interval("P1D") DELETE ON ts;)");
-            rejectAlter("RESET (TTL);");
-
-            const TString legacyName = tableName + "_legacy";
-            const auto legacy = session.ExecuteSchemeQuery(TStringBuilder() << "CREATE TABLE `" << legacyName
-                << "` (ts Timestamp NOT NULL, value String, PRIMARY KEY(ts))"
-                << " WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);").GetValueSync();
-            UNIT_ASSERT_C(legacy.IsSuccess(), legacy.GetIssues().ToString());
-            const auto alterLegacy = session.ExecuteSchemeQuery(TStringBuilder() << "ALTER TABLE `" << legacyName
-                << "` SET TTL Interval(\"P1D\") TO EXTERNAL DATA SOURCE `/Root/tier1`.`archive/data` ON ts;").GetValueSync();
-            UNIT_ASSERT_C(!alterLegacy.IsSuccess(), alterLegacy.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(alterLegacy.GetIssues().ToString(), "Changing tiering object key prefixes with ALTER is not supported");
-        }
-
-        const auto alter = session.ExecuteSchemeQuery(TStringBuilder() << "ALTER TABLE `" << tableName
-            << "` SET TTL Interval(\"P2D\") TO EXTERNAL DATA SOURCE `/Root/tier1`"
-            << (enableTree ? ".`archive/data`" : "") << " ON ts;").GetValueSync();
-        UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToString());
-        checkTier();
+        const auto desc = session.DescribeTable(tableName).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        UNIT_ASSERT(!desc.GetTableDescription().GetTtlSettings());
+        alterPrefix(enableTree ? std::make_optional(TString("after/reset")) : std::nullopt);
     }
 
     Y_UNIT_TEST(AlterColumnTableTiering) {
@@ -10814,10 +10817,365 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateAsyncReplicationReportsTrailingSlashInSourcePath) {
+        TKikimrRunner kikimr;
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        TReplicationClient replication(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+
+        const auto tableQuery = "CREATE TABLE `/Root/table` (Key Uint64, PRIMARY KEY (Key));";
+        const auto table = session.ExecuteSchemeQuery(tableQuery).GetValueSync();
+        UNIT_ASSERT_C(table.IsSuccess(), table.GetIssues().ToString());
+
+        const auto query = Sprintf(R"(
+            --!syntax_v1
+            CREATE ASYNC REPLICATION `/Root/replication` FOR
+                `/Root/table/` AS `/Root/replica`
+            WITH (ENDPOINT = "%s", DATABASE = "/Root");
+        )", kikimr.GetEndpoint().c_str());
+        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto deadline = TInstant::Now() + TDuration::Minutes(1);
+        while (TInstant::Now() < deadline) {
+            const auto described = replication.DescribeReplication("/Root/replication").ExtractValueSync();
+            UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+            const auto& desc = described.GetReplicationDescription();
+            if (desc.GetState() == TReplicationDescription::EState::Error) {
+                UNIT_ASSERT_STRING_CONTAINS(desc.GetErrorState().GetIssues().ToOneLineString(),
+                                            "Error: wrong path format '/Root/table/'");
+                return;
+            }
+            Sleep(TDuration::Seconds(1));
+        }
+
+        UNIT_FAIL("Replication did not report the source path error");
+    }
+
+    Y_UNIT_TEST_QUAD(AsyncReplicationYson, Global, BinaryInitial) {
+        TKikimrRunner kikimr;
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto service = runtime.Register(NReplication::CreateReplicationService());
+        runtime.RegisterService(NReplication::MakeReplicationServiceId(runtime.GetNodeId(0)), service);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TReplicationClient replication(kikimr.GetDriver());
+        const auto scheme = [&](const TString& query) {
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        const auto execute = [&](const TString& query) {
+            std::optional<TDataQueryResult> result;
+            const auto status = db.RetryOperationSync([&](TSession retrySession) -> TStatus {
+                result.emplace(retrySession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync());
+                if (!result->IsSuccess()) {
+                    const auto code = result->GetStatus();
+                    const bool retryable = code == EStatus::SCHEME_ERROR
+                        || code == EStatus::ABORTED || code == EStatus::OVERLOADED;
+                    UNIT_ASSERT_C(retryable, result->GetIssues().ToString());
+                }
+                return *result;
+            }, TRetryOperationSettings().Idempotent(true).RetryUndefined(true).MaxTimeout(TDuration::Seconds(60)));
+            // Stream creation changes the source schema and can invalidate a
+            // cached query. RetryUndefined lets the SDK retry SCHEME_ERROR too.
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            return std::move(*result);
+        };
+        scheme("CREATE TABLE `/Root/source` (key Uint32, rev Uint32, value Yson, PRIMARY KEY (key));");
+        TVector<TString> values = {
+            R"(<a="first";>42)", "1u", "1.0", R"({plain=1u;meta=<x="nested";>2.0;})",
+            "%nan", "%inf", "%-inf", "#", R"("1u")", R"("nan")", "%true", "[1u;1.0;#;]",
+            R"({yson={update={value="MQ==";};};})",
+            R"("\xff")", R"("\xc0\xaf")", R"("\xe2\x82")", R"("\xed\xa0\x80")",
+            R"({nested=[{value="\xff";};];})", R"({nested=[{"\xff"=1;};];})",
+            R"({"\xed\xa0\x80"=1;})", R"("\xf4\x90\x80\x80")",
+            R"({"ключ"=["строка";"😀";"\x00";];})",
+        };
+        TStringBuilder allBytes;
+        allBytes << '"';
+        for (ui32 byte = 0; byte < 256; ++byte) {
+            allBytes << Sprintf("\\x%02x", byte);
+        }
+        allBytes << '"';
+        values.push_back(allBytes);
+        const auto write = [&](ui32 revision) {
+            TStringBuilder query;
+            query << "UPSERT INTO `/Root/source` (key, rev, value) VALUES ";
+            for (ui32 key = 0; key < values.size(); ++key) {
+                // Change every YSON cell on CDC, keeping each special value in
+                // the data set. The revision is committed with the same row.
+                query << "(" << key << "u," << revision << "u,Yson(@@"
+                    << (revision == 0 && !BinaryInitial ? R"("initial")" : values[(key + revision) % values.size()])
+                    << "@@)),";
+            }
+            query << "(" << values.size() << "u," << revision << "u,NULL),"
+                << "(" << values.size() + 1 << "u," << revision << "u,Yson(@@\"control\"@@));";
+            execute(query);
+        };
+        write(0);
+        const TString consistency = Global
+            ? R"(, CONSISTENCY_LEVEL = "GLOBAL", COMMIT_INTERVAL = Interval("PT1S"))" : "";
+        scheme(Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
+            WITH (ENDPOINT = '%s', DATABASE = '/Root', INITIAL_SCAN = TRUE%s);
+        )", kikimr.GetEndpoint().c_str(), consistency.c_str()));
+
+        const auto waitAndCheck = [&](ui32 revision) {
+            const auto source = execute("SELECT key, rev, value FROM `/Root/source` ORDER BY key;");
+            TString lastIssues;
+            const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+            while (TInstant::Now() < deadline) {
+                const auto description = replication.DescribeReplication("/Root/replication").ExtractValueSync();
+                UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+                const auto& desc = description.GetReplicationDescription();
+                UNIT_ASSERT_C(desc.GetState() != TReplicationDescription::EState::Error,
+                    desc.GetErrorState().GetIssues().ToString());
+                const auto target = session.ExecuteDataQuery("SELECT key, rev, value FROM `/Root/replica` ORDER BY key;",
+                    TTxControl::BeginTx().CommitTx()).GetValueSync();
+                if (target.IsSuccess() && target.GetResultSet(0).RowsCount() == values.size() + 2) {
+                    TResultSetParser actual(target.GetResultSet(0));
+                    TResultSetParser expected(source.GetResultSet(0));
+                    bool complete = true;
+                    while (actual.TryNextRow()) {
+                        UNIT_ASSERT(expected.TryNextRow());
+                        UNIT_ASSERT_VALUES_EQUAL(actual.ColumnParser("key").GetOptionalUint32(),
+                            expected.ColumnParser("key").GetOptionalUint32());
+                        if (actual.ColumnParser("rev").GetOptionalUint32() != revision) {
+                            complete = false;
+                            break;
+                        }
+                        UNIT_ASSERT_VALUES_EQUAL_C(actual.ColumnParser("value").GetOptionalYson(),
+                            expected.ColumnParser("value").GetOptionalYson(),
+                            TStringBuilder() << "YSON changed at revision " << revision);
+                    }
+                    if (complete) {
+                        UNIT_ASSERT(desc.GetState() == TReplicationDescription::EState::Running);
+                        return;
+                    }
+                }
+                lastIssues = target.GetIssues().ToString();
+                Sleep(TDuration::MilliSeconds(10));
+            }
+            UNIT_FAIL(TStringBuilder() << "Replica did not reach revision " << revision << ": " << lastIssues);
+        };
+        waitAndCheck(0);
+        write(1);
+        waitAndCheck(1);
+    }
+
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationAvailabilityPeriod, UseQueryService) {
+        NKikimrConfig::TFeatureFlags flags;
+        flags.SetEnableTopicDiskSubDomainQuota(true);
+        TKikimrRunner kikimr(flags);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        TReplicationClient replication(kikimr.GetDriver());
+        TTopicClient topics(kikimr.GetDriver());
+        using EKind = TReplicationDescription::EAvailabilityPeriodKind;
+        const TVector<TString> options = {"", "'UNLIMITED'", "Interval('PT0.000001S')", "Interval('PT10.001S')"};
+        for (ui32 i = 0; i < options.size(); ++i) {
+            const TString source = TStringBuilder() << "/Root/table" << i;
+            const TString target = TStringBuilder() << "/Root/replica" << i;
+            const TString path = TStringBuilder() << "/Root/replication" << i;
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(
+                "CREATE TABLE `%s` (Key Uint64, PRIMARY KEY (Key));", source.c_str()));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            TString availabilityOption;
+            if (!options[i].empty()) {
+                availabilityOption = TStringBuilder() << ", AVAILABILITY_PERIOD = " << options[i];
+            }
+            result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
+                CREATE ASYNC REPLICATION `%s` FOR `%s` AS `%s`
+                WITH (ENDPOINT = '%s', DATABASE = '/Root'%s);
+            )", path.c_str(), source.c_str(), target.c_str(), kikimr.GetEndpoint().c_str(), availabilityOption.c_str()));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const bool unlimited = i < 2;
+            const auto duration = i == 2 ? TDuration::MilliSeconds(1) : TDuration::MilliSeconds(10001);
+            bool ready = false;
+            const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+            while (!ready && TInstant::Now() < deadline) {
+                const auto description = replication.DescribeReplication(path).ExtractValueSync();
+                UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+                const auto& desc = description.GetReplicationDescription();
+                UNIT_ASSERT(desc.GetAvailabilityPeriodKind() == (unlimited ? EKind::Unlimited : EKind::Finite));
+                if (!unlimited) {
+                    UNIT_ASSERT_VALUES_EQUAL(*desc.GetAvailabilityPeriod(), duration);
+                }
+                if (desc.GetState() == TReplicationDescription::EState::Error) {
+                    UNIT_FAIL(desc.GetErrorState().GetIssues().ToString());
+                }
+                const auto& items = desc.GetItems();
+                if (items.empty() || !items.front().SrcChangefeedName) {
+                    continue;
+                }
+                const TString stream = TStringBuilder() << source << "/" << *items.front().SrcChangefeedName;
+                const auto topic = topics.DescribeTopic(stream).ExtractValueSync();
+                if (!topic.IsSuccess()) {
+                    continue;
+                }
+                const auto& config = topic.GetTopicDescription();
+                if (config.GetConsumers().empty() || config.GetRetentionPeriod() != TDuration::Seconds(1)) {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers().front().GetImportant(), unlimited);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers().front().GetAvailabilityPeriod(),
+                    unlimited ? TDuration::Zero() : duration);
+                ready = true;
+            }
+            UNIT_ASSERT_C(ready, TStringBuilder() << "Source consumer did not install availability policy for " << path);
+            result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(
+                "ALTER ASYNC REPLICATION `%s` SET (AVAILABILITY_PERIOD = 'UNLIMITED');", path.c_str()));
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "AVAILABILITY_PERIOD is not supported in ALTER");
+        }
+    }
+
+    Y_UNIT_TEST(RestoreLegacyReplicationAvailabilityPeriod) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableReplicationConfig()->SetConsumerAvailabilityPeriodSeconds(7201);
+        config.MutableFeatureFlags()->SetEnableTopicDiskSubDomainQuota(true);
+        TKikimrRunner kikimr(TKikimrSettings(config)
+            .SetFeatureFlags(config.GetFeatureFlags())
+            .SetUseRealThreads(false));
+        auto session = kikimr.RunCall([&] {
+            return kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        });
+        auto queryClient = kikimr.GetQueryClient();
+        TReplicationClient replication(kikimr.GetDriver());
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        ui32 legacyConfigs = 0;
+        auto observer = runtime.AddObserver<NKikimr::NReplication::TEvController::TEvCreateReplication>([&](const auto& ev) {
+            ev->Get()->Record.MutableConfig()->ClearAvailabilityPeriod();
+            ++legacyConfigs;
+        });
+        auto status = kikimr.RunCall([&] {
+            return session.ExecuteSchemeQuery("CREATE TABLE `/Root/source` (Key Uint64, PRIMARY KEY (Key));").GetValueSync();
+        });
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        status = kikimr.RunCall([&] {
+            return session.ExecuteSchemeQuery(Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/legacy` FOR `/Root/source` AS `/Root/replica`
+                WITH (ENDPOINT = '%s', DATABASE = '/Root');
+            )", kikimr.GetEndpoint().c_str())).GetValueSync();
+        });
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        observer.Remove();
+        UNIT_ASSERT_C(legacyConfigs > 0, "Legacy controller config was not injected");
+
+        std::optional<Ydb::Replication::DescribeReplicationResult> proto;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+        while (TInstant::Now() < deadline) {
+            const auto result = kikimr.RunCall([&] {
+                return replication.DescribeReplication("/Root/legacy").ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& desc = result.GetReplicationDescription();
+            UNIT_ASSERT(desc.GetAvailabilityPeriodKind() == TReplicationDescription::EAvailabilityPeriodKind::Finite);
+            UNIT_ASSERT_VALUES_EQUAL(*desc.GetAvailabilityPeriod(), TDuration::Seconds(7201));
+            if (desc.GetState() == TReplicationDescription::EState::Error) {
+                UNIT_FAIL(desc.GetErrorState().GetIssues().ToString());
+            }
+            if (desc.GetItems().empty()) {
+                continue;
+            }
+
+            proto = NDraft::TProtoAccessor::GetProto(result);
+            break;
+        }
+        UNIT_ASSERT(proto);
+        enum class EPolicy {
+            Legacy,
+            Missing,
+            Invalid,
+            LastValid,
+            OutsideSqlRange,
+            RoundedOutsideSqlRange,
+        };
+        const TVector<EPolicy> policies = {EPolicy::Legacy, EPolicy::Missing, EPolicy::Invalid,
+            EPolicy::LastValid, EPolicy::OutsideSqlRange, EPolicy::RoundedOutsideSqlRange};
+        const auto lastValid = TDuration::MilliSeconds((NYql::NUdf::MAX_TIMESTAMP - 1) / 1000);
+        using EKind = TReplicationDescription::EAvailabilityPeriodKind;
+        for (ui32 i = 0; i < policies.size(); ++i) {
+            const auto policy = policies[i];
+            auto dumped = *proto;
+            const TString path = TStringBuilder() << "/Root/restored" << i;
+            dumped.mutable_items(0)->set_destination_path(path + "_replica");
+            if (policy == EPolicy::Missing) {
+                dumped.clear_availability_period();
+            } else if (policy == EPolicy::Invalid) {
+                dumped.mutable_availability_period()->Clear();
+            } else if (policy != EPolicy::Legacy) {
+                const auto value = policy == EPolicy::LastValid ? lastValid
+                    : policy == EPolicy::OutsideSqlRange ? TDuration::MicroSeconds(NYql::NUdf::MAX_TIMESTAMP)
+                    : lastValid + TDuration::MicroSeconds(1);
+                auto& duration = *dumped.mutable_availability_period()->mutable_duration();
+                duration.set_seconds(value.Seconds());
+                duration.set_nanos(value.NanoSecondsOfSecond());
+            }
+
+            const TReplicationDescription source(dumped);
+            const auto sourceKind = policy == EPolicy::Missing ? EKind::Unknown
+                : policy == EPolicy::Invalid ? EKind::Invalid : EKind::Finite;
+            UNIT_ASSERT(source.GetAvailabilityPeriodKind() == sourceKind);
+            const bool preserveFinite = policy == EPolicy::Legacy || policy == EPolicy::LastValid;
+            const auto expectedPeriod = policy == EPolicy::Legacy ? TDuration::Seconds(7201) : lastValid;
+            const auto query = NYdb::NDump::BuildCreateReplicationQuery("/Root", "/Root", path, source);
+            if (preserveFinite) {
+                UNIT_ASSERT_STRING_CONTAINS(query, TStringBuilder() << "AVAILABILITY_PERIOD = Interval('PT"
+                    << expectedPeriod.Seconds() << (policy == EPolicy::LastValid ? ".999" : "") << "S')");
+            } else {
+                UNIT_ASSERT(!query.Contains("AVAILABILITY_PERIOD"));
+            }
+            const auto restored = kikimr.RunCall([&] {
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(restored.IsSuccess(), restored.GetIssues().ToString());
+            const auto description = kikimr.RunCall([&] {
+                return replication.DescribeReplication(path).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+            const auto& desc = description.GetReplicationDescription();
+            const auto expected = preserveFinite ? EKind::Finite : EKind::Unlimited;
+            UNIT_ASSERT(desc.GetAvailabilityPeriodKind() == expected);
+            if (preserveFinite) {
+                UNIT_ASSERT_VALUES_EQUAL(*desc.GetAvailabilityPeriod(), expectedPeriod);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationInvalidAvailabilityPeriod, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        const auto created = ExecuteGeneric<UseQueryService>(queryClient, session,
+            "CREATE TABLE `/Root/table` (Key Uint64, PRIMARY KEY (Key));");
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto lastValid = TDuration::MilliSeconds((NYql::NUdf::MAX_TIMESTAMP - 1) / 1000);
+        const TVector<std::pair<TString, TString>> cases = {
+            {"Interval('PT0S')", "Availability period must be positive"},
+            {"Interval('-PT1S')", "Availability period must be positive"},
+            {TStringBuilder() << "Interval('PT" << lastValid.Seconds() << ".999999S')",
+                "Availability period cannot be represented as SQL Interval after rounding to milliseconds"},
+            {"'FOREVER'", "Unknown availability period"},
+            {"1", "UNLIMITED or a literal of Interval type is expected"},
+            {"TRUE", "UNLIMITED or a literal of Interval type is expected"},
+        };
+        for (const auto& [value, issue] : cases) {
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/table` AS `/Root/replica`
+                WITH (ENDPOINT = '%s', DATABASE = '/Root', AVAILABILITY_PERIOD = %s);
+            )", kikimr.GetEndpoint().c_str(), value.c_str()));
+            UNIT_ASSERT_C(!result.IsSuccess(), value);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), issue);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithTokenSecret, UseSchemaSecrets) {
         using namespace NReplication;
 
-        TKikimrRunner kikimr("root@builtin");
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetDisableOldSecretCreation(false);
+        TKikimrRunner kikimr(featureFlags, "root@builtin");
         if (UseSchemaSecrets) {
             kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
         }
@@ -10899,7 +11257,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithPasswordSecret, UseSchemaSecrets) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetDisableOldSecretCreation(false);
+        TKikimrRunner kikimr(featureFlags);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -10923,7 +11283,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_QUAD(CreateAsyncReplicationWithIamAuth, UseQueryService, UseSchemaSecrets) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetDisableOldSecretCreation(false);
+        TKikimrRunner kikimr(featureFlags);
         auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -11047,10 +11409,53 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(AsyncReplicationCommitIntervalBoundary, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+
+        for (const auto* interval : {"-PT1S", "PT0S", "PT0.000001S", "PT0.001S", "PT0.999999S"}) {
+            const auto query = Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://%s/?database=/Root",
+                    CONSISTENCY_LEVEL = "GLOBAL",
+                    COMMIT_INTERVAL = Interval("%s")
+                );
+            )", kikimr.GetEndpoint().c_str(), interval);
+
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "commit_interval must be at least 1 second", interval);
+        }
+
+        const auto query = Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR
+                `/Root/table` AS `/Root/replica`
+            WITH (
+                CONNECTION_STRING = "grpc://%s/?database=/Root",
+                CONSISTENCY_LEVEL = "GLOBAL",
+                COMMIT_INTERVAL = Interval("PT1S")
+            );
+        )", kikimr.GetEndpoint().c_str());
+
+        const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        const auto desc = repl.DescribeReplication("/Root/replication").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(desc.GetStatus(), EStatus::SUCCESS, desc.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetReplicationDescription().GetGlobalConsistency().GetCommitInterval(), TDuration::Seconds(1));
+    }
+
     Y_UNIT_TEST(AlterAsyncReplication) {
         using namespace NReplication;
 
-        TKikimrRunner kikimr;
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetDisableOldSecretCreation(false);
+        TKikimrRunner kikimr(featureFlags);
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -12317,6 +12722,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         using namespace NReplication;
 
         TKikimrSettings serverSettings;
+        serverSettings.FeatureFlags.SetDisableOldSecretCreation(false);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
@@ -12688,6 +13094,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         using namespace NReplication;
 
         TKikimrSettings serverSettings;
+        serverSettings.FeatureFlags.SetDisableOldSecretCreation(false);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
@@ -14172,7 +14579,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto ydb = NWorkloadManager::TYdbSetupSettings()
             .CreateSampleTenants(true)
             .EnableMetadataObjectsOnServerless(false)
-            .Create();
+            .Create([](Tests::TServerSettings& settings) {
+                settings.FeatureFlags.SetDisableOldSecretCreation(false);
+            });
 
         auto checkDisabled = [](const auto& result) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
@@ -16181,7 +16590,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint4")})
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
         TTestHelper::TColumnTableStore testTableStore;
 
@@ -16201,11 +16610,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
 
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat4")}));
             auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `" << testTableStore.GetName() << "` ADD COLUMN new_column pgfloat4;";
 
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(alterResult.GetIssues().ToString(),
+                "Type 'pgfloat4' specified for column 'new_column' is not supported for column tables");
         }
 
         {
@@ -16215,26 +16625,14 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
             const auto& description = describeResult.GetTableDescription();
             auto columns = description.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
         }
 
-        testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
-        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[#]]");
-        testHelper.ReadData("SELECT resource_id FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[[\"test_res_1\"]]]");
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(3).Add("test_res_3").Add(-321).Add(-3.14f);
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[3;\"-321\";\"-3.14\";[\"test_res_3\"]]]");
-        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[\"-3.14\"]]");
-        testHelper.ReadData("SELECT resource_id FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[[\"test_res_3\"]]]");
-        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest` ORDER BY new_column", "[[#];[#];[\"-3.14\"]]");
+        testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
+        testHelper.ReadData("SELECT level FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=2", "[[[-123]]]");
 
         testHelper.RebootTablets(testTable.GetName());
-        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest` ORDER BY new_column", "[[#];[#];[\"-3.14\"]]");
+        testHelper.ReadData("SELECT level FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=2", "[[[-123]]]");
     }
 
     Y_UNIT_TEST(AddColumnErrors) {
@@ -17216,157 +17614,42 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         }
     }
 
-    Y_UNIT_TEST(PgInt2Column) {
+    void CheckPgColumnRejected(const TString& typeName) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint2")})
+            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName(typeName)})
         };
 
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
+        auto result = testHelper.GetSession().ExecuteSchemeQuery(testTable.BuildQuery()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+            TStringBuilder() << "Type '" << typeName << "' specified for column 'val' is not supported for column tables");
+    }
 
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add<i16>(0);
-            tableInserter.AddRow().Add(2).Add<i16>(42);
-            tableInserter.AddRow().Add(3).Add<i16>(-42);
-            tableInserter.AddRow().Add(4).AddNull();
-            tableInserter.AddRow().Add(5).Add<i16>(32767);   // INT16_MAX
-            tableInserter.AddRow().Add(6).Add<i16>(-32768);  // INT16_MIN
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"0\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"42\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-42\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=4", "[[#]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=5", "[[\"32767\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=6", "[[\"-32768\"]]");
+    Y_UNIT_TEST(PgInt2Column) {
+        CheckPgColumnRejected("pgint2");
     }
 
     Y_UNIT_TEST(PgInt4Column) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint4")})
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add(0);
-            tableInserter.AddRow().Add(2).Add(123);
-            tableInserter.AddRow().Add(3).Add(-123);
-            tableInserter.AddRow().Add(4).AddNull();
-            tableInserter.AddRow().Add(5).Add(2147483647);   // INT32_MAX
-            tableInserter.AddRow().Add(6).Add(-2147483648);  // INT32_MIN
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"0\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"123\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-123\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=4", "[[#]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=5", "[[\"2147483647\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=6", "[[\"-2147483648\"]]");
+        CheckPgColumnRejected("pgint4");
     }
 
     Y_UNIT_TEST(PgInt8Column) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint8")})
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add<i64>(0);
-            tableInserter.AddRow().Add(2).Add<i64>(123456789012345LL);
-            tableInserter.AddRow().Add(3).Add<i64>(-123456789012345LL);
-            tableInserter.AddRow().Add(4).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"0\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"123456789012345\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-123456789012345\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=4", "[[#]]");
+        CheckPgColumnRejected("pgint8");
     }
 
     Y_UNIT_TEST(PgFloat4Column) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat4")})
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add(0.0f);
-            tableInserter.AddRow().Add(2).Add(3.14f);
-            tableInserter.AddRow().Add(3).Add(-2.5f);
-            tableInserter.AddRow().Add(4).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"0\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"3.14\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-2.5\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=4", "[[#]]");
+        CheckPgColumnRejected("pgfloat4");
     }
 
     Y_UNIT_TEST(PgFloat8Column) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat8")})
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add(0.0);
-            tableInserter.AddRow().Add(2).Add(3.141592653589793);
-            tableInserter.AddRow().Add(3).Add(-2.5);
-            tableInserter.AddRow().Add(4).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"0\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"3.141592653589793\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-2.5\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=4", "[[#]]");
+        CheckPgColumnRejected("pgfloat8");
     }
 
     Y_UNIT_TEST(PgMultipleTypesColumn) {
@@ -17385,23 +17668,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add<i16>(-1).Add(-1).Add<i64>(-1).Add(-1.5f).Add(-1.5);
-            tableInserter.AddRow().Add(2).Add<i16>(100).Add(100000).Add<i64>(100000000000LL).Add(1.25f).Add(1.25);
-            tableInserter.AddRow().Add(3).AddNull().AddNull().AddNull().AddNull().AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        // SELECT * returns columns in alphabetical order: f4, f8, i2, i4, i8, id
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1",
-            "[[\"-1.5\";\"-1.5\";\"-1\";\"-1\";\"-1\";1]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2",
-            "[[\"1.25\";\"1.25\";\"100\";\"100000\";\"100000000000\";2]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=3",
-            "[[#;#;#;#;#;3]]");
+        auto result = testHelper.GetSession().ExecuteSchemeQuery(testTable.BuildQuery()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "is not supported for column tables");
     }
 
     Y_UNIT_TEST(BackupReturnsOperationId) {

@@ -39,4 +39,4 @@ void TDSAccessorSimple::Handle(TTableExistsActor::TEvController::TEvResult::TPtr
     }
 }
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

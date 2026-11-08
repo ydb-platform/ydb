@@ -830,6 +830,17 @@ class Test(TestBase):
                 builder.add_vslot(node_id=1, pdisk_id=1002, vslot_id=1001, group_id=0x80000004, group_generation=1),
             ) and None,
             _trace_cluster_balance(pending_reassigns={0x80000004: (1, 1003, 1000)}),
+
+            # Rack-2 usage is 7/8
+            # Rack-1 usage is 16/42 (3 PDisks: 5/10, 11/16, 0/16);
+            # VDisk is expected to be moved from PDisk 2:1000 to 1:1003.
+            (
+                builder.add_node(node_id=2, rack='rack-2'),
+                builder.add_pdisk(node_id=2, pdisk_id=1000, expected_slot_count=8),
+                builder.add_group(group_id=0x80000005, vslot_ids=[(2, 1000, 1000)], group_size_in_units=7),
+                builder.add_vslot(node_id=2, pdisk_id=1000, vslot_id=1000, group_id=0x80000005, group_generation=1),
+            ) and None,
+            _trace_cluster_balance('--sort-by=free_slots_per_rack', pending_reassigns={0x80000005: (1, 1003, 1000)}),
         ]
 
     def test_cluster_balance_mismatching_size_in_units(self):

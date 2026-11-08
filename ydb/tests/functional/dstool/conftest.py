@@ -31,11 +31,13 @@ class BaseConfigBuilder:
         self._base_config = kikimr_bsconfig.TBaseConfig()
         self._storage_pools = []
 
-    def add_node(self, node_id=1, fqdn='localhost', ic_port=19001):
+    def add_node(self, node_id=1, fqdn='localhost', ic_port=19001, rack=None):
         node = self._base_config.Node.add()
         node.NodeId = node_id
         node.HostKey.Fqdn = fqdn
         node.HostKey.IcPort = ic_port
+        if rack is not None:
+            node.Location.Rack = rack
         return self
 
     def add_pdisk(self, node_id=1, pdisk_id=1, expected_slot_count=0, slot_size_in_units=0, enforced_dynamic_slot_size=0,

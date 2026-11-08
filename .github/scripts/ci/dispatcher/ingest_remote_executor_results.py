@@ -13,7 +13,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -41,10 +40,42 @@ _TEXT_SUFFIXES = frozenset(
     ".json .html .htm .txt .md .js .css .xml .yaml .yml .csv .log .out .err".split()
 )
 
+_TRY_ARTIFACT_SUFFIXES = (
+    "report.json",
+    "started_at",
+    "index.html",
+)
+
 
 def run(cmd: list[str], **kwargs: Any) -> None:
     print("+", " ".join(cmd), flush=True)
     subprocess.check_call(cmd, **kwargs)
+
+
+def normalize_manifest_files(meta: dict[str, Any]) -> list[str]:
+    """Validate and dedupe manifest `files` (POSIX paths relative to artifact_key_prefix)."""
+    raw = meta.get("files")
+    if not isinstance(raw, list) or not raw:
+        die("remote_artifacts.json missing non-empty files list")
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            die(f"invalid files entry: {item!r}")
+        rel = item.strip()
+        if not rel or rel.startswith("/"):
+            die(f"invalid file path: {item!r}")
+        if "\\" in rel:
+            die(f"invalid file path (backslash): {item!r}")
+        parts = [p for p in rel.split("/") if p and p != "."]
+        if not parts or any(p == ".." for p in parts):
+            die(f"invalid file path: {item!r}")
+        rel = "/".join(parts)
+        if rel in seen:
+            continue
+        seen.add(rel)
+        out.append(rel)
+    return out
 
 
 def load_manifest(
@@ -65,33 +96,8 @@ def load_manifest(
     meta = json.loads(raw.decode())
     if not isinstance(meta, dict) or int(meta.get("version") or 0) != 1:
         die(f"unexpected remote_artifacts.json schema: {meta!r}")
+    normalize_manifest_files(meta)
     return meta
-
-
-_INDEX_HREF_RE = re.compile(r"""href=["']([^"']+)["']""", re.IGNORECASE)
-
-
-def parse_index_hrefs(html: str) -> list[str]:
-    """Relative file/dir links from Indexer index.html (skip parent/nav/abs)."""
-    out: list[str] = []
-    seen: set[str] = set()
-    for raw in _INDEX_HREF_RE.findall(html):
-        href = urllib.parse.unquote(raw.strip())
-        if not href or href.startswith(("#", "?", "mailto:", "javascript:")):
-            continue
-        if "://" in href:
-            continue
-        if href.startswith("./"):
-            href = href[2:]
-        href = href.replace("\\", "/").lstrip("/")
-        # Reject parent crumbs and any .. segment (a/../../x).
-        if not href or any(p == ".." for p in href.split("/")):
-            continue
-        if href in seen:
-            continue
-        seen.add(href)
-        out.append(href)
-    return out
 
 
 def _posix_join(*parts: str) -> str:
@@ -117,7 +123,7 @@ def _write_bytes(path: Path, data: bytes) -> None:
 
 
 def _is_required_artifact(rel: str) -> bool:
-    """Paths that must be present when listed by the host Indexer tree."""
+    """Paths that must be present when listed in remote_artifacts.json `files`."""
     rel = rel.strip("/")
     if rel in ("index.html", "ci_metrics.jsonl"):
         return True
@@ -130,89 +136,86 @@ def _is_required_artifact(rel: str) -> bool:
     )
 
 
-def download_prefix_via_index(
+def _try_dirs_in_files(files: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for rel in files:
+        m = re.match(r"(try_\d+)/", rel)
+        if not m:
+            continue
+        tn = m.group(1)
+        if tn in seen:
+            continue
+        seen.add(tn)
+        out.append(tn)
+    return sorted(out, key=lambda s: int(s.split("_", 1)[1]))
+
+
+def validate_downloaded_manifest(
+    files: list[str], dest: Path, failed: list[str]
+) -> None:
+    """Enforce required paths from manifest `files` after GetObject download."""
+    failed_set = set(failed)
+    if "ci_metrics.jsonl" not in files:
+        die("remote_artifacts.json files missing ci_metrics.jsonl")
+    for tn in _try_dirs_in_files(files):
+        for suffix in _TRY_ARTIFACT_SUFFIXES:
+            rel = f"{tn}/{suffix}"
+            if rel not in files:
+                die(f"remote_artifacts.json files missing {rel}")
+    for rel in files:
+        if not _is_required_artifact(rel):
+            continue
+        if rel in failed_set:
+            die(f"incomplete remote artifacts: {rel}")
+        local = _safe_under(dest, rel)
+        if local is None or not local.is_file():
+            die(f"incomplete remote artifacts: {rel}")
+
+
+def download_listed_objects(
     endpoint: str,
     bucket: str,
     key_prefix: str,
+    files: list[str],
     dest: Path,
     *,
     fetch=http_get_bytes_retry,
 ) -> list[str]:
-    """Download a public artifact tree by walking Indexer index.html pages.
-
-    Host public buckets often allow anonymous GetObject but deny ListBucket,
-    so signed list sync fails. Indexer listings are public HTML and enumerate
-    the same objects.
+    """Download manifest-listed objects via anonymous GetObject.
 
     Returns relative paths that failed to download. Dies if any required path
-    listed by the index cannot be fetched (after retries).
+    listed in `files` cannot be fetched (after retries).
     """
     dest.mkdir(parents=True, exist_ok=True)
     root_key = key_prefix.strip("/")
-    endpoint = endpoint.rstrip("/")
-
-    # BFS over directory keys relative to root_key ("" = leaf root).
-    queue: list[str] = [""]
-    seen_dirs: set[str] = set()
     n_ok = 0
     failed: list[str] = []
 
-    while queue:
-        rel_dir = queue.pop(0)
-        if rel_dir in seen_dirs:
+    for child_rel in files:
+        local_path = _safe_under(dest, child_rel)
+        if local_path is None:
+            print(f"::warning::refusing unsafe manifest path {child_rel!r}")
+            failed.append(child_rel)
             continue
-        seen_dirs.add(rel_dir)
-
-        index_key = _posix_join(root_key, rel_dir, "index.html")
-        index_url = object_url(endpoint, bucket, index_key)
-        index_rel = _posix_join(rel_dir, "index.html")
-        raw = fetch(index_url)
-        if raw is None:
-            if rel_dir == "":
-                die(f"missing index.html at {index_url}")
-            print(f"::warning::missing index.html at {index_url}; skipping subtree")
-            failed.append(index_rel)
+        file_key = _posix_join(root_key, child_rel)
+        file_url = object_url(endpoint.rstrip("/"), bucket, file_key)
+        data = fetch(file_url)
+        if data is None:
+            print(f"::warning::failed to download {file_url}")
+            failed.append(child_rel)
             continue
-
-        local_index = _safe_under(dest, index_rel)
-        if local_index is None:
-            print(f"::warning::refusing unsafe index path {index_rel!r}")
-            failed.append(index_rel)
-            continue
-        _write_bytes(local_index, raw)
+        _write_bytes(local_path, data)
         n_ok += 1
 
-        for href in parse_index_hrefs(raw.decode("utf-8", errors="replace")):
-            child_rel = _posix_join(rel_dir, href)
-
-            # Dir link: either "try_1/index.html" (recursive Indexer) or "try_1/".
-            if href.endswith(("/index.html", "/")):
-                sub = child_rel.removesuffix("/index.html")
-                if sub and _safe_under(dest, sub) is not None and sub not in seen_dirs:
-                    queue.append(sub)
-                continue
-
-            local_path = _safe_under(dest, child_rel)
-            if local_path is None:
-                print(f"::warning::refusing unsafe href path {child_rel!r}")
-                failed.append(child_rel)
-                continue
-            file_key = _posix_join(root_key, child_rel)
-            file_url = object_url(endpoint, bucket, file_key)
-            data = fetch(file_url)
-            if data is None:
-                print(f"::warning::failed to download {file_url}")
-                failed.append(child_rel)
-                continue
-            _write_bytes(local_path, data)
-            n_ok += 1
-
     print(
-        f"Downloaded {n_ok} object(s) via index.html crawl "
+        f"Downloaded {n_ok} object(s) from manifest "
         f"(s3://{bucket}/{root_key}/); failures={len(failed)}"
     )
     if n_ok == 0:
-        die(f"index crawl downloaded nothing under s3://{bucket}/{root_key}/")
+        die(f"manifest download retrieved nothing under s3://{bucket}/{root_key}/")
+
+    validate_downloaded_manifest(files, dest, failed)
 
     required_failed = [p for p in failed if _is_required_artifact(p)]
     if required_failed:
@@ -487,6 +490,7 @@ def main() -> None:
     caller_repo = env("GITHUB_REPOSITORY")
 
     meta = load_manifest(host_ep, host_bucket, host_repo, host_workflow, run_id)
+    files = normalize_manifest_files(meta)
     key_prefix = str(meta.get("artifact_key_prefix") or "").strip()
     if not key_prefix:
         die("remote_artifacts.json missing artifact_key_prefix")
@@ -509,8 +513,10 @@ def main() -> None:
         scratch_dir = tmp_path / "scratch"
         scratch_dir.mkdir()
 
-        print(f"Downloading s3://{host_bucket}/{key_prefix} → {public_dir} (via index.html)")
-        download_failed = download_prefix_via_index(host_ep, host_bucket, key_prefix, public_dir)
+        print(f"Downloading s3://{host_bucket}/{key_prefix} → {public_dir} (manifest files)")
+        download_failed = download_listed_objects(
+            host_ep, host_bucket, key_prefix, files, public_dir
+        )
 
         n = rewrite_url_prefix(public_dir, old_public, new_public)
         print(f"Rewrote URL prefix in {n} files ({old_public} → {new_public})")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve seeds, discover_attempts, index-crawl, retry, claim attempt, contracts."""
+"""Resolve seeds, discover_attempts, manifest download, retry, claim attempt, contracts."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from ingest_remote_executor_results import (  # noqa: E402
     _is_required_artifact,
     _s3_acl_args,
     _safe_under,
-    download_prefix_via_index,
-    parse_index_hrefs,
+    download_listed_objects,
+    normalize_manifest_files,
     rewrite_ci_metrics_attribution,
 )
 from resolve_remote_execution import build_config  # noqa: E402
@@ -108,11 +108,7 @@ class ResolveSeedsTest(unittest.TestCase):
             build_config()
 
 
-class IndexCrawlSafetyTest(unittest.TestCase):
-    def test_parse_index_rejects_parent_segments(self):
-        html = '<a href="../">up</a><a href="a/../../x">bad</a><a href="try_1/report.json">ok</a>'
-        self.assertEqual(parse_index_hrefs(html), ["try_1/report.json"])
-
+class SafePathTest(unittest.TestCase):
     def test_safe_under_blocks_escape(self):
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp)
@@ -136,7 +132,7 @@ class IndexCrawlSafetyTest(unittest.TestCase):
             self.assertEqual(found[0]["report_relpath"], "try_1/report.json")
 
 
-class IndexCrawlCompletenessTest(unittest.TestCase):
+class ManifestDownloadTest(unittest.TestCase):
     def test_is_required_artifact(self):
         self.assertTrue(_is_required_artifact("index.html"))
         self.assertTrue(_is_required_artifact("ci_metrics.jsonl"))
@@ -147,25 +143,26 @@ class IndexCrawlCompletenessTest(unittest.TestCase):
         self.assertFalse(_is_required_artifact("try_1/logs/a.log"))
         self.assertFalse(_is_required_artifact("summary_text.txt"))
 
-    def _fake_tree(self):
-        root_index = (
-            '<a href="try_1/index.html">try</a>'
-            '<a href="ci_metrics.jsonl">metrics</a>'
-        )
-        try_index = (
-            '<a href="report.json">r</a>'
-            '<a href="ya-test.html">h</a>'
-            '<a href="started_at">s</a>'
-            '<a href="logs/a.log">l</a>'
-        )
+    def _manifest_files(self):
+        return [
+            "index.html",
+            "ci_metrics.jsonl",
+            "try_1/index.html",
+            "try_1/report.json",
+            "try_1/ya-test.html",
+            "try_1/started_at",
+            "try_1/logs/a.log",
+        ]
+
+    def _objects(self):
         return {
-            "index.html": root_index.encode(),
-            "try_1/index.html": try_index.encode(),
+            "index.html": b"<html/>",
+            "ci_metrics.jsonl": b"{}\n",
+            "try_1/index.html": b"<html/>",
             "try_1/report.json": b"{}",
             "try_1/ya-test.html": b"<html/>",
             "try_1/started_at": b"1700000000",
             "try_1/logs/a.log": b"log",
-            "ci_metrics.jsonl": b"{}\n",
         }
 
     def _fetch_from(self, objects, missing=frozenset()):
@@ -177,14 +174,24 @@ class IndexCrawlCompletenessTest(unittest.TestCase):
 
         return fetch
 
+    def test_normalize_manifest_rejects_bad_paths(self):
+        with self.assertRaises(SystemExit):
+            normalize_manifest_files({"files": ["../x"]})
+        with self.assertRaises(SystemExit):
+            normalize_manifest_files({"files": ["/abs"]})
+        with self.assertRaises(SystemExit):
+            normalize_manifest_files({"files": ["a\\b"]})
+
     def test_all_present_returns_empty_failed(self):
-        objects = self._fake_tree()
+        files = self._manifest_files()
+        objects = self._objects()
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp)
-            failed = download_prefix_via_index(
+            failed = download_listed_objects(
                 "https://ep",
                 "bucket",
                 "prefix",
+                files,
                 dest,
                 fetch=self._fetch_from(objects),
             )
@@ -194,41 +201,102 @@ class IndexCrawlCompletenessTest(unittest.TestCase):
             self.assertTrue((dest / "try_1" / "logs" / "a.log").is_file())
 
     def test_missing_required_report_dies(self):
-        objects = self._fake_tree()
+        files = self._manifest_files()
+        objects = self._objects()
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(SystemExit):
-                download_prefix_via_index(
+                download_listed_objects(
                     "https://ep",
                     "bucket",
                     "prefix",
+                    files,
                     Path(tmp),
                     fetch=self._fetch_from(objects, missing={"try_1/report.json"}),
                 )
 
-    def test_missing_try_index_dies(self):
-        objects = self._fake_tree()
+    def test_missing_try_index_in_manifest_dies(self):
+        files = [f for f in self._manifest_files() if f != "try_1/index.html"]
+        objects = self._objects()
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(SystemExit):
-                download_prefix_via_index(
+                download_listed_objects(
                     "https://ep",
                     "bucket",
                     "prefix",
+                    files,
                     Path(tmp),
-                    fetch=self._fetch_from(objects, missing={"try_1/index.html"}),
+                    fetch=self._fetch_from(objects),
                 )
 
-    def test_missing_optional_log_warns_only(self):
-        objects = self._fake_tree()
+    def test_unsafe_path_refused_at_download(self):
+        files = self._manifest_files() + ["a/../../outside"]
+        objects = self._objects()
         with tempfile.TemporaryDirectory() as tmp:
-            failed = download_prefix_via_index(
+            failed = download_listed_objects(
                 "https://ep",
                 "bucket",
                 "prefix",
+                files,
+                Path(tmp),
+                fetch=self._fetch_from(objects),
+            )
+            self.assertEqual(failed, ["a/../../outside"])
+
+    def test_missing_optional_log_warns_only(self):
+        files = self._manifest_files()
+        objects = self._objects()
+        with tempfile.TemporaryDirectory() as tmp:
+            failed = download_listed_objects(
+                "https://ep",
+                "bucket",
+                "prefix",
+                files,
                 Path(tmp),
                 fetch=self._fetch_from(objects, missing={"try_1/logs/a.log"}),
             )
             self.assertEqual(failed, ["try_1/logs/a.log"])
             self.assertTrue((Path(tmp) / "try_1" / "report.json").is_file())
+
+    def test_try_manifest_without_ya_test_html_succeeds(self):
+        files = [
+            "index.html",
+            "ci_metrics.jsonl",
+            "try_1/index.html",
+            "try_1/report.json",
+            "try_1/started_at",
+        ]
+        objects = {
+            "index.html": b"<html/>",
+            "ci_metrics.jsonl": b"{}\n",
+            "try_1/index.html": b"<html/>",
+            "try_1/report.json": b"{}",
+            "try_1/started_at": b"1700000000",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            failed = download_listed_objects(
+                "https://ep",
+                "bucket",
+                "prefix",
+                files,
+                Path(tmp),
+                fetch=self._fetch_from(objects),
+            )
+            self.assertEqual(failed, [])
+            self.assertFalse((Path(tmp) / "try_1" / "ya-test.html").exists())
+
+    def test_listed_ya_test_html_missing_object_dies(self):
+        files = self._manifest_files()
+        objects = self._objects()
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(SystemExit):
+                download_listed_objects(
+                    "https://ep",
+                    "bucket",
+                    "prefix",
+                    files,
+                    Path(tmp),
+                    fetch=self._fetch_from(objects, missing={"try_1/ya-test.html"}),
+                )
 
 
 class HttpRetryTest(unittest.TestCase):

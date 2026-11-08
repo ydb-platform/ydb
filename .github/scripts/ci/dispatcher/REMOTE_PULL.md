@@ -16,8 +16,9 @@ only from the `remote-ticket` Actions artifact; claims and build outputs go to
    (no PR comments / commit statuses); the caller run's waiter/ingest is the signal.
 3. **wait** (`runner-waiter`) — poll `remote-claims/{platform_run_id}.json` on
    host S3 (~60 min), then the host Actions run to completion.
-4. **ingest** — crawl host `remote_artifacts.json` + `index.html` tree, copy to
-   platform S3, upload test results and `ci_metrics` to YDB QA, write summary.
+4. **ingest** — read host `remote_artifacts.json` (`files` list + metadata),
+   anonymous GetObject for each key, copy to platform S3, upload test results and
+   `ci_metrics` to YDB QA, write summary.
 
 ## Reruns
 

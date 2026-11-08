@@ -1081,12 +1081,18 @@ runs:
     - name: cleanup tmp
       if: always() && steps.prepare_s3cmd.outcome == 'success'
       shell: bash
+      env:
+        SOURCE_RUN_ID: ${{ inputs.source_run_id }}
       run: |
         set +e
         set -x
         if [ -n "${TMP_DIR:-}" ]; then
-          rm -rf "$TMP_DIR"
+          if [ -n "${SOURCE_RUN_ID:-}" ]; then
+            find "$TMP_DIR" -mindepth 1 -maxdepth 1 ! -name results -exec rm -rf {} +
+          else
+            rm -rf "$TMP_DIR"
+            # mktemp / graph_compare leftovers; does not match /tmp/systemd-private-*
+            rm -rf /tmp/tmp*
+          fi
         fi
-        # mktemp / graph_compare leftovers; does not match /tmp/systemd-private-*
-        rm -rf /tmp/tmp*
         df -h / || true

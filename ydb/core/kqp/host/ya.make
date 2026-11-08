@@ -18,7 +18,7 @@ PEERDIR(
     ydb/core/kqp/federated_query
     ydb/core/kqp/gateway/utils
     # The host owns both the standalone frontend and its optional RBO importer;
-    # legacy translation dependencies remain necessary for fallback and IO setup.
+    # legacy translation dependencies remain necessary for explicit fallback.
     ydb/core/kqp/host/new_parser
     ydb/core/kqp/host/new_parser/rbo
     ydb/core/kqp/opt

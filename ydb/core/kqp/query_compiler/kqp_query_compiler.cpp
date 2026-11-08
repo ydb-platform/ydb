@@ -749,6 +749,22 @@ public:
     bool CompilePhysicalQuery(const TKqpPhysicalQuery& query, const TKiDataQueryBlocks& dataQueryBlocks,
         NKqpProto::TKqpPhyQuery& queryProto, TExprContext& ctx) final
     {
+        TQueryExecutionMetadata metadata;
+        for (const auto& block : dataQueryBlocks) {
+            metadata.HasUncommittedChangesRead |= TKiDataQueryBlockSettings::Parse(block).HasUncommittedChangesRead;
+            for (const auto& result : block.Results()) {
+                metadata.DiscardResults.push_back(result.Discard().Value() == "1");
+            }
+            for (auto& operation : TableOperationsToProto(block.Operations(), ctx)) {
+                metadata.TableOperations.push_back(std::move(operation));
+            }
+        }
+        return CompilePhysicalQuery(query, metadata, queryProto, ctx);
+    }
+
+    bool CompilePhysicalQuery(const TKqpPhysicalQuery& query, const TQueryExecutionMetadata& metadata,
+        NKqpProto::TKqpPhyQuery& queryProto, TExprContext& ctx) final
+    {
         TGuard<TScopedAlloc> allocGuard(Alloc);
 
         auto querySettings = TKqpPhyQuerySettings::Parse(query);
@@ -792,36 +808,19 @@ public:
         bool enableDiscardSelect = Config->GetEnableDiscardSelect();
 
         TDynBitMap resultDiscardFlags;
-        ui32 resultCount = 0;
-        for (const auto& queryBlock : dataQueryBlocks) {
-            auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
-            if (queryBlockSettings.HasUncommittedChangesRead) {
-                queryProto.SetHasUncommittedChangesRead(true);
-            }
-
-            if (enableDiscardSelect) {
-                for (const auto& kiResult : queryBlock.Results()) {
-                    if (kiResult.Maybe<TKiResult>()) {
-                        auto result = kiResult.Cast<TKiResult>();
-                        bool discard = result.Discard().Value() == "1";
-                        if (discard) {
-                            resultDiscardFlags.Set(resultCount);
-                        }
-                        ++resultCount;
-                    }
+        const ui32 resultCount = metadata.DiscardResults.size();
+        queryProto.SetHasUncommittedChangesRead(metadata.HasUncommittedChangesRead);
+        if (enableDiscardSelect) {
+            for (ui32 i = 0; i < resultCount; ++i) {
+                if (metadata.DiscardResults[i]) {
+                    resultDiscardFlags.Set(i);
                 }
             }
-
-            auto ops = TableOperationsToProto(queryBlock.Operations(), ctx);
-            for (auto& op : ops) {
-                const auto tableName = op.GetTable();
-                auto operation = static_cast<TYdbOperation>(op.GetOperation());
-
-                *queryProto.AddTableOps() = std::move(op);
-
-                const auto& desc = TablesData->GetTable(Cluster, tableName);
-                TableDescriptionToTableInfo(desc, operation, *queryProto.MutableTableInfos());
-            }
+        }
+        for (const auto& op : metadata.TableOperations) {
+            *queryProto.AddTableOps() = op;
+            const auto& desc = TablesData->GetTable(Cluster, op.GetTable());
+            TableDescriptionToTableInfo(desc, static_cast<TYdbOperation>(op.GetOperation()), *queryProto.MutableTableInfos());
         }
 
         THashSet<std::pair<ui32, ui32>> shouldCreateChannel;

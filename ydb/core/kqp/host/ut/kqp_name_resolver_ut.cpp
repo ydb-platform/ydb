@@ -65,6 +65,23 @@ struct TFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
+    Y_UNIT_TEST(NativeResultColumnNames) {
+        TFixture f;
+        f.Ok("SELECT l.id, r.id, 1 AS column2, 2 FROM t AS l JOIN u AS r ON l.id = r.id;");
+        const auto& outputs = f.Result.Names->QueryOutputs.at(&f.Query());
+        const TVector<TString> expected = {"l.id", "r.id", "column2", "column3"};
+        for (size_t i = 0; i < expected.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->Columns[outputs[i]].Name, expected[i]);
+        }
+        f.Ok("SELECT 1, 2 AS column0, 3;");
+        const auto& synthetic = f.Result.Names->QueryOutputs.at(&f.Query());
+        UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->Columns[synthetic[0]].Name, "column1");
+        UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->Columns[synthetic[2]].Name, "column2");
+        f.Resolve("SELECT id AS x, value AS x FROM t;");
+        UNIT_ASSERT(!f.Result.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(f.Result.Issues.ToString(), "Duplicate output column 'x'");
+    }
+
     // Verify schema identity and physical column provenance, not just names.
     Y_UNIT_TEST(BindsCatalogIdentityAndColumns) {
         TFixture f;

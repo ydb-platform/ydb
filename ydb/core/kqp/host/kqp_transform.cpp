@@ -23,6 +23,7 @@ void TKqlTransformContext::Reset() {
     ReplyTarget = {};
     QueryStats = {};
     PhysicalQuery = nullptr;
+    PlanJson.reset();
     ExplainTransformerInput = nullptr;
     DataQueryBlocks = Nothing();
 }

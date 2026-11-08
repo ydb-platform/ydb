@@ -39,7 +39,8 @@ struct TAstTypeAnnotationSettings {
 // Annotates the supported scalar-query subset using the existing YQL callable
 // type rules. The AST, resolved names and destination context must outlive the
 // result. Neither syntax nor name bindings are changed. The caller supplies
-// effective SQL expression settings; only TablePathPrefix pragmas are accepted.
+// effective SQL expression settings; TablePathPrefix and the legacy translator's
+// YqlSelect control pragma are accepted.
 // Returns null on a type error, with diagnostics in ctx. Unsupported constructs
 // throw TNewYqlParserFallback. No partial annotation result escapes either case.
 // Does not run provider IO stages or reset ctx.Step.

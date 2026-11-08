@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/kqp/federated_query
     ydb/core/kqp/gateway/utils
     ydb/core/kqp/host/new_parser
+    ydb/core/kqp/host/new_parser/rbo
     ydb/core/kqp/opt
     ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/provider

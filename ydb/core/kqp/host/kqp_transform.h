@@ -13,6 +13,7 @@
 #include <util/generic/ptr.h>
 
 #include <optional>
+#include <functional>
 
 namespace NYql {
 
@@ -31,6 +32,8 @@ class TKqpPhyQuery;
 
 namespace NKikimr::NKqp {
 
+class TOpRoot;
+
 struct TKqlTransformContext : TThrRefBase {
     TKqlTransformContext(const TIntrusivePtr<NYql::TKikimrConfiguration>& config, TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx,
         TIntrusivePtr<NYql::TKikimrTablesData> tables);
@@ -47,6 +50,12 @@ struct TKqlTransformContext : TThrRefBase {
     std::optional<NJson::TJsonValue> PlanJson; // JSON plan for the new optimizer
     TOptimizerCacheOutput CacheOutput;
     TMaybe<NYql::NNodes::TKiDataQueryBlocks> DataQueryBlocks;
+
+    // Frontend input, retained across Reset() of runner outputs. SetupSession
+    // replaces it before destroying the AST and its annotation context.
+    size_t NewParserRboQueryCount = 0;
+    std::function<TIntrusivePtr<TOpRoot>(size_t, const NYql::TExprNode::TPtr&,
+        const NYql::TExprNode::TPtr&, NYql::TExprContext&)> NewParserRboLowering;
 
     void Reset();
 };

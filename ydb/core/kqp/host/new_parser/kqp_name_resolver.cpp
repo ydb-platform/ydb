@@ -91,6 +91,11 @@ private:
     }
 
     void Pragma(const TPragmaStatement& pragma) {
+        // This controls the legacy translator's representation, not SQL names.
+        // The original frontend still validates its value during host import.
+        if (!pragma.Namespace && AsciiEqualsIgnoreCase(Name(pragma.Name), "YqlSelect")) {
+            return;
+        }
         if (pragma.Namespace || !AsciiEqualsIgnoreCase(Name(pragma.Name), "TablePathPrefix")
             || pragma.Values.size() != 1) {
             Unsupported(pragma.Name.Range, "this pragma's binding rules");
@@ -205,6 +210,17 @@ private:
                     Unsupported(expression.Range, "typed struct member resolution");
                 }
             } else if constexpr (std::is_same_v<T, TCall>) {
+                if (const auto* name = std::get_if<TName>(&value.Callable->Value); name && !name->Module) {
+                    static const THashSet<TString> typeConstructors = {"datatype", "optionaltype", "listtype",
+                        "dicttype", "tupletype", "structtype", "varianttype", "callabletype", "resourcetype",
+                        "taggedtype", "streamtype", "flowtype", "voidtype", "nulltype", "emptylisttype", "emptydicttype"};
+                    if (typeConstructors.contains(to_lower(Name(name->Name)))) {
+                        // These arguments belong to the type namespace. Until
+                        // type-valued expressions are lowered, use the legacy
+                        // frontend instead of reporting their names as columns.
+                        Unsupported(expression.Range, "type-valued expressions");
+                    }
+                }
                 // Function names are not column references. Function overload
                 // and parameter type resolution belong to expression lowering.
                 if (!std::holds_alternative<TName>(value.Callable->Value)

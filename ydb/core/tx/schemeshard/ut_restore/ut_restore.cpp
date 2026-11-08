@@ -4178,6 +4178,243 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )";
     }
 
+    void CreateReplicaPlaceholder(TTestBasicRuntime& runtime, TTestEnv& env, ui64 txId,
+            const TString& name = "Table", bool withIndex = false) {
+        const auto table = Sprintf(R"(
+            Name: "%s"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            ReplicationConfig {
+                Mode: REPLICATION_MODE_READ_ONLY
+                ConsistencyLevel: CONSISTENCY_LEVEL_GLOBAL
+                ImportState: WAITING_IMPORT
+            }
+        )", name.c_str());
+        if (withIndex) {
+            auto* request = InternalTransaction(CreateIndexedTableRequest(txId, "/MyRoot", TStringBuilder()
+                << "TableDescription { " << table << " }" << R"(
+                    IndexDescription {
+                        Name: "by_value"
+                        Type: EIndexTypeGlobal
+                        KeyColumnNames: ["value"]
+                        IndexImplTableDescriptions {
+                            ReplicationConfig {
+                                Mode: REPLICATION_MODE_READ_ONLY
+                                ConsistencyLevel: CONSISTENCY_LEVEL_GLOBAL
+                                ImportState: WAITING_IMPORT
+                            }
+                        }
+                    }
+                )"));
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+            TestModificationResult(runtime, txId);
+        } else {
+            TestCreateTable(runtime, txId, "/MyRoot", table);
+        }
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    void CheckImportedReplica(TTestBasicRuntime& runtime, const TString& path) {
+        const auto desc = DescribePrivatePath(runtime, path, true, true);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+        const auto& config = desc.GetPathDescription().GetTable().GetReplicationConfig();
+        UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetConsistencyLevel(), TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetImportState(), TTableReplicationConfig::IMPORTED);
+    }
+
+    enum class EFinalizeReboot {
+        None,
+        BeforePropose,
+        AfterPropose,
+    };
+
+    void CheckReplicaImportRecovery(bool rebootBeforeCreate, bool enableDataShardDirectPartImport,
+            bool rebootBeforeCompletion = false, EFinalizeReboot finalizeReboot = EFinalizeReboot::None) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
+        CreateReplicaPlaceholder(runtime, env, 10);
+        const auto placeholder = DescribePath(runtime, "/MyRoot/Table").GetPathId();
+        const auto data = GenerateTestData("", 3);
+        const TTestDataWithScheme backup(R"(
+            columns { name: "key" type { optional_type { item { type_id: UINT32 } } } }
+            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
+            primary_key: "key"
+            ttl_settings {
+                value_since_unix_epoch { column_name: "key" column_unit: UNIT_SECONDS expire_after_seconds: 1 }
+            }
+        )", {data});
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TS3Mock s3(ConvertTestData(backup), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3.Start());
+
+        bool createBlocked = false;
+        bool completionBlocked = false;
+        ui64 restoreTxId = 0;
+        ui64 finalizeTxId = 0;
+        bool finalizeBlocked = false;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetAlterTable().GetReplicationConfig().GetImportState() == TTableReplicationConfig::IMPORTED) {
+                    finalizeTxId = ev->Get()->Record.GetTxId();
+                    if (finalizeReboot == EFinalizeReboot::BeforePropose && !finalizeBlocked) {
+                        finalizeBlocked = true;
+                        ev.Reset();
+                        return;
+                    }
+                }
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore) {
+                    restoreTxId = ev->Get()->Record.GetTxId();
+                }
+                if (rebootBeforeCreate && !createBlocked && tx.GetCreateIndexedTable().GetTableDescription().GetReplicationConfig().GetImportState()
+                        == TTableReplicationConfig::IMPORTING) {
+                    createBlocked = true;
+                    ev.Reset();
+                    return;
+                }
+            }
+        });
+        auto resultObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            if (rebootBeforeCompletion && !completionBlocked && restoreTxId
+                    && ev->Get()->Record.GetTxId() == restoreTxId) {
+                completionBlocked = true;
+                ev.Reset();
+            }
+        });
+        auto finalizeObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
+            if (finalizeReboot == EFinalizeReboot::AfterPropose && !finalizeBlocked && finalizeTxId
+                    && ev->Get()->Record.GetTxId() == finalizeTxId
+                    && ev->Get()->Record.GetStatus() == NKikimrScheme::StatusAccepted) {
+                finalizeBlocked = true;
+                ev.Reset();
+            }
+        });
+        TestImport(runtime, 20, "/MyRoot", Sprintf(ImportTableRequest().c_str(), port));
+        if (finalizeReboot != EFinalizeReboot::None) {
+            runtime.WaitFor("final replica ALTER", [&] { return finalizeBlocked; });
+            UNIT_ASSERT_UNEQUAL(TestGetImport(runtime, 20, "/MyRoot").GetResponse().GetEntry().GetProgress(),
+                Ydb::Import::ImportProgress::PROGRESS_DONE);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        }
+        if (rebootBeforeCreate) {
+            runtime.WaitFor("recreating replica after DROP", [&] { return createBlocked; });
+            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetStatus(), NKikimrScheme::StatusPathDoesNotExist);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        }
+        if (rebootBeforeCompletion) {
+            runtime.WaitFor("restore completion before finishing import", [&] { return completionBlocked; });
+            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetPathDescription()
+                .GetTable().GetReplicationConfig().GetImportState(), TTableReplicationConfig::IMPORTING);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        }
+        env.TestWaitNotification(runtime, 20);
+        TestGetImport(runtime, 20, "/MyRoot");
+        CheckImportedReplica(runtime, "/MyRoot/Table");
+        const auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        UNIT_ASSERT_UNEQUAL(desc.GetPathId(), placeholder);
+        UNIT_ASSERT(desc.GetPathDescription().GetTable().GetTTLSettings().HasEnabled());
+        const auto shardId = desc.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+        NKqp::CompareYson(data.YsonStr, ReadTable(runtime, shardId, "Table", {"key"}, {"key", "value"}));
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        env.SimulateSleep(runtime, TDuration::Seconds(10));
+        CheckImportedReplica(runtime, "/MyRoot/Table");
+        NKqp::CompareYson(data.YsonStr, ReadTable(runtime, shardId, "Table", {"key"}, {"key", "value"}));
+    }
+
+    Y_UNIT_TEST_QUAD(ReplicaImportPreservesTtlRows, RebootBeforeCreate, EnableDataShardDirectPartImport) {
+        CheckReplicaImportRecovery(RebootBeforeCreate, EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(ReplicaImportResumesCompletion, EnableDataShardDirectPartImport) {
+        CheckReplicaImportRecovery(false, EnableDataShardDirectPartImport, true);
+    }
+
+    Y_UNIT_TEST_QUAD(ReplicaImportResumesFinalAlter, AfterPropose, EnableDataShardDirectPartImport) {
+        CheckReplicaImportRecovery(false, EnableDataShardDirectPartImport, false,
+            AfterPropose ? EFinalizeReboot::AfterPropose : EFinalizeReboot::BeforePropose);
+    }
+
+    Y_UNIT_TEST_FLAG(ReplicaImportFinalizesItemsIndependently, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        CreateReplicaPlaceholder(runtime, env, 10, "First");
+        CreateReplicaPlaceholder(runtime, env, 11, "Second");
+        const auto backup = GenerateTestData(Utf8KeyValueScheme(), {{"a", 1}});
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TS3Mock s3(ConvertTestData({{"/a", backup}, {"/b", backup}}), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3.Start());
+
+        bool blocked = false;
+        ui64 otherFinalizeTxId = 0;
+        bool otherFinalized = false;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetAlterTable().GetReplicationConfig().GetImportState() != TTableReplicationConfig::IMPORTED) {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.TransactionSize(), 1);
+                if (!blocked) {
+                    blocked = true;
+                    ev.Reset();
+                    return;
+                }
+                otherFinalizeTxId = ev->Get()->Record.GetTxId();
+            }
+        });
+        auto resultObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            if (otherFinalizeTxId && ev->Get()->Record.GetTxId() == otherFinalizeTxId) {
+                otherFinalized = true;
+            }
+        });
+        TestImport(runtime, 20, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_prefix: "a" destination_path: "/MyRoot/First" }
+                items { source_prefix: "b" destination_path: "/MyRoot/Second" }
+            }
+        )", port));
+        runtime.WaitFor("one item finalizes while the other waits for ALTER", [&] { return otherFinalized; });
+        UNIT_ASSERT(blocked);
+        const auto firstState = DescribePath(runtime, "/MyRoot/First").GetPathDescription()
+            .GetTable().GetReplicationConfig().GetImportState();
+        const auto secondState = DescribePath(runtime, "/MyRoot/Second").GetPathDescription()
+            .GetTable().GetReplicationConfig().GetImportState();
+        UNIT_ASSERT((firstState == TTableReplicationConfig::IMPORTING && secondState == TTableReplicationConfig::IMPORTED)
+            || (firstState == TTableReplicationConfig::IMPORTED && secondState == TTableReplicationConfig::IMPORTING));
+        UNIT_ASSERT_UNEQUAL(TestGetImport(runtime, 20, "/MyRoot").GetResponse().GetEntry().GetProgress(),
+            Ydb::Import::ImportProgress::PROGRESS_DONE);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, 20);
+        TestGetImport(runtime, 20, "/MyRoot");
+        for (const TString path : {"/MyRoot/First", "/MyRoot/Second"}) {
+            CheckImportedReplica(runtime, path);
+            const auto table = DescribePrivatePath(runtime, path, true, true);
+            NKqp::CompareYson(backup.Data[0].YsonStr, ReadTable(runtime,
+                table.GetPathDescription().GetTablePartitions(0).GetDatashardId(),
+                table.GetPathDescription().GetTable().GetName(), {"key"}, {"key", "value"}));
+        }
+    }
+
+    Y_UNIT_TEST(ReplicaImportFailureDoesNotMarkImported) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        CreateReplicaPlaceholder(runtime, env, 10);
+        const TTestDataWithScheme backup(Utf8KeyValueScheme(), {TTestData("invalid csv\n", "")});
+        Run(runtime, env, ConvertTestData(backup), ImportTableRequest(), Ydb::StatusIds::CANCELLED);
+        const auto desc = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+            TTableReplicationConfig::IMPORTING);
+    }
+
     Y_UNIT_TEST_FLAG(ShouldSucceedOnParquetTable, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -4575,6 +4812,53 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_FLAG(ShouldSucceedOnIndexedTable3, EnableDataShardDirectPartImport) {
         ShouldSucceedOnIndexedTable(1, EnableDataShardDirectPartImport, "");
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldFailOnColumnTableWithMissingTier, EnableDependencyRetry) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTieringInColumnShard(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTableImportDependencyRetry(EnableDependencyRetry);
+
+        const auto data = GenerateTestData(TTypedScheme(EPathTypeColumnTable, R"(
+            columns {
+                name: "ts"
+                type { type_id: TIMESTAMP }
+                not_null: true
+            }
+            primary_key: "ts"
+            store_type: STORE_TYPE_COLUMN
+            ttl_settings {
+                tiered_ttl {
+                    tiers {
+                        date_type_column {
+                            column_name: "ts"
+                            expire_after_seconds: 86400
+                        }
+                        evict_to_external_storage { storage: "/MyRoot/MissingTier" }
+                    }
+                }
+            }
+        )"), {{"", 0}});
+
+        ui32 createAttempts = 0;
+        const ui32 expectedAttempts = EnableDependencyRetry ? 2 : 1;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateColumnTable) {
+                    ++createAttempts;
+                    UNIT_ASSERT_C(createAttempts <= expectedAttempts,
+                        "Column table import keeps retrying without progress");
+                }
+            }
+        });
+
+        const ui64 id = Run(runtime, env, ConvertTestData(data), ImportTableRequest(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(createAttempts, expectedAttempts);
+        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
+            "Object not found: /MyRoot/MissingTier");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST_QUAD(ImportStandaloneColumnTableWithLocalBloomIndexes, EnableLocalIndexAsSchemeObject, EnableDataShardDirectPartImport) {
@@ -7436,7 +7720,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables, bool enableDataShardDirectPartImport,
-            const TString& extraTopicFields = "", Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
+            const TString& extraTopicFields = "", Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
+            bool replica = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -7464,6 +7749,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         for (const auto& table : tables) {
+            if (replica) {
+                CreateReplicaPlaceholder(runtime, env, ++txId, table.TableName);
+            }
             TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
                 ImportFromS3Settings {
                   endpoint: "localhost:%d"
@@ -7476,6 +7764,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             )", port, table.TableName.c_str(), table.TableName.c_str()));
             env.TestWaitNotification(runtime, txId);
             TestGetImport(runtime, txId, "/MyRoot", expectedStatus);
+            if (replica) {
+                CheckImportedReplica(runtime, "/MyRoot/" + table.TableName);
+            }
         }
 
         if (expectedStatus == Ydb::StatusIds::SUCCESS) {
@@ -7487,6 +7778,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     void TestImportChangefeeds(bool enableDataShardDirectPartImport, ui64 countChangefeed = 1, SchemeFunction addedScheme = AddedScheme, const TString& pkType = "UTF8", int maxPartitions = 3) {
         TestImportChangefeeds({{"Table", pkType, countChangefeed, addedScheme, maxPartitions}}, enableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(ReplicaImportChangefeeds, EnableDataShardDirectPartImport) {
+        TestImportChangefeeds({{"Table", "UTF8", 1, AddedScheme, 3}},
+            EnableDataShardDirectPartImport, "", Ydb::StatusIds::SUCCESS, true);
     }
 
     Y_UNIT_TEST_FLAG(Changefeed, EnableDataShardDirectPartImport) {
@@ -8271,10 +8567,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     void MaterializedIndex(
             Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode,
             bool enableDataShardDirectPartImport,
-            const TString& metadata = R"({"version": 1})")
+            const TString& metadata = R"({"version": 1})", bool replica = false)
     {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+        if (replica) {
+            CreateReplicaPlaceholder(runtime, env, 10, "Table", true);
+        }
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
 
         const auto a = GenerateTestData(R"(
@@ -8294,18 +8593,36 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )", {{"a", 1}}, "", metadata);
 
-        const auto b = GenerateTestData(R"(
+        auto b = GenerateTestData(R"(
             columns {
-              name: "key"
+              name: "value"
               type { optional_type { item { type_id: UTF8 } } }
             }
             columns {
-              name: "value"
+              name: "key"
               type { optional_type { item { type_id: UTF8 } } }
             }
             primary_key: "value"
             primary_key: "key"
         )", {{"b", 1}}, "", metadata);
+        b.Data[0] = TTestData("\"value1\",\"b1\"\n", GenerateTestData("b", 1).YsonStr);
+
+        const bool importedIndex = mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
+            || (mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO && metadata == R"({"version": 1})");
+        ui32 finalAlterRequests = 0;
+        auto finalAlterObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            ui32 tables = 0;
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetAlterTable().GetReplicationConfig().GetImportState() == TTableReplicationConfig::IMPORTED) {
+                    ++tables;
+                }
+            }
+            if (tables) {
+                UNIT_ASSERT(replica);
+                UNIT_ASSERT_VALUES_EQUAL(tables, importedIndex ? 1 : 2);
+                ++finalAlterRequests;
+            }
+        });
 
         Run(runtime, env, ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), Sprintf(R"(
             ImportFromS3Settings {
@@ -8323,6 +8640,24 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::PathExist,
             NLs::IndexesCount(1),
         });
+        UNIT_ASSERT_VALUES_EQUAL(finalAlterRequests, replica ? (importedIndex ? 2 : 1) : 0);
+        if (replica) {
+            CheckImportedReplica(runtime, "/MyRoot/Table");
+            CheckImportedReplica(runtime, "/MyRoot/Table/by_value/indexImplTable");
+        }
+        const auto table = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        const auto index = DescribePrivatePath(runtime, "/MyRoot/Table/by_value/indexImplTable", true, true);
+        NKqp::CompareYson(a.Data[0].YsonStr, ReadTable(runtime,
+            table.GetPathDescription().GetTablePartitions(0).GetDatashardId(), "Table", {"key"}, {"key", "value"}));
+        NKqp::CompareYson((importedIndex ? b : a).Data[0].YsonStr, ReadTable(runtime,
+            index.GetPathDescription().GetTablePartitions(0).GetDatashardId(), "indexImplTable",
+            {"value", "key"}, {"key", "value"}));
+    }
+
+    Y_UNIT_TEST_QUAD(ReplicaImportIndexes, Materialized, EnableDataShardDirectPartImport) {
+        MaterializedIndex(Materialized ? Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
+                                      : Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD,
+            EnableDataShardDirectPartImport, R"({"version": 1})", true);
     }
 
     Y_UNIT_TEST_FLAG(MaterializedIndexBuild, EnableDataShardDirectPartImport) {
@@ -9761,12 +10096,14 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     namespace TEvKesus = NKikimr::NKesus::TEvKesus;
 
-    const TString ResourcesKey = "/backup/coordination/rate_limiter_resources.pb";
+    const TString ResourcesKey = "/backup/coordination/rate_limiter_resources/001/create_rate_limiter.pb";
+    const TString SemaphoreKey = "/backup/coordination/semaphores/001/create_semaphore.pb";
+    const TString MetadataKey = "/backup/coordination/metadata.json";
     const TString NodeKey = "/backup/coordination/create_coordination_node.pb";
     const TString PermissionsKey = "/backup/coordination/permissions.pb";
 
-    Ydb::RateLimiter::Resources MakeResources(bool metering = false) {
-        Ydb::RateLimiter::Resources result;
+    NKikimrSchemeOp::TImportKesus MakeResources(bool metering = false) {
+        NKikimrSchemeOp::TImportKesus result;
         // Several roots and three levels, deliberately not in lexical order.
         for (const TString& path : {"z", "a", "a/z", "a/a", "a/a/leaf"}) {
             auto& resource = *result.add_resources();
@@ -9797,15 +10134,19 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         return result;
     }
 
-    TString ResourcesText(const Ydb::RateLimiter::Resources& resources) {
-        if (resources.resources().empty()) {
-            return "resources: []\n";
+    NKikimrSchemeOp::TImportKesus MakeContents(bool metering = false) {
+        auto result = MakeResources(metering);
+        for (const TString& name : {"", "../binary", "/absolute/name"}) {
+            auto& semaphore = *result.add_semaphores();
+            semaphore.set_name(name);
+            semaphore.set_limit(result.semaphores_size());
+            semaphore.set_data(TString("a\0\xffz", 4));
         }
-        return resources.DebugString();
+        return result;
     }
 
-    Ydb::RateLimiter::Resources NormalizeResources(const Ydb::RateLimiter::Resources& resources) {
-        Ydb::RateLimiter::Resources result;
+    NKikimrSchemeOp::TImportKesus NormalizeResources(const NKikimrSchemeOp::TImportKesus& resources) {
+        NKikimrSchemeOp::TImportKesus result;
         for (const auto& resource : resources.resources()) {
             NKikimrKesus::TStreamingQuoterResource internal;
             FillRateLimiterDescription(internal, resource);
@@ -9820,7 +10161,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     class TKesusImportEnv {
     public:
-        TKesusImportEnv()
+        explicit TKesusImportEnv(bool enableImport = true)
             : Port(Ports.GetPort())
             , S3({}, TS3Mock::TSettings(Port))
             , Env(Runtime, TTestEnvOptions().EnablePermissionsExport(true).EnableChecksumsExport(true))
@@ -9829,7 +10170,10 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
             Runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
             Runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
             Runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
-            Runtime.GetAppData().FeatureFlags.SetEnableKesusImport(true);
+            TControlBoard::SetValue(1, Runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
+            if (enableImport) {
+                TControlBoard::SetValue(1, Runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusImport);
+            }
         }
 
         ui64 CreateNode(const TString& name = "Original") {
@@ -9866,15 +10210,64 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
                 response->Get()->Record.DebugString());
         }
 
-        void Populate(ui64 tabletId, const Ydb::RateLimiter::Resources& resources) {
+        void AddSemaphore(ui64 tabletId, const TString& path,
+            const Ydb::Coordination::SessionRequest::CreateSemaphore& semaphore)
+        {
+            const auto sender = Runtime.AllocateEdgeActor();
+            Runtime.SendToPipe(tabletId, sender, new TEvKesus::TEvCreateSemaphore(
+                path, semaphore.name(), semaphore.limit(), semaphore.data()), 0, GetPipeConfigWithRetries());
+            auto response = Runtime.GrabEdgeEventRethrow<TEvKesus::TEvCreateSemaphoreResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS,
+                response->Get()->Record.DebugString());
+        }
+
+        void AcquireSemaphore(const TString& path, const TString& name, bool ephemeral = false) {
+            const ui64 tabletId = TabletId(path);
+            const auto proxy = Runtime.AllocateEdgeActor();
+            Runtime.SendToPipe(tabletId, proxy, new TEvKesus::TEvRegisterProxy(path, 1),
+                0, GetPipeConfigWithRetries());
+            auto registered = Runtime.GrabEdgeEventRethrow<TEvKesus::TEvRegisterProxyResult>(proxy);
+            UNIT_ASSERT_VALUES_EQUAL(registered->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            Runtime.SendToPipe(tabletId, proxy, new TEvKesus::TEvAttachSession(
+                path, 1, 0, TDuration::Minutes(10).MilliSeconds(), "backup test"), 0, GetPipeConfigWithRetries());
+            auto attached = Runtime.GrabEdgeEventRethrow<TEvKesus::TEvAttachSessionResult>(proxy);
+            UNIT_ASSERT_VALUES_EQUAL(attached->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            Runtime.SendToPipe(tabletId, proxy, new TEvKesus::TEvAcquireSemaphore(
+                path, 1, attached->Get()->Record.GetSessionId(), name, 1, 0, "", ephemeral),
+                0, GetPipeConfigWithRetries());
+            auto acquired = Runtime.GrabEdgeEventRethrow<TEvKesus::TEvAcquireSemaphoreResult>(proxy);
+            UNIT_ASSERT_VALUES_EQUAL(acquired->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(acquired->Get()->Record.GetAcquired());
+        }
+
+        Ydb::Coordination::SemaphoreDescription DescribeSemaphore(const TString& path, const TString& name,
+            Ydb::StatusIds::StatusCode expected = Ydb::StatusIds::SUCCESS)
+        {
+            const auto sender = Runtime.AllocateEdgeActor();
+            auto request = MakeHolder<TEvKesus::TEvDescribeSemaphore>();
+            request->Record.SetKesusPath(path);
+            request->Record.SetName(name);
+            request->Record.SetIncludeOwners(true);
+            request->Record.SetIncludeWaiters(true);
+            Runtime.SendToPipe(TabletId(path), sender, request.Release(), 0, GetPipeConfigWithRetries());
+            auto response = Runtime.GrabEdgeEventRethrow<TEvKesus::TEvDescribeSemaphoreResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetError().GetStatus(), expected,
+                response->Get()->Record.DebugString());
+            return response->Get()->Record.GetSemaphoreDescription();
+        }
+
+        void Populate(ui64 tabletId, const NKikimrSchemeOp::TImportKesus& resources) {
             for (const auto& resource : resources.resources()) {
                 NKikimrKesus::TStreamingQuoterResource internal;
                 FillRateLimiterDescription(internal, resource);
                 AddResource(tabletId, internal);
             }
+            for (const auto& semaphore : resources.semaphores()) {
+                AddSemaphore(tabletId, "/MyRoot/Original", semaphore);
+            }
         }
 
-        Ydb::RateLimiter::Resources DescribeResources(const TString& path = "/MyRoot/Restored") {
+        NKikimrSchemeOp::TImportKesus DescribeResources(const TString& path = "/MyRoot/Restored") {
             const auto sender = Runtime.AllocateEdgeActor();
             auto request = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
             request->Record.SetRecursive(true);
@@ -9882,14 +10275,14 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
             auto response = Runtime.GrabEdgeEventRethrow<TEvKesus::TEvDescribeQuoterResourcesResult>(sender);
             UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS,
                 response->Get()->Record.DebugString());
-            Ydb::RateLimiter::Resources result;
+            NKikimrSchemeOp::TImportKesus result;
             for (const auto& resource : response->Get()->Record.GetResources()) {
                 FillRateLimiterDescription(*result.add_resources(), resource);
             }
             return NormalizeResources(result);
         }
 
-        void AssertResources(const Ydb::RateLimiter::Resources& expected, const TString& path = "/MyRoot/Restored") {
+        void AssertResources(const NKikimrSchemeOp::TImportKesus& expected, const TString& path = "/MyRoot/Restored") {
             const auto normalized = NormalizeResources(expected);
             const auto actual = DescribeResources(path);
             google::protobuf::util::DefaultFieldComparator comparator;
@@ -9900,6 +10293,28 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
                 "Expected: " << normalized.DebugString() << "; actual: " << actual.DebugString());
         }
 
+        void AssertContents(const NKikimrSchemeOp::TImportKesus& expected,
+            const TString& path = "/MyRoot/Restored")
+        {
+            AssertResources(expected, path);
+            const auto sender = Runtime.AllocateEdgeActor();
+            Runtime.SendToPipe(TabletId(path), sender, new TEvKesus::TEvDescribeSemaphores(),
+                0, GetPipeConfigWithRetries());
+            auto response = Runtime.GrabEdgeEventRethrow<TEvKesus::TEvDescribeSemaphoresResult>(sender);
+            const auto& record = response->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL_C(record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS, record.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(record.SemaphoresSize(), expected.semaphores_size());
+            for (const auto& semaphore : record.GetSemaphores()) {
+                const auto it = std::find_if(expected.semaphores().begin(), expected.semaphores().end(),
+                    [&](const auto& item) { return item.name() == semaphore.GetName(); });
+                UNIT_ASSERT_C(it != expected.semaphores().end(), semaphore.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.GetLimit(), it->limit());
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.GetData(), it->data());
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.GetCount(), 0);
+                UNIT_ASSERT(!semaphore.GetEphemeral());
+            }
+        }
+
         void WriteFile(const TString& key, const TString& content, bool checksum = true) {
             S3.GetData()[key] = content;
             if (checksum) {
@@ -9907,19 +10322,45 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
             }
         }
 
-        void WriteBackup(const TString& resources, bool permissions = false) {
+        void WriteBackup(const NKikimrSchemeOp::TImportKesus& contents, std::optional<bool> permissions = false) {
             NBackup::TMetadata metadata;
             metadata.SetVersion(1);
-            metadata.SetEnablePermissions(permissions);
+            if (permissions) {
+                metadata.SetEnablePermissions(*permissions);
+            }
+            std::vector<NBackup::TRateLimiterResourceMetadata> resources;
+            for (int i = 0; i < contents.resources_size(); ++i) {
+                const auto& resource = contents.resources(i);
+                const TString prefix = Sprintf("rate_limiter_resources/%03u", i + 1);
+                resources.push_back({prefix, resource.resource_path()});
+                Ydb::RateLimiter::CreateResourceRequest request;
+                *request.mutable_resource() = resource;
+                request.mutable_resource()->clear_resource_path();
+                WriteFile("/backup/coordination/" + prefix + "/create_rate_limiter.pb", request.DebugString());
+            }
+            metadata.SetRateLimiterResources(std::move(resources));
+            std::vector<NBackup::TSemaphoreMetadata> semaphores;
+            for (int i = 0; i < contents.semaphores_size(); ++i) {
+                const auto& semaphore = contents.semaphores(i);
+                const TString prefix = Sprintf("semaphores/%03u", i + 1);
+                semaphores.push_back({prefix, semaphore.name()});
+                WriteFile("/backup/coordination/" + prefix + "/create_semaphore.pb", semaphore.DebugString());
+            }
+            metadata.SetSemaphores(std::move(semaphores));
             WriteFile("/backup/coordination/metadata.json", metadata.Serialize());
             WriteFile(NodeKey, R"(config { self_check_period_millis: 1234 session_grace_period_millis: 5678 })");
-            WriteFile(ResourcesKey, resources);
-            if (permissions) {
+            if (permissions.value_or(false)) {
                 WriteFile(PermissionsKey, R"(
                     actions { change_owner: "backup-owner" }
                     actions { grant { subject: "reader" permission_names: "ydb.generic.read" } }
                 )");
             }
+        }
+
+        void WriteBackup(const TString& text, std::optional<bool> permissions = false) {
+            NKikimrSchemeOp::TImportKesus contents;
+            UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(text, &contents), text);
+            WriteBackup(contents, permissions);
         }
 
         void Export(bool fs, bool encrypted,
@@ -10041,7 +10482,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
     template <typename TEvent, typename TCheck>
     void TestCancelWithPendingEvent(TCheck check) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
+        t.WriteBackup(MakeContents());
         TBlockEvents<TEvent> replies(t.Runtime);
         const ui64 id = t.StartImport(t.MakeImport());
         t.Runtime.WaitFor("import event blocked before cancellation", [&] { return !replies.empty(); });
@@ -10060,8 +10501,19 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST_FLAGS(RoundTrip, Fs, Encrypted) {
         TKesusImportEnv t;
-        const auto resources = MakeResources(true);
+        auto resources = MakeContents(true);
+        for (const TString& path : {".", "..", "../escaped", "semaphores", "metadata.json"}) {
+            auto& resource = *resources.add_resources();
+            resource.set_resource_path(path);
+            resource.mutable_hierarchical_drr()->set_max_units_per_second(100);
+        }
         t.Populate(t.CreateNode(), resources);
+        t.AcquireSemaphore("/MyRoot/Original", "");
+        t.AcquireSemaphore("/MyRoot/Original", "temporary", true);
+        const auto acquired = t.DescribeSemaphore("/MyRoot/Original", "");
+        UNIT_ASSERT_VALUES_EQUAL(acquired.count(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(acquired.owners_size(), 1);
+        UNIT_ASSERT(t.DescribeSemaphore("/MyRoot/Original", "temporary").ephemeral());
         t.CreateNode("Empty");
         t.Export(Fs, Encrypted, {{"/MyRoot/Original", "coordination"}, {"/MyRoot/Empty", "empty"}});
         TestMkDir(t.Runtime, ++t.TxId, "/MyRoot", "Existing");
@@ -10070,8 +10522,13 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
             {"coordination", "/MyRoot/Existing/Restored"},
             {"empty", "/MyRoot/New/Deeper/Empty"},
         }), true));
-        t.AssertResources(resources, "/MyRoot/Existing/Restored");
-        t.AssertResources({}, "/MyRoot/New/Deeper/Empty");
+        t.AssertContents(resources, "/MyRoot/Existing/Restored");
+        t.AssertContents({}, "/MyRoot/New/Deeper/Empty");
+        const auto released = t.DescribeSemaphore("/MyRoot/Existing/Restored", "");
+        UNIT_ASSERT_VALUES_EQUAL(released.count(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(released.owners_size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(released.waiters_size(), 0);
+        t.DescribeSemaphore("/MyRoot/Existing/Restored", "temporary", Ydb::StatusIds::NOT_FOUND);
         TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/New"), {NLs::IsDirectory});
         TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/New/Deeper"), {NLs::IsDirectory});
         for (const auto& [source, destination] : TVector<std::pair<TString, TString>>{
@@ -10088,12 +10545,10 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
     }
 
     Y_UNIT_TEST_FLAGS(KesusImportDisabledByDefault, Fs, Encrypted) {
-        TKesusImportEnv t;
+        TKesusImportEnv t(false);
         t.CreateNode();
         t.Export(Fs, Encrypted);
-        auto& flags = t.Runtime.GetAppData().FeatureFlags;
-        flags.ClearEnableKesusImport();
-        UNIT_ASSERT(!flags.GetEnableKesusImport());
+        UNIT_ASSERT_VALUES_EQUAL(t.Runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusImport.AtomicLoad()->Get(), 0);
         const ui64 id = t.StartImport(t.MakeImport(Fs, Encrypted));
         t.Finish(id, Ydb::StatusIds::CANCELLED, "unsupported scheme object type");
         t.AssertNotCreated();
@@ -10110,7 +10565,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         const ui64 id = t.StartImport(t.MakeImport(Fs));
         t.Runtime.WaitFor("scheme downloaded before payload persisted", [&] { return !replies.empty(); });
         UNIT_ASSERT(replies.front()->Get()->Success);
-        t.Runtime.GetAppData().FeatureFlags.SetEnableKesusImport(false);
+        TControlBoard::SetValue(0, t.Runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusImport);
         replies.Stop().Unblock();
         t.Finish(id, Ydb::StatusIds::CANCELLED, "EnableKesusImport");
         t.AssertNotCreated();
@@ -10121,9 +10576,8 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
     Y_UNIT_TEST(PreservesResourceOrderWithParentsBeforeChildren) {
         TKesusImportEnv t;
         const auto resources = MakeResources();
-        t.WriteBackup(ResourcesText(resources));
-        // Legacy backups without enable_permissions may omit permissions.pb.
-        t.WriteFile("/backup/coordination/metadata.json", R"({"version": 1})");
+        // Legacy permissions metadata may omit permissions.pb; keep both Kesus lists.
+        t.WriteBackup(resources, std::nullopt);
         TVector<TString> addedPaths;
         auto observer = t.Runtime.AddObserver<TEvKesus::TEvAddQuoterResource>([&](auto& ev) {
             addedPaths.push_back(ev->Get()->Record.GetResource().GetResourcePath());
@@ -10136,17 +10590,256 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         }
     }
 
+    Y_UNIT_TEST(InvalidMetadata) {
+        TKesusImportEnv t;
+        const TString resource = R"({"export_prefix":"rate_limiter_resources/001","resource_path":"a"})";
+        const TString semaphore = R"({"export_prefix":"semaphores/001","name":"lock"})";
+        const TVector<std::pair<TString, TString>> cases = {
+            {R"("rate_limiter_resources":[])", "must contain"},
+            {R"("semaphores":[])", "must contain"},
+            {R"("rate_limiter_resources":{},"semaphores":[])", "failed to parse metadata"},
+            {R"("rate_limiter_resources":[],"semaphores":null)", "failed to parse metadata"},
+            {R"("rate_limiter_resources":[{"export_prefix":1,"resource_path":"a"}],"semaphores":[])", "failed to parse metadata"},
+            {R"("rate_limiter_resources":[],"semaphores":[{"export_prefix":"semaphores/001","name":1}])", "failed to parse metadata"},
+            {TStringBuilder() << "\"rate_limiter_resources\":[" << resource << ',' << resource << "],\"semaphores\":[]", "duplicate resource export_prefix"},
+            {TStringBuilder() << "\"rate_limiter_resources\":[],\"semaphores\":[" << semaphore << ',' << semaphore << ']', "duplicate semaphore export_prefix"},
+            {R"("rate_limiter_resources":[],"semaphores":[{"export_prefix":"semaphores/001","name":"lock"},{"export_prefix":"semaphores/002","name":"lock"}])", "Duplicate semaphore name"},
+        };
+        auto check = [&](const TString& fields, TStringBuf issue) {
+            t.WriteBackup(MakeContents());
+            t.WriteFile(MetadataKey, TStringBuilder() << "{\"version\":1,\"permissions\":0," << fields << '}');
+            const ui64 id = t.StartImport(t.MakeImport());
+            t.Finish(id, Ydb::StatusIds::CANCELLED, issue);
+            t.AssertNotCreated();
+            TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", id);
+        };
+        for (const auto& [fields, issue] : cases) {
+            check(fields, issue);
+        }
+        for (const TString& prefix : {"", "/absolute", "../outside", "x/../outside", "x/./y", "x//y"}) {
+            check(TStringBuilder() << "\"rate_limiter_resources\":[{\"export_prefix\":\"" << prefix
+                << "\",\"resource_path\":\"a\"}],\"semaphores\":[]", "Invalid or duplicate resource export_prefix");
+            check(TStringBuilder() << "\"rate_limiter_resources\":[],\"semaphores\":[{\"export_prefix\":\"" << prefix
+                << "\",\"name\":\"lock\"}]", "Invalid or duplicate semaphore export_prefix");
+        }
+    }
+
+    Y_UNIT_TEST(MalformedMetadataDoesNotRestorePartialLists) {
+        TKesusImportEnv t;
+        for (bool truncated : {false, true}) {
+            t.WriteBackup(MakeContents());
+            TString metadata = t.S3.GetData().at(MetadataKey);
+            if (truncated) {
+                metadata.pop_back();
+            } else {
+                metadata += " trailing garbage";
+            }
+            t.WriteFile(MetadataKey, metadata);
+            const ui64 id = t.StartImport(t.MakeImport());
+            t.Finish(id, Ydb::StatusIds::CANCELLED, "failed to parse metadata");
+            t.AssertNotCreated();
+            TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", id);
+        }
+    }
+
+    Y_UNIT_TEST(EmptyMetadataIgnoresStaleFiles) {
+        TKesusImportEnv t;
+        t.WriteBackup(MakeContents());
+        // Re-exporting an empty node replaces the lists but leaves old files.
+        t.WriteBackup(NKikimrSchemeOp::TImportKesus());
+        t.WriteFile(ResourcesKey, "corrupted stale resource");
+        t.WriteFile(SemaphoreKey, "corrupted stale semaphore");
+        t.Finish(t.StartImport(t.MakeImport()));
+        t.AssertContents({});
+    }
+
+    Y_UNIT_TEST(InvalidSemaphoreFiles) {
+        TKesusImportEnv t;
+        for (const auto& [content, issue] : TVector<std::pair<TString, TString>>{
+            {"", "empty or exceeds"}, {"name: {", "cannot parse semaphore"},
+            {"name: \"wrong\" limit: 1", "Semaphore name differs"},
+            {"limit: 0", "Invalid semaphore limit"},
+            {"limit: 1 data: \"" + TString((1 << 20) + 1, 'a') + '"', "Invalid semaphore limit"},
+        }) {
+            t.WriteBackup(MakeContents());
+            t.WriteFile(SemaphoreKey, content);
+            const ui64 id = t.StartImport(t.MakeImport());
+            t.Finish(id, Ydb::StatusIds::CANCELLED, issue);
+            t.AssertNotCreated();
+            TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", id);
+        }
+        auto contents = MakeContents();
+        contents.mutable_semaphores(0)->set_name(TString(1025, 'a'));
+        t.WriteBackup(contents);
+        auto id = t.StartImport(t.MakeImport());
+        t.Finish(id, Ydb::StatusIds::CANCELLED, "Invalid semaphore limit");
+        t.AssertNotCreated();
+        TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", id);
+        t.WriteBackup(MakeContents());
+        t.S3.GetData().erase(SemaphoreKey);
+        t.Finish(t.StartImport(t.MakeImport()), Ydb::StatusIds::CANCELLED, "no semaphore file found");
+        t.AssertNotCreated();
+    }
+
+    Y_UNIT_TEST(OversizedFilesFailBeforeDownloadingContents) {
+        TKesusImportEnv t;
+        const TString oversized((128 << 20) + 1, 'x');
+        for (const TString& key : {NodeKey, ResourcesKey, SemaphoreKey}) {
+            t.WriteBackup(MakeContents());
+            t.WriteFile(key, oversized, false);
+            const ui64 id = t.StartImport(t.MakeImport());
+            t.Finish(id, Ydb::StatusIds::CANCELLED,
+                key == NodeKey ? "oversized coordination node scheme" : "exceeds the 128 MiB size limit");
+            t.AssertNotCreated();
+            TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", id);
+        }
+    }
+
+    Y_UNIT_TEST(OversizedPayloadFailsBeforeCreatingNode) {
+        TKesusImportEnv t;
+        NKikimrSchemeOp::TImportKesus contents;
+        // Every individual file is valid; protobuf overhead takes their sum
+        // over the persistence limit even though the data alone is 128 MiB.
+        const TString data(1 << 20, 'a');
+        for (ui32 i = 0; i < 128; ++i) {
+            auto& semaphore = *contents.add_semaphores();
+            semaphore.set_name(ToString(i));
+            semaphore.set_limit(1);
+            semaphore.set_data(data);
+        }
+        t.WriteBackup(contents);
+        contents.Clear();
+        t.Finish(t.StartImport(t.MakeImport()), Ydb::StatusIds::CANCELLED,
+            "import payload exceeds the 128 MiB size limit");
+        t.AssertNotCreated();
+    }
+
+    Y_UNIT_TEST_FLAG(EncryptedObjectIndexes, Semaphores) {
+        TKesusImportEnv t;
+        t.Populate(t.CreateNode(), MakeContents());
+        t.Export(false, true);
+        // Prefixes are obtained from the encrypted mapping; swapping ciphertext
+        // must fail even if checksum validation is explicitly skipped.
+        TVector<TString> keys;
+        const TString suffix = Semaphores ? "/create_semaphore.pb.enc" : "/create_rate_limiter.pb.enc";
+        for (const auto& [key, value] : t.S3.GetData()) {
+            Y_UNUSED(value);
+            if (key.EndsWith(suffix)) {
+                keys.push_back(key);
+            }
+        }
+        UNIT_ASSERT(keys.size() >= 2);
+        std::swap(t.S3.GetData()[keys[0]], t.S3.GetData()[keys[1]]);
+        auto request = t.MakeImport(false, true);
+        request.MutableImportFromS3Settings()->set_skip_checksum_validation(true);
+        t.Finish(t.StartImport(request), Ydb::StatusIds::CANCELLED);
+        t.AssertNotCreated();
+    }
+
+    Y_UNIT_TEST_FLAG(LostSemaphoreResponse, Reboot) {
+        TKesusImportEnv t;
+        const auto contents = MakeContents();
+        t.WriteBackup(contents);
+        auto timers = t.Runtime.AddObserver<TEvSchemeShard::TEvDescribeSchemeResult>([&](auto& ev) {
+            if (ev->Get()->GetRecord().GetPathDescription().HasKesus()) {
+                t.Runtime.EnableScheduleForActor(ev->Recipient);
+            }
+        });
+        bool first = true;
+        TBlockEvents<TEvKesus::TEvCreateSemaphoreResult> replies(t.Runtime, [&](const auto&) {
+            return std::exchange(first, false);
+        });
+        ui32 creates = 0;
+        auto observer = t.Runtime.AddObserver<TEvKesus::TEvCreateSemaphore>([&](auto&) { ++creates; });
+        const ui64 id = t.StartImport(t.MakeImport());
+        t.Runtime.WaitFor("semaphore committed before reply", [&] { return !replies.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(replies.front()->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+        t.WriteBackup(NKikimrSchemeOp::TImportKesus());
+        if (Reboot) {
+            t.RebootSchemeShard();
+        }
+        t.Finish(id);
+        t.AssertContents(contents);
+        UNIT_ASSERT_VALUES_EQUAL(creates, contents.semaphores_size());
+        replies.Stop().Unblock();
+        TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST_FLAGS(ExistingSemaphoreChecksDefinition, Conflicting, Reboot) {
+        TKesusImportEnv t;
+        const auto contents = MakeContents();
+        t.WriteBackup(contents);
+        TBlockEvents<TEvKesus::TEvCreateSemaphore> requests(t.Runtime);
+        const ui64 id = t.StartImport(t.MakeImport());
+        t.Runtime.WaitFor("first semaphore create blocked", [&] { return !requests.empty(); });
+        requests.Stop();
+        auto semaphore = contents.semaphores(0);
+        if (Conflicting) {
+            semaphore.set_data("changed");
+            semaphore.set_limit(semaphore.limit() + 1);
+        }
+        t.AddSemaphore(t.TabletId(), "/MyRoot/Restored", semaphore);
+        if (Reboot) {
+            // Recovery compares the bulk description; otherwise Create returns
+            // ALREADY_EXISTS and the restorer verifies a single description.
+            t.RebootSchemeShard();
+        } else {
+            requests.Unblock();
+        }
+        t.Finish(id, Conflicting ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS,
+            Conflicting ? "already exists with different settings" : "");
+        if (!Conflicting) {
+            t.AssertContents(contents);
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(UnexpectedSemaphoreIsRejected, Ephemeral) {
+        TKesusImportEnv t;
+        const auto contents = MakeContents();
+        t.WriteBackup(contents);
+        TBlockEvents<TEvKesus::TEvCreateSemaphore> requests(t.Runtime);
+        const ui64 id = t.StartImport(t.MakeImport());
+        t.Runtime.WaitFor("restorer before semaphore creation", [&] { return !requests.empty(); });
+        requests.Stop();
+        if (Ephemeral) {
+            t.AcquireSemaphore("/MyRoot/Restored", contents.semaphores(0).name(), true);
+            requests.Unblock();
+        } else {
+            auto extra = contents.semaphores(0);
+            extra.set_name("unexpected");
+            t.AddSemaphore(t.TabletId(), "/MyRoot/Restored", extra);
+            t.RebootSchemeShard();
+        }
+        t.Finish(id, Ydb::StatusIds::CANCELLED,
+            Ephemeral ? "ephemeral locks" : "Unexpected semaphore");
+    }
+
+    Y_UNIT_TEST(CancelWithPendingSemaphoreResponse) {
+        TestCancelWithPendingEvent<TEvKesus::TEvCreateSemaphoreResult>([](auto& t) {
+            auto expected = MakeContents();
+            expected.mutable_semaphores()->DeleteSubrange(1, expected.semaphores_size() - 1);
+            t.AssertContents(expected);
+        });
+    }
+
+    Y_UNIT_TEST(DescribeSemaphoresFailureIsNotSuccess) {
+        TKesusImportEnv t;
+        t.WriteBackup(MakeContents());
+        auto observer = t.Runtime.AddObserver<TEvKesus::TEvDescribeSemaphoresResult>([](auto& ev) {
+            ev->Get()->Record.MutableError()->SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
+            ev->Get()->Record.MutableError()->AddIssues()->set_message("Injected semaphore describe failure");
+        });
+        t.Finish(t.StartImport(t.MakeImport()), Ydb::StatusIds::CANCELLED, "Injected semaphore describe failure");
+        UNIT_ASSERT_VALUES_EQUAL(t.DescribeResources().resources_size(), 0);
+    }
+
     Y_UNIT_TEST(InvalidResourceBackups) {
         struct TCase {
             TStringBuf Name;
             TString Content;
             TStringBuf Issue;
-            bool MissingFile = false;
         };
         const TCase cases[] = {
-            {"MissingFile", "resources: []\n", "no rate limiter resources file found", true},
-            {"EmptyFile", "", "empty rate limiter resources file"},
-            {"CorruptProto", "resources {", "cannot parse rate limiter resources"},
             {"ParentAfterChild", R"(
                 resources { resource_path: "a/b" hierarchical_drr {} }
                 resources { resource_path: "a" hierarchical_drr { max_units_per_second: 10 } }
@@ -10164,17 +10857,12 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
             {"MissingParent", R"(resources { resource_path: "a/b" hierarchical_drr {} })",
                 "Parent resource 'a' must precede its child"},
             {"MissingResourceType", R"(resources { resource_path: "a" })", "No resource properties"},
-            {"UnknownResourceType", R"(resources { resource_path: "a" future_algorithm { limit: 10 } })",
-                "No resource properties"},
-            {"MeteringWithoutPermission", ResourcesText(MakeResources(true)), "Setting metering is allowed only for administrators"},
+            {"MeteringWithoutPermission", MakeResources(true).DebugString(), "Setting metering is allowed only for administrators"},
         };
         TKesusImportEnv t;
         for (const auto& test : cases) {
             Cerr << "Invalid resource backup: " << test.Name << Endl;
             t.WriteBackup(test.Content);
-            if (test.MissingFile) {
-                t.S3.GetData().erase(ResourcesKey);
-            }
             const ui64 id = t.StartImport(t.MakeImport());
             t.Finish(id, Ydb::StatusIds::CANCELLED, test.Issue);
             t.AssertNotCreated();
@@ -10183,13 +10871,37 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         }
     }
 
+    Y_UNIT_TEST(InvalidResourceFiles) {
+        TKesusImportEnv t;
+        for (const auto& [content, issue] : TVector<std::pair<TString, TString>>{
+            {"", "empty or exceeds"}, {"resource {", "cannot parse rate limiter resource"},
+            {"resource { future_algorithm { limit: 10 } }", "No resource properties"},
+            {"resource { resource_path: \"wrong\" hierarchical_drr {} }", "Resource path differs"},
+        }) {
+            t.WriteBackup(MakeResources());
+            t.WriteFile(ResourcesKey, content);
+            const ui64 id = t.StartImport(t.MakeImport());
+            t.Finish(id, Ydb::StatusIds::CANCELLED, issue);
+            t.AssertNotCreated();
+            TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", id);
+        }
+        t.WriteBackup(MakeResources());
+        t.S3.GetData().erase(ResourcesKey);
+        t.Finish(t.StartImport(t.MakeImport()), Ydb::StatusIds::CANCELLED, "no rate limiter resource file found");
+        t.AssertNotCreated();
+    }
+
     Y_UNIT_TEST_FLAG(CompatibleBackupFields, Empty) {
         TKesusImportEnv t;
-        t.WriteBackup(TString(Empty ? "resources: []" : R"(resources {
-            resource_path: "a"
-            hierarchical_drr { max_units_per_second: 10 future_drr_field: 2 }
-            future_resource_field: 1
-        })") + "\nfuture_container_field { version: 1 }\n");
+        auto resources = Empty ? NKikimrSchemeOp::TImportKesus() : MakeContents();
+        t.WriteBackup(resources);
+        if (!Empty) {
+            t.WriteFile(SemaphoreKey, t.S3.GetData().at(SemaphoreKey) + "future_semaphore_field: 3\nreq_id: 42\n");
+            // Keep known properties and add unknown fields at both protobuf levels.
+            TString content = t.S3.GetData().at(ResourcesKey);
+            content.insert(content.rfind('}'), "future_resource_field: 1\n");
+            t.WriteFile(ResourcesKey, content + "future_request_field: 2\n");
+        }
         t.WriteFile(NodeKey, R"(
             path: "/OldDatabase/OldNode"
             config {
@@ -10205,13 +10917,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         const auto& config = description.GetPathDescription().GetKesus().GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(config.self_check_period_millis(), 1234);
         UNIT_ASSERT_VALUES_EQUAL(config.session_grace_period_millis(), 5678);
-        Ydb::RateLimiter::Resources expected;
-        if (!Empty) {
-            auto& resource = *expected.add_resources();
-            resource.set_resource_path("a");
-            resource.mutable_hierarchical_drr()->set_max_units_per_second(10);
-        }
-        t.AssertResources(expected);
+        t.AssertContents(resources);
     }
 
     Y_UNIT_TEST_FLAG(InvalidNumericPropertiesPreserveCommittedResources, Child) {
@@ -10221,7 +10927,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
             ? parent + R"(resources { resource_path: "a/b" hierarchical_drr { max_units_per_second: -1 } })"
             : R"(resources { resource_path: "a" hierarchical_drr { max_units_per_second: -1 } })");
         t.Finish(t.StartImport(t.MakeImport()), Ydb::StatusIds::CANCELLED, "MaxUnitsPerSecond");
-        Ydb::RateLimiter::Resources expected;
+        NKikimrSchemeOp::TImportKesus expected;
         if (Child) {
             UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(parent, &expected));
         }
@@ -10237,23 +10943,23 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         } else {
             (*fields)["unknown"].set_string_value("value");
         }
-        t.WriteBackup(ResourcesText(resources));
+        t.WriteBackup(resources);
         t.Finish(t.StartImport(t.MakeImport(), true), Ydb::StatusIds::CANCELLED,
             WrongType ? "Unsupported type for metric" : "Unsupported key for metric");
         t.AssertNotCreated();
     }
 
-    Y_UNIT_TEST_FLAG(ResourceChecksum, SkipValidation) {
+    Y_UNIT_TEST_FLAGS(ContentsChecksum, SkipValidation, Semaphores) {
         TKesusImportEnv t;
-        const auto resources = MakeResources();
-        t.WriteBackup(ResourcesText(resources));
-        t.S3.GetData()[ResourcesKey + ".sha256"] = "bad checksum";
+        const auto resources = MakeContents();
+        t.WriteBackup(resources);
+        t.S3.GetData()[(Semaphores ? SemaphoreKey : ResourcesKey) + ".sha256"] = "bad checksum";
         auto request = t.MakeImport();
         request.MutableImportFromS3Settings()->set_skip_checksum_validation(SkipValidation);
         const ui64 id = t.StartImport(request);
         if (SkipValidation) {
             t.Finish(id);
-            t.AssertResources(resources);
+            t.AssertContents(resources);
         } else {
             t.Finish(id, Ydb::StatusIds::CANCELLED, "Checksum mismatch");
             t.AssertNotCreated();
@@ -10262,10 +10968,12 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST_FLAG(Permissions, NoAcl) {
         TKesusImportEnv t;
-        t.WriteBackup("resources: []\n", true);
+        const auto contents = MakeContents();
+        t.WriteBackup(contents, true);
         auto request = t.MakeImport();
         request.MutableImportFromS3Settings()->set_no_acl(NoAcl);
         t.Finish(t.StartImport(request));
+        t.AssertContents(contents);
         const auto description = DescribePath(t.Runtime, "/MyRoot/Restored");
         if (NoAcl) {
             TestDescribeResult(description, {NLs::HasOwner("importer@builtin")});
@@ -10276,7 +10984,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         request.MutableImportFromS3Settings()->mutable_items(0)->set_destination_path("/MyRoot/MissingPermissions");
         t.Finish(t.StartImport(request), NoAcl ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
         if (NoAcl) {
-            t.AssertResources({}, "/MyRoot/MissingPermissions");
+            t.AssertContents(contents, "/MyRoot/MissingPermissions");
         } else {
             TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/MissingPermissions"), {NLs::PathNotExist});
         }
@@ -10285,7 +10993,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
     Y_UNIT_TEST(RebootBeforeSchemeReadyPreservesMeteringPermission) {
         TKesusImportEnv t;
         const auto resources = MakeResources(true);
-        t.WriteBackup(ResourcesText(resources));
+        t.WriteBackup(resources);
         TBlockEvents<TEvPrivate::TEvImportSchemeReady> replies(t.Runtime);
         const ui64 id = t.StartImport(t.MakeImport(), true);
         t.Runtime.WaitFor("metering validated before payload persisted", [&] { return !replies.empty(); });
@@ -10301,24 +11009,24 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST_FLAG(RebootReplaysSavedResourcesAfterLostAddResponse, NaN) {
         TKesusImportEnv t;
-        auto resources = MakeResources(true);
+        auto resources = MakeContents(true);
         if (NaN) {
             resources.mutable_resources(0)->mutable_hierarchical_drr()->set_max_burst_size_coefficient(
                 std::numeric_limits<double>::quiet_NaN());
         }
-        t.WriteBackup(ResourcesText(resources));
+        t.WriteBackup(resources);
         TBlockEvents<TEvKesus::TEvAddQuoterResourceResult> replies(t.Runtime);
         const ui64 id = t.StartImport(t.MakeImport(), true);
         t.Runtime.WaitFor("first resource committed before reply", [&] { return !replies.empty(); });
         UNIT_ASSERT_VALUES_EQUAL(replies.front()->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
         // The persisted payload must survive the restart even if the source is replaced.
-        t.WriteFile(ResourcesKey, "resources: []\n");
+        t.WriteBackup(NKikimrSchemeOp::TImportKesus());
         // Disabling the feature must not prevent an already persisted import from resuming.
-        t.Runtime.GetAppData().FeatureFlags.SetEnableKesusImport(false);
+        TControlBoard::SetValue(0, t.Runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusImport);
         replies.Stop();
         t.RebootSchemeShard();
         t.Finish(id);
-        t.AssertResources(resources);
+        t.AssertContents(resources);
         replies.Unblock();
         TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
@@ -10330,7 +11038,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
             resources.mutable_resources(0)->mutable_hierarchical_drr()->set_max_burst_size_coefficient(
                 std::numeric_limits<double>::quiet_NaN());
         }
-        t.WriteBackup(ResourcesText(resources));
+        t.WriteBackup(resources);
         auto timers = t.Runtime.AddObserver<TEvSchemeShard::TEvDescribeSchemeResult>([&](auto& ev) {
             if (ev->Get()->GetRecord().GetPathDescription().HasKesus()) {
                 t.Runtime.EnableScheduleForActor(ev->Recipient);
@@ -10358,7 +11066,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         auto resources = MakeResources();
         const double nan = std::numeric_limits<double>::quiet_NaN();
         resources.mutable_resources(0)->mutable_hierarchical_drr()->set_max_burst_size_coefficient(SavedNaN ? nan : 1.5);
-        t.WriteBackup(ResourcesText(resources));
+        t.WriteBackup(resources);
         // Store a different value before the Add reply is lost, then compare it
         // with the saved backup on recovery: NaN must never equal a finite value.
         bool replaceFirst = true;
@@ -10382,19 +11090,20 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
-    Y_UNIT_TEST(ResourceRequestRetriesAreBounded) {
+    Y_UNIT_TEST_FLAG(DescribeRetriesAreBounded, Semaphores) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
+        t.WriteBackup(MakeResources());
         auto timers = t.Runtime.AddObserver<TEvSchemeShard::TEvDescribeSchemeResult>([&](auto& ev) {
             if (ev->Get()->GetRecord().GetPathDescription().HasKesus()) {
                 t.Runtime.EnableScheduleForActor(ev->Recipient);
             }
         });
-        TBlockEvents<TEvKesus::TEvDescribeQuoterResourcesResult> replies(t.Runtime);
+        TBlockEvents<std::conditional_t<Semaphores,
+            TEvKesus::TEvDescribeSemaphoresResult, TEvKesus::TEvDescribeQuoterResourcesResult>> replies(t.Runtime);
         auto request = t.MakeImport();
         request.MutableImportFromS3Settings()->set_number_of_retries(1);
         const ui64 id = t.StartImport(request);
-        t.Finish(id, Ydb::StatusIds::CANCELLED, "Timed out restoring coordination node resources");
+        t.Finish(id, Ydb::StatusIds::CANCELLED, "Timed out restoring coordination node contents");
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 2); // Initial attempt plus the configured single retry.
         replies.Stop().Unblock();
         UNIT_ASSERT_VALUES_EQUAL(t.DescribeResources().resources_size(), 0);
@@ -10403,23 +11112,23 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST_FLAG(RebootBeforePersistingResourceCompletion, Empty) {
         TKesusImportEnv t;
-        const auto resources = Empty ? Ydb::RateLimiter::Resources() : MakeResources();
-        t.WriteBackup(ResourcesText(resources));
-        TBlockEvents<TEvPrivate::TEvImportKesusResourcesResult> replies(t.Runtime);
+        const auto resources = Empty ? NKikimrSchemeOp::TImportKesus() : MakeContents();
+        t.WriteBackup(resources);
+        TBlockEvents<TEvPrivate::TEvImportKesusResult> replies(t.Runtime);
         const ui64 id = t.StartImport(t.MakeImport());
         t.Runtime.WaitFor("resources restored before completion persisted", [&] { return !replies.empty(); });
         UNIT_ASSERT(replies.front()->Get()->Success);
         replies.Stop();
         t.RebootSchemeShard();
         t.Finish(id);
-        t.AssertResources(resources);
+        t.AssertContents(resources);
         replies.Unblock();
         TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 
     Y_UNIT_TEST(RebootBeforeCreateProposalIsDelivered) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
+        t.WriteBackup(MakeResources());
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(t.Runtime, IsKesusCreation);
         const ui64 id = t.StartImport(t.MakeImport());
         t.Runtime.WaitFor("create txid persisted before proposal delivery", [&] { return !proposals.empty(); });
@@ -10442,7 +11151,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST(RebootAfterNodeCreationBeforeAcceptedIsPersisted) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
+        t.WriteBackup(MakeResources());
         ui64 createTxId = 0;
         auto observer = t.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
             if (IsKesusCreation(ev)) {
@@ -10470,13 +11179,15 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST(CancelWithPendingAddResponse) {
         TestCancelWithPendingEvent<TEvKesus::TEvAddQuoterResourceResult>([](auto& t) {
-            UNIT_ASSERT_VALUES_EQUAL(t.DescribeResources().resources_size(), 1);
+            auto expected = MakeResources();
+            expected.mutable_resources()->DeleteSubrange(1, expected.resources_size() - 1);
+            t.AssertContents(expected);
         });
     }
 
     Y_UNIT_TEST(CancelWithPendingCreateProposal) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
+        t.WriteBackup(MakeResources());
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(t.Runtime, IsKesusCreation);
         ui32 addRequests = 0;
         auto observer = t.Runtime.AddObserver<TEvKesus::TEvAddQuoterResource>([&](const auto&) {
@@ -10496,8 +11207,8 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
     }
 
     Y_UNIT_TEST(CancelWithPendingCompletion) {
-        TestCancelWithPendingEvent<TEvPrivate::TEvImportKesusResourcesResult>([](auto& t) {
-            t.AssertResources(MakeResources());
+        TestCancelWithPendingEvent<TEvPrivate::TEvImportKesusResult>([](auto& t) {
+            t.AssertContents(MakeContents());
         });
     }
 
@@ -10509,10 +11220,10 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST(OtherItemFailureStopsResourcesRestorer) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
+        t.WriteBackup(MakeResources());
         t.WriteFile("/backup/broken/metadata.json", t.S3.GetData().at("/backup/coordination/metadata.json"));
         t.WriteFile("/backup/broken/create_coordination_node.pb", t.S3.GetData().at(NodeKey));
-        t.WriteFile("/backup/broken/rate_limiter_resources.pb", "resources {");
+        t.WriteFile("/backup/broken/rate_limiter_resources/001/create_rate_limiter.pb", "resource {");
         auto request = t.MakeImport();
         auto* item = request.MutableImportFromS3Settings()->add_items();
         item->set_source_prefix("backup/broken");
@@ -10544,10 +11255,14 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         t.Finish(t.StartImport(t.MakeImport()), Ydb::StatusIds::CANCELLED, "Injected describe failure");
     }
 
-    Y_UNIT_TEST_FLAG(AlreadyExistsChecksMetering, Conflicting) {
+    Y_UNIT_TEST_FLAGS(RepeatedAddChecksFullDefinition, Conflicting, NaN) {
         TKesusImportEnv t;
-        const auto resources = MakeResources(true);
-        t.WriteBackup(ResourcesText(resources));
+        auto resources = MakeResources(true);
+        if (NaN) {
+            resources.mutable_resources(0)->mutable_hierarchical_drr()->set_max_burst_size_coefficient(
+                std::numeric_limits<double>::quiet_NaN());
+        }
+        t.WriteBackup(resources);
         TBlockEvents<TEvKesus::TEvAddQuoterResource> requests(t.Runtime);
         const ui64 id = t.StartImport(t.MakeImport(), true);
         t.Runtime.WaitFor("first Add blocked", [&] { return !requests.empty(); });
@@ -10559,7 +11274,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         t.AddResource(t.TabletId(), resource);
         bool alreadyExists = false;
         auto observer = t.Runtime.AddObserver<TEvKesus::TEvAddQuoterResourceResult>([&](auto& ev) {
-            alreadyExists |= ev->Get()->Record.GetError().GetStatus() == Ydb::StatusIds::ALREADY_EXISTS;
+            alreadyExists |= ev->Get()->Record.GetError().GetStatus() == (NaN ? Ydb::StatusIds::BAD_REQUEST : Ydb::StatusIds::ALREADY_EXISTS);
         });
         requests.Unblock();
         t.Finish(id, Conflicting ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
@@ -10573,9 +11288,23 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         }
     }
 
+    Y_UNIT_TEST(UnexpectedResourceIsRejectedOnRecovery) {
+        TKesusImportEnv t;
+        t.WriteBackup(MakeResources());
+        TBlockEvents<TEvKesus::TEvAddQuoterResource> requests(t.Runtime);
+        const ui64 id = t.StartImport(t.MakeImport());
+        t.Runtime.WaitFor("restorer before adding resources", [&] { return !requests.empty(); });
+        requests.Stop();
+        auto extra = requests.front()->Get()->Record.GetResource();
+        extra.SetResourcePath("unexpected");
+        t.AddResource(t.TabletId(), extra);
+        t.RebootSchemeShard();
+        t.Finish(id, Ydb::StatusIds::CANCELLED, "Unexpected resource");
+    }
+
     Y_UNIT_TEST(ExistingNodeIsRejected) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
+        t.WriteBackup(MakeResources());
         const ui64 tabletId = t.CreateNode("Restored");
         t.StartImport(t.MakeImport(), false, Ydb::StatusIds::BAD_REQUEST);
         UNIT_ASSERT_VALUES_EQUAL(t.TabletId(), tabletId);
@@ -10584,7 +11313,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST(ParentMustBeADirectory) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
+        t.WriteBackup(MakeResources());
         const ui64 originalTablet = t.CreateNode("Blocker");
         auto request = t.MakeImport();
         request.MutableImportFromS3Settings()->mutable_items(0)->set_destination_path("/MyRoot/Blocker/Restored");
@@ -10596,7 +11325,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST(RebootBeforeCreatingParentDirectories) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
+        t.WriteBackup(MakeResources());
         auto request = t.MakeImport();
         request.MutableImportFromS3Settings()->mutable_items(0)->set_destination_path("/MyRoot/Nested/Deeper/Restored");
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(t.Runtime, [](const auto& ev) {
@@ -10615,7 +11344,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST_FLAG(TwoItemsCreatingTheSameParent, InFlight) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
+        t.WriteBackup(MakeResources());
         auto request = t.MakeImport(false, false, {
             {"coordination", "/MyRoot/New/N1"}, {"coordination", "/MyRoot/New/N2"},
         });
@@ -10662,7 +11391,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST(ConcurrentNodeCreationDoesNotBecomeImportDestination) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
+        t.WriteBackup(MakeResources());
         bool blockFirst = true;
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(t.Runtime, [&](const auto& ev) {
             if (blockFirst && IsKesusCreation(ev)) {
@@ -10682,8 +11411,8 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST(RebootDoesNotRestoreIntoReplacementNode) {
         TKesusImportEnv t;
-        t.WriteBackup(ResourcesText(MakeResources()));
-        TBlockEvents<TEvPrivate::TEvImportKesusResourcesResult> replies(t.Runtime);
+        t.WriteBackup(MakeResources());
+        TBlockEvents<TEvPrivate::TEvImportKesusResult> replies(t.Runtime);
         const ui64 id = t.StartImport(t.MakeImport());
         t.Runtime.WaitFor("restore completion blocked", [&] { return !replies.empty(); });
         const ui64 oldTablet = t.TabletId();
@@ -10702,7 +11431,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST(MixedTableAndKesus) {
         TKesusImportEnv t;
-        t.Populate(t.CreateNode(), MakeResources());
+        t.Populate(t.CreateNode(), MakeContents());
         TestCreateTable(t.Runtime, ++t.TxId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
@@ -10713,7 +11442,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         t.Finish(t.StartImport(t.MakeImport(false, false, {
             {"coordination", "/MyRoot/Restored"}, {"table", "/MyRoot/RestoredTable"},
         })));
-        t.AssertResources(MakeResources());
+        t.AssertContents(MakeContents());
         TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/RestoredTable"), {NLs::PathExist, NLs::IsTable});
     }
 }
@@ -11019,7 +11748,9 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )", EnableDataShardDirectPartImport);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSingleView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    // Direct part import only affects row-table data. Schema-only imports keep
+    // both storage backends and all reboot/reset buckets without varying it.
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleView, 2, 1, false, IsFs) {
         ShouldSucceed<IsFs>(t,
             {
                 EPathTypeView,
@@ -11028,7 +11759,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
                 )"
             },
-            EnableDataShardDirectPartImport
+            false
         );
     }
 
@@ -11064,7 +11795,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         ShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {{"view", "/MyRoot/View"}, {"table", "/MyRoot/Table"}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnDependentView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnDependentView, 2, 1, false, IsFs) {
         const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/DependentView",
@@ -11086,13 +11817,13 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         };
-        ShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {
+        ShouldSucceed<IsFs>(t, schemes, false, {
             {"DependentView", "/MyRoot/DependentView"},
             {"BaseView", "/MyRoot/BaseView"}
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSystemView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSystemView, 2, 1, false, IsFs) {
         const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/partition_stats",
@@ -11105,7 +11836,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         };
-        ShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
+        ShouldSucceed<IsFs>(t, schemes, false, {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSystemViewWithPermissions, 2, 1, false, IsFs) {
@@ -11267,7 +11998,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )", EnableDataShardDirectPartImport);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(CancelShouldSucceedOnSingleView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleView, 2, 1, false, IsFs) {
         CancelShouldSucceed<IsFs>(t,
             {
                 EPathTypeView,
@@ -11276,7 +12007,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
                 )"
             },
-            EnableDataShardDirectPartImport
+            false
         );
     }
 
@@ -11436,7 +12167,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         CancelShouldSucceed<IsFs>(t, GetSchemeWithUniqueIndex(), EnableDataShardDirectPartImport);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(CancelShouldSucceedOnDependentView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnDependentView, 2, 1, false, IsFs) {
         const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/DependentView",
@@ -11458,13 +12189,13 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         };
-        CancelShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {
+        CancelShouldSucceed<IsFs>(t, schemes, false, {
             {"DependentView", "/MyRoot/DependentView"},
             {"BaseView", "/MyRoot/BaseView"}
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(CancelShouldSucceedOnSystemView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSystemView, 2, 1, false, IsFs) {
         const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/partition_stats",
@@ -11477,7 +12208,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         };
-        CancelShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
+        CancelShouldSucceed<IsFs>(t, schemes, false, {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSystemViewWithPermissions, 2, 1, false, IsFs) {
@@ -11554,7 +12285,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSingleTopic, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleTopic, 2, 1, false, IsFs) {
         auto topic = NDescUT::TSimpleTopic(0, 2);
         ShouldSucceed<IsFs>(t, {
             {
@@ -11565,7 +12296,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         },
-        EnableDataShardDirectPartImport,
+        false,
         {{topic.GetDir(), TStringBuilder() << "/MyRoot/Restored/" << topic.GetDir()}});
     }
 
@@ -11630,7 +12361,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSingleReplication, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleReplication, 2, 1, false, IsFs) {
         ShouldSucceed<IsFs>(t,
             {
                 EPathTypeReplication,
@@ -11648,7 +12379,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     );
                 )"
             },
-            EnableDataShardDirectPartImport
+            false
         );
     }
 
@@ -11695,7 +12426,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         ShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {{"Table", "/MyRoot/Table"}, {"Transfer", "/MyRoot/Transfer"}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSingleExternalDataSource, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleExternalDataSource, 2, 1, false, IsFs) {
         ShouldSucceed<IsFs>(t,
             {
                 EPathTypeExternalDataSource,
@@ -11714,11 +12445,11 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     );
                 )"
             },
-            EnableDataShardDirectPartImport
+            false
         );
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSingleExternalTable, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleExternalTable, 2, 1, false, IsFs) {
         const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/ExternalTable",
@@ -11757,7 +12488,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             },
         };
-        ShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {
+        ShouldSucceed<IsFs>(t, schemes, false, {
             {"ExternalTable", "/MyRoot/ExternalTable"},
             {"DataSource", "/MyRoot/DataSource"}
         });

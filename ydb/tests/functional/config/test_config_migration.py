@@ -190,22 +190,34 @@ def verify_configuration_version(cluster, dynconfig_client, expected_v1, expecte
     return last_result
 
 
+def kv_request_until_available(request, timeout_seconds=60):
+    # A partition has been seen to answer UNAVAILABLE right after nodes report Green following a restart.
+    # Any other error, as well as unavailability outlasting the timeout, is returned to the caller.
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        response = request()
+        if response.operation.status != StatusIds.UNAVAILABLE or time.monotonic() >= deadline:
+            return response
+        logger.debug(f"Partition is not available yet: {response}")
+        time.sleep(1)
+
+
 def check_kikimr_is_operational(cluster, table_path, tablet_ids):
     for partition_id, tablet_id in enumerate(tablet_ids):
-        write_resp = cluster.kv_client.kv_write(
+        write_resp = kv_request_until_available(lambda: cluster.kv_client.kv_write(
             table_path, partition_id, "key", value_for("key", tablet_id)
-        )
+        ))
 
         if write_resp.operation.status != StatusIds.SUCCESS:
             logger.debug(f"Failed write response: {write_resp}")
 
         assert_that(write_resp.operation.status == StatusIds.SUCCESS)
 
-        read_resp = cluster.kv_client.kv_read(
+        read_resp = kv_request_until_available(lambda: cluster.kv_client.kv_read(
             table_path, partition_id, "key"
-        )
+        ))
 
-        if write_resp.operation.status != StatusIds.SUCCESS:
+        if read_resp.operation.status != StatusIds.SUCCESS:
             logger.debug(f"Failed read response: {read_resp}")
 
         assert_that(read_resp.operation.status == StatusIds.SUCCESS)

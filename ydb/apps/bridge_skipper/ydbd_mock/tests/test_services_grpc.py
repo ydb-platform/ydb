@@ -404,7 +404,7 @@ class FaultTest(GrpcCase):
 
 
 class HealthOverGrpcTest(GrpcCase):
-    async def test_failed_resyncing_pile_is_not_reported_as_a_bridge_group_failure(self):
+    async def test_failed_stage2_pile_is_reported_as_a_bridge_group_failure(self):
         c = await self.make()
         inst = c.inst("pile1")
         inst.set_blocked([1])
@@ -413,9 +413,12 @@ class HealthOverGrpcTest(GrpcCase):
         inst.replica.force(state, True)
         self.assertTrue(model.requires_data_quorum(state.per_pile[1]))
         data = await self.self_check(c, c.label("pile1"))
-        self.assertEqual(data["self_check_result"], "GOOD")
-        self.assertFalse(data.get("issue_log"))
-        self.assertEqual(data["database_status"][0]["storage"]["pools"][0]["groups"][0]["overall"], "GREEN")
+        self.assertEqual(data["self_check_result"], "MAINTENANCE_REQUIRED")
+        self.assertEqual(len(data["issue_log"]), 1)
+        issue = data["issue_log"][0]
+        self.assertEqual((issue["type"], issue["status"]), ("BRIDGE_GROUP", "RED"))
+        self.assertEqual(issue["location"]["storage"]["pool"]["group"]["pile"]["name"], "pile2")
+        self.assertEqual(data["database_status"][0]["storage"]["pools"][0]["groups"][0]["overall"], "ORANGE")
 
     async def self_check(self, c, label):
         resp = await c.monitoring(label).SelfCheck(ydb_monitoring_pb2.SelfCheckRequest())
@@ -437,7 +440,7 @@ class HealthOverGrpcTest(GrpcCase):
         self.assertEqual(data["self_check_result"], "MAINTENANCE_REQUIRED")
         issues = [i for i in data["issue_log"] if self.demo_filter(i)]
         self.assertEqual([i["location"]["storage"]["pool"]["group"]["pile"]["name"] for i in issues], ["pile2"])
-        self.assertIn("storage", issues[0]["message"])
+        self.assertEqual(issues[0]["message"], "Group failed")
         # a node without the fault still says GOOD
         data = await self.self_check(c, c.label("pile1", 2))
         self.assertEqual(data["self_check_result"], "GOOD")
@@ -453,7 +456,8 @@ class HealthOverGrpcTest(GrpcCase):
 
         await wait_until(blamed, message="auto blame of the dead pile")
         data = await self.self_check(c, label)
-        self.assertEqual(data["self_check_result"], "MAINTENANCE_REQUIRED")
+        # The dead pile's state storage also reports RED PILE_* issues, as on the server.
+        self.assertEqual(data["self_check_result"], "EMERGENCY")
         op = await self.update(c, label, ("pile2", DISC))
         self.assertEqual(op.status, model.SUCCESS)
 
@@ -463,26 +467,30 @@ class HealthOverGrpcTest(GrpcCase):
 
         await wait_until(clean, message="blame disappears after failover")
 
-    async def test_partition_makes_both_sides_blame_each_other_while_staying_responsive(self):
+    async def test_partition_keeps_bsc_red_on_primary_side_and_fallback_on_the_other(self):
         c = await self.make()
         for pile, other in (("pile1", "pile2"), ("pile2", "pile1")):
             status, _ = await c.http(pile, "POST", "/link", {"block": [other]})
             self.assertEqual(status, 200)
 
-        async def mutual():
+        async def asymmetric():
             a = await self.self_check(c, c.label("pile1"))
             b = await self.self_check(c, c.label("pile2"))
-            return any(self.demo_filter(i) for i in a.get("issue_log", [])) and \
-                any(self.demo_filter(i) for i in b.get("issue_log", []))
+            return (any(i["type"] == "BRIDGE_GROUP" and self.demo_filter(i) for i in a.get("issue_log", []))
+                    and any(i["type"] == "STORAGE" for i in b.get("issue_log", []))
+                    and any(i["type"] == "STORAGE_GROUP" and i["status"] == "GREY"
+                            for i in b.get("issue_log", []))
+                    and not any(i["type"] == "BRIDGE_GROUP" for i in b.get("issue_log", [])))
 
-        await wait_until(mutual, message="mutual blame")
+        await wait_until(asymmetric, message="BSC/fallback partition asymmetry")
 
     async def test_auto_blame_can_be_switched_off(self):
         c = await self.make(policies=Policies(auto_blame_dead_piles=False))
         await c.kill("pile2")
         await wait_until(lambda: not c.inst("pile1").connected(1), message="pile2 seen down")
         data = await self.self_check(c, c.label("pile1"))
-        self.assertEqual(data["self_check_result"], "GOOD")
+        # The dead pile still yields RED PILE_* issues, so only the absence of parts is checked.
+        self.assertFalse(any(i["type"] == "BRIDGE_GROUP" for i in data.get("issue_log", [])))
 
     async def test_self_check_override(self):
         c = await self.make()
@@ -505,6 +513,49 @@ class AdminTokenTest(GrpcCase):
         self.assertEqual((await self.get_state(c, label)).generation, 1)
         op = await self.update(c, label, ("pile2", DISC), metadata=(("x-ydb-auth-ticket", "secret"),))
         self.assertEqual(op.status, model.SUCCESS)
+
+
+class ExpectedGenerationTest(GrpcCase):
+    """UpdateClusterStateRequest.expected_generation is a compare-and-set guard (rpc_bridge.cpp)."""
+
+    async def update_expecting(self, c, label, expected, *pairs):
+        req = update_request(*pairs)
+        if expected is not None:
+            req.expected_generation = expected
+        return (await c.bridge(label).UpdateClusterState(req)).operation
+
+    async def test_matching_generation_commits(self):
+        c = await self.make()
+        label = c.label("pile1")
+        op = await self.update_expecting(c, label, 1, ("pile2", DISC))
+        self.assertEqual(op.status, model.SUCCESS, operations.issue_texts(op))
+        self.assertEqual((await self.get_state(c, label)).generation, 2)
+
+    async def test_stale_generation_is_aborted_and_not_applied(self):
+        c = await self.make()
+        label = c.label("pile1")
+        self.assertEqual((await self.update(c, label, ("pile2", DISC))).status, model.SUCCESS)
+        op = await self.update_expecting(c, label, 1, ("pile2", NOTSYNC))
+        self.assertEqual(op.status, model.ABORTED, operations.issue_texts(op))
+        state = await self.get_state(c, label)
+        self.assertEqual(state.generation, 2)
+        self.assertEqual([(p.pile_name, p.state) for p in state.pile_states], [("pile1", PRIMARY), ("pile2", DISC)])
+
+    async def test_stale_generation_beats_validation(self):
+        c = await self.make()
+        label = c.label("pile1")
+        self.assertEqual((await self.update(c, label, ("pile2", DISC))).status, model.SUCCESS)
+        op = await self.update_expecting(c, label, 1, ("no_such_pile", DISC))
+        self.assertEqual(op.status, model.ABORTED, operations.issue_texts(op))
+        op = await self.update_expecting(c, label, None, ("no_such_pile", DISC))
+        self.assertEqual(op.status, model.BAD_REQUEST, operations.issue_texts(op))
+
+    async def test_generation_the_node_has_not_seen_is_unavailable(self):
+        c = await self.make()
+        label = c.label("pile1")
+        op = await self.update_expecting(c, label, 5, ("pile2", DISC))
+        self.assertEqual(op.status, model.UNAVAILABLE, operations.issue_texts(op))
+        self.assertEqual((await self.get_state(c, label)).generation, 1)
 
 
 class PersistenceTest(GrpcCase):
@@ -585,7 +636,7 @@ class DisconnectedPileStopsServingTest(GrpcCase):
         self.assertEqual((await self.update(c, c.label("pile1"), ("pile2", NOTSYNC))).status, model.SUCCESS)
         await wait_until(lambda: c.inst("pile2").state.stored(1) == model.Stored.NOT_SYNCHRONIZED_2,
                          message="connect follow-up reached pile2")
-        await wait_until(lambda: self._serves(c, c.label("pile2")), message="pile2 serves again")
+        await wait_until(lambda: self._serves(c, c.label("pile2")), timeout=10.0, message="pile2 serves again")
 
     async def _serves(self, c, label) -> bool:
         return not await self.refused(c, label)

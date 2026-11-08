@@ -45,6 +45,22 @@ const std::optional<std::vector<TIndexMetadata>>& TMetadata::GetIndexes() const 
     return Indexes;
 }
 
+void TMetadata::SetRateLimiterResources(std::vector<TRateLimiterResourceMetadata> resources) {
+    RateLimiterResources = std::move(resources);
+}
+
+const std::optional<std::vector<TRateLimiterResourceMetadata>>& TMetadata::GetRateLimiterResources() const {
+    return RateLimiterResources;
+}
+
+void TMetadata::SetSemaphores(std::vector<TSemaphoreMetadata> semaphores) {
+    Semaphores = std::move(semaphores);
+}
+
+const std::optional<std::vector<TSemaphoreMetadata>>& TMetadata::GetSemaphores() const {
+    return Semaphores;
+}
+
 void TMetadata::SetEnablePermissions(bool enablePermissions) {
     EnablePermissions = enablePermissions;
 }
@@ -99,12 +115,35 @@ TString TMetadata::Serialize() const {
     }
     m["indexes"] = indexes;
 
+    if (RateLimiterResources) {
+        NJson::TJsonArray resources;
+        for (const auto& resource : *RateLimiterResources) {
+            NJson::TJsonMap resourceMap;
+            resourceMap["export_prefix"] = resource.ExportPrefix;
+            resourceMap["resource_path"] = resource.ResourcePath;
+            resources.AppendValue(std::move(resourceMap));
+        }
+        m["rate_limiter_resources"] = std::move(resources);
+    }
+
+    if (Semaphores) {
+        NJson::TJsonArray semaphores;
+        for (const auto& semaphore : *Semaphores) {
+            NJson::TJsonMap semaphoreMap;
+            semaphoreMap["export_prefix"] = semaphore.ExportPrefix;
+            semaphoreMap["name"] = semaphore.Name;
+            semaphores.AppendValue(std::move(semaphoreMap));
+        }
+        m["semaphores"] = std::move(semaphores);
+    }
+
     return NJson::WriteJson(&m, false);
 }
 
 TMetadata TMetadata::Deserialize(const TString& metadata) {
     NJson::TJsonValue json;
-    NJson::ReadJsonTree(metadata, &json);
+    // Do not restore a partial resource/semaphore list left by a failed parse.
+    NJson::ReadJsonTree(metadata, &json, /* throwOnError */ true);
     const auto& value = json["version"];
 
     TMetadata result;
@@ -136,6 +175,26 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
             result.AddIndex({
                 .ExportPrefix = index["export_prefix"].GetString(),
                 .ImplTablePrefix = index["impl_table_prefix"].GetString(),
+            });
+        }
+    }
+
+    if (json.Has("rate_limiter_resources")) {
+        result.RateLimiterResources.emplace();
+        for (const auto& resource : json["rate_limiter_resources"].GetArraySafe()) {
+            result.RateLimiterResources->push_back({
+                .ExportPrefix = resource["export_prefix"].GetStringSafe(),
+                .ResourcePath = resource["resource_path"].GetStringSafe(),
+            });
+        }
+    }
+
+    if (json.Has("semaphores")) {
+        result.Semaphores.emplace();
+        for (const auto& semaphore : json["semaphores"].GetArraySafe()) {
+            result.Semaphores->push_back({
+                .ExportPrefix = semaphore["export_prefix"].GetStringSafe(),
+                .Name = semaphore["name"].GetStringSafe(),
             });
         }
     }

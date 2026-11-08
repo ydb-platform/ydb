@@ -15,7 +15,6 @@
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
-#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -153,6 +152,8 @@ struct TBackupToS3Settings {
     // System Views
     TControlWrapper EnableSysViewPermissionsExport;
     TControlWrapper EnableSysViewPermissionsImport;
+    // Coordination Nodes
+    TControlWrapper EnableKesusExport;
 
     TBackupToS3Settings()
         : EnableAsyncReplicationExport(1, 0, 1)
@@ -165,6 +166,7 @@ struct TBackupToS3Settings {
         , EnableExternalTableImport(1, 0, 1)
         , EnableSysViewPermissionsExport(1, 0, 1)
         , EnableSysViewPermissionsImport(1, 0, 1)
+        , EnableKesusExport(0, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -182,6 +184,8 @@ struct TBackupToS3Settings {
 
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsExport, icb->BackupControls.S3Controls.EnableSysViewPermissionsExport);
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsImport, icb->BackupControls.S3Controls.EnableSysViewPermissionsImport);
+
+        TControlBoard::RegisterSharedControl(EnableKesusExport, icb->BackupControls.S3Controls.EnableKesusExport);
     }
 };
 
@@ -1016,6 +1020,14 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
             default:
                 return true;
         }
+    }
+
+    bool IsWaitingImportReplica() const {
+        return ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT;
+    }
+
+    bool IsImportingReplica() const {
+        return ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING;
     }
 
     bool HasIncrementalBackupConfig() const { return TableDescription.HasIncrementalBackupConfig(); }
@@ -3964,8 +3976,10 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         BuildIndexes = 5,
         CreateChangefeed = 6,
         DownloadExportMetadata = 7,
-        RestoreKesusResources = 8,
-        CreateKesusParent = 9,
+        DropPlaceholder = 8,
+        FinalizeImport = 9,
+        RestoreKesus = 10,
+        CreateKesusParent = 11,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,
@@ -3996,14 +4010,14 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybe<Ydb::Table::CreateTableRequest> Table;
         TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
         TMaybe<Ydb::Table::DescribeSystemViewResult> SysView;
-        TMaybe<Ydb::Coordination::CreateNodeRequest> CoordinationNode;
-        TMaybe<Ydb::RateLimiter::Resources> RateLimiterResources;
+        TMaybe<NKikimrSchemeOp::TImportKesus> Kesus;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
         TVector<std::pair<NBackup::TIndexMetadata, Ydb::Table::CreateTableRequest>> MaterializedIndexes;
         NKikimrSchemeOp::TImportTableChangefeeds Changefeeds;
+        TMaybe<NKikimrSchemeOp::TTableReplicationConfig> ReplicationConfig;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
@@ -4011,7 +4025,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
-        TActorId KesusResourcesRestorer;
+        TActorId KesusRestorer;
         // Unlike WaitTxId, this is durable before the create proposal is sent.
         TTxId CreateKesusTxId = InvalidTxId;
         int NextIndexIdx = 0;

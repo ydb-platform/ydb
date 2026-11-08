@@ -3,17 +3,17 @@
 #include "schemeshard_identificators.h"
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NSchemeShard {
 
-NActors::IActor* CreateKesusResourcesRestorer(
+NActors::IActor* CreateKesusRestorer(
     NActors::TActorId schemeShard,
     ui64 importId,
     ui32 itemIdx,
     TPathId dstPathId,
     TTxId createTxId,
-    Ydb::RateLimiter::Resources resources,
+    NKikimrSchemeOp::TImportKesus contents,
     ui32 retries);
 
 } // namespace NKikimr::NSchemeShard

@@ -8,6 +8,7 @@
 namespace NKikimr::NKqp {
 
 class TOpRoot;
+class TOpTableEffect;
 class TRBOContext;
 
 class TPhysicalQueryBuilder : public NNonCopyable::TNonCopyable {
@@ -30,7 +31,8 @@ private:
     NYql::TExprNode::TPtr BuildDqPhyStage(const TVector<NYql::TExprNode::TPtr>& inputs, const TVector<NYql::TExprNode::TPtr>& args, NYql::TExprNode::TPtr physicalStageBody,
         NYql::NNodes::TCoNameValueTupleList&& setings, NYql::TExprContext& ctx, NYql::TPositionHandle pos) const;
     NYql::TExprNode::TPtr BuildDqPhySinkStage(const TVector<NYql::TExprNode::TPtr>& inputs, const TVector<NYql::TExprNode::TPtr>& args, NYql::TExprNode::TPtr physicalStageBody,
-        NYql::NNodes::TCoNameValueTupleList&& setings, const NYql::TExprNode::TPtr& sinkSettings, NYql::TExprContext& ctx, NYql::TPositionHandle pos) const;
+        NYql::NNodes::TCoNameValueTupleList&& setings, const NYql::TExprNode::TPtr& sinkSettings, const TOpTableEffect& effect,
+        NYql::TExprContext& ctx, NYql::TPositionHandle pos);
     void TopologicalSort(NYql::NNodes::TDqPhyStage& dqStage, TVector<NYql::TExprNode::TPtr>& result, THashSet<const NYql::TExprNode*>& visited) const;
     void TopologicalSort(NYql::NNodes::TDqPhyStage&& dqStage, TVector<NYql::TExprNode::TPtr>& result) const;
     void KeepTypeAnnotationForStageAndFirstLevelChilds(NYql::NNodes::TDqPhyStage& newStage, const NYql::NNodes::TDqPhyStage& oldStage) const;
@@ -41,12 +43,14 @@ private:
     NYql::TExprNode::TPtr TypeAnnotateProgram(NYql::TExprNode::TPtr input, const TVector<const NYql::TTypeAnnotationNode*>& argsType);
     void TypeAnnotate(NYql::TExprNode::TPtr& input);
     NYql::TKqpPhyQuerySettings GetPhysicalQuerySettings() const;
-    NYql::TKqpPhyTxSettings GetPhysicalTxSettings() const;
+    NYql::TKqpPhyTxSettings GetPhysicalTxSettings(size_t rootIdx) const;
     NYql::TExprNode::TPtr GetFinalStage(const NYql::TExprNode::TPtr& stage) const;
     bool NeedFinalNarrowing(int rootIdx);
     NYql::TExprNode::TPtr BuildFinalNarrowStage(int rootIdx, const NYql::TExprNode::TPtr& stage) const;
     TVector<NYql::NNodes::TKqpParamBinding> CollectParamBindings(int rootIdx, const NYql::TExprNode::TPtr& rootStage);
-    NYql::TExprNode::TPtr BuildMaterialize(int rootIdx, NYql::TExprNode::TPtr ranges);
+    // Computes `node` in a separate transaction and returns the parameter holding its result:
+    // read ranges are bound as a tuple, a scalar as a plain value.
+    NYql::TExprNode::TPtr BuildMaterialize(int rootIdx, NYql::TExprNode::TPtr node, bool asTuple = true);
     bool IsSingleTaskConnection(const NYql::NNodes::TExprBase& input) const;
 
     const TVector<TIntrusivePtr<TOpRoot>>& Roots;

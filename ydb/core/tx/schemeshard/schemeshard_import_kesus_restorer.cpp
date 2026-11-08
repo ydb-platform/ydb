@@ -21,12 +21,15 @@
 namespace NKikimr::NSchemeShard {
 namespace {
 
-class TKesusResourcesRestorer: public TActorBootstrapped<TKesusResourcesRestorer> {
+class TKesusRestorer: public TActorBootstrapped<TKesusRestorer> {
     enum class EPhase {
         DescribeNode,
         DescribeResources,
         AddResource,
         DescribeResource,
+        DescribeSemaphores,
+        CreateSemaphore,
+        DescribeSemaphore,
         Retry,
     };
 
@@ -52,20 +55,20 @@ class TKesusResourcesRestorer: public TActorBootstrapped<TKesusResourcesRestorer
     };
 
 public:
-    TKesusResourcesRestorer(
+    TKesusRestorer(
         TActorId schemeShard,
         ui64 importId,
         ui32 itemIdx,
         TPathId dstPathId,
         TTxId createTxId,
-        Ydb::RateLimiter::Resources resources,
+        NKikimrSchemeOp::TImportKesus contents,
         ui32 retries)
         : SchemeShard(schemeShard)
         , ImportId(importId)
         , ItemIdx(itemIdx)
         , DstPathId(dstPathId)
         , CreateTxId(createTxId)
-        , Resources(std::move(resources))
+        , Contents(std::move(contents))
         , Retries(retries)
     {}
 
@@ -76,16 +79,22 @@ public:
 
         // Compare the representation produced by Kesus, including the default
         // metric fields materialized by the public/internal converters.
-        for (auto& resource : *Resources.mutable_resources()) {
+        for (auto& resource : *Contents.mutable_resources()) {
             NKikimrKesus::TStreamingQuoterResource internal;
             FillRateLimiterDescription(internal, resource);
             resource.Clear();
             FillRateLimiterDescription(resource, internal);
         }
-        for (int i = 0; i < Resources.resources_size(); ++i) {
-            const auto& path = Resources.resources(i).resource_path();
+        for (int i = 0; i < Contents.resources_size(); ++i) {
+            const auto& path = Contents.resources(i).resource_path();
             if (!ResourcesByPath.emplace(path, i).second) {
                 return Finish(false, TStringBuilder() << "Duplicate resource path: " << path);
+            }
+        }
+
+        for (int i = 0; i < Contents.semaphores_size(); ++i) {
+            if (!SemaphoresByName.emplace(Contents.semaphores(i).name(), i).second) {
+                return Finish(false, "Duplicate semaphore name in imported coordination node");
             }
         }
 
@@ -104,6 +113,9 @@ private:
     void StartAttempt() {
         ExistingResources.clear();
         NextResource = 0;
+        ExistingSemaphores.clear();
+        NextSemaphore = 0;
+        AddError.clear();
         const ui64 cookie = StartRequest(EPhase::DescribeNode);
         Send(SchemeShard, new TEvSchemeShard::TEvDescribeScheme(DstPathId), 0, cookie);
     }
@@ -133,6 +145,8 @@ private:
             return Finish(false, "Imported coordination node tablet id is missing");
         }
 
+        KesusPath = record.GetPath();
+
         NTabletPipe::TClientConfig config;
         config.RetryPolicy = {.RetryLimitCount = 3};
         KesusPipe = Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
@@ -150,7 +164,7 @@ private:
         comparator.set_treat_nan_as_equal(true);
         google::protobuf::util::MessageDifferencer differencer;
         differencer.set_field_comparator(&comparator);
-        return differencer.Compare(Resources.resources(index), actual);
+        return differencer.Compare(Contents.resources(index), actual);
     }
 
     void Handle(NKesus::TEvKesus::TEvDescribeQuoterResourcesResult::TPtr& ev) {
@@ -161,17 +175,22 @@ private:
         }
         const auto& record = ev->Get()->Record;
         if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) {
-            return Finish(false, TStringBuilder() << "Cannot describe imported coordination node resources: "
-                << record.GetError().ShortDebugString());
+            return Finish(false, AddError.empty()
+                ? TString(TStringBuilder() << "Cannot describe imported coordination node resources: "
+                    << record.GetError().ShortDebugString()) : AddError);
         }
 
         if (Phase == EPhase::DescribeResource) {
-            // ALREADY_EXISTS only compares DRR inside Kesus. Metering must also
-            // match before a previous Add can be considered successfully replayed.
-            if (record.ResourcesSize() != 1 || !IsExpectedResource(record.GetResources(0), NextResource)) {
-                return ResourceConflict(Resources.resources(NextResource).resource_path());
+            // ALREADY_EXISTS only compares DRR. A repeated Add with NaN may
+            // even return BAD_REQUEST; compare the full persisted definition.
+            if (record.ResourcesSize() == 0 && !AddError.empty()) {
+                return Finish(false, AddError);
             }
-            ExistingResources.insert(Resources.resources(NextResource).resource_path());
+            if (record.ResourcesSize() != 1 || !IsExpectedResource(record.GetResources(0), NextResource)) {
+                return ResourceConflict(Contents.resources(NextResource).resource_path());
+            }
+            AddError.clear();
+            ExistingResources.insert(Contents.resources(NextResource).resource_path());
             ++NextResource;
         } else {
             for (const auto& resource : record.GetResources()) {
@@ -187,22 +206,116 @@ private:
                     return Finish(false, TStringBuilder() << "Duplicate resource in coordination node description: " << path);
                 }
             }
+            const ui64 cookie = StartRequest(EPhase::DescribeSemaphores);
+            NTabletPipe::SendData(SelfId(), KesusPipe, new NKesus::TEvKesus::TEvDescribeSemaphores(), cookie);
+            return;
         }
         AddNextResource();
     }
 
+    bool IsExpectedSemaphore(int index, const TString& name, ui64 limit, const TString& data, bool ephemeral) const {
+        const auto& expected = Contents.semaphores(index);
+        return !ephemeral && expected.name() == name && expected.limit() == limit && expected.data() == data;
+    }
+
+    void SemaphoreConflict(const TString& name) {
+        Finish(false, TStringBuilder() << "Semaphore '" << name << "' already exists with different settings");
+    }
+
+    void Handle(NKesus::TEvKesus::TEvDescribeSemaphoresResult::TPtr& ev) {
+        if (Phase != EPhase::DescribeSemaphores || ev->Cookie != RequestCookie) {
+            return;
+        }
+        const auto& record = ev->Get()->Record;
+        if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) {
+            return Finish(false, TStringBuilder() << "Cannot describe imported coordination node semaphores: "
+                << record.GetError().ShortDebugString());
+        }
+        for (const auto& semaphore : record.GetSemaphores()) {
+            const auto& name = semaphore.GetName();
+            const auto it = SemaphoresByName.find(name);
+            if (it == SemaphoresByName.end()) {
+                return Finish(false, TStringBuilder() << "Unexpected semaphore in imported coordination node: " << name);
+            }
+            if (!IsExpectedSemaphore(it->second, name, semaphore.GetLimit(), semaphore.GetData(), semaphore.GetEphemeral())) {
+                return SemaphoreConflict(name);
+            }
+            if (!ExistingSemaphores.insert(name).second) {
+                return Finish(false, "Duplicate semaphore in coordination node description");
+            }
+        }
+        AddNextResource();
+    }
+
+    void CreateNextSemaphore() {
+        while (NextSemaphore < Contents.semaphores_size()
+            && ExistingSemaphores.contains(Contents.semaphores(NextSemaphore).name()))
+        {
+            ++NextSemaphore;
+        }
+        if (NextSemaphore == Contents.semaphores_size()) {
+            return Finish(true, {});
+        }
+        const auto& semaphore = Contents.semaphores(NextSemaphore);
+        const ui64 cookie = StartRequest(EPhase::CreateSemaphore);
+        NTabletPipe::SendData(SelfId(), KesusPipe,
+            new NKesus::TEvKesus::TEvCreateSemaphore(KesusPath, semaphore.name(), semaphore.limit(), semaphore.data()), cookie);
+    }
+
+    void Handle(NKesus::TEvKesus::TEvCreateSemaphoreResult::TPtr& ev) {
+        if (Phase != EPhase::CreateSemaphore || ev->Cookie != RequestCookie) {
+            return;
+        }
+        const auto& record = ev->Get()->Record;
+        const auto& name = Contents.semaphores(NextSemaphore).name();
+        switch (record.GetError().GetStatus()) {
+        case Ydb::StatusIds::SUCCESS:
+            ExistingSemaphores.insert(name);
+            ++NextSemaphore;
+            return CreateNextSemaphore();
+        case Ydb::StatusIds::ALREADY_EXISTS: {
+            auto request = MakeHolder<NKesus::TEvKesus::TEvDescribeSemaphore>();
+            request->Record.SetKesusPath(KesusPath);
+            request->Record.SetName(name);
+            const ui64 cookie = StartRequest(EPhase::DescribeSemaphore);
+            NTabletPipe::SendData(SelfId(), KesusPipe, request.Release(), cookie);
+            return;
+        }
+        default:
+            return Finish(false, TStringBuilder() << "Cannot restore semaphore '" << name << "': "
+                << record.GetError().ShortDebugString());
+        }
+    }
+
+    void Handle(NKesus::TEvKesus::TEvDescribeSemaphoreResult::TPtr& ev) {
+        if (Phase != EPhase::DescribeSemaphore || ev->Cookie != RequestCookie) {
+            return;
+        }
+        const auto& record = ev->Get()->Record;
+        if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) {
+            return Finish(false, TStringBuilder() << "Cannot describe imported semaphore: " << record.GetError().ShortDebugString());
+        }
+        const auto& semaphore = record.GetSemaphoreDescription();
+        if (!IsExpectedSemaphore(NextSemaphore, semaphore.name(), semaphore.limit(), semaphore.data(), semaphore.ephemeral())) {
+            return SemaphoreConflict(Contents.semaphores(NextSemaphore).name());
+        }
+        ExistingSemaphores.insert(semaphore.name());
+        ++NextSemaphore;
+        CreateNextSemaphore();
+    }
+
     void AddNextResource() {
-        while (NextResource < Resources.resources_size()
-            && ExistingResources.contains(Resources.resources(NextResource).resource_path()))
+        while (NextResource < Contents.resources_size()
+            && ExistingResources.contains(Contents.resources(NextResource).resource_path()))
         {
             ++NextResource;
         }
-        if (NextResource == Resources.resources_size()) {
-            return Finish(true, {});
+        if (NextResource == Contents.resources_size()) {
+            return CreateNextSemaphore();
         }
 
         auto request = MakeHolder<NKesus::TEvKesus::TEvAddQuoterResource>();
-        FillRateLimiterDescription(*request->Record.MutableResource(), Resources.resources(NextResource));
+        FillRateLimiterDescription(*request->Record.MutableResource(), Contents.resources(NextResource));
         const ui64 cookie = StartRequest(EPhase::AddResource);
         NTabletPipe::SendData(SelfId(), KesusPipe, request.Release(), cookie);
     }
@@ -212,14 +325,16 @@ private:
             return;
         }
         const auto& record = ev->Get()->Record;
-        const auto& path = Resources.resources(NextResource).resource_path();
+        const auto& path = Contents.resources(NextResource).resource_path();
         switch (record.GetError().GetStatus()) {
         case Ydb::StatusIds::SUCCESS:
             ExistingResources.insert(path);
             ++NextResource;
             return AddNextResource();
 
-        case Ydb::StatusIds::ALREADY_EXISTS: {
+        case Ydb::StatusIds::ALREADY_EXISTS:
+        case Ydb::StatusIds::BAD_REQUEST: {
+            AddError = TStringBuilder() << "Cannot restore resource '" << path << "': " << record.GetError().ShortDebugString();
             auto request = MakeHolder<NKesus::TEvKesus::TEvDescribeQuoterResources>();
             request->Record.AddResourcePaths(path);
             request->Record.SetRecursive(false);
@@ -240,6 +355,9 @@ private:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->ClientId == KesusPipe && ev->Get()->Status != NKikimrProto::OK) {
+            if (ev->Get()->Dead) {
+                return Finish(false, "Imported coordination node tablet does not exist");
+            }
             Retry("Failed to connect to imported coordination node");
         }
     }
@@ -252,7 +370,7 @@ private:
 
     void Handle(TEvRequestTimeout::TPtr& ev) {
         if (Phase != EPhase::Retry && ev->Get()->RequestCookie == RequestCookie) {
-            Retry("Timed out restoring coordination node resources");
+            Retry("Timed out restoring coordination node contents");
         }
     }
 
@@ -289,7 +407,7 @@ private:
     }
 
     void Finish(bool success, const TString& error) {
-        Send(SchemeShard, new TEvPrivate::TEvImportKesusResourcesResult(ImportId, ItemIdx, success, error));
+        Send(SchemeShard, new TEvPrivate::TEvImportKesusResult(ImportId, ItemIdx, success, error));
         PassAway();
     }
 
@@ -298,6 +416,9 @@ private:
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(NKesus::TEvKesus::TEvDescribeQuoterResourcesResult, Handle);
             hFunc(NKesus::TEvKesus::TEvAddQuoterResourceResult, Handle);
+            hFunc(NKesus::TEvKesus::TEvDescribeSemaphoresResult, Handle);
+            hFunc(NKesus::TEvKesus::TEvCreateSemaphoreResult, Handle);
+            hFunc(NKesus::TEvKesus::TEvDescribeSemaphoreResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvRequestTimeout, Handle);
@@ -311,12 +432,17 @@ private:
     const ui32 ItemIdx;
     const TPathId DstPathId;
     const TTxId CreateTxId;
-    Ydb::RateLimiter::Resources Resources;
+    NKikimrSchemeOp::TImportKesus Contents;
     const ui32 Retries;
 
     THashMap<TString, int> ResourcesByPath;
     THashSet<TString> ExistingResources;
     int NextResource = 0;
+    THashMap<TString, int> SemaphoresByName;
+    THashSet<TString> ExistingSemaphores;
+    int NextSemaphore = 0;
+    TString KesusPath;
+    TString AddError;
     TActorId KesusPipe;
     ui32 Attempt = 0;
     ui64 RequestCookie = 0;
@@ -325,16 +451,16 @@ private:
 
 } // anonymous namespace
 
-IActor* CreateKesusResourcesRestorer(
+IActor* CreateKesusRestorer(
     TActorId schemeShard,
     ui64 importId,
     ui32 itemIdx,
     TPathId dstPathId,
     TTxId createTxId,
-    Ydb::RateLimiter::Resources resources,
+    NKikimrSchemeOp::TImportKesus contents,
     ui32 retries)
 {
-    return new TKesusResourcesRestorer(schemeShard, importId, itemIdx, dstPathId, createTxId, std::move(resources), retries);
+    return new TKesusRestorer(schemeShard, importId, itemIdx, dstPathId, createTxId, std::move(contents), retries);
 }
 
 } // namespace NKikimr::NSchemeShard

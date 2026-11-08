@@ -25,7 +25,7 @@ public:
     }
 
     TStatusCallbackPair HandleCommit(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!State_->IsRtmrMode() && TDqQuery::Match(input->Child(TCoCommit::idx_World))) {
+        if (TDqQuery::Match(input->Child(TCoCommit::idx_World))) {
             return DelegateExecutionToDqProvider(input->ChildPtr(TCoCommit::idx_World), input, ctx);
         }
 
@@ -33,10 +33,6 @@ public:
     }
 
     TStatusCallbackPair HandleSoWriteToShard(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (State_->IsRtmrMode()) {
-            return ExecPass(input, ctx);
-        }
-
         return DelegateExecutionToDqProvider(input->ChildPtr(TSoWriteToShard::idx_Input), input, ctx);
     }
 

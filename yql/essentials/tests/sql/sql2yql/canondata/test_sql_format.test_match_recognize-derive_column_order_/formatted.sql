@@ -1,0 +1,14 @@
+PRAGMA DeriveColumnOrder;
+
+SELECT
+    *
+FROM
+    AS_TABLE([<|key: 1|>]) MATCH_RECOGNIZE (
+        MEASURES
+            LAST(A.key) AS key
+        ONE ROW PER MATCH
+        PATTERN (A)
+        DEFINE
+            A AS TRUE
+    )
+;

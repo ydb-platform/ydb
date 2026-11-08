@@ -94,7 +94,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusPropose(
 ) {
     error.clear();
     const auto& item = importInfo.Items.at(itemIdx);
-    Y_ABORT_UNLESS(item.CoordinationNode);
+    Y_ABORT_UNLESS(item.Kesus);
 
     const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
     std::pair<TString, TString> wdAndPath;
@@ -118,7 +118,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusPropose(
     // Return AlreadyExists for a completed replay. TTxProgress still rejects
     // any path whose create txid differs from this item's persisted create txid.
     modifyScheme.SetFailOnExist(false);
-    FillKesusDescription(*modifyScheme.MutableKesus(), item.CoordinationNode->config(), wdAndPath.second);
+    FillKesusDescription(*modifyScheme.MutableKesus(), item.Kesus->node().config(), wdAndPath.second);
     modifyScheme.MutableKesus()->MutableConfig()->clear_path();
 
     FillOwner(record, item.Permissions);
@@ -325,6 +325,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
                 descs->Clear();
                 for (auto& desc : compatible) {
                     *descs->Add() = desc;
+                }
+            }
+        }
+
+        if (item.ReplicationConfig) {
+            auto config = *item.ReplicationConfig;
+            config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
+            *tableDesc.MutableReplicationConfig() = config;
+            for (auto& index : *indexedTable.MutableIndexDescription()) {
+                // Match the index types with independent replication targets in
+                // replication/controller/target_discoverer.cpp.
+                if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobal
+                        || index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                    *index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig() = config;
                 }
             }
         }
@@ -602,6 +616,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
+    modifyScheme.SetInternal(true);
     auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);

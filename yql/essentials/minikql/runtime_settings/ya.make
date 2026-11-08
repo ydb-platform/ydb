@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/utils/meta
     yql/essentials/minikql/runtime_settings/proto
     yql/essentials/providers/common/config
     yql/essentials/providers/common/activation

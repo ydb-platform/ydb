@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include "kqp_effects_helpers.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -7,17 +7,6 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
-
-namespace {
-
-NKikimrConfig::TAppConfig NewRboAppConfig() {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-    appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
-    return appConfig;
-}
-
-} // namespace
 
 Y_UNIT_TEST_SUITE(KqpInplaceUpdateNewRbo) {
 
@@ -79,7 +68,7 @@ void Test(
     setting.SetValue("true");
 
     // source read and stream lookup use iterator interface, that doesn't use datashard transactions
-    auto kikimr = DefaultKikimrRunner({setting}, NewRboAppConfig());
+    auto kikimr = NewRboKikimrRunner({setting});
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -362,7 +351,7 @@ Y_UNIT_TEST(BigRow) {
     unsafeCommitSetting.SetValue("true");
 
     // source read use iterator interface, that doesn't use datashard transactions
-    auto kikimr = DefaultKikimrRunner({keysLimitSetting, unsafeCommitSetting}, NewRboAppConfig());
+    auto kikimr = NewRboKikimrRunner({keysLimitSetting, unsafeCommitSetting});
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 

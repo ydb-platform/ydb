@@ -198,8 +198,8 @@ namespace {
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
         const auto initialStatus = expectedStatus == Ydb::StatusIds::PRECONDITION_FAILED
             ? expectedStatus
@@ -415,6 +415,96 @@ namespace {
             return 101;
         }
 
+        NKikimrExport::TListExportsResponse ListExports(ui64 pageSize = 10, const TString& pageToken = {}) {
+            AsyncSend(Runtime(), TTestTxConfig::SchemeShard,
+                new TEvExport::TEvListExportsRequest("/MyRoot", pageSize, pageToken, "export/s3"));
+            TAutoPtr<IEventHandle> handle;
+            auto ev = Runtime().GrabEdgeEvent<TEvExport::TEvListExportsResponse>(handle);
+            const auto& response = ev->Record.GetResponse();
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::SUCCESS);
+            return response;
+        }
+
+        void CheckExportsHiddenWhileForgetting(bool cancelled) {
+            using namespace NKikimr::NWrappers::NExternalStorage;
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
+            ui64 txId = 100;
+            TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TVector<ui64> exportIds;
+            for (ui32 i = 0; i < 5; ++i) {
+                // Do not recapture marker requests released by earlier cancelled exports.
+                const TString markerKey = Sprintf("backup%u/data_complete.json", i);
+                TBlockEvents<TEvPutObjectRequest> markers(Runtime(), [cancelled, markerKey](auto& ev) {
+                    return cancelled && TString(ev->Get()->Request.GetKey()) == markerKey;
+                });
+                const ui64 exportId = ++txId;
+                TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items { source_path: "/MyRoot/Table" destination_prefix: "backup%u" }
+                    }
+                )", S3Port(), i));
+                if (cancelled) {
+                    Runtime().WaitFor("table marker upload", [&] { return !markers.empty(); });
+                    TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+                }
+                Env().TestWaitNotification(Runtime(), exportId);
+                TestGetExport(Runtime(), exportId, "/MyRoot",
+                    cancelled ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
+                markers.Stop().Unblock();
+                exportIds.push_back(exportId);
+            }
+
+            const auto before = ListExports();
+            UNIT_ASSERT_VALUES_EQUAL(before.EntriesSize(), 5);
+            for (ui32 i = 0; i < exportIds.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(before.GetEntries(i).GetId(), exportIds[4 - i]);
+                UNIT_ASSERT_VALUES_EQUAL(before.GetEntries(i).GetStatus(),
+                    cancelled ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
+            }
+
+            TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> drops(Runtime(), [](auto& ev) {
+                return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTable;
+            });
+            // Hide the newest export and one between visible exports to exercise both pagination loops.
+            for (ui32 i : {4, 2}) {
+                TestForgetExport(Runtime(), ++txId, "/MyRoot", exportIds[i]);
+            }
+            Runtime().WaitFor("export cleanup blocked", [&] { return drops.size() == 2; });
+
+            const auto firstPage = ListExports(2);
+            UNIT_ASSERT_VALUES_EQUAL(firstPage.EntriesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(firstPage.GetEntries(0).GetId(), exportIds[3]);
+            UNIT_ASSERT_VALUES_EQUAL(firstPage.GetEntries(1).GetId(), exportIds[1]);
+            UNIT_ASSERT_VALUES_EQUAL(firstPage.GetNextPageToken(), "2");
+            const auto secondPage = ListExports(2, firstPage.GetNextPageToken());
+            UNIT_ASSERT_VALUES_EQUAL(secondPage.EntriesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(secondPage.GetEntries(0).GetId(), exportIds[0]);
+            UNIT_ASSERT_VALUES_EQUAL(secondPage.GetNextPageToken(), "0");
+
+            for (ui32 i : {3, 1, 0}) {
+                TestForgetExport(Runtime(), ++txId, "/MyRoot", exportIds[i]);
+            }
+            const auto empty = ListExports();
+            UNIT_ASSERT_VALUES_EQUAL(empty.EntriesSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(empty.GetNextPageToken(), "0");
+
+            drops.Stop().Unblock();
+            for (ui64 exportId : exportIds) {
+                Env().TestWaitNotification(Runtime(), exportId);
+                TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            }
+        }
+
         void CheckCompletionMarkerContents(ui64 exportId) {
             for (const auto* path : {"/backup/table/data_complete.json", "/backup/table/export_complete.json"}) {
                 const auto marker = ParseCompletionMarker(GetS3FileContent(path));
@@ -505,7 +595,7 @@ namespace {
         }
 
         ui64 ExportWithRetryInjection(ui64 txId, const TString& compression = "", const TString& encryptionBlock = "", ui64 minWriteBatchSize = 1, const TString& formatBlock = "") {
-            Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
             if (encryptionBlock) {
                 Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
@@ -618,8 +708,8 @@ namespace {
                 Env().TestWaitNotification(Runtime(), txId);
             }
 
-            Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-            Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
             THolder<IEventHandle> delayed;
             auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -733,8 +823,8 @@ namespace {
                 Env().TestWaitNotification(Runtime(), txId);
             }
 
-            Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-            Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
             bool dropNotification = false;
             THolder<IEventHandle> delayed;
@@ -820,9 +910,9 @@ namespace {
             UpdateRow(Runtime(), "Table", 1, "valueA");
             UpdateRow(Runtime(), "Table", 2, "valueB");
 
-            Runtime().SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
-            Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-            Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
             TMaybe<ui64> backupTxId;
             TMaybe<ui64> tabletId;
@@ -937,7 +1027,10 @@ namespace {
             Run(Runtime(), Env(), tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
         }
 
-        ui64 CreateExportKesus() {
+        ui64 CreateExportKesus(bool enableExport = true) {
+            if (enableExport) {
+                TControlBoard::SetValue(1, Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
+            }
             TestCreateKesus(Runtime(), 100, "/MyRoot", R"(
                 Name: "Coordination"
                 Config {
@@ -978,6 +1071,31 @@ namespace {
                 response->Get()->Record.DebugString());
         }
 
+        void AddExportKesusSemaphore(ui64 tabletId, const TString& name, ui64 limit, const TString& data = {}) {
+            const auto sender = Runtime().AllocateEdgeActor();
+            Runtime().SendToPipe(tabletId, sender, new TEvKesus::TEvCreateSemaphore("/MyRoot/Coordination", name, limit, data),
+                0, GetPipeConfigWithRetries());
+            const auto response = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvCreateSemaphoreResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS,
+                response->Get()->Record.DebugString());
+        }
+
+        TVector<Ydb::RateLimiter::Resource> ReadExportedKesusResources() {
+            const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
+            UNIT_ASSERT(metadata.GetRateLimiterResources());
+            TVector<Ydb::RateLimiter::Resource> resources;
+            for (const auto& entry : *metadata.GetRateLimiterResources()) {
+                Ydb::RateLimiter::CreateResourceRequest request;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
+                    GetS3FileContent("/coordination/" + entry.ExportPrefix + "/create_rate_limiter.pb"), &request));
+                UNIT_ASSERT(request.coordination_node_path().empty());
+                UNIT_ASSERT(request.resource().resource_path().empty());
+                auto& resource = resources.emplace_back(std::move(*request.mutable_resource()));
+                resource.set_resource_path(entry.ResourcePath);
+            }
+            return resources;
+        }
+
         void TestKesusExport(bool isFs, bool empty, bool encrypted) {
             EnvOptions().EnablePermissionsExport(true).EnableChecksumsExport(true);
             Env();
@@ -991,7 +1109,22 @@ namespace {
                 AddExportKesusResource(tabletId, "a/z", false);
                 AddExportKesusResource(tabletId, "a/a", false);
                 AddExportKesusResource(tabletId, "a/a/grandchild", false);
+                AddExportKesusResource(tabletId, "semaphores");
+                // Valid resource paths must not be interpreted as filesystem paths.
+                AddExportKesusResource(tabletId, ".");
+                AddExportKesusResource(tabletId, "..");
+                AddExportKesusResource(tabletId, "../escaped", false);
+                AddExportKesusResource(tabletId, "a/create_rate_limiter.pb", false);
+                AddExportKesusResource(tabletId, "metadata.json");
+                AddExportKesusResource(tabletId, "rate_limiter_resources");
+                AddExportKesusSemaphore(tabletId, "/absolute/name", Max<ui64>());
+                AddExportKesusSemaphore(tabletId, "../binary", 3, TString("a\0\xffz", 4));
             }
+
+            size_t semaphoreRequests = 0;
+            auto requests = Runtime().AddObserver<TEvKesus::TEvDescribeSemaphores>([&](auto&) {
+                ++semaphoreRequests;
+            });
 
             TTempDir tempDir;
             NKikimrExport::TCreateExportRequest request;
@@ -1063,20 +1196,29 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(node.config().rate_limiter_counters_mode()),
                 static_cast<int>(Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED));
 
-            const TString resourcesText = readPlaintext("rate_limiter_resources.pb");
-            Ydb::RateLimiter::Resources resources;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(resourcesText, &resources));
-            if (empty) {
-                UNIT_ASSERT_VALUES_EQUAL(resourcesText, "resources: []\n");
-                UNIT_ASSERT_VALUES_EQUAL(resources.resources_size(), 0);
-            } else {
-                const TVector<TString> expectedPaths = {"a", "a/a", "a/a/grandchild", "a/z", "z"};
-                UNIT_ASSERT_VALUES_EQUAL(resources.resources_size(), expectedPaths.size());
-                for (size_t i = 0; i < expectedPaths.size(); ++i) {
-                    UNIT_ASSERT_VALUES_EQUAL(resources.resources(i).resource_path(), expectedPaths[i]);
-                }
-                for (int i : {0, 4}) {
-                    const auto& resource = resources.resources(i);
+            const TString metadataText = readPlaintext("metadata.json");
+            const auto metadata = NBackup::TMetadata::Deserialize(metadataText);
+            UNIT_ASSERT(metadata.GetRateLimiterResources());
+            const auto& entries = *metadata.GetRateLimiterResources();
+            const TVector<TString> expectedPaths = empty
+                ? TVector<TString>{}
+                : TVector<TString>{".", "..", "../escaped", "a", "a/a", "a/a/grandchild",
+                    "a/create_rate_limiter.pb", "a/z", "metadata.json", "rate_limiter_resources", "semaphores", "z"};
+            UNIT_ASSERT_VALUES_EQUAL(entries.size(), expectedPaths.size());
+            TVector<Ydb::RateLimiter::Resource> resources;
+            for (size_t i = 0; i < entries.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(entries[i].ResourcePath, expectedPaths[i]);
+                UNIT_ASSERT_VALUES_EQUAL(entries[i].ExportPrefix, Sprintf("rate_limiter_resources/%03u", ui32(i + 1)));
+                Ydb::RateLimiter::CreateResourceRequest request;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
+                    readPlaintext(entries[i].ExportPrefix + "/create_rate_limiter.pb"), &request));
+                UNIT_ASSERT(request.coordination_node_path().empty());
+                UNIT_ASSERT(request.resource().resource_path().empty());
+                resources.emplace_back(std::move(*request.mutable_resource()));
+            }
+            for (size_t i = 0; i < resources.size(); ++i) {
+                const auto& resource = resources[i];
+                if (!expectedPaths[i].Contains('/')) {
                     UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_units_per_second(), 100);
                     UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_burst_size_coefficient(), 1.5);
                     UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().prefetch_coefficient(), 0.4);
@@ -1085,27 +1227,185 @@ namespace {
                     UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().meter_period_ms(), 1000);
                     UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().collect_period_sec(), 30);
                     UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().provisioned_units_per_second(), 25);
+                } else {
+                    // Inherited settings must remain unset, rather than becoming explicit limits.
+                    UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_units_per_second(), 0);
                 }
-                // Inherited settings must remain unset, rather than becoming explicit limits.
-                UNIT_ASSERT_VALUES_EQUAL(resources.resources(1).hierarchical_drr().max_units_per_second(), 0);
-                const auto& leaf = resources.resources(2).hierarchical_drr();
-                UNIT_ASSERT(leaf.has_immediately_fill_up_to());
-                UNIT_ASSERT_VALUES_EQUAL(leaf.immediately_fill_up_to(), -123);
-                UNIT_ASSERT(leaf.replicated_bucket().has_report_interval_ms());
-                UNIT_ASSERT_VALUES_EQUAL(leaf.replicated_bucket().report_interval_ms(), 321);
+                if (expectedPaths[i] == "a/a/grandchild") {
+                    const auto& leaf = resource.hierarchical_drr();
+                    UNIT_ASSERT(leaf.has_immediately_fill_up_to());
+                    UNIT_ASSERT_VALUES_EQUAL(leaf.immediately_fill_up_to(), -123);
+                    UNIT_ASSERT(leaf.replicated_bucket().has_report_interval_ms());
+                    UNIT_ASSERT_VALUES_EQUAL(leaf.replicated_bucket().report_interval_ms(), 321);
+                }
+            }
+
+            UNIT_ASSERT(metadata.GetSemaphores());
+            const auto& semaphores = *metadata.GetSemaphores();
+            UNIT_ASSERT_VALUES_EQUAL(semaphores.size(), empty ? 0 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(semaphoreRequests, 1);
+            for (ui32 i = 0; i < semaphores.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(semaphores[i].ExportPrefix,
+                    Sprintf("semaphores/%03u", i + 1));
+                Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
+                    readPlaintext(semaphores[i].ExportPrefix + "/create_semaphore.pb"), &semaphore));
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), semaphores[i].Name);
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), i ? "/absolute/name" : "../binary");
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), i ? Max<ui64>() : 3);
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), i ? TString() : TString("a\0\xffz", 4));
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.req_id(), 0);
             }
 
             CheckPermissions(readPlaintext("permissions.pb"), [](const auto& permissions) {
                 UNIT_ASSERT_VALUES_EQUAL(permissions.actions_size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(permissions.actions(0).change_owner(), "root@builtin");
             });
-            NJson::TJsonValue metadata;
-            UNIT_ASSERT(NJson::ReadJsonTree(readPlaintext("metadata.json"), &metadata));
-            UNIT_ASSERT(!metadata.Has("rate_limiter_resources"));
         }
 
+        void TestKesusExportIcb(bool isFs) {
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableFsBackups(true);
+            CreateExportKesus(false);
+
+            TTempDir tempDir;
+            NKikimrExport::TCreateExportRequest request;
+            if (isFs) {
+                auto* settings = request.MutableExportToFsSettings();
+                settings->set_base_path(tempDir.Path());
+                auto* item = settings->add_items();
+                item->set_source_path("/MyRoot/Coordination");
+                item->set_destination_path("coordination");
+            } else {
+                auto* settings = request.MutableExportToS3Settings();
+                settings->set_endpoint(TStringBuilder() << "localhost:" << S3Port());
+                settings->set_scheme(Ydb::Export::ExportToS3Settings::HTTP);
+                auto* item = settings->add_items();
+                item->set_source_path("/MyRoot/Coordination");
+                item->set_destination_prefix("coordination");
+            }
+
+            auto& control = Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport;
+            UNIT_ASSERT_VALUES_EQUAL(control.AtomicLoad()->Get(), 0);
+            TestExport(Runtime(), 101, "/MyRoot", request.DebugString(), "", "", Ydb::StatusIds::BAD_REQUEST);
+
+            // The shared control must take effect without rebooting SchemeShard.
+            TControlBoard::SetValue(1, control);
+            TestExport(Runtime(), 102, "/MyRoot", request.DebugString());
+            Env().TestWaitNotification(Runtime(), 102);
+            TestGetExport(Runtime(), 102, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            if (isFs) {
+                UNIT_ASSERT((TFsPath(tempDir.Path()) / "coordination/create_coordination_node.pb").Exists());
+            } else {
+                UNIT_ASSERT(HasS3File("/coordination/create_coordination_node.pb"));
+            }
+
+            TControlBoard::SetValue(0, control);
+            TestExport(Runtime(), 103, "/MyRoot", request.DebugString(), "", "", Ydb::StatusIds::BAD_REQUEST);
+        }
+
+        void TestKesusRebootChangesResources(bool empty) {
+            EnvOptions().EnableChecksumsExport(true);
+            Env();
+            const ui64 tabletId = CreateExportKesus();
+            AddExportKesusResource(tabletId, "A");
+            AddExportKesusSemaphore(tabletId, "A", 1, "semaphore data");
+            if (!empty) {
+                AddExportKesusResource(tabletId, "B");
+                AddExportKesusResource(tabletId, "Z");
+            }
+
+            TBlockEvents<NKikimr::NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult> results(Runtime());
+            TestExport(Runtime(), 101, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items { source_path: "/MyRoot/Coordination" destination_prefix: "coordination" }
+                }
+            )", S3Port()));
+            Runtime().WaitFor("Kesus files uploaded before completion is persisted", [&] { return !results.empty(); });
+            UNIT_ASSERT(results.front()->Get()->Success);
+
+            const auto resources = ReadExportedKesusResources();
+            UNIT_ASSERT_VALUES_EQUAL(resources.size(), empty ? 1 : 3);
+            UNIT_ASSERT_VALUES_EQUAL(resources[0].resource_path(), "A");
+            UNIT_ASSERT_VALUES_EQUAL(NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"))
+                .GetSemaphores()->size(), 1);
+
+            const auto sender = Runtime().AllocateEdgeActor();
+            auto request = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
+            request->Record.SetResourcePath("A");
+            Runtime().SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            auto response = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvDeleteQuoterResourceResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+
+            auto deleteSemaphore = MakeHolder<TEvKesus::TEvDeleteSemaphore>();
+            deleteSemaphore->Record.SetKesusPath("/MyRoot/Coordination");
+            deleteSemaphore->Record.SetName("A");
+            Runtime().SendToPipe(tabletId, sender, deleteSemaphore.Release(), 0, GetPipeConfigWithRetries());
+            const auto deletedSemaphore = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvDeleteSemaphoreResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(deletedSemaphore->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+
+            if (!empty) {
+                auto remove = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
+                remove->Record.SetResourcePath("Z");
+                Runtime().SendToPipe(tabletId, sender, remove.Release(), 0, GetPipeConfigWithRetries());
+                auto removed = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvDeleteQuoterResourceResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(removed->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+                AddExportKesusResource(tabletId, "C");
+                auto update = MakeHolder<TEvKesus::TEvUpdateQuoterResource>();
+                update->Record.MutableResource()->SetResourcePath("B");
+                update->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(200);
+                Runtime().SendToPipe(tabletId, sender, update.Release(), 0, GetPipeConfigWithRetries());
+                auto updated = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvUpdateQuoterResourceResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(updated->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            }
+
+            const TString oldMetadata = GetS3FileContent("/coordination/metadata.json");
+            const TString oldSecondResource = empty ? TString()
+                : GetS3FileContent("/coordination/rate_limiter_resources/002/create_rate_limiter.pb");
+            using namespace NKikimr::NWrappers::NExternalStorage;
+            TBlockEvents<TEvPutObjectRequest> uploads(Runtime(), [](auto& ev) {
+                return TString(ev->Get()->Request.GetKey()).EndsWith("rate_limiter_resources/002/create_rate_limiter.pb");
+            });
+            results.Stop();
+            RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+            if (!empty) {
+                Runtime().WaitFor("last resource upload after reboot", [&] { return !uploads.empty(); });
+                UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/coordination/metadata.json"), oldMetadata);
+                UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/coordination/rate_limiter_resources/002/create_rate_limiter.pb"),
+                    oldSecondResource);
+            }
+            uploads.Stop().Unblock();
+            Env().TestWaitNotification(Runtime(), 101);
+            TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            const auto restored = ReadExportedKesusResources();
+            UNIT_ASSERT_VALUES_EQUAL(restored.size(), empty ? 0 : 2);
+            if (!empty) {
+                UNIT_ASSERT_VALUES_EQUAL(restored[0].resource_path(), "B");
+                UNIT_ASSERT_VALUES_EQUAL(restored[0].hierarchical_drr().max_units_per_second(), 200);
+                UNIT_ASSERT_VALUES_EQUAL(restored[1].resource_path(), "C");
+            }
+            // Files beyond the new resource list remain in storage and must be ignored.
+            UNIT_ASSERT(HasS3File(Sprintf("/coordination/rate_limiter_resources/%03u/create_rate_limiter.pb", empty ? 1u : 3u)));
+            const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
+            UNIT_ASSERT(metadata.GetSemaphores());
+            UNIT_ASSERT(metadata.GetSemaphores()->empty());
+            UNIT_ASSERT(HasS3File("/coordination/semaphores/001/create_semaphore.pb"));
+            UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/coordination/metadata.json.sha256"),
+                NBackup::ComputeChecksum(GetS3FileContent("/coordination/metadata.json")));
+
+            results.Unblock();
+            TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        }
+
+        template <bool semaphores = false>
         void TestKesusDescriberStops(bool timeout, bool waitingToRetry = false) {
             namespace TEvPrivate = NKikimr::NSchemeShard::TEvPrivate;
+            using TDescribeResult = std::conditional_t<semaphores,
+                TEvKesus::TEvDescribeSemaphoresResult, TEvKesus::TEvDescribeQuoterResourcesResult>;
+            using TResult = std::conditional_t<semaphores,
+                TEvPrivate::TEvKesusSemaphoresDescribeResult, TEvPrivate::TEvKesusResourcesDescribeResult>;
             Env();
             const ui64 tabletId = CreateExportKesus();
             AddExportKesusResource(tabletId, "A");
@@ -1117,12 +1417,12 @@ namespace {
                 }
             });
             size_t resultCount = 0;
-            auto results = Runtime().AddObserver<TEvPrivate::TEvKesusResourcesDescribeResult>([&](auto& ev) {
+            auto results = Runtime().AddObserver<TResult>([&](auto& ev) {
                 ++resultCount;
                 UNIT_ASSERT(!ev->Get()->Success);
                 UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "Timed out");
             });
-            TBlockEvents<TEvKesus::TEvDescribeQuoterResourcesResult> responses(Runtime());
+            TBlockEvents<TDescribeResult> responses(Runtime());
             TestExport(Runtime(), 101, "/MyRoot", Sprintf(R"(
                 ExportToS3Settings {
                     endpoint: "localhost:%d"
@@ -1159,14 +1459,22 @@ namespace {
             responses.Stop().Unblock();
             TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::CANCELLED);
             UNIT_ASSERT(!HasS3File("/coordination/create_coordination_node.pb"));
-            UNIT_ASSERT(!HasS3File("/coordination/rate_limiter_resources.pb"));
+            UNIT_ASSERT(!HasS3File("/coordination/metadata.json"));
         }
 
+        template <bool semaphores = false>
         void TestKesusReconnect(bool rebootTablet) {
             namespace TEvPrivate = NKikimr::NSchemeShard::TEvPrivate;
+            using TDescribeResult = std::conditional_t<semaphores,
+                TEvKesus::TEvDescribeSemaphoresResult, TEvKesus::TEvDescribeQuoterResourcesResult>;
+            using TResult = std::conditional_t<semaphores,
+                TEvPrivate::TEvKesusSemaphoresDescribeResult, TEvPrivate::TEvKesusResourcesDescribeResult>;
             Env();
             const ui64 tabletId = CreateExportKesus();
             AddExportKesusResource(tabletId, "A");
+            if constexpr (semaphores) {
+                AddExportKesusSemaphore(tabletId, "lock", 2, "data");
+            }
 
             THashMap<TActorId, TActorId> pipeClients;
             auto connected = Runtime().AddObserver<TEvTabletPipe::TEvClientConnected>([&](auto& ev) {
@@ -1175,11 +1483,11 @@ namespace {
                 }
             });
             size_t resultCount = 0;
-            auto results = Runtime().AddObserver<TEvPrivate::TEvKesusResourcesDescribeResult>([&](auto& ev) {
+            auto results = Runtime().AddObserver<TResult>([&](auto& ev) {
                 ++resultCount;
                 UNIT_ASSERT_C(ev->Get()->Success, ev->Get()->Error);
             });
-            TBlockEvents<TEvKesus::TEvDescribeQuoterResourcesResult> responses(Runtime());
+            TBlockEvents<TDescribeResult> responses(Runtime());
             TestExport(Runtime(), 101, "/MyRoot", Sprintf(R"(
                 ExportToS3Settings {
                     endpoint: "localhost:%d"
@@ -1219,11 +1527,22 @@ namespace {
                 return !Runtime().FindActor(describer) && !Runtime().FindActor(newPipe);
             });
 
-            Ydb::RateLimiter::Resources resources;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                GetS3FileContent("/coordination/rate_limiter_resources.pb"), &resources));
-            UNIT_ASSERT_VALUES_EQUAL(resources.resources_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(resources.resources(0).resource_path(), "A");
+            const auto resources = ReadExportedKesusResources();
+            UNIT_ASSERT_VALUES_EQUAL(resources.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resources[0].resource_path(), "A");
+            if constexpr (semaphores) {
+                const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
+                UNIT_ASSERT(metadata.GetSemaphores());
+                UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 1);
+                const auto& entry = metadata.GetSemaphores()->front();
+                UNIT_ASSERT_VALUES_EQUAL(entry.Name, "lock");
+                Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
+                    GetS3FileContent("/coordination/" + entry.ExportPrefix + "/create_semaphore.pb"), &semaphore));
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), "lock");
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), "data");
+            }
         }
 
         void TestTopic(bool enablePermissions = false, ui64 topicsCount = 1, ui64 consumersCount = 0) {
@@ -1309,6 +1628,56 @@ namespace {
                 permissions, permissions_expected,
                 TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
 
+        }
+
+        void TestLegacyReplicationAvailabilityPeriod(bool invalid) {
+            TTestEnv env(Runtime(), TTestEnvOptions().InitYdbDriver(true));
+            Runtime().GetAppData().ReplicationConfig.SetConsumerAvailabilityPeriodSeconds(7201);
+            ui64 txId = 100;
+            TestCreateReplication(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Replication"
+                Config {
+                    SrcConnectionParams { Endpoint: "localhost:2135" Database: "/MyRoot" }
+                    Specific { Targets { SrcPath: "/MyRoot/Table" DstPath: "/MyRoot/Replica" } }
+                }
+            )");
+            env.TestWaitNotification(Runtime(), txId);
+
+            size_t patched = 0;
+            auto observer = Runtime().AddObserver<TEvSchemeShard::TEvDescribeSchemeResult>([&](const auto& ev) {
+                auto* desc = ev->Get()->MutableRecord()->MutablePathDescription();
+                if (desc->GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeReplication) {
+                    return;
+                }
+
+                // Model the SchemeShard description of an existing replication.
+                auto* config = desc->MutableReplicationDescription()->MutableConfig();
+                config->ClearAvailabilityPeriod();
+                if (invalid) {
+                    config->MutableAvailabilityPeriod();
+                }
+                ++patched;
+            });
+            TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items { source_path: "/MyRoot/Replication" destination_prefix: "Replication" }
+                }
+            )", S3Port()));
+            env.TestWaitNotification(Runtime(), txId);
+            UNIT_ASSERT(patched > 0);
+
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            const TString file = "/Replication/create_async_replication.sql";
+            CheckPathWithChecksum(file);
+            const auto query = GetS3FileContent(file);
+            if (invalid) {
+                UNIT_ASSERT(!query.Contains("AVAILABILITY_PERIOD"));
+            } else {
+                UNIT_ASSERT_STRING_CONTAINS(query, "AVAILABILITY_PERIOD = Interval('PT7201S')");
+                UNIT_ASSERT(!query.Contains("UNLIMITED"));
+            }
         }
 
         void TestTransfer(const TString& scheme, const TString& expected) {
@@ -1656,10 +2025,10 @@ namespace {
         void InitColumnTableExportSlowS3Test(bool enableScanWriteLog = true) {
             Env();
             Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-            Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
             if (enableScanWriteLog) {
-                Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-                Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
+                TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
+                TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
             }
         }
 
@@ -1978,6 +2347,14 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         UNIT_ASSERT_VALUES_EQUAL(table1DataRequests, 1);
     }
 
+    Y_UNIT_TEST(CancelledExportsHiddenWhileForgetting) {
+        CheckExportsHiddenWhileForgetting(true);
+    }
+
+    Y_UNIT_TEST(CompletedExportsHiddenWhileForgetting) {
+        CheckExportsHiddenWhileForgetting(false);
+    }
+
     Y_UNIT_TEST(CompletionMarkerWithoutAutoDropping) {
         const ui64 exportId = StartCompletionMarkerExport(false);
         Env().TestWaitNotification(Runtime(), exportId);
@@ -1996,6 +2373,10 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         CheckCompletionMarkerContents(exportId);
         const auto status = TestGetExport(Runtime(), exportId, "/MyRoot");
         UNIT_ASSERT_VALUES_EQUAL(status.GetResponse().GetEntry().GetProgress(), Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
+        const auto list = ListExports();
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(list.GetEntries(0).GetId(), exportId);
+        UNIT_ASSERT_VALUES_EQUAL(list.GetEntries(0).GetProgress(), Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
         drops.Stop().Unblock();
         Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
@@ -2546,8 +2927,8 @@ partitioning_settings {
         )");
         Env().TestWaitNotification(Runtime(), txId);
 
-        Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
         bool dropNotification = false;
         THolder<IEventHandle> delayed;
@@ -3285,7 +3666,7 @@ partitioning_settings {
 
         UpdateRow(runtime, "Table", 1, "valueA");
         UpdateRow(runtime, "Table", 2, "valueB");
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
         THolder<IEventHandle> injectResult;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -3512,7 +3893,7 @@ partitioning_settings {
 
         UpdateRow(runtime, "Table", 1, "valueA");
         UpdateRow(runtime, "Table", 2, "valueB");
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
         // An earlier scan may have uploaded more parts. Reusing that session leaves its tail
         // on the server even after a shorter scan overwrites all the parts it needs.
@@ -5117,43 +5498,83 @@ state: STATE_ENABLED
         TestKesusExport(true, true, true);
     }
 
-    Y_UNIT_TEST(KesusRebootReplacesResourcesWithEmptySet) {
-        EnvOptions().EnableChecksumsExport(true);
+    Y_UNIT_TEST(KesusExportIcbToS3) {
+        TestKesusExportIcb(false);
+    }
+
+    Y_UNIT_TEST(KesusExportIcbToFs) {
+        TestKesusExportIcb(true);
+    }
+
+    Y_UNIT_TEST(KesusExportToYtIsRejected) {
         Env();
+        CreateExportKesus();
+        TestExport(Runtime(), 101, "/MyRoot", R"(
+            ExportToYtSettings {
+                host: "localhost"
+                items { source_path: "/MyRoot/Coordination" destination_path: "//coordination" }
+            }
+        )", "", "", Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(KesusRebootReplacesResourcesWithEmptySet) {
+        TestKesusRebootChangesResources(true);
+    }
+
+    Y_UNIT_TEST(KesusRebootReplacesResourceList) {
+        TestKesusRebootChangesResources(false);
+    }
+
+    Y_UNIT_TEST(KesusFsRebootKeepsResourceAndSemaphoreFilesSeparate) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableFsBackups(true);
         const ui64 tabletId = CreateExportKesus();
-        AddExportKesusResource(tabletId, "A");
+        AddExportKesusSemaphore(tabletId, "lock", 1, "data");
+
+        TTempDir tempDir;
+        NKikimrExport::TCreateExportRequest request;
+        auto* settings = request.MutableExportToFsSettings();
+        settings->set_base_path(tempDir.Path());
+        auto* item = settings->add_items();
+        item->set_source_path("/MyRoot/Coordination");
+        item->set_destination_path("coordination");
 
         TBlockEvents<NKikimr::NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult> results(Runtime());
-        TestExport(Runtime(), 101, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-                endpoint: "localhost:%d"
-                scheme: HTTP
-                items { source_path: "/MyRoot/Coordination" destination_prefix: "coordination" }
-            }
-        )", S3Port()));
-        Runtime().WaitFor("Kesus files uploaded before completion is persisted", [&] { return !results.empty(); });
+        TestExport(Runtime(), 101, "/MyRoot", request.DebugString());
+        Runtime().WaitFor("Kesus files uploaded before reboot", [&] { return !results.empty(); });
         UNIT_ASSERT(results.front()->Get()->Success);
+        auto readFile = [&](const TString& path) {
+            return TFileInput(TFsPath(tempDir.Path()) / "coordination" / path).ReadAll();
+        };
+        const TString oldSemaphore = readFile("semaphores/001/create_semaphore.pb");
 
-        Ydb::RateLimiter::Resources resources;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-            GetS3FileContent("/coordination/rate_limiter_resources.pb"), &resources));
-        UNIT_ASSERT_VALUES_EQUAL(resources.resources_size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(resources.resources(0).resource_path(), "A");
-
-        const auto sender = Runtime().AllocateEdgeActor();
-        auto request = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
-        request->Record.SetResourcePath("A");
-        Runtime().SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
-        auto response = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvDeleteQuoterResourceResult>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
-
+        // Using this resource path as a directory would collide with the semaphore file above.
+        AddExportKesusResource(tabletId, "semaphores");
+        AddExportKesusResource(tabletId, "semaphores/001", false);
+        AddExportKesusResource(tabletId, "semaphores/001/create_semaphore.pb", false);
         results.Stop();
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
         Env().TestWaitNotification(Runtime(), 101);
         TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/coordination/rate_limiter_resources.pb"), "resources: []\n");
-        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/coordination/rate_limiter_resources.pb.sha256"),
-            NBackup::ComputeChecksum("resources: []\n"));
+
+        const auto metadata = NBackup::TMetadata::Deserialize(readFile("metadata.json"));
+        UNIT_ASSERT(metadata.GetRateLimiterResources());
+        const auto& resources = *metadata.GetRateLimiterResources();
+        const TVector<TString> expectedPaths = {"semaphores", "semaphores/001", "semaphores/001/create_semaphore.pb"};
+        UNIT_ASSERT_VALUES_EQUAL(resources.size(), expectedPaths.size());
+        for (ui32 i = 0; i < resources.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(resources[i].ResourcePath, expectedPaths[i]);
+            UNIT_ASSERT_VALUES_EQUAL(resources[i].ExportPrefix, Sprintf("rate_limiter_resources/%03u", i + 1));
+            Ydb::RateLimiter::CreateResourceRequest resource;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
+                readFile(resources[i].ExportPrefix + "/create_rate_limiter.pb"), &resource));
+            UNIT_ASSERT_VALUES_EQUAL(resource.resource().hierarchical_drr().max_units_per_second(), i ? 0 : 100);
+        }
+        UNIT_ASSERT(metadata.GetSemaphores());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->front().Name, "lock");
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->front().ExportPrefix, "semaphores/001");
+        UNIT_ASSERT_VALUES_EQUAL(readFile("semaphores/001/create_semaphore.pb"), oldSemaphore);
 
         results.Unblock();
         TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
@@ -5165,6 +5586,62 @@ state: STATE_ENABLED
 
     Y_UNIT_TEST(KesusRetriesAfterConnectionFailure) {
         TestKesusReconnect(false);
+    }
+
+    Y_UNIT_TEST(KesusSemaphoresRetriesAfterConnectionFailure) {
+        TestKesusReconnect<true>(false);
+    }
+
+    Y_UNIT_TEST(KesusSemaphoresRetriesAfterTabletReboot) {
+        TestKesusReconnect<true>(true);
+    }
+
+    Y_UNIT_TEST(KesusSemaphoresCancelStopsDescriber) {
+        TestKesusDescriberStops<true>(false);
+    }
+
+    Y_UNIT_TEST(KesusSemaphoresTimeoutStopsDescriber) {
+        TestKesusDescriberStops<true>(true);
+    }
+
+    Y_UNIT_TEST(KesusSemaphoresExportUsesSingleResponse) {
+        Env();
+        const ui64 tabletId = CreateExportKesus();
+        AddExportKesusSemaphore(tabletId, "A", 1);
+        AddExportKesusSemaphore(tabletId, "B", 2);
+        size_t requestCount = 0;
+        auto requests = Runtime().AddObserver<TEvKesus::TEvDescribeSemaphores>([&](auto&) {
+            ++requestCount;
+        });
+        TBlockEvents<TEvKesus::TEvDescribeSemaphoresResult> responses(Runtime());
+        TestExport(Runtime(), 101, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_path: "/MyRoot/Coordination" destination_prefix: "coordination" }
+            }
+        )", S3Port()));
+        Runtime().WaitFor("semaphore descriptions", [&] { return !responses.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(responses.front()->Get()->Record.SemaphoresSize(), 2);
+        UNIT_ASSERT(!HasS3File("/coordination/metadata.json"));
+
+        AddExportKesusSemaphore(tabletId, "C", 3);
+        responses.Stop().Unblock();
+        Env().TestWaitNotification(Runtime(), 101);
+        TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(requestCount, 1);
+        const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
+        UNIT_ASSERT(metadata.GetSemaphores());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->at(0).Name, "A");
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->at(1).Name, "B");
+        for (const auto& entry : *metadata.GetSemaphores()) {
+            Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
+                GetS3FileContent("/coordination/" + entry.ExportPrefix + "/create_semaphore.pb"), &semaphore));
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), entry.Name);
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), entry.Name == "A" ? 1 : 2);
+        }
     }
 
     Y_UNIT_TEST(KesusConnectionFailuresRespectDeadline) {
@@ -5213,7 +5690,7 @@ state: STATE_ENABLED
         });
         responses.Stop().Unblock();
         TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT(!HasS3File("/coordination/rate_limiter_resources.pb"));
+        UNIT_ASSERT(!HasS3File("/coordination/metadata.json"));
     }
 
     Y_UNIT_TEST(KesusSchemeShardRebootWhileWaitingForResources) {
@@ -5261,12 +5738,10 @@ state: STATE_ENABLED
         Env().TestWaitNotification(Runtime(), 101);
         TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(resultCount, 1);
-        Ydb::RateLimiter::Resources resources;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-            GetS3FileContent("/coordination/rate_limiter_resources.pb"), &resources));
-        UNIT_ASSERT_VALUES_EQUAL(resources.resources_size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(resources.resources(0).resource_path(), "A");
-        UNIT_ASSERT_VALUES_EQUAL(resources.resources(1).resource_path(), "B");
+        const auto resources = ReadExportedKesusResources();
+        UNIT_ASSERT_VALUES_EQUAL(resources.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(resources[0].resource_path(), "A");
+        UNIT_ASSERT_VALUES_EQUAL(resources[1].resource_path(), "B");
     }
 
     Y_UNIT_TEST(KesusDescribeFailureDoesNotExportEmptyResources) {
@@ -5290,7 +5765,7 @@ state: STATE_ENABLED
         Env().TestWaitNotification(Runtime(), 101);
         TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::CANCELLED);
         UNIT_ASSERT(injected);
-        UNIT_ASSERT(!HasS3File("/coordination/rate_limiter_resources.pb"));
+        UNIT_ASSERT(!HasS3File("/coordination/metadata.json"));
     }
 
     Y_UNIT_TEST(KesusLateTimeoutDoesNotRetryUpload) {
@@ -5334,7 +5809,7 @@ state: STATE_ENABLED
         Env().TestWaitNotification(Runtime(), 101);
         TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT(HasS3File("/coordination/create_coordination_node.pb"));
-        UNIT_ASSERT(HasS3File("/coordination/rate_limiter_resources.pb"));
+        UNIT_ASSERT(HasS3File("/coordination/rate_limiter_resources/001/create_rate_limiter.pb"));
         for (const auto& [key, count] : putCounts) {
             UNIT_ASSERT_VALUES_EQUAL_C(count, 1, key);
         }
@@ -5379,11 +5854,9 @@ state: STATE_ENABLED
 
         Env().TestWaitNotification(Runtime(), 101);
         TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        Ydb::RateLimiter::Resources resources;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-            GetS3FileContent("/coordination/rate_limiter_resources.pb"), &resources));
-        UNIT_ASSERT_VALUES_EQUAL(resources.resources_size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(resources.resources(0).resource_path(), "A");
+        const auto resources = ReadExportedKesusResources();
+        UNIT_ASSERT_VALUES_EQUAL(resources.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resources[0].resource_path(), "A");
     }
 
     Y_UNIT_TEST(TopicExport) {
@@ -5841,8 +6314,8 @@ state: STATE_ENABLED
         TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port,
         bool withRelevance, bool withRowId)
     {
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NLog::PRI_TRACE);
 
         ui64 txId = 100;
         auto expectedIndexType = withRelevance
@@ -6016,6 +6489,14 @@ state: STATE_ENABLED
         });
     }
 
+    Y_UNIT_TEST(ReplicationExportLegacyAvailabilityPeriod) {
+        TestLegacyReplicationAvailabilityPeriod(false);
+    }
+
+    Y_UNIT_TEST(ReplicationExportInvalidAvailabilityPeriod) {
+        TestLegacyReplicationAvailabilityPeriod(true);
+    }
+
     Y_UNIT_TEST(ReplicationExportWithStaticCredentials) {
         TString scheme = R"(
             Name: "Replication"
@@ -6047,6 +6528,7 @@ WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
   USER = 'user',
   PASSWORD_SECRET_NAME = 'pwd-secret-name',
+  AVAILABILITY_PERIOD = 'UNLIMITED',
   CONSISTENCY_LEVEL = 'Row'
 );)";
         TestReplication(scheme, expected);
@@ -6081,6 +6563,7 @@ FOR
 WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
   TOKEN_SECRET_NAME = 'token-secret-name',
+  AVAILABILITY_PERIOD = 'UNLIMITED',
   CONSISTENCY_LEVEL = 'Row'
 );)";
         TestReplication(scheme, expected);
@@ -6119,6 +6602,7 @@ FOR
   `/MyRoot/Table3` AS `/MyRoot/Table3Replica`
 WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  AVAILABILITY_PERIOD = 'UNLIMITED',
   CONSISTENCY_LEVEL = 'Row'
 );)";
         TestReplication(scheme, expected);
@@ -6128,6 +6612,7 @@ WITH (
         TString scheme = R"(
             Name: "Replication"
             Config {
+                AvailabilityPeriod { Duration { seconds: 7201 nanos: 1 } }
                 SrcConnectionParams {
                     Endpoint: "localhost:2135"
                     Database: "/MyRoot"
@@ -6152,6 +6637,7 @@ FOR
   `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
 WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  AVAILABILITY_PERIOD = Interval('PT7201.001S'),
   CONSISTENCY_LEVEL = 'Global',
   COMMIT_INTERVAL = Interval('PT17S')
 );)";
@@ -6851,7 +7337,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
     Y_UNIT_TEST(ShouldNotCorruptEncryptedBufferOnRetry) {
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
-        Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -7190,7 +7676,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
         EnableParquetFormats(Runtime());
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
         TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -7429,7 +7915,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
         EnableParquetFormats(Runtime());
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
         TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(

@@ -99,6 +99,8 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         EnqueueProgressTx(ctx);
         OnTieringModified();
     }
+    // the request for every portion takes long to build, so it is not part of the start
+    ctx.Send(SelfId(), new TEvPrivate::TEvPrefetchPortionsMetadata());
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
@@ -323,6 +325,18 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     }
 }
 
+void TColumnShard::Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& /*ev*/) {
+    if (TablesManager.HasPrimaryIndex()) {
+        TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().PrefetchPortionsMetadata();
+    }
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev) {
+    auto& engine = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    engine.GetGranulePtrVerified(ev->Get()->PathId)->SetLoadedKeyRanges(std::move(ev->Get()->LoadedKeyRanges));
+    ScanGate.ReleaseLoadedPortions(engine);
+}
+
 void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const TActorContext& ctx) {
     const TDuration stalenessLivetime = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness();
     const TDuration stalenessInMem = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStalenessInMem();
@@ -460,8 +474,7 @@ void TColumnShard::UpdateIndexCounters() {
 }
 
 ui64 TColumnShard::MemoryUsage() const {
-    ui64 memory = ProgressTxController->GetMemoryUsage() + ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
-                  (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*));
+    ui64 memory = ProgressTxController->GetMemoryUsage() + ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) + ScanGate.GetMemoryUsage();
     memory += TablesManager.GetMemoryUsage();
     return memory;
 }

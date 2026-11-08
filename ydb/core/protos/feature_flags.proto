@@ -326,7 +326,7 @@ message TFeatureFlags {
     optional bool EnableCompactFulltextIndex = 280 [default = true];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = true];
-    reserved 283; reserved "EnableAccessServiceV2Interface";
+    optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
     optional bool EnableTopicDeferredPublish = 286 [default = false];
@@ -462,5 +462,20 @@ message TFeatureFlags {
     optional bool EnableAddColumnGeneratedStored = 372 [default = false];
     optional bool EnableUnsafeTruncateTable = 373 [default = false];
     optional bool EnableCsPatternIndexHints = 374 [default = false];
-    optional bool EnableKesusImport = 375 [default = false];
+    // Allows persisting Waiting for column-table imports with unresolved dependencies.
+    // Enable only after the rollback version supports resuming these imports.
+    optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
+    optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
+    optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
+    optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
+    optional bool EnableCoroutineCompactionSelector = 379 [default = false];
+    // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
+    // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
+    optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
+    optional bool EnableCsPortionsCacheAcrossRestarts = 381 [default = false];
+    optional bool EnableCsGeneralCacheConsumerWeights = 382 [default = false];
+    // Enables policy-driven data tiering for row-oriented tables.
+    // When disabled, no new migrations to colder tiers are scheduled.
+    // Existing data in all tiers remains readable.
+    optional bool EnableDataTiering = 383 [default = false];    
 }

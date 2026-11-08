@@ -1,5 +1,7 @@
 #pragma once
 
+#include "limits.h"
+
 #include "defs.h"
 
 #include "events.h"
@@ -45,6 +47,7 @@ private:
     struct TTxSemaphoreAcquire;
     struct TTxSemaphoreCreate;
     struct TTxSemaphoreDescribe;
+    struct TTxSemaphoresDescribe;
     struct TTxSemaphoreDelete;
     struct TTxSemaphoreRelease;
     struct TTxSemaphoreTimeout;
@@ -62,8 +65,8 @@ private:
     static constexpr size_t MAX_DESCRIPTION_SIZE = 1024;
     static constexpr size_t MAX_PROTECTION_KEY_SIZE = 16;
 
-    static constexpr size_t MAX_SEMAPHORE_NAME = 1024; // 1KB
-    static constexpr size_t MAX_SEMAPHORE_DATA = 1024 * 1024; // 1MB
+    static constexpr size_t MAX_SEMAPHORE_NAME = MaxSemaphoreNameSize; // 1KB
+    static constexpr size_t MAX_SEMAPHORE_DATA = MaxSemaphoreDataSize; // 1MB
     static constexpr size_t MAX_SEMAPHORES_LIMIT = 1000000; // 1 million
 
     static constexpr TDuration MIN_SELF_CHECK_PERIOD = TDuration::MilliSeconds(500);
@@ -393,6 +396,7 @@ private:
     void Handle(TEvKesus::TEvSetConfig::TPtr& ev);
     void Handle(TEvKesus::TEvGetConfig::TPtr& ev);
     void Handle(TEvKesus::TEvDescribeSemaphore::TPtr& ev);
+    void Handle(TEvKesus::TEvDescribeSemaphores::TPtr& ev);
     void Handle(TEvKesus::TEvDescribeProxies::TPtr& ev);
     void Handle(TEvKesus::TEvDescribeSessions::TPtr& ev);
     void Handle(TEvKesus::TEvRegisterProxy::TPtr& ev);

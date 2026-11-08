@@ -77,6 +77,10 @@ TString ExtractMonDatabaseParam(const NHttp::THttpIncomingRequest* request) {
 
 void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
     event->Database = ExtractMonDatabaseParam(event->Request.Get());
+    if (!event->Database.empty() && HasAppData() && AppData()->FeatureFlags.GetEnableRelativePaths()
+        && AppData()->DomainsInfo && AppData()->DomainsInfo->Domain) {
+        event->Database = PrependDomainIfNeeded("/" + AppData()->DomainsInfo->GetDomain()->Name, event->Database);
+    }
     if (!event->Database.empty() && event->PathNormalizer && *event->PathNormalizer) {
         event->Database = (**event->PathNormalizer)(CanonizePath(event->Database));
     }
@@ -1905,7 +1909,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     ActorSystem = actorSystem;
     if (!PathNormalizer) {
         auto* appData = ActorSystem->AppData<NKikimr::TAppData>();
-        PathNormalizer = MakePathNormalizer(appData ? appData->PathNormalizer : nullptr);
+        PathNormalizer = MakePathNormalizer(appData ? appData->GetPathNormalizer() : nullptr);
     }
     if (auto* appData = ActorSystem->AppData<NKikimr::TAppData>()) {
         GrpcProxyCounters = NKikimr::NGRpcService::CreateGRpcProxyCounters(appData->Counters);

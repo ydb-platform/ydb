@@ -25,6 +25,7 @@ import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/formats/arrow/protos/accessor.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
+import "ydb/public/api/protos/ydb_rate_limiter.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_topic.proto";
@@ -51,6 +52,7 @@ message TDrop {
     optional string Name = 1;
     optional EDropWaitPolicy WaitPolicy = 2;
     optional uint64 Id = 3;
+    optional NKikimrReplication.ESourceCleanupPolicy ReplicationSourceCleanup = 4 [default = SOURCE_CLEANUP_POLICY_DROP];
 }
 
 enum EColumnCodec {
@@ -306,8 +308,16 @@ message TTableReplicationConfig {
         CONSISTENCY_LEVEL_ROW = 2;
     }
 
+    enum EImportState {
+        IMPORT_STATE_NONE = 0;
+        WAITING_IMPORT = 1;
+        IMPORTING = 2;
+        IMPORTED = 3;
+    }
+
     optional EReplicationMode Mode = 1;
     optional EConsistencyLevel ConsistencyLevel = 2;
+    optional EImportState ImportState = 3;
 }
 
 message TTableIncrementalBackupConfig {
@@ -2579,6 +2589,13 @@ message TBackupBackupCollection {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional string TargetDir = 3; // must be set on Rewrite
+}
+
+// Persisted, fully downloaded coordination node import. Not a backup file format.
+message TImportKesus {
+    optional Ydb.Coordination.CreateNodeRequest node = 1;
+    repeated Ydb.RateLimiter.Resource resources = 2;
+    repeated Ydb.Coordination.SessionRequest.CreateSemaphore semaphores = 3;
 }
 
 message TImportTableChangefeeds {

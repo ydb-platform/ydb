@@ -2,9 +2,11 @@
 #include "schemeshard_identificators.h"
 
 #include <ydb/core/base/storage_pools.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/kesus.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/actors/core/event_local.h>
@@ -62,7 +64,8 @@ namespace TEvPrivate {
         EvExportCompletionUploadResult,
         EvExportKesusTimeout,
         EvKesusResourcesDescribeResult,
-        EvImportKesusResourcesResult,
+        EvKesusSemaphoresDescribeResult,
+        EvImportKesusResult,
         EvImportRetryKesusParent,
         EvEnd
     };
@@ -148,13 +151,13 @@ namespace TEvPrivate {
         {}
     };
 
-    struct TEvImportKesusResourcesResult: public TEventLocal<TEvImportKesusResourcesResult, EvImportKesusResourcesResult> {
+    struct TEvImportKesusResult: public TEventLocal<TEvImportKesusResult, EvImportKesusResult> {
         const ui64 ImportId;
         const ui32 ItemIdx;
         const bool Success;
         const TString Error;
 
-        TEvImportKesusResourcesResult(ui64 id, ui32 itemIdx, bool success, const TString& error)
+        TEvImportKesusResult(ui64 id, ui32 itemIdx, bool success, const TString& error)
             : ImportId(id)
             , ItemIdx(itemIdx)
             , Success(success)
@@ -213,14 +216,20 @@ namespace TEvPrivate {
 
     struct TEvKesusResourcesDescribeResult: public TEventLocal<TEvKesusResourcesDescribeResult, EvKesusResourcesDescribeResult> {
         const bool Success;
-        TString Content;
+        TVector<Ydb::RateLimiter::Resource> Resources;
         const TString Error;
 
-        TEvKesusResourcesDescribeResult(bool success, TString content, TString error)
+        TEvKesusResourcesDescribeResult(bool success, TVector<Ydb::RateLimiter::Resource> resources, TString error)
             : Success(success)
-            , Content(std::move(content))
+            , Resources(std::move(resources))
             , Error(std::move(error))
         {}
+    };
+
+    struct TEvKesusSemaphoresDescribeResult: public TEventLocal<TEvKesusSemaphoresDescribeResult, EvKesusSemaphoresDescribeResult> {
+        bool Success = false;
+        TString Error;
+        TVector<NKikimrKesus::TSemaphoreDescription> Semaphores;
     };
 
     struct TEvExportUploadMetadataResult: public TEventLocal<TEvExportUploadMetadataResult, EvExportUploadMetadataResult> {

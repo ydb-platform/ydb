@@ -45,11 +45,7 @@ struct TYqlJoin {
     TVector<TYqlJoinConstraint> Constraints;
 };
 
-struct TPlainAsterisk {};
-
-using TProjection = std::variant<
-    TVector<TNodePtr>,
-    TPlainAsterisk>;
+using TProjection = TVector<TNodePtr>;
 
 struct TYqlWithout {
     struct TColumn {
@@ -166,6 +162,8 @@ TNodePtr BuildYqlScalarSubquery(TNodePtr node);
 TNodePtr BuildYqlExistsSubquery(TNodePtr node);
 
 TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression);
+
+TNodePtr BuildYqlStar(TPosition position, TMaybe<TString> source = Nothing());
 
 TNodePtr BuildYqlStatement(TNodePtr node);
 

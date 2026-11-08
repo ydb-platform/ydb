@@ -2411,6 +2411,351 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(sql.format(query_name=query_name1))
         kikimr.ydb_client.query(sql.format(query_name=query_name2))
 
+    @staticmethod
+    def _parse_json_rows(rows):
+        parsed = []
+        for row in rows:
+            if isinstance(row, (bytes, bytearray)):
+                row = row.decode("utf-8")
+            parsed.append(json.loads(row))
+        return parsed
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize(
+        "kikimr",
+        [{"enable_shared_reading_structured_json_parsing": True}],
+        indirect=["kikimr"],
+    )
+    def test_structured_json_skip_errors_nested(
+        self,
+        kikimr,
+        entity_name,
+        local_topics,
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"structured_json_skip_errors_nested{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
+
+        name = f"test_structured_json_skip_errors_nested_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT * FROM {inp}
+                WITH (
+                    FORMAT = "json_each_row",
+                    `skip.json.errors` = "true",
+                    SCHEMA = (
+                        top Struct<
+                            a: List<Int>?,
+                            b: Tuple<Int, String?>?,
+                            c: Dict<String, Int>?,
+                            d: Int?,
+                            e: String?
+                        >,
+                        req Struct<
+                            id: Int,
+                            name: String?
+                        >,
+                        note String
+                    )
+                );
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, name)
+
+        messages = [
+            # Valid row with all nested containers.
+            '{"top":{"a":[1,2],"b":[3,"s"],"c":{"k":1},"d":4,"e":"x"},"req":{"id":10,"name":"y"},"note":"ok"}',
+
+            # Errors: missing required nested field.
+            '{"req":{"name":"no"},"note":"skip-missing-req"}',
+
+            # Errors: top-level structured field has wrong type.
+            '{"top":"bad","note":"skip-top-type"}',
+
+            # Errors: list element type mismatch.
+            '{"top":{"a":[1,"bad"]},"note":"skip-list-element"}',
+
+            # Errors: null list element for non-optional Int.
+            '{"top":{"a":[null]},"note":"skip-list-null"}',
+
+            # Errors: tuple too short, missing non-optional first element.
+            '{"top":{"b":[]},"note":"skip-tuple-short"}',
+
+            # Errors: null first tuple element, first element is non-optional.
+            '{"top":{"b":[null,"x"]},"note":"skip-tuple-null"}',
+
+            # Errors: dict payload type mismatch.
+            '{"top":{"c":{"k":"bad"}},"note":"skip-dict-payload"}',
+
+            # Errors: null dict payload for non-optional Int.
+            '{"top":{"c":{"k":null}},"note":"skip-dict-null"}',
+
+            # Errors: nested required scalar wrong type.
+            '{"req":{"id":"bad"},"note":"skip-req-type"}',
+
+            # Errors: nested required scalar null.
+            '{"req":{"id":null},"note":"skip-req-null"}',
+
+            # Valid: tuple has extra elements, extra tuple elements are ignored.
+            '{"top":{"b":[5,"t","extra"]},"req":{"id":1},"note":"ok-extra"}',
+
+            # Valid: explicit nulls for optional top-level structs.
+            '{"top":null,"req":null,"note":"ok-nulls"}',
+
+            # Valid: optional top-level structs omitted.
+            '{"note":"ok-omitted"}',
+
+            # Valid: empty list and empty dict.
+            '{"top":{"a":[],"c":{}},"note":"ok-empty"}',
+
+            # Valid: only one nested scalar present.
+            '{"top":{"d":101},"note":"ok-only-d"}',
+
+            # Valid: tuple trailing optional element omitted.
+            '{"top":{"b":[7]},"note":"ok-tuple-trailing-optional"}',
+
+            # Valid: explicit null for optional list.
+            '{"top":{"a":null},"note":"ok-list-null"}',
+
+            # Valid: unknown top-level and nested keys are ignored.
+            '{"top":{"extra":"ignored"},"extra":"ignored","note":"ok-extra-keys"}',
+        ]
+
+        self.write_stream(messages, endpoint=endpoint)
+
+        expected_notes = {
+            "ok",
+            "ok-extra",
+            "ok-nulls",
+            "ok-omitted",
+            "ok-empty",
+            "ok-only-d",
+            "ok-tuple-trailing-optional",
+            "ok-list-null",
+            "ok-extra-keys",
+        }
+
+        rows = self._parse_json_rows(
+            self.read_stream(len(expected_notes), topic_path=self.output_topic, endpoint=endpoint)
+        )
+        assert len(rows) == len(expected_notes)
+
+        parsed = {row["note"]: row for row in rows}
+        assert set(parsed) == expected_notes
+
+        # Fully populated valid row.
+        assert parsed["ok"]["top"] == {
+            "a": [1, 2],
+            "b": [3, "s"],
+            "c": {"k": 1},
+            "d": 4,
+            "e": "x",
+        }
+        assert parsed["ok"]["req"] == {"id": 10, "name": "y"}
+
+        # Extra tuple elements are ignored.
+        extra_top = parsed["ok-extra"]["top"]
+        assert extra_top.get("b") == [5, "t"]
+        assert extra_top.get("a") is None
+        assert extra_top.get("c") is None
+        assert extra_top.get("d") is None
+        assert extra_top.get("e") is None
+
+        extra_req = parsed["ok-extra"]["req"]
+        assert extra_req.get("id") == 1
+        assert extra_req.get("name") is None
+
+        # Explicit optional nulls.
+        assert parsed["ok-nulls"].get("top") is None
+        assert parsed["ok-nulls"].get("req") is None
+
+        # Omitted optional top-level structs.
+        assert parsed["ok-omitted"].get("top") is None
+        assert parsed["ok-omitted"].get("req") is None
+
+        # Empty containers are valid.
+        empty_top = parsed["ok-empty"]["top"]
+        assert empty_top.get("a") == []
+        assert empty_top.get("c") == {}
+        assert empty_top.get("b") is None
+
+        # Only one scalar field present.
+        only_d_top = parsed["ok-only-d"]["top"]
+        assert only_d_top.get("d") == 101
+        assert only_d_top.get("a") is None
+        assert only_d_top.get("b") is None
+        assert parsed["ok-only-d"].get("req") is None
+
+        # Tuple trailing optional element omitted.
+        #
+        # The assertion is intentionally tolerant of JSON serialization style:
+        # some serialization may emit [7] for a tuple whose second element is null.
+        trailing_b = parsed["ok-tuple-trailing-optional"]["top"].get("b")
+        assert trailing_b is not None
+        assert trailing_b in ([7], [7, None])
+
+        # Explicit null optional list.
+        ok_list_top = parsed["ok-list-null"].get("top")
+        if ok_list_top is not None:
+            assert ok_list_top.get("a") is None
+        assert parsed["ok-list-null"].get("req") is None
+
+        # Unknown keys were ignored and the row was still emitted.
+        assert "ok-extra-keys" in parsed
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize(
+        "kikimr",
+        [{"enable_shared_reading_structured_json_parsing": True}],
+        indirect=["kikimr"],
+    )
+    def test_structured_json_skip_errors_required_top_level(
+        self,
+        kikimr,
+        entity_name,
+        local_topics,
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"structured_json_skip_errors_required{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
+
+        name = f"test_structured_json_skip_errors_required_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT * FROM {inp}
+                WITH (
+                    FORMAT = "json_each_row",
+                    `skip.json.errors` = "true",
+                    SCHEMA = (
+                        payload Struct<
+                            id: Int,
+                            name: String?
+                        > NOT NULL,
+                        note String
+                    )
+                );
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, name)
+
+        # Put the valid row after several invalid rows to ensure the parser recovers.
+        messages = [
+            '{"note":"skip-missing-payload"}',
+            '{"payload":null,"note":"skip-null-payload"}',
+            '{"payload":{"name":"b"},"note":"skip-missing-id"}',
+            '{"payload":{"id":"bad"},"note":"skip-id-type"}',
+            '{"payload":{"id":null},"note":"skip-id-null"}',
+            '{"payload":{"id":1,"name":"a"},"note":"ok"}',
+        ]
+
+        self.write_stream(messages, endpoint=endpoint)
+
+        rows = self._parse_json_rows(
+            self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)
+        )
+        assert len(rows) == 1
+
+        row = rows[0]
+        assert row["note"] == "ok"
+        assert row["payload"] == {"id": 1, "name": "a"}
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize(
+        "kikimr",
+        [{"enable_shared_reading_structured_json_parsing": True}],
+        indirect=["kikimr"],
+    )
+    def test_structured_json_skip_errors_invalid_documents(
+        self,
+        kikimr,
+        entity_name,
+        local_topics,
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"structured_json_skip_errors_docs{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
+
+        name = f"test_structured_json_skip_errors_docs_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT * FROM {inp}
+                WITH (
+                    FORMAT = "json_each_row",
+                    `skip.json.errors` = "true",
+                    SCHEMA = (
+                        payload Struct<
+                            id: Int
+                        >,
+                        note String
+                    )
+                );
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, name)
+
+        messages = [
+            # Malformed JSON document.
+            "not json",
+
+            # Valid JSON documents, but not JSON objects, are invalid for json_each_row.
+            "[1,2] ",
+            '"scalar" ',
+            "42 ",
+            "true ",
+
+            # Valid object with all optional fields omitted.
+            '{"note":"valid-empty"}',
+
+            # Valid object.
+            '{"payload":{"id":1},"note":"valid1"}',
+        ]
+
+        self.write_stream(messages, endpoint=endpoint)
+
+        expected_notes = {"valid-empty", "valid1"}
+
+        rows = self._parse_json_rows(
+            self.read_stream(len(expected_notes), topic_path=self.output_topic, endpoint=endpoint)
+        )
+        assert len(rows) == len(expected_notes)
+
+        parsed = {row["note"]: row for row in rows}
+        assert set(parsed) == expected_notes
+
+        assert parsed["valid1"]["payload"] == {"id": 1}
+        assert parsed["valid-empty"].get("payload") is None
+        assert parsed["valid-empty"]["note"] == "valid-empty"
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_pushdown(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool

@@ -13,6 +13,9 @@
 namespace NKikimr::NKqp {
 namespace {
 
+// Describe the existing RBO benchmark fixtures, not a second set of expected
+// plans. Schema/statistics names also determine the canonical snapshot suffix,
+// so profile selection must stay aligned with the original canonization suite.
 struct TBenchmark {
     TString Name;
     TString QueryDirectory;
@@ -26,6 +29,8 @@ TString ReadRboData(const TString& path) {
     return TIFStream(SRC_("../../rbo/data/" + path)).ReadAll();
 }
 
+// Reuse the original filename convention, including scale and column storage.
+// A snapshot for another statistics scale is not a valid expected join order.
 TString CanonicalPath(const TBenchmark& benchmark, const TString& statistics, ui32 queryId) {
     const TString statisticsName = statistics == "normal" ? benchmark.NormalStatistics : benchmark.SmallStatistics;
     const TString scale = statisticsName.substr(benchmark.Schema.size());
@@ -33,6 +38,9 @@ TString CanonicalPath(const TBenchmark& benchmark, const TString& statistics, ui
         << "_" << scale << "_column_store.json");
 }
 
+// Keep join algorithms and shuffle placement in the oracle, not just table
+// leaf order. Serialize for useful failure output; comparison below is JSON
+// structure equality, so irrelevant indentation does not affect correctness.
 TString FormatJoinOrder(const TString& plan) {
     const auto order = GetDetailedJoinOrder(plan, TGetPlanParams{.IncludeShuffles = true});
     UNIT_ASSERT_C(order.IsMap() && order.Has("op_name"), "Missing join-order tree in plan:\n" << plan);
@@ -49,6 +57,9 @@ TString FormatJoinOrder(const TString& plan) {
 // Check only that request, including all four frontend fallback stages.
 void RequireNativeLowering(const TCapturedLog& logs, size_t logStart, const TString& traceId, const TString& context) {
     const TString tag = "TraceId: " + traceId + ", ";
+    // Logs arrive asynchronously after query completion. Wait only for this
+    // request's success/fallback evidence; another query's native success must
+    // never make an unsupported workload appear to have lowered natively.
     const auto deadline = TInstant::Now() + TDuration::Seconds(10);
     TString evidence;
     size_t nativeRoots = 0;
@@ -72,6 +83,9 @@ void RequireNativeLowering(const TCapturedLog& logs, size_t logStart, const TStr
         }
         Sleep(TDuration::MilliSeconds(10));
     } while (TInstant::Now() < deadline);
+    // Exactly one native root is required for each single-result fixture.
+    // Disabling optimizer fallback alone cannot prove this: the frontend can
+    // still feed the legacy-converted plan into the same RBO optimizer.
     UNIT_ASSERT_C(!fallback && nativeRoots == 1,
         context << ": native AST-to-RBO lowering required before canonical comparison; native roots=" << nativeRoots
         << "\n" << (evidence.empty() ? TString("No frontend evidence for request ") + traceId : evidence));
@@ -102,6 +116,9 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
     }
     UNIT_ASSERT_C(profile == "normal" || profile == "small",
         "JOIN_ORDER_STATISTICS must be normal or small");
+    // These are correctness checks against an independent existing oracle.
+    // Reject canonization requests so a frontend regression cannot rewrite its
+    // expected output and hide a mismatch.
     TString canonize = GetTestParam("CANONIZE_JOIN_ORDER_TESTS");
     canonize.to_lower();
     UNIT_ASSERT_C(canonize.empty() || canonize == "false",
@@ -110,10 +127,15 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
     TString errors;
     const TString statisticsPath = "stats/" + (profile == "normal"
         ? benchmark.NormalStatistics : benchmark.SmallStatistics) + ".json";
+    // A missing profile must fail clearly rather than reuse another scale
+    // and compare plans produced under different optimizer assumptions.
     const TString fullStatisticsPath = SRC_("../../rbo/data/" + statisticsPath);
     UNIT_ASSERT_C(TFsPath(fullStatisticsPath).Exists(),
         "Missing " << profile << " statistics: " << fullStatisticsPath);
 
+    // Match the original column-store canonization setup: the same statistics,
+    // CBO level and order optimization must be active or a join-order difference
+    // could come from configuration instead of frontend lowering.
     NKikimrConfig::TAppConfig appConfig;
     auto* config = appConfig.MutableTableServiceConfig();
     config->SetEnableNewRBO(true);
@@ -141,6 +163,8 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
     UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
     auto session = sessionResult.GetSession();
 
+    // Apply the original fixture's column-store/partition options in memory.
+    // Keep the checked-in schema and canonical snapshots untouched.
     const std::regex tables(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
     const std::string schema = std::regex_replace(std::string(ReadRboData("schema/" + benchmark.Schema + ".sql")), tables,
         "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
@@ -166,6 +190,9 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
             const TString expected = TIFStream(path).ReadAll();
             NJson::ReadJsonTree(expected, &expectedOrder, true);
             UNIT_ASSERT_C(expectedOrder.IsMap() && expectedOrder.Has("op_name"), "Invalid canonical join order: " << path);
+            // Preserve the original helper preamble, including named lambda bindings.
+            // If the frontend cannot represent it, RequireNativeLowering must fail;
+            // removing helpers here would test a different workload from the oracle.
             const TString query = R"(
                 $to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
                 $to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
@@ -179,6 +206,9 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
                 NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
                     .TraceId(std::string(traceId))).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            // Prove native import before examining the canonical plan. Legacy
+            // fallback could produce the expected join order perfectly while the
+            // new AST-to-RBO path never ran.
             RequireNativeLowering(logs, logStart, traceId, context);
             UNIT_ASSERT_C(result.GetStats() && result.GetStats()->GetPlan(), "Missing explain plan");
             const TString actual = FormatJoinOrder(TString(*result.GetStats()->GetPlan()));
@@ -188,7 +218,12 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
                 context << ": native AST-to-RBO join order differs from " << path
                 << "\nActual join order:\n" << actual
                 << "\nExpected canonical join order:\n" << expected);
+            // Count only queries that passed both the native-path guard and the
+            // canonical comparison. Successful explain alone is not a match.
             ++matched;
+        // Continue through the corpus after a failure so one unsupported
+        // construct does not hide coverage gaps in all subsequent queries.
+        // The accumulated errors still fail the enclosing benchmark test.
         } catch (const std::exception& error) {
             errors += context + ": " + error.what() + "\n";
             Cerr << context << ": " << error.what() << Endl;

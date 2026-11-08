@@ -8,6 +8,9 @@
 namespace NKikimr::NKqp {
 namespace {
 
+// This fixture bypasses host fallback and imports the new AST directly. Its
+// common checks validate IU definition/use, lambda argument ownership and
+// PlanProps lifetime for every operator, not just the visible result columns.
 struct TFixture : NTests::TIdTestContext {
     std::unique_ptr<NNewYql::TScript> Ast;
     std::unique_ptr<NNewYql::TResolvedNames> Names;
@@ -29,6 +32,8 @@ struct TFixture : NTests::TIdTestContext {
         return Lower(orderedColumns);
     }
 
+    // Keep this separate from Run so a test can lower the same AST/annotation
+    // result twice and verify that importing a plan did not consume or mutate it.
     TIntrusivePtr<TOpRoot> Lower(bool orderedColumns = false) {
         const auto& query = *std::get<NNewYql::TQueryStatement>(Ast->Statements.back().Value).Query;
         auto root = NNewYql::LowerToRbo(query, *Ast, *Names, *Annotations, ExprCtx,
@@ -60,6 +65,8 @@ struct TFixture : NTests::TIdTestContext {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
+    // ORDER BY uses an unprojected computed value; the map must retain its input
+    // and count literals must already be visible to later pushdown rules.
     Y_UNIT_TEST(ProjectionSortAndLimitKeepHiddenDependencies) {
         TFixture f;
         auto root = f.Run("PRAGMA YqlSelect = 'force'; SELECT id + 1 AS next FROM t WHERE id > 0 ORDER BY a + 2 DESC LIMIT 5 OFFSET 1;");
@@ -79,6 +86,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
         UNIT_ASSERT_VALUES_EQUAL(offset->Head().Content(), "1");
     }
 
+    // Check both RBO type recomputation and a second import from the same inputs
+    // to detect consumed AST nodes or mutated annotation lambdas.
     Y_UNIT_TEST(SelectWithoutSourceCanBeReannotated) {
         TFixture f;
         auto root = f.Run("SELECT [1, 2][0u] AS v, CAST(3 AS Int64) + 2 AS n LIMIT 1;");
@@ -95,6 +104,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
         }
     }
 
+    // Reversed equality operands still form a key, while the remaining outer-join
+    // condition must stay on the join rather than disappear or move to WHERE.
     Y_UNIT_TEST(SelfJoinExtractsKeysAndRetainsResidual) {
         TFixture f;
         auto root = f.Run("SELECT l.id, r.value FROM t AS l LEFT JOIN t AS r ON r.id = l.id AND r.a > 1;");
@@ -105,6 +116,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
         UNIT_ASSERT(!join->GetLeftInput()->GetOutputIUs().HasAny(join->GetRightInput()->GetOutputIUs()));
     }
 
+    // Shared computation and independent consumer identity are separate invariants:
+    // one read should feed two ports with disjoint IU sets.
     Y_UNIT_TEST(CteReferencesShareProducerAndHaveDisjointIds) {
         TFixture f;
         auto root = f.Run("WITH c(k) AS (SELECT id + 1 FROM t) "
@@ -118,6 +131,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
         UNIT_ASSERT_EQUAL(&a->GetReplicate(), &b->GetReplicate());
     }
 
+    // Visible renames must not replace the stored column names used by the read.
     Y_UNIT_TEST(DerivedAndPhysicalColumnAliases) {
         TFixture f;
         auto root = f.Run("SELECT d.key FROM (SELECT key FROM t AS x(key, label, count)) AS d;");
@@ -126,6 +140,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
         UNIT_ASSERT_VALUES_EQUAL(root->PlanProps.InfoUnitRegistry.Get(*read->GetColumns().begin()).GetColumnName(), "id");
     }
 
+    // Presentation ordering is separate from catalog order; DISTINCT must emit
+    // only its projected key IUs and exclude hidden input dependencies.
     Y_UNIT_TEST(StarPresentationAndDistinctKeys) {
         TFixture f;
         auto root = f.Run("SELECT * FROM t;");
@@ -137,6 +153,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
         UNIT_ASSERT(agg->GetOutputIUs() == distinct->GetOutputIUs());
     }
 
+    // Exercise differing output-side rules through the same ID/argument invariants.
     Y_UNIT_TEST(SemiCrossAndOuterJoinKinds) {
         for (const TString kind : {"LEFT SEMI", "RIGHT ONLY", "FULL", "EXCLUSION", "CROSS"}) {
             TFixture f;
@@ -147,6 +164,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
         }
     }
 
+    // Reject unsupported modifiers and unavailable DISTINCT sort dependencies
+    // without producing either a partial plan or a spurious type-error issue.
     Y_UNIT_TEST(UnsupportedSemanticsDoNotSilentlyDisappear) {
         for (const TString sql : {"SELECT l.id FROM t AS l JOIN ANY t AS r ON l.id = r.id;",
             "SELECT DISTINCT id FROM t ORDER BY value;", "SELECT id FROM t ASSUME ORDER BY id;"}) {

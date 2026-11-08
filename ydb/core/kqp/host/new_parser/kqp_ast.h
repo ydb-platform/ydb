@@ -12,6 +12,10 @@ namespace NKikimr::NKqp::NNewYql {
 
 // Offsets are zero-based Unicode code-point offsets, with an exclusive end.
 // Line is one-based and Column is zero-based, matching the ANTLR token locations.
+// The AST is a syntax representation: constructing a node does not promise
+// that name resolution, type annotation or RBO lowering supports its semantics.
+// Those phases keep results in separate tables and explicitly request fallback
+// when they cannot preserve the meaning of a represented construct.
 struct TSourceRange {
     size_t Begin = 0;
     size_t End = 0;
@@ -25,6 +29,9 @@ struct TIdentifier {
     TSourceRange Range;
 };
 
+// Recursive edges own their children. Semantic tables later use node addresses
+// as keys, so keep this tree alive and do not replace its nodes while those
+// tables are in use. No node borrows storage from the parser or input text.
 struct TExpression;
 struct TQuery;
 struct TSource;
@@ -32,6 +39,8 @@ using TExpressionPtr = std::unique_ptr<TExpression>;
 using TQueryPtr = std::unique_ptr<TQuery>;
 using TSourcePtr = std::unique_ptr<TSource>;
 
+// Keep omitted syntax distinct from an explicit ALL/DISTINCT. The applicable
+// default belongs to the clause and dialect, rather than to the parser.
 enum class ESetQuantifier { Default, All, Distinct };
 enum class ELiteralKind { Integer, Real, String, Boolean, Null, Blob };
 enum class EUnaryOp { Plus, Minus, BitNot, Not, IsNull, IsNotNull };
@@ -48,6 +57,9 @@ struct TLiteral {
     TString Spelling;
 };
 
+// Module qualification describes a callable namespace. Table qualification
+// is initially a TMember expression; the resolver decides whether its base
+// is a relation alias before treating the suffix as a column name.
 struct TName {
     TIdentifier Name;
     std::optional<TIdentifier> Module;
@@ -101,6 +113,9 @@ struct TWindowFrame {
     EWindowExclusion Exclusion = EWindowExclusion::Default;
 };
 
+// Store window inheritance and frame syntax without expanding either. Name
+// resolution can bind window names independently of the later implementation
+// of window evaluation and frame type rules.
 struct TWindowSpecification {
     TSourceRange Range;
     std::optional<TIdentifier> BaseWindow;
@@ -123,6 +138,9 @@ struct TWindowDefinition {
 };
 
 enum class ENullTreatment { Default, Respect, Ignore };
+// Keep aggregate/window modifiers attached to the call. Scalar lowering must
+// reject unsupported modifiers rather than accidentally execute a different
+// scalar function with the same spelling.
 struct TCall {
     TExpressionPtr Callable;
     TVector<TNamedExpression> Arguments;
@@ -143,6 +161,8 @@ struct TIndex {
     TExpressionPtr Index;
 };
 
+// A parenthesized scalar is unwrapped by the builder; a comma or named element
+// makes a tuple. This distinction affects both arity and YQL tuple typing.
 struct TTuple {
     TVector<TNamedExpression> Elements;
 };
@@ -168,6 +188,9 @@ struct TTypeTag {
 };
 
 struct TTypeMember;
+// This recursive syntax also represents types not yet accepted by scalar
+// lowering. OptionalDepth preserves repeated suffixes; Parameters retain
+// Decimal arguments as text until the existing YQL type rules validate them.
 struct TTypeName {
     TIdentifier Name;
     TVector<TTypeName> Arguments;
@@ -240,6 +263,9 @@ struct TDerivedTable {
 };
 
 enum class EJoinKind { Inner, Cross, Left, Right, Full, LeftOnly, RightOnly, LeftSemi, RightSemi, Exclusion };
+// ON and USING remain distinct because USING/NATURAL require column merging.
+// ANY belongs to an immediate join input, not to the entire accumulated join
+// chain. Later phases must implement these rules or request fallback.
 struct TJoin {
     EJoinKind Kind;
     TSourcePtr Left;
@@ -291,6 +317,9 @@ struct TTableHint {
     std::variant<TGenericTableHint, TSchemaHint, TWatermarkHint> Value;
 };
 
+// Aliases, sampling and hints decorate this particular source occurrence.
+// For a self join, two occurrences of one catalog table remain separate nodes
+// and therefore receive independent resolved column identities.
 struct TSource {
     TSourceRange Range;
     std::variant<TTable, TDerivedTable, TJoin> Value;
@@ -301,6 +330,8 @@ struct TSource {
 };
 
 enum class EGroupingKind { Ordinary, Rollup, Cube, Sets };
+// Retain the grouping tree, including empty/nested sets. Expanding CUBE or
+// ROLLUP here would mix syntax construction with relational semantics.
 struct TGroupingElement {
     TSourceRange Range;
     EGroupingKind Kind = EGroupingKind::Ordinary;
@@ -308,6 +339,9 @@ struct TGroupingElement {
     TVector<TGroupingElement> Elements;
 };
 
+// Clause order is represented structurally, not as an execution order. In
+// particular ORDER BY may refer to projection aliases or hidden input columns;
+// resolution and operator lowering establish those scopes explicitly.
 struct TSelect {
     ESetQuantifier Quantifier = ESetQuantifier::Default;
     TVector<TNamedExpression> Columns;
@@ -338,6 +372,9 @@ struct TCte {
     bool Recursive = false;
 };
 
+// WITH and LIMIT/OFFSET belong to the query, including a set-operation query.
+// Both LIMIT spellings use these semantic slots: LIMIT offset,count is stored
+// with the second expression in Limit and the first in Offset.
 struct TQuery {
     TSourceRange Range;
     TVector<TCte> With;
@@ -370,6 +407,9 @@ struct TStatement {
     std::variant<TQueryStatement, TPragmaStatement> Value;
 };
 
+// Pragmas remain interleaved with queries so each semantic pass can apply
+// settings in source order. File and AnsiLexer retain the context needed to
+// interpret copied spellings and produce diagnostics after ANTLR is gone.
 struct TScript {
     TString File;
     bool AnsiLexer = false;

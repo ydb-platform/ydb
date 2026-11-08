@@ -51,6 +51,10 @@ struct TKqlTransformContext : TThrRefBase {
 
     // Frontend input, retained across Reset() of runner outputs. SetupSession
     // replaces it before destroying the AST and its annotation context.
+    // The callback receives a top-level query index, the legacy result root and
+    // column hints. A null result requests legacy conversion for that root; user
+    // diagnostics must already have failed the earlier frontend passes. Count
+    // checks in the RBO transformer protect the positional query/result mapping.
     size_t NewParserRboQueryCount = 0;
     std::function<TIntrusivePtr<TOpRoot>(size_t, const NYql::TExprNode::TPtr&,
         const NYql::TExprNode::TPtr&, NYql::TExprContext&)> NewParserRboLowering;

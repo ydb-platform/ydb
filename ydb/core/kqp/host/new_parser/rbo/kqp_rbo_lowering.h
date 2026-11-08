@@ -5,11 +5,16 @@
 
 namespace NKikimr::NKqp::NNewYql {
 
+// The host provides the provider-specific table node only after validating
+// that its catalog identity still matches the snapshot used for resolution.
+// The lowerer needs storage kind for the read but does not load metadata itself.
 struct TRboTable {
     NYql::TExprNode::TPtr Table; // TKqpTable, including path ID and schema version.
     NYql::EStorageType StorageType = NYql::EStorageType::RowStorage;
 };
 
+// The callback may request frontend fallback; returning a node for a different
+// schema would invalidate both resolved column identities and annotated types.
 using TRboTableLookup = std::function<TRboTable(const TTableMetadata&)>;
 
 // Direct import into logical RBO operators, using annotated/re-written scalar

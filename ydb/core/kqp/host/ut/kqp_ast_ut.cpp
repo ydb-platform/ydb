@@ -7,6 +7,9 @@ namespace {
 
 using namespace NNewYql;
 
+// These tests inspect syntax shape directly. Acceptance here does not imply
+// that resolution or native operator lowering supports the feature. The helper
+// returns only the owning AST, after the ANTLR parse tree has been destroyed.
 std::unique_ptr<TScript> Parse(const TString& text) {
     auto parsed = ParseQueryWithNewParser(text, {}, false);
     UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
@@ -31,6 +34,8 @@ void LiteralIs(const TExpressionPtr& expression, TStringBuf spelling) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
+    // Check the tree, not evaluated constants: wrong associativity can still
+    // produce the same value for convenient literal inputs.
     Y_UNIT_TEST(PrecedenceAndAssociativity) {
         auto ast = Parse("SELECT 10 - 3 - 2 * 4, a OR b AND c, x ?? y ?? z, -x * y;");
         const auto& columns = Select(*ast).Columns;
@@ -49,6 +54,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT(As<TUnary>(As<TBinary>(columns[3].Expression).Left).Op == EUnaryOp::Minus);
     }
 
+    // Assert clause placement and join inputs together so a nested grammar
+    // wrapper cannot cause the builder to pick the wrong expression.
     Y_UNIT_TEST(SelectClausesAndJoin) {
         auto ast = Parse(R"(
             SELECT DISTINCT t.id AS id, COUNT(DISTINCT u.value) AS n
@@ -78,6 +85,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         LiteralIs(query.Offset, "2");
     }
 
+    // Keep syntax modifiers even when their later semantic phases require
+    // fallback; parsing must not silently simplify the query.
     Y_UNIT_TEST(AnyUsingAndQualifiedStar) {
         auto ast = Parse("SELECT l.*, r.v FROM ANY t AS l INNER JOIN ANY u AS r USING(id);");
         const auto& select = Select(*ast);
@@ -88,6 +97,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT(!join.On);
     }
 
+    // ANY on one input must not mark the other input, including across the
+    // outer/semi/only join spellings accepted by the grammar.
     Y_UNIT_TEST(AnyJoinInputsAreIndependent) {
         for (bool ansi : {false, true}) {
             for (bool leftAny : {false, true}) {
@@ -112,6 +123,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         }
     }
 
+    // The accumulated left relation of a later join does not inherit an
+    // earlier input's ANY flag; nested sources have their own modifier state.
     Y_UNIT_TEST(AnyDoesNotLeakAcrossJoinChainOrSubquery) {
         auto ast = Parse(R"(SELECT * FROM ANY t AS l
             JOIN ANY (SELECT * FROM u JOIN w ON u.id = w.id) WITH infer AS r SAMPLE 0.5 ON l.id = r.id
@@ -130,6 +143,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT_VALUES_EQUAL(outer.Right->Alias->Spelling, "s");
     }
 
+    // Normalize the two LIMIT syntaxes into count/offset slots while retaining
+    // the derived query as a separate subtree.
     Y_UNIT_TEST(DerivedTableAndCommaLimit) {
         auto ast = Parse("SELECT d.id FROM (SELECT id FROM t LIMIT 2, 5) AS d;");
         const auto& from = *Select(*ast).From;
@@ -139,6 +154,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         LiteralIs(inner.Offset, "2");
     }
 
+    // Predicate-specific operands and flags must survive construction rather
+    // than collapsing into an incomplete binary expression.
     Y_UNIT_TEST(Predicates) {
         auto ast = Parse(R"(SELECT x NOT IN (1, 2), x NOT BETWEEN SYMMETRIC 1 AND 3,
             x IS NOT NULL, x IS NOT DISTINCT FROM y, name NOT LIKE 'a%' ESCAPE '!';)");
@@ -157,6 +174,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         LiteralIs(like.Escape, "'!'");
     }
 
+    // Distinguish grouping from tuples/lists and relational subqueries even
+    // though their grammar shares parenthesized alternatives.
     Y_UNIT_TEST(ParenthesesCollectionsAndSubqueries) {
         auto ast = Parse("SELECT (1 + 2), (1,), (), [1, 2], EXISTS (SELECT 1 FROM t), (SELECT MAX(x) FROM u);");
         const auto& columns = Select(*ast).Columns;
@@ -168,6 +187,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT(As<TSubquery>(columns[5].Expression).Query);
     }
 
+    // Preserve CASE branches and structured cast targets before lowering can
+    // choose callables or apply type coercions.
     Y_UNIT_TEST(CaseAndCast) {
         auto ast = Parse(R"(SELECT CASE x WHEN 1 THEN 'one' ELSE 'many' END,
             CASE WHEN x > 0 THEN 1 END, CAST($x AS Int64?), CAST(1 AS Decimal(22, 9)),
@@ -188,6 +209,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT_VALUES_EQUAL(As<TCast>(columns[4].Expression).Type.Arguments[0].Name.Spelling, "Int32");
     }
 
+    // A left fold at only one precedence level would misgroup INTERSECT with
+    // UNION/EXCEPT; assert the nested set-operation tree explicitly.
     Y_UNIT_TEST(CteAndSetOperationPrecedence) {
         auto ast = Parse("WITH c(id) AS (SELECT 1) SELECT id FROM c UNION ALL SELECT 2 INTERSECT SELECT 3 EXCEPT SELECT 4;");
         const auto& query = *std::get<TQueryStatement>(ast->Statements[0].Value).Query;
@@ -201,6 +224,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT(std::get<TSetOperation>(unionAll.Right->Body).Op == ESetOperation::Intersect);
     }
 
+    // Retain nested grouping syntax instead of expanding combinations during
+    // parsing; downstream support must see the original grouping form.
     Y_UNIT_TEST(GroupingSets) {
         auto ast = Parse("SELECT a, COUNT(*) FROM t GROUP BY GROUPING SETS ((), ROLLUP(a, b), CUBE(a, b));");
         const auto& sets = Select(*ast).GroupBy[0];
@@ -211,6 +236,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT(sets.Elements[2].Kind == EGroupingKind::Cube);
     }
 
+    // Suffix chains must attach in source order, and module qualification
+    // must remain distinct from table/struct member access.
     Y_UNIT_TEST(MemberIndexAndModuleCall) {
         auto ast = Parse("SELECT t.record.field, $items[0], Math::Abs(-$value);");
         const auto& columns = Select(*ast).Columns;
@@ -223,6 +250,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT_VALUES_EQUAL(name.Name.Spelling, "Abs");
     }
 
+    // Keep quoted spelling and statement boundaries for later dialect-aware
+    // name resolution; the builder itself does not decode identifiers.
     Y_UNIT_TEST(AnsiSpellingsAndMultipleStatements) {
         auto ast = Parse("--!ansi_lexer\nEXPLAIN QUERY PLAN SELECT 'a''b' AS \"a\"\"b\"; SELECT 42ul;");
         UNIT_ASSERT(ast->AnsiLexer);
@@ -233,6 +262,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         LiteralIs(Select(*ast, 1).Columns[0].Expression, "42ul");
     }
 
+    // Suffixes and delimiters carry type information that would be lost by
+    // converting literals into generic C++ values during parsing.
     Y_UNIT_TEST(LiteralKindsAndSpellings) {
         auto ast = Parse(R"(SELECT NULL, true, 1.25, 42ul, 'a\n';)");
         const auto& columns = Select(*ast).Columns;
@@ -245,6 +276,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         LiteralIs(columns[4].Expression, R"('a\n')");
     }
 
+    // Use the AST after parser/input temporaries have gone away and verify
+    // Unicode-aware ranges; copied token text must not be dangling storage.
     Y_UNIT_TEST(SourceRangesAndOwnership) {
         auto ast = Parse("-- comment\nSELECT 'Ж', x + 12;");
         const auto& literal = *Select(*ast).Columns[0].Expression;
@@ -258,6 +291,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT_VALUES_EQUAL(As<TName>(std::get<TBinary>(binary.Value).Left).Name.Spelling, "x");
     }
 
+    // Window and aggregate modifiers belong to the call and must retain all
+    // frame/partition/order detail even before window execution is supported.
     Y_UNIT_TEST(InlineWindowWithFilterAndFrame) {
         auto ast = Parse(R"(SELECT SUM(x) FILTER (WHERE x > 0) OVER (
             PARTITION COMPACT BY department AS dep ORDER BY ts DESC, id ASC
@@ -283,6 +318,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT(frame.Range.End < window.Range.End);
     }
 
+    // OVER name and OVER (name) encode different inheritance rules; preserve
+    // that distinction alongside explicit NULL treatment.
     Y_UNIT_TEST(NamedWindowsInheritanceAndNullTreatment) {
         auto ast = Parse(R"(SELECT FIRST_VALUE(x) IGNORE NULLS OVER w,
             LAST_VALUE(x) RESPECT NULLS OVER (w), ROW_NUMBER() OVER (),
@@ -311,6 +348,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT(inherited.Frame->Exclusion == EWindowExclusion::Default);
     }
 
+    // Check bounded and unbounded endpoints independently of exclusion mode;
+    // omitted endpoints must not be confused with explicit syntax.
     Y_UNIT_TEST(WindowFrameExclusionsAndBounds) {
         auto ast = Parse(R"(SELECT
             SUM(x) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING EXCLUDE GROUP),
@@ -332,6 +371,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         LiteralIs(range.Begin.Offset, "2");
     }
 
+    // SAMPLE fractions and TABLESAMPLE percentages are different modes, and
+    // sampling must remain attached to the intended source occurrence.
     Y_UNIT_TEST(SamplingModesAndSourcePlacement) {
         auto ast = Parse(R"(SELECT * FROM t AS l SAMPLE $fraction
             JOIN (SELECT * FROM u) AS r TABLESAMPLE BERNOULLI(10 + 5) REPEATABLE($seed)
@@ -352,6 +393,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT(!system.Seed);
     }
 
+    // Hint repetition, quoting and scalar/list forms may matter to providers;
+    // a map keyed only by hint name would discard valid source information.
     Y_UNIT_TEST(GenericHintsPreserveValuesAndOrder) {
         auto ast = Parse(R"(SELECT * FROM t WITH (infer, format = 'csv',
             flags = (foo, 'bar', $baz), format = json, one = (foo)) AS src SAMPLE 0.5;
@@ -377,6 +420,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT_VALUES_EQUAL(Select(*ast, 1).From->Hints.size(), 1);
     }
 
+    // Schema hints carry type/nullability structure, while watermark hints
+    // carry expressions. Neither can be reduced to an opaque hint name.
     Y_UNIT_TEST(SchemaAndWatermarkHints) {
         auto ast = Parse(R"(SELECT * FROM t WITH (
             SCHEMA = Struct<id:Int64, name:String?>, COLUMNS = $columns,
@@ -404,6 +449,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT(std::get<TVector<TSchemaColumn>>(std::get<TSchemaHint>(Select(*ast, 2).From->Hints[0].Value).Value).empty());
     }
 
+    // Recursive type arguments and field/tag syntax must survive intact for
+    // subsequent validation by the supported semantic path.
     Y_UNIT_TEST(NestedSchemaTypes) {
         auto ast = Parse(R"(SELECT * FROM t WITH SCHEMA Struct<
             a:Variant<Int32, String>, b:Variant<x:Int32, y:$type>,
@@ -419,6 +466,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT_VALUES_EQUAL(std::get<TLiteral>(members[4].Type.Tags[0].Value).Spelling, "'handle'");
     }
 
+    // Pragmas affect later statements, so keep source order and distinguish
+    // flag, assignment and list forms without applying settings during parsing.
     Y_UNIT_TEST(PragmasPreserveOrderAndValueForms) {
         auto ast = Parse(R"(PRAGMA OrderedColumns;
             PRAGMA yt.Pool = 'batch'; SELECT 1;
@@ -450,6 +499,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         LiteralIs(Select(*ast, 5).Columns[0].Expression, "2");
     }
 
+    // Exercise the same AST alternatives under ANSI tokenization so the shared
+    // builder cannot accidentally depend on default-dialect token behavior.
     Y_UNIT_TEST(AnsiWindowsHintsAndPragmas) {
         auto ast = Parse(R"(--!ansi_lexer
             PRAGMA "ns"."name" = 'a''b';
@@ -469,6 +520,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT_VALUES_EQUAL(std::get<TLiteral>(hint.Values[0].Value).Spelling, "'a''b'");
     }
 
+    // Each rejected alternative must request whole-script fallback; returning
+    // a partial AST with the unsupported clause removed would change semantics.
     Y_UNIT_TEST(UnsupportedSyntaxDoesNotDisappear) {
         const TVector<TString> queries = {
             "SELECT 1; DELETE FROM t;",
@@ -488,6 +541,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         }
     }
 
+    // An empty script is a valid owning AST with no statements, not a parse
+    // error or an unsupported-feature fallback.
     Y_UNIT_TEST(EmptyScript) {
         UNIT_ASSERT(Parse("-- comment\n")->Statements.empty());
     }

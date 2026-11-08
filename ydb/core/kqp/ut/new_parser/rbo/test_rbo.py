@@ -17,6 +17,9 @@ import yatest.common
 
 
 RBO_ROOT = "ydb/core/kqp/ut/rbo"
+# Enumerate the original targets, then ask each binary for registered names.
+# This includes generated twin/quad cases and avoids maintaining a copied list
+# of SQL inputs or assertions as the original RBO suite evolves.
 GROUPS = (
     "", "aggregation", "basic", "explain", "fallback", "join_order", "joins",
     "metadata", "olap", "physical", "reads", "subqueries", "workloads",
@@ -56,10 +59,14 @@ EXCLUDED = {
 }
 
 
+# ya derives these unit-test executable names from the full module path.
+# Use binary_path so execution also works in the isolated test sandbox.
 def binary_for(module):
     return yatest.common.binary_path(f"{module}/{module.replace('/', '-')}")
 
 
+# Discover actual registrations rather than parsing C++ macros. Reject empty
+# or malformed output so a broken discovery command cannot silently drop coverage.
 def registered_cases(module):
     output = yatest.common.execute([binary_for(module), "--list-verbose"]).std_out
     names = output.decode().splitlines()
@@ -74,6 +81,8 @@ def collect_cases():
         module = f"{RBO_ROOT}/{group}" if group else RBO_ROOT
         names = registered_cases(module)
         exclusions = EXCLUDED.get(group, {})
+        # Require every exclusion to match a current case; renamed tests should
+        # force a review of whether effects or multiple results are still excluded.
         for pattern in exclusions:
             assert any(fnmatch.fnmatchcase(name, pattern) for name in names), (
                 f"Stale exclusion in {group}: {pattern}"
@@ -82,6 +91,9 @@ def collect_cases():
             if not any(fnmatch.fnmatchcase(name, pattern) for pattern in exclusions):
                 cases.append(pytest.param(module, name, id=f"{group or 'operators'}/{name}"))
 
+    # Include direct importer checks alongside compatibility cases. Most reused
+    # SQL tests allow frontend fallback, so those passes alone do not establish
+    # that any query reached the new AST-to-RBO importer.
     module = "ydb/core/kqp/ut/new_parser/fallback"
     native = [name for name in registered_cases(module)
               if name.startswith("KqpNewYqlRboLowering::")
@@ -94,10 +106,14 @@ def collect_cases():
 @pytest.mark.parametrize("module,name", collect_cases())
 def test_rbo_frontend_compatibility(module, name):
     env = os.environ.copy()
+    # The shared C++ runner enables the frontend only for configurations already
+    # using new RBO, preserving explicit old-optimizer baseline runs in twin tests.
     env["YDB_KQP_TEST_NEW_AST"] = "1"
     # Do not inherit an outer C++ runner's selection and accidentally run zero
     # cases. A trace assertion below also validates the precise executed case.
     env.pop("Y_UNITTEST_FILTER_FILE", None)
+    # Derive unique artifact names from both module and case: registered names
+    # can repeat between binaries, and punctuation in names is unsuitable for paths.
     suffix = hashlib.sha256(f"{module}/{name}".encode()).hexdigest()[:16]
     trace = yatest.common.output_path(f"rbo-{suffix}.trace")
     result = yatest.common.execute(
@@ -109,6 +125,8 @@ def test_rbo_frontend_compatibility(module, name):
         stderr=yatest.common.output_path(f"rbo-{suffix}.err"),
     )
     assert result.exit_code == 0, f"{module}/{name}: exit {result.exit_code}; see rbo-{suffix}.err"
+    # A zero exit code can also mean no selected case ran. Validate the trace
+    # identity, cardinality and status so filtering mistakes cannot report a pass.
     events = [json.loads(line) for line in Path(trace).read_text().splitlines()]
     finished = [event["value"] for event in events if event["name"] == "subtest-finished"]
     assert len(finished) == 1, f"Expected exactly one executed case: {finished}"

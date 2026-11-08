@@ -38,6 +38,9 @@ NNewYql::TTableMetadataPtr ClickBenchTable() {
     return table;
 }
 
+// Check the unoptimized logical operator tree from an original workload query.
+// Expected projections, predicate dependencies, sort keys and count are supplied
+// independently of the importer so a dropped clause cannot pass by compilation alone.
 void CheckClickBench(ui32 queryId, bool columnStore, const TVector<TString>& outputs,
     const TVector<TString>& sortKeys, TStringBuf predicateColumn)
 {
@@ -57,6 +60,8 @@ void CheckClickBench(ui32 queryId, bool columnStore, const TVector<TString>& out
     auto annotations = NNewYql::AnnotateAst(*parsed.Ast, *names.Names, f.ExprCtx, f.TypeCtx);
     UNIT_ASSERT_C(annotations, f.ExprCtx.IssueManager.GetIssues().ToString());
     const auto& query = *std::get<NNewYql::TQueryStatement>(parsed.Ast->Statements.front().Value).Query;
+    // Both twins share SQL and catalog types; storage kind is the explicit
+    // provider input. Assert it on the resulting read to catch lost table metadata.
     const auto storage = columnStore ? NYql::EStorageType::ColumnStorage : NYql::EStorageType::RowStorage;
     // There is no host or legacy translator in this test. Any fallback thrown
     // by parsing, resolution, annotation or operator lowering fails the case.
@@ -66,6 +71,9 @@ void CheckClickBench(ui32 queryId, bool columnStore, const TVector<TString>& out
                 .Path().Build(table.Path).PathId().Build("1:1").SysView().Build("").Version().Build("1").Done().Ptr();
             return NNewYql::TRboTable{node, storage};
         });
+    // Validate definition/use scope across the complete plan, then inspect
+    // clause-specific structure. A correct-looking root label is insufficient
+    // if expressions reference IUs absent from their input operators.
     NTests::AssertIdInvariants(*root, root->PlanProps);
     TVector<TString> actualOutputs;
     for (const auto& [id, name] : root->GetColumns().Items()) {
@@ -73,6 +81,9 @@ void CheckClickBench(ui32 queryId, bool columnStore, const TVector<TString>& out
         actualOutputs.push_back(name);
     }
     UNIT_ASSERT_VALUES_EQUAL(actualOutputs, outputs);
+    // Walk the exact expected stack, not just a bag of operator kinds: LIMIT
+    // must wrap sorting, and filtering must precede projection. These checks
+    // also catch an extra/missing operator between otherwise valid clauses.
     auto op = root->GetInput();
     if (!sortKeys.empty()) {
         UNIT_ASSERT(op->Kind == EOperator::Limit);
@@ -104,7 +115,12 @@ void CheckClickBench(ui32 queryId, bool columnStore, const TVector<TString>& out
     const auto read = CastOperator<TOpRead>(op);
     UNIT_ASSERT(read->GetTableStorageType() == storage);
     UNIT_ASSERT_VALUES_EQUAL(NNodes::TKqpTable(read->GetTable()).Path().StringValue(), "/Root/hits");
+    // The importer initially emits the full catalog schema; pruning belongs
+    // to later optimizer rules. Do not reduce this fixture to referenced columns
+    // and accidentally mask a broken catalog-to-IU mapping.
     UNIT_ASSERT_VALUES_EQUAL(read->GetColumns().Size(), metadata->Columns.size());
+    // Scalar lambdas and their PlanProps pointers must remain valid after the
+    // temporary lowerer has been destroyed and ownership has moved to the root.
     for (const auto& item : *root) {
         for (const auto& expression : item.Current->GetExpressions()) {
             NYql::CheckArguments(*expression.get().GetLambda());
@@ -119,6 +135,8 @@ void CheckClickBench(ui32 queryId, bool columnStore, const TVector<TString>& out
 // subset. Aggregation-heavy TPCH/TPCDS queries are not native lowering coverage;
 // their separate fallback compatibility tests must not be counted as such.
 Y_UNIT_TEST_SUITE(KqpNewYqlWorkloadLowering) {
+    // Start with filter/projection only, then cover one-key and multi-key sorting
+    // with LIMIT using the unchanged workload resources in the following cases.
     Y_UNIT_TEST_TWIN(ClickBench_Q20, ColumnStore) {
         CheckClickBench(20, ColumnStore, {"UserID"}, {}, "UserID");
     }

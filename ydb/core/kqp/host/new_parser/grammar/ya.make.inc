@@ -16,6 +16,9 @@ COPY_FILE(
 # for these generated libraries only. Do not change the shared parser targets.
 CXXFLAGS(-UANTLR4_USE_THREAD_LOCAL_CACHE -DANTLR4_USE_THREAD_LOCAL_CACHE=0)
 
+# Use the repository C++ templates copied above, including their cache
+# initialization support. The grammar is shared with SQL v1; only lexer
+# configuration and generated C++ namespace differ between the two callers.
 RUN_ANTLR4_CPP(
     ${SQL_GRAMMAR}
     VISITOR

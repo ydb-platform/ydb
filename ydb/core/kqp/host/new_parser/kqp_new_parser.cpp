@@ -15,6 +15,8 @@ namespace NKikimr::NKqp {
 
 namespace {
 
+// Own the complete ANTLR lifetime chain for one parse. The parser owns the CST;
+// tokens and character input must remain alive until the builder has copied it.
 template <typename TLexer, typename TParser, bool AnsiLexer>
 class TParseTree {
 public:
@@ -37,6 +39,8 @@ public:
         Parser.addErrorListener(&errorListener);
         Parser.addParseListener(&depthLimiter);
         Parser.setBuildParseTree(true);
+        // Listeners are stack objects, while Lexer and Parser survive this call.
+        // Detach them on every exit, including diagnostic/depth-limit exceptions.
         Y_DEFER {
             Lexer.removeErrorListeners();
             Parser.removeErrorListeners();
@@ -57,6 +61,8 @@ public:
     }
 
 private:
+    // Declaration order matters: dependencies are constructed first and destroyed
+    // last. Root is borrowed from Parser and must never escape this wrapper.
     TString Text;
     antlr4::ANTLRInputStream Input;
     TLexer Lexer;
@@ -73,6 +79,7 @@ std::unique_ptr<NNewYql::TScript> ParseQuery(const TString& queryText,
     if (!tree.Parse(settings, isAmbiguityError, issues)) {
         return nullptr;
     }
+    // Build while the CST and token text are valid; only the owning AST escapes.
     return BuildNewYqlAst(*tree.GetRoot(), AnsiLexer, settings.File);
 }
 
@@ -82,6 +89,8 @@ TNewYqlParseResult ParseQueryWithNewParser(const TString& queryText,
     NSQLTranslation::TTranslationSettings settings, bool isAmbiguityError)
 {
     TNewYqlParseResult result;
+    // Honor SQL comment directives before choosing a lexer. A directive error
+    // is a user diagnostic, while an unsupported dialect requests fallback.
     if (!NSQLTranslation::ParseTranslationSettings(queryText, settings, result.Issues)) {
         return result;
     }

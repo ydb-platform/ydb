@@ -18,6 +18,8 @@ using TContext = antlr4::ParserRuleContext;
 using TTree = antlr4::tree::ParseTree;
 using TTerminal = antlr4::tree::TerminalNode;
 
+// ANTLR stop indices are inclusive, while our ranges are half-open. EOF has
+// no source character, and empty grammar rules must not produce End < Begin.
 TSourceRange Range(TTree* tree) {
     auto* context = dynamic_cast<TContext*>(tree);
     auto* start = context ? context->getStart() : dynamic_cast<TTerminal*>(tree)->getSymbol();
@@ -40,6 +42,9 @@ TIdentifier Identifier(TTree* tree) {
     return {TString(tree->getText()), Range(tree)};
 }
 
+// These helpers inspect direct children only. A recursive search could pick
+// a nested SELECT clause or operand instead of the current grammar production.
+// Children preserves token order, including repetitions of the same rule.
 TContext* Child(TContext* context, size_t rule) {
     for (auto* tree : context->children) {
         if (auto* child = dynamic_cast<TContext*>(tree); child && child->getRuleIndex() == rule) {
@@ -68,6 +73,9 @@ TTerminal* Token(TContext* context, size_t type) {
     return nullptr;
 }
 
+// A suffix context covers only the suffix, not its base. Extend composite
+// ranges to include both operands or the original callee so diagnostics point
+// to the whole expression after intermediate CST wrappers are discarded.
 template <typename T>
 TExpressionPtr MakeExpression(TTree* tree, T value) {
     auto range = Range(tree);
@@ -96,6 +104,9 @@ public:
         : File(file)
     {}
 
+    // Only statements with an explicit AST representation may enter the result.
+    // Unsupported declarations/effects abort the whole build: dropping a statement
+    // could change the meaning of every query that follows it.
     std::unique_ptr<TScript> Build(TContext* root, bool ansiLexer) {
         auto result = std::make_unique<TScript>();
         result->File = File;
@@ -128,12 +139,17 @@ private:
             << " at " << File << ":" << range.Line << ":" << range.Column + 1;
     }
 
+    // Use this guard for valid grammar constructs whose semantics are not yet
+    // represented. Syntax errors have already been reported by ANTLR; this path
+    // requests a complete restart through the legacy frontend.
     void Require(bool supported, TTree* tree, TStringBuf feature) const {
         if (!supported) {
             Unsupported(tree, feature);
         }
     }
 
+    // Preserve namespace, value form and quoting. A flag pragma, assignment and
+    // list are different syntax even if they currently carry the same values.
     TPragmaStatement Pragma(TContext* context) {
         TPragmaStatement result;
         auto* prefix = Child(context, P::RuleOpt_id_prefix_or_type);
@@ -173,6 +189,8 @@ private:
         return Token(context, P::TOKEN_ALL) ? ESetQuantifier::All : ESetQuantifier::Default;
     }
 
+    // Normalize operator aliases only; precedence and associativity still come
+    // from the surrounding grammar rule and the folding strategy below.
     EBinaryOp BinaryOp(TTree* tree) const {
         static const THashMap<TString, EBinaryOp> operators = {
             {"OR", EBinaryOp::Or}, {"AND", EBinaryOp::And}, {"XOR", EBinaryOp::Xor},
@@ -192,6 +210,9 @@ private:
         return it->second;
     }
 
+    // Left-fold one precedence level in source order. Recursing into each operand
+    // handles tighter precedence; this helper must not flatten those subtrees.
+    // Operators with special associativity (notably ??) use a separate path.
     TExpressionPtr Fold(TContext* context, size_t operandRule) {
         TExpressionPtr result;
         TTree* op = nullptr;
@@ -223,6 +244,8 @@ private:
         return result;
     }
 
+    // Keep the original spelling, including suffixes and escapes. Numeric range
+    // checks and string decoding need semantic settings and occur during lowering.
     TExpressionPtr Literal(TContext* context) {
         ELiteralKind kind;
         if (Child(context, P::RuleInteger)) {
@@ -243,6 +266,9 @@ private:
         return MakeExpression(context, TLiteral{kind, TString(context->getText())});
     }
 
+    // SQL predicates carry extra operands/modifiers that a binary operator cannot
+    // represent. Retain NOT, ESCAPE and SYMMETRIC rather than rewriting predicates
+    // before type and NULL semantics are available.
     TExpressionPtr Condition(TContext* context, TExpressionPtr left) {
         const bool negated = Token(context, P::TOKEN_NOT);
         auto values = Children(context, P::RuleEq_subexpr);
@@ -272,6 +298,8 @@ private:
         return MakeExpression(context, TBinary{BinaryOp(context->children.front()), std::move(left), Expression(values[0])});
     }
 
+    // Type tags can inhabit different namespaces: a literal, identifier and
+    // parameter must remain distinguishable even when their text looks similar.
     TTypeTag TypeTag(TContext* context) {
         TTypeTag result;
         result.Range = Range(context);
@@ -285,6 +313,9 @@ private:
         return result;
     }
 
+    // Unwrap grammar scaffolding while preserving recursive type structure.
+    // Do not resolve aliases or validate Decimal bounds here; existing YQL type
+    // annotation will do that for the subset accepted by expression lowering.
     TTypeName Type(TContext* context) {
         const auto rule = context->getRuleIndex();
         if (rule == P::RuleType_name_or_bind) {
@@ -344,6 +375,8 @@ private:
         return result;
     }
 
+    // Preserve an omitted direction separately from explicit ASC. Expressions
+    // are syntax only here; projection-alias precedence is resolved later.
     TVector<TSortSpecification> OrderBy(TContext* context) {
         TVector<TSortSpecification> result;
         auto* list = Child(context, P::RuleSort_specification_list);
@@ -355,6 +388,8 @@ private:
         return result;
     }
 
+    // An unbounded frame endpoint has no offset expression. Preserve this
+    // distinction so later validation cannot confuse it with a numeric bound.
     TWindowBound WindowBound(TContext* context) {
         TWindowBound result;
         result.Range = Range(context);
@@ -370,6 +405,8 @@ private:
         return result;
     }
 
+    // Copy the optional base window and each clause independently. In particular
+    // a missing frame end is not replaced by an explicit CURRENT ROW at parse time.
     TWindowSpecification WindowSpecification(TContext* context) {
         TWindowSpecification result;
         result.Range = Range(context);
@@ -410,6 +447,8 @@ private:
         return result;
     }
 
+    // Hints can change schema as well as execution. Keep their structured values
+    // so a later phase can reject unsupported hints instead of silently losing them.
     TTableHint TableHint(TContext* context) {
         TTableHint result;
         result.Range = Range(context);
@@ -447,6 +486,9 @@ private:
         return result;
     }
 
+    // The same grammar wrapper covers grouping, tuples and relational subqueries.
+    // Use its actual alternatives and comma/alias syntax to distinguish them;
+    // parentheses around one scalar alone do not create a one-element tuple.
     TExpressionPtr Parenthesis(TContext* context) {
         auto* subexpr = Child(context, P::RuleSelect_subexpr);
         if (!subexpr) {
@@ -484,6 +526,9 @@ private:
         return Expression(child);
     }
 
+    // Apply member, index and call suffixes to the result built so far. This
+    // preserves chains such as f(x).field[i] without treating every suffix as
+    // attached directly to the original atom.
     TExpressionPtr Suffix(TContext* context, TExpressionPtr result) {
         Require(!Token(context, P::TOKEN_COLLATE), context, "COLLATE");
         for (auto* tree : context->children) {
@@ -540,6 +585,9 @@ private:
         return result;
     }
 
+    // Dispatch on generated grammar rules rather than reparsing token text.
+    // Every accepted alternative must preserve all of its semantic modifiers;
+    // otherwise Require/Unsupported hands the complete script to the old frontend.
     TExpressionPtr Expression(TContext* context) {
         Y_ENSURE(context);
         TExpressionPtr result;
@@ -667,6 +715,9 @@ private:
     const TString& File;
 };
 
+// Fold UNION/EXCEPT and INTERSECT at their separate grammar levels, retaining
+// INTERSECT precedence and left associativity within a level. WITH and count
+// clauses decorate the resulting query rather than an arbitrary leaf SELECT.
 template <typename P>
 TQueryPtr TAstBuilder<P>::Query(TContext* context) {
     const auto rule = context->getRuleIndex();
@@ -749,6 +800,8 @@ TQueryPtr TAstBuilder<P>::Query(TContext* context) {
     return result;
 }
 
+// Preserve the nested grouping specification; expanding it into grouping
+// sets is a relational operation and is deliberately deferred.
 template <typename P>
 TGroupingElement TAstBuilder<P>::Grouping(TContext* context) {
     if (context->getRuleIndex() == P::RuleGrouping_element) {
@@ -775,6 +828,9 @@ TGroupingElement TAstBuilder<P>::Grouping(TContext* context) {
     return result;
 }
 
+// Read each clause from this SELECT only. In particular WHERE and HAVING
+// expressions are direct children; descending into projections or FROM would
+// accidentally capture expressions from nested queries.
 template <typename P>
 TSelect TAstBuilder<P>::Select(TContext* context) {
     Require(!Token(context, P::TOKEN_STREAM), context, "SELECT STREAM");
@@ -836,6 +892,9 @@ TSelect TAstBuilder<P>::Select(TContext* context) {
     return result;
 }
 
+// Join chains are left-folded as their inputs arrive. The following ON/USING
+// constraint belongs to the most recently constructed join; aliases, hints
+// and sampling stay on their own source wrappers.
 template <typename P>
 TSourcePtr TAstBuilder<P>::Source(TContext* context) {
     const auto rule = context->getRuleIndex();

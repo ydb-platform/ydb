@@ -187,6 +187,10 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     // with two roots is not a result tuple.
     ui64 physicalTxGroup = 0;
     ui64 effectPriority = 0;
+    // Native queries map to result roots by source order. Effects or a changed
+    // result count break that correspondence, so select legacy conversion for
+    // the whole list in those cases. Individual supported roots may still request
+    // frontend fallback without switching away from the configured RBO optimizer.
     size_t frontendIndex = 0;
     size_t resultCount = 0;
     bool useFrontend = TransformCtx && bool(TransformCtx->NewParserRboLowering);
@@ -200,6 +204,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
             root = root->HeadPtr();
         }
         Y_ENSURE(TKqpOpRoot::Match(root.Get()), "Expected an RBO query root, got " << root->Content());
+        // Both importers produce the same logical root interface. Transaction
+        // grouping and effect priority are assigned below regardless of origin.
         auto opRoot = useFrontend ? TransformCtx->NewParserRboLowering(frontendIndex++, root, columns, ctx) : nullptr;
         if (!opRoot) { opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root, columns); }
         opRoot->PlanProps.PhysicalTxGroup = physicalTxGroup;

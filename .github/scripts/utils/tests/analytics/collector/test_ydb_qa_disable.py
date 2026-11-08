@@ -24,32 +24,21 @@ from ydb_wrapper import YDBWrapper  # noqa: E402
 
 class YdbQaDisableTest(unittest.TestCase):
     def setUp(self):
-        self._saved = {
-            key: os.environ.get(key)
-            for key in (
-                "CI_DISABLE_YDB_QA",
-                "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS",
-                "ANALYTICS_YDB_CREDENTIALS",
-                "YDB_QA_CONFIG",
-            )
-        }
-
-    def tearDown(self):
-        for key, value in self._saved.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
+        patcher = mock.patch.dict(
+            os.environ,
+            {
+                "CI_DISABLE_YDB_QA": "1",
+                "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS": "/tmp/fake-sa.json",
+            },
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_wrapper_disabled_skips_credentials(self):
-        os.environ["CI_DISABLE_YDB_QA"] = "1"
-        os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = "/tmp/fake-sa.json"
         with YDBWrapper(silent=True) as wrapper:
             self.assertFalse(wrapper.check_credentials())
 
     def test_flush_keeps_local_batch_when_disabled(self):
-        os.environ["CI_DISABLE_YDB_QA"] = "1"
-        os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = "/tmp/fake-sa.json"
         self.assertFalse(has_send_credentials())
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "analytics.jsonl")

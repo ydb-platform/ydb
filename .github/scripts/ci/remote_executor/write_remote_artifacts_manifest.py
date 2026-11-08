@@ -12,29 +12,23 @@ import os
 import sys
 
 
-def main() -> int:
-    out = os.environ.get("REMOTE_ARTIFACTS_JSON") or ""
-    if not out:
-        print("usage: REMOTE_ARTIFACTS_JSON=path write_remote_artifacts_manifest.py", file=sys.stderr)
-        return 2
+def require_env(name: str) -> str:
+    value = (os.environ.get(name) or "").strip()
+    if not value:
+        print(f"{name} missing", file=sys.stderr)
+        sys.exit(2)
+    return value
 
-    bucket_path = (os.environ.get("S3_BUCKET_PATH") or "").strip()
-    if not bucket_path:
-        print("S3_BUCKET_PATH missing", file=sys.stderr)
-        return 2
+
+def main() -> int:
+    out = require_env("REMOTE_ARTIFACTS_JSON")
+    bucket_path = require_env("S3_BUCKET_PATH")
     if not bucket_path.startswith("s3://"):
         print(f"S3_BUCKET_PATH must be s3://...; got {bucket_path!r}", file=sys.stderr)
         return 2
-    rest = bucket_path[len("s3://") :]
-    _, _, key_prefix = rest.partition("/")
-    public_dir_url = (os.environ.get("PUBLIC_DIR_URL") or "").rstrip("/")
-    if not public_dir_url:
-        print("PUBLIC_DIR_URL missing", file=sys.stderr)
-        return 2
-    commit = (os.environ.get("ORIGINAL_HEAD") or "").strip()
-    if not commit:
-        print("ORIGINAL_HEAD missing", file=sys.stderr)
-        return 2
+    _, _, key_prefix = bucket_path[len("s3://") :].partition("/")
+    public_dir_url = require_env("PUBLIC_DIR_URL").rstrip("/")
+    commit = require_env("ORIGINAL_HEAD")
 
     meta = {
         "version": 1,

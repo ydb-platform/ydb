@@ -103,7 +103,6 @@ def parse_claim(claim: dict[str, Any]) -> tuple[str, str, str]:
 
 
 def build_ticket(cfg):
-    """Ticket for the host VM: dispatch uses config.inputs only."""
     run_id = env("PLATFORM_RUN_ID")
     attempt = env("PLATFORM_RUN_ATTEMPT")
     repo = env("PLATFORM_REPOSITORY")
@@ -270,16 +269,13 @@ def cmd_cancel():
     append_summary(f"### Caller cancelled\n- executor [{run_id}]({run_url}) HTTP {code}\n")
 
 
+COMMANDS = {"enqueue": cmd_enqueue, "wait": cmd_wait, "cancel": cmd_cancel}
+
+
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in ("enqueue", "wait", "cancel"):
+    if len(sys.argv) != 2 or sys.argv[1] not in COMMANDS:
         die("usage: dispatcher/dispatch_remote_executor.py enqueue|wait|cancel")
-    cmd = sys.argv[1]
-    if cmd == "enqueue":
-        cmd_enqueue()
-    elif cmd == "wait":
-        cmd_wait()
-    else:
-        cmd_cancel()
+    COMMANDS[sys.argv[1]]()
 
 
 if __name__ == "__main__":

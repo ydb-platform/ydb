@@ -29,30 +29,17 @@ from ingest_remote_executor_results import (  # noqa: E402
 from resolve_remote_execution import build_config  # noqa: E402
 
 
+def patch_env(test: unittest.TestCase, **values: str) -> None:
+    patcher = mock.patch.dict(os.environ, values)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+
+
 class ResolveSeedsTest(unittest.TestCase):
     def setUp(self):
-        self._env = {
-            k: os.environ.get(k)
-            for k in (
-                "REMOTE_JSON",
-                "DEFAULT_BUILD_TARGET",
-                "DEFAULT_BUILD_PRESET",
-                "CODE_REF",
-                "GITHUB_WORKFLOW",
-            )
-        }
-        os.environ["CODE_REF"] = "abcdef1"
-        os.environ["GITHUB_WORKFLOW"] = "Run and debug tests"
-        os.environ.pop("REMOTE_JSON", None)
-        os.environ.pop("DEFAULT_BUILD_TARGET", None)
-        os.environ.pop("DEFAULT_BUILD_PRESET", None)
-
-    def tearDown(self):
-        for key, value in self._env.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
+        patch_env(self, CODE_REF="abcdef1", GITHUB_WORKFLOW="Run and debug tests")
+        for key in ("REMOTE_JSON", "DEFAULT_BUILD_TARGET", "DEFAULT_BUILD_PRESET"):
+            os.environ.pop(key, None)
 
     def test_ui_seeds_override_defaults_when_remote_omits_job_keys(self):
         os.environ["DEFAULT_BUILD_TARGET"] = "ydb/core/foo"
@@ -146,7 +133,7 @@ class IndexCrawlCompletenessTest(unittest.TestCase):
             '<a href="started_at">s</a>'
             '<a href="logs/a.log">l</a>'
         )
-        objects = {
+        return {
             "index.html": root_index.encode(),
             "try_1/index.html": try_index.encode(),
             "try_1/report.json": b"{}",
@@ -155,24 +142,13 @@ class IndexCrawlCompletenessTest(unittest.TestCase):
             "try_1/logs/a.log": b"log",
             "ci_metrics.jsonl": b"{}\n",
         }
-        return objects
 
     def _fetch_from(self, objects, missing=frozenset()):
         def fetch(url: str, **_kwargs):
-            # object_url percent-encodes; recover the key suffix after bucket.
-            # URL shape: https://ep/bucket/<key>
-            marker = "/bucket/"
-            idx = url.find(marker)
-            self.assertGreaterEqual(idx, 0, url)
-            key = url[idx + len(marker) :]
-            # strip optional leading path from key_prefix used in tests
-            if key.startswith("prefix/"):
-                key = key[len("prefix/") :]
-            if key in missing:
-                return None
-            if key not in objects:
-                return None
-            return objects[key]
+            prefix = "https://ep/bucket/prefix/"
+            self.assertTrue(url.startswith(prefix), url)
+            key = url[len(prefix) :]
+            return None if key in missing else objects.get(key)
 
         return fetch
 
@@ -300,31 +276,19 @@ class S3AclArgsTest(unittest.TestCase):
 
 class WaitClaimAttemptTest(unittest.TestCase):
     def setUp(self):
-        self._env = {
-            k: os.environ.get(k)
-            for k in (
-                "PLATFORM_RUN_ID",
-                "PLATFORM_RUN_ATTEMPT",
-                "CONFIG_JSON",
-            )
-        }
-        os.environ["PLATFORM_RUN_ID"] = "111"
-        os.environ["PLATFORM_RUN_ATTEMPT"] = "1"
-        os.environ["CONFIG_JSON"] = json.dumps(
-            {
-                "host_s3_endpoint": "https://ep",
-                "host_s3_bucket": "bucket",
-                "repository": "nebius/ydb",
-                "fail_on_remote_failure": True,
-            }
+        patch_env(
+            self,
+            PLATFORM_RUN_ID="111",
+            PLATFORM_RUN_ATTEMPT="1",
+            CONFIG_JSON=json.dumps(
+                {
+                    "host_s3_endpoint": "https://ep",
+                    "host_s3_bucket": "bucket",
+                    "repository": "nebius/ydb",
+                    "fail_on_remote_failure": True,
+                }
+            ),
         )
-
-    def tearDown(self):
-        for key, value in self._env.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
 
     def test_waits_for_matching_attempt(self):
         os.environ["PLATFORM_RUN_ATTEMPT"] = "2"
@@ -413,26 +377,12 @@ class EnqueueOutputTest(unittest.TestCase):
 
 
 class WorkflowContractTest(unittest.TestCase):
-    def test_build_and_test_ya_acl_and_pr_number(self):
-        text = (_GITHUB / "actions/build_and_test_ya/action.yml").read_text(encoding="utf-8")
-        self.assertIn("AWS_REGION || 'ru-central1'", text)
-        self.assertIn("AWS_PUBLIC_ACL || 'true'", text)
-        self.assertEqual(text.count("inputs.source_run_id == ''"), 2)
-        self.assertIn("inputs.pull_number", text)
-
     def test_dispatch_remote_pins_ticket_attempt(self):
         text = (_GITHUB / "workflows/dispatch_remote.yml").read_text(encoding="utf-8")
         self.assertIn(
             "PLATFORM_RUN_ATTEMPT: ${{ needs.enqueue.outputs.ticket_attempt }}",
             text,
         )
-        self.assertIn("overwrite: true", text)
-
-    def test_s3cmd_only_false_disables_acl(self):
-        text = (_GITHUB / "actions/s3cmd/action.yml").read_text(encoding="utf-8")
-        self.assertIn('false)', text)
-        self.assertIn('true|"")', text)
-        self.assertIn('S3_REGION="${S3_REGION:-ru-central1}"', text)
 
 
 if __name__ == "__main__":

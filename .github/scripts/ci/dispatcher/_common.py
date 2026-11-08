@@ -50,11 +50,7 @@ def http_get_bytes_retry(
     backoff_s: float = 2.0,
     timeout: int = 60,
 ) -> bytes | None:
-    """Retrying GET for ingest downloads; claim polling stays on http_get_bytes.
-
-    HTTP 404 is not retried (missing object). Other failures back off and retry.
-    """
-    last: bytes | None = None
+    """GET with linear backoff; HTTP 404 is returned as None without retry."""
     for i in range(1, attempts + 1):
         try:
             with urllib.request.urlopen(url, timeout=timeout) as resp:
@@ -63,13 +59,11 @@ def http_get_bytes_retry(
             print(f"GET {url} failed: HTTP {e.code}")
             if e.code == 404:
                 return None
-            last = None
         except Exception as e:
             print(f"GET {url} failed: {e}")
-            last = None
         if i < attempts:
             time.sleep(backoff_s * i)
-    return last
+    return None
 
 
 def http_get_text(url: str, timeout: int = 60) -> str | None:

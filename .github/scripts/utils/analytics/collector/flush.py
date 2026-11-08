@@ -149,7 +149,6 @@ def flush_file(
             print(f"No valid metric rows in {metrics_path}, keeping local batch")
             return 0
         if not has_send_credentials():
-            # Includes CI_DISABLE_YDB_QA=1: keep JSONL for S3 / caller-side flush.
             print(f"Analytics send disabled or credentials missing; keeping {len(rows)} row(s) in {metrics_path}")
             return 0
         upsert_fn = upsert or upsert_metrics

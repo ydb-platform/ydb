@@ -12,9 +12,7 @@ on:
           - remote
         default: ydb_yc
       remote:
-        description: >
-          remote only: JSON override for host/dispatch/job (empty = script defaults).
-          Agents / other workflows pass the full blob; humans rarely edit this in UI.
+        description: 'remote only: JSON override for host/dispatch/job (empty = defaults)'
         required: false
         type: string
         default: ''

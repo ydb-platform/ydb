@@ -25,8 +25,7 @@ Platform never starts the host workflow. The host VM downloads `remote-ticket`
 and dispatches `ci_remote_executor` with **`ticket.config.inputs` only**
 (`code_ref`, `job_inputs`, `runs_on`, plus stamped `platform_run_*`). Top-level
 `repository` / `workflow_file` / `executor_ref` / `workflow_name` are for the
-VM + waiter (GH poll), not for `workflow_dispatch` inputs. Top-level ticket
-fields are also for humans/logs.
+VM + waiter (GH poll) and logs, not for `workflow_dispatch` inputs.
 
 Host runs as `workflow_dispatch`, so PR-only `build_*` / pending statuses never
 fire; `test_*` is skipped when the action gets `source_run_id`

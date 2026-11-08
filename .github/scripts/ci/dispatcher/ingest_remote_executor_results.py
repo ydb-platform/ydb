@@ -38,22 +38,7 @@ from _common import (  # noqa: E402
 from github_actions.ci_metrics import flush_file  # noqa: E402
 
 _TEXT_SUFFIXES = frozenset(
-    {
-        ".json",
-        ".html",
-        ".htm",
-        ".txt",
-        ".md",
-        ".js",
-        ".css",
-        ".xml",
-        ".yaml",
-        ".yml",
-        ".csv",
-        ".log",
-        ".out",
-        ".err",
-    }
+    ".json .html .htm .txt .md .js .css .xml .yaml .yml .csv .log .out .err".split()
 )
 
 
@@ -180,7 +165,7 @@ def download_prefix_via_index(
 
         index_key = _posix_join(root_key, rel_dir, "index.html")
         index_url = object_url(endpoint, bucket, index_key)
-        index_rel = _posix_join(rel_dir, "index.html") if rel_dir else "index.html"
+        index_rel = _posix_join(rel_dir, "index.html")
         raw = fetch(index_url)
         if raw is None:
             if rel_dir == "":
@@ -197,21 +182,12 @@ def download_prefix_via_index(
         _write_bytes(local_index, raw)
         n_ok += 1
 
-        try:
-            html = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            html = raw.decode("utf-8", errors="replace")
-
-        for href in parse_index_hrefs(html):
+        for href in parse_index_hrefs(raw.decode("utf-8", errors="replace")):
             child_rel = _posix_join(rel_dir, href)
 
             # Dir link: either "try_1/index.html" (recursive Indexer) or "try_1/".
-            if href.endswith("/index.html") or href.endswith("/"):
-                sub = (
-                    child_rel[: -len("/index.html")]
-                    if href.endswith("/index.html")
-                    else child_rel.rstrip("/")
-                )
+            if href.endswith(("/index.html", "/")):
+                sub = child_rel.removesuffix("/index.html")
                 if sub and _safe_under(dest, sub) is not None and sub not in seen_dirs:
                     queue.append(sub)
                 continue
@@ -467,11 +443,7 @@ def upload_attempts(
 
 
 def _s3_acl_args() -> list[str]:
-    """Honor S3_PUBLIC_ACL_FLAG from s3cmd action; default --acl-public.
-
-    Missing env → default public. Explicit empty string → no ACL flag
-    (host/public_acl=false writes S3_PUBLIC_ACL_FLAG=).
-    """
+    """S3_PUBLIC_ACL_FLAG from s3cmd action; unset → --acl-public, empty → no flag."""
     if "S3_PUBLIC_ACL_FLAG" not in os.environ:
         return ["--acl-public"]
     flag = os.environ["S3_PUBLIC_ACL_FLAG"].strip()
@@ -491,7 +463,7 @@ def s3cmd_sync_upload(local: Path, s3_bucket_path: str) -> None:
             "--guess-mime-type",
             "--no-check-md5",
             f"{local}/",
-            s3_bucket_path if s3_bucket_path.endswith("/") else s3_bucket_path + "/",
+            s3_bucket_path.rstrip("/") + "/",
         ]
     )
 

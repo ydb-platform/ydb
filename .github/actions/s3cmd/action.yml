@@ -19,7 +19,7 @@ inputs:
     default: "ru-central1"
   public_acl:
     required: false
-    description: "true or empty → --acl-public; false → empty flag (bucket policy). Only literal false disables ACL."
+    description: "false → no --acl-public (bucket policy); true or empty → --acl-public"
     default: "true"
   folder_prefix:
     required: false

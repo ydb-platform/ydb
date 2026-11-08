@@ -670,39 +670,20 @@ void TSideEffects::DoSend(TSchemeShard* ss, const TActorContext& ctx) {
 }
 
 void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
-<<<<<<< HEAD
-    for (auto& rec: BindedMessages) {
-        TOperationId opId;
-        TTabletId tablet;
-        TPipeMessageId cookie;
-        THolder<::NActors::IEventBase> message;
-        std::tie(opId, tablet, cookie, message) = rec;
-
-        const ui32 msgType = message->Type();
-
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send tablet strongly msg"
-                        << " operationId: " << opId
-                        << " from tablet: " << ss->TabletID()
-                        << " to tablet: " << tablet
-                        << " cookie: " << cookie
-                        << " msg type: " << msgType);
-=======
     auto bindOne = [ss, &ctx](
             TOperationId opId,
             TTabletId tablet,
             TPipeMessageId cookie,
             ui32 msgType,
             TOperation::TPreSerializedMessage&& msg) {
-        YDB_LOG_DEBUG_CTX(ctx, "Send tablet strongly msg",
-            {"operationId", opId},
-            {"fromTablet", ss->TabletID()},
-            {"toTablet", tablet},
-            {"cookie", cookie},
-            {"msgType", msgType},
-            {"deferred", !msg.IsMaterialized()},
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Send tablet strongly msg"
+            << " operationId: " << opId
+            << " from tablet: " << ss->TabletID()
+            << " to tablet: " << tablet
+            << " cookie: " << cookie
+            << " msg type: " << msgType
+            << " deferred: " << !msg.IsMaterialized()
         );
->>>>>>> 03dbdae20b6 (schemeshard: stage pq proposes as fragments sharing common parts (#58439))
 
         if (!ss->Operations.contains(opId.GetTxId())) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

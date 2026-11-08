@@ -1548,7 +1548,11 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
         response.SetStatus(NKikimrProto::OK);
         ui32 numItems = 0;
         ui32 numUntrimmed = 0;
-        for (const TLogoBlobID& id : intermediate->TrimLeakedBlobs->FoundBlobs) {
+        auto& foundBlobs = intermediate->TrimLeakedBlobs->FoundBlobs;
+        // A group can occur more than once in channel history (A -> B -> A),
+        // so range replies may contain the same blob more than once.
+        SortUnique(foundBlobs);
+        for (const TLogoBlobID& id : foundBlobs) {
             auto it = RefCounts.find(id);
             if (it != RefCounts.end()) {
                 Y_ABORT_UNLESS(it->second != 0);
@@ -1563,6 +1567,12 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
                     }
                 }
                 if (!found) { // we found a candidate for trash
+                    // MoveData registers the new copy in RefCounts only after PUT.
+                    // Do not classify an in-flight copy as leaked while awaiting its result.
+                    if (id.Generation() == ExecutorGeneration && InFlightForStep.contains(id.Step())) {
+                        ++numUntrimmed;
+                        continue;
+                    }
                     if (numItems < intermediate->TrimLeakedBlobs->MaxItemsToTrim) {
                         YDB_LOG_WARN("Trimming",
                             {"keyValue", TabletId},

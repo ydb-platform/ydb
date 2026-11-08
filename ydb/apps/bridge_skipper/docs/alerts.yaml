@@ -1,0 +1,82 @@
+# Example rules for the default timing configuration. Change the job selector
+# and thresholds for the deployment; these are not qualification measurements.
+groups:
+  - name: bridge-skipper
+    rules:
+      - alert: SkipperScrapeUnavailable
+        expr: up{job="bridge_skipper"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Skipper cannot be scraped"
+          description: "Check the process, listener and scrape path. HTTP success alone does not prove loop progress."
+      - alert: SkipperLoopStalled
+        expr: skipper_loop_age_seconds{job="bridge_skipper"} > 5
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Skipper controller loop has stopped progressing"
+          description: "Inspect service logs and /api/state before relying on its plan."
+      - alert: SkipperClusterStateStale
+        expr: skipper_cluster_state_age_seconds{job="bridge_skipper"} > 15
+        labels:
+          severity: warning
+        annotations:
+          summary: "Skipper cluster-state view is stale"
+          description: "Warn before the default 30s TTL removes the selected-view series. Tune the threshold and scrape/evaluation intervals together; inspect endpoint errors and view selection."
+      - alert: SkipperPileDown
+        expr: skipper_pile_verdict{job="bridge_skipper", verdict=~"FAILED|LOST"} == 1
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Skipper reports a Failed or Lost pile"
+          description: "Inspect confirmation, survivor evidence and the complete plan; do not split a failover batch."
+      - alert: SkipperPileUnknown
+        # A SUSPENDED pile is UNKNOWN by design and does not make the decision UNKNOWN.
+        expr: skipper_decision{job="bridge_skipper", kind="UNKNOWN"} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Skipper cannot establish a participating pile's verdict"
+          description: "Check evidence age, endpoint identity, BSC fallback and warm-up. Unknown is not Healthy."
+      - alert: SkipperBlocked
+        expr: skipper_blocked{job="bridge_skipper"} == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Skipper decision is blocked"
+          description: "Read the reason label and /api/state; follow the runbook for pending records or stale history."
+      - alert: SkipperPendingMutation
+        expr: skipper_pending_mutation{job="bridge_skipper"} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Skipper has a persistent unresolved mutation"
+          description: "Do not clear the record merely because it timed out. Inspect the exact update, outcome and coherent history."
+      - alert: SkipperMutationRejected
+        expr: increase(skipper_mutation_total{job="bridge_skipper", outcome="REJECTED"}[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "A Skipper mutation was rejected"
+          description: "Fix the exact BAD_REQUEST or UNAUTHORIZED cause before restart permits an identical resend."
+      - alert: SkipperMutationAmbiguous
+        expr: increase(skipper_mutation_total{job="bridge_skipper", outcome="AMBIGUOUS"}[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "A Skipper mutation outcome is ambiguous"
+          description: "The request may still commit. Inspect the pending record and last_mutation."
+      - alert: SkipperUnexplainedStateChange
+        expr: increase(skipper_unexplained_state_change_total{job="bridge_skipper"}[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Skipper observed an unexplained transition"
+          description: "Correlate operator commands, other controllers and missed generations; this signal does not block decisions."

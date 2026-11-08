@@ -2,6 +2,8 @@
 
 #include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_library_compiler.h>
+#include <yql/essentials/core/yql_module_helpers.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/ast/yql_ast_annotation.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -226,5 +228,145 @@ Y_UNIT_TEST(PropagatesUniversalDefinePredicate) {
 }
 
 } // Y_UNIT_TEST_SUITE(TMatchRecognizeTypeAnnotation)
+
+Y_UNIT_TEST_SUITE(TLazyBindTypeAnnotation) {
+
+struct TLazyBindFixture {
+    TExprContext LibraryContext;
+    TExprContext Context;
+    TTypeAnnotationContext Types;
+    TExprNode::TPtr Expression;
+
+    TLazyBindFixture() {
+        TLibraryCohesion library;
+        const TString source = R"((
+            (let value (Int32 '42))
+            (let identity (lambda '(value) value))
+            (let nested (LazyBind '/lib/test 'value))
+            (let applied (Apply identity value))
+            (let invalid (Apply identity))
+            (let atom 'Int32)
+            (export value) (export identity) (export nested) (export applied) (export atom)
+            (export invalid)
+        ))";
+        UNIT_ASSERT_C(CompileLibrary({nullptr, nullptr, nullptr}, "/lib/test.yqls", source, LibraryContext, library, false),
+                      LibraryContext.IssueManager.GetIssues().ToString());
+        TModulesTable modules;
+        modules.emplace("/lib/test", std::move(library.Exports));
+        Types.Modules = std::make_shared<TModuleResolver>(NSQLTranslation::TTranslators(nullptr, nullptr, nullptr),
+                                                          std::move(modules), LibraryContext.NextUniqueId, THashMap<TString, TString>{}, NSQLTranslation::TExtendedSqlFlags{});
+        Context.NextUniqueId = LibraryContext.NextUniqueId;
+    }
+
+    bool Annotate(TStringBuf expression) {
+        const auto ast = ParseAst(TStringBuilder() << "((return " << expression << "))");
+        UNIT_ASSERT_C(ast.IsOk(), ast.Issues.ToString());
+        UNIT_ASSERT_C(CompileExpr(*ast.Root, Expression, Context, nullptr, nullptr), Context.IssueManager.GetIssues().ToString());
+        return InstantAnnotateTypes(Expression, Context, false, Types);
+    }
+};
+
+Y_UNIT_TEST(ValueAndNestedBinding) {
+    for (TStringBuf symbol : {"value", "nested", "applied"}) {
+        TLazyBindFixture fixture;
+        UNIT_ASSERT_C(fixture.Annotate(TStringBuilder() << "(LazyBind '/lib/test '" << symbol << ")"),
+                      fixture.Context.IssueManager.GetIssues().ToString());
+        UNIT_ASSERT(fixture.Expression->IsCallable("Int32"));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Expression->Head().Content(), "42");
+    }
+}
+
+Y_UNIT_TEST(LambdaWithDifferentArgumentTypes) {
+    TLazyBindFixture fixture;
+    UNIT_ASSERT_C(fixture.Annotate(R"('(
+        (Apply (LazyBind '/lib/test 'identity) (Int32 '1))
+        (Apply (LazyBind '/lib/test 'identity) (String 'hello))
+    ))"), fixture.Context.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT(fixture.Expression->Child(0)->IsCallable("Int32"));
+    UNIT_ASSERT(fixture.Expression->Child(1)->IsCallable("String"));
+}
+
+Y_UNIT_TEST(UnselectedBranchIsNotResolved) {
+    TLazyBindFixture fixture;
+    UNIT_ASSERT_C(fixture.Annotate(R"((MatchType (DataType 'Int32)
+        'Int32 (lambda '() (LazyBind '/lib/test 'value))
+        (lambda '() (LazyBind '/missing 'missing))))"), fixture.Context.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT(fixture.Expression->IsCallable("Int32"));
+}
+
+Y_UNIT_TEST(AtomBinding) {
+    TLazyBindFixture fixture;
+    UNIT_ASSERT_C(fixture.Annotate("(DataType (LazyBind '/lib/test 'atom))"), fixture.Context.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT(fixture.Expression->IsCallable("DataType"));
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Expression->Head().Content(), "Int32");
+}
+
+Y_UNIT_TEST(NamedLambdaApplication) {
+    TLazyBindFixture fixture;
+    UNIT_ASSERT_C(fixture.Annotate("(NamedApply (LazyBind '/lib/test 'identity) '((Int32 '42)) (AsStruct))"),
+                  fixture.Context.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT(fixture.Expression->IsCallable("Int32"));
+}
+
+Y_UNIT_TEST(WithoutResolverUsesUniversalType) {
+    for (TStringBuf expression : {"(LazyBind '/lib/test 'value)", "(Apply (LazyBind '/lib/test 'identity) (Int32 '1))"}) {
+        TLazyBindFixture fixture;
+        fixture.Types.Modules.reset();
+        UNIT_ASSERT_C(fixture.Annotate(expression), fixture.Context.IssueManager.GetIssues().ToString());
+        UNIT_ASSERT(fixture.Expression->GetTypeAnn());
+        UNIT_ASSERT(fixture.Expression->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal);
+    }
+}
+
+Y_UNIT_TEST(InvalidBinding) {
+    for (TStringBuf expression : {"(LazyBind '/missing 'value)", "(LazyBind '/lib/test 'missing)",
+                                  "(LazyBind '/lib/test)", "(LazyBind (Int32 '1) 'value)", "(LazyBind '/lib/test (Int32 '1))",
+                                  "(Apply (LazyBind '/lib/test 'identity))",
+                                  "(Apply (LazyBind '/lib/test 'identity) (Int32 '1) (Int32 '2))"}) {
+        TLazyBindFixture fixture;
+        UNIT_ASSERT(!fixture.Annotate(expression));
+        UNIT_ASSERT(!fixture.Context.IssueManager.GetIssues().Empty());
+    }
+}
+
+Y_UNIT_TEST(InvalidImportedApplication) {
+    TLazyBindFixture fixture;
+    UNIT_ASSERT(!fixture.Annotate("(LazyBind '/lib/test 'invalid)"));
+    UNIT_ASSERT_STRING_CONTAINS(fixture.Context.IssueManager.GetIssues().ToString(),
+                                "Minimum arguments count: 1, maximum arguments count: 1, but provided 0");
+    UNIT_ASSERT(fixture.Context.LazyBindings.empty());
+    fixture.Context.IssueManager.Reset();
+    UNIT_ASSERT(!ImportCached({}, "/lib/test", "invalid", fixture.Context, fixture.Types));
+    UNIT_ASSERT_STRING_CONTAINS(fixture.Context.IssueManager.GetIssues().ToString(),
+                                "Minimum arguments count: 1, maximum arguments count: 1, but provided 0");
+    UNIT_ASSERT(fixture.Context.LazyBindings.empty());
+}
+
+Y_UNIT_TEST(CachedCloneIsQueryLocal) {
+    TLazyBindFixture fixture;
+    auto first = ImportCached({}, "/lib/test", "identity", fixture.Context, fixture.Types);
+    UNIT_ASSERT(first);
+    const auto count = fixture.Context.ExprNodes.size();
+    auto second = ImportCached({}, "/lib/test", "identity", fixture.Context, fixture.Types);
+    UNIT_ASSERT(first == second);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Context.ExprNodes.size(), count);
+    TExprContext other(fixture.Context.NextUniqueId);
+    auto separate = ImportCached({}, "/lib/test", "identity", other, fixture.Types);
+    UNIT_ASSERT(first != separate);
+    fixture.Context.Reset();
+    auto afterReset = ImportCached({}, "/lib/test", "identity", fixture.Context, fixture.Types);
+    UNIT_ASSERT(first != afterReset);
+}
+
+Y_UNIT_TEST(ExportsShareClonedSubgraphs) {
+    TLazyBindFixture fixture;
+    auto value = ImportCached({}, "/lib/test", "value", fixture.Context, fixture.Types);
+    auto applied = ImportCached({}, "/lib/test", "applied", fixture.Context, fixture.Types);
+    UNIT_ASSERT(value);
+    UNIT_ASSERT(value == applied);
+    UNIT_ASSERT(applied->IsCallable("Int32"));
+}
+
+} // Y_UNIT_TEST_SUITE(TLazyBindTypeAnnotation)
 
 } // namespace NYql

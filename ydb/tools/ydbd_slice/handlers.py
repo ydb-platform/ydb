@@ -10,6 +10,11 @@ from ydb.tools.ydbd_slice import process_profiles
 
 logger = logging.getLogger(__name__)
 
+# Max time to wait for kikimr processes to come back after a rolling-restart stop/start.
+ROLLING_RESTART_TIMEOUT_SEC = 1800
+# Require the new PID set to stay visible across several polls before treating the host as back.
+ROLLING_RESTART_STABLE_POLLS = 3
+
 
 class CalledProcessError(subprocess.CalledProcessError):
     def __init__(self, base):
@@ -21,6 +26,34 @@ class CalledProcessError(subprocess.CalledProcessError):
             self.returncode,
             self.output,
         )
+
+
+def _list_kikimr_pids_command(include_regex=None, exclude_regex=None):
+    """Remote awk: pids of /Berkanavt/kikimr/bin/kikimr, optionally filtered by args."""
+    clauses = [r'$0 ~ /[k]ikimr\/bin\/kikimr/']
+    if include_regex:
+        clauses.append('$0 ~ /%s/' % include_regex.replace('/', r'\/'))
+    if exclude_regex:
+        clauses.append('$0 !~ /%s/' % exclude_regex.replace('/', r'\/'))
+    clauses.append('$0 !~ /awk/')
+    return "ps -eo pid=,args= | awk '%s {print $1}' | sort -n" % ' && '.join(clauses)
+
+
+def _parse_pids(stdout):
+    return [part for part in (stdout or '').split() if part]
+
+
+def _pid_count(stdout):
+    return len(_parse_pids(stdout))
+
+
+def _static_pids_command():
+    return _list_kikimr_pids_command(include_regex='--node static')
+
+
+def _dynamic_pids_command():
+    # New-style static also has --ic-port; exclude --node static so only slots match.
+    return _list_kikimr_pids_command(include_regex='--ic-port', exclude_regex='--node static')
 
 
 class Slice:
@@ -35,6 +68,7 @@ class Slice:
         yav_version=None,
         walle_provider=None,
         configurator=None,
+        rolling_restart_sec=None,
     ):
         self.slice_kikimr_path = '/Berkanavt/kikimr/bin/kikimr'
         self.__slice_cfg_path = '/Berkanavt/kikimr/cfg'
@@ -48,6 +82,7 @@ class Slice:
         self.configurator = configurator
         self.do_clear_logs = do_clear_logs
         self.yav_version = yav_version
+        self.rolling_restart_sec = rolling_restart_sec
         self.walle_provider = walle_provider
         self._host_dynamic_slot_counts = getattr(cluster_details, 'host_dynamic_slot_counts', None) or {}
         self._host_storage_enabled_map = getattr(cluster_details, 'host_storage_enabled', None) or {}
@@ -416,58 +451,63 @@ mon={mon}""".format(
         if storage_hosts:
             self.nodes.execute_async("sudo service kikimr start", check_retcode=True, nodes=storage_hosts)
 
+    def _iter_dynamic_assignments(self):
+        """Return [(slot, tenant, host, node_bind), ...] for the current cluster config."""
+        if 'dynamic_slots' not in self.components:
+            return []
+
+        def get_numa_nodes(nodes):
+            results = dict()
+            nodes.execute_async(
+                "numactl --hardware | head -n 1 | awk '{print $2}'",
+                check_retcode=False,
+                results=results,
+            )
+            return {
+                host: int(result['stdout']) if result['retcode'] == 0 else 0
+                for host, result in results.items()
+            }
+
+        numa_nodes = None  # get_numa_nodes(nodes)
+        numa_nodes_counters = {node: 0 for node in self.nodes.nodes_list}
+        (slots_per_domain, all_available_slots_count,) = self._get_available_slots()
+        assignments = []
+
+        for domain in self.cluster_details.domains:
+            slots_taken = set()
+            available_slots_per_zone = slots_per_domain[domain.domain_name]
+
+            if domain.bind_slots_to_numa_nodes and numa_nodes is None:
+                numa_nodes = get_numa_nodes(self.nodes)
+
+            for tenant in domain.tenants:
+                for compute_unit in tenant.compute_units:
+                    zone = compute_unit.zone.lower()
+                    for _ in range(compute_unit.count):
+                        try:
+                            while True:
+                                slot, node = available_slots_per_zone[zone].popleft()
+                                if (slot, node) in slots_taken:
+                                    continue
+                                slots_taken.add((slot, node))
+                                node_bind = None
+                                if domain.bind_slots_to_numa_nodes and numa_nodes and numa_nodes[node] > 0:
+                                    node_bind = numa_nodes_counters[node]
+                                    numa_nodes_counters[node] += 1
+                                    numa_nodes_counters[node] %= numa_nodes[node]
+                                assignments.append((slot, tenant, node, node_bind))
+                                break
+                        except IndexError:
+                            logger.critical('insufficient slots allocated')
+                            return assignments
+
+            logger.warning('{count} unused slots'.format(count=all_available_slots_count - len(slots_taken)))
+
+        return assignments
+
     def _start_dynamic(self):
-        if 'dynamic_slots' in self.components:
-
-            def get_numa_nodes(nodes):
-                results = dict()
-                nodes.execute_async("numactl --hardware | head -n 1 | awk '{print $2}'", check_retcode=False,
-                                    results=results)
-                return {
-                    host: int(result['stdout']) if result['retcode'] == 0 else 0
-                    for host, result in results.items()
-                }
-
-            numa_nodes = None  # get_numa_nodes(nodes)
-            numa_nodes_counters = {node: 0 for node in self.nodes.nodes_list}
-
-            (slots_per_domain, all_available_slots_count,) = self._get_available_slots()
-
-            for domain in self.cluster_details.domains:
-
-                slots_taken = set()
-                available_slots_per_zone = slots_per_domain[domain.domain_name]
-
-                if domain.bind_slots_to_numa_nodes and numa_nodes is None:
-                    numa_nodes = get_numa_nodes(self.nodes)
-
-                for tenant in domain.tenants:
-                    for compute_unit in tenant.compute_units:
-                        zone = compute_unit.zone.lower()
-                        for _ in range(compute_unit.count):
-                            try:
-                                while True:
-                                    slot, node = available_slots_per_zone[zone].popleft()
-                                    if (slot, node) in slots_taken:
-                                        continue
-                                    slots_taken.add((slot, node))
-                                    if domain.bind_slots_to_numa_nodes and numa_nodes and numa_nodes[node] > 0:
-                                        self._start_slot_for_tenant(
-                                            slot,
-                                            tenant,
-                                            host=node,
-                                            node_bind=numa_nodes_counters[node]
-                                        )
-                                        numa_nodes_counters[node] += 1
-                                        numa_nodes_counters[node] %= numa_nodes[node]
-                                    else:
-                                        self._start_slot_for_tenant(slot, tenant, host=node)
-                                    break
-                            except IndexError:
-                                logger.critical('insufficient slots allocated')
-                                return
-
-                logger.warning('{count} unused slots'.format(count=all_available_slots_count - len(slots_taken)))
+        for slot, tenant, host, node_bind in self._iter_dynamic_assignments():
+            self._start_slot_for_tenant(slot, tenant, host=host, node_bind=node_bind)
 
     def slice_start(self):
         if 'kikimr' in self.components:
@@ -475,22 +515,30 @@ mon={mon}""".format(
 
         self._start_dynamic()
 
-    def _stop_all_slots(self):
+    def _stop_slot_command(self, slot):
+        return (
+            "sudo sh -c \"if [ -x /sbin/stop ]; "
+            "    then stop kikimr-multi slot={slot}; "
+            "    else systemctl stop kikimr-multi@{slot}; fi\"".format(
+                slot=slot.slot,
+            )
+        )
+
+    def _stop_all_slots(self, hosts=None):
         cmd = "find /Berkanavt/ -maxdepth 1 -type d  -name kikimr_* " \
             " | while read x; do " \
             "      sudo sh -c \"if [ -x /sbin/stop ]; "\
             "          then stop kikimr-multi slot=${x#/Berkanavt/kikimr_}; "\
             "          else systemctl stop kikimr-multi@${x#/Berkanavt/kikimr_}; fi\"; " \
             "   done"
-        self.nodes.execute_async(cmd, check_retcode=False)
+        self.nodes.execute_async(cmd, check_retcode=False, nodes=hosts)
 
-    def _stop_slot_ret(self, slot):
-        cmd = "sudo sh -c \"if [ -x /sbin/stop ]; "\
-            "    then stop kikimr-multi slot={slot}; "\
-            "    else systemctl stop kikimr-multi@{slot}; fi\"".format(
-                slot=slot.slot,
-            )
-        return self.nodes.execute_async_ret(cmd, check_retcode=False)
+    def _stop_slot_ret(self, slot, nodes=None):
+        return self.nodes.execute_async_ret(
+            self._stop_slot_command(slot),
+            check_retcode=False,
+            nodes=nodes,
+        )
 
     def _stop_slot(self, slot):
         tasks = self._stop_slot_ret(slot)
@@ -596,9 +644,279 @@ mon={mon}""".format(
 
             self._deploy_secrets()
 
+        self._restart_after_update()
+
+    def _restart_after_update(self):
+        if self.rolling_restart_sec is not None:
+            self._deploy_slot_configs()
+            self._rolling_restart(self.rolling_restart_sec)
+            return
+
         self.slice_stop()
         self._deploy_slot_configs()
         self.slice_start()
+
+    def _host_probe(self, host, command):
+        results = {}
+        self.nodes.execute_async(
+            command,
+            check_retcode=False,
+            nodes=[host],
+            results=results,
+            retry_attempts=0,
+        )
+        result = results.get(host) or {}
+        return (
+            (result.get('stdout') or '').strip(),
+            result.get('retcode'),
+            (result.get('stderr') or '').strip(),
+        )
+
+    def _wait_kikimr_back(self, host, list_cmd, old_pids, min_count, phase, index, total):
+        old_set = set(old_pids)
+        deadline = time.time() + ROLLING_RESTART_TIMEOUT_SEC
+        next_report = time.time() + 30
+        stable_polls = 0
+        stable_pid_set = None
+        last_stdout = ''
+        last_retcode = None
+        last_stderr = ''
+        while True:
+            if getattr(self.nodes, '_dry_run', False):
+                return
+            stdout, retcode, stderr = self._host_probe(host, list_cmd)
+            last_stdout, last_retcode, last_stderr = stdout, retcode, stderr
+            pids = _parse_pids(stdout)
+            pid_set = set(pids)
+            probe_ok = retcode in (0, None)
+            # min_count == 0: wait only until old pids are gone (drained host).
+            have_replacements = min_count == 0 or (len(pids) >= min_count and len(pids) > 0)
+            restarted = probe_ok and not (old_set & pid_set) and have_replacements
+            if restarted:
+                if pid_set != stable_pid_set:
+                    # Crash-looping services can show a fresh PID each poll; require
+                    # the same replacement set across consecutive successful polls.
+                    stable_pid_set = pid_set
+                    stable_polls = 1
+                else:
+                    stable_polls += 1
+                if stable_polls >= ROLLING_RESTART_STABLE_POLLS:
+                    logger.info(
+                        "rolling restart %s %d/%d %s: new pids: %s",
+                        phase,
+                        index,
+                        total,
+                        host,
+                        stdout,
+                    )
+                    return
+            else:
+                stable_polls = 0
+                stable_pid_set = None
+            now = time.time()
+            if now >= next_report:
+                logger.info(
+                    "rolling restart %s %d/%d %s: still waiting (%ss), current: %s "
+                    "retcode=%s stderr=%s",
+                    phase,
+                    index,
+                    total,
+                    host,
+                    int(ROLLING_RESTART_TIMEOUT_SEC - (deadline - now)),
+                    stdout,
+                    retcode,
+                    stderr,
+                )
+                next_report = now + 30
+            if now >= deadline:
+                raise RuntimeError(
+                    "timeout waiting for kikimr restart on %s (%s %d/%d); "
+                    "hosts 1..%d in this phase may already be on the new binary/config; "
+                    "current: %s retcode=%s stderr=%s"
+                    % (
+                        host,
+                        phase,
+                        index,
+                        total,
+                        index - 1,
+                        last_stdout,
+                        last_retcode,
+                        last_stderr,
+                    )
+                )
+            time.sleep(2)
+
+    def _rolling_pause(self, interval_sec, message, *args):
+        if interval_sec <= 0:
+            return
+        if getattr(self.nodes, '_dry_run', False):
+            logger.info("dry-run: skip " + message, *args)
+            return
+        logger.info(message, *args)
+        time.sleep(interval_sec)
+
+    def _rolling_probe_old_pids(self, host, list_cmd, phase, index, total):
+        """List kikimr pids before stop. Fail if the probe itself did not succeed."""
+        if getattr(self.nodes, '_dry_run', False):
+            return []
+        stdout, retcode, stderr = self._host_probe(host, list_cmd)
+        if retcode != 0:
+            raise RuntimeError(
+                "failed to list kikimr pids on %s before %s restart (%d/%d): "
+                "retcode=%s stderr=%s stdout=%s"
+                % (host, phase, index, total, retcode, stderr, stdout)
+            )
+        return _parse_pids(stdout)
+
+    def _rolling_restart_static_host(self, host, index, total):
+        list_cmd = _static_pids_command()
+        old_pids = self._rolling_probe_old_pids(host, list_cmd, "storage", index, total)
+        logger.info(
+            "rolling restart storage %d/%d %s: stop/start kikimr (old pids: %s)",
+            index,
+            total,
+            host,
+            ' '.join(old_pids) or "none",
+        )
+        self.nodes.execute_async(
+            "sudo service kikimr stop",
+            check_retcode=False,
+            nodes=[host],
+            retry_attempts=0,
+        )
+        # Same default retries as _start_static: covers transient SSH/start failures.
+        # Persistent start failure still ends in sys.exit from Nodes after retries.
+        self.nodes.execute_async(
+            "sudo service kikimr start",
+            check_retcode=True,
+            nodes=[host],
+        )
+        self._wait_kikimr_back(
+            host,
+            list_cmd,
+            old_pids=old_pids,
+            min_count=1,
+            phase="storage",
+            index=index,
+            total=total,
+        )
+
+    def _rolling_restart_dynamic_host(self, host, index, total, host_assignments):
+        list_cmd = _dynamic_pids_command()
+        old_pids = self._rolling_probe_old_pids(host, list_cmd, "dynamic", index, total)
+        logger.info(
+            "rolling restart dynamic %d/%d %s: stop all local slots, start %d assigned "
+            "(old pids: %s)",
+            index,
+            total,
+            host,
+            len(host_assignments),
+            ' '.join(old_pids) or "none",
+        )
+        # One SSH call stops every kikimr_* dir, including slots removed from the
+        # current config. Then start only the assignments from this update.
+        self._stop_all_slots(hosts=[host])
+        for slot, tenant, _, node_bind in host_assignments:
+            self._start_slot_for_tenant(slot, tenant, host=host, node_bind=node_bind)
+
+        if not host_assignments:
+            if old_pids:
+                # Drained host: still confirm previously running slots actually died.
+                logger.info(
+                    "rolling restart dynamic %d/%d %s: no assigned slots, "
+                    "waiting until old pids are gone",
+                    index,
+                    total,
+                    host,
+                )
+                self._wait_kikimr_back(
+                    host,
+                    list_cmd,
+                    old_pids=old_pids,
+                    min_count=0,
+                    phase="dynamic",
+                    index=index,
+                    total=total,
+                )
+            else:
+                logger.info(
+                    "rolling restart dynamic %d/%d %s: no assigned slots, skip wait",
+                    index,
+                    total,
+                    host,
+                )
+            return
+
+        self._wait_kikimr_back(
+            host,
+            list_cmd,
+            old_pids=old_pids,
+            min_count=len(host_assignments),
+            phase="dynamic",
+            index=index,
+            total=total,
+        )
+
+    def _rolling_restart_hosts(self, hosts, interval_sec, phase, assignments_by_host=None):
+        hosts = list(hosts)
+        total = len(hosts)
+        if total == 0:
+            return
+        logger.info(
+            "rolling restart %s: %d hosts, pause %ss after processes are up and stable",
+            phase,
+            total,
+            interval_sec,
+        )
+        for index, host in enumerate(hosts, 1):
+            if phase == "storage":
+                self._rolling_restart_static_host(host, index, total)
+            else:
+                host_assignments = (assignments_by_host or {}).get(host, [])
+                self._rolling_restart_dynamic_host(host, index, total, host_assignments)
+            if index < total and interval_sec > 0:
+                self._rolling_pause(
+                    interval_sec,
+                    "waiting %ss before the next %s host",
+                    interval_sec,
+                    phase,
+                )
+
+    def _rolling_restart(self, interval_sec):
+        # Same order as a full update restart: storage first across hosts, then dynamic.
+        # Intentional two-phase (not per-host combined): storage should be back before dynnodes.
+        # "Back" here is PID liveness/stability only; SECONDS must cover cluster rejoin.
+        did_storage = False
+        if "kikimr" in self.components:
+            storage_hosts = self._storage_hosts()
+            storage_host_set = set(storage_hosts)
+            skip_hosts = [node for node in self.nodes.nodes_list if node not in storage_host_set]
+            # Roll remaining storage first so storage:false hosts stay up for quorum,
+            # then stop them (mirrors _start_static's skip_hosts stop, but after the roll).
+            self._rolling_restart_hosts(
+                storage_hosts,
+                interval_sec,
+                phase="storage",
+            )
+            if skip_hosts:
+                self._stop_static_on_hosts(skip_hosts)
+            did_storage = bool(storage_hosts)
+        if "dynamic_slots" in self.components:
+            if did_storage and interval_sec > 0:
+                self._rolling_pause(
+                    interval_sec,
+                    "waiting %ss between storage and dynamic rolling-restart phases",
+                    interval_sec,
+                )
+            assignments_by_host = defaultdict(list)
+            for slot, tenant, host, node_bind in self._iter_dynamic_assignments():
+                assignments_by_host[host].append((slot, tenant, host, node_bind))
+            self._rolling_restart_hosts(
+                self.nodes.nodes_list,
+                interval_sec,
+                phase="dynamic",
+                assignments_by_host=assignments_by_host,
+            )
 
     def slice_update_raw_configs(self, raw_config_path):
         self.slice_stop()

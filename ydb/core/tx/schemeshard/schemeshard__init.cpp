@@ -4076,6 +4076,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                         txState.ShardStatuses[shardIdx] = TTxState::TShardStatus(success, error, bytes, rows);
                     }
+                } else if (txState.TxType == TTxState::TxDropReplication || txState.TxType == TTxState::TxDropReplicationCascade) {
+                    if (!extraData.empty()) {
+                        NKikimrSchemeOp::TDrop drop;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(drop, extraData));
+                        txState.ReplicationSourceCleanup = drop.GetReplicationSourceCleanup();
+                    }
                 } else if (txState.TxType == TTxState::TxForceDropSubDomain || txState.TxType == TTxState::TxForceDropExtSubDomain) {
                     forceDropOpIds.push_back(operationId);
                 } else if (txState.TxType == TTxState::TxAlterUserAttributes) {
@@ -5258,6 +5264,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.DstPathId = TPathId(rowset.GetValueOrDefault<Schema::ImportItems::DstPathOwnerId>(InvalidOwnerId),
                                              rowset.GetValueOrDefault<Schema::ImportItems::DstPathLocalId>(InvalidLocalPathId));
 
+                    if (rowset.HaveValue<Schema::ImportItems::ReplicationConfig>()) {
+                        NKikimrSchemeOp::TTableReplicationConfig config;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(config, rowset.GetValue<Schema::ImportItems::ReplicationConfig>()));
+                        item.ReplicationConfig = std::move(config);
+                    }
+
                     if (rowset.HaveValue<Schema::ImportItems::Scheme>()) {
                         Ydb::Table::CreateTableRequest table;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(table, rowset.GetValue<Schema::ImportItems::Scheme>()));
@@ -5787,7 +5799,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         rowset.GetValue<Schema::SnapshotTables::TableOwnerId>(),
                         rowset.GetValue<Schema::SnapshotTables::TableLocalId>());
 
-                    Self->TablesWithSnapshots.emplace(tableId, id);
+                    Self->TablesWithSnapshots[tableId].insert(id);
                     Self->SnapshotTables[id].insert(tableId);
                     ++records;
 

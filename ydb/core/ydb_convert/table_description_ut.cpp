@@ -676,6 +676,31 @@ indexes {
 })");
     }
 
+    Y_UNIT_TEST(BloomFilterAlterTableReportsInvalidPath) {
+        Ydb::Table::AlterTableRequest request;
+        request.set_path("/Root/Table/");
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+
+        UNIT_ASSERT(!BuildAlterTableBloomFilterModifyScheme(&request, &result, status, error));
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(error, "wrong path format '/Root/Table/'");
+    }
+
+    Y_UNIT_TEST(ColumnTableAlterReportsInvalidPath) {
+        NKikimrKqp::TKqpAlterTableRequest request;
+        request.set_path("/Root/Table/");
+        request.add_add_columns();
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+
+        UNIT_ASSERT(!BuildAlterColumnTableModifyScheme(&request, &result, {}, status, error));
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(error, "wrong path format '/Root/Table/'");
+    }
+
 } // ConvertTableDescription
 
 } // NKikimr

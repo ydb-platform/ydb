@@ -200,6 +200,6 @@ struct TSampleQueries {
     };
 };
 
-void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex = 0);
+void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex = 0, const TString& poolId = {});
 
 }   // namespace NKikimr::NWorkloadManager

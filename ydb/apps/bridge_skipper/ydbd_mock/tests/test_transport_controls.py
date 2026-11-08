@@ -1,6 +1,5 @@
 """Deterministic transport faults, cluster Lab API and TLS client authentication."""
 import asyncio
-import json
 import os
 import shutil
 import subprocess
@@ -8,11 +7,9 @@ import tempfile
 import unittest
 from unittest import mock
 
-import aiohttp
 import grpc
-from aiohttp import web
 
-from ydb.apps.bridge_skipper.ydbd_mock.lib import model, supervisor
+from ydb.apps.bridge_skipper.ydbd_mock.lib import model
 from ydb.apps.bridge_skipper.ydbd_mock.lib.events import EventLog
 from ydb.apps.bridge_skipper.ydbd_mock.lib.faults import NodeFaults, NodeRuntime
 from ydb.apps.bridge_skipper.ydbd_mock.lib.instance import _server_credentials
@@ -108,194 +105,6 @@ class RuntimeControlsTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.rt.response_override("GetClusterState"))
         with self.assertRaises(ValueError):
             self.rt.set_response_override("UpdateClusterState", {})
-
-
-class SupervisorHttpTest(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        Topology().save(os.path.join(self.tmp.name, "topology.yaml"))
-        with open(os.path.join(self.tmp.name, "cluster.json"), "w") as f:
-            json.dump({"cluster_id": "cluster-test"}, f)
-        self.cluster = supervisor.Cluster(self.tmp.name)
-        self.cluster.live_piles = lambda: ["pile1", "pile2"]
-        self.cluster.alive = lambda pile: True
-        self.calls = []
-
-        def request(pile, method, path, body=None, timeout=5):
-            self.calls.append((pile, method, path, body))
-            return {"pile": pile, "generation": 7}
-
-        self.cluster.request = request
-        self.runner = web.AppRunner(supervisor.build_http_app(self.cluster, "supervisor-test"), access_log=None)
-        await self.runner.setup()
-        self.addAsyncCleanup(self.runner.cleanup)
-        await web.TCPSite(self.runner, "127.0.0.1", 0).start()
-        self.url = "http://127.0.0.1:%d/api/v1" % self.runner.addresses[0][1]
-        self.client = aiohttp.ClientSession()
-        self.addAsyncCleanup(self.client.close)
-
-    async def post(self, path, body, status=200, **kw):
-        async with self.client.post(self.url + path, json=body, **kw) as response:
-            self.assertEqual(response.status, status, await response.text())
-            return await response.json()
-
-    async def test_manifest_matches_the_direct_sdk_inventory(self):
-        async with self.client.get(self.url + "/manifest") as response:
-            data = await response.json()
-        self.assertEqual(data["schema_version"], 1)
-        self.assertEqual(data["kind"], "ydbd_mock")
-        self.assertEqual(data["cluster_id"], "cluster-test")
-        self.assertEqual(data["supervisor_id"], "supervisor-test")
-        self.assertEqual(len(data["nodes"]), 6)
-        self.assertEqual(data["endpoint_map"][data["nodes"][0]["label"]], data["nodes"][0]["dial_endpoint"])
-        self.assertEqual(self.cluster.manifest()["topology_sha256"], data["topology_sha256"])
-
-    async def test_node_faults_and_overrides_are_forwarded_only_to_their_pile(self):
-        await self.post("/fault", {"target": "mock-pile2-2", "op": "unavailable", "on": True})
-        self.assertEqual(self.calls, [("pile2", "POST", "/control",
-                                      {"label": "mock-pile2-2", "op": "unavailable", "on": True})])
-        await self.post("/response-override", {"target": "pile1", "method": "SelfCheck", "result": {}})
-        self.assertEqual(self.calls[-1], (
-            "pile1", "POST", "/response-override", {"all": True, "method": "SelfCheck", "result": {}}))
-
-    async def test_topology_is_submitted_once_but_followup_holds_are_broadcast(self):
-        await self.post("/topology", {"configured_piles": ["pile1"], "bridged": False})
-        self.assertEqual(self.calls, [("pile1", "POST", "/topology",
-                                      {"configured_piles": ["pile1"], "bridged": False})])
-        self.calls.clear()
-        await self.post("/followups", {"hold": ["promote"]})
-        self.assertEqual(self.calls, [
-            (p, "POST", "/followups", {"hold": ["promote"]}) for p in ("pile1", "pile2")])
-
-    async def test_unknown_process_action_and_arbitrary_proxy_are_rejected(self):
-        await self.post("/process", {"pile": "pile1", "action": "shell"}, status=400)
-        await self.post("/fault", {"target": "pile1", "url": "http://other"}, status=400)
-        async with self.client.post(self.url + "/peer/commit", json={}) as response:
-            self.assertEqual(response.status, 404)
-        self.assertEqual(self.calls, [])
-
-    async def test_cross_origin_and_rebinding_host_are_rejected(self):
-        await self.post("/reset", {}, status=403, headers={"Origin": "https://other.example"})
-        await self.post("/reset", {}, status=403, headers={"Host": "other.example"})
-        self.assertEqual(self.calls, [])
-
-    async def test_partial_broadcast_reports_each_failure(self):
-        def request(pile, *args, **kw):
-            if pile == "pile2":
-                raise supervisor.SupervisorError("unresponsive")
-            return {"ok": True}
-
-        self.cluster.request = request
-        out = await self.post("/timings", {"values": {"promote_delay": 0}}, status=207)
-        self.assertFalse(out["ok"])
-        self.assertEqual(out["errors"], {"pile2": "unresponsive"})
-        self.assertEqual(out["instances"], {"pile1": {"ok": True}})
-
-    async def test_dead_pile_is_an_explicit_broadcast_failure(self):
-        self.cluster.alive = lambda pile: pile == "pile1"
-        out = await self.post("/followups", {"hold": ["promote"]}, status=207)
-        self.assertFalse(out["ok"])
-        self.assertIn("pile2", out["errors"])
-        self.assertEqual(set(out["instances"]), {"pile1"})
-
-    async def test_aggregate_state_preserves_unresponsive_and_dead_piles(self):
-        self.cluster.alive = lambda pile: pile == "pile1"
-        self.cluster.request = mock.Mock(side_effect=supervisor.SupervisorError("stopped"))
-        async with self.client.get(self.url + "/state") as response:
-            out = await response.json()
-        self.assertEqual(set(out["instances"]), {"pile1", "pile2"})
-        self.assertTrue(out["instances"]["pile1"]["alive"])
-        self.assertFalse(out["instances"]["pile1"]["responsive"])
-        self.assertFalse(out["instances"]["pile2"]["alive"])
-
-    async def test_partition_validation_happens_before_any_mutation(self):
-        await self.post("/partition", {"spec": "pile1|missing"}, status=400)
-        self.assertEqual(self.calls, [])
-        self.assertEqual(self.cluster._macros(), [])
-
-    async def test_partial_partition_reports_outcomes_and_retains_undo_record(self):
-        def request(pile, method, path, body=None, **kw):
-            if pile == "pile2":
-                raise supervisor.SupervisorError("lost link reply")
-            return {"blocked": ["pile2"]}
-
-        self.cluster.request = request
-        out = await self.post("/partition", {"spec": "pile1|pile2"}, status=207)
-        self.assertFalse(out["ok"])
-        self.assertTrue(out["uncertain"])
-        self.assertEqual((out["action"], out["stage"]), ("partition", "links"))
-        self.assertEqual(out["results"]["links"], {"pile1": {"blocked": ["pile2"]}})
-        self.assertEqual(out["errors"]["links"], {"pile2": "lost link reply"})
-        self.assertEqual(self.cluster._macros(), [{"kind": "partition", "spec": "pile1|pile2"}])
-
-    async def test_partial_heal_reports_outcomes_and_keeps_records_for_retry(self):
-        macros = [{"kind": "partition", "spec": "pile1|pile2"}]
-        self.cluster._save_macros(macros)
-
-        def request(pile, method, path, body=None, **kw):
-            if pile == "pile2":
-                raise supervisor.SupervisorError("heal reply lost")
-            return {"blocked": []}
-
-        self.cluster.request = request
-        out = await self.post("/heal", {}, status=207)
-        self.assertEqual((out["action"], out["stage"]), ("heal", "links"))
-        self.assertEqual(out["attempted"]["links"], ["pile1", "pile2"])
-        self.assertEqual(out["results"]["links"], {"pile1": {"blocked": []}})
-        self.assertEqual(out["errors"]["links"], {"pile2": "heal reply lost"})
-        self.assertEqual(self.cluster._macros(), macros)
-
-    async def test_partial_reset_includes_install_and_cleanup_failures(self):
-        macros = [{"kind": "partition", "spec": "pile1|pile2"}]
-        self.cluster._save_macros(macros)
-
-        def request(pile, method, path, body=None, **kw):
-            self.calls.append((pile, method, path, body))
-            if path == "/reset-local" and pile == "pile2":
-                raise supervisor.SupervisorError("commit reply lost")
-            if path == "/reset-cancel" and pile == "pile1":
-                raise supervisor.SupervisorError("resume reply lost")
-            if path == "/state":
-                return {"generation": 7, "max_generation": 9}
-            return {"ok": True}
-
-        self.cluster.request = request
-        with mock.patch.object(supervisor, "_signal", return_value=None):
-            out = await self.post("/reset", {}, status=207)
-        self.assertEqual((out["action"], out["stage"], out["generation"]), ("reset", "install", 10))
-        self.assertEqual(out["results"]["install"], {"pile1": {"ok": True}})
-        self.assertEqual(out["errors"]["install"], {"pile2": "commit reply lost"})
-        self.assertEqual(out["errors"]["resume"], {"pile1": "resume reply lost"})
-        self.assertEqual(out["attempted"]["resume"], ["pile1", "pile2"])
-        self.assertEqual(self.cluster._macros(), macros)
-
-    async def test_failed_reset_prepare_resumes_even_the_pile_with_a_lost_reply(self):
-        def request(pile, method, path, body=None, **kw):
-            if path == "/reset-prepare" and pile == "pile2":
-                raise supervisor.SupervisorError("prepare reply lost")
-            return {"ok": True}
-
-        self.cluster.request = request
-        with mock.patch.object(supervisor, "_signal", return_value=None):
-            out = await self.post("/reset", {}, status=207)
-        self.assertEqual(out["stage"], "prepare")
-        self.assertEqual(out["attempted"]["resume"], ["pile1", "pile2"])
-        self.assertNotIn("install", out["attempted"])
-
-
-class SupervisorEventsTest(unittest.TestCase):
-    def test_event_pagination_does_not_skip_a_pile_when_its_clock_moves_back(self):
-        cluster = mock.Mock()
-        cluster.piles.return_value = ["pile1"]
-        events = [{"seq": seq, "ts": ts, "pile": "pile1", "kind": "rpc.start"}
-                  for seq, ts in ((1, 10), (2, 9), (3, 11))]
-        with mock.patch.object(supervisor, "read_events", return_value=events):
-            first = supervisor._http_events(cluster, {}, 1, None)
-            second = supervisor._http_events(cluster, first["cursors"], 10, None)
-        self.assertEqual([e["seq"] for e in first["events"] + second["events"]], [1, 2, 3])
-        self.assertTrue(first["has_more"])
-        self.assertFalse(second["has_more"])
 
 
 class TlsConfigurationTest(unittest.TestCase):

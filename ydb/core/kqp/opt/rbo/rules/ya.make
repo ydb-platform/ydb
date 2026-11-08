@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 SRCS(
+    expand_insert_revert.cpp
     expand_replicate.cpp
     inline_join_filters.cpp
     propagate_topsort_through_stage.cpp
@@ -47,6 +48,7 @@ JOIN_SRCS(
     all_push_filter.cpp
     push_filter_into_join.cpp
     push_filter_through_aggregate.cpp
+    push_filter_through_union_all.cpp
     push_filter_under_map.cpp
 )
 
@@ -60,6 +62,7 @@ JOIN_SRCS(
 JOIN_SRCS(
     all_push_rest_1.cpp
     push_limit_into_sort.cpp
+    push_top_sort_through_union_all.cpp
     push_ranges.cpp
     push_simple_join_filter.cpp
 )
@@ -77,6 +80,7 @@ JOIN_SRCS(
     build_initial_cbo_tree.cpp
     constant_folding_stage.cpp
     decorrelation/dependent_join_pushdown.cpp
+    decorrelation/pull_up_correlated_predicate.cpp
     disable_blocks_on_columns_limit.cpp
     eliminate_left_join.cpp
     fuse_filters.cpp

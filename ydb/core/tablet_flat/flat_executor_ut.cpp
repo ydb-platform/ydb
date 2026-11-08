@@ -1,5 +1,6 @@
 #include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
+#include "flat_redo_observer.h"
 #include "util_fmt_abort.h"
 #include "shared_cache_counters.h"
 #include <ydb/core/base/counters.h>
@@ -3486,6 +3487,38 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         }
     };
 
+    Y_UNIT_TEST(FollowerSnapshotCheckpointSealsLogBatch) {
+        struct TTxEnableBatching : ITransaction {
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                txc.DB.Alter().SetExecutorAllowLogBatching(true)
+                    .SetExecutorLogFlushPeriod(TDuration::Seconds(30));
+                return true;
+            }
+            void Complete(const TActorContext& ctx) override {
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }
+        };
+
+        TMyEnvBase env;
+        TRowsModel rows;
+        env.FireDummyTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{new TTxEnableBatching()});
+        ui32 step = 0, checkpoint = 0, nextCheckpoint = 0;
+        env.SendSync(new NFake::TEvExecute{new TTxWriteRow(1, step)});
+        env.SendSync(new NFake::TEvCall{[&](auto* executor, const auto& ctx) {
+            checkpoint = executor->CreateFollowerSnapshotCheckpoint();
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        UNIT_ASSERT_GE(checkpoint, step);
+        env.SendSync(new NFake::TEvExecute{new TTxWriteRow(2, step)});
+        env.SendSync(new NFake::TEvCall{[&](auto* executor, const auto& ctx) {
+            nextCheckpoint = executor->CreateFollowerSnapshotCheckpoint();
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        UNIT_ASSERT_GT(nextCheckpoint, checkpoint);
+    }
+
     Y_UNIT_TEST(BasicFollowerRead) {
         TMyEnvBase env;
         TRowsModel rows;
@@ -3526,6 +3559,62 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
                 "Key 4 = Upsert value = Set key4value\n"
                 "Key 5 = Upsert value = Set key5value\n");
         }
+    }
+
+    // The leader gets the follower list with its only follower. The follower is then lost for good, as the leader sees
+    // it; as it is in the list, the leader must keep it, and must not tell the user tablet that it is detached.
+    Y_UNIT_TEST(FollowerInRefreshedListIsKept) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        TActorId leaderSys;
+        TActorId followerSys;
+        auto attachObserver = env->AddObserver<TEvTablet::TEvFollowerAttach>([&](auto& ev) {
+            leaderSys = ev->GetRecipientRewrite();
+            followerSys = ev->Sender;
+        });
+        // only the list sent by the test reaches the leader
+        auto refreshObserver = env->AddObserver<TEvTablet::TEvFollowerListRefresh>([&](auto& ev) {
+            if (ev->Sender != env.Edge) {
+                ev.Reset();
+            }
+        });
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        env.FireDummyFollower(1);
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+        UNIT_ASSERT(leaderSys && followerSys);
+
+        env->Send(new IEventHandle(leaderSys, env.Edge, new TEvTablet::TEvFollowerListRefresh({followerSys})));
+        env->SimulateSleep(TDuration::MilliSeconds(100));
+
+        // the next update for the follower is answered as if the follower is gone
+        bool loseFollower = true;
+        std::optional<ui64> updateCookie;
+        auto updateObserver = env->AddObserver<TEvTablet::TEvFollowerUpdate>([&](auto& ev) {
+            if (loseFollower && ev->Sender == leaderSys && ev->GetRecipientRewrite() == followerSys) {
+                updateCookie = ev->Cookie;
+                ev.Reset();
+            }
+        });
+        ui32 numDetached = 0;
+        auto detachedObserver = env->AddObserver<TEvTablet::TEvFollowerDetached>([&](auto&) {
+            ++numDetached;
+        });
+
+        ui32 step = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(1, step) });
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return updateCookie.has_value(); };
+        env->DispatchEvents(options, TDuration::Seconds(10));
+        UNIT_ASSERT_C(updateCookie, "the leader didn't send an update to the follower");
+        loseFollower = false;
+
+        env->Send(new IEventHandle(leaderSys, followerSys, new TEvents::TEvUndelivered(
+            TEvTablet::TEvFollowerUpdate::EventType, TEvents::TEvUndelivered::ReasonActorUnknown), 0, *updateCookie));
+        env->SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(numDetached, 0);
     }
 
     Y_UNIT_TEST(VacuumWaitsForFollowerGc) {
@@ -9354,6 +9443,95 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LowPriorityTxs) {
         }
     };
 
+    struct TCallbackTx : public TSimpleTx {
+        using TCallback = std::function<bool(TTransactionContext&, const TActorContext&)>;
+
+        TCallbackTx(TTxState& state, TCallback callback)
+            : TSimpleTx(state)
+            , Callback(std::move(callback))
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+            ++State.Executed;
+            return Callback(txc, ctx);
+        }
+
+        TCallback Callback;
+    };
+
+    Y_UNIT_TEST(TestHelpNormalQueue) {
+        TMyEnvBase env;
+        env.FireDummyTablet();
+
+        TTxState first, second, third;
+        env.SendSync(new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+            x->Enqueue(new TCallbackTx(first, [&](auto&, const auto&) {
+                UNIT_ASSERT(!x->TryExecuteReadyTransaction()); // No nested execution.
+                return true;
+            }));
+            x->Enqueue(new TSimpleTx(second));
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(first.Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 0);
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 1);
+            UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+
+            // Both posted activations remain; one can serve a new transaction
+            // and the other must safely handle an empty queue.
+            x->Enqueue(new TSimpleTx(third));
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                UNIT_ASSERT_VALUES_EQUAL(third.Executed, 1);
+                UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }});
+        }});
+    }
+
+    Y_UNIT_TEST(TestHelpLowPriorityQueue) {
+        TMyEnvBase env;
+        env.FireDummyTablet();
+
+        TTxState normal, first, second, third, fourth;
+        env.SendSync(new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+            x->EnqueueLowPriority(new TSimpleTx(first));
+            x->EnqueueLowPriority(new TSimpleTx(second));
+            x->Enqueue(new TSimpleTx(normal));
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(normal.Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(first.Executed, 0);
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(first.Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 0);
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 1);
+            UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+
+            // The posted normal and low-priority activations must safely
+            // consume an empty queue without executing any transaction twice.
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+                // After the stale events have been consumed, new low-priority
+                // work must still activate, one transaction per mailbox turn.
+                x->EnqueueLowPriority(new TSimpleTx(third));
+                x->EnqueueLowPriority(new TSimpleTx(fourth));
+                ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                    UNIT_ASSERT_VALUES_EQUAL(third.Executed, 1);
+                    UNIT_ASSERT_VALUES_EQUAL(fourth.Executed, 0);
+                    ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                        UNIT_ASSERT_VALUES_EQUAL(fourth.Executed, 1);
+                        ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+                    }});
+                }});
+            }});
+        }});
+        for (const auto* state : {&normal, &first, &second, &third, &fourth}) {
+            UNIT_ASSERT_VALUES_EQUAL(state->Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(state->Completed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(state->Destroyed, 1);
+        }
+    }
+
     Y_UNIT_TEST(TestEnqueueCancel) {
         TMyEnvBase env;
 
@@ -9944,6 +10122,132 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
             Cerr << "...checking rows (expecting new)" << Endl;
             env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 4) }, /* retry */ true);
         }
+    }
+
+    struct TTruncateRedoObserver : public NTable::IRedoObserver {
+        THashSet<i64> Keys;
+        TVector<i64> Events;
+        ui32 Truncates = 0;
+
+        void OnRedoUpdate(ui32 table, NTable::ERowOp op, TArrayRef<const TRawTypeValue> key,
+                TArrayRef<const NTable::TUpdateOp>, TArrayRef<const NPageCollection::TMemGlob>,
+                TRowVersion, ui64, ui32) override
+        {
+            UNIT_ASSERT_VALUES_EQUAL(table, ui32(TRowsModel::TableId));
+            UNIT_ASSERT_VALUES_EQUAL(key.size(), 1);
+            const i64 value = TCell(key[0].AsRef()).AsValue<i64>();
+            Events.push_back(value);
+            if (op == NTable::ERowOp::Erase) {
+                Keys.erase(value);
+            } else {
+                Keys.insert(value);
+            }
+        }
+
+        void OnRedoCommit(ui32, ui64, TRowVersion) override {}
+        void OnRedoRemove(ui32, ui64) override {}
+
+        void OnTruncate(ui32 table) override {
+            UNIT_ASSERT_VALUES_EQUAL(table, ui32(TRowsModel::TableId));
+            Keys.clear();
+            Events.push_back(-1);
+            ++Truncates;
+        }
+    };
+
+    class TObservedTablet : public TTestFlatTablet {
+    public:
+        TObservedTablet(const TActorId& sender, const TActorId& tablet, TTabletStorageInfo* info,
+                TTruncateRedoObserver& observer)
+            : TTestFlatTablet(sender, tablet, info)
+            , Observer(observer)
+        {}
+
+        NTable::IRedoObserver* GetFollowerRedoObserver() override {
+            return &Observer;
+        }
+
+    private:
+        TTruncateRedoObserver& Observer;
+    };
+
+    void CheckTruncateRedoObserver(bool compact, i64 newRows) {
+        TTruncateRedoObserver observer;
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.FireFollower(env.Edge, env.Tablet, [&env, &observer](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TObservedTablet(env.Edge, tablet, info, observer);
+        }, /* followerId */ 1);
+        env.WaitForWakeUp();
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(rows.MakeRows(100, 0, 100));
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0) });
+        UNIT_ASSERT_VALUES_EQUAL(observer.Keys.size(), 100);
+
+        if (compact) {
+            env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+            env.WaitFor<NFake::TEvCompacted>();
+            env->SimulateSleep(TDuration::MilliSeconds(1));
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0) });
+        }
+        UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, 0);
+
+        observer.Events.clear();
+        env.SendSync(new NFake::TEvExecute{ new TTxTruncateAndWrite(newRows) });
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, newRows) });
+
+        UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, 1);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Events.size(), 1 + newRows);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Events[0], -1);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Keys.size(), newRows);
+        for (i64 i = 0; i < newRows; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(observer.Events[i + 1], 101 + i);
+            UNIT_ASSERT(observer.Keys.contains(101 + i));
+        }
+
+        // Ordinary writes must not clear the observer again.
+        env.SendSync(rows.RowTo(101 + newRows).MakeRows(1));
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, newRows + 1) });
+        UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, 1);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Keys.size(), newRows + 1);
+
+        // Repeated truncates must be reported, including an already empty table.
+        for (ui32 expected = 2; expected <= 3; ++expected) {
+            observer.Events.clear();
+            env.SendSync(new NFake::TEvExecute{ new TTxTruncateAndWrite(0) });
+            env->SimulateSleep(TDuration::MilliSeconds(1));
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) });
+            UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(observer.Events.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(observer.Events[0], -1);
+            UNIT_ASSERT(observer.Keys.empty());
+        }
+    }
+
+    Y_UNIT_TEST(TruncateRedoObserver) {
+        CheckTruncateRedoObserver(false, 0);
+    }
+
+    Y_UNIT_TEST(TruncateAndWriteRedoObserver) {
+        CheckTruncateRedoObserver(false, 4);
+    }
+
+    Y_UNIT_TEST(TruncateCompactedRedoObserver) {
+        CheckTruncateRedoObserver(true, 0);
+    }
+
+    Y_UNIT_TEST(TruncateCompactedAndWriteRedoObserver) {
+        CheckTruncateRedoObserver(true, 4);
     }
 
     Y_UNIT_TEST(TruncateAtFollower) {
@@ -10719,6 +11023,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Tiering) {
                 .AddColumnToKey(TableId, KeyColumnId)
                 .AddFamily(TableId, ColdTierId, NTable::TScheme::DefaultRoom)
                 .SetFamilyCompression(TableId, ColdTierId, NTable::NPage::ECodec::LZ4)
+                .SetFamilyIndexPlacement(TableId, ColdTierId, false, false)
                 .SetTieringPolicy(TableId, MakeTieringPolicy());
             return true;
         }
@@ -10738,6 +11043,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Tiering) {
             UNIT_ASSERT(tier);
             UNIT_ASSERT(tier->Room == NTable::TScheme::DefaultRoom);
             UNIT_ASSERT(tier->Codec == NTable::NPage::ECodec::LZ4);
+            UNIT_ASSERT(!tier->KeyIndexInDescriptor);
+            UNIT_ASSERT(!tier->GroupIndexesInDescriptor);
             UNIT_ASSERT(table->TieringPolicy);
             UNIT_ASSERT(*table->TieringPolicy == MakeTieringPolicy());
             return true;

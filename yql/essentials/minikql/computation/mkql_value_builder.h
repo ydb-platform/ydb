@@ -100,6 +100,11 @@ public:
 
     NUdf::IListValueBuilder::TPtr NewListBuilder() const final;
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 48)
+    NUdf::TUnboxedValue ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePod value) const final;
+    NUdf::TUnboxedValue ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef value) const final;
+#endif
+
 private:
     const THolderFactory& HolderFactory_;
     NUdf::EValidatePolicy Policy_;

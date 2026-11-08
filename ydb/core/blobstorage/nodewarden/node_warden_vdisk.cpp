@@ -88,6 +88,10 @@ namespace NKikimr::NStorage {
             return;
         }
 
+        if (!donorMode && EjectedGroups.contains(vdisk.GetGroupId())) {
+            return; // its group is gone, only the destruction of this slot is yet to come
+        }
+
         // A record that asks for a wipe is a command, not a configuration to run with: it carries the settings of the
         // moment the wipe was requested. BS_CONTROLLER answers the WIPED report with a fresh record, and the VDisk
         // starts from that one, so settings changed during the wipe (e.g. the heap allocator one) are not lost.
@@ -539,8 +543,28 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet) {
+    void TNodeWarden::ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet, bool isStatic) {
+        THashMap<TPDiskKey, ui64> pdiskGuids;
+        if (!isStatic) {
+            for (const auto& pdisk : StaticServices.GetPDisks()) {
+                pdiskGuids.emplace(pdisk, pdisk.GetPDiskGuid());
+            }
+            for (const auto& pdisk : DynamicServices.GetPDisks()) {
+                pdiskGuids.emplace(pdisk, pdisk.GetPDiskGuid());
+            }
+        }
         for (const auto& vdisk : serviceSet.GetVDisks()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            if (!isStatic && loc.GetNodeID() == LocalNodeId && !vdisk.GetDoDestroy() && !vdisk.GetDoWipe()
+                    && vdisk.GetEntityStatus() != NKikimrBlobStorage::DESTROY) {
+                const auto it = pdiskGuids.find(TPDiskKey(loc.GetNodeID(), loc.GetPDiskID()));
+                if (it == pdiskGuids.end() || it->second != loc.GetPDiskGuid()) {
+                    YDB_LOG_NOTICE("Ignoring VDisk with unknown or superseded PDisk identity",
+                        {"marker", "NW125"}, {"vdisk", vdisk});
+                    ControllerServicesDropped = true;
+                    continue;
+                }
+            }
             ApplyLocalVDiskInfo(vdisk);
         }
     }
@@ -604,7 +628,9 @@ namespace NKikimr::NStorage {
         }
 
         const TPDiskKey pdiskKey(vslotId.NodeId, vslotId.PDiskId);
-        const bool pdiskMissing = !LocalPDisks.contains(pdiskKey);
+        const auto pdiskIt = LocalPDisks.find(pdiskKey);
+        const bool pdiskMissing = pdiskIt == LocalPDisks.end()
+            || pdiskIt->second.Record.GetPDiskGuid() != loc.GetPDiskGuid();
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
             if (record.UnderlyingPDiskDestroyed || pdiskMissing) {
                 PoisonLocalVDisk(record);

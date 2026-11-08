@@ -979,6 +979,7 @@ public:
                         }
 
                         THashMap<NKikimrViewer::TStorageUsage::EType, ui64> tablesStorageByType;
+                        const auto guessedStorageType = GuessStorageType(domainDescription);
 
                         for (const auto& poolUsage : domainDescription.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
                             auto type = GetStorageType(poolUsage.GetPoolKind());
@@ -986,13 +987,17 @@ public:
                         }
 
                         if (tablesStorageByType.empty() && domainDescription.HasDiskSpaceUsage()) {
-                            tablesStorageByType[GuessStorageType(domainDescription)] =
-                                domainDescription.GetDiskSpaceUsage().GetTables().GetTotalSize()
-                                + domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
+                            tablesStorageByType[guessedStorageType] =
+                                domainDescription.GetDiskSpaceUsage().GetTables().GetTotalSize();
+                        }
+
+                        if (domainDescription.HasDiskSpaceUsage()) {
+                            tablesStorageByType[guessedStorageType] +=
+                                domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
                         }
 
                         if (storageQuotasByType.empty()) {
-                            auto& quotas = storageQuotasByType[GuessStorageType(domainDescription)];
+                            auto& quotas = storageQuotasByType[guessedStorageType];
                             quotas.HardQuota = domainDescription.GetDatabaseQuotas().data_size_hard_quota();
                             quotas.SoftQuota = domainDescription.GetDatabaseQuotas().data_size_soft_quota();
                         }

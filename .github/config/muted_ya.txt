@@ -15,6 +15,7 @@ ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.VC
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeferredTopicCreation_MessagingWhileTopicPending
+ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.ExternalTableMatches
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeServerlessTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeServerlessTable-ColumnStore
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexCoverColumn+EnableCompileTimeDefaults

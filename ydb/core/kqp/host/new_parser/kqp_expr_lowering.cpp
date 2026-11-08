@@ -23,6 +23,9 @@ using TNode = TExprNode::TPtr;
 
 struct TLoweringError {};
 
+// Translate scalar syntax into the existing YQL callable vocabulary. This
+// class deliberately leaves coercions and result typing to the shared type
+// annotator; unsupported SQL semantics must never be guessed from a name.
 class TLowerer {
 public:
     TLowerer(const TScript& script, const TExpressionBindings& bindings, TExprContext& ctx,
@@ -32,6 +35,8 @@ public:
 
     TNode Expression(const TExpression& expression) {
         const auto pos = Pos(expression.Range);
+        // Resolved identity takes precedence over the syntax variant, including
+        // ANSI quoted identifiers represented as literals and qualified members.
         if (Bindings.Names) {
             if (const auto* id = Bindings.Names->ColumnReferences.FindPtr(&expression)) {
                 const auto* binding = Bindings.Columns.FindPtr(*id);
@@ -57,6 +62,8 @@ public:
                 if (value.Op == EUnaryOp::Minus) {
                     if (const auto* literal = std::get_if<TLiteral>(&value.Operand->Value);
                         literal && literal->Kind == ELiteralKind::Integer) {
+                        // Parse sign together with magnitude so the minimum signed integer
+                        // is accepted even though its positive magnitude exceeds signed max.
                         return Integer(literal->Spelling, expression.Range, true);
                     }
                 }
@@ -106,6 +113,8 @@ public:
                 }
                 auto result = Expression(*value.Else);
                 auto operand = value.Operand ? Expression(*value.Operand) : TNode{};
+                // Build from ELSE outward so the first matching WHEN remains the
+                // outermost If. Reuse the simple-CASE operand node across comparisons.
                 for (auto it = value.Branches.rbegin(); it != value.Branches.rend(); ++it) {
                     auto condition = Expression(*it->When);
                     if (operand) {
@@ -134,6 +143,9 @@ public:
                 if (value.Compact) { option("isCompact"); }
                 if (!Settings.AnsiIn) { option("warnNoAnsi"); }
                 else if (*Settings.AnsiIn) { option("ansi"); }
+                // SqlIn owns SQL three-valued membership semantics and expects the
+                // collection first. Expanding into equality/Or here would bypass its
+                // NULL handling and ANSI compatibility options.
                 auto result = Call(pos, "SqlIn", {Expression(*value.Collection), Expression(*value.Value),
                     Ctx.NewList(pos, std::move(options))});
                 return value.Negated ? Call(pos, "Not", {result}) : result;
@@ -168,6 +180,8 @@ private:
         return Ctx.NewCallable(pos, name, std::move(args));
     }
 
+    // YQL If requires a definite Bool. SQL unknown conditions take the false
+    // branch, so normalize Optional<Bool> at the conditional boundary.
     TNode Predicate(TPositionHandle pos, TNode expression) {
         return Call(pos, "Coalesce", {expression, Call(pos, "Bool", {Atom(pos, "false")})});
     }
@@ -198,6 +212,9 @@ private:
             ? Decode(name, identifier.Range) : name;
     }
 
+    // Accumulate an unsigned magnitude with overflow checks before selecting
+    // a signed/unsigned width. Keeping the sign separate avoids overflowing
+    // when spelling the minimum Int64 or a suffix-constrained negative literal.
     TNode Integer(const TString& spelling, const TSourceRange& range, bool negative = false) {
         const auto pos = Pos(range);
         const auto text = to_lower(spelling);
@@ -234,6 +251,8 @@ private:
             if (!found) { Error(range, "Invalid integer suffix"); }
             type = *found;
         }
+        // A minus applied to an unsigned literal is still an arithmetic operation;
+        // it must not silently change the explicit unsigned type to a signed one.
         const bool signedNegative = negative && type.StartsWith("Int");
         auto result = Call(pos, type, {Atom(pos, (signedNegative ? "-" : "") + ToString(magnitude))});
         return negative && !signedNegative ? Call(pos, Settings.CheckedOps ? "CheckedMinus" : "Minus", {result}) : result;
@@ -255,6 +274,9 @@ private:
             case ELiteralKind::String: {
                 auto text = value.Spelling;
                 if (Script.AnsiLexer && text.StartsWith('"')) { Error(range, "Unresolved quoted column reference"); }
+                // An explicit SQL suffix overrides the default string type. Decode
+                // escapes only after removing the suffix; otherwise a suffix could be
+                // misinterpreted as part of the quoted value.
                 TString type = Settings.UnicodeLiterals ? "Utf8" : "String";
                 const auto lower = to_lower(text);
                 if (lower.EndsWith('p') || lower.EndsWith("pt") || lower.EndsWith("pb") || lower.EndsWith("pv")) {
@@ -278,6 +300,8 @@ private:
         Y_UNREACHABLE();
     }
 
+    // Callable selection preserves SQL warning and checked-arithmetic modes.
+    // The shared type rules subsequently choose operand coercions and NULL types.
     TStringBuf BinaryName(EBinaryOp op) const {
         switch (op) {
             case EBinaryOp::Or: return "Or";
@@ -309,6 +333,9 @@ private:
         Y_UNREACHABLE();
     }
 
+    // Build type expressions rather than assigning type annotations manually.
+    // This reuses the existing validation for aliases, Decimal parameters and
+    // container nesting through the shared callable type rules.
     TNode Type(const TTypeName& type) {
         const auto pos = Pos(type.Name.Range);
         if (type.Binding) { Unsupported(type.Name.Range, "bound type expressions"); }
@@ -349,6 +376,9 @@ private:
         return result;
     }
 
+    // SQL aggregate/window modifiers are not ordinary scalar-call arguments.
+    // Reject them before considering explicit bindings or builtins, otherwise
+    // a familiar function spelling could accidentally lose relational semantics.
     TNode Function(const TCall& call, const TSourceRange& range) {
         const auto pos = Pos(range);
         if (call.Over || call.Filter || call.StarArgument || call.Quantifier != ESetQuantifier::Default

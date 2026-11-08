@@ -647,8 +647,12 @@ message TTableServiceConfig {
     // Each compilation draws p from [0, 1) and uses the new RBO if p < NewRBORolloutRatio, otherwise the YQL optimizer.
     // 1 (default) always uses the new RBO; 0 never does.
     optional double NewRBORolloutRatio = 156 [default = 1.0, (InvalidateCompileCache) = true];
-    
+
     // Try the direct YQL frontend before the existing compilation pipeline.
-    // Currently parses with ANTLR and falls back because AST-to-RBO lowering is not implemented.
+    // Supported queries resolve names, reuse YQL scalar type annotation and lower
+    // directly to RBO. Unsupported constructs explicitly fall back to the legacy
+    // frontend; syntax/type errors remain diagnostics. Catalog loading and result
+    // packaging still use the existing pipeline. Changing frontend selection
+    // invalidates cached compilations even when both paths produce the same result.
     optional bool EnableNewYqlParser = 157 [default = false, (InvalidateCompileCache) = true];
 };

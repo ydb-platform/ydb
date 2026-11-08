@@ -4,6 +4,8 @@ TEST_SRCS(test_rbo.py)
 
 SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+# Each Python case launches one registered C++ case. Sharding distributes the
+# original suite without editing its sources or its expected results.
 FORK_SUBTESTS()
 SPLIT_FACTOR(64)
 TIMEOUT(1800)

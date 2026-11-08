@@ -38,8 +38,14 @@ struct TNameResolutionSettings {
     THashMap<TString, TString> ClusterPathPrefixes;
 };
 
+// These IDs identify logical column occurrences, not catalog column numbers.
+// Aliases, projections and repeated CTE references may allocate fresh IDs while
+// retaining an Input link to the value they expose.
 using TColumnId = size_t;
 
+// Table/MetadataColumnId describe stored provenance; Expression describes a
+// projection producer. Input links renames and direct projections back to their
+// producer without merging independent source occurrences such as self joins.
 struct TResolvedColumn {
     TString Name;
     const TSource* Source = nullptr; // Distinguishes occurrences in self joins.
@@ -67,6 +73,9 @@ struct TNameResolutionResult {
     bool IsOk() const { return bool(Names); }
 };
 
+// Resolution reads catalog snapshots but does not construct ExprNodes or infer
+// types. A user name error returns Issues and no partial Names; unsupported
+// binding rules throw TNewYqlParserFallback for the entire script.
 TNameResolutionResult ResolveNames(const TScript& script, TNameResolutionSettings settings,
     const TTableLookup& lookup);
 

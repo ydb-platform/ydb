@@ -13,6 +13,9 @@ namespace {
 using namespace NNewYql;
 using namespace NYql;
 
+// Run parse, resolution and annotation directly with nullable/non-nullable
+// catalog columns. Ownership order keeps the AST keys and context-owned types
+// alive for assertions on the separate annotation result.
 struct TFixture {
     TExprContext Ctx;
     TTypeAnnotationContext Types;
@@ -34,6 +37,8 @@ struct TFixture {
         Result = AnnotateAst(*Ast, *Names, Ctx, Types, Settings);
     }
 
+    // Every successful scalar root must be a closed lambda before RBO lowering
+    // substitutes its arguments. Checking all roots also covers hidden clauses.
     void Ok(const TString& sql) {
         Run(sql);
         UNIT_ASSERT_C(Result, Ctx.IssueManager.GetIssues().ToString());
@@ -57,6 +62,8 @@ struct TFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
+    // The annotation table must keep coercions and access rewrites, not merely
+    // attach a result type to the old unrewritten expression.
     Y_UNIT_TEST(AnnotatesScalarQueryAndRetainsRewrites) {
         TFixture f;
         f.Ok("SELECT id + 1 AS next, value ?? 'none', CAST(id AS Double), amount, [1, 2][0u] "
@@ -78,6 +85,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_VALUES_EQUAL(FormatType(f.Result->Columns[aliasId]), "Int64");
     }
 
+    // Tuple expansion preserves catalog order and each column's stored nullability.
     Y_UNIT_TEST(StarAndCatalogNullability) {
         TFixture f;
         f.Ok("SELECT t.* FROM t;");
@@ -89,6 +97,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_VALUES_EQUAL(star.Lambda->Tail().ChildrenSize(), 4);
     }
 
+    // Producer output types must be available before following consumer alias IDs.
     Y_UNIT_TEST(CteAndDerivedOutputsAreTypedBeforeConsumers) {
         TFixture f;
         f.Ok("WITH c(key, label) AS (SELECT id + 1, value ?? 'none' FROM t) "
@@ -99,6 +108,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         for (const auto type : f.Result->Columns) { UNIT_ASSERT(type); }
     }
 
+    // Null extension applies to join outputs; ON and child reads retain input types.
     Y_UNIT_TEST(LeftJoinNullabilityDoesNotAffectOnOrInputSchemas) {
         TFixture f;
         f.Ok("SELECT l.id, r.id, r.score FROM t AS l LEFT JOIN t AS r ON l.id = r.id;");
@@ -116,6 +126,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_VALUES_EQUAL(FormatType(on.Lambda->Head().Child(it - on.Inputs.begin())->GetTypeAnn()), "Int64");
     }
 
+    // Check which sides become nullable or disappear for each output-scope rule.
     Y_UNIT_TEST(RightFullAndSemiJoins) {
         TFixture right;
         right.Ok("SELECT l.id, r.id FROM t AS l RIGHT JOIN t AS r ON l.id = r.id;");
@@ -131,6 +142,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_VALUES_EQUAL(semi.Result->Sources.at(semi.Select().From.get()).size(), 4);
     }
 
+    // Making one CTE consumer nullable must not contaminate the other consumer.
     Y_UNIT_TEST(CteSelfJoinHasIndependentNullability) {
         TFixture f;
         f.Ok("WITH c AS (SELECT id FROM t) SELECT l.id, r.id "
@@ -141,6 +153,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_VALUES_EQUAL(FormatType(f.Result->QueryOutputs.at(&cte)[0]), "Int64");
     }
 
+    // Counts are query-wide typed expressions and reuse the existing Uint64 coercion.
     Y_UNIT_TEST(LimitOffsetAndParameters) {
         TFixture f;
         f.Settings.Parameters["$p"] = f.Ctx.MakeType<TDataExprType>(EDataSlot::Int64);
@@ -150,6 +163,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_VALUES_EQUAL(FormatType(f.Result->Expressions.at(f.Query().Offset.get()).GetType()), "Uint64");
     }
 
+    // Separate queries share settings but must retain their own annotation entries.
     Y_UNIT_TEST(MultipleStatementsAndExpressionSettings) {
         TFixture f;
         f.Settings.Expressions.CheckedOps = true;
@@ -160,6 +174,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_VALUES_EQUAL(f.Output(1, 1), "Int64");
     }
 
+    // A late scalar/clause error invalidates the complete annotation result.
     Y_UNIT_TEST(ErrorsDoNotReturnPartialAnnotations) {
         for (const TString sql : {"SELECT id, id + 'bad' FROM t;", "SELECT id FROM t WHERE 1;",
             "SELECT l.id FROM t AS l JOIN t AS r ON l.id;", "SELECT id FROM t LIMIT 'bad';",
@@ -171,6 +186,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         }
     }
 
+    // The wrapper issue scope must retain the source location of the SQL expression.
     Y_UNIT_TEST(DiagnosticsKeepSqlPositions) {
         TFixture f;
         f.Run("SELECT\n  id + 'bad' FROM t;");
@@ -181,6 +197,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "New YQL type annotation");
     }
 
+    // Embedding scalar annotation inside the host must preserve completed stages
+    // and the surrounding transform repeat counter.
     Y_UNIT_TEST(DoesNotResetCallerCompilationStages) {
         TFixture f;
         f.Ctx.Step.Done(TExprStep::LoadTablesMetadata);
@@ -193,6 +211,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_VALUES_EQUAL(f.Ctx.RepeatTransformCounter, 17);
     }
 
+    // Syntax/name support alone must not imply support for grouping or windows.
     Y_UNIT_TEST(UnsupportedRelationalSemanticsFallBack) {
         for (const TString sql : {"SELECT COUNT(*) FROM t;", "SELECT id FROM t GROUP BY id;",
             "SELECT SUM(id) OVER () FROM t;", "SELECT (SELECT id FROM t);", "SELECT value LIKE 'a%' FROM t;"}) {

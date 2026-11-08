@@ -10,6 +10,9 @@ namespace NKikimr::NKqp::NNewYql {
 
 using TColumnTypes = THashMap<TColumnId, const NYql::TTypeAnnotationNode*>;
 
+// The lambda is the bridge between scalar typing and relational lowering.
+// Its arguments are private to this expression and Inputs maps them back to
+// resolved IDs; consumers substitute arguments, never re-resolve SQL names.
 struct TAnnotatedExpression {
     // A typed lambda whose arguments correspond to Inputs. Its body is the
     // rewritten YQL expression, including coercions inserted by annotation.
@@ -19,6 +22,9 @@ struct TAnnotatedExpression {
     const NYql::TTypeAnnotationNode* GetType() const { return Lambda->Tail().GetTypeAnn(); }
 };
 
+// AST pointers are borrowed keys and type pointers belong to TExprContext.
+// Keep both owners alive. Annotation stores rewritten expressions separately
+// so the same immutable syntax and name bindings can be lowered again.
 struct TAnnotatedAst {
     // Scalar roots of relational clauses: projections, predicates, sort keys,
     // LIMIT/OFFSET. A star projection has a tuple body in catalog column order.

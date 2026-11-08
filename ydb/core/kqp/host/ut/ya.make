@@ -1,3 +1,5 @@
+# Fast frontend unit tests exercise each phase directly, including rejection
+# and fallback contracts. They need no actor runtime or provider metadata IO.
 UNITTEST_FOR(ydb/core/kqp/host/new_parser)
 
 SRCS(

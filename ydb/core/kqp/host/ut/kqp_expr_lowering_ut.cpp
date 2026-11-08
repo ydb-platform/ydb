@@ -12,6 +12,9 @@ namespace {
 using namespace NNewYql;
 using namespace NYql;
 
+// Exercise scalar construction independently of relational annotation. Tests
+// provide column/parameter/callable bindings explicitly, then run the existing
+// YQL annotator to check both inferred types and rewritten expression shapes.
 struct TFixture {
     TExprContext Ctx;
     TTypeAnnotationContext Types;
@@ -48,6 +51,8 @@ struct TFixture {
     }
 };
 
+// Inspect the annotator-returned root: lowering alone does not assign types,
+// and annotation may replace the original callable while coercing operands.
 void CheckType(const TString& expression, TStringBuf expected) {
     TFixture f;
     f.Parse("SELECT " + expression + ";");
@@ -58,6 +63,8 @@ void CheckType(const TString& expression, TStringBuf expected) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
+    // Run literal callables through the shared annotator to cover suffixes,
+    // bases and inferred widths instead of checking callable text alone.
     Y_UNIT_TEST(LiteralsUseExistingTypeAnnotation) {
         for (const auto& [sql, type] : TVector<std::pair<TString, TString>>{
             {"42", "Int32"}, {"2147483648", "Int64"}, {"9223372036854775808", "Uint64"},
@@ -71,6 +78,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         }
     }
 
+    // The minimum signed value has no representable positive signed magnitude.
     Y_UNIT_TEST(NegativeIntegerBoundaries) {
         for (const auto& [sql, type] : TVector<std::pair<TString, TString>>{
             {"-2147483648", "Int32"}, {"-2147483649", "Int64"}, {"-9223372036854775808", "Int64"},
@@ -80,6 +88,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         }
     }
 
+    // Some errors are caught while decoding, others by existing callable rules;
+    // both must produce diagnostics rather than a usable typed expression.
     Y_UNIT_TEST(InvalidLiteralsAreRejected) {
         for (const TString sql : {"18446744073709551616", "-9223372036854775809", "128t", "256ut", "-129t", "'\\xff'u"}) {
             TFixture f;
@@ -92,6 +102,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         }
     }
 
+    // Decoded contents and dialect-sensitive quoting must agree with literal types.
     Y_UNIT_TEST(StringEscapesAndAnsiQuoting) {
         TFixture f;
         f.Parse("SELECT 'a\\n\\x00b', @@one@@@@two@@;");
@@ -110,6 +121,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         UNIT_ASSERT_VALUES_EQUAL(FormatType(unicode.Annotate(unicode.Lower())->GetTypeAnn()), "Utf8");
     }
 
+    // Optional operands must retain SQL NULL semantics through existing YQL rules.
     Y_UNIT_TEST(OperatorsAndNullablePredicates) {
         for (const auto& [sql, type] : TVector<std::pair<TString, TString>>{
             {"1 + 2l * 3 - 4", "Int64"}, {"+1", "Int32"}, {"~1u", "Uint32"},
@@ -125,6 +137,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         }
     }
 
+    // Identical SQL text can require different callable trees under these settings.
     Y_UNIT_TEST(DivisionAndCheckedArithmeticSettings) {
         TFixture f;
         f.Parse("SELECT 4 / 2, 1 + 2;");
@@ -141,6 +154,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         UNIT_ASSERT_VALUES_EQUAL(FormatType(f.Annotate(root)->GetTypeAnn()), "Optional<Int32>");
     }
 
+    // Delegate cast validation and resulting optionality to the shared type rules.
     Y_UNIT_TEST(CastsUseExistingCoercions) {
         CheckType("CAST(1 AS Int64)", "Int64");
         CheckType("CAST('123' AS Int32)", "Optional<Int32>");
@@ -151,6 +165,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         CheckType("CAST(1 AS Decimal(12, 2))", "Decimal(12,2)");
     }
 
+    // Structured predicates must lower into callables the existing annotator accepts,
+    // including CASE branch coercion and membership options.
     Y_UNIT_TEST(CaseBetweenAndIn) {
         CheckType("CASE WHEN TRUE THEN 1 ELSE 2l END", "Int64");
         CheckType("CASE 1 WHEN 1 THEN 'yes' WHEN 2 THEN 'two' ELSE 'no' END", "String");
@@ -169,6 +185,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         UNIT_ASSERT_VALUES_EQUAL(FormatType(f.Annotate(root)->GetTypeAnn()), "Optional<Bool>");
     }
 
+    // Assert the rewritten form, because pre-annotation SQL access callables are
+    // not necessarily the expressions relational lowering should consume.
     Y_UNIT_TEST(CollectionsAndAccessAreRewrittenByAnnotator) {
         CheckType("(1, 'a')", "Tuple<Int32,String>");
         CheckType("[1, 2l]", "List<Int64>");
@@ -185,6 +203,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         UNIT_ASSERT_VALUES_EQUAL(FormatType(root->GetTypeAnn()), "Int32");
     }
 
+    // SQL name normalization and argument defaults must produce valid YQL calls.
     Y_UNIT_TEST(ScalarFunctionsUseSqlNames) {
         CheckType("aBs(-1)", "Int32");
         CheckType("Length('abc')", "Uint32");
@@ -198,6 +217,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         CheckType("Substring('abc', 1u)", "String");
     }
 
+    // Bind by resolved ID and argument identity rather than looking up text again.
     Y_UNIT_TEST(ResolvedColumnsPreserveSelfJoinIdentity) {
         TFixture f;
         f.Parse("SELECT l.id + r.id FROM t AS l JOIN t AS r ON l.id = r.id;");
@@ -225,6 +245,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         UNIT_ASSERT_VALUES_EQUAL(FormatType(f.Annotate(root)->GetTypeAnn()), "Optional<Int64>");
     }
 
+    // Caller-provided parameter values and callable nodes belong to the destination
+    // context and must be applied without introducing free arguments.
     Y_UNIT_TEST(ParameterAndResolvedCallableBindings) {
         TFixture f;
         f.Parse("SELECT $f($p), Demo::Identity($p);");
@@ -237,6 +259,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         UNIT_ASSERT_VALUES_EQUAL(FormatType(f.Annotate(f.Lower(1))->GetTypeAnn()), "Int64");
     }
 
+    // Reusing YQL callable rules must not lose the original SQL diagnostic position.
     Y_UNIT_TEST(AnnotationReportsTypeErrorsAtSqlPosition) {
         TFixture f;
         f.Parse("SELECT\n  1 + 'bad';");
@@ -249,6 +272,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         UNIT_ASSERT(!f.Ctx.IssueManager.GetIssues().Empty());
     }
 
+    // A malformed supported expression is an error, not a reason to select fallback.
     Y_UNIT_TEST(MissingBindingsAndElseProduceDiagnostics) {
         for (const TString sql : {"missing", "$missing", "CASE WHEN TRUE THEN 1 END"}) {
             TFixture f;
@@ -261,6 +285,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         }
     }
 
+    // Reject aggregate/window/subquery semantics before accidentally treating them
+    // as scalar callables with a superficially compatible spelling.
     Y_UNIT_TEST(UnsupportedSemanticsRequestFallback) {
         for (const TString sql : {"COUNT(*)", "SUM(1)", "MIN(1)", "SUM(1) OVER ()", "SUM(DISTINCT 1)",
             "Demo::Unbound(1)", "'abc' LIKE 'a%'", "(SELECT 1)", "EXISTS (SELECT 1)", "*"}) {

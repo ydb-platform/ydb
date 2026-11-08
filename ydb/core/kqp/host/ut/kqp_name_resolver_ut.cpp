@@ -8,6 +8,9 @@ namespace {
 
 using namespace NNewYql;
 
+// Use an explicit catalog and record every lookup so tests can distinguish
+// lexical CTE binding from physical table lookup. Keep Ast alive because the
+// resolution result indexes its nodes by address.
 struct TFixture {
     THashMap<std::pair<TString, TString>, TTableMetadataPtr> Catalog;
     TVector<std::pair<TString, TString>> Lookups;
@@ -62,6 +65,7 @@ struct TFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
+    // Verify schema identity and physical column provenance, not just names.
     Y_UNIT_TEST(BindsCatalogIdentityAndColumns) {
         TFixture f;
         f.Ok("SELECT t.id, value FROM t WHERE id > $min ORDER BY t.id;");
@@ -79,6 +83,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->QueryOutputs.at(&f.Query()).size(), 2);
     }
 
+    // Equal table/column spellings on two inputs must not share a logical ID.
     Y_UNIT_TEST(SelfJoinHasDistinctColumnBindings) {
         TFixture f;
         f.Ok("SELECT l.id, r.id AS rid FROM ANY t AS l JOIN ANY t AS r ON l.id = r.id;");
@@ -94,6 +99,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT(f.Column(*on.Right).Source == r.Source);
     }
 
+    // Missing names and ambiguous nearest-scope matches are user errors,
+    // so neither may become a successful partial resolution or fallback.
     Y_UNIT_TEST(RejectsMissingAndAmbiguousNames) {
         for (const auto& [query, message] : TVector<std::pair<TString, TString>>{
             {"SELECT id FROM absent;", "does not exist"},
@@ -116,6 +123,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         }
     }
 
+    // Decode names before catalog lookup and use the prefix for the selected
+    // cluster rather than always applying the default prefix.
     Y_UNIT_TEST(QuotedNamesAndClusterPrefixes) {
         TFixture f;
         f.AddTable("remote", "/Data/strange`table", {{"some`column", 9, "String", false}});
@@ -126,6 +135,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT_VALUES_EQUAL(f.Column(*f.Select().Columns[0].Expression).Name, "some`column");
     }
 
+    // ANSI escaping must not erase exact-case identifier matching.
     Y_UNIT_TEST(AnsiQuotedAliasesAndExactCase) {
         TFixture f;
         f.AddTable("local", "/Root/Mixed", {{"Id", 1, "Int64", false}});
@@ -135,6 +145,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT(!f.Result.IsOk());
     }
 
+    // Expansion order is a catalog contract, independent of hash-map iteration.
     Y_UNIT_TEST(StarUsesCatalogColumnOrder) {
         TFixture f;
         f.Ok("SELECT t.* FROM t;");
@@ -144,6 +155,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->Columns[expansion[1]].Name, "value");
     }
 
+    // Renamed outputs retain Input provenance while exposing the new names.
     Y_UNIT_TEST(DerivedTablesAndProjectionAliases) {
         TFixture f;
         f.Ok("SELECT d.key FROM (SELECT id AS key FROM t) AS d ORDER BY key;");
@@ -157,6 +169,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT(!f.Result.IsOk());
     }
 
+    // Output aliases take precedence in ORDER BY but are unavailable in WHERE.
     Y_UNIT_TEST(OrderByAliasesDoNotLeakIntoWhere) {
         TFixture f;
         f.Ok("SELECT id + 1 AS value FROM t ORDER BY value;");
@@ -166,6 +179,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT(!f.Result.IsOk());
     }
 
+    // A CTE name is resolved lexically, while each reference gets fresh IDs.
     Y_UNIT_TEST(CteShadowsCatalogAndCopiesBindings) {
         TFixture f;
         f.Ok("WITH t(key) AS (SELECT id FROM u) SELECT l.key, r.key AS other FROM t AS l JOIN t AS r ON l.key = r.key;");
@@ -176,6 +190,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT(!f.Result.IsOk());
     }
 
+    // Nearest relations shadow outer ones even when correlation would otherwise
+    // find a similarly named column in the parent scope.
     Y_UNIT_TEST(CorrelatedSubqueryAndLocalShadowing) {
         TFixture f;
         f.Ok("SELECT l.id FROM t AS l WHERE EXISTS (SELECT r.id FROM u AS r WHERE r.id = l.id);");
@@ -187,6 +203,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT_STRING_CONTAINS(f.Result.Issues.ToString(), "Unknown column 'l.value'");
     }
 
+    // Both sides participate in ON; only the preserved side is visible afterward.
     Y_UNIT_TEST(SemiJoinExposesOnlyPreservedSide) {
         TFixture f;
         f.Ok("SELECT l.id FROM t AS l LEFT SEMI JOIN u AS r ON l.id = r.id;");
@@ -194,6 +211,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT(!f.Result.IsOk());
     }
 
+    // Function names inhabit a different namespace from their column arguments;
+    // window references also need their own binding table.
     Y_UNIT_TEST(FunctionsAndWindowsResolveTheirArguments) {
         TFixture f;
         f.Ok("SELECT SUM(id) FILTER(WHERE id > 0) OVER w, Math::Abs(id) FROM t WINDOW w AS (PARTITION BY value ORDER BY id);");
@@ -207,6 +226,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT(!f.Result.IsOk());
     }
 
+    // A later path-prefix pragma must not retroactively change an earlier query.
     Y_UNIT_TEST(PrefixPragmasAreAppliedInStatementOrder) {
         TFixture f;
         f.AddTable("local", "/Other/t", {{"different", 1, "String", true}});
@@ -216,6 +236,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT_VALUES_EQUAL(f.Lookups[2].second, "/Root/t");
     }
 
+    // Diagnostics should retain SQL file/line/column information after CST release.
     Y_UNIT_TEST(ErrorsHaveSourcePositions) {
         TFixture f;
         f.Resolve("SELECT\n  missing FROM t;");
@@ -225,6 +246,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT_VALUES_EQUAL(issue.Position.Column, 3);
     }
 
+    // Representable syntax with unimplemented binding rules requests fallback
+    // without publishing bindings accumulated before the unsupported construct.
     Y_UNIT_TEST(UnsupportedBindingDoesNotReturnPartialNames) {
         for (const TString query : {
             "SELECT * FROM t JOIN u USING(id);",

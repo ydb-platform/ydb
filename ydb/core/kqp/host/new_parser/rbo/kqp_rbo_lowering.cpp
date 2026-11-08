@@ -16,11 +16,16 @@ using namespace NYql;
 using TRboExpression = NKqp::TExpression;
 using TBindings = THashMap<TColumnId, TInfoUnitId>;
 
+// Bindings translate frontend column identities into the IUs produced by this
+// operator. They can include hidden inputs needed by ORDER BY until the final
+// query boundary narrows the result to projected columns.
 struct TRelation {
     TIntrusivePtr<IOperator> Op;
     TBindings Bindings;
 };
 
+// One producer can have several CTE consumers. A replicate hub shares the
+// producer while assigning independent IU identities to additional ports.
 struct TSharedQuery {
     TIntrusivePtr<TReplicate> Hub;
     TBindings Outputs;
@@ -40,6 +45,9 @@ public:
         }
     }
 
+    // Only this outer boundary creates the result contract and owns PlanProps.
+    // Subqueries return relations so their IUs live in the same registry as the
+    // parent plan, even when their producer is shared.
     TIntrusivePtr<TOpRoot> Run(const TQuery& query, bool orderedColumns) {
         auto relation = Query(query);
         auto outputIds = Names.QueryOutputs.at(&query);
@@ -54,6 +62,9 @@ public:
         TOrderedIUs<TString> columns;
         for (const auto id : outputIds) { columns.Append(relation.Bindings.at(id), Names.Columns[id].Name); }
         auto root = MakeIntrusive<TOpRoot>(std::move(relation.Op), Pos(query.Range), std::move(columns));
+        // Expressions hold a pointer to their plan properties. Moving ownership
+        // into the returned root requires rebinding every expression before the
+        // short-lived lowerer and its original Props member are destroyed.
         root->PlanProps = std::move(Props);
         for (const auto& item : *root) { item.Current->BindExpressionPlanProps(&root->PlanProps); }
         root->RecomputeOutputIUsSubtree();
@@ -92,6 +103,9 @@ private:
         return s;
     }
 
+    // Convert the annotation lambda's column arguments to Member(row, IU)
+    // accesses in one RBO row lambda. Substitution uses node identity and retains
+    // all rewrites/coercions produced by the existing type annotator.
     TRboExpression Expression(const TExpression& expression, const TBindings& bindings) {
         const auto& annotated = Annotations.Expressions.at(&expression);
         const auto pos = annotated.Lambda->Pos();
@@ -107,6 +121,9 @@ private:
             }
         }
         auto body = Ctx.ReplaceNodes(annotated.Lambda->TailPtr(), replacements);
+        // Nested lambdas may own legitimate arguments of their own. Exclude those
+        // from the dangling-argument check; any remaining foreign argument means
+        // a real dependency is unavailable in the current relational scope.
         TNodeSet locals;
         VisitExpr(body, [&](const TExprNode::TPtr& node) {
             if (node->IsLambda()) {
@@ -135,6 +152,9 @@ private:
         return predicate;
     }
 
+    // Recognize only nonnegative integral constants through the wrappers added
+    // by count annotation. Dynamic expressions are left to runtime evaluation;
+    // this is not a general constant folder.
     std::optional<ui64> LiteralCount(const TExprNode& node) const {
         if (node.IsCallable("Coalesce") || node.IsCallable("Just")
             || (node.IsCallable("Convert") && (node.Tail().IsAtom("Uint64")
@@ -160,18 +180,25 @@ private:
         return count;
     }
 
+    // Aliases can add several layers of logical IDs without creating new values.
+    // Follow their provenance until reaching an IU supplied by the current source.
     TInfoUnitId Input(TColumnId id, const TBindings& bindings) const {
         if (const auto* found = bindings.FindPtr(id)) { return *found; }
         Y_ENSURE(Names.Columns[id].Input, "Missing resolved input column " << id);
         return Input(*Names.Columns[id].Input, bindings);
     }
 
+    // A CTE alias may point through renamed columns before reaching a query
+    // output. Recover the producer from that provenance, not from table spelling.
     const TQuery& Producer(TColumnId id) const {
         if (const auto* query = OutputQueries.FindPtr(id)) { return **query; }
         Y_ENSURE(Names.Columns[id].Input, "Missing derived query output " << id);
         return Producer(*Names.Columns[id].Input);
     }
 
+    // Cache the query producer once, then obtain a fresh consumer port per use.
+    // The non-primary port's rebindings must also update the visible column map;
+    // otherwise a self join would reference the first consumer's IUs on both sides.
     TRelation Reference(const TQuery& query) {
         auto it = Shared.find(&query);
         if (it == Shared.end()) {
@@ -205,6 +232,9 @@ private:
             TVector<TRboExpression> filters;
             if (join->On) {
                 auto predicate = Predicate(*join->On, bindings);
+                // Extract only equalities crossing the two inputs and orient keys
+                // left-to-right. Same-side equalities and all other conjuncts remain
+                // join filters, including residual predicates of outer joins.
                 for (auto& term : predicate.SplitConjunct()) {
                     if (term.MaybeEquiJoinCondition()) {
                         TEquiJoinCondition condition(term);
@@ -238,6 +268,9 @@ private:
         }
         const auto& columns = SourceColumns.at(&source);
         TRelation result;
+        // Allocate IUs for stored columns, then resolve alias IDs through Input.
+        // Keep the complete read schema here; column pruning, ranges and physical
+        // read properties belong to later RBO rules.
         if (const auto* metadata = Names.Tables.FindPtr(&source)) {
             const auto table = Tables(**metadata);
             if (!table.Table) { Unsupported(source.Range, "unavailable table metadata"); }
@@ -263,6 +296,9 @@ private:
         return result;
     }
 
+    // Build logical operators in SQL evaluation order: input, WHERE, projection,
+    // DISTINCT, sorting, then count/offset. A source-free SELECT uses EmptySource
+    // as the singleton input on which constant projections are evaluated.
     TRelation Query(const TQuery& query) {
         const auto* select = std::get_if<TSelect>(&query.Body);
         if (!select || !select->GroupBy.empty() || select->Having || !select->Windows.empty()) {
@@ -293,7 +329,13 @@ private:
         }
         Y_ENSURE(index == outputIds.size());
         relation.Op = MakeIntrusive<TOpMap>(std::move(relation.Op), pos, std::move(definitions));
+        // Map keeps input IUs alive as well as defining outputs. ORDER BY may use
+        // an unprojected input column; discard those bindings only at a boundary
+        // that removes them semantically, such as DISTINCT or the final result.
         relation.Bindings.insert(outputs.begin(), outputs.end());
+        // DISTINCT is a key-only aggregate over projected values. Its output
+        // scope excludes hidden inputs, so sorting by a lost dependency must fail
+        // rather than generate a reference to an IU the aggregate no longer emits.
         if (select->Quantifier == ESetQuantifier::Distinct) {
             TOrderedIUs<> keys;
             for (const auto id : outputIds) { keys.Append(outputs.at(id)); }
@@ -302,6 +344,9 @@ private:
             relation.Bindings = outputs;
         }
         if (!select->OrderBy.empty()) {
+            // Simple column keys reuse existing IUs; computed keys need hidden Map
+            // definitions. These generated columns participate in sorting but never
+            // appear in the query's externally visible output binding map.
             TMapIUs sortDefinitions;
             TSortIUs keys;
             for (const auto& sort : select->OrderBy) {

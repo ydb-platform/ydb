@@ -17,12 +17,18 @@ struct TWorkloadQuery {
     TString Text;
 };
 
+// Store the externally visible status and optimizer counter deltas from each
+// compile. Frontend fallback may still use new RBO; an optimizer fallback would
+// change these counters and violate the compatibility contract.
 struct TCompileResult {
     EStatus Status;
     TString Issues;
     std::pair<ui32, ui32> OptimizerCounters;
 };
 
+// Either AST success or parser fallback proves an attempted frontend parse.
+// This deliberately does not establish native operator lowering: the separate
+// direct and canonical suites require stronger evidence.
 size_t CountFrontendAttempts(const TCapturedLog& logs) {
     const auto text = logs.Snapshot();
     size_t count = 0;
@@ -34,6 +40,9 @@ size_t CountFrontendAttempts(const TCapturedLog& logs) {
     return count;
 }
 
+// Run each configuration in its own database fixture, using the original schema
+// and query text. Explain exercises compilation without requiring benchmark
+// data or comparing results from empty tables.
 TVector<TCompileResult> CompileWorkload(const TVector<TWorkloadQuery>& queries, EBenchType type,
     bool enableNewParser, bool tpchPerf)
 {
@@ -103,6 +112,9 @@ TVector<TCompileResult> CompileWorkload(const TVector<TWorkloadQuery>& queries, 
     return results;
 }
 
+// Compare enabled/disabled frontend configurations query by query. A workload
+// may already be unsupported by the selected optimizer, so compare failure
+// statuses too instead of declaring every successful fallback a native pass.
 void CheckWorkload(const TVector<TWorkloadQuery>& queries, EBenchType type, bool tpchPerf = false) {
     const auto baseline = CompileWorkload(queries, type, /*enableNewParser=*/false, tpchPerf);
     const auto fallback = CompileWorkload(queries, type, /*enableNewParser=*/true, tpchPerf);
@@ -119,6 +131,8 @@ void CheckWorkload(const TVector<TWorkloadQuery>& queries, EBenchType type, bool
     UNIT_ASSERT_C(successes > 0, "No workload query compiled successfully in the baseline");
 }
 
+// Chunk only the execution schedule; preserve query IDs and full original SQL
+// so diagnostics still identify the source benchmark case.
 void CheckYqlWorkload(EBenchType type, ui32 first, ui32 last) {
     TVector<TWorkloadQuery> queries;
     for (ui32 id = first; id <= last; ++id) {
@@ -127,6 +141,8 @@ void CheckYqlWorkload(EBenchType type, ui32 first, ui32 last) {
     CheckWorkload(queries, type);
 }
 
+// Frontend and optimizer fallback are distinct mechanisms. These checks allow
+// the former while rejecting the latter through counters and its issue marker.
 bool HasOptimizerFallbackIssue(const NYdb::NIssue::TIssues& issues) {
     for (const auto& issue : issues) {
         if (issue.GetMessage().find("Compilation with the new RBO failed") != std::string::npos) {
@@ -139,6 +155,9 @@ bool HasOptimizerFallbackIssue(const NYdb::NIssue::TIssues& issues) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
+    // Use nonempty tables and compare actual result sets for both storage kinds.
+    // This catches value/order/NULL mistakes that an explain-only plan check misses;
+    // the native success log requirement additionally guards against silent fallback.
     Y_UNIT_TEST_TWIN(DirectRboResultsMatchLegacyFrontend, ColumnStore) {
         const TVector<TString> queries = {
             "SELECT id + 1 AS n, value FROM `/Root/t` WHERE id > 0 ORDER BY id DESC LIMIT 2 OFFSET 1;",
@@ -161,6 +180,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             config->SetEnableFallbackToYqlOptimizer(false);
             config->SetEnableFallbackOnMultipleStatements(false);
             config->SetAllowOlapDataQuery(true);
+            // A service cap smaller than the SQL LIMIT checks that host wrapping
+            // preserves the SQL OFFSET and applies the external cap exactly once.
             config->MutableQueryLimits()->SetResultRowsLimit(2);
             TCapturedLog logs(true);
             auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false).SetLogCapture(logs);
@@ -184,6 +205,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
                 if (!enable) { baseline.push_back(std::move(values)); }
                 else { UNIT_ASSERT_VALUES_EQUAL_C(values, baseline[i], queries[i]); }
             }
+            // Supply parameter types through the SDK rather than a DECLARE preamble,
+            // so this query exercises native parameter binding and scalar annotation.
             auto params = TParamsBuilder().AddParam("$offset").Int64(10).Build().Build();
             const auto parameterized = session.ExecuteQuery(
                 "SELECT id + $offset AS n FROM `/Root/t` WHERE id = 1;",
@@ -217,6 +240,9 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
         }
     }
 
+    // Exercise the host passes after real asynchronous metadata loading. Both
+    // optimizer configurations should resolve/type-check; only the RBO twin must
+    // report successful native operator import.
     Y_UNIT_TEST_TWIN(ResolvesNamesUsingLoadedMetadata, NewRbo) {
         NKikimrConfig::TAppConfig appConfig;
         auto* config = appConfig.MutableTableServiceConfig();
@@ -284,6 +310,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
         UNIT_ASSERT_C(next.IsSuccess(), next.GetIssues().ToString());
     }
 
+    // COUNT currently uses frontend fallback. It must still return the same value
+    // with either optimizer, while malformed SQL must remain a diagnostic failure.
     Y_UNIT_TEST_TWIN(SelectAndSyntaxErrors, NewRbo) {
         for (bool enableNewParser : {false, true}) {
             NKikimrConfig::TAppConfig appConfig;
@@ -321,10 +349,15 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
         }
     }
 
+    // The following benchmark cases test compatibility with full original inputs,
+    // including declarations and unsupported relational constructs. Their success
+    // does not assert native lowering; join_order supplies the strict TPCH/TPCDS oracle.
     Y_UNIT_TEST(TPCH_YQL) {
         CheckYqlWorkload(EBenchType::TPCH, 1, BenchmarkQueryCount[EBenchType::TPCH]);
     }
 
+    // Split TPCDS into bounded test cases without filtering unsupported syntax
+    // or changing the full set of benchmark query IDs.
     Y_UNIT_TEST(TPCDS_YQL_1_25) {
         CheckYqlWorkload(EBenchType::TPCDS, 1, 25);
     }
@@ -341,10 +374,14 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
         CheckYqlWorkload(EBenchType::TPCDS, 76, BenchmarkQueryCount[EBenchType::TPCDS]);
     }
 
+    // Run the entire ClickBench compatibility corpus here. The workloads target
+    // separately inspects operators for the subset that must lower natively.
     Y_UNIT_TEST(ClickBench_YQL) {
         CheckYqlWorkload(EBenchType::CLICKBENCH, 1, BenchmarkQueryCount[EBenchType::CLICKBENCH]);
     }
 
+    // Use the performance fixture's query templates and table API, preserving
+    // the same baseline compilation behavior as its original RBO workload test.
     Y_UNIT_TEST(TPCH_YDB_PERF) {
         TVector<TWorkloadQuery> queries;
         const auto constants = NResource::Find("consts.yql");

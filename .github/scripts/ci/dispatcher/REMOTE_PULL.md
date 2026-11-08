@@ -42,3 +42,13 @@ Layout under `.github/scripts/ci/`:
 
 Build config: `dispatcher/resolve_remote_execution.py` → opaque JSON into
 `dispatch_remote.yml`.
+
+## Reruns
+
+- **Re-run failed jobs** — if `enqueue` already succeeded, it is not rerun. The
+  waiter pins to `needs.enqueue.outputs.ticket_attempt` (the attempt stamped into
+  the existing `remote-ticket`) and re-attaches to that host executor run, then
+  re-ingests. It does **not** start a new remote execution.
+- **Re-run all jobs** — reruns `enqueue`, writes a new ticket with a new
+  `platform_run_attempt`, and the host claims that attempt. Use this when you
+  need a fresh remote build/test.

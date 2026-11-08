@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve seeds (env-backed), discover_attempts, and index-crawl safety checks."""
+"""Resolve seeds, discover_attempts, index-crawl, retry, claim attempt, contracts."""
 
 from __future__ import annotations
 
@@ -9,12 +9,23 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+_REPO_ROOT = Path(__file__).resolve().parents[5]
 _DISPATCHER = Path(__file__).resolve().parents[3] / "ci" / "dispatcher"
+_GITHUB = _REPO_ROOT / ".github"
 sys.path.insert(0, str(_DISPATCHER))
 
-from _common import discover_attempts  # noqa: E402
-from ingest_remote_executor_results import _safe_under, parse_index_hrefs  # noqa: E402
+import _common as common  # noqa: E402
+from _common import discover_attempts, http_get_bytes_retry  # noqa: E402
+import dispatch_remote_executor as dre  # noqa: E402
+from ingest_remote_executor_results import (  # noqa: E402
+    _is_required_artifact,
+    _s3_acl_args,
+    _safe_under,
+    download_prefix_via_index,
+    parse_index_hrefs,
+)
 from resolve_remote_execution import build_config  # noqa: E402
 
 
@@ -111,6 +122,317 @@ class IndexCrawlSafetyTest(unittest.TestCase):
             self.assertEqual(len(found), 1)
             self.assertEqual(found[0]["retry"], 1)
             self.assertEqual(found[0]["report_relpath"], "try_1/report.json")
+
+
+class IndexCrawlCompletenessTest(unittest.TestCase):
+    def test_is_required_artifact(self):
+        self.assertTrue(_is_required_artifact("index.html"))
+        self.assertTrue(_is_required_artifact("ci_metrics.jsonl"))
+        self.assertTrue(_is_required_artifact("try_1/report.json"))
+        self.assertTrue(_is_required_artifact("try_2/ya-test.html"))
+        self.assertTrue(_is_required_artifact("try_3/started_at"))
+        self.assertTrue(_is_required_artifact("try_1/index.html"))
+        self.assertFalse(_is_required_artifact("try_1/logs/a.log"))
+        self.assertFalse(_is_required_artifact("summary_text.txt"))
+
+    def _fake_tree(self):
+        root_index = (
+            '<a href="try_1/index.html">try</a>'
+            '<a href="ci_metrics.jsonl">metrics</a>'
+        )
+        try_index = (
+            '<a href="report.json">r</a>'
+            '<a href="ya-test.html">h</a>'
+            '<a href="started_at">s</a>'
+            '<a href="logs/a.log">l</a>'
+        )
+        objects = {
+            "index.html": root_index.encode(),
+            "try_1/index.html": try_index.encode(),
+            "try_1/report.json": b"{}",
+            "try_1/ya-test.html": b"<html/>",
+            "try_1/started_at": b"1700000000",
+            "try_1/logs/a.log": b"log",
+            "ci_metrics.jsonl": b"{}\n",
+        }
+        return objects
+
+    def _fetch_from(self, objects, missing=frozenset()):
+        def fetch(url: str, **_kwargs):
+            # object_url percent-encodes; recover the key suffix after bucket.
+            # URL shape: https://ep/bucket/<key>
+            marker = "/bucket/"
+            idx = url.find(marker)
+            self.assertGreaterEqual(idx, 0, url)
+            key = url[idx + len(marker) :]
+            # strip optional leading path from key_prefix used in tests
+            if key.startswith("prefix/"):
+                key = key[len("prefix/") :]
+            if key in missing:
+                return None
+            if key not in objects:
+                return None
+            return objects[key]
+
+        return fetch
+
+    def test_all_present_returns_empty_failed(self):
+        objects = self._fake_tree()
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp)
+            failed = download_prefix_via_index(
+                "https://ep",
+                "bucket",
+                "prefix",
+                dest,
+                fetch=self._fetch_from(objects),
+            )
+            self.assertEqual(failed, [])
+            self.assertTrue((dest / "try_1" / "report.json").is_file())
+            self.assertTrue((dest / "ci_metrics.jsonl").is_file())
+            self.assertTrue((dest / "try_1" / "logs" / "a.log").is_file())
+
+    def test_missing_required_report_dies(self):
+        objects = self._fake_tree()
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(SystemExit):
+                download_prefix_via_index(
+                    "https://ep",
+                    "bucket",
+                    "prefix",
+                    Path(tmp),
+                    fetch=self._fetch_from(objects, missing={"try_1/report.json"}),
+                )
+
+    def test_missing_try_index_dies(self):
+        objects = self._fake_tree()
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(SystemExit):
+                download_prefix_via_index(
+                    "https://ep",
+                    "bucket",
+                    "prefix",
+                    Path(tmp),
+                    fetch=self._fetch_from(objects, missing={"try_1/index.html"}),
+                )
+
+    def test_missing_optional_log_warns_only(self):
+        objects = self._fake_tree()
+        with tempfile.TemporaryDirectory() as tmp:
+            failed = download_prefix_via_index(
+                "https://ep",
+                "bucket",
+                "prefix",
+                Path(tmp),
+                fetch=self._fetch_from(objects, missing={"try_1/logs/a.log"}),
+            )
+            self.assertEqual(failed, ["try_1/logs/a.log"])
+            self.assertTrue((Path(tmp) / "try_1" / "report.json").is_file())
+
+
+class HttpRetryTest(unittest.TestCase):
+    def test_retries_then_succeeds(self):
+        calls = {"n": 0}
+
+        class _Resp:
+            def read(self):
+                return b"ok"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        def fake_urlopen(url, timeout=60):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise TimeoutError("boom")
+            return _Resp()
+
+        with mock.patch.object(common.urllib.request, "urlopen", fake_urlopen), mock.patch.object(
+            common.time, "sleep"
+        ) as sleep:
+            got = http_get_bytes_retry("https://x", attempts=4, backoff_s=0.01)
+        self.assertEqual(got, b"ok")
+        self.assertEqual(calls["n"], 3)
+        self.assertEqual(sleep.call_count, 2)
+
+    def test_404_not_retried(self):
+        calls = {"n": 0}
+
+        def fake_urlopen(url, timeout=60):
+            calls["n"] += 1
+            raise common.urllib.error.HTTPError(url, 404, "missing", hdrs=None, fp=None)
+
+        with mock.patch.object(common.urllib.request, "urlopen", fake_urlopen), mock.patch.object(
+            common.time, "sleep"
+        ) as sleep:
+            self.assertIsNone(http_get_bytes_retry("https://x", attempts=4, backoff_s=0.01))
+        self.assertEqual(calls["n"], 1)
+        self.assertEqual(sleep.call_count, 0)
+
+    def test_all_none_returns_none(self):
+        def fake_urlopen(url, timeout=60):
+            raise TimeoutError("boom")
+
+        with mock.patch.object(common.urllib.request, "urlopen", fake_urlopen), mock.patch.object(
+            common.time, "sleep"
+        ) as sleep:
+            self.assertIsNone(http_get_bytes_retry("https://x", attempts=3, backoff_s=0.01))
+        self.assertEqual(sleep.call_count, 2)
+
+
+class S3AclArgsTest(unittest.TestCase):
+    def test_missing_env_defaults_public(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("S3_PUBLIC_ACL_FLAG", None)
+            self.assertEqual(_s3_acl_args(), ["--acl-public"])
+
+    def test_explicit_empty_means_no_acl(self):
+        with mock.patch.dict(os.environ, {"S3_PUBLIC_ACL_FLAG": ""}, clear=False):
+            self.assertEqual(_s3_acl_args(), [])
+
+    def test_explicit_flag_passthrough(self):
+        with mock.patch.dict(os.environ, {"S3_PUBLIC_ACL_FLAG": "--acl-public"}, clear=False):
+            self.assertEqual(_s3_acl_args(), ["--acl-public"])
+
+
+class WaitClaimAttemptTest(unittest.TestCase):
+    def setUp(self):
+        self._env = {
+            k: os.environ.get(k)
+            for k in (
+                "PLATFORM_RUN_ID",
+                "PLATFORM_RUN_ATTEMPT",
+                "CONFIG_JSON",
+            )
+        }
+        os.environ["PLATFORM_RUN_ID"] = "111"
+        os.environ["PLATFORM_RUN_ATTEMPT"] = "1"
+        os.environ["CONFIG_JSON"] = json.dumps(
+            {
+                "host_s3_endpoint": "https://ep",
+                "host_s3_bucket": "bucket",
+                "repository": "nebius/ydb",
+                "fail_on_remote_failure": True,
+            }
+        )
+
+    def tearDown(self):
+        for key, value in self._env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_waits_for_matching_attempt(self):
+        os.environ["PLATFORM_RUN_ATTEMPT"] = "2"
+        claims = [
+            None,
+            {
+                "platform_run_attempt": "1",
+                "executor_run_id": "old",
+                "executor_run_url": "https://old",
+            },
+            {
+                "platform_run_attempt": "2",
+                "executor_run_id": "99",
+                "executor_run_url": "https://run/99",
+            },
+        ]
+        cfg = dre.load_config_json()
+        with mock.patch.object(dre, "read_claim", side_effect=claims), mock.patch.object(
+            dre.time, "sleep"
+        ):
+            run_id, run_url = dre.wait_for_claim(cfg)
+        self.assertEqual(run_id, "99")
+        self.assertEqual(run_url, "https://run/99")
+
+    def test_newer_claim_dies(self):
+        cfg = dre.load_config_json()
+        claim = {
+            "platform_run_attempt": "2",
+            "executor_run_id": "99",
+            "executor_run_url": "https://run/99",
+        }
+        with mock.patch.object(dre, "read_claim", return_value=claim), mock.patch.object(
+            dre.time, "sleep"
+        ):
+            with self.assertRaises(SystemExit):
+                dre.wait_for_claim(cfg)
+
+    def test_matching_claim_missing_url_dies(self):
+        cfg = dre.load_config_json()
+        claim = {
+            "platform_run_attempt": "1",
+            "executor_run_id": "99",
+            "executor_run_url": "",
+        }
+        with mock.patch.object(dre, "read_claim", return_value=claim), mock.patch.object(
+            dre.time, "sleep"
+        ):
+            with self.assertRaises(SystemExit):
+                dre.wait_for_claim(cfg)
+
+
+class EnqueueOutputTest(unittest.TestCase):
+    def test_writes_ticket_and_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            out = tmp_path / "github_output"
+            ticket_path = tmp_path / "remote-ticket.json"
+            env = {
+                "CONFIG_JSON": json.dumps(
+                    {
+                        "inputs": {"job_inputs": {"build_preset": "relwithdebinfo"}},
+                        "host_s3_endpoint": "https://ep",
+                        "host_s3_bucket": "b",
+                        "repository": "nebius/ydb",
+                        "fail_on_remote_failure": True,
+                    }
+                ),
+                "PLATFORM_RUN_ID": "42",
+                "PLATFORM_RUN_ATTEMPT": "3",
+                "PLATFORM_REPOSITORY": "ydb-platform/ydb",
+                "PLATFORM_WORKFLOW": "Run and debug tests",
+                "PLATFORM_RUN_URL": "https://github.com/ydb-platform/ydb/actions/runs/42",
+                "GITHUB_OUTPUT": str(out),
+            }
+            with mock.patch.dict(os.environ, env, clear=False):
+                cwd = os.getcwd()
+                try:
+                    os.chdir(tmp_path)
+                    dre.cmd_enqueue()
+                finally:
+                    os.chdir(cwd)
+            self.assertTrue(ticket_path.is_file())
+            ticket = json.loads(ticket_path.read_text(encoding="utf-8"))
+            self.assertEqual(ticket["platform_run_attempt"], "3")
+            self.assertIn("ticket_attempt=3", out.read_text(encoding="utf-8"))
+
+
+class WorkflowContractTest(unittest.TestCase):
+    def test_build_and_test_ya_acl_and_pr_number(self):
+        text = (_GITHUB / "actions/build_and_test_ya/action.yml").read_text(encoding="utf-8")
+        self.assertIn("AWS_REGION || 'ru-central1'", text)
+        self.assertIn("AWS_PUBLIC_ACL || 'true'", text)
+        self.assertEqual(text.count("inputs.source_run_id == ''"), 2)
+        self.assertIn("inputs.pull_number", text)
+
+    def test_dispatch_remote_pins_ticket_attempt(self):
+        text = (_GITHUB / "workflows/dispatch_remote.yml").read_text(encoding="utf-8")
+        self.assertIn(
+            "PLATFORM_RUN_ATTEMPT: ${{ needs.enqueue.outputs.ticket_attempt }}",
+            text,
+        )
+        self.assertIn("overwrite: true", text)
+
+    def test_s3cmd_only_false_disables_acl(self):
+        text = (_GITHUB / "actions/s3cmd/action.yml").read_text(encoding="utf-8")
+        self.assertIn('false)', text)
+        self.assertIn('true|"")', text)
+        self.assertIn('S3_REGION="${S3_REGION:-ru-central1}"', text)
 
 
 if __name__ == "__main__":

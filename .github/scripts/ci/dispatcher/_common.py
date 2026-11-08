@@ -6,6 +6,8 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -39,6 +41,35 @@ def http_get_bytes(url: str, timeout: int = 60) -> bytes | None:
     except Exception as e:
         print(f"GET {url} failed: {e}")
         return None
+
+
+def http_get_bytes_retry(
+    url: str,
+    *,
+    attempts: int = 4,
+    backoff_s: float = 2.0,
+    timeout: int = 60,
+) -> bytes | None:
+    """Retrying GET for ingest downloads; claim polling stays on http_get_bytes.
+
+    HTTP 404 is not retried (missing object). Other failures back off and retry.
+    """
+    last: bytes | None = None
+    for i in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as e:
+            print(f"GET {url} failed: HTTP {e.code}")
+            if e.code == 404:
+                return None
+            last = None
+        except Exception as e:
+            print(f"GET {url} failed: {e}")
+            last = None
+        if i < attempts:
+            time.sleep(backoff_s * i)
+    return last
 
 
 def http_get_text(url: str, timeout: int = 60) -> str | None:

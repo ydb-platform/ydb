@@ -132,6 +132,16 @@ def build_ticket(cfg):
     }
 
 
+def _attempt_int(raw: str, *, label: str) -> int:
+    s = str(raw or "").strip()
+    if not s.isdigit():
+        die(f"{label} must be a positive integer, got {raw!r}")
+    n = int(s)
+    if n < 1:
+        die(f"{label} must be >= 1, got {n}")
+    return n
+
+
 def cmd_enqueue():
     cfg = load_config_json()
     ticket = build_ticket(cfg)
@@ -139,23 +149,32 @@ def cmd_enqueue():
     path.write_text(json.dumps(ticket, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {path} ({path.stat().st_size} bytes)")
     print(f"::notice title=Remote ticket artifact ready::{TICKET_FILENAME} on run {ticket['platform_run_id']}")
+    # Pin waiters (incl. Re-run failed jobs) to the attempt that wrote this ticket.
+    set_outputs(ticket_attempt=ticket["platform_run_attempt"])
 
 
 def wait_for_claim(cfg):
     platform_run_id = env("PLATFORM_RUN_ID")
-    want_attempt = env("PLATFORM_RUN_ATTEMPT")
+    want_attempt = _attempt_int(env("PLATFORM_RUN_ATTEMPT"), label="PLATFORM_RUN_ATTEMPT")
     endpoint, bucket = host_s3(cfg)
     url = object_url(endpoint, bucket, f"remote-claims/{platform_run_id}.json")
-    print(f"Waiting for claim at {url} (attempt={want_attempt}) ...")
+    print(f"Waiting for claim at {url} (ticket_attempt={want_attempt}) ...")
     for i in range(2400):
         claim = read_claim(cfg, platform_run_id)
         if claim:
-            claim_attempt, run_id, run_url = parse_claim(claim)
-            if claim_attempt != want_attempt:
+            claim_attempt_raw, run_id, run_url = parse_claim(claim)
+            claim_attempt = _attempt_int(claim_attempt_raw, label="claim.platform_run_attempt")
+            if claim_attempt > want_attempt:
+                die(
+                    f"host claimed a newer ticket attempt {claim_attempt} "
+                    f"(this waiter wants {want_attempt}); this attempt is obsolete"
+                )
+            if claim_attempt < want_attempt:
                 if i % 10 == 0:
                     print(
                         f"{time.strftime('%H:%M:%S', time.gmtime())} "
-                        f"stale claim attempt={claim_attempt!r} (want {want_attempt}); waiting..."
+                        f"stale claim attempt={claim_attempt} (want {want_attempt}); waiting... "
+                        f"(if this is Re-run failed jobs, use Re-run all jobs for a fresh executor)"
                     )
                 time.sleep(30)
                 continue
@@ -197,11 +216,14 @@ def wait_executor_done(cfg, token: str, run_id, run_url):
         return
     # Defence-in-depth if the VM cancels+relaunches on webhook redelivery.
     if conclusion == "cancelled":
-        want_attempt = env("PLATFORM_RUN_ATTEMPT")
+        want_attempt = _attempt_int(env("PLATFORM_RUN_ATTEMPT"), label="PLATFORM_RUN_ATTEMPT")
         for _ in range(40):
             claim = read_claim(cfg, env("PLATFORM_RUN_ID"))
             if claim:
-                claim_attempt, new_id, new_url = parse_claim(claim)
+                claim_attempt_raw, new_id, new_url = parse_claim(claim)
+                claim_attempt = _attempt_int(
+                    claim_attempt_raw, label="claim.platform_run_attempt"
+                )
                 if new_id and new_id != run_id and claim_attempt == want_attempt and new_url:
                     print(f"::notice::executor {run_id} cancelled; following new claim {new_id}")
                     set_outputs(executor_run_id=new_id, executor_run_url=new_url)

@@ -24,6 +24,9 @@ jobs:
   enqueue:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      # Survives "Re-run failed jobs" when enqueue is not retried; wait pins to this.
+      ticket_attempt: ${{ steps.ticket.outputs.ticket_attempt }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -49,6 +52,7 @@ jobs:
           path: remote-ticket.json
           if-no-files-found: error
           retention-days: 7
+          overwrite: true
 
   wait:
     needs: enqueue
@@ -71,7 +75,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           CONFIG_JSON: ${{ inputs.config }}
           PLATFORM_RUN_ID: ${{ github.run_id }}
-          PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}
+          # Pin to the attempt that wrote the ticket (not live github.run_attempt).
+          PLATFORM_RUN_ATTEMPT: ${{ needs.enqueue.outputs.ticket_attempt }}
         run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py wait
 
       - name: Cancel on caller cancel

@@ -30,7 +30,7 @@ from _common import (  # noqa: E402
     env,
     env_opt,
     host_s3,
-    http_get_bytes,
+    http_get_bytes_retry,
     load_config_json,
     object_url,
     quote_url,
@@ -74,7 +74,7 @@ def load_manifest(
     )
     print(f"Fetching remote_artifacts.json from {url}")
     # Wait already saw host run completed; host publishes this in its final step.
-    raw = http_get_bytes(url)
+    raw = http_get_bytes_retry(url)
     if not raw:
         die(f"missing remote_artifacts.json at {url}")
     meta = json.loads(raw.decode())
@@ -131,12 +131,36 @@ def _write_bytes(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
-def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest: Path) -> None:
+def _is_required_artifact(rel: str) -> bool:
+    """Paths that must be present when listed by the host Indexer tree."""
+    rel = rel.strip("/")
+    if rel in ("index.html", "ci_metrics.jsonl"):
+        return True
+    return (
+        re.match(
+            r"try_\d+/(index\.html|report\.json|ya-test\.html|started_at)$",
+            rel,
+        )
+        is not None
+    )
+
+
+def download_prefix_via_index(
+    endpoint: str,
+    bucket: str,
+    key_prefix: str,
+    dest: Path,
+    *,
+    fetch=http_get_bytes_retry,
+) -> list[str]:
     """Download a public artifact tree by walking Indexer index.html pages.
 
     Host public buckets often allow anonymous GetObject but deny ListBucket,
     so signed list sync fails. Indexer listings are public HTML and enumerate
     the same objects.
+
+    Returns relative paths that failed to download. Dies if any required path
+    listed by the index cannot be fetched (after retries).
     """
     dest.mkdir(parents=True, exist_ok=True)
     root_key = key_prefix.strip("/")
@@ -146,7 +170,7 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
     queue: list[str] = [""]
     seen_dirs: set[str] = set()
     n_ok = 0
-    n_fail = 0
+    failed: list[str] = []
 
     while queue:
         rel_dir = queue.pop(0)
@@ -156,19 +180,19 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
 
         index_key = _posix_join(root_key, rel_dir, "index.html")
         index_url = object_url(endpoint, bucket, index_key)
-        raw = http_get_bytes(index_url)
+        index_rel = _posix_join(rel_dir, "index.html") if rel_dir else "index.html"
+        raw = fetch(index_url)
         if raw is None:
             if rel_dir == "":
                 die(f"missing index.html at {index_url}")
             print(f"::warning::missing index.html at {index_url}; skipping subtree")
-            n_fail += 1
+            failed.append(index_rel)
             continue
 
-        index_rel = _posix_join(rel_dir, "index.html") if rel_dir else "index.html"
         local_index = _safe_under(dest, index_rel)
         if local_index is None:
             print(f"::warning::refusing unsafe index path {index_rel!r}")
-            n_fail += 1
+            failed.append(index_rel)
             continue
         _write_bytes(local_index, raw)
         n_ok += 1
@@ -195,24 +219,33 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
             local_path = _safe_under(dest, child_rel)
             if local_path is None:
                 print(f"::warning::refusing unsafe href path {child_rel!r}")
-                n_fail += 1
+                failed.append(child_rel)
                 continue
             file_key = _posix_join(root_key, child_rel)
             file_url = object_url(endpoint, bucket, file_key)
-            data = http_get_bytes(file_url)
+            data = fetch(file_url)
             if data is None:
                 print(f"::warning::failed to download {file_url}")
-                n_fail += 1
+                failed.append(child_rel)
                 continue
             _write_bytes(local_path, data)
             n_ok += 1
 
     print(
         f"Downloaded {n_ok} object(s) via index.html crawl "
-        f"(s3://{bucket}/{root_key}/); failures={n_fail}"
+        f"(s3://{bucket}/{root_key}/); failures={len(failed)}"
     )
     if n_ok == 0:
         die(f"index crawl downloaded nothing under s3://{bucket}/{root_key}/")
+
+    required_failed = [p for p in failed if _is_required_artifact(p)]
+    if required_failed:
+        shown = ", ".join(required_failed[:20])
+        die(f"incomplete remote artifacts: {shown}")
+    if failed:
+        shown = ", ".join(failed[:20])
+        print(f"::warning::{len(failed)} non-required artifact(s) failed to copy: {shown}")
+    return failed
 
 
 def rewrite_url_prefix(root: Path, old: str, new: str) -> int:
@@ -433,13 +466,25 @@ def upload_attempts(
         run(cmd, cwd=str(_REPO_ROOT))
 
 
+def _s3_acl_args() -> list[str]:
+    """Honor S3_PUBLIC_ACL_FLAG from s3cmd action; default --acl-public.
+
+    Missing env → default public. Explicit empty string → no ACL flag
+    (host/public_acl=false writes S3_PUBLIC_ACL_FLAG=).
+    """
+    if "S3_PUBLIC_ACL_FLAG" not in os.environ:
+        return ["--acl-public"]
+    flag = os.environ["S3_PUBLIC_ACL_FLAG"].strip()
+    return [flag] if flag else []
+
+
 def s3cmd_sync_upload(local: Path, s3_bucket_path: str) -> None:
     run(
         [
             "s3cmd",
             "sync",
             "--follow-symlinks",
-            "--acl-public",
+            *_s3_acl_args(),
             "--no-progress",
             "--stats",
             "--no-mime-magic",
@@ -456,7 +501,7 @@ def s3cmd_put(local: Path, s3_uri: str) -> None:
         [
             "s3cmd",
             "put",
-            "--acl-public",
+            *_s3_acl_args(),
             "--no-progress",
             "--no-mime-magic",
             "--guess-mime-type",
@@ -522,7 +567,7 @@ def main() -> None:
         meta_path = out_dir / "remote_artifacts.json"
 
         print(f"Downloading s3://{host_bucket}/{key_prefix} → {public_dir} (via index.html)")
-        download_prefix_via_index(host_ep, host_bucket, key_prefix, public_dir)
+        download_failed = download_prefix_via_index(host_ep, host_bucket, key_prefix, public_dir)
 
         n = rewrite_url_prefix(public_dir, old_public, new_public)
         print(f"Rewrote URL prefix in {n} files ({old_public} → {new_public})")
@@ -545,6 +590,12 @@ def main() -> None:
             workflow_run_id=caller_run_id,
             scratch_dir=scratch_dir,
         )
+        if download_failed:
+            note = (
+                f"\n\n_{len(download_failed)} non-required artifact(s) failed to copy "
+                f"from the host tree._\n"
+            )
+            summary_md = summary_md.rstrip() + note
         job_summary.write_text(summary_md, encoding="utf-8")
 
         meta_out = {

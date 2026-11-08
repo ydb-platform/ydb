@@ -136,8 +136,8 @@ runs:
       with:
         s3_bucket: ${{ fromJSON( inputs.vars ).AWS_BUCKET }}
         s3_endpoint: ${{ fromJSON( inputs.vars ).AWS_ENDPOINT }}
-        s3_region: ${{ fromJSON( inputs.vars ).AWS_REGION }}
-        public_acl: ${{ fromJSON( inputs.vars ).AWS_PUBLIC_ACL }}
+        s3_region: ${{ fromJSON( inputs.vars ).AWS_REGION || 'ru-central1' }}
+        public_acl: ${{ fromJSON( inputs.vars ).AWS_PUBLIC_ACL || 'true' }}
         s3_key_id: ${{ fromJSON( inputs.secs ).AWS_KEY_ID }}
         s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
         folder_prefix: ${{ env.folder_prefix }}
@@ -185,8 +185,9 @@ runs:
           ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         fi
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
-        # PR_NUMBER drives PR comments: only this repo's own event number.
-        echo "PR_NUMBER=${{ github.event.number }}" >> "$GITHUB_ENV"
+        # PR comments: event number, or caller pull_number (Run-tests). Empty on
+        # remote executor (source_run_id set) so host never comments on platform PRs.
+        echo "PR_NUMBER=${{ inputs.source_run_id == '' && (github.event.number || inputs.pull_number) || '' }}" >> "$GITHUB_ENV"
         # Analytics / generate-summary may use the caller's PR number.
         echo "ANALYTICS_PULL_NUMBER=${{ inputs.pull_number || github.event.number }}" >> "$GITHUB_ENV"
         # Random delimiter so a hostile title cannot close the GITHUB_ENV block.
@@ -291,7 +292,7 @@ runs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != 'false' }}
-        PR_NUMBER: ${{ github.event.number }}
+        PR_NUMBER: ${{ inputs.source_run_id == '' && (github.event.number || inputs.pull_number) || '' }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}

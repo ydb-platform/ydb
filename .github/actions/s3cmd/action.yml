@@ -19,7 +19,7 @@ inputs:
     default: "ru-central1"
   public_acl:
     required: false
-    description: "true → export S3_PUBLIC_ACL_FLAG=--acl-public for s3cmd put/sync; false → empty (bucket policy)"
+    description: "true or empty → --acl-public; false → empty flag (bucket policy). Only literal false disables ACL."
     default: "true"
   folder_prefix:
     required: false
@@ -42,11 +42,20 @@ runs:
         umask 077
         export S3CMD_CONFIG=$(mktemp)
         echo "S3CMD_CONFIG=$S3CMD_CONFIG" >> "$GITHUB_ENV"
-        if [ "$S3_PUBLIC_ACL" = "true" ]; then
-          echo "S3_PUBLIC_ACL_FLAG=--acl-public" >> "$GITHUB_ENV"
-        else
-          echo "S3_PUBLIC_ACL_FLAG=" >> "$GITHUB_ENV"
-        fi
+        # Empty input must not disable ACL/region (callers often omit AWS_* from vars JSON).
+        S3_REGION="${S3_REGION:-ru-central1}"
+        case "$S3_PUBLIC_ACL" in
+          true|"")
+            echo "S3_PUBLIC_ACL_FLAG=--acl-public" >> "$GITHUB_ENV"
+            ;;
+          false)
+            echo "S3_PUBLIC_ACL_FLAG=" >> "$GITHUB_ENV"
+            ;;
+          *)
+            echo "::error::public_acl must be 'true' or 'false', got: ${S3_PUBLIC_ACL}"
+            exit 1
+            ;;
+        esac
         host=${S3_ENDPOINT#https://}
         host=${host#http://}
         host=${host%/}

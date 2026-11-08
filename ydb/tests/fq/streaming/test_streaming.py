@@ -2569,9 +2569,9 @@ FROM `{table_name}`"""
         assert trailing_b == [7, None]
 
         # Explicit null optional list.
-        ok_list_top = parsed["ok-list-null"].get("top")
-        if ok_list_top is not None:
-            assert ok_list_top.get("a") is None
+        ok_list_top = parsed["ok-list-null"]["top"]
+        assert ok_list_top is not None
+        assert ok_list_top.get("a") is None
         assert parsed["ok-list-null"].get("req") is None
 
         # Unknown keys were ignored and the row was still emitted.

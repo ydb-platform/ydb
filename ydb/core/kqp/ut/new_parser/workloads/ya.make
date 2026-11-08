@@ -1,3 +1,5 @@
+# Direct AST-to-RBO tests use original SQL resources and synthetic catalog
+# snapshots. No host/legacy translator is available to rescue unsupported SQL.
 UNITTEST_FOR(ydb/core/kqp)
 
 SRCS(kqp_workload_lowering_ut.cpp)

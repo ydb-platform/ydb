@@ -6,6 +6,9 @@
 
 namespace NKikimr::NKqp::NNewYql {
 
+// The caller translates logical bindings into values in its own expression
+// context. Lowering substitutes these nodes by identity, so self-join columns
+// with equal names still remain different values.
 struct TExpressionBindings {
     const TResolvedNames* Names = nullptr;
     // Bindings belong to the destination TExprContext. The relational caller
@@ -17,6 +20,9 @@ struct TExpressionBindings {
     THashMap<TString, NYql::TExprNode::TPtr> Callables;
 };
 
+// Supply effective SQL settings, not parser spelling defaults: these switches
+// change callable selection and literal types. AnsiIn is tri-state because
+// unspecified mode preserves the legacy warning behavior.
 struct TExpressionLoweringSettings {
     bool ClassicDivision = true;
     bool CheckedOps = false;

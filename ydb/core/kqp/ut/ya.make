@@ -14,6 +14,7 @@ RECURSE_FOR_TESTS(
     idx_test
     join
     knn
+    # Register frontend-specific checks independently of the unchanged RBO suite.
     new_parser
     olap
     opt

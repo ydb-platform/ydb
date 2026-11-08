@@ -1,3 +1,6 @@
+# Frontend phases share an owning AST and semantic side tables. Depend on the
+# existing grammar and YQL type rules rather than introducing another SQL
+# grammar or an independent implementation of scalar typing.
 LIBRARY()
 
 SRCS(

@@ -21,6 +21,9 @@ struct TVisibleColumn {
     TString Qualifier;
 };
 
+// Columns retain source order for star expansion. Relations are tracked
+// separately so a local alias shadows an outer relation even when the requested
+// column is absent locally. Parent is borrowed only for the recursive visit.
 struct TScope {
     TVector<TVisibleColumn> Columns;
     THashSet<TString> Relations;
@@ -36,6 +39,9 @@ public:
         : Script(script), Settings(std::move(settings)), Lookup(lookup)
     {}
 
+    // Apply pragmas in statement order, but start each top-level query with no
+    // outer row scope or inherited CTEs. Publish names only after the whole script
+    // has resolved successfully.
     std::unique_ptr<TResolvedNames> Run() {
         for (const auto& statement : Script.Statements) {
             if (const auto* pragma = std::get_if<TPragmaStatement>(&statement.Value)) {
@@ -58,6 +64,8 @@ private:
             << " at " << Script.File << ":" << range.Line << ":" << range.Column + 1;
     }
 
+    // Decode quoted spelling using the selected dialect without case folding.
+    // Identifier case remains significant after escaping has been removed.
     TString Decode(const TString& text, const TSourceRange& range) const {
         if (text.empty() || (text[0] != '`' && text[0] != '\'' && text[0] != '"')) {
             return text;
@@ -90,6 +98,9 @@ private:
         return Decode(identifier.Spelling, identifier.Range);
     }
 
+    // Only pragmas whose binding effects are understood may pass this stage.
+    // An unknown setting could change table paths or name visibility, so ignoring
+    // it would be less safe than falling back to the existing translator.
     void Pragma(const TPragmaStatement& pragma) {
         // This controls the legacy translator's representation, not SQL names.
         // The original frontend still validates its value during host import.
@@ -107,12 +118,17 @@ private:
         Settings.TablePathPrefix = Decode(value->Spelling, pragma.Values[0].Range);
     }
 
+    // Append-only allocation keeps IDs stable as nested scopes add columns.
+    // Never use a catalog column ID here: the same stored column can occur twice.
     TColumnId AddColumn(TResolvedColumn column) {
         const auto id = Result.Columns.size();
         Result.Columns.push_back(std::move(column));
         return id;
     }
 
+    // Search one scope at a time: ambiguity is local to the nearest matching
+    // scope. Qualified lookup must stop at a local relation declaration, even
+    // when that relation lacks the field, to prevent accidental outer binding.
     TColumnId FindColumn(const TScope& scope, const TString& name, const TString& qualifier,
         const TSourceRange& range) const
     {
@@ -147,6 +163,8 @@ private:
         return false;
     }
 
+    // The ANSI lexer can deliver a double-quoted identifier through the literal
+    // grammar alternative. Classify it as a name before ordinary literal handling.
     std::optional<TString> ExpressionName(const TExpression& expression) const {
         if (const auto* name = std::get_if<TName>(&expression.Value); name && !name->Module) {
             return Name(name->Name);
@@ -160,6 +178,9 @@ private:
         return {};
     }
 
+    // Resolve partition/order expressions in the row scope, but frame offsets
+    // in an empty row scope. Binding a window reference here does not implement
+    // window evaluation; the type/lowering phases still gate that support.
     void Window(const TWindowSpecification& window, const TScope& scope, const TCtes& ctes,
         const TWindows& windows)
     {
@@ -186,6 +207,9 @@ private:
         }
     }
 
+    // Record bindings against the complete AST expression. In particular a.b
+    // can be one qualified column reference, not two independently bound names.
+    // Subqueries receive this scope for correlation; callable names do not.
     void Expression(const TExpression& expression, const TScope& scope, const TCtes& ctes,
         const TWindows& windows)
     {
@@ -277,6 +301,9 @@ private:
         }, expression.Value);
     }
 
+    // Resolve both inputs before ON so the condition can reference either side.
+    // Only after binding ON is the visible scope narrowed for SEMI/ONLY joins.
+    // NATURAL/USING need different column-merging rules and cannot reuse this path.
     TScope Source(const TSource& source, const TCtes& ctes, const TScope* parent) {
         if (!source.Hints.empty()) {
             Unsupported(source.Range, "table hints that may change the schema");
@@ -337,6 +364,8 @@ private:
                 }
             }
         } else {
+            // Derived tables are not LATERAL: they inherit CTEs but no enclosing row
+            // scope. Scalar subqueries use a different path that permits correlation.
             inputs = Query(*std::get<TDerivedTable>(source.Value).Query, nullptr, ctes);
         }
         if (source.Alias) {
@@ -352,6 +381,9 @@ private:
             auto id = inputs[i];
             const auto& input = Result.Columns[id];
             const TString name = source.ColumnAliases.empty() ? input.Name : Name(source.ColumnAliases[i]);
+            // Each derived/CTE use gets fresh visible IDs. Keep Input provenance so
+            // types and later RBO bindings can follow the rename without conflating
+            // independent references to the same producer.
             if (input.Source != &source || !source.ColumnAliases.empty()) {
                 id = AddColumn({name, &source, {}, {}, nullptr, id});
             }
@@ -379,6 +411,9 @@ private:
         }
     }
 
+    // Copy the CTE environment so nested WITH declarations do not leak outward.
+    // Publish each CTE after resolving its body; later declarations can use it,
+    // but a declaration does not bind itself recursively through this path.
     TVector<TColumnId> Query(const TQuery& query, const TScope* parent, TCtes ctes) {
         THashSet<TString> localCtes;
         for (const auto& cte : query.With) {
@@ -412,6 +447,8 @@ private:
         for (const auto& group : select->GroupBy) {
             Group(group, scope, ctes);
         }
+        // Collect names before visiting definitions, allowing window references
+        // to be resolved independently of definition order.
         TWindows windows;
         for (const auto& window : select->Windows) {
             if (!windows.emplace(Name(window.Name), &window).second) {
@@ -456,6 +493,9 @@ private:
             // until its binding rules are implemented instead of misbinding it.
             Unsupported(select->Having->Range, "HAVING alias visibility");
         }
+        // Projection aliases form the nearest ORDER BY scope. Its parent keeps
+        // unprojected input columns available for hidden sort dependencies; WHERE
+        // was resolved earlier and therefore cannot see these aliases.
         TScope orderScope;
         orderScope.Parent = &scope;
         for (auto id : outputs) {
@@ -465,6 +505,8 @@ private:
             Expression(*sort.Expression, orderScope, ctes, windows);
         }
         const TScope empty;
+        // LIMIT/OFFSET use the empty scope: parameters and constants remain legal,
+        // but a column name must not bind to the rows of this SELECT.
         if (query.Limit) { Expression(*query.Limit, empty, ctes, {}); }
         if (query.Offset) { Expression(*query.Offset, empty, ctes, {}); }
         Result.QueryOutputs[&query] = outputs;

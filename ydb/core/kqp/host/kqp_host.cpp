@@ -1445,6 +1445,9 @@ private:
     {
         TCompileExprResult result;
         std::shared_ptr<NYql::TAstParseResult> queryAst;
+        // The native frontend also needs effective translation settings when the
+        // legacy AST was supplied by the caller. Reuse the same settings builder
+        // so parser selection, parameters and table prefixes agree across paths.
         if (!query.AstResult || (isSql && SessionCtx->Config().GetEnableNewYqlParser())) {
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
                 .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
@@ -1453,6 +1456,9 @@ private:
                 .SetFromConfig(SessionCtx->Config());
         }
 
+        // Build the owning syntax AST early, before asynchronous catalog loading.
+        // A syntax error is final; only explicit unsupported-feature exceptions
+        // permit fallback. Semantic passes below run once metadata is available.
         if (isSql && SessionCtx->Config().GetEnableNewYqlParser()) {
             TCompileTraceScope traceScope(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase,
                 "Parse query with new YQL frontend");
@@ -1468,6 +1474,9 @@ private:
                 NewParserSettings = {translationSettings.DefaultCluster, translationSettings.PathPrefix,
                     translationSettings.ClusterPathPrefixes};
                 NewParserTypeSettings = {};
+                // Forward the expression settings supported by the new scalar path.
+                // Pragmas with unsupported semantics are rejected by subsequent passes,
+                // so their effects cannot be silently lost by using default settings.
                 NewParserTypeSettings.Expressions.UnicodeLiterals = translationSettings.UnicodeLiterals;
                 NewParserTypeSettings.Expressions.FlexibleTypes = !translationSettings.Flags.contains("DisableFlexibleTypes");
                 if (translationSettings.Flags.contains("AnsiInForEmptyOrNullableItemsCollections")) {
@@ -1481,6 +1490,8 @@ private:
                         if (!type) {
                             return result;
                         }
+                        // SDK parameter keys may omit the SQL sigil; scalar bindings use
+                        // the exact $-prefixed convention. Types belong to this compile context.
                         NewParserTypeSettings.Parameters[name.StartsWith('$') ? name : "$" + name] = type;
                     }
                 }
@@ -2471,6 +2482,8 @@ private:
 
     void SetupSession(EKikimrQueryType queryType, TCompileTrace::TPtr trace = {}) {
         if (TransformCtx) {
+            // The callback captures this host and AST query pointers. Release it
+            // before destroying the semantic side tables and the AST they refer to.
             TransformCtx->NewParserRboLowering = {};
             TransformCtx->NewParserRboQueryCount = 0;
         }
@@ -2502,6 +2515,9 @@ private:
         std::get<2>(TypesCtx->CachedRandom).reset();
     }
 
+    // Insert this pass after IO annotation has populated SessionCtx tables.
+    // It leaves the legacy ExprNode graph intact and builds a separate name table.
+    // Processed guards are needed because the surrounding transformer may repeat.
     TAutoPtr<IGraphTransformer> CreateNewParserNameResolutionTransformer() {
         return CreateFunctorTransformer([this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             output = input;
@@ -2512,6 +2528,9 @@ private:
             TCompileTraceScope trace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase,
                 "Resolve new YQL AST names");
             try {
+                // All occurrences of one table share an immutable catalog snapshot,
+                // while the resolver still allocates independent logical column IDs
+                // for each occurrence. Identity/version are checked again at RBO import.
                 THashMap<std::pair<TString, TString>, NNewYql::TTableMetadataPtr> snapshots;
                 const auto lookup = [&](const TString& cluster, const TString& path) -> NNewYql::TTableMetadataPtr {
                     const auto key = std::make_pair(cluster, path);
@@ -2549,6 +2568,9 @@ private:
                         }
                         snapshot->Columns.push_back({column.Name, column.Id, FormatType(type), column.NotNull});
                     };
+                    // Preserve the provider column order for star expansion whenever it
+                    // is supplied. The final RBO boundary separately validates result
+                    // labels/order against the legacy packaging contract.
                     if (metadata.ColumnOrder.empty()) {
                         for (const auto& [name, column] : metadata.Columns) {
                             Y_UNUSED(name);
@@ -2578,6 +2600,9 @@ private:
         });
     }
 
+    // Annotate only after successful native resolution. A type error remains
+    // a user error; unsupported semantics leave the legacy pipeline available.
+    // Install the RBO callback only after the complete typed result exists.
     TAutoPtr<IGraphTransformer> CreateNewParserTypeAnnotationTransformer() {
         return CreateFunctorTransformer([this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             output = input;
@@ -2603,6 +2628,9 @@ private:
         });
     }
 
+    // Capture top-level queries in source order. The RBO transformer verifies
+    // that result count and effects permit this positional correspondence before
+    // calling the factory; inner CTE/derived queries are lowered by their consumer.
     void InstallNewParserRboLowering() {
         TVector<const NNewYql::TQuery*> queries;
         for (const auto& statement : NewParserAst->Statements) {
@@ -2615,6 +2643,9 @@ private:
             const TExprNode::TPtr& legacyRoot, const TExprNode::TPtr& hints, TExprContext& ctx) -> TIntrusivePtr<TOpRoot>
         {
             try {
+                // Names and scalar types were computed from this snapshot. A changed
+                // table identity/version or unsupported provider invalidates that work
+                // and must fall back before creating a physical table reference.
                 const auto lookup = [&](const NNewYql::TTableMetadata& snapshot) -> NNewYql::TRboTable {
                     if (snapshot.Cluster != Cluster) {
                         ythrow TNewYqlParserFallback() << "Cross-cluster RBO reads are not supported";
@@ -2656,6 +2687,9 @@ private:
                     limits.push_back(limit.Cast());
                     input = limit.Cast().Input();
                 }
+                // The native plan already contains the SQL LIMIT/OFFSET. Remove only
+                // the corresponding innermost legacy limit; every remaining outer
+                // limit is a service cap that still belongs around the native plan.
                 if (query.Limit) {
                     if (limits.empty()) { ythrow TNewYqlParserFallback() << "Missing SQL LIMIT at RBO boundary"; }
                     limits.pop_back();
@@ -2671,9 +2705,15 @@ private:
                     for (const auto& hint : hints->Children()) { queryColumns.emplace_back(hint->Content()); }
                 }
                 auto root = MakeIntrusive<TOpRoot>(std::move(op), lowered->Pos, lowered->GetColumns(), std::move(queryColumns));
+                // Wrapping for result caps moves the IU registry to a different root.
+                // Rebind expression property pointers to that final owner and retain
+                // the legacy node needed by the surrounding result/transaction pipeline.
                 root->PlanProps = std::move(lowered->PlanProps);
                 root->Node = legacyRoot;
                 for (const auto& item : *root) { item.Current->BindExpressionPlanProps(&root->PlanProps); }
+                // Emit native success only after all boundary checks and wrapping
+                // have succeeded. Strict join-order tests use this as request-scoped
+                // evidence that a legacy-converted root did not satisfy their oracle.
                 YQL_CLOG(INFO, ProviderKqp) << "New YQL RBO lowering succeeded";
                 return root;
             } catch (const TNewYqlParserFallback& e) {
@@ -2727,6 +2767,9 @@ private:
     TAutoPtr<IGraphTransformer> YqlTransformer;
     TAutoPtr<IGraphTransformer> YqlTransformerNewRBO;
     TAutoPtr<IGraphTransformer> DataQueryAstTransformer;
+    // Per-compilation ownership chain: names and annotations borrow AST node
+    // addresses, and the installed RBO callback borrows all three. SetupSession
+    // clears the callback first and then releases these in dependency order.
     mutable std::unique_ptr<NNewYql::TScript> NewParserAst;
     mutable NNewYql::TNameResolutionSettings NewParserSettings;
     std::unique_ptr<NNewYql::TResolvedNames> NewParserNames;

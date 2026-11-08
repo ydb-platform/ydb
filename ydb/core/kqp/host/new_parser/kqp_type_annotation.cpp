@@ -18,6 +18,8 @@ using TNode = TExprNode::TPtr;
 using TType = const TTypeAnnotationNode*;
 
 struct TAnnotationError {};
+// The enclosing SQL clause imposes requirements beyond the scalar return type:
+// predicates must be Bool, sort keys comparable, and counts coercible to Uint64.
 enum class EUse { Value, Predicate, SortKey, Limit, Offset };
 
 class TAnnotator {
@@ -76,6 +78,9 @@ private:
             || type->GetKind() == ETypeAnnotationKind::Null ? type : Ctx.MakeType<TOptionalExprType>(type);
     }
 
+    // Memoize stored-column and alias types by resolved identity. Projection
+    // types are supplied by Query in dependency order; recursively following
+    // Input handles renames without looking up ambiguous SQL names again.
     TType Column(TColumnId id) {
         Y_ENSURE(id < Names.Columns.size());
         if (Result.Columns[id]) { return Result.Columns[id]; }
@@ -101,6 +106,9 @@ private:
         return type;
     }
 
+    // Each scalar lambda is a fresh annotation job. Isolate its repeat counter
+    // from the surrounding host compilation, but preserve the caller's completed
+    // transform stages. The transformer may replace root as it inserts coercions.
     void Annotate(TNode& root, const TSourceRange& range) {
         const auto repeats = Ctx.RepeatTransformCounter;
         Y_DEFER { Ctx.RepeatTransformCounter = repeats; };
@@ -114,6 +122,9 @@ private:
         }
     }
 
+    // Wrap the lowered body in a closed, typed lambda before calling the YQL
+    // annotator. Supplying all visible columns gives lowering a stable contract
+    // even when a particular expression uses only a subset of the scope.
     TType Expression(const TExpression& expression, const TColumnTypes& scope, EUse use = EUse::Value) {
         const auto pos = Pos(expression.Range);
         TExpressionBindings bindings;
@@ -159,6 +170,9 @@ private:
         UpdateLambdaAllArgumentsTypes(annotated.Lambda, argumentTypes, Ctx);
         Annotate(annotated.Lambda, expression.Range);
         if (use == EUse::Limit || use == EUse::Offset) {
+            // Take was only a vehicle for its count-validation rule. Retain the
+            // rewritten count (including coercions/defaults), then annotate the
+            // replacement lambda so its result type describes the count itself.
             auto count = annotated.Lambda->Tail().TailPtr();
             annotated.Lambda = Ctx.NewLambda(pos, annotated.Lambda->HeadPtr(), std::move(count));
             Annotate(annotated.Lambda, expression.Range);
@@ -177,6 +191,9 @@ private:
         return type;
     }
 
+    // A source has its own output schema. ON is typed against the original
+    // input schemas before outer-join null extension; enclosing clauses consume
+    // the nullable output schema stored for the join, not the child read schema.
     TColumnTypes Source(const TSource& source) {
         if (source.Sampling) { Unsupported(source.Range, "sampling"); }
         TColumnTypes scope;
@@ -214,6 +231,9 @@ private:
         return scope;
     }
 
+    // Visit CTE/derived producers before their consumers so every referenced
+    // output has an established type. Cache by query identity for shared uses.
+    // Grouping/windows require scope rules that this scalar subset does not supply.
     void Query(const TQuery& query) {
         if (Result.QueryOutputs.contains(&query)) { return; }
         for (const auto& cte : query.With) { Query(*cte.Query); }
@@ -236,6 +256,9 @@ private:
             }
         }
         Y_ENSURE(outputIds.size() == outputs.size());
+        // Publish projection types before ORDER BY, retaining input types for
+        // hidden sort expressions. Name resolution has already decided which
+        // IDs each reference denotes, including output-alias precedence.
         for (size_t i = 0; i < outputs.size(); ++i) {
             Result.Columns[outputIds[i]] = outputs[i];
             scope[outputIds[i]] = outputs[i];

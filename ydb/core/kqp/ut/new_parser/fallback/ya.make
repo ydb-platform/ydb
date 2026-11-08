@@ -1,3 +1,6 @@
+# Host integration and legacy-compatibility workloads share this runtime
+# fixture. Direct operator unit tests also live here and call the importer
+# without allowing a host fallback to hide a lowering failure.
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()

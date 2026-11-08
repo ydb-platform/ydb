@@ -136,10 +136,15 @@ void RunTPCHBenchmark(bool columnStore, std::vector<ui32> queries, bool newRbo) 
     }
 
     std::string consts = NResource::Find(TStringBuilder() << "consts.yql");
+    std::string tablePrefix = "/Root/";
     for (const auto qId : queries) {
         Cout << "Q " << qId << Endl;
-        const auto q = PrepareTpchPerfQuery(
-            NResource::Find(TStringBuilder() << "resfs/file/tpch/queries/yql/q" << qId << ".sql"), consts);
+        std::string q = NResource::Find(TStringBuilder() << "resfs/file/tpch/queries/yql/q" << qId << ".sql");
+        Replace(q, "{path}", tablePrefix);
+        Replace(q, "{% include 'header.sql.jinja' %}", R"(PRAGMA YqlSelect = 'force';)");
+        std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
+        q = std::regex_replace(q, pattern, "`" + tablePrefix + "$1`");
+        q = consts + "\n" + q;
         TScopedRboTraceTitleOverride traceTitle(
             FormatBenchmarkTraceTitle("KqpRboYql", "TPCH_YDB_PERF", qId),
             TString(q.data(), q.size()));
@@ -162,6 +167,8 @@ void PrintStatus(std::unordered_map<ui32, bool>& queries, std::vector<TString>&&
 static constexpr const char* BenchmarkTraceSuiteName = "KqpRboYql";
 
 static constexpr std::array<const char*, 3> BenchmarkTraceName{"TPCH_YQL", "TPCDS_YQL", "CLICKBENCH_YQL"};
+
+static constexpr std::array<ui32, 3> BenchmarkQueryCount{22, 99, 43};
 
 bool PlanHasJoin(const NJson::TJsonValue& planNode) {
     if (!planNode.IsMap()) {
@@ -256,7 +263,12 @@ void RunPerf_YqlTest(const EBenchType type, const bool columnStore, std::set<ui3
 
         const auto expectedStatus = queriesStatus.empty() ? true : queriesStatus.contains(qId);
         queriesExpectedStatus.push_back(expectedStatus);
-        const auto q = LoadBenchmarkQuery(type, qId);
+        TString q = GetFullPath(BenchmarkQueryPath[type], ToString(qId) + ".yql");
+        const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+        const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+        const TString round = R"($round = ($x,$y) -> {return $x;};)";
+
+        q = toDecimal + "\n" + toDecimalMax + "\n" + round + "\n" + q;
 
         Cerr << "Executing benchmark query " << qId << "\n";
         TScopedRboTraceTitleOverride traceTitle(
@@ -334,7 +346,12 @@ void RunPerf_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore
     CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
 
     {
-        const auto q = LoadBenchmarkQuery(type, queryId);
+        TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+        const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+        const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+        const TString round = R"($round = ($x,$y) -> {return $x;};)";
+
+        q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
 
         TScopedRboTraceTitleOverride traceTitle(
             FormatBenchmarkTraceTitle(BenchmarkTraceSuiteName, BenchmarkTraceName[type], queryId),
@@ -367,7 +384,12 @@ void TimePerf_YqlTest(const EBenchType type, ui32 queryId, const bool columnStor
     CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
 
     {
-        const auto q = LoadBenchmarkQuery(type, queryId);
+        TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+        const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+        const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+        const TString round = R"($round = ($x,$y) -> {return $x;};)";
+
+        q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
 
         auto queryClient = kikimr.GetQueryClient();
         auto session = queryClient.GetSession().GetValueSync().GetSession();
@@ -412,7 +434,7 @@ using namespace NYqlTests;
 Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCH_YDB_PERF) {
-       RunTPCHBenchmark(/*columnstore*/ true, {TpchPerfQueryIds.begin(), TpchPerfQueryIds.end()}, /*new rbo*/ true);
+       RunTPCHBenchmark(/*columnstore*/ true, {1, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18, 19}, /*new rbo*/ true);
        //RunTPCHBenchmark(/*columnstore*/ true, {1, 6, 14, 19}, /*new rbo*/ false);
     }
 

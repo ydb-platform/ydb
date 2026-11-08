@@ -683,7 +683,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto queryCounters =
             GetCounters()->GetSubgroup("subsystem", "streaming_queries")->GetSubgroup("host", "")->GetSubgroup("path", "/Root/hopCountersQuery");
-        const auto waitCounters = [&](ui64 expectedInput, ui64 expectedLate) {
+        const auto waitCounters = [&](i64 expectedInput, i64 expectedLate) {
             WaitFor(TDuration::Seconds(30), "streaming query Hop counters", [&](TString& error) {
                 const auto inputEvents = queryCounters->FindCounter("hop.input_events.rate");
                 const auto lateEvents = queryCounters->FindCounter("hop.late_events.rate");

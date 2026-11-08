@@ -80,7 +80,6 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
                 {"streamPath", SrcStreamPath},
                 {"consumer", SrcStreamConsumerName},
                 {"ev", ev->Get()->ToString()});
-            Send(Parent, new TEvPrivate::TEvCompleteWorkerSet(ReplicationId, TargetId));
             return PassAway();
         }
 
@@ -130,8 +129,6 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
 
             RunWorker(partition.GetPartitionId());
         }
-
-        Send(Parent, new TEvPrivate::TEvCompleteWorkerSet(ReplicationId, TargetId));
 
         PassAway();
     }
@@ -331,6 +328,22 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
 
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
+
+    if (replication->GetState() == TReplication::EState::Removing
+        && GetStreamState() == EStreamState::Removed)
+    {
+        Reset(StreamCreator);
+        Reset(StreamRemover);
+        if (GetDstState() != EDstState::Removing && GetDstState() != EDstState::Attaching) {
+            if (HasWorkers()) {
+                RemoveWorkers(ctx);
+            } else {
+                ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropStreamResult(
+                    replication->GetId(), GetId(), NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+            }
+            return;
+        }
+    }
 
     if (CanDetachWithoutStream()) {
         Reset(StreamCreator);

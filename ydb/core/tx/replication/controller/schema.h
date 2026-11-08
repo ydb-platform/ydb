@@ -64,12 +64,6 @@ struct TControllerSchema: NIceDb::Schema {
         struct TransformLambda: Column<10, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
         struct RunAsUser: Column<11, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
         struct DirectoryPath: Column<12, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
-        // Marks that registration has completed for the target, so Workers is
-        // a complete partition-membership set rather than a partial stream of
-        // asynchronous registrations.
-        struct WorkerSetComplete: Column<13, NScheme::NTypeIds::Bool> {
-            static constexpr bool Default = false;
-        };
         struct PendingDstPathOwnerId: Column<18, NScheme::NTypeIds::Uint64> { // Deprecated.
             using Type = TOwnerId;
             static constexpr Type Default = InvalidOwnerId;
@@ -93,7 +87,6 @@ struct TControllerSchema: NIceDb::Schema {
             TransformLambda,
             RunAsUser,
             DirectoryPath,
-            WorkerSetComplete,
             PendingDstPathOwnerId,
             PendingDstPathLocalId
         >;

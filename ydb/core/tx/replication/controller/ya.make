@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/tx/tx_allocator_client
     ydb/core/util
     ydb/core/ydb_convert
+    ydb/public/api/protos
     ydb/services/metadata
     yql/essentials/public/issue
     library/cpp/json
@@ -63,7 +64,6 @@ SRCS(
     tx_resolve_database_result.cpp
     tx_resolve_resource_id_result.cpp
     tx_resolve_secret_result.cpp
-    tx_run_worker.cpp
     tx_worker_error.cpp
     tx_source_offset_report.cpp
     worker_lag_expiry_queue.cpp

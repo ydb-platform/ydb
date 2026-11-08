@@ -94,7 +94,6 @@ private:
     void Handle(TEvPrivate::TEvProcessQueues::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestoreSession::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx);
@@ -132,6 +131,7 @@ private:
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     TReplication::ITarget* FindTarget(const TWorkerId& id) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void UpdateLagCounters();
     void InvalidateLag(const TWorkerId& id);
     void ScheduleLagExpiry(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvExpireWorkerLag::TPtr& ev, const TActorContext& ctx);
@@ -139,6 +139,7 @@ private:
     void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
     void ProcessDropStreamQueue(const TActorContext& ctx);
+    void RemoveTarget(NIceDb::TNiceDb& db, TReplication& replication, ui64 targetId);
 
     // local transactions
     class TTxInitSchema;
@@ -162,9 +163,6 @@ private:
     class TTxAssignTxId;
     class TTxHeartbeat;
     class TTxCommitChanges;
-    class TTxRunWorker;
-    class TTxRemoveWorker;
-    class TTxCompleteWorkerSet;
 
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
@@ -188,9 +186,6 @@ private:
     void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch = false, TMaybe<ui64> sourceCommittedOffset = Nothing());
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
-    void RunTxRunWorker(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
-    void RunTxRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
-    void RunTxCompleteWorkerSet(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
 
     // other
     template <typename T>
@@ -205,6 +200,8 @@ private:
             Y_VERIFY_S(res.second, "Duplication replication: " << pathId);
         }
 
+        replication->SetLagChangedCallback([this] { UpdateLagCounters(); });
+        UpdateLagCounters();
         return replication;
     }
 
@@ -238,7 +235,6 @@ private:
     bool LagExpiryScheduled = false;
     THashSet<TWorkerId> StoppingWorkers;
     static constexpr TDuration WorkerLagTimeout = TDuration::Seconds(60);
-    THashSet<std::pair<ui64, ui64>> CompleteWorkerSets;
     THashSet<TWorkerId> BootQueue;
     THashSet<std::pair<TWorkerId, ui32>> StopQueue;
     THashSet<TWorkerId> RemoveQueue;

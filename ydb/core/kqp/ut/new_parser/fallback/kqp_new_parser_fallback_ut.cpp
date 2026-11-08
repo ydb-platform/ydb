@@ -125,6 +125,12 @@ void CheckWorkload(const TVector<TWorkloadQuery>& queries, EBenchType type, bool
             << "\nOriginal pipeline: " << baseline[i].Issues << "\nParser fallback: " << fallback[i].Issues;
         // Include known unsupported workload queries too: their failures must
         // remain failures of the configured optimizer, with the same status.
+        if (baseline[i].Status != EStatus::SUCCESS && fallback[i].Status == EStatus::SUCCESS
+            && baseline[i].Issues.Contains("YqlSelect unsupported: GROUP BY aliases")) {
+            UNIT_ASSERT_VALUES_EQUAL_C(fallback[i].OptimizerCounters, (std::pair<ui32, ui32>{1, 0}), context);
+            ++successes;
+            continue;
+        }
         UNIT_ASSERT_VALUES_EQUAL_C(fallback[i].Status, baseline[i].Status, context);
         UNIT_ASSERT_VALUES_EQUAL_C(fallback[i].OptimizerCounters, baseline[i].OptimizerCounters, context);
         successes += baseline[i].Status == EStatus::SUCCESS;
@@ -185,7 +191,9 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
                 "FROM c AS l LEFT JOIN c AS r ON l.k = r.k ORDER BY a;",
             "SELECT l.id AS a, r.id AS b FROM `/Root/t` AS l LEFT JOIN `/Root/t` AS r ON l.id = r.id AND r.id > 2 ORDER BY a;",
             "SELECT * FROM `/Root/t` ORDER BY id;",
+            "SELECT l.id, r.id FROM `/Root/t` AS l JOIN `/Root/t` AS r ON l.id = r.id ORDER BY l.id;",
             "SELECT [1, 2][0u] AS v, CAST(3 AS Int64) + 2 AS n;",
+            "SELECT 1, 2 AS column0, 3;",
             "SELECT 1 AS a; SELECT id AS b FROM `/Root/t` ORDER BY id LIMIT 2;",
             // Original workload helper declarations now pass through every
             // native phase, even when only one helper is used by the query.
@@ -206,6 +214,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             NKikimrConfig::TAppConfig appConfig;
             auto* config = appConfig.MutableTableServiceConfig();
             config->SetEnableNewYqlParser(enable);
+            config->SetEnableAstCache(enable);
             config->SetEnableNewRBO(true);
             config->SetEnableFallbackToYqlOptimizer(false);
             config->SetEnableFallbackOnMultipleStatements(false);
@@ -224,14 +233,25 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
                 << (ColumnStore ? " WITH (STORE = COLUMN);" : ";")).GetValueSync();
             UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
             auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
-            auto data = session.ExecuteQuery("UPSERT INTO `/Root/t` (id, value) VALUES (1, 'a'), (2, 'a'), (3, NULL), (4, 'b');",
-                NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto rows = TValueBuilder().BeginList()
+                .AddListItem().BeginStruct().AddMember("id").Int64(1).AddMember("value").OptionalString("a").EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(2).AddMember("value").OptionalString("a").EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(3).AddMember("value").EmptyOptional(EPrimitiveType::String).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(4).AddMember("value").OptionalString("b").EndStruct()
+                .EndList().Build();
+            auto data = kikimr.GetTableClient().BulkUpsert("/Root/t", std::move(rows)).GetValueSync();
             UNIT_ASSERT_C(data.IsSuccess(), data.GetIssues().ToString());
+            const auto legacyLogStart = logs.Snapshot().size();
             for (size_t i = 0; i < queries.size(); ++i) {
                 const auto result = session.ExecuteQuery(queries[i], NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), queries[i] << ": " << result.GetIssues().ToString());
                 TVector<TString> values;
-                for (const auto& set : result.GetResultSets()) { values.push_back(FormatResultSetYson(set)); }
+                for (const auto& set : result.GetResultSets()) {
+                    values.push_back(FormatResultSetYson(set));
+                    for (const auto& column : set.GetColumnsMeta()) {
+                        values.push_back(TStringBuilder() << column.Name << ":" << column.Type.ToString());
+                    }
+                }
                 if (!enable) { baseline.push_back(std::move(values)); }
                 else { UNIT_ASSERT_VALUES_EQUAL_C(values, baseline[i], queries[i]); }
             }
@@ -239,7 +259,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             // so this query exercises native parameter binding and scalar annotation.
             auto params = TParamsBuilder().AddParam("$offset").Int64(10).Build().Build();
             const auto parameterized = session.ExecuteQuery(
-                "SELECT id + $offset AS n FROM `/Root/t` WHERE id = 1;",
+                "SELECT id + $offset AS n FROM `/Root/t` WHERE id + $offset = 11;",
                 NQuery::TTxControl::BeginTx().CommitTx(), params).GetValueSync();
             UNIT_ASSERT_C(parameterized.IsSuccess(), parameterized.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(parameterized.GetResultSet(0)), "[[11]]");
@@ -265,14 +285,124 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
                     Sleep(TDuration::MilliSeconds(10));
                 }
                 UNIT_ASSERT_C(successCount() >= expected, logs.Snapshot());
-                UNIT_ASSERT_C(!logs.Snapshot().Contains("New YQL RBO lowering fallback:"), logs.Snapshot());
+                const auto nativeLogs = logs.Snapshot().substr(legacyLogStart);
+                UNIT_ASSERT_C(!nativeLogs.Contains("New YQL frontend fallback:"), nativeLogs);
+                UNIT_ASSERT_C(!nativeLogs.Contains("Legacy YQL graph compilation started"), nativeLogs);
             }
         }
     }
 
-    // Exercise the host passes after real asynchronous metadata loading. Both
-    // optimizer configurations should resolve/type-check; only the RBO twin must
-    // report successful native operator import.
+    Y_UNIT_TEST(NativeCatalogAndResultContract) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableNewYqlParser(true);
+        config->SetEnableNewRBO(true);
+        config->SetEnableAstCache(true);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetEnableFallbackOnMultipleStatements(false);
+        TCapturedLog logs(true);
+        auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false).SetLogCapture(logs);
+        settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_INFO);
+        settings.LogSettings->DefaultLogPriority = NActors::NLog::PRI_CRIT;
+        TKikimrRunner kikimr(settings);
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto scheme = tableSession.ExecuteSchemeQuery(
+            "CREATE TABLE `/Root/a` (id Int64 NOT NULL, value String, PRIMARY KEY(id));"
+            "CREATE TABLE `/Root/b` (id Int64 NOT NULL, PRIMARY KEY(id));").GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto rows = TValueBuilder().BeginList()
+            .AddListItem().BeginStruct().AddMember("id").Int64(1).AddMember("value").OptionalString("one").EndStruct()
+            .AddListItem().BeginStruct().AddMember("id").Int64(2).AddMember("value").OptionalString("two").EndStruct()
+            .EndList().Build();
+        auto write = kikimr.GetTableClient().BulkUpsert("/Root/a", std::move(rows)).GetValueSync();
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        auto keys = TValueBuilder().BeginList().AddListItem().BeginStruct().AddMember("id").Int64(2).EndStruct().EndList().Build();
+        auto writeKeys = kikimr.GetTableClient().BulkUpsert("/Root/b", std::move(keys)).GetValueSync();
+        UNIT_ASSERT_C(writeKeys.IsSuccess(), writeKeys.GetIssues().ToString());
+
+        const auto start = logs.Snapshot().size();
+        auto joined = session.ExecuteQuery(
+            "PRAGMA TablePathPrefix = '/Root'; WITH c AS (SELECT id FROM b) "
+            "SELECT a.id AS id, a.value AS value FROM a JOIN c ON a.id = c.id ORDER BY a.id;",
+            NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(joined.IsSuccess(), joined.GetIssues().ToString());
+        CompareYson(FormatResultSetYson(joined.GetResultSet(0)), R"([[2;["two"]]])");
+        UNIT_ASSERT_VALUES_EQUAL(joined.GetResultSet(0).GetColumnsMeta()[0].Name, "id");
+        UNIT_ASSERT_VALUES_EQUAL(joined.GetResultSet(0).GetColumnsMeta()[1].Name, "value");
+        // Qualified stars are supported natively even though the legacy
+        // forced-YqlSelect translator cannot supply a comparison result.
+        auto mixedStar = session.ExecuteQuery("SELECT 1 AS z, a.* FROM `/Root/a` AS a ORDER BY id;",
+            NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(mixedStar.IsSuccess(), mixedStar.GetIssues().ToString());
+        CompareYson(FormatResultSetYson(mixedStar.GetResultSet(0)), R"([[1;1;["one"]];[1;2;["two"]]])");
+        auto qualifiedStar = session.ExecuteQuery(
+            "SELECT a.* FROM `/Root/a` AS a JOIN `/Root/b` AS b ON a.id = b.id ORDER BY a.id;",
+            NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(qualifiedStar.IsSuccess(), qualifiedStar.GetIssues().ToString());
+        CompareYson(FormatResultSetYson(qualifiedStar.GetResultSet(0)), R"([[2;["two"]]])");
+        auto scan = kikimr.GetTableClient().StreamExecuteScanQuery(
+            "SELECT id FROM `/Root/b` ORDER BY id;").GetValueSync();
+        UNIT_ASSERT_C(scan.IsSuccess(), scan.GetIssues().ToString());
+        CompareYson(StreamResultToYson(scan), "[[2]]");
+        auto grouped = session.ExecuteQuery(
+            "SELECT key, COUNT(*) AS n FROM `/Root/a` GROUP BY id % 2 AS key ORDER BY key;",
+            NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(grouped.IsSuccess(), grouped.GetIssues().ToString());
+        CompareYson(FormatResultSetYson(grouped.GetResultSet(0)), "[[[0];1u];[[1];1u]]");
+        const auto nativeLogs = logs.Snapshot().substr(start);
+        UNIT_ASSERT_C(nativeLogs.Contains("New YQL native execution contract built"), nativeLogs);
+        UNIT_ASSERT_C(!nativeLogs.Contains("Legacy YQL graph compilation started"), nativeLogs);
+
+        // Table information in the native contract must invalidate cached plans
+        // after a schema change, including their cached result column metadata.
+        const TString star = "SELECT * FROM `/Root/a` ORDER BY id;";
+        for (size_t count : {2, 2, 3}) {
+            if (count == 3) {
+                auto alter = tableSession.ExecuteSchemeQuery("ALTER TABLE `/Root/a` ADD COLUMN extra String;").GetValueSync();
+                UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToString());
+            }
+            auto result = session.ExecuteQuery(star, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).GetColumnsMeta().size(), count);
+        }
+
+        // Unsupported scalar semantics discovered after catalog loading must
+        // restart legacy compilation without losing the loaded table metadata.
+        const auto fallbackStart = logs.Snapshot().size();
+        auto fallback = session.ExecuteQuery("SELECT TablePath() AS path FROM `/Root/b`;",
+            NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(!fallback.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(fallback.GetIssues().ToString(), "YqlSelect unsupported: TablePath");
+        UNIT_ASSERT_C(logs.Snapshot().substr(fallbackStart).Contains("Legacy YQL graph compilation started"), logs.Snapshot());
+        auto structured = session.ExecuteQuery("SELECT (AsStruct(id AS k)).k AS id FROM `/Root/b`;",
+            NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(structured.IsSuccess(), structured.GetIssues().ToString());
+        CompareYson(FormatResultSetYson(structured.GetResultSet(0)), "[[2]]");
+        auto multipleScan = kikimr.GetTableClient().StreamExecuteScanQuery("SELECT 1; SELECT 2;").GetValueSync();
+        TString scanIssues;
+        if (multipleScan.IsSuccess()) {
+            auto part = multipleScan.ReadNext().GetValueSync();
+            UNIT_ASSERT(!part.IsSuccess());
+            scanIssues = part.GetIssues().ToString();
+        } else {
+            scanIssues = multipleScan.GetIssues().ToString();
+        }
+        UNIT_ASSERT_STRING_CONTAINS(scanIssues, "single result set");
+        auto duplicate = session.ExecuteQuery("SELECT 1 AS x, 2 AS x;", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(!duplicate.IsSuccess());
+        auto invalid = session.ExecuteQuery("PRAGMA YqlSelect = 'invalid'; SELECT id FROM `/Root/a`;",
+            NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(!invalid.IsSuccess());
+        auto missing = session.ExecuteQuery("SELECT id FROM `/Root/absent`;", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(!missing.IsSuccess());
+        auto next = session.ExecuteQuery("SELECT id FROM `/Root/b` WHERE id = 2;", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(next.IsSuccess(), next.GetIssues().ToString());
+        CompareYson(FormatResultSetYson(next.GetResultSet(0)), "[[2]]");
+    }
+
+    // Native catalog IO and semantic errors are exercised only with new RBO;
+    // the old optimizer continues to use its original frontend diagnostics.
     Y_UNIT_TEST_TWIN(ResolvesNamesUsingLoadedMetadata, NewRbo) {
         NKikimrConfig::TAppConfig appConfig;
         auto* config = appConfig.MutableTableServiceConfig();
@@ -293,17 +423,14 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             + "SELECT n.id, n.value FROM `/Root/names` AS n WHERE n.id > 0 ORDER BY n.id;",
             NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(valid.IsSuccess(), valid.GetIssues().ToString());
-        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
-        while (!logs.Snapshot().Contains("New YQL type annotation succeeded") && TInstant::Now() < deadline) {
-            Sleep(TDuration::MilliSeconds(10));
-        }
-        UNIT_ASSERT_C(logs.Snapshot().Contains("New YQL name resolution succeeded"), logs.Snapshot());
-        UNIT_ASSERT_C(logs.Snapshot().Contains("New YQL type annotation succeeded"), logs.Snapshot());
         if constexpr (NewRbo) {
-            while (!logs.Snapshot().Contains("New YQL RBO lowering succeeded") && TInstant::Now() < deadline) {
+            const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+            while (!logs.Snapshot().Contains("New YQL native execution contract built") && TInstant::Now() < deadline) {
                 Sleep(TDuration::MilliSeconds(10));
             }
-            UNIT_ASSERT_C(logs.Snapshot().Contains("New YQL RBO lowering succeeded"), logs.Snapshot());
+            UNIT_ASSERT_C(logs.Snapshot().Contains("New YQL name resolution succeeded"), logs.Snapshot());
+            UNIT_ASSERT_C(logs.Snapshot().Contains("New YQL type annotation succeeded"), logs.Snapshot());
+            UNIT_ASSERT_C(logs.Snapshot().Contains("New YQL native execution contract built"), logs.Snapshot());
         }
 
         auto params = TParamsBuilder().AddParam("$offset").Int64(3).Build().Build();
@@ -314,7 +441,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
         auto badType = session.ExecuteQuery("SELECT n.id + n.value FROM `/Root/names` AS n;",
             NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT(!badType.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(badType.GetIssues().ToString(), "New YQL type annotation");
+        if constexpr (NewRbo) { UNIT_ASSERT_STRING_CONTAINS(badType.GetIssues().ToString(), "New YQL type annotation"); }
 
         auto outerJoin = session.ExecuteQuery("SELECT r.id FROM `/Root/names` AS l "
             "LEFT JOIN `/Root/names` AS r ON l.id = r.id;", NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -327,12 +454,12 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
         auto missing = session.ExecuteQuery("SELECT n.absent FROM `/Root/names` AS n;",
             NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT(!missing.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(missing.GetIssues().ToString(), "New YQL name resolution: Unknown column 'n.absent'");
+        if constexpr (NewRbo) { UNIT_ASSERT_STRING_CONTAINS(missing.GetIssues().ToString(), "New YQL name resolution: Unknown column 'n.absent'"); }
 
         auto ambiguous = session.ExecuteQuery("SELECT id FROM `/Root/names` AS l JOIN `/Root/names` AS r ON l.id = r.id;",
             NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT(!ambiguous.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(ambiguous.GetIssues().ToString(), "Ambiguous column");
+        if constexpr (NewRbo) { UNIT_ASSERT_STRING_CONTAINS(ambiguous.GetIssues().ToString(), "Ambiguous column"); }
 
         // A failed binding must not contaminate the next compilation.
         auto next = session.ExecuteQuery("SELECT id FROM `/Root/names` WHERE id = 7;",

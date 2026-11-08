@@ -244,8 +244,13 @@ TIntrusivePtr<NYql::IKikimrAsyncResult<TApplyResult>> AsyncApplyResult(
     return MakeIntrusive<TKqpAsyncApplyResult<TResult, TApplyResult>>(result, callback);
 }
 
+struct TNativeQuery;
+
 class IKqpRunner : public TThrRefBase {
 public:
+    virtual TIntrusivePtr<NYql::IKikimrAsyncResult<NYql::IKikimrGateway::TQueryResult>> PrepareNativeQuery(
+        std::shared_ptr<TNativeQuery> query, NYql::TExprContext& ctx) = 0;
+
     using TQueryResult = NYql::IKikimrGateway::TQueryResult;
     using TAsyncQueryResult = NYql::IKikimrAsyncResult<TQueryResult>;
 

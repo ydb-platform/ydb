@@ -124,10 +124,20 @@ private:
     // An unknown setting could change table paths or name visibility, so ignoring
     // it would be less safe than falling back to the existing translator.
     void Pragma(const TPragmaStatement& pragma) {
-        // This controls the legacy translator's representation, not SQL names.
-        // The original frontend still validates its value during host import.
-        if (!pragma.Namespace && (AsciiEqualsIgnoreCase(Name(pragma.Name), "YqlSelect")
-            || AsciiEqualsIgnoreCase(Name(pragma.Name), "YqlSelectAllowUnnamedGroupByExpr"))) {
+        if (!pragma.Namespace && AsciiEqualsIgnoreCase(Name(pragma.Name), "YqlSelect")) {
+            const auto* value = pragma.Values.size() == 1 ? std::get_if<TLiteral>(&pragma.Values[0].Value) : nullptr;
+            if (!value || value->Kind != ELiteralKind::String) {
+                Unsupported(pragma.Name.Range, "non-literal YqlSelect pragma");
+            }
+            const auto mode = Decode(value->Spelling, pragma.Values[0].Range);
+            if (mode != "force" && mode != "auto") {
+                // Explicit disable and malformed values retain legacy behavior.
+                Unsupported(pragma.Name.Range, "this YqlSelect mode");
+            }
+            return;
+        }
+        if (!pragma.Namespace && AsciiEqualsIgnoreCase(Name(pragma.Name), "YqlSelectAllowUnnamedGroupByExpr")
+            && pragma.ValueForm == EPragmaValueForm::None) {
             return;
         }
         // Benchmark preambles explicitly enable comma joins. The AST already
@@ -535,7 +545,13 @@ private:
             Window(window.Specification, scope, ctes, windows);
         }
         TVector<TColumnId> outputs;
+        THashSet<TString> usedLabels;
         for (const auto& projection : select->Columns) {
+            if (projection.Alias) { usedLabels.insert(Name(*projection.Alias)); }
+        }
+        size_t projectionIndex = 0;
+        for (const auto& projection : select->Columns) {
+            const auto ordinal = projectionIndex++;
             const auto& expression = *projection.Expression;
             if (const auto* star = std::get_if<TStar>(&expression.Value)) {
                 const auto qualifier = star->Qualifier ? Name(*star->Qualifier) : TString();
@@ -561,10 +577,33 @@ private:
             } else {
                 Expression(expression, scope, ctes, windows);
                 const auto* input = Result.ColumnReferences.FindPtr(&expression);
-                const TString name = projection.Alias ? Name(*projection.Alias)
-                    : input ? Result.Columns[*input].Name : TStringBuilder() << "column" << outputs.size();
+                TString name;
+                if (projection.Alias) {
+                    name = Name(*projection.Alias);
+                } else if (input) {
+                    name = Result.Columns[*input].Name;
+                    // SQL v1 retains explicit relation qualification in the
+                    // result of a join, even when the field name is unique.
+                    if (scope.Relations.size() > 1) {
+                        if (const auto* member = std::get_if<TMember>(&expression.Value)) {
+                            if (const auto qualifier = ExpressionName(*member->Object)) {
+                                name = *qualifier + "." + name;
+                            }
+                        }
+                    }
+                } else {
+                    auto index = ordinal;
+                    do { name = TStringBuilder() << "column" << index++; } while (usedLabels.contains(name));
+                }
+                usedLabels.insert(name);
                 outputs.push_back(AddColumn({name, nullptr, {}, {}, &expression,
                     input ? std::optional(*input) : std::nullopt}));
+            }
+        }
+        THashSet<TString> outputNames;
+        for (const auto id : outputs) {
+            if (!outputNames.insert(Result.Columns[id].Name).second) {
+                Error(query.Range, TStringBuilder() << "Duplicate output column '" << Result.Columns[id].Name << "'");
             }
         }
         // Projection aliases form the nearest ORDER BY scope. Its parent keeps

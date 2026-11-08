@@ -14,6 +14,7 @@
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/data_events/write_data.h>
+#include <ydb/core/tx/datashard/datashard_s3_download.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 
@@ -102,6 +103,9 @@ struct TEvPrivate {
         EvSetLoadedKeyRanges,
 
         EvBackupExportReset,
+
+        EvBackupManifestWriteResult,
+        EvBackupManifestReadResult,
 
         EvEnd
     };
@@ -518,14 +522,17 @@ struct TEvPrivate {
     };
 
     struct TEvBackupExportRecordBatchResult: public TEventLocal<TEvBackupExportRecordBatchResult, EvBackupExportRecordBatchResult> {
-        explicit TEvBackupExportRecordBatchResult(bool isFinish, ui32 generation = 0)
+        explicit TEvBackupExportRecordBatchResult(bool isFinish, ui32 generation = 0, std::optional<ui64> dataFileEndRows = std::nullopt)
             : IsFinish(isFinish)
             , Generation(generation)
+            , DataFileEndRows(dataFileEndRows)
         {
         }
 
         bool IsFinish = false;
         ui32 Generation;
+        // Not a finish: the data file is ended by the multipart parts limit after this number of rows of the last batch
+        std::optional<ui64> DataFileEndRows;
     };
 
     struct TEvBackupExportReset: public TEventLocal<TEvBackupExportReset, EvBackupExportReset> {
@@ -571,10 +578,30 @@ struct TEvPrivate {
         std::shared_ptr<arrow::RecordBatch> Data;
         bool IsLast;
         TString Error;
+        // Position in the data file after these rows
+        std::optional<NDataShard::TS3Download> Download;
     };
 
     struct TEvBackupImportRecordBatchResult: public TEventLocal<TEvBackupImportRecordBatchResult, EvBackupImportRecordBatchResult> {
         explicit TEvBackupImportRecordBatchResult() = default;
+    };
+
+    // *** Backup (data manifest) ***
+    struct TEvBackupManifestWriteResult: public TEventLocal<TEvBackupManifestWriteResult, EvBackupManifestWriteResult> {
+        TEvBackupManifestWriteResult() = default;
+
+        explicit TEvBackupManifestWriteResult(const TString& error)
+            : Error(error)
+        {
+        }
+
+        TString Error;
+    };
+
+    struct TEvBackupManifestReadResult: public TEventLocal<TEvBackupManifestReadResult, EvBackupManifestReadResult> {
+        // FilesCount == 0: there is no manifest, the shard has a single data file
+        ui32 FilesCount = 0;
+        TString Error;
     };
 
     struct TEvRetryConfigSubscription: public TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};

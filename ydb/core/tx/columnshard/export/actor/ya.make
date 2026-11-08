@@ -10,6 +10,8 @@ PEERDIR(
     ydb/library/signals
     ydb/core/tx/columnshard/engines/writer
     ydb/core/kqp/compute_actor
+    ydb/core/tx/columnshard/backup/manifest
+    ydb/core/formats/arrow
 )
 
 GENERATE_ENUM_SERIALIZATION(export_actor.h)

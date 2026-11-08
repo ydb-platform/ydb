@@ -468,4 +468,7 @@ message TFeatureFlags {
     optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
     optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
     optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
+    // Column table exports to S3 split the shard data into files of up to 10000 multipart upload parts
+    // (data_NN_KKKKKK with data_NN.manifest.json) instead of a single data_NN file. Older versions cannot import them.
+    optional bool EnableColumnShardExportMultiFile = 379 [default = false];
 }

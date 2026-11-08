@@ -149,6 +149,10 @@ protected:
         return defaultValue;
     }
 
+    virtual ui32 DoGetExportDataFileMaxParts(const ui32 defaultValue) const {
+        return defaultValue;
+    }
+
     virtual TDuration DoGetMaxReadStaleness(const TDuration defaultValue) const {
         return defaultValue;
     }
@@ -281,6 +285,11 @@ public:
     ui64 GetSmallPortionSizeDetector() const {
         const ui64 defaultValue = GetConfig().GetSmallPortionDetectSizeLimit();
         return DoGetSmallPortionSizeDetector(defaultValue);
+    }
+
+    // S3 limits a multipart upload to 10000 parts
+    ui32 GetExportDataFileMaxParts() const {
+        return DoGetExportDataFileMaxParts(10000);
     }
 
     virtual void OnExportFinished() {

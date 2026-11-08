@@ -28,7 +28,10 @@ public:
         WaitSaveResetCursor,
         WaitSaveCursorBeforeFinish,
         WaitSaveFinalCursor,
-        Finished
+        Finished,
+        WaitSaveCursorBeforeNextFile,
+        WaitSaveCursorBeforeManifest,
+        WaitManifest
     };
 
 private:
@@ -41,6 +44,19 @@ private:
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NExport::TSession> ExportSession;
     TActorId Exporter;
+    TActorId ManifestWriter;
+
+    // The end of the data file being written is known: the last batch of the table is passed to the uploader
+    // or the uploader has ended the file by the multipart parts limit
+    struct TPendingFileEnd {
+        // The last key of the data file, unset at the end of the table
+        std::optional<TOwnedCellVec> LastKey;
+        bool IsEof = false;
+    };
+
+    std::optional<TPendingFileEnd> PendingFileEnd;
+    // The batch being written by the uploader
+    std::shared_ptr<arrow::RecordBatch> WritingBatch;
     static inline const ui64 FreeSpace = ((ui64)128) << 20;
     static constexpr TDuration WarningInterval = TDuration::Seconds(60);
     static constexpr TDuration TimeoutCheckInterval = TDuration::Seconds(15);
@@ -62,6 +78,12 @@ private:
     void StartScan();
     void ResetCursor();
     void FinishExport();
+    void CreateExporter();
+    void OnFileCompleted();
+    bool IsMultiFile() const;
+    TConclusion<TOwnedCellVec> GetPrimaryKey(const arrow::RecordBatch& batch, const ui64 row) const;
+    void WriteManifest();
+    void KillManifestWriter();
 
     void ScheduleTimeoutCheck();
     void HandleWakeup();
@@ -87,6 +109,8 @@ protected:
 
     void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportReset::TPtr& ev);
 
+    void HandleExecute(NColumnShard::TEvPrivate::TEvBackupManifestWriteResult::TPtr& ev);
+
     virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
 
     std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> BuildRequestInitiator(const TCursor& cursor) const;
@@ -103,6 +127,7 @@ public:
                 hFunc(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult, HandleExecute);
                 hFunc(NColumnShard::TEvPrivate::TEvBackupExportError, HandleExecute);
                 hFunc(NColumnShard::TEvPrivate::TEvBackupExportReset, HandleExecute);
+                hFunc(NColumnShard::TEvPrivate::TEvBackupManifestWriteResult, HandleExecute);
                 cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
                 default:
                     TBase::StateInProgress(ev);

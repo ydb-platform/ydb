@@ -4,4 +4,16 @@ message TCursor {
     optional string LastKey = 1;
     optional bool Finished = 2;
     optional uint32 ChunkIdx = 3;
+
+    // Several data files per shard (data_NN_KKKKKK), each within the multipart upload parts limit,
+    // see TFeatureFlags.EnableColumnShardExportMultiFile. Fixed when the export starts.
+    optional bool MultiFile = 4;
+    // Index of the data file being written
+    optional uint32 FileIdx = 5;
+    // The data file being written starts after this key, unset means from the beginning of the table
+    optional string FileStartKey = 6;
+    // Rows passed to the data file being written
+    optional uint64 FileRows = 7;
+    // All data files are uploaded, FileIdx is the number of data files
+    optional bool DataFinished = 8;
 }

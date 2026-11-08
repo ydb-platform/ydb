@@ -35,8 +35,10 @@ TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(con
 class TImportDownloader: public TActorBootstrapped<TImportDownloader> {
 public:
     TImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask,
-        const NKikimr::NDataShard::TTableInfo& tableInfo, const THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>>& ydbSchema)
-        : SubscriberActorId(subscriberActorId)
+        const NKikimr::NDataShard::TTableInfo& tableInfo, const THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
+        const std::optional<NDataShard::TS3Download>& initialDownload)
+        : KnownInfo(initialDownload)
+        , SubscriberActorId(subscriberActorId)
         , TabletId(tabletId)
         , TxId(txId)
         , RestoreTask(restoreTask)
@@ -74,17 +76,24 @@ public:
     }
 
     void Handle(TEvPrivate::TEvBackupImportRecordBatchResult::TPtr&) {
+        // The import actor has saved the rows with this position
+        KnownInfo = LastInfo;
         auto response = std::make_unique<NKikimr::TEvDataShard::TEvS3UploadRowsResponse>();
         response->Info = LastInfo;
         Send(LastActorId, std::move(response));
     }
 
     void Handle(NKikimr::TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev) {
-        Send(ev->Sender, std::make_unique<NKikimr::TEvDataShard::TEvS3DownloadInfo>());
+        if (KnownInfo) {
+            Send(ev->Sender, std::make_unique<NKikimr::TEvDataShard::TEvS3DownloadInfo>(*KnownInfo));
+        } else {
+            Send(ev->Sender, std::make_unique<NKikimr::TEvDataShard::TEvS3DownloadInfo>());
+        }
     }
 
     void Handle(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev) {
-        // Nothing is stored here: the downloader gets back what it asked to store.
+        // Only the start of a data file is stored here: the import actor saves the position together with the written rows.
+        KnownInfo = ev->Get()->Info;
         Send(ev->Sender, std::make_unique<NKikimr::TEvDataShard::TEvS3DownloadInfo>(ev->Get()->Info));
     }
 
@@ -166,7 +175,9 @@ public:
 
         LastInfo = ev->Get()->Info;
         LastActorId = ev->Sender;
-        Send(SubscriberActorId, std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(resultBatch, false));
+        auto batchEvent = std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(resultBatch, false);
+        batchEvent->Download = LastInfo;
+        Send(SubscriberActorId, std::move(batchEvent));
     }
 
     void Handle(NKikimr::TEvDataShard::TEvAsyncJobComplete::TPtr& ev) {
@@ -187,6 +198,8 @@ public:
     }
 
 private:
+    // The last position saved by the import actor
+    std::optional<NDataShard::TS3Download> KnownInfo;
     TActorId DownloaderActorId;
     NDataShard::TS3Download LastInfo;
     TActorId LastActorId;
@@ -201,8 +214,8 @@ private:
 
 std::unique_ptr<NActors::IActor> CreateImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId, ui64 txId,
     const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo,
-    const THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>>& ydbSchema) {
-    return std::make_unique<TImportDownloader>(subscriberActorId, tabletId, txId, restoreTask, tableInfo, ydbSchema);
+    const THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, const std::optional<NDataShard::TS3Download>& initialDownload) {
+    return std::make_unique<TImportDownloader>(subscriberActorId, tabletId, txId, restoreTask, tableInfo, ydbSchema, initialDownload);
 }
 
 }   // namespace NKikimr::NColumnShard::NBackup

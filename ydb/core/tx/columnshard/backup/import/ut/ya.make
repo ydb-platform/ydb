@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/testlib/actors
     ydb/core/testlib/default
     ydb/core/tx
     ydb/core/tx/columnshard/hooks/abstract

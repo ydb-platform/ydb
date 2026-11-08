@@ -29,6 +29,7 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideMaxReadStaleness);
     YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
     YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
+    YDB_ACCESSOR_DEF(std::optional<ui32>, OverrideExportDataFileMaxParts);
     YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
     YDB_FLAG_ACCESSOR(ExternalStorageUnavailable, false);
 
@@ -228,6 +229,10 @@ protected:
 
     virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const override {
         return OverrideLimitForPortionsMetadataAsk.value_or(defaultValue);
+    }
+
+    virtual ui32 DoGetExportDataFileMaxParts(const ui32 defaultValue) const override {
+        return OverrideExportDataFileMaxParts.value_or(defaultValue);
     }
 
     virtual ui64 DoGetMemoryLimitScanPortion(const ui64 defaultValue) const override {

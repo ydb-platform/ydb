@@ -114,11 +114,50 @@ TConclusionStatus TSession::DoDeserializeStateFromProto(const TProtoState &proto
     return TConclusionStatus::Success();
 }
 
-TSession::TProtoProgress TSession::DoSerializeProgressToProto() const {
-    return NProtoBuf::Empty{};
+NKikimrColumnShardImportProto::TImportProgress TImportProgress::SerializeToProto() const {
+    NKikimrColumnShardImportProto::TImportProgress result;
+    result.SetManifestLoaded(ManifestLoaded);
+    result.SetFilesCount(FilesCount);
+    result.SetFileIdx(FileIdx);
+    if (Download) {
+        auto &download = *result.MutableDownload();
+        if (Download->DataETag) {
+            download.SetDataETag(*Download->DataETag);
+        }
+        download.SetProcessedBytes(Download->ProcessedBytes);
+        download.SetWrittenBytes(Download->WrittenBytes);
+        download.SetWrittenRows(Download->WrittenRows);
+        *download.MutableProcessedChecksumState() = Download->ProcessedChecksumState;
+        *download.MutableDownloadState() = Download->DownloadState;
+    }
+    return result;
 }
 
-TConclusionStatus TSession::DoDeserializeProgressFromProto(const TProtoProgress & /* proto */) {
+void TImportProgress::DeserializeFromProto(const NKikimrColumnShardImportProto::TImportProgress &proto) {
+    ManifestLoaded = proto.GetManifestLoaded();
+    FilesCount = proto.GetFilesCount();
+    FileIdx = proto.GetFileIdx();
+    Download.reset();
+    if (proto.HasDownload()) {
+        const auto &download = proto.GetDownload();
+        auto &info = Download.emplace();
+        if (download.HasDataETag()) {
+            info.DataETag = download.GetDataETag();
+        }
+        info.ProcessedBytes = download.GetProcessedBytes();
+        info.WrittenBytes = download.GetWrittenBytes();
+        info.WrittenRows = download.GetWrittenRows();
+        info.ProcessedChecksumState = download.GetProcessedChecksumState();
+        info.DownloadState = download.GetDownloadState();
+    }
+}
+
+TSession::TProtoProgress TSession::DoSerializeProgressToProto() const {
+    return Progress.SerializeToProto();
+}
+
+TConclusionStatus TSession::DoDeserializeProgressFromProto(const TProtoProgress &proto) {
+    Progress.DeserializeFromProto(proto);
     return TConclusionStatus::Success();
 }
 

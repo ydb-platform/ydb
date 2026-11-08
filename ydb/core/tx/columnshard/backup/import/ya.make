@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/tablet_flat
     ydb/core/tx/columnshard/backup/import/protos
+    ydb/core/tx/columnshard/backup/manifest
     ydb/core/tx/columnshard/bg_tasks
     ydb/library/signals
 )

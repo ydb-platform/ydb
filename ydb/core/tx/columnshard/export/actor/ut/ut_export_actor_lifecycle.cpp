@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/columnshard/backup/manifest/manifest.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/global.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -101,6 +102,19 @@ void TestWaitCondition(TTestBasicRuntime& runtime, const TString& title, const T
         runtime.SimulateSleep(TDuration::Seconds(1));
     }
     UNIT_ASSERT(checker());
+}
+
+// Unlike TestWaitCondition, does not advance simulated time, so it works with SetFastSimulatedTime(false).
+void DispatchUntil(TTestBasicRuntime& runtime, const TString& title, const std::function<bool()>& condition, const TDuration timeout) {
+    TDispatchOptions options;
+    options.CustomFinalCondition = condition;
+    runtime.DispatchEvents(options, timeout);
+    UNIT_ASSERT_C(condition(), title);
+}
+
+TString ObjectName(TStringBuf key) {
+    key.SkipPrefix("/");
+    return TString(key);
 }
 
 [[nodiscard]] TPlanStep ProposeTx(
@@ -232,6 +246,75 @@ void WriteAndCommitToMain(TTestBasicRuntime& runtime, TActorId& sender, ui64& tx
     PlanCommit(runtime, sender, planStep, txId);
 }
 
+TString WriteLargeTable(TTestBasicRuntime& runtime, TActorId& sender, ui64& txId, TPlanStep& planStep, const ui64 tableId,
+    const std::vector<NArrow::NTest::TTestColumn>& schema, const ui64 rows) {
+    NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME);
+    UNIT_ASSERT(batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(schema)).ok());
+    const TString value(1024, 'x');
+    TString expectedCsv;
+    for (ui64 key = 0; key < rows; ++key) {
+        const TCell cells[] = { TCell::Make(key), TCell::Make(key), TCell(value.data(), value.size()) };
+        batchBuilder.AddRow(cells);
+        expectedCsv += TStringBuilder() << key << ',' << key << ",\"" << value << "\"\n";
+    }
+    std::vector<ui64> writeIds;
+    UNIT_ASSERT(WriteData(runtime, sender, 1, tableId, batchBuilder.Finish(), schema, true, &writeIds));
+    planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+    return expectedCsv;
+}
+
+TString DataFileName(const ui32 idx) {
+    return idx ? Sprintf("data_00_files/%06u/data_00.csv", idx) : TString("data_00.csv");
+}
+
+std::optional<ui32> GetDataFileIdx(TStringBuf key) {
+    if (key == "data_00.csv") {
+        return 0;
+    }
+    ui32 idx = 0;
+    if (!key.SkipPrefix("data_00_files/") || !key.ChopSuffix("/data_00.csv") || !TryFromString(key, idx) || !idx) {
+        return std::nullopt;
+    }
+    return idx;
+}
+
+std::vector<TString> GetDataFiles(const TString& bucket, Aws::S3::S3Client& s3Client) {
+    std::vector<std::pair<ui32, TString>> files;
+    for (const auto& key : NTestUtils::GetObjectKeys(bucket, s3Client)) {
+        if (const auto idx = GetDataFileIdx(key)) {
+            files.emplace_back(*idx, key);
+        }
+    }
+    std::sort(files.begin(), files.end());
+    std::vector<TString> result;
+    for (ui32 i = 0; i < files.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(files[i].first, i);
+        result.push_back(files[i].second);
+    }
+    return result;
+}
+
+void CheckMultiFileExport(const TString& bucket, Aws::S3::S3Client& s3Client, const TString& expectedCsv, const ui32 minFiles) {
+    const auto files = GetDataFiles(bucket, s3Client);
+    UNIT_ASSERT_GE(files.size(), minFiles);
+    const auto manifest = NColumnShard::NBackup::TDataManifest::Parse(NTestUtils::GetObject(bucket, "data_00.manifest.json", s3Client));
+    UNIT_ASSERT_C(manifest.IsSuccess(), manifest.GetErrorMessage());
+    UNIT_ASSERT_VALUES_EQUAL(manifest->FilesCount, files.size());
+    TString actualCsv;
+    for (const auto& file : files) {
+        const TString content = NTestUtils::GetObject(bucket, file, s3Client);
+        UNIT_ASSERT_C(!content.empty(), "empty data file " << file);
+        actualCsv += content;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(actualCsv.size(), expectedCsv.size());
+    UNIT_ASSERT_C(actualCsv == expectedCsv, "Exported CSV differs from the input rows");
+    const auto keys = NTestUtils::GetObjectKeys(bucket, s3Client);
+    UNIT_ASSERT(std::count(keys.begin(), keys.end(), "scheme.pb"));
+    UNIT_ASSERT(std::count(keys.begin(), keys.end(), "metadata.json"));
+    UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount(bucket, s3Client), 0);
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
@@ -347,6 +430,213 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL(GetExportAckInflight(runtime), 0);
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorCounter(runtime, "Value/Export/Write/Inflight")->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorCounter(runtime, "Value/Export/SaveCursor/Inflight")->Val(), 0);
+    }
+
+    Y_UNIT_TEST(MultiFileExportRetriesOnlyCurrentFile) {
+        const TString bucket = "multi-file-retry";
+        auto s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket(bucket, s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        runtime.SetFastSimulatedTime(false);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardExportMultiFile(true);
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)),
+        };
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        // A data file is one full part and the last part
+        controller->SetOverrideExportDataFileMaxParts(2);
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+        auto sender = runtime.AllocateEdgeActor();
+        const TString expectedCsv = WriteLargeTable(runtime, sender, txId, planStep, tableId, schema, 30000);
+
+        // The last part of the second file fails
+        ui32 failedParts = 0;
+        THashMap<TString, ui32> startedUploads;
+        THashMap<TString, ui32> maxPartNumbers;
+        TActorId s3Uploader;
+        auto createObserver = runtime.AddObserver<NWrappers::TEvExternalStorage::TEvCreateMultipartUploadRequest>([&](auto& ev) {
+            ++startedUploads[ObjectName(TString(ev->Get()->Request.GetKey()))];
+        });
+        auto storageObserver = runtime.AddObserver<NWrappers::TEvExternalStorage::TEvUploadPartRequest>([&](auto& ev) {
+            const auto& request = ev->Get()->Request;
+            const TString key(request.GetKey());
+            auto& maxPartNumber = maxPartNumbers[ObjectName(key)];
+            maxPartNumber = std::max<ui32>(maxPartNumber, request.GetPartNumber());
+            if (failedParts || ObjectName(key) != DataFileName(1) || request.GetPartNumber() != 2) {
+                return;
+            }
+            ++failedParts;
+            s3Uploader = ev->Sender;
+            Aws::S3::S3Error error(
+                Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::UNKNOWN, "TooManyRequests", "Reduce request rate.", false));
+            error.SetResponseCode(Aws::Http::HttpResponseCode::TOO_MANY_REQUESTS);
+            using TResponse = NWrappers::TEvExternalStorage::TEvUploadPartResponse;
+            runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, new TResponse(key, TResponse::TOutcome(error))), 0, true);
+            ev.Reset();
+        });
+
+        auto previousScheduledFilter = runtime.SetScheduledEventFilter(&NActors::TTestActorRuntimeBase::NopFilterFunc);
+        runtime.SetScheduledEventFilter(
+            [&, previousScheduledFilter](NActors::TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& ev, TDuration delay, TInstant& deadline) {
+                if (s3Uploader && ev->GetRecipientRewrite() == s3Uploader && ev->GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType) {
+                    r.Send(ev.Release(), 0, true);
+                    return true;
+                }
+                return previousScheduledFilter(r, ev, delay, deadline);
+            });
+
+        std::vector<ui32> scanRanges;
+        auto scanObserver = runtime.AddObserver<TEvDataShard::TEvKqpScan>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetCSScanPolicy() == "EXPORT") {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetGeneration(), scanRanges.size());
+                scanRanges.push_back(record.RangesSize());
+            }
+        });
+
+        auto body = MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId));
+        body.MutableBackupTask()->MutableS3Settings()->SetBucket(bucket);
+        body.MutableBackupTask()->SetNumberOfRetries(1);
+        body.MutableBackupTask()->MutableScanSettings()->SetBytesBatchSize(5 << 20);
+        const auto backupTxId = ++txId;
+        planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, body.SerializeAsString(), backupTxId);
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, backupTxId), true);
+        DispatchUntil(runtime, "multi-file export completed", [&]() {
+            return controller->GetFinishedExportsCount() == 1 && GetExportActorsAliveCounter(runtime) == 0;
+        }, TDuration::Seconds(60));
+
+        UNIT_ASSERT_VALUES_EQUAL(failedParts, 1);
+        CheckMultiFileExport(bucket, s3Client, expectedCsv, 3);
+        const ui32 files = GetDataFiles(bucket, s3Client).size();
+        UNIT_ASSERT_LE(maxPartNumbers.size(), files);
+        for (const auto& [key, maxPartNumber] : maxPartNumbers) {
+            UNIT_ASSERT_LE_C(maxPartNumber, 2, key);
+        }
+        // One scan per file plus the rescan of the second file after the S3 error.
+        UNIT_ASSERT_VALUES_EQUAL(scanRanges.size(), files + 1);
+        UNIT_ASSERT_VALUES_EQUAL(scanRanges[0], 0);
+        for (ui32 i = 1; i < scanRanges.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(scanRanges[i], 1, "scan " << i << " must start from the beginning of its file");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(startedUploads[DataFileName(0)], 1);
+        UNIT_ASSERT_VALUES_EQUAL(startedUploads[DataFileName(1)], 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportReadInflight(runtime), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportAckInflight(runtime), 0);
+    }
+
+    Y_UNIT_TEST(MultiFileExportResumesAfterReboot) {
+        const TString bucket = "multi-file-reboot";
+        auto s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket(bucket, s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        // Tablet reboot needs simulated time; periodic timers keep firing while S3 replies arrive over real HTTP.
+        runtime.SetScheduledLimit(10'000'000);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardExportMultiFile(true);
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)),
+        };
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        // A data file is one full part and the last part
+        controller->SetOverrideExportDataFileMaxParts(2);
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+        auto sender = runtime.AllocateEdgeActor();
+        const TString expectedCsv = WriteLargeTable(runtime, sender, txId, planStep, tableId, schema, 30000);
+
+        THashMap<TString, ui32> startedUploads;
+        auto createObserver = runtime.AddObserver<NWrappers::TEvExternalStorage::TEvCreateMultipartUploadRequest>([&](auto& ev) {
+            ++startedUploads[ObjectName(TString(ev->Get()->Request.GetKey()))];
+        });
+        auto putObserver = runtime.AddObserver<NWrappers::TEvExternalStorage::TEvPutObjectRequest>([&](auto& ev) {
+            ++startedUploads[ObjectName(TString(ev->Get()->Request.GetKey()))];
+        });
+        std::vector<ui32> scanRanges;
+        auto scanObserver = runtime.AddObserver<TEvDataShard::TEvKqpScan>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetCSScanPolicy() == "EXPORT") {
+                scanRanges.push_back(record.RangesSize());
+            }
+        });
+        // Hold the scan of the third file: the first two files are complete and the cursor points to the third.
+        ui32 exportScans = 0;
+        NActors::TBlockEvents<TEvDataShard::TEvKqpScan> blockScan(runtime, [&](const auto& ev) {
+            return ev->Get()->Record.GetCSScanPolicy() == "EXPORT" && ++exportScans == 3;
+        });
+
+        const auto body = [&]() {
+            auto body = MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId));
+            body.MutableBackupTask()->MutableS3Settings()->SetBucket(bucket);
+            body.MutableBackupTask()->MutableScanSettings()->SetBytesBatchSize(5 << 20);
+            return body;
+        }();
+        const auto backupTxId = ++txId;
+        // The export runs before the propose result, so the result is requested again after the reboot.
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, body.SerializeAsString()));
+        TestWaitCondition(runtime, "scan of the third file", [&]() {
+            return !blockScan.empty();
+        }, TDuration::Seconds(60));
+        blockScan.Stop();
+        blockScan.clear();
+        const ui32 scansBeforeReboot = scanRanges.size();
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, body.SerializeAsString(), backupTxId);
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, backupTxId), true);
+        TestWaitCondition(runtime, "multi-file export completed after reboot", [&]() {
+            return controller->GetFinishedExportsCount() == 1 && GetExportActorsAliveCounter(runtime) == 0;
+        }, TDuration::Seconds(60));
+
+        CheckMultiFileExport(bucket, s3Client, expectedCsv, 3);
+        UNIT_ASSERT_GT(scanRanges.size(), scansBeforeReboot);
+        UNIT_ASSERT_VALUES_EQUAL_C(scanRanges[scansBeforeReboot], 1, "export must resume from the beginning of the third file");
+        UNIT_ASSERT_VALUES_EQUAL(startedUploads[DataFileName(0)], 1);
+        UNIT_ASSERT_VALUES_EQUAL(startedUploads[DataFileName(1)], 1);
+    }
+
+    Y_UNIT_TEST(SingleFileExportByDefault) {
+        const TString bucket = "single-file";
+        auto s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket(bucket, s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)),
+        };
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+        auto sender = runtime.AllocateEdgeActor();
+        const TString expectedCsv = WriteLargeTable(runtime, sender, txId, planStep, tableId, schema, 1000);
+
+        auto body = MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId));
+        body.MutableBackupTask()->MutableS3Settings()->SetBucket(bucket);
+        const auto backupTxId = ++txId;
+        planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, body.SerializeAsString(), backupTxId);
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, backupTxId), true);
+        TestWaitCondition(runtime, "single-file export completed", [&]() {
+            return controller->GetFinishedExportsCount() == 1 && GetExportActorsAliveCounter(runtime) == 0;
+        });
+
+        auto keys = NTestUtils::GetObjectKeys(bucket, s3Client);
+        std::sort(keys.begin(), keys.end());
+        UNIT_ASSERT_VALUES_EQUAL(keys, (std::vector<TString>{ "data_00.csv", "metadata.json", "scheme.pb" }));
+        UNIT_ASSERT(NTestUtils::GetObject(bucket, "data_00.csv", s3Client) == expectedCsv);
     }
 
     void TestScanPings(bool allowPings, bool savingCursor, bool failDuringSave = false) {

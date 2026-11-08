@@ -118,9 +118,63 @@ ui64 TExportDriver::GetTotalCpuTimeUs() const {
     return 0;
 }
 
+namespace {
+
+class TPartsCountingBuffer: public NDataShard::NExportScan::IBuffer {
+public:
+    TPartsCountingBuffer(THolder<IBuffer> buffer, const std::shared_ptr<TDataFileParts>& parts)
+        : Buffer(std::move(buffer))
+        , Parts(parts)
+    {
+    }
+
+    void ColumnsOrder(const TVector<ui32>& tags) override {
+        Buffer->ColumnsOrder(tags);
+    }
+
+    bool Collect(const NTable::IScan::TRow& row) override {
+        if (!Buffer->Collect(row)) {
+            return false;
+        }
+        ++Parts->BufferedRows;
+        return true;
+    }
+
+    IEventBase* PrepareEvent(bool last, TStats& stats) override {
+        ++Parts->Sent;
+        Parts->BufferedRows = 0;
+        return Buffer->PrepareEvent(last, stats);
+    }
+
+    void Clear() override {
+        Parts->Sent = 0;
+        Parts->BufferedRows = 0;
+        Buffer->Clear();
+    }
+
+    bool IsFilled() const override {
+        // The last part is sent only at the end of the data file
+        return !Parts->IsLastPartLeft() && Buffer->IsFilled();
+    }
+
+    ui64 GetMemoryBytes() const override {
+        return Buffer->GetMemoryBytes();
+    }
+
+    TString GetError() const override {
+        return Buffer->GetError();
+    }
+
+private:
+    THolder<IBuffer> Buffer;
+    std::shared_ptr<TDataFileParts> Parts;
+};
+
+}   // namespace
+
 TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TActorId& subscriberActorId,
     const NKikimrSchemeOp::TBackupTask& backupTask, const NDataShard::IExportFactory* exportFactory,
-    const NDataShard::IExport::TTableColumns& tableColumns, ui64 txId) {
+    const NDataShard::IExport::TTableColumns& tableColumns, ui64 txId, const std::shared_ptr<TDataFileParts>& parts) {
     std::shared_ptr<::NKikimr::NDataShard::IExport> exp;
     switch (backupTask.GetSettingsCase()) {
         case NKikimrSchemeOp::TBackupTask::kYTSettings:
@@ -163,6 +217,9 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
     };
 
     THolder<NKikimr::NDataShard::NExportScan::IBuffer> buffer{ exp->CreateBuffer() };
+    if (parts) {
+        buffer = MakeHolder<TPartsCountingBuffer>(std::move(buffer), parts);
+    }
     std::unique_ptr<NTable::IScan> scan{ NDataShard::CreateExportScan(std::move(buffer), createUploader) };
 
     return scan;
@@ -206,18 +263,24 @@ public:
     };
 
     TUploaderActor(const NKikimrSchemeOp::TBackupTask& backupTask, const NDataShard::IExportFactory* exportFactory,
-        const NDataShard::IExport::TTableColumns& tableColumns, const TActorId& subscriberActorId, ui64 txId)
+        const NDataShard::IExport::TTableColumns& tableColumns, const TActorId& subscriberActorId, ui64 txId, ui32 initialGeneration,
+        ui32 maxDataFileParts)
         : BackupTask(backupTask)
         , ExportFactory(exportFactory)
         , TableColumns(tableColumns)
         , SubscriberActorId(subscriberActorId)
         , TxId(txId)
+        , Generation(initialGeneration)
         , ColumnTypes(MakeColumnTypes())
     {
+        if (maxDataFileParts) {
+            DataFileParts = std::make_shared<TDataFileParts>();
+            DataFileParts->Limit = maxDataFileParts;
+        }
     }
 
     void Bootstrap() {
-        auto exporter = NColumnShard::NBackup::CreateIScanExportUploader(SelfId(), BackupTask, ExportFactory, TableColumns, TxId);
+        auto exporter = NColumnShard::NBackup::CreateIScanExportUploader(SelfId(), BackupTask, ExportFactory, TableColumns, TxId, DataFileParts);
         if (!exporter.IsSuccess()) {
             Fail(exporter.GetErrorMessage());
             return;
@@ -343,6 +406,7 @@ public:
         if (event.Generation != Generation) {
             return;
         }
+        AFL_VERIFY(!DataFileEnded)("event", "batch after the end of the data file");
         DataQueue.emplace(event.Data, event.IsLast);
         ++TotalBatchesReceived;
         Counters.OnBatchReceived();
@@ -475,9 +539,33 @@ public:
                 Counters.OnRowsFed(rowsFedInBatch);
                 return;
             }
+            if (DataFileParts && DataFileParts->IsLastPartLeft() && DataFileParts->BufferedRows) {
+                TotalRowsFed += rowsFedInBatch;
+                Counters.OnRowsFed(rowsFedInBatch);
+                return EndDataFile();
+            }
         }
         TotalRowsFed += rowsFedInBatch;
         Counters.OnRowsFed(rowsFedInBatch);
+    }
+
+    // The rest of the rows go to the next data file
+    void EndDataFile() {
+        const ui64 fileRowsInBatch = CurrentBatch.Position;
+        YDB_LOG_INFO("",
+            {"component", "TUploaderActor"},
+            {"event", "data_file_parts_limit_reached"},
+            {"parts", DataFileParts->Sent + 1},
+            {"batchRows", CurrentBatch.Batch.size()},
+            {"fileRowsInBatch", fileRowsInBatch});
+        DataFileEnded = true;
+        DataFileEndDecided = true;
+        CurrentBatch = {};
+        DataQueue = {};
+        Counters.SetQueueSize(0);
+        // Reported before the upload completes: a restarted upload can complete the file before a rescan reaches its end
+        Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(false, Generation, fileRowsInBatch));
+        LastState = Exporter->Exhausted();
     }
 
     void Handle(const TEvPrivate::TEvBackupExportState::TPtr& ev) {
@@ -486,6 +574,11 @@ public:
             ++Generation;
             DataQueue = {};
             CurrentBatch = {};
+            DataFileEnded = false;
+            if (DataFileEndDecided && DataFileParts) {
+                // The rescan is bounded by the end of the data file reported before
+                DataFileParts->Limit = 0;
+            }
             Counters.SetQueueSize(0);
             Counters.ResetSleeping();
             LastActivityTime = TInstant::Now();
@@ -518,6 +611,7 @@ public:
             return;
         }
         if (CurrentBatch.IsLast) {
+            DataFileEndDecided = true;
             LastState = Exporter->Exhausted();
         }
     }
@@ -553,6 +647,11 @@ private:
     ui64 TxId;
     ui32 Generation = 0;
     TVector<std::pair<TString, NScheme::TTypeInfo>> ColumnTypes;
+    std::shared_ptr<TDataFileParts> DataFileParts;
+    // The data file is ended by the parts limit in the current generation
+    bool DataFileEnded = false;
+    // The data file was ended in some generation: its rows are fixed
+    bool DataFileEndDecided = false;
 
     TUploaderCounters Counters;
     TInstant LastActivityTime;
@@ -565,8 +664,10 @@ private:
 };
 
 std::unique_ptr<IActor> CreateExportUploaderActor(const TActorId& subscriberActorId, const NKikimrSchemeOp::TBackupTask& backupTask,
-    const NDataShard::IExportFactory* exportFactory, const NDataShard::IExport::TTableColumns& tableColumns, ui64 txId) {
-    return std::make_unique<TUploaderActor>(backupTask, exportFactory, tableColumns, subscriberActorId, txId);
+    const NDataShard::IExportFactory* exportFactory, const NDataShard::IExport::TTableColumns& tableColumns, ui64 txId, ui32 initialGeneration,
+    ui32 maxDataFileParts) {
+    return std::make_unique<TUploaderActor>(
+        backupTask, exportFactory, tableColumns, subscriberActorId, txId, initialGeneration, maxDataFileParts);
 }
 
 }   // namespace NKikimr::NColumnShard::NBackup

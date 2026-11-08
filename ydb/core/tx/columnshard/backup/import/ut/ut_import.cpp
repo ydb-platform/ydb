@@ -1,9 +1,12 @@
+#include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/protos/data_format_settings.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/columnshard/backup/import/session.h>
 #include <ydb/core/tx/columnshard/backup/import/task.h>
+#include <ydb/core/tx/columnshard/backup/manifest/manifest.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -687,6 +690,307 @@ Y_UNIT_TEST_SUITE(Restore) {
 
     Y_UNIT_TEST(ProposeRestore, EBackupTestDataFormat) {
         ProposeRestore(ToDataFormat(Arg<0>()));
+    }
+
+    static TString MakeCsvRows(const ui64 from, const ui64 to) {
+        TStringBuilder csv;
+        for (ui64 key = from; key < to; ++key) {
+            csv << key << ',' << key << ",\"value" << key << "\"\n";
+        }
+        return csv;
+    }
+
+    static std::vector<ui64> ReadKeys(TTestBasicRuntime & runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema) {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 0));
+        reader.SetReplyColumnIds(TTestSchema::ExtractIds(schema));
+        const auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        std::vector<ui64> keys;
+        if (!rb) {
+            return keys;
+        }
+        const auto key1 = std::static_pointer_cast<arrow::UInt64Array>(rb->GetColumnByName("key1"));
+        const auto field = std::static_pointer_cast<arrow::StringArray>(rb->GetColumnByName("field"));
+        UNIT_ASSERT(key1 && field);
+        for (i64 i = 0; i < rb->num_rows(); ++i) {
+            keys.push_back(key1->Value(i));
+            UNIT_ASSERT_VALUES_EQUAL(field->GetString(i), TStringBuilder() << "value" << key1->Value(i));
+        }
+        std::sort(keys.begin(), keys.end());
+        return keys;
+    }
+
+    static std::vector<ui64> KeyRange(const ui64 from, const ui64 to) {
+        std::vector<ui64> keys;
+        for (ui64 key = from; key < to; ++key) {
+            keys.push_back(key);
+        }
+        return keys;
+    }
+
+    static TString DataFilePrefix(const ui32 idx) {
+        return idx ? Sprintf("data_00_files/%06u/", idx) : TString();
+    }
+
+    static void CreateMultiFileBackup(const TString& bucket, const ui32 files, const ui64 rowsPerFile) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket(bucket, s3Client);
+        for (ui32 i = 0; i < files; ++i) {
+            NTestUtils::UploadObject(bucket, DataFilePrefix(i) + "data_00.csv", MakeCsvRows(i * rowsPerFile, (i + 1) * rowsPerFile), s3Client);
+        }
+        NTestUtils::UploadObject(bucket, "data_00.manifest.json", Sprintf("{\"version\":1,\"files_count\":%u}", files), s3Client);
+        // Data files beyond the manifest are ignored
+        NTestUtils::UploadObject(bucket, DataFilePrefix(files) + "data_00.csv", MakeCsvRows(100000, 100001), s3Client);
+    }
+
+    Y_UNIT_TEST(RestoreFromMultipleFiles) {
+        const TString bucket = "restore-multi-file";
+        CreateMultiFileBackup(bucket, 3, 10);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        const auto schema = MakeRestoreSchema();
+        constexpr ui64 tableId = 1;
+        Y_UNUSED(PrepareTablet(runtime, tableId, schema, 2));
+        auto sender = runtime.AllocateEdgeActor();
+
+        ui64 txId = 111;
+        RunCountedTx(
+            runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, MakeRestoreTxBody(tableId, bucket).SerializeAsString(), txId, [&]() {
+                return csControllerGuard->GetFinishedImportsCount();
+            });
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+        UNIT_ASSERT_VALUES_EQUAL(ReadKeys(runtime, tableId, schema), KeyRange(0, 30));
+    }
+
+    Y_UNIT_TEST(RestoreFromMultipleFilesWithBadManifest) {
+        const TString bucket = "restore-multi-file-bad-manifest";
+        CreateMultiFileBackup(bucket, 2, 10);
+        NTestUtils::UploadObject(bucket, "data_00.manifest.json", "{\"version\":1}");
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        const auto schema = MakeRestoreSchema();
+        constexpr ui64 tableId = 1;
+        Y_UNUSED(PrepareTablet(runtime, tableId, schema, 2));
+        auto sender = runtime.AllocateEdgeActor();
+
+        constexpr ui64 txId = 112;
+        const auto planStep =
+            ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, MakeRestoreTxBody(tableId, bucket).SerializeAsString(), txId);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(txId));
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, NOlap::TSnapshot(planStep, txId), false);
+        const auto result = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
+        UNIT_ASSERT(!result->Get()->Record.GetOpResult().GetSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Record.GetOpResult().GetExplain(), "manifest");
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+    }
+
+    // Reboots the tablet when the import reaches the given point, then checks that the import continues from the saved position.
+    void RestoreMultiFileWithReboot(const bool midFile) {
+        const TString bucket = midFile ? "restore-multi-file-reboot-mid" : "restore-multi-file-reboot-boundary";
+        constexpr ui32 files = 3;
+        constexpr ui64 rowsPerFile = 1000;
+        CreateMultiFileBackup(bucket, files, rowsPerFile);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        // Tablet reboot needs simulated time; periodic timers keep firing while S3 replies arrive over real HTTP.
+        runtime.SetScheduledLimit(10'000'000);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        const auto schema = MakeRestoreSchema();
+        constexpr ui64 tableId = 1;
+        Y_UNUSED(PrepareTablet(runtime, tableId, schema, 2));
+        auto sender = runtime.AllocateEdgeActor();
+
+        bool rebooted = false;
+        ui32 manifestReads = 0;
+        std::vector<std::pair<TString, TString>> readsAfterReboot;
+        auto headObserver = runtime.AddObserver<NWrappers::TEvExternalStorage::TEvHeadObjectRequest>([&](auto& ev) {
+            if (TStringBuf(ev->Get()->GetRequest().GetKey()).RAfter('/') == "data_00.manifest.json") {
+                ++manifestReads;
+            }
+        });
+        auto getObserver = runtime.AddObserver<NWrappers::TEvExternalStorage::TEvGetObjectRequest>([&](auto& ev) {
+            if (rebooted) {
+                const auto& request = ev->Get()->GetRequest();
+                TStringBuf key(request.GetKey());
+                key.SkipPrefix("/");
+                readsAfterReboot.emplace_back(TString(key), TString(request.GetRange()));
+            }
+        });
+
+        // Data batches of the second file, counted after the first file is complete.
+        bool firstFileDone = false;
+        ui32 secondFileBatches = 0;
+        NActors::TBlockEvents<TEvPrivate::TEvBackupImportRecordBatch> blockBatch(runtime, [&](const auto& ev) {
+            const auto* batch = ev->Get();
+            if (!firstFileDone) {
+                firstFileDone = batch->IsLast;
+                return false;
+            }
+            if (!batch->Data || !batch->Data->num_rows()) {
+                return false;
+            }
+            ++secondFileBatches;
+            return secondFileBatches == (midFile ? 2u : 1u);
+        });
+
+        constexpr ui64 txId = 112;
+        const auto restoreTxBody = MakeRestoreTxBody(tableId, bucket, midFile ? 1024 : std::optional<ui32>{});
+        // The import runs before the propose result, so the result is requested again after the reboot.
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_RESTORE, sender, txId, restoreTxBody.SerializeAsString()));
+        TestWaitCondition(runtime, "import reached the reboot point", [&]() {
+            return !blockBatch.empty();
+        }, TDuration::Seconds(30));
+        blockBatch.Stop();
+        blockBatch.clear();
+        UNIT_ASSERT_VALUES_EQUAL(manifestReads, 1);
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        rebooted = true;
+        const auto planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, restoreTxBody.SerializeAsString(), txId);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(txId));
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, NOlap::TSnapshot(planStep, txId), false);
+        const auto result = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
+        UNIT_ASSERT_C(result->Get()->Record.GetOpResult().GetSuccess(), result->Get()->Record.DebugString());
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+
+        UNIT_ASSERT_VALUES_EQUAL_C(manifestReads, 1, "the manifest is read once and kept in the import progress");
+        UNIT_ASSERT(!readsAfterReboot.empty());
+        for (const auto& [key, range] : readsAfterReboot) {
+            UNIT_ASSERT_C(key != "data_00.csv", "unexpected read after reboot: " << key);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(readsAfterReboot.front().first, DataFilePrefix(1) + "data_00.csv");
+        if (midFile) {
+            UNIT_ASSERT_C(!readsAfterReboot.front().second.StartsWith("bytes=0-"),
+                "the second file must be read from the saved position, got range " << readsAfterReboot.front().second);
+        } else {
+            UNIT_ASSERT_C(readsAfterReboot.front().second.StartsWith("bytes=0-"), readsAfterReboot.front().second);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ReadKeys(runtime, tableId, schema), KeyRange(0, files * rowsPerFile));
+    }
+
+    Y_UNIT_TEST(RestoreMultiFileResumesAfterRebootAtFileBoundary) {
+        RestoreMultiFileWithReboot(false);
+    }
+
+    Y_UNIT_TEST(RestoreMultiFileResumesAfterRebootMidFile) {
+        RestoreMultiFileWithReboot(true);
+    }
+
+    // Export splits the shard data into many small files; import restores all of them.
+    void MultiFileRoundtrip(const bool checksumsCompressionEncryption) {
+        const ui64 rowsPerWrite = 4;
+        const TString bucket = checksumsCompressionEncryption ? "multi-file-roundtrip-full" : "multi-file-roundtrip";
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket(bucket, s3Client);
+        const auto schema = MakeRestoreSchema();
+        const ui64 tableId = 1;
+        const auto iv = NKikimr::NBackup::TEncryptionIV::Generate().GetBinaryString();
+        const TString key(32, 'k');
+
+        {
+            TTestBasicRuntime runtime;
+            TTester::Setup(runtime);
+            runtime.SetFastSimulatedTime(false);
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExportMultiFile(true);
+            auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+            // A data file is a single part with a single row
+            csControllerGuard->SetOverrideExportDataFileMaxParts(1);
+            auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+            ui64 txId = 111;
+            TActorId sender = runtime.AllocateEdgeActor();
+
+            ui64 writeId = 1;
+            for (ui64 i = 0; i < 3; ++i) {
+                std::vector<ui64> writeIds;
+                UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ i * rowsPerWrite, (i + 1) * rowsPerWrite }, schema),
+                    schema, true, &writeIds));
+                planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+                PlanCommit(runtime, sender, planStep, txId);
+            }
+
+            auto txBody = MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId), bucket);
+            if (checksumsCompressionEncryption) {
+                auto& task = *txBody.MutableBackupTask();
+                task.SetEnableChecksums(true);
+                task.MutableCompression()->SetCodec("zstd");
+                task.MutableEncryptionSettings()->SetEncryptionAlgorithm("AES-256-GCM");
+                task.MutableEncryptionSettings()->SetIV(iv);
+                task.MutableEncryptionSettings()->MutableSymmetricKey()->set_key(key);
+            }
+            RunCountedTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), txId, [&]() {
+                return csControllerGuard->GetFinishedExportsCount();
+            });
+            VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+        }
+
+        const auto keys = NTestUtils::GetObjectKeys(bucket, s3Client);
+        const TString dataSuffix = checksumsCompressionEncryption ? ".csv.zst.enc" : ".csv";
+        ui32 dataFiles = 0;
+        for (const auto& objectKey : keys) {
+            if (objectKey.EndsWith("data_00" + dataSuffix)) {
+                ++dataFiles;
+            }
+        }
+        for (ui32 i = 0; i < dataFiles; ++i) {
+            const TString objectKey = DataFilePrefix(i) + "data_00" + dataSuffix;
+            UNIT_ASSERT_C(std::count(keys.begin(), keys.end(), objectKey), objectKey);
+            if (!checksumsCompressionEncryption) {
+                UNIT_ASSERT_C(!NTestUtils::GetObject(bucket, objectKey, s3Client).empty(), "empty data file " << objectKey);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(dataFiles, 3 * rowsPerWrite);
+        const auto manifest = NColumnShard::NBackup::TDataManifest::Parse(NTestUtils::GetObject(bucket, "data_00.manifest.json", s3Client));
+        UNIT_ASSERT_C(manifest.IsSuccess(), manifest.GetErrorMessage());
+        UNIT_ASSERT_VALUES_EQUAL(manifest->FilesCount, dataFiles);
+        if (checksumsCompressionEncryption) {
+            for (ui32 i = 0; i < dataFiles; ++i) {
+                UNIT_ASSERT(std::count(keys.begin(), keys.end(), DataFilePrefix(i) + "data_00.csv.sha256"));
+            }
+            UNIT_ASSERT(std::count(keys.begin(), keys.end(), "data_00.manifest.json.sha256"));
+        }
+
+        {
+            TTestBasicRuntime runtime;
+            TTester::Setup(runtime);
+            runtime.SetFastSimulatedTime(false);
+            auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+            Y_UNUSED(PrepareTablet(runtime, tableId, schema, 2));
+            ui64 txId = 111;
+            TActorId sender = runtime.AllocateEdgeActor();
+
+            auto txBody = MakeRestoreTxBody(tableId, bucket);
+            if (checksumsCompressionEncryption) {
+                auto& task = *txBody.MutableRestoreTask();
+                task.SetValidateChecksums(true);
+                task.MutableEncryptionSettings()->SetIV(iv);
+                task.MutableEncryptionSettings()->MutableSymmetricKey()->set_key(key);
+            }
+            RunCountedTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, txBody.SerializeAsString(), txId, [&]() {
+                return csControllerGuard->GetFinishedImportsCount();
+            });
+            VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 0));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(schema));
+            const auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), 3 * rowsPerWrite);
+        }
+    }
+
+    Y_UNIT_TEST(MultiFileRoundtrip) {
+        MultiFileRoundtrip(false);
+    }
+
+    Y_UNIT_TEST(MultiFileRoundtripWithChecksumsCompressionEncryption) {
+        MultiFileRoundtrip(true);
     }
 }
 

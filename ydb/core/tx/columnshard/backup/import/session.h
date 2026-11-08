@@ -2,8 +2,10 @@
 #include "task.h"
 
 #include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/tx/columnshard/backup/import/protos/task.pb.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/export/protos/task.pb.h>
+#include <ydb/core/tx/datashard/datashard_s3_download.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/empty.pb.h>
 
@@ -20,8 +22,21 @@ class IStoragesManager;
 }
 
 namespace NKikimr::NOlap::NImport {
-class TSession: public NBackground::TSessionProtoAdapter<NKikimrColumnShardImportProto::TImportSessionLogic, NProtoBuf::Empty,
-                    NKikimrColumnShardImportProto::TImportSessionState> {
+
+// Saved with the written rows, so that an import restarts from them
+struct TImportProgress {
+    bool ManifestLoaded = false;
+    // 0: a single data_NN file
+    ui32 FilesCount = 0;
+    ui32 FileIdx = 0;
+    std::optional<NDataShard::TS3Download> Download;
+
+    NKikimrColumnShardImportProto::TImportProgress SerializeToProto() const;
+    void DeserializeFromProto(const NKikimrColumnShardImportProto::TImportProgress &proto);
+};
+
+class TSession: public NBackground::TSessionProtoAdapter<NKikimrColumnShardImportProto::TImportSessionLogic,
+                    NKikimrColumnShardImportProto::TImportProgress, NKikimrColumnShardImportProto::TImportSessionState> {
 public:
     static TString GetClassNameStatic();
 
@@ -37,6 +52,7 @@ private:
     std::shared_ptr<TImportTask> Task;
     TString ErrorMessage;
     mutable EStatus Status = EStatus::Draft;
+    TImportProgress Progress;
 
     virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const NBackground::TStartContext &context) const override;
 
@@ -84,6 +100,14 @@ public:
     bool IsStarted() const;
 
     const TImportTask &GetTask() const;
+
+    const TImportProgress &GetProgress() const {
+        return Progress;
+    }
+
+    TImportProgress &MutableProgress() {
+        return Progress;
+    }
 
     const NColumnShard::TSchemeShardLocalPathId GetSchemeShardLocalPathId() const;
 

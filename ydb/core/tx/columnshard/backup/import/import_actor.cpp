@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/backup/async_jobs/import_downloader.h>
+#include <ydb/core/tx/columnshard/backup/manifest/manifest_actor.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
@@ -100,6 +101,9 @@ void TImportActor::AbortImport(const TString& errorMessage) {
     PendingBlobs.clear();
     PendingPayloadSchema.clear();
     WriteRetryState.reset();
+    PendingDownload.reset();
+    StartNextFilePending = false;
+    KillManifestReader();
     if (ImportActorId) {
         Send(ImportActorId, new NActors::TEvents::TEvPoisonPill());
         ImportActorId = {};
@@ -112,7 +116,15 @@ void TImportActor::AbortImport(const TString& errorMessage) {
     SaveSessionProgress();
 }
 
+void TImportActor::KillManifestReader() {
+    if (ManifestReader) {
+        Send(ManifestReader, new NActors::TEvents::TEvPoisonPill());
+        ManifestReader = {};
+    }
+}
+
 void TImportActor::PassAway() {
+    KillManifestReader();
     if (ImportActorId) {
         Send(ImportActorId, new NActors::TEvents::TEvPoisonPill());
         ImportActorId = {};
@@ -146,7 +158,19 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
         Counters.OnError();
         ImportSession->Abort(ev->Get()->Error);
     } else if (ev->Get()->IsLast) {
-        if (ImportSession->IsStarted()) {
+        auto& progress = ImportSession->MutableProgress();
+        if (progress.FilesCount && progress.FileIdx + 1 < progress.FilesCount) {
+            YDB_LOG_INFO("",
+                {"event", "import_data_file_completed"},
+                {"tabletId", TabletId},
+                {"fileIdx", progress.FileIdx},
+                {"filesCount", progress.FilesCount});
+            ++progress.FileIdx;
+            progress.Download.reset();
+            StartNextFilePending = true;
+            // The downloader of the completed file stops by itself
+            ImportActorId = {};
+        } else if (ImportSession->IsStarted()) {
             ImportSession->Finish();
         }
     }
@@ -177,6 +201,7 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
     }
 
     AFL_VERIFY(PendingBlobs.empty());
+    PendingDownload = ev->Get()->Download;
     PendingPayloadSchema = NArrow::SerializeSchema(*ev->Get()->Data->schema());
     for (const auto& blob : blobsSplittedConclusion.GetResult()) {
         PendingBlobs.push_back(blob.GetData());
@@ -244,6 +269,9 @@ void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         return;
     }
     PendingPayloadSchema.clear();
+    if (PendingDownload) {
+        ImportSession->MutableProgress().Download = std::move(*std::exchange(PendingDownload, std::nullopt));
+    }
     SwitchStage(EStage::WaitWriting, EStage::WaitData);
     Counters.OnSaveProgressStarted();
     SaveProgressStartTime = TInstant::Now();
@@ -265,15 +293,55 @@ void TImportActor::OnBootstrap(const TActorContext& /*ctx*/) {
     StageStartTime = TInstant::Now();
     ScheduleTimeoutCheck();
 
+    Become(&TImportActor::StateFunc);
     const auto& restoreTask = ImportSession->GetTask().GetRestoreTask();
+    if (!ImportSession->GetProgress().ManifestLoaded && restoreTask.HasS3Settings()) {
+        SwitchStage(EStage::Initialization, EStage::WaitManifest);
+        ManifestReader = Register(NKikimr::NColumnShard::NBackup::CreateDataManifestReader(SelfId(), restoreTask).release());
+        return;
+    }
+    StartDownloader();
+}
+
+void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupManifestReadResult::TPtr& ev) {
+    if (ev->Sender != ManifestReader || Stage != EStage::WaitManifest) {
+        return;
+    }
+    ManifestReader = {};
+    if (ev->Get()->Error) {
+        Counters.OnError();
+        AbortImport("Data manifest download failed: " + ev->Get()->Error);
+        return;
+    }
+    auto& progress = ImportSession->MutableProgress();
+    progress.ManifestLoaded = true;
+    progress.FilesCount = ev->Get()->FilesCount;
+    progress.FileIdx = 0;
+    progress.Download.reset();
+    YDB_LOG_INFO("",
+        {"event", "import_data_manifest_loaded"},
+        {"tabletId", TabletId},
+        {"filesCount", progress.FilesCount});
+    SwitchStage(EStage::WaitManifest, EStage::Initialization);
+    StartDownloader();
+}
+
+void TImportActor::StartDownloader() {
+    AFL_VERIFY(!ImportActorId);
+    auto restoreTask = ImportSession->GetTask().GetRestoreTask();
+    const auto& progress = ImportSession->GetProgress();
+    if (progress.FilesCount) {
+        AFL_VERIFY(progress.FileIdx < progress.FilesCount)("file_idx", progress.FileIdx)("files_count", progress.FilesCount);
+        NKikimr::NColumnShard::NBackup::SetDataFile(restoreTask, progress.FileIdx);
+    }
     auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
     auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(SelfId(), static_cast<ui64>(TabletId), 0, restoreTask,
-        NKikimr::NDataShard::TTableInfo{ 0, userTable }, ImportSession->GetTask().GetColumns());
+        NKikimr::NDataShard::TTableInfo{ 0, userTable }, ImportSession->GetTask().GetColumns(), progress.Download);
     ImportActorId = Register(importActor.release());
-    SwitchStage(EStage::Initialization, EStage::WaitData);
+    Stage = EStage::WaitData;
+    StageStartTime = TInstant::Now();
     Counters.OnReadStarted();
     ReadStartTime = TInstant::Now();
-    Become(&TImportActor::StateFunc);
 }
 
 TImportActor::TImportActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter)
@@ -289,6 +357,10 @@ void TImportActor::OnSessionProgressSaved() {
         Stage = EStage::Finished;
         StageStartTime = TInstant::Now();
         SaveSessionState();
+    } else if (StartNextFilePending) {
+        AFL_VERIFY(Stage == EStage::WaitData)("real", Stage);
+        StartNextFilePending = false;
+        StartDownloader();
     } else {
         AFL_VERIFY(Stage == EStage::WaitData)("real", Stage);
         StageStartTime = TInstant::Now();

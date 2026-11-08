@@ -25,7 +25,8 @@ public:
         WaitData,
         WaitWriting,
         WaitSaveCursor,
-        Finished
+        Finished,
+        WaitManifest
     };
 
 private:
@@ -34,6 +35,11 @@ private:
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NImport::TSession> ImportSession;
     TActorId ImportActorId;
+    TActorId ManifestReader;
+    // The current data file is imported, the next one starts when the progress is saved
+    bool StartNextFilePending = false;
+    // Position in the data file after the rows being written
+    std::optional<NDataShard::TS3Download> PendingDownload;
     // Keep the current blob until the write succeeds so it can be retried on overload.
     // ColumnShard accepts one operation per TEvWrite.
     std::deque<TString> PendingBlobs;
@@ -58,6 +64,8 @@ private:
     void AbortImport(const TString& errorMessage);
     void SendNextBlob();
     void SendWriteRequest();
+    void StartDownloader();
+    void KillManifestReader();
 
     void PassAway() override;
 
@@ -74,6 +82,8 @@ protected:
 
     void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
 
+    void Handle(NColumnShard::TEvPrivate::TEvBackupManifestReadResult::TPtr& ev);
+
 public:
     TImportActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter);
 
@@ -82,6 +92,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch, Handle);
                 hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
+                hFunc(NColumnShard::TEvPrivate::TEvBackupManifestReadResult, Handle);
                 hFunc(NActors::TEvents::TEvWakeup, Handle);
                 default:
                     TBase::StateInProgress(ev);

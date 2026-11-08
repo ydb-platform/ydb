@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/datashard/datashard_s3_download.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/conclusion/result.h>
@@ -20,6 +21,7 @@ TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(con
 
 std::unique_ptr<NActors::IActor> CreateImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId, ui64 txId,
     const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo,
-    const THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>>& ydbSchema);
+    const THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
+    const std::optional<NDataShard::TS3Download>& initialDownload = std::nullopt);
 
 }   // namespace NKikimr::NColumnShard::NBackup

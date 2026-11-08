@@ -1,3 +1,4 @@
+import "ydb/core/protos/datashard_backup.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 
@@ -33,4 +34,24 @@ message TImportSessionLogic {
 
 message TImportSessionState {
     optional string Status = 1;
+}
+
+// Position of the S3 downloader in a data file, see NDataShard::TS3Download
+message TS3DownloadProgress {
+    optional string DataETag = 1;
+    optional uint64 ProcessedBytes = 2;
+    optional uint64 WrittenBytes = 3;
+    optional uint64 WrittenRows = 4;
+    optional NKikimrBackup.TChecksumState ProcessedChecksumState = 5;
+    optional NKikimrBackup.TS3DownloadState DownloadState = 6; // Can hold secure encryption key
+}
+
+message TImportProgress {
+    // The data manifest of the shard is read, FilesCount == 0 means a single data_NN file
+    optional bool ManifestLoaded = 1;
+    optional uint32 FilesCount = 2;
+    // Index of the data file being imported
+    optional uint32 FileIdx = 3;
+    // Written part of the data file being imported
+    optional TS3DownloadProgress Download = 4;
 }

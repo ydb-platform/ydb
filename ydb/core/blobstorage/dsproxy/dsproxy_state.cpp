@@ -358,6 +358,8 @@ namespace NKikimr {
         // Reply error to all messages in the init queue
         ErrorDescription = "DsProxy got a Poison Pill";
         SetStateEstablishingSessionsTimeout();
+        // the proxy stops here, so it must not stay counted in the sessions timeout gauges
+        ClearTimeoutCounters();
 
         if (NumUnconnectedDisks != Max<ui32>()) {
             NodeMon->DecNumUnconnected(NumUnconnectedDisks);

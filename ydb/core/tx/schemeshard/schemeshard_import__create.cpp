@@ -1242,6 +1242,22 @@ private:
         SendNotificationsIfFinished(importInfo);
     }
 
+    void CancelUnsupportedScheme(NIceDb::TNiceDb& db, const TImportInfo::TPtr& importInfo, ui32 itemIdx) {
+        CancelAndPersist(db, importInfo, itemIdx,
+            TStringBuilder() << "Unsupported or missing import scheme for path '"
+                << importInfo->Items.at(itemIdx).DstPathName << "'",
+            "unsupported import object");
+    }
+
+    bool CheckScheme(NIceDb::TNiceDb& db, const TImportInfo::TPtr& importInfo, ui32 itemIdx) {
+        const auto& item = importInfo->Items.at(itemIdx);
+        if (item.Table || item.Topic || item.SysView || IsCreatedByQuery(item)) {
+            return true;
+        }
+        CancelUnsupportedScheme(db, importInfo, itemIdx);
+        return false;
+    }
+
     TMaybe<TString> GetIssues(const TImportInfo::TItem& item, TTxId restoreTxId) {
         if (item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
             Y_ABORT_UNLESS(Self->ColumnTables.contains(item.DstPathId));
@@ -1360,6 +1376,10 @@ private:
 
                 case EState::DropPlaceholder:
                 case EState::CreateSchemeObject:
+                    if (!CheckScheme(db, importInfo, itemIdx)) {
+                        return;
+                    }
+                    [[fallthrough]];
                 case EState::Transferring:
                 case EState::BuildIndexes:
                 case EState::CreateChangefeed:
@@ -1379,8 +1399,16 @@ private:
                     }
                     break;
 
-                default:
+                case EState::Waiting:
+                case EState::Done:
+                case EState::Cancelled:
                     break;
+
+                default:
+                    return CancelAndPersist(db, importInfo, itemIdx,
+                        TStringBuilder() << "Unsupported import item state " << static_cast<ui32>(item.State)
+                            << " for path '" << item.DstPathName << "'",
+                        "unsupported import item state");
                 }
             }
             break;
@@ -1475,6 +1503,10 @@ private:
 
         if (!msg.Success) {
             return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
+        }
+
+        if (!CheckScheme(db, importInfo, msg.ItemIdx)) {
+            return;
         }
 
         if (IsCreatedByQuery(item)) {
@@ -1801,9 +1833,13 @@ private:
                     // If an object’s CreationQuery has not been prepared yet, it does not need a txId at this point.
                     break;
                 }
+                if (!item.Table) {
+                    NIceDb::TNiceDb db(txc.DB);
+                    return CancelUnsupportedScheme(db, importInfo, i);
+                }
                 if (!Self->TableProfilesLoaded) {
                     Self->WaitForTableProfiles(id, i);
-                } else if (item.Table) {
+                } else {
                     CreateTable(*importInfo, i, txId);
                     itemIdx = i;
                 }
@@ -2193,7 +2229,7 @@ private:
                     AllocateTxId(*importInfo, childIdx);
                 }
             } else {
-                Y_ABORT("Create Scheme Object: schema objects are empty");
+                return CancelUnsupportedScheme(db, importInfo, itemIdx);
             }
             item.State = EState::Transferring;
             AllocateTxId(*importInfo, itemIdx);

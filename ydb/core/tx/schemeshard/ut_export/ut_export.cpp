@@ -2202,6 +2202,77 @@ namespace {
             return NKikimr::NClient::TValue::Create(result)[0]["List"].Size();
         }
 
+        void ResumeWithUnsupportedObject(ui32 unsupportedItemIdx, bool hasWaitTxId, bool unsupportedSibling = false) {
+            using TUploadResult = NKikimr::NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult;
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableViewExport(true);
+            ui64 txId = 100;
+            for (const TString name : {"View1", "View2"}) {
+                TestCreateView(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                    Name: "%s" QueryText: "SELECT 1"
+                )", name.c_str()));
+                Env().TestWaitNotification(Runtime(), txId);
+            }
+
+            TBlockEvents<TUploadResult> results(Runtime());
+            const ui64 exportId = ++txId;
+            TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items { source_path: "/MyRoot/View1" destination_prefix: "view1" }
+                    items { source_path: "/MyRoot/View2" destination_prefix: "view2" }
+                }
+            )", S3Port()));
+            Runtime().WaitFor("both schema upload results", [&] { return results.size() == 2; });
+
+            // Model an item written by a newer binary. Its type is neither a
+            // table nor a schema object supported by the current binary.
+            LocalMiniKQL(Runtime(), TTestTxConfig::SchemeShard, Sprintf(R"((
+                (let key '('('ExportId (Uint64 '%lu)) '('Index (Uint32 '%u))))
+                (let row '('('SourcePathType (Uint32 '999)) %s))
+                (return (AsList (UpdateRow 'ExportItems key row)))
+            ))", exportId, unsupportedItemIdx,
+                hasWaitTxId ? "'('BackupTxId (Uint64 '101))" : ""));
+
+            if (unsupportedSibling) {
+                LocalMiniKQL(Runtime(), TTestTxConfig::SchemeShard, Sprintf(R"((
+                    (let key '('('ExportId (Uint64 '%lu)) '('Index (Uint32 '%u))))
+                    (let row '('('SourcePathType (Uint32 '998)) '('BackupTxId (Uint64 '102))))
+                    (return (AsList (UpdateRow 'ExportItems key row)))
+                ))", exportId, 1 - unsupportedItemIdx));
+            }
+
+            RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+            Env().TestWaitNotification(Runtime(), exportId);
+            const auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            const auto& entry = desc.GetResponse().GetEntry();
+            UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+            UNIT_ASSERT(entry.HasEndTime());
+            UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+            UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Unsupported export object type 999");
+            UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(),
+                unsupportedItemIdx == 0 ? "/MyRoot/View1" : "/MyRoot/View2");
+            UNIT_ASSERT(!HasS3File("/export_complete.json"));
+
+            // Late successes from before the reboot must not change the result.
+            results.Stop();
+            for (auto& ev : results) {
+                ForwardToTablet(Runtime(), TTestTxConfig::SchemeShard, ev->Sender,
+                    new TUploadResult(exportId, ev->Get()->ItemIdx, true, ""));
+            }
+            results.Unblock();
+            TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+            TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            TestLs(Runtime(), "/MyRoot/View1", false, NLs::PathExist);
+            TestLs(Runtime(), "/MyRoot/View2", false, NLs::PathExist);
+
+            TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
+            Env().TestWaitNotification(Runtime(), exportId);
+            TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        }
+
         void CancelColumnTableExportWithReboot(bool rebootCS, bool rebootSS, bool rebootBeforeCancel) {
             auto ctx = SetupColumnTableSlowS3Export();
             ui64 txId = ctx.TxId;
@@ -4371,6 +4442,22 @@ partitioning_settings {
             return GotModifyResult && ev->GetTypeRewrite() == TEvSchemeShard::EvNotifyTxCompletion;
         }
     };
+
+    Y_UNIT_TEST(UnsupportedObjectOnResume) {
+        ResumeWithUnsupportedObject(0, false);
+    }
+
+    Y_UNIT_TEST(UnsupportedObjectAfterResumingSibling) {
+        ResumeWithUnsupportedObject(1, false);
+    }
+
+    Y_UNIT_TEST(UnsupportedObjectWithPendingTransactionOnResume) {
+        ResumeWithUnsupportedObject(1, true);
+    }
+
+    Y_UNIT_TEST(MultipleUnsupportedObjectsWithPendingTransactionsOnResume) {
+        ResumeWithUnsupportedObject(0, true, true);
+    }
 
     Y_UNIT_TEST(CancelAfterSchemeUploadFailure) {
         using namespace NKikimr::NWrappers::NExternalStorage;

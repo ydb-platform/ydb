@@ -350,6 +350,7 @@ struct TDeserializerWithOffset {
         LastOffset += delta;
         offset = LastOffset;
 
+        AFL_ENSURE(Data < End)("reason", "missing item after offset");
         return ItemDeserializer.Deserialize(Data, End, message);
     }
 };

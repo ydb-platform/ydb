@@ -2427,10 +2427,7 @@ FROM `{table_name}`"""
         indirect=["kikimr"],
     )
     def test_structured_json_skip_errors_nested(
-        self,
-        kikimr,
-        entity_name,
-        local_topics,
+        self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
         inp, out, endpoint = self.get_io_names(
             kikimr,
@@ -2473,58 +2470,40 @@ FROM `{table_name}`"""
         messages = [
             # Valid row with all nested containers.
             '{"top":{"a":[1,2],"b":[3,"s"],"c":{"k":1},"d":4,"e":"x"},"req":{"id":10,"name":"y"},"note":"ok"}',
-
             # Errors: missing required nested field.
             '{"req":{"name":"no"},"note":"skip-missing-req"}',
-
             # Errors: top-level structured field has wrong type.
             '{"top":"bad","note":"skip-top-type"}',
-
             # Errors: list element type mismatch.
             '{"top":{"a":[1,"bad"]},"note":"skip-list-element"}',
-
             # Errors: null list element for non-optional Int.
             '{"top":{"a":[null]},"note":"skip-list-null"}',
-
             # Errors: tuple too short, missing non-optional first element.
             '{"top":{"b":[]},"note":"skip-tuple-short"}',
-
             # Errors: null first tuple element, first element is non-optional.
             '{"top":{"b":[null,"x"]},"note":"skip-tuple-null"}',
-
             # Errors: dict payload type mismatch.
             '{"top":{"c":{"k":"bad"}},"note":"skip-dict-payload"}',
-
             # Errors: null dict payload for non-optional Int.
             '{"top":{"c":{"k":null}},"note":"skip-dict-null"}',
-
             # Errors: nested required scalar wrong type.
             '{"req":{"id":"bad"},"note":"skip-req-type"}',
-
             # Errors: nested required scalar null.
             '{"req":{"id":null},"note":"skip-req-null"}',
-
             # Valid: tuple has extra elements, extra tuple elements are ignored.
             '{"top":{"b":[5,"t","extra"]},"req":{"id":1},"note":"ok-extra"}',
-
             # Valid: explicit nulls for optional top-level structs.
             '{"top":null,"req":null,"note":"ok-nulls"}',
-
             # Valid: optional top-level structs omitted.
             '{"note":"ok-omitted"}',
-
             # Valid: empty list and empty dict.
             '{"top":{"a":[],"c":{}},"note":"ok-empty"}',
-
             # Valid: only one nested scalar present.
             '{"top":{"d":101},"note":"ok-only-d"}',
-
             # Valid: tuple trailing optional element omitted.
             '{"top":{"b":[7]},"note":"ok-tuple-trailing-optional"}',
-
             # Valid: explicit null for optional list.
             '{"top":{"a":null},"note":"ok-list-null"}',
-
             # Valid: unknown top-level and nested keys are ignored.
             '{"top":{"extra":"ignored"},"extra":"ignored","note":"ok-extra-keys"}',
         ]
@@ -2620,10 +2599,7 @@ FROM `{table_name}`"""
         indirect=["kikimr"],
     )
     def test_structured_json_skip_errors_required_top_level(
-        self,
-        kikimr,
-        entity_name,
-        local_topics,
+        self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
         inp, out, endpoint = self.get_io_names(
             kikimr,
@@ -2668,9 +2644,7 @@ FROM `{table_name}`"""
 
         self.write_stream(messages, endpoint=endpoint)
 
-        rows = self._parse_json_rows(
-            self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)
-        )
+        rows = self._parse_json_rows(self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint))
         assert len(rows) == 1
 
         row = rows[0]
@@ -2686,10 +2660,7 @@ FROM `{table_name}`"""
         indirect=["kikimr"],
     )
     def test_structured_json_skip_errors_invalid_documents(
-        self,
-        kikimr,
-        entity_name,
-        local_topics,
+        self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
         inp, out, endpoint = self.get_io_names(
             kikimr,
@@ -2724,16 +2695,13 @@ FROM `{table_name}`"""
         messages = [
             # Malformed JSON document.
             "not json",
-
             # Valid JSON documents, but not JSON objects, are invalid for json_each_row.
             "[1,2] ",
             '"scalar" ',
             "42 ",
             "true ",
-
             # Valid object with all optional fields omitted.
             '{"note":"valid-empty"}',
-
             # Valid object.
             '{"payload":{"id":1},"note":"valid1"}',
         ]

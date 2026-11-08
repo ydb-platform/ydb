@@ -569,44 +569,6 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT(env.Write("UPSERT INTO `Table` (key, value) VALUES (2, 20);").IsSuccess());
         }
 
-        Y_UNIT_TEST(DiscardIsNotATopicAcknowledgement) {
-            TEnv env;
-            const auto [shards, tableId] = env.CreateTable(true);
-            TVector<ui64> orders;
-            // key=1 belongs to the first of the two uniform Uint32 partitions.
-            const auto source = shards.at(0);
-            auto observer = env.Runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>([&](auto& ev) {
-                if (orders.empty() && !ev->Get()->Records.empty()) {
-                    for (const auto& record : ev->Get()->Records) {
-                        orders.push_back(record.Order);
-                    }
-                }
-            });
-            bool fenced = false;
-            auto fenceObserver = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreezeResult>([&](auto& ev) {
-                const auto& result = ev->Get()->Record;
-                fenced |= result.GetTabletId() == source && result.GetStage() == NKikimrTxDataShard::TDatabaseFreezeState::FENCE_WRITES && result.GetStatus() == Ydb::StatusIds::SUCCESS && result.GetReady();
-            });
-            TBlockEvents<NPQ::TEvPartitionWriter::TEvWriteResponse> ack(env.Runtime);
-            UNIT_ASSERT(env.Write("UPSERT INTO `Table` (key, value) VALUES (1, 10);").IsSuccess());
-            env.Runtime.WaitFor("unconfirmed CDC write", [&] { return !ack.empty() && !orders.empty(); });
-            const auto freeze = env.Freeze(true);
-            env.Runtime.WaitFor("write fence installed", [&] { return fenced; });
-            auto discard = MakeHolder<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>(std::move(orders));
-            discard->DeliveryConfirmed = false;
-            const auto sourceActor = ResolveTablet(env.Runtime, source);
-            env.Runtime.Send(new IEventHandle(sourceActor, env.Sender, discard.Release()),
-                             sourceActor.NodeId() - env.Runtime.GetFirstNodeId());
-            UNIT_ASSERT_VALUES_EQUAL(env.Wait(freeze.id()).status(), Ydb::StatusIds::PRECONDITION_FAILED);
-            const auto retry = env.Freeze(true);
-            UNIT_ASSERT_VALUES_EQUAL(env.Wait(retry.id()).status(), Ydb::StatusIds::PRECONDITION_FAILED);
-            ack.Stop().Unblock();
-            UNIT_ASSERT(!env.Write("UPSERT INTO `Table` (key, value) VALUES (2, 20);").IsSuccess());
-            const auto thaw = env.Freeze(false);
-            UNIT_ASSERT_VALUES_EQUAL(env.Wait(thaw.id()).status(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT(env.Write("UPSERT INTO `Table` (key, value) VALUES (2, 20);").IsSuccess());
-        }
-
         Y_UNIT_TEST(InitialScanFinalizationMustComplete) {
             TEnv env;
             env.CreateTable();

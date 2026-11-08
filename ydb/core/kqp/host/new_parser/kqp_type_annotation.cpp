@@ -38,7 +38,8 @@ public:
                 Query(*query->Query);
             } else {
                 const auto& pragma = std::get<TPragmaStatement>(statement.Value);
-                if (pragma.Namespace || !AsciiEqualsIgnoreCase(pragma.Name.Spelling, "TablePathPrefix")) {
+                if (pragma.Namespace || (!AsciiEqualsIgnoreCase(pragma.Name.Spelling, "TablePathPrefix")
+                    && !AsciiEqualsIgnoreCase(pragma.Name.Spelling, "YqlSelect"))) {
                     Unsupported(statement.Range, "this pragma's type semantics");
                 }
             }

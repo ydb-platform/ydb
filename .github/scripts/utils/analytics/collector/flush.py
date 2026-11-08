@@ -149,7 +149,7 @@ def flush_file(
             print(f"No valid metric rows in {metrics_path}, keeping local batch")
             return 0
         if not has_send_credentials():
-            print(f"Analytics send disabled or credentials missing; keeping {len(rows)} row(s) in {metrics_path}")
+            print("Analytics YDB credentials are missing, keeping local batch")
             return 0
         upsert_fn = upsert or upsert_metrics
         with _open_ydb_wrapper(ydb_wrapper_factory) as wrapper:

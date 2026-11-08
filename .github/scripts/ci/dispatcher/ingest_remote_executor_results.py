@@ -251,15 +251,13 @@ def regenerate_summary(
     attempts: list[dict[str, Any]],
     build_preset: str,
     branch: str,
-    pull_number: str,
     workflow_run_id: str,
     scratch_dir: Path,
 ) -> str:
-    """Regenerate ya-test.html with YDB history; return enriched job_summary markdown.
+    """Regenerate ya-test.html with YDB history; return enriched summary markdown.
 
-    Host publishes job_summary.md at run root for humans; ingest builds its own
-    enriched summary from attempt artifacts. generate-summary is run with
-    GITHUB_STEP_SUMMARY cleared so it cannot append to the ingest job summary.
+    generate-summary runs with GITHUB_STEP_SUMMARY cleared so it cannot append
+    to the ingest job summary.
     """
     summary_links = public_dir / "summary_links.txt"
     stub = f"_No test attempts found._\n\n[Artifacts]({public_dir_url}/index.html)\n"
@@ -302,8 +300,6 @@ def regenerate_summary(
         "--workflow_run_id",
         workflow_run_id,
     ]
-    if pull_number:
-        cmd.extend(["--pr_number", pull_number])
     if oom.is_file() and oom.stat().st_size > 0:
         cmd.extend(["--oom_dmesg_log", str(oom)])
     cmd.extend(["Tests", str(html_path), str(report_path)])
@@ -331,19 +327,12 @@ def rewrite_ci_metrics_attribution(
     event_name: str,
     workflow: str,
     job_name: str,
-    pull_number: str,
     caller_repo: str,
 ) -> Path:
     """Rewrite remote-stamped JSONL rows to caller run attribution before YDB flush."""
     out = metrics_path.with_name(metrics_path.name + ".caller")
     run_url = f"https://github.com/{caller_repo}/actions/runs/{run_id}"
     caller_run_id = int(run_id)
-    pr_number = None
-    if pull_number:
-        try:
-            pr_number = int(pull_number)
-        except ValueError:
-            print(f"::warning::pull_number={pull_number!r} is not an integer; pr_number not set")
     attempt_raw = env_opt("PLATFORM_RUN_ATTEMPT") or env_opt("GITHUB_RUN_ATTEMPT")
     caller_attempt = int(attempt_raw) if attempt_raw.isdigit() else None
     rewritten = 0
@@ -371,8 +360,6 @@ def rewrite_ci_metrics_attribution(
             row["workflow"] = workflow
             row["job_name"] = job_name
             row["run_url"] = run_url
-            if pr_number is not None:
-                row["pr_number"] = pr_number
             if labels:
                 row["labels"] = labels
             dst.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -386,7 +373,6 @@ def flush_ci_metrics(
     *,
     event_name: str,
     run_id: str,
-    pull_number: str,
     caller_repo: str,
     caller_workflow: str,
     job_name: str,
@@ -403,7 +389,6 @@ def flush_ci_metrics(
         event_name=event_name,
         workflow=caller_workflow,
         job_name=job_name,
-        pull_number=pull_number,
         caller_repo=caller_repo,
     )
 
@@ -421,7 +406,6 @@ def upload_attempts(
     build_preset: str,
     event_name: str,
     run_id: str,
-    pull_number: str,
     job_name: str,
 ) -> None:
     for att in attempts:
@@ -439,8 +423,6 @@ def upload_attempts(
             build_preset,
             "--event-name",
             event_name,
-            "--pr-number",
-            pull_number,
             "--attempt",
             str(int(att["retry"])),
             "--job-name",
@@ -479,21 +461,6 @@ def s3cmd_sync_upload(local: Path, s3_bucket_path: str) -> None:
     )
 
 
-def s3cmd_put(local: Path, s3_uri: str) -> None:
-    run(
-        [
-            "s3cmd",
-            "put",
-            *_s3_acl_args(),
-            "--no-progress",
-            "--no-mime-magic",
-            "--guess-mime-type",
-            str(local),
-            s3_uri,
-        ]
-    )
-
-
 def main() -> None:
     cfg = load_config_json()
     host_repo = cfg_str(cfg, "repository")
@@ -508,7 +475,6 @@ def main() -> None:
     ji = inputs.get("job_inputs")
     if not isinstance(ji, dict) or not ji:
         die("CONFIG_JSON.inputs.job_inputs missing")
-    pull_number = str(ji.get("pull_number") or "").strip()
     build_preset = cfg_str(ji, "build_preset")
     branch = cfg_str(ji, "custom_branch_name")
 
@@ -534,8 +500,6 @@ def main() -> None:
     dest_key_prefix = f"{run_root_key}/{leaf}"
     new_public = quote_url(f"{caller_endpoint}/{caller_bucket}/{dest_key_prefix}")
     caller_s3_path = f"s3://{caller_bucket}/{dest_key_prefix}"
-    caller_run_root = f"s3://{caller_bucket}/{run_root_key}"
-    caller_run_root_url = quote_url(f"{caller_endpoint}/{caller_bucket}/{run_root_key}")
 
     executor_conclusion = env_opt("EXECUTOR_CONCLUSION")
 
@@ -543,11 +507,7 @@ def main() -> None:
         tmp_path = Path(tmp)
         public_dir = tmp_path / "results"
         scratch_dir = tmp_path / "scratch"
-        out_dir = tmp_path / "out"
         scratch_dir.mkdir()
-        out_dir.mkdir()
-        job_summary = out_dir / "job_summary.md"
-        meta_path = out_dir / "remote_artifacts.json"
 
         print(f"Downloading s3://{host_bucket}/{key_prefix} → {public_dir} (via index.html)")
         download_failed = download_prefix_via_index(host_ep, host_bucket, key_prefix, public_dir)
@@ -569,7 +529,6 @@ def main() -> None:
             attempts=attempts,
             build_preset=build_preset,
             branch=branch,
-            pull_number=pull_number,
             workflow_run_id=caller_run_id,
             scratch_dir=scratch_dir,
         )
@@ -579,22 +538,8 @@ def main() -> None:
                 f"from the host tree._\n"
             )
             summary_md = summary_md.rstrip() + note
-        job_summary.write_text(summary_md, encoding="utf-8")
-
-        meta_out = {
-            "version": 1,
-            "commit": commit,
-            "caller_public_dir_url": new_public,
-            "caller_artifact_key_prefix": dest_key_prefix,
-            "caller_run_root_url": caller_run_root_url,
-            "executor_run_id": run_id,
-            "executor_run_url": run_url,
-        }
-        meta_path.write_text(json.dumps(meta_out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
         s3cmd_sync_upload(public_dir, caller_s3_path)
-        s3cmd_put(job_summary, f"{caller_run_root}/job_summary.md")
-        s3cmd_put(meta_path, f"{caller_run_root}/remote_artifacts.json")
         print(f"::notice title=Caller artifacts uploaded::{new_public}/index.html")
 
         upload_attempts(
@@ -605,7 +550,6 @@ def main() -> None:
             build_preset=build_preset,
             event_name=event_name,
             run_id=caller_run_id,
-            pull_number=pull_number,
             job_name=job_name,
         )
 
@@ -613,7 +557,6 @@ def main() -> None:
             public_dir=public_dir,
             event_name=event_name,
             run_id=caller_run_id,
-            pull_number=pull_number,
             caller_repo=caller_repo,
             caller_workflow=caller_workflow,
             job_name=job_name,

@@ -246,7 +246,7 @@ runs:
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         analytics start init
 
-        python3 -m pip install ydb 'ydb[yc]' codeowners humanize plotly pyyaml
+        python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml
         analytics end init --conclusion success
         if [ "${GH_PROXY_MEASURED:-}" = 1 ]; then
           chosen_mbps="${GH_PROXY_DIRECT_MBPS}"

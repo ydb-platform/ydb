@@ -97,11 +97,6 @@ class ResolveSeedsTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             build_config()
 
-    def test_non_bool_fail_on_remote_failure_dies(self):
-        os.environ["REMOTE_JSON"] = json.dumps({"fail_on_remote_failure": "yes"})
-        with self.assertRaises(SystemExit):
-            build_config()
-
     def test_non_bool_run_tests_dies(self):
         os.environ["REMOTE_JSON"] = json.dumps({"job": {"run_tests": "yes"}})
         with self.assertRaises(SystemExit):
@@ -315,7 +310,6 @@ class WaitClaimAttemptTest(unittest.TestCase):
                     "host_s3_endpoint": "https://ep",
                     "host_s3_bucket": "bucket",
                     "repository": "nebius/ydb",
-                    "fail_on_remote_failure": True,
                 }
             ),
         )
@@ -369,18 +363,7 @@ class WaitClaimAttemptTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 dre.wait_for_claim(cfg)
 
-    def test_claim_timeout_uses_claim_wait_attempts(self):
-        os.environ["CLAIM_WAIT_ATTEMPTS"] = "5"
-        cfg = dre.load_config_json()
-        with mock.patch.object(dre, "read_claim", return_value=None) as read, mock.patch.object(
-            dre.time, "sleep"
-        ):
-            with self.assertRaises(SystemExit):
-                dre.wait_for_claim(cfg)
-        self.assertEqual(read.call_count, 5)
-
-    def test_claim_timeout_default(self):
-        os.environ.pop("CLAIM_WAIT_ATTEMPTS", None)
+    def test_claim_timeout(self):
         cfg = dre.load_config_json()
         with mock.patch.object(dre, "read_claim", return_value=None) as read, mock.patch.object(
             dre.time, "sleep"
@@ -391,7 +374,7 @@ class WaitClaimAttemptTest(unittest.TestCase):
 
 
 class RewriteCiMetricsTest(unittest.TestCase):
-    def _rewrite(self, rows, pull_number="7"):
+    def _rewrite(self, rows):
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / "ci_metrics.jsonl"
             src.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
@@ -401,7 +384,6 @@ class RewriteCiMetricsTest(unittest.TestCase):
                 event_name="workflow_dispatch",
                 workflow="Run and debug tests",
                 job_name="Run and debug tests",
-                pull_number=pull_number,
                 caller_repo="ydb-platform/ydb",
             )
             return [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
@@ -411,17 +393,10 @@ class RewriteCiMetricsTest(unittest.TestCase):
         (row,) = self._rewrite([{"run_id": 9, "run_attempt": 1, "labels": {"k": "v"}}])
         self.assertEqual(row["run_id"], 500)
         self.assertEqual(row["run_attempt"], 3)
-        self.assertEqual(row["pr_number"], 7)
         self.assertEqual(
             row["labels"],
             {"k": "v", "remote_executor_run_id": 9, "remote_executor_run_attempt": 1},
         )
-
-    def test_bad_pull_number_does_not_crash(self):
-        patch_env(self, PLATFORM_RUN_ATTEMPT="1")
-        (row,) = self._rewrite([{"run_id": 9}], pull_number="abc")
-        self.assertNotIn("pr_number", row)
-        self.assertEqual(row["run_attempt"], 1)
 
 
 class EnqueueOutputTest(unittest.TestCase):
@@ -437,7 +412,6 @@ class EnqueueOutputTest(unittest.TestCase):
                         "host_s3_endpoint": "https://ep",
                         "host_s3_bucket": "b",
                         "repository": "nebius/ydb",
-                        "fail_on_remote_failure": True,
                     }
                 ),
                 "PLATFORM_RUN_ID": "42",

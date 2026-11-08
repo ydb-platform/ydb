@@ -1,10 +1,8 @@
 name: Dispatch remote executor
 
-# Reusable from Run-and-debug / PR-check / etc.:
-#   enqueue remote-ticket Actions artifact → wait host claim → ingest.
+# enqueue remote-ticket Actions artifact → wait host claim → ingest.
 # Host gets launch context from that artifact only (never from platform S3).
-# Platform never workflow_dispatch'es the host; host VM does after the webhook.
-# Config: scripts/ci/dispatcher/resolve_remote_execution.py + REMOTE_PULL.md.
+# See scripts/ci/dispatcher/REMOTE_PULL.md.
 on:
   workflow_call:
     inputs:
@@ -12,13 +10,6 @@ on:
         description: JSON from resolve_remote_execution (repos, S3, inputs, …)
         required: true
         type: string
-    outputs:
-      executor_run_id:
-        value: ${{ jobs.wait.outputs.executor_run_id }}
-      executor_run_url:
-        value: ${{ jobs.wait.outputs.executor_run_url }}
-      executor_conclusion:
-        value: ${{ jobs.wait.outputs.executor_conclusion }}
 
 jobs:
   enqueue:
@@ -77,8 +68,6 @@ jobs:
           PLATFORM_RUN_ID: ${{ github.run_id }}
           # Pin to the attempt that wrote the ticket (not live github.run_attempt).
           PLATFORM_RUN_ATTEMPT: ${{ needs.enqueue.outputs.ticket_attempt }}
-          # 30s per attempt; empty → defaults in dispatch_remote_executor.py.
-          CLAIM_WAIT_ATTEMPTS: ${{ vars.REMOTE_CLAIM_WAIT_ATTEMPTS }}
         run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py wait
 
       - name: Cancel on caller cancel
@@ -121,7 +110,6 @@ jobs:
           s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
           s3_bucket: ${{ vars.AWS_BUCKET }}
           s3_endpoint: ${{ vars.AWS_ENDPOINT }}
-          build_preset: ${{ fromJSON(inputs.config).inputs.job_inputs.build_preset }}
 
       - name: Ingest remote artifacts
         env:

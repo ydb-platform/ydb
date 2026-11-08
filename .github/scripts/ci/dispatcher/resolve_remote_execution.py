@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
 """Merge remote execution JSON with defaults → dispatch_remote `config` output.
 
-Callers (Run-and-debug, PR-check, …) pass optional REMOTE_JSON; this script
-emits one opaque config for dispatch_remote.yml (artifact → wait claim → ingest).
-
 Env:
   REMOTE_JSON — optional caller override (object or empty)
   CODE_REF, GITHUB_WORKFLOW, DEFAULT_BUILD_TARGET, DEFAULT_BUILD_PRESET,
-  PULL_NUMBER (optional), ANALYTICS_BRANCH (optional, ignored if remote.code_ref set)
-  GITHUB_OUTPUT — write `config=...`
-  GITHUB_STEP_SUMMARY — optional launch-params table
+  ANALYTICS_BRANCH (optional, ignored if remote.code_ref set)
 """
 from __future__ import annotations
 
@@ -66,12 +61,10 @@ DEFAULT_REMOTE: dict[str, Any] = {
     "workflow_file": "ci_remote_executor.yml",
     "workflow_name": "CI remote executor",
     "executor_ref": "nebius-ci",
-    "fail_on_remote_failure": True,
     # Host public S3 (claims + build outputs). Platform never points host at YC S3.
     "host_s3_endpoint": "https://s3.us-east-1.amazonaws.com",
     "host_s3_bucket": "ydb-nebius-ci-public-609722444123-us-east-1",
     "analytics_job_name": "Run and debug tests",
-    "caller_workflow": "",
     "runs_on": ["self-hosted", "linux", "amd64-large"],
     "code_ref": "",
     "analytics_branch": "",
@@ -146,21 +139,15 @@ def build_config() -> dict[str, Any]:
     fetch_depth = "0" if job["increment"] else "2"
 
     cfg["analytics_job_name"] = cfg_str(cfg, "analytics_job_name")
-    cfg["caller_workflow"] = (
-        cfg["caller_workflow"].strip()
-        or (os.environ.get("GITHUB_WORKFLOW") or "").strip()
-    )
+    cfg["caller_workflow"] = (os.environ.get("GITHUB_WORKFLOW") or "").strip()
     if not cfg["caller_workflow"]:
-        die("caller_workflow is empty")
-
-    pull_number = (os.environ.get("PULL_NUMBER") or "").strip()
+        die("GITHUB_WORKFLOW is empty")
 
     job_inputs = {k: _job_input_str(job[k]) for k in _DEFAULT_JOB}
     job_inputs["build_preset"] = preset
     job_inputs["fetch_depth"] = fetch_depth
     job_inputs["custom_branch_name"] = analytics
     job_inputs["analytics_job_name"] = cfg["analytics_job_name"]
-    job_inputs["pull_number"] = pull_number
 
     runs_on_str = json.dumps(cfg["runs_on"], separators=(",", ":"))
     cfg["host_s3_endpoint"], cfg["host_s3_bucket"] = host_s3(cfg)

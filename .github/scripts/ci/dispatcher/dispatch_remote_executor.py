@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Platform remote dispatcher: publish remote-ticket artifact, wait for claim, cancel.
 
-Reusable from Run-and-debug / PR-check / etc. via dispatch_remote.yml.
 Does not start the remote executor — the host VM does that after the webhook.
 The executor writes remote-claims/{platform_run_id}.json on *its* public S3.
 """
@@ -20,7 +19,6 @@ from typing import Any
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import (  # noqa: E402
     append_summary,
-    cfg_bool,
     cfg_str,
     die,
     env,
@@ -33,6 +31,9 @@ from _common import (  # noqa: E402
 )
 
 TICKET_FILENAME = "remote-ticket.json"
+# Polls are 30s apart: ~60 min for a claim, ~20 h for the executor run.
+CLAIM_WAIT_ATTEMPTS = 120
+EXECUTOR_WAIT_ATTEMPTS = 2400
 
 
 def api(repo: str) -> str:
@@ -141,11 +142,6 @@ def _attempt_int(raw: str, *, label: str) -> int:
     return n
 
 
-def _attempts_env(name: str, default: int) -> int:
-    raw = env_opt(name)
-    return _attempt_int(raw, label=name) if raw else default
-
-
 def cmd_enqueue():
     cfg = load_config_json()
     ticket = build_ticket(cfg)
@@ -162,9 +158,8 @@ def wait_for_claim(cfg):
     want_attempt = _attempt_int(env("PLATFORM_RUN_ATTEMPT"), label="PLATFORM_RUN_ATTEMPT")
     endpoint, bucket = host_s3(cfg)
     url = object_url(endpoint, bucket, f"remote-claims/{platform_run_id}.json")
-    attempts = _attempts_env("CLAIM_WAIT_ATTEMPTS", 120)
-    print(f"Waiting for claim at {url} (ticket_attempt={want_attempt}, {attempts}x30s) ...")
-    for i in range(attempts):
+    print(f"Waiting for claim at {url} (ticket_attempt={want_attempt}) ...")
+    for i in range(CLAIM_WAIT_ATTEMPTS):
         claim = read_claim(cfg, platform_run_id)
         if claim:
             claim_attempt_raw, run_id, run_url = parse_claim(claim)
@@ -193,17 +188,16 @@ def wait_for_claim(cfg):
             print(f"{time.strftime('%H:%M:%S', time.gmtime())} waiting for claim...")
         time.sleep(30)
     die(
-        f"ticket not claimed in time ({attempts}x30s) at {url} "
+        f"ticket not claimed in time ({CLAIM_WAIT_ATTEMPTS}x30s) at {url} "
         f"(ticket_attempt={want_attempt}); check host VM / webhook delivery"
     )
 
 
 def wait_executor_done(cfg, token: str, run_id, run_url):
-    fail_on_remote = cfg_bool(cfg, "fail_on_remote_failure")
     repo = cfg_str(cfg, "repository")
     print(f"Waiting for executor run {run_id} ({run_url}) ...")
     status = conclusion = ""
-    for _ in range(_attempts_env("EXECUTOR_WAIT_ATTEMPTS", 2400)):
+    for _ in range(EXECUTOR_WAIT_ATTEMPTS):
         _, state = gh("GET", f"{api(repo)}/actions/runs/{run_id}", token, retries=5)
         status = state.get("status") or ""
         conclusion = state.get("conclusion") or ""
@@ -237,10 +231,7 @@ def wait_executor_done(cfg, token: str, run_id, run_url):
                     set_outputs(executor_run_id=new_id, executor_run_url=new_url)
                     return wait_executor_done(cfg, token, new_id, new_url)
             time.sleep(15)
-    msg = f"executor finished with conclusion={conclusion}"
-    if fail_on_remote:
-        die(msg)
-    print(f"::warning::{msg} (fail_on_remote_failure=false)")
+    die(f"executor finished with conclusion={conclusion}")
 
 
 def cmd_wait():

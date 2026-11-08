@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <util/stream/str.h>
 #include <util/string/cast.h>
 
@@ -51,10 +52,10 @@ public:
     TIntrusivePtr<TOpRoot> Run(const TQuery& query, bool orderedColumns) {
         auto relation = Query(query);
         auto outputIds = Names.QueryOutputs.at(&query);
-        const auto& select = std::get<TSelect>(query.Body);
+        const auto* select = std::get_if<TSelect>(&query.Body);
         // Match RewriteSelect's presentation order for a plain SELECT *.
-        if (!orderedColumns && select.Columns.size() == 1
-            && Names.Stars.contains(select.Columns.front().Expression.get())) {
+        if (!orderedColumns && select && select->Columns.size() == 1
+            && Names.Stars.contains(select->Columns.front().Expression.get())) {
             std::stable_sort(outputIds.begin(), outputIds.end(), [&](auto a, auto b) {
                 return Names.Columns[a].Name < Names.Columns[b].Name;
             });
@@ -66,7 +67,7 @@ public:
         // into the returned root requires rebinding every expression before the
         // short-lived lowerer and its original Props member are destroyed.
         root->PlanProps = std::move(Props);
-        for (const auto& item : *root) { item.Current->BindExpressionPlanProps(&root->PlanProps); }
+        for (const auto& item : IterateSubtreeWithSubplans(root.Get(), root->PlanProps)) { item.Current->BindExpressionPlanProps(&root->PlanProps); }
         root->RecomputeOutputIUsSubtree();
         root->ComputeParents();
         return root;
@@ -106,9 +107,44 @@ private:
     // Convert the annotation lambda's column arguments to Member(row, IU)
     // accesses in one RBO row lambda. Substitution uses node identity and retains
     // all rewrites/coercions produced by the existing type annotator.
-    TRboExpression Expression(const TExpression& expression, const TBindings& bindings) {
-        const auto& annotated = Annotations.Expressions.at(&expression);
+    TRboExpression Expression(const TExpression& expression, TBindings bindings) {
+        return AnnotatedExpression(Annotations.Expressions.at(&expression), expression.Range, std::move(bindings));
+    }
+
+    TRboExpression AnnotatedExpression(const TAnnotatedExpression& annotated, const TSourceRange& range, TBindings bindings) {
         const auto pos = annotated.Lambda->Pos();
+        // Subplan bindings are scalar inputs but have their own relational
+        // producer. Captures are allocated by Query with local IU identities.
+        // Annotation supplies the whole visible scope. A sibling subquery can
+        // therefore appear among the arguments without being used by this body.
+        // Import only referenced subplans: unused siblings may capture columns
+        // that are not available in the current query's local scope.
+        TNodeSet used;
+        VisitExpr(annotated.Lambda->TailPtr(), [&](const TExprNode::TPtr& node) {
+            if (node->IsArgument()) { used.insert(node.Get()); }
+            return true;
+        });
+        for (size_t i = 0; i < annotated.Inputs.size(); ++i) {
+            if (!used.contains(annotated.Lambda->Head().Child(i))) { continue; }
+            const auto column = annotated.Inputs[i];
+            const auto* subquery = Annotations.Subqueries.FindPtr(column);
+            if (!subquery || bindings.contains(column)) { continue; }
+            auto producer = Query(*subquery->Query, bindings);
+            const auto id = Props.InfoUnitRegistry.AddGenerated("subquery");
+            TOrderedIUs<> tuple;
+            std::optional<TInfoUnitId> result;
+            auto kind = ESubplanType::EXPR;
+            if (subquery->Kind == EAstSubquery::Exists) { kind = ESubplanType::EXISTS; }
+            else { result = producer.Bindings.at(Names.QueryOutputs.at(subquery->Query).front()); }
+            if (subquery->Kind == EAstSubquery::In) {
+                kind = ESubplanType::IN_SUBPLAN;
+                const auto comparison = Expression(*subquery->Comparison, bindings);
+                if (!comparison.IsColumnAccess()) { Unsupported(range, "computed IN subquery input"); }
+                tuple.Append(*comparison.GetRawInputIUs().begin());
+            }
+            Props.Subplans.Add(id, producer.Op, kind, std::move(tuple), result);
+            bindings[column] = id;
+        }
         auto row = Ctx.NewArgument(pos, "row");
         TNodeOnNodeOwnedMap replacements;
         for (size_t i = 0; i < annotated.Inputs.size(); ++i) {
@@ -133,7 +169,7 @@ private:
         });
         VisitExpr(body, [&](const TExprNode::TPtr& node) {
             if (node->IsArgument() && node != row && !locals.contains(node.Get())) {
-                Unsupported(expression.Range, "expression outside its relational scope");
+                Unsupported(range, "expression outside its relational scope");
             }
             return true;
         });
@@ -288,7 +324,11 @@ private:
                 table.Table, nullptr, nullptr, std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, pos);
         } else {
             const auto* derived = std::get_if<TDerivedTable>(&source.Value);
-            result = Reference(derived ? *derived->Query : Producer(columns.front()));
+            const auto* named = Names.NamedSources.FindPtr(&source);
+            // Named preamble queries share the same producer/port machinery as
+            // WITH CTEs. The source-to-query link was fixed at definition/use
+            // resolution, so later redefinitions cannot retarget this read.
+            result = Reference(named ? **named : derived ? *derived->Query : Producer(columns.front()));
         }
         TBindings visible;
         for (const auto id : columns) { visible[id] = Input(id, result.Bindings); }
@@ -296,20 +336,226 @@ private:
         return result;
     }
 
+    // Aggregate arguments and computed keys are mapped before aggregation.
+    // Output bindings contain only keys/results, enforcing SQL grouping scope.
+    void Grouping(const TQuery& query, TRelation& relation) {
+        const auto* grouping = Annotations.Groupings.FindPtr(&query);
+        if (!grouping) { return; }
+        const auto pos = Pos(query.Range);
+        TMapIUs definitions;
+        TOrderedIUs<> keys;
+        TAggregationIUs aggregates;
+        TBindings outputs;
+        const auto map = [&](TRboExpression expression, TStringBuf label) {
+            if (expression.IsColumnAccess()) { return *expression.GetRawInputIUs().begin(); }
+            const auto id = Props.InfoUnitRegistry.AddGenerated(label);
+            definitions.Add(id, std::move(expression));
+            return id;
+        };
+        for (const auto& [column, expression] : grouping->Keys) {
+            const auto id = map(Expression(*expression, relation.Bindings), "group_key");
+            keys.Append(id); outputs[column] = id;
+        }
+        for (const auto& aggregate : grouping->Aggregates) {
+            auto argument = aggregate.Argument ? Expression(*aggregate.Argument, relation.Bindings)
+                : MakeConstant("Uint64", "1", pos, &Ctx);
+            const auto input = map(std::move(argument), "aggregate_argument");
+            const auto output = Props.InfoUnitRegistry.AddGenerated("aggregate");
+            aggregates.Add(output, TOpAggregationTraits{input, aggregate.Function, aggregate.Distinct});
+            outputs[aggregate.Output] = output;
+        }
+        if (!definitions.Keys().Empty()) { relation.Op = MakeIntrusive<TOpMap>(relation.Op, pos, std::move(definitions)); }
+        auto aggregate = MakeIntrusive<TOpAggregate>(relation.Op, std::move(aggregates), std::move(keys), EOpPhase::Undefined, false, pos);
+        relation.Op = aggregate;
+        if (!grouping->Sets.empty()) {
+            TVector<TUnorderedIUs> sets;
+            for (const auto& set : grouping->Sets) {
+                TUnorderedIUs ius;
+                for (const auto column : set) { ius.Add(outputs.at(column)); }
+                sets.push_back(std::move(ius));
+            }
+            TMappedIUs<TInfoUnitId> indicators;
+            for (const auto& [column, key] : grouping->Indicators) {
+                const auto id = Props.InfoUnitRegistry.AddGenerated("grouping_indicator");
+                indicators.Add(id, outputs.at(key));
+                relation.Bindings[column] = id;
+            }
+            TMappedIUs<TInfoUnitId> columns;
+            for (auto& [column, id] : outputs) {
+                Y_UNUSED(column);
+                const auto output = Props.InfoUnitRegistry.AddCopy(id);
+                columns.Add(output, id); id = output;
+            }
+            relation.Op = MakeIntrusive<TOpGroupingSets>(aggregate, std::move(sets), std::move(columns), pos, std::move(indicators));
+            for (const auto& [column, key] : grouping->Indicators) { Y_UNUSED(key); outputs[column] = relation.Bindings.at(column); }
+        } else if (!grouping->Indicators.empty()) {
+            TMapIUs constants;
+            for (const auto& [column, key] : grouping->Indicators) {
+                Y_UNUSED(key);
+                const auto id = Props.InfoUnitRegistry.AddGenerated("grouping_indicator");
+                constants.Add(id, MakeConstant("Uint64", "0", pos, &Ctx)); outputs[column] = id;
+            }
+            relation.Op = MakeIntrusive<TOpMap>(relation.Op, pos, std::move(constants));
+        }
+        relation.Bindings = std::move(outputs);
+    }
+
+    void Windows(const TQuery& query, TRelation& relation) {
+        const auto* windows = Annotations.Windows.FindPtr(&query);
+        if (!windows) { return; }
+        for (const auto& window : *windows) {
+            const auto& specification = *window.Specification;
+            const auto pos = Pos(specification.Range);
+            TMapIUs definitions;
+            const auto map = [&](TRboExpression expression) {
+                if (expression.IsColumnAccess()) { return *expression.GetRawInputIUs().begin(); }
+                const auto id = Props.InfoUnitRegistry.AddGenerated("window_argument");
+                definitions.Add(id, std::move(expression)); return id;
+            };
+            TOrderedIUs<> partitions;
+            TSortIUs ordering;
+            for (const auto& key : specification.PartitionBy) { partitions.Append(map(Expression(*key.Expression, relation.Bindings))); }
+            for (const auto& key : specification.OrderBy) {
+                ordering.Append(map(Expression(*key.Expression, relation.Bindings)), TSortOrder{key.Direction != ESortDirection::Descending, true});
+            }
+            TOpWindowFunc function;
+            function.Function = window.Function;
+            function.Kind = window.Native ? EWindowFuncKind::Native : EWindowFuncKind::Aggregate;
+            if (!window.Native) {
+                function.Arguments.Append(map(window.Argument ? Expression(*window.Argument, relation.Bindings)
+                    : MakeConstant("Uint64", "1", pos, &Ctx)));
+            }
+            TOpWindowFrame frame;
+            frame.Type = EWindowFrameType::Range;
+            frame.EndKind = specification.OrderBy.empty() ? EWindowFrameBound::UnboundedFollowing : EWindowFrameBound::CurrentRow;
+            if (specification.Frame) {
+                const auto& syntax = *specification.Frame;
+                frame.Type = syntax.Units == EWindowFrameUnits::Rows ? EWindowFrameType::Rows
+                    : syntax.Units == EWindowFrameUnits::Range ? EWindowFrameType::Range : EWindowFrameType::Groups;
+                const auto bound = [&](const TWindowBound& value, EWindowFrameBound& kind, ui64& offset) {
+                    switch (value.Kind) {
+                        case EWindowBoundKind::CurrentRow: kind = EWindowFrameBound::CurrentRow; break;
+                        case EWindowBoundKind::Preceding: kind = EWindowFrameBound::Preceding; break;
+                        case EWindowBoundKind::Following: kind = EWindowFrameBound::Following; break;
+                        case EWindowBoundKind::UnboundedPreceding: kind = EWindowFrameBound::UnboundedPreceding; break;
+                        case EWindowBoundKind::UnboundedFollowing: kind = EWindowFrameBound::UnboundedFollowing; break;
+                    }
+                    if (value.Offset) {
+                        const auto literal = LiteralCount(*Count(*value.Offset).GetExpressionBody());
+                        if (!literal) { Unsupported(value.Range, "nonconstant window bounds"); }
+                        offset = *literal;
+                    }
+                };
+                bound(syntax.Begin, frame.BeginKind, frame.BeginValue);
+                if (syntax.End) { bound(*syntax.End, frame.EndKind, frame.EndValue); }
+                else { frame.EndKind = EWindowFrameBound::CurrentRow; }
+            }
+            if (!definitions.Keys().Empty()) { relation.Op = MakeIntrusive<TOpMap>(relation.Op, pos, std::move(definitions)); }
+            const auto id = Props.InfoUnitRegistry.AddGenerated("window_result");
+            TWindowIUs functions; functions.Add(id, std::move(function));
+            relation.Op = MakeIntrusive<TOpWindow>(relation.Op, pos, std::move(functions), std::move(partitions), std::move(ordering), frame);
+            relation.Bindings[window.Output] = id;
+        }
+    }
+
+    void Limit(const TQuery& query, TRelation& relation) {
+        if (!query.Limit && !query.Offset) { return; }
+        const auto pos = Pos(query.Range);
+        auto count = query.Limit ? Count(*query.Limit) : MakeConstant("Uint64", "18446744073709551615", pos, &Ctx);
+        std::optional<TRboExpression> offset;
+        if (query.Offset) { offset = Count(*query.Offset); }
+        relation.Op = MakeIntrusive<TOpLimit>(relation.Op, pos, TPhysicalOpProps{}, count, std::move(offset), EOpPhase::Undefined);
+    }
+
+    TRelation SetOperation(const TQuery& query, const TSetOperation& set, const TBindings& outer) {
+        if (set.Op != ESetOperation::Union && set.Quantifier == ESetQuantifier::All) {
+            Unsupported(query.Range, "INTERSECT/EXCEPT ALL multiplicities");
+        }
+        auto left = Query(*set.Left, outer), right = Query(*set.Right, outer);
+        const auto& outputIds = Names.QueryOutputs.at(&query);
+        const auto& leftIds = Names.QueryOutputs.at(set.Left.get());
+        const auto& rightIds = Names.QueryOutputs.at(set.Right.get());
+        const auto pos = Pos(query.Range);
+        // Both operands must expose the common type computed by the existing
+        // YQL annotator, including optionality and numeric widening.
+        const auto widen = [&](TRelation& relation, const TVector<TColumnId>& ids, bool rightBranch) {
+            TMapIUs definitions;
+            for (size_t i = 0; i < ids.size(); ++i) {
+                const auto* type = Annotations.Columns[outputIds[i]];
+                if (IsSameAnnotation(*type, *Annotations.Columns[ids[i]])) { continue; }
+                const auto id = Props.InfoUnitRegistry.AddGenerated("set_column");
+                const auto& conversions = Annotations.SetConversions.at(&query)[i];
+                definitions.Add(id, AnnotatedExpression(rightBranch ? conversions.second : conversions.first, query.Range, relation.Bindings));
+                relation.Bindings[ids[i]] = id;
+            }
+            if (!definitions.Keys().Empty()) { relation.Op = MakeIntrusive<TOpMap>(relation.Op, pos, std::move(definitions)); }
+        };
+        widen(left, leftIds, false); widen(right, rightIds, true);
+        TRelation result;
+        if (set.Op == ESetOperation::Union) {
+            TUnionAllIUs columns(TUnionInputPolicy{2});
+            for (size_t i = 0; i < outputIds.size(); ++i) {
+                const auto id = Props.InfoUnitRegistry.Add(TInfoUnit("", Names.Columns[outputIds[i]].Name));
+                TUnionInputRow row; row.Inputs = {left.Bindings.at(leftIds[i]), right.Bindings.at(rightIds[i])};
+                columns.Add(id, std::move(row)); result.Bindings[outputIds[i]] = id;
+            }
+            result.Op = MakeIntrusive<TOpUnionAll>(left.Op, right.Op, pos, std::move(columns));
+        } else {
+            TMapIUs leftPickles, rightPickles;
+            TJoinIUs keys;
+            for (size_t i = 0; i < outputIds.size(); ++i) {
+                auto a = left.Bindings.at(leftIds[i]), b = right.Bindings.at(rightIds[i]);
+                result.Bindings[outputIds[i]] = a;
+                if (Annotations.Columns[outputIds[i]]->IsOptionalOrNull()) {
+                    const auto pickle = [&](TInfoUnitId input, TMapIUs& definitions) {
+                        const auto id = Props.InfoUnitRegistry.AddGenerated("null_safe_key");
+                        definitions.Add(id, MakeUnaryCallable("StablePickle", MakeColumnAccess(input, pos, &Ctx, &Props)));
+                        return id;
+                    };
+                    a = pickle(a, leftPickles); b = pickle(b, rightPickles);
+                }
+                keys.Add(a, b);
+            }
+            if (!leftPickles.Keys().Empty()) {
+                left.Op = MakeIntrusive<TOpMap>(left.Op, pos, std::move(leftPickles));
+                right.Op = MakeIntrusive<TOpMap>(right.Op, pos, std::move(rightPickles));
+            }
+            result.Op = MakeIntrusive<TOpJoin>(left.Op, right.Op, pos,
+                set.Op == ESetOperation::Intersect ? "LeftSemi" : "LeftOnly", std::move(keys));
+        }
+        if (set.Quantifier != ESetQuantifier::All) {
+            TOrderedIUs<> keys;
+            for (const auto column : outputIds) { keys.Append(result.Bindings.at(column)); }
+            result.Op = MakeIntrusive<TOpAggregate>(result.Op, TAggregationIUs{}, std::move(keys), EOpPhase::Undefined, false, pos);
+        }
+        Limit(query, result);
+        return result;
+    }
+
     // Build logical operators in SQL evaluation order: input, WHERE, projection,
     // DISTINCT, sorting, then count/offset. A source-free SELECT uses EmptySource
     // as the singleton input on which constant projections are evaluated.
-    TRelation Query(const TQuery& query) {
+    TRelation Query(const TQuery& query, const TBindings& outer = {}) {
         const auto* select = std::get_if<TSelect>(&query.Body);
-        if (!select || !select->GroupBy.empty() || select->Having || !select->Windows.empty()) {
-            Unsupported(query.Range, "set operations, grouping and windows");
-        }
+        if (!select) { return SetOperation(query, std::get<TSetOperation>(query.Body), outer); }
         if (select->AssumeOrderBy) { Unsupported(query.Range, "ASSUME ORDER BY"); }
         const auto pos = Pos(query.Range);
         TRelation relation = select->From ? Source(*select->From) : TRelation{MakeIntrusive<TOpEmptySource>(pos), {}};
+        if (const auto* captures = Annotations.Captures.FindPtr(&query); captures && !captures->empty()) {
+            TDependencyIUs dependencies;
+            for (const auto& [column, type] : *captures) {
+                const auto input = outer.at(column);
+                const auto local = Props.InfoUnitRegistry.AddCopy(input);
+                dependencies.Add(local, TCapturedIU{input, type});
+                relation.Bindings[column] = local;
+            }
+            relation.Op = MakeIntrusive<TOpAddDependencies>(relation.Op, pos, std::move(dependencies));
+        }
         if (select->Where) {
             relation.Op = MakeIntrusive<TOpFilter>(std::move(relation.Op), pos, Predicate(*select->Where, relation.Bindings));
         }
+        Grouping(query, relation);
+        Windows(query, relation);
         TMapIUs definitions;
         TBindings outputs;
         const auto& outputIds = Names.QueryOutputs.at(&query);
@@ -333,6 +579,9 @@ private:
         // an unprojected input column; discard those bindings only at a boundary
         // that removes them semantically, such as DISTINCT or the final result.
         relation.Bindings.insert(outputs.begin(), outputs.end());
+        if (select->Having) {
+            relation.Op = MakeIntrusive<TOpFilter>(relation.Op, pos, Predicate(*select->Having, relation.Bindings));
+        }
         // DISTINCT is a key-only aggregate over projected values. Its output
         // scope excludes hidden inputs, so sorting by a lost dependency must fail
         // rather than generate a reference to an IU the aggregate no longer emits.
@@ -365,13 +614,7 @@ private:
             }
             relation.Op = MakeIntrusive<TOpSort>(std::move(relation.Op), pos, std::move(keys));
         }
-        if (query.Limit || query.Offset) {
-            auto count = query.Limit ? Count(*query.Limit) : MakeConstant("Uint64", "18446744073709551615", pos, &Ctx);
-            std::optional<TRboExpression> offset;
-            if (query.Offset) { offset = Count(*query.Offset); }
-            relation.Op = MakeIntrusive<TOpLimit>(std::move(relation.Op), pos, TPhysicalOpProps{},
-                count, std::move(offset), EOpPhase::Undefined);
-        }
+        Limit(query, relation);
         relation.Bindings = std::move(outputs);
         return relation;
     }

@@ -4123,11 +4123,14 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         TEnv env;
         const auto info = StartReplication(env);
         const auto controllerId = info.ControllerId;
+        const auto owner = [&] { return TPathId::FromProto(env.GetDescription("/Root/replica1")
+            .GetPathDescription().GetTable().GetReplicationConfig().GetOwnerPathId()); };
 
         const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
         const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
 
         AttachWorkers(env, controllerId, {worker});
+        UNIT_ASSERT_VALUES_EQUAL(owner(), info.PathId);
 
         const auto schema = MakeSchemaChange();
 
@@ -4141,9 +4144,11 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
 
         RequestConfigUpdate(env, info, 1006);
+        UNIT_ASSERT_VALUES_EQUAL(owner(), info.PathId);
 
         RestartController(env, controllerId);
         AttachWorkers(env, controllerId, {worker});
+        UNIT_ASSERT_VALUES_EQUAL(owner(), info.PathId);
         const auto replay = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
         UNIT_ASSERT(replay->Get()->Record.GetApplied());
 

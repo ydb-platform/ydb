@@ -789,6 +789,32 @@ public:
             }
         }
 
+        const auto& replicationConfig = table->ReplicationConfig();
+        const auto replicationPathId = replicationConfig.HasOwnerPathId()
+            ? TPathId::FromProto(replicationConfig.GetOwnerPathId()) : TPathId{};
+        if (alter.HasReplicationConfig()) {
+            const auto& config = alter.GetReplicationConfig();
+            const auto newReplicationPathId = config.HasOwnerPathId()
+                ? TPathId::FromProto(config.GetOwnerPathId()) : TPathId{};
+            if (replicationPathId && replicationPathId != newReplicationPathId
+                && !Transaction.HasExpectedReplicationOwnerPathId())
+            {
+                const auto replicationPath = context.SS->PathsById.find(replicationPathId);
+                // A DROP in progress still owns its tables until the controller
+                // has stopped and SchemeShard has committed deletion of its path.
+                if (!newReplicationPathId || !context.SS->IsLocalId(replicationPathId)
+                    || (replicationPath != context.SS->PathsById.end() && !replicationPath->second->Dropped())) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "Table is owned by another replication");
+                    return result;
+                }
+            }
+            if (newReplicationPathId && replicationConfig.GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+                && !replicationConfig.HasOwnerPathId()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot claim a legacy replica without an owner");
+                return result;
+            }
+        }
+
         bool hasLegacyReplicationStream = false;
         bool hasSchemaReplicationStream = false;
         bool hasSchemaCdcStream = false;
@@ -1342,6 +1368,26 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
             return {CreateAlterColumnTable(id, tx)};
         }
         return {CreateAlterTable(id, tx)};
+    }
+
+    // Fence cleanup before creating sub-operations for an index table.
+    if (tx.HasExpectedReplicationOwnerPathId()) {
+        const auto checks = path.Check().NotUnderOperation();
+        if (!checks) {
+            return {CreateReject(id, checks.GetStatus(), checks.GetError())};
+        }
+        const auto table = context.SS->Tables.find(path->PathId);
+        if (table != context.SS->Tables.end()) {
+            if (table->second->AlterData) {
+                return {CreateReject(id, NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight")};
+            }
+            const auto& config = table->second->ReplicationConfig();
+            if (config.HasOwnerPathId()
+                && TPathId::FromProto(config.GetOwnerPathId()) != TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId())) {
+                return {CreateReject(id, NKikimrScheme::StatusSuccess,
+                    "Table is owned by another replication; cleanup skipped")};
+            }
+        }
     }
 
     if (auto result = DropLocalBloomIndexesOnFilterDisable(id, tx, path, context)) {

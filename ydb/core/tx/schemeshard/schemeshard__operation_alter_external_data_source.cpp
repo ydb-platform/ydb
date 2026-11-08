@@ -189,6 +189,12 @@ public:
 
         const auto oldExternalDataSourceInfo = context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
         AFL_ENSURE(oldExternalDataSourceInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
+        if (oldExternalDataSourceInfo->Properties.GetProperties().contains("storage_pool_name") ||
+                externalDataSourceDescription.GetProperties().GetProperties().contains("storage_pool_name")) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "A managed external data source storage pool must be configured at CREATE and cannot be replaced; rotate credentials with ALTER SECRET");
+            return result;
+        }
         const TExternalDataSourceInfo::TPtr externalDataSourceInfo = NExternalDataSource::CreateExternalDataSource(
             externalDataSourceDescription,
             oldExternalDataSourceInfo->AlterVersion + 1

@@ -886,16 +886,13 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
     entry->SetPartitionCount(solomonVolumeInfo->Partitions.size());
 
     entry->MutablePartitions()->Reserve(entry->GetPartitionCount());
-    for (ui32 idx = 0; idx < entry->GetPartitionCount(); ++idx) {
-        entry->AddPartitions();
-    }
 
     for (const auto& partition: solomonVolumeInfo->Partitions) {
         auto shardId = partition.first;
         auto shardInfo = Self->ShardInfos.FindPtr(shardId);
         Y_ABORT_UNLESS(shardInfo);
 
-        auto part = entry->MutablePartitions()->Mutable(partition.second->PartitionId);
+        auto part = entry->AddPartitions();
         part->SetPartitionId(partition.second->PartitionId);
         part->SetShardIdx(ui64(shardId.GetLocalId()));
         auto tabletId = partition.second->TabletId;
@@ -910,8 +907,8 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
         }
     }
 
-    if (solomonVolumeInfo->Partitions.size() > 0) {
-        auto shardId = solomonVolumeInfo->Partitions.begin()->first;
+    if (!solomonVolumeInfo->Partitions.empty()) {
+        auto shardId = solomonVolumeInfo->GetFirstPartitionShardIdx();
         auto shardInfo = Self->ShardInfos.FindPtr(shardId);
         Y_ABORT_UNLESS(shardInfo);
         for (const auto& channel : shardInfo->BindedChannels) {

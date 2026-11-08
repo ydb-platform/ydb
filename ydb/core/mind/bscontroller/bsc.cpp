@@ -1132,6 +1132,7 @@ STFUNC(TBlobStorageController::StateWork) {
         fFunc(TEvBlobStorage::EvRequestControllerInfo, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerNodeReport, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerConfigRequest, EnqueueIncomingEvent);
+        fFunc(TEvBlobStorage::EvExternalDataSourcePoolRequest, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerProposeGroupKey, EnqueueIncomingEvent);
         fFunc(NSysView::TEvSysView::EvGetPDisksRequest, ForwardToSystemViewsCollector);
         fFunc(NSysView::TEvSysView::EvGetVSlotsRequest, ForwardToSystemViewsCollector);
@@ -1294,6 +1295,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerScrubReportQuantumInProgress: return 2;
         case TEvBlobStorage::EvControllerUpdateNodeDrives:             return 2;
         case TEvBlobStorage::EvControllerShredRequest:                 return 2;
+        case TEvBlobStorage::EvExternalDataSourcePoolRequest:         return 2;
 
         // hive-related commands
         case TEvBlobStorage::EvControllerSelectGroups:                 return 4;
@@ -1371,6 +1373,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReassignGroupDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAllocateVirtualGroup:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kCreateExternalDataSourcePool:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDecommitGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kWipeVDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSanitizeGroup:

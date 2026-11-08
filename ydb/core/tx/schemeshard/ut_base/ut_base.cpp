@@ -11202,6 +11202,90 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UpdateChannelsBindingSolomonStorageConfig();
     }
 
+    Y_UNIT_TEST(SolomonVolumeRejectsInvalidExternalChannels) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Volume"
+            PartitionCount: 1
+            StorageConfig { Channel { ExternalDataSource: "/MyRoot/archive" } }
+        )", {{NKikimrScheme::StatusInvalidParameter, "data channel"}});
+
+        const TString prefix = R"(
+            Name: "Volume"
+            PartitionCount: 1
+            StorageConfig {
+                Channel { PreferredPoolKind: "pool-kind-1" }
+                Channel { PreferredPoolKind: "pool-kind-1" }
+        )";
+        TestCreateSolomon(runtime, ++txId, "/MyRoot",
+            prefix + R"(Channel { StoragePool: "pool-1" } })",
+            {{NKikimrScheme::StatusInvalidParameter, "not found in this database"}});
+        TestCreateSolomon(runtime, ++txId, "/MyRoot",
+            prefix + R"(Channel { ExternalDataSource: "/MyRoot/archive" PreferredPoolKind: "pool-kind-1" } })",
+            {{NKikimrScheme::StatusInvalidParameter, "combined with media"}});
+        TestLs(runtime, "/MyRoot/Volume", false, NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(SolomonVolumeInheritsBindingsWhenGrowing) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Volume"
+            PartitionCount: 1
+            StorageConfig {
+                Channel { PreferredPoolKind: "pool-kind-1" }
+                Channel { PreferredPoolKind: "pool-kind-1" }
+                Channel { PreferredPoolKind: "pool-kind-2" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // A legacy alter can set a different binding for a new partition without rebinding partition 0.
+        TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Volume"
+            PartitionCount: 2
+            StorageConfig {
+                Channel { PreferredPoolKind: "pool-kind-1" }
+                Channel { PreferredPoolKind: "pool-kind-1" }
+                Channel { PreferredPoolKind: "pool-kind-1" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto mixed = DescribePath(runtime, "/MyRoot/Volume").GetPathDescription().GetSolomonDescription();
+        UNIT_ASSERT_VALUES_EQUAL(mixed.GetBoundChannels(2).GetStoragePoolName(), "pool-2");
+
+        // Even if the old gRPC cache supplies pool-1, a count-only alter inherits partition 0.
+        TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Volume"
+            PartitionCount: 3
+            InheritChannelsBinding: true
+            StorageConfig {
+                Channel { PreferredPoolKind: "pool-kind-1" }
+                Channel { PreferredPoolKind: "pool-kind-1" }
+                Channel { PreferredPoolKind: "pool-kind-1" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NKikimrSchemeOp::TDescribeOptions options;
+        options.SetReturnChannelsBinding(true);
+        const auto description = DescribePath(runtime, "/MyRoot/Volume", options);
+        const auto& volume = description.GetPathDescription().GetSolomonDescription();
+        UNIT_ASSERT_VALUES_EQUAL(volume.PartitionsSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(volume.GetBoundChannels(2).GetStoragePoolName(), "pool-2");
+        for (const auto& partition : volume.GetPartitions()) {
+            UNIT_ASSERT_VALUES_EQUAL(partition.BoundChannelsSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(partition.GetBoundChannels(2).GetStoragePoolName(),
+                partition.GetPartitionId() == 1 ? "pool-1" : "pool-2");
+        }
+    }
+
     Y_UNIT_TEST(RejectAlterSolomon) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

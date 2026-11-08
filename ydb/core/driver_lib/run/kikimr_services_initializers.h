@@ -223,6 +223,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
+class TSchemaSecretsInitializer : public IKikimrServicesInitializer {
+public:
+    using IKikimrServicesInitializer::IKikimrServicesInitializer;
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const TAppData* appData) override;
+};
+
 class TLongTxServiceInitializer : public IKikimrServicesInitializer {
 public:
     TLongTxServiceInitializer(const TKikimrRunConfig& runConfig);

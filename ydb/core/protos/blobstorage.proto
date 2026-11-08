@@ -1225,6 +1225,15 @@ message TEvControllerConfigResponse {
     reserved 2;
 }
 
+// BSC sends this acknowledgment directly to the requesting SchemeShard, which
+// can live on a tenant node. Keep the cluster configuration inside BSC.
+message TEvExternalDataSourcePoolResult {
+    optional uint32 SubTxId = 1;
+    optional bool Success = 2;
+    optional bool Ready = 3;
+    optional string ErrorDescription = 4;
+}
+
 message TEvControllerGetGroup {
     optional uint32 NodeID = 1;
     repeated uint32 GroupIDs = 2;

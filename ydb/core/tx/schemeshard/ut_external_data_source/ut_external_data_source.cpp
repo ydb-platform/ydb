@@ -28,6 +28,47 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         TestLs(runtime, "/MyRoot/MyExternalDataSource", false, NLs::PathExist);
     }
 
+    Y_UNIT_TEST(StoragePoolAdmission) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+        auto reject = [&](TStringBuf alias, const TString& auth, const TString& reason) {
+            const TString description = TStringBuilder()
+                << R"(Name: "source" SourceType: "ObjectStorage" Location: "https://s3.cloud.net/bucket" )"
+                << "Auth { " << auth << " } "
+                << "Properties { Properties { key: \"storage_pool_name\" value: \"" << alias << "\" } }";
+            TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", description,
+                {{NKikimrScheme::StatusInvalidParameter, reason}});
+        };
+        reject("cold", "None {}", "External data source storage pools are disabled");
+        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSourceStoragePools(true);
+        runtime.GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
+        reject("cold", "None {}", "STORAGE_POOL_NAME requires ObjectStorage with AWS authentication");
+        reject("../cold", "None {}", "Invalid STORAGE_POOL_NAME");
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "source" SourceType: "ObjectStorage" Location: "https://s3.cloud.net/bucket"
+            Auth { None {} } Properties { StoragePoolObjectPrefix: "somebody-elses-prefix" }
+        )", {{NKikimrScheme::StatusSchemeError, "Storage pool state is managed by SchemeShard"}});
+        TestLs(runtime, "/MyRoot/source", false, NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(StoragePoolCannotBeAttachedByReplace) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
+        const TString plain = R"(
+            Name: "source" SourceType: "ObjectStorage" Location: "https://s3.cloud.net/bucket" Auth { None {} }
+        )";
+        TestCreateExternalDataSource(runtime, 100, "/MyRoot", plain);
+        env.TestWaitNotification(runtime, 100);
+        TestCreateExternalDataSourceOrReplace(runtime, 101, "/MyRoot",
+            plain + R"(Properties { Properties { key: "storage_pool_name" value: "cold" } })",
+            {{NKikimrScheme::StatusPreconditionFailed, "must be configured at CREATE"}});
+        const auto describe = DescribePath(runtime, "/MyRoot/source");
+        const auto& source = describe.GetPathDescription().GetExternalDataSourceDescription();
+        UNIT_ASSERT_VALUES_EQUAL(source.GetVersion(), 1);
+        UNIT_ASSERT(source.GetProperties().GetProperties().empty());
+    }
+
     Y_UNIT_TEST(CreateExternalDataSourceWithProperties) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));

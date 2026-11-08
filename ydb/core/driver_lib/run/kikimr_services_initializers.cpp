@@ -2631,11 +2631,6 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        auto describeSchemaSecretsService = NSecret::TDescribeSchemaSecretsServiceFactory().CreateService();
-        setup->LocalServices.push_back(std::make_pair(
-            NSecret::MakeDescribeSchemaSecretServiceId(NodeId),
-            TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
-
         if (NKqp::IsCompileCacheWarmupEnabled(Config.GetTableServiceConfig(), appData->TenantName, warmupDomainName)) {
             auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetCompileCacheWarmupConfig());
 
@@ -3069,6 +3064,12 @@ void TTxProxyInitializer::InitializeServices(TActorSystemSetup *setup,
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             MakeTxProxyID(),
             TActorSetupCmd(CreateTxProxy(CollectAllAllocatorsFromAllDomains(appData)), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+}
+
+void TSchemaSecretsInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData) {
+    setup->LocalServices.emplace_back(
+        NSecret::MakeDescribeSchemaSecretServiceId(NodeId),
+        TActorSetupCmd(NSecret::TDescribeSchemaSecretsServiceFactory().CreateService(), TMailboxType::HTSwap, appData->UserPoolId));
 }
 
 TLongTxServiceInitializer::TLongTxServiceInitializer(const TKikimrRunConfig &runConfig)

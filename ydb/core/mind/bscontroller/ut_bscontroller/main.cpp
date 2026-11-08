@@ -9,11 +9,14 @@
 #include <ydb/core/mind/bscontroller/storage_stats_calculator.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -587,6 +590,91 @@ namespace {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
+    Y_UNIT_TEST(ExternalDataSourcePoolRetry) {
+        TEnvironmentSetup env(1, 1);
+        bool active = false;
+        env.Prepare("pool", [](TTestActorRuntime&) {}, active);
+        const auto schemeCache = env.Runtime->AllocateEdgeActor();
+        env.Runtime->RegisterService(MakeSchemeCacheID(), schemeCache);
+        NKikimrBlobStorage::TConfigRequest setup;
+        env.DefineBox(1, "box", {}, env.GetNodes(), setup);
+        env.DefineStoragePool(1, 1, "backing", 0, {}, {}, setup, "none");
+        const auto setupResponse = env.Invoke(setup);
+        UNIT_ASSERT_C(setupResponse.GetSuccess(), setupResponse.ShortDebugString());
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto* create = request.AddCommand()->MutableCreateExternalDataSourcePool();
+        create->SetSubTxId(17);
+        auto* group = create->MutableGroup();
+        group->SetDatabase("/database");
+        group->SetName("eds-1-2");
+        group->SetStoragePoolName("/database:eds-1-2");
+        group->AddChannelProfiles()->SetStoragePoolName("backing");
+        auto* backend = group->MutableS3BackendSettings();
+        backend->MutableSyncMode();
+        backend->MutableSettings()->SetBucket("bucket");
+        auto* credentials = backend->MutableExternalDataSourceCredentials();
+        credentials->SetDatabase("/database");
+        credentials->SetOwnerSid("owner");
+        credentials->SetAccessKeySecretPath("/database/access");
+        credentials->SetSecretKeySecretPath("/database/secret");
+
+        const auto first = env.Invoke(request);
+        UNIT_ASSERT_C(first.GetSuccess(), first.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(first.GetStatus(0).GetExternalDataSourcePoolSubTxId(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(first.GetStatus(0).GroupIdSize(), 1);
+        NKikimrBlobStorage::TConfigRequest rename;
+        env.DefineStoragePool(1, 1, "renamed", 0, {}, {}, rename, "none", 1);
+        const auto renamed = env.Invoke(rename);
+        UNIT_ASSERT_C(renamed.GetSuccess(), renamed.ShortDebugString());
+        const auto retry = env.Invoke(request);
+        UNIT_ASSERT_C(retry.GetSuccess(), retry.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(retry.GetStatus(0).GroupIdSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(retry.GetStatus(0).GetGroupId(0), first.GetStatus(0).GetGroupId(0));
+
+        backend->MutableSettings()->SetBucket("other");
+        const auto collision = env.Invoke(request);
+        UNIT_ASSERT(!collision.GetSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(collision.GetErrorDescription(), "ownership mismatch");
+        backend->MutableSettings()->SetBucket("bucket");
+
+        group->MutableChannelProfiles(0)->SetCount(2);
+        const auto changedProfile = env.Invoke(request);
+        UNIT_ASSERT(!changedProfile.GetSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(changedProfile.GetErrorDescription(), "ownership mismatch");
+        group->MutableChannelProfiles(0)->ClearCount();
+
+        auto navigate = env.Runtime->GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCache);
+        navigate->Get()->Request->ResultSet.front().Status = NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown;
+        env.Runtime->Send(new IEventHandle(navigate->Sender, schemeCache,
+            new TEvTxProxySchemeCache::TEvNavigateKeySetResult(navigate->Get()->Request.Release())));
+
+        TString failure;
+        for (ui32 i = 0; i < 10 && failure.empty(); ++i) {
+            const auto poll = env.Invoke(request);
+            UNIT_ASSERT_C(poll.GetSuccess(), poll.ShortDebugString());
+            failure = poll.GetStatus(0).GetExternalDataSourcePoolError();
+        }
+        UNIT_ASSERT_STRING_CONTAINS(failure, "failed to resolve Hive");
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        const auto replay = env.Invoke(request);
+        UNIT_ASSERT_C(replay.GetSuccess(), replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetStatus(0).GetExternalDataSourcePoolError(), failure);
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetStatus(0).GroupIdSize(), 0);
+        backend->MutableSettings()->SetBucket("other");
+        const auto foreignReplay = env.Invoke(request);
+        UNIT_ASSERT(!foreignReplay.GetSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(foreignReplay.GetErrorDescription(), "ownership mismatch");
+        UNIT_ASSERT(foreignReplay.GetStatus(0).GetExternalDataSourcePoolError().empty());
+
+        NKikimrBlobStorage::TConfigRequest read;
+        read.AddCommand()->MutableReadStoragePool()->SetBoxId(1);
+        const auto pools = env.Invoke(read);
+        UNIT_ASSERT_C(pools.GetSuccess(), pools.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(pools.GetStatus(0).StoragePoolSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pools.GetStatus(0).GetStoragePool(0).GetName(), "renamed");
+    }
+
     Y_UNIT_TEST(GroupStateSatellitePromotesAndPersists) {
         using TFailRealm = TDataCenterStatesEnv::TFailRealm;
         TDataCenterStatesEnv env([](TTestActorRuntime& runtime) {

@@ -2104,6 +2104,7 @@ private:
     void Handle(TEvBlobStorage::TEvRequestControllerInfo::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerNodeReport::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev);
+    void Handle(TEvBlobStorage::TEvExternalDataSourcePoolRequest::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev);
     void ForwardToSystemViewsCollector(STATEFN_SIG);
     void Handle(TEvPrivate::TEvUpdateSystemViews::TPtr &ev);
@@ -2599,6 +2600,7 @@ public:
             hFunc(TEvBlobStorage::TEvRequestControllerInfo, Handle);
             hFunc(TEvBlobStorage::TEvControllerNodeReport, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigRequest, Handle);
+            hFunc(TEvBlobStorage::TEvExternalDataSourcePoolRequest, Handle);
             hFunc(TEvBlobStorage::TEvControllerProposeGroupKey, Handle);
             hFunc(TEvPrivate::TEvUpdateSystemViews, Handle);
             cFunc(TEvPrivate::EvUpdateSelfHealCounters, UpdateSelfHealCounters);

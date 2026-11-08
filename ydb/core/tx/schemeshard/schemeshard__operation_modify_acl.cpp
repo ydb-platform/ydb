@@ -63,6 +63,15 @@ public:
             return result;
         }
 
+        if (path->IsExternalDataSource() && owner && owner != path->Owner) {
+            const auto source = context.SS->ExternalDataSources.Value(path->PathId, nullptr);
+            if (source && source->Properties.GetProperties().contains("storage_pool_name")) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Cannot change the owner of an external data source with a managed storage pool");
+                return result;
+            }
+        }
+
         bool isAdmin = (context.UserToken && IsAdministrator(AppData(), context.UserToken.Get()));
 
         if (acl && AppData()->FeatureFlags.GetEnableStrictAclCheck()) {

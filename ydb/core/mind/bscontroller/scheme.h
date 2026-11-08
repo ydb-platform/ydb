@@ -520,6 +520,23 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<BoxId, StoragePoolId>;
     };
 
+    // A failed EDS can be dropped and its alias reused. The physical name
+    // contains its immutable PathId, so old allocation requests still see
+    // the original failure after cleanup and after a controller restart.
+    struct ExternalDataSourcePoolFailures : Table<137> {
+        struct PoolName : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Reason : Column<2, NScheme::NTypeIds::Utf8> {};
+
+        struct SchemeShardId : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct PathItemId : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct Allocation : Column<5, NScheme::NTypeIds::String> {
+            using Type = NKikimrBlobStorage::TAllocateVirtualGroup;
+        };
+
+        using TKey = TableKey<PoolName>;
+        using TColumns = TableColumns<PoolName, Reason, SchemeShardId, PathItemId, Allocation>;
+    };
+
     struct BoxStoragePoolPDiskFilterV2 : Table<136> {
         using BoxId = BoxStoragePoolPDiskFilter::BoxId;
         using StoragePoolId = BoxStoragePoolPDiskFilter::StoragePoolId;
@@ -559,7 +576,8 @@ struct Schema : NIceDb::Schema {
         DirectBlockGroupTabletState,
         DirectBlockGroupClaims,
         DatabaseSpaceExhaustedPool,
-        BoxStoragePoolPDiskFilterV2
+        BoxStoragePoolPDiskFilterV2,
+        ExternalDataSourcePoolFailures
     >;
 
     using TSettings = SchemaSettings<

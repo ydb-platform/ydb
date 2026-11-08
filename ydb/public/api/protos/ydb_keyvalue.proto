@@ -58,6 +58,13 @@ message StorageConfig {
         // Media for the storage channel.
         // This field specifies the kind of one storage_pool_types configured in config.yaml
         string media = 1;
+
+        // Select one managed ObjectStorage pool for a data channel (index 2 or greater).
+        // Mutually exclusive with media. DescribeVolume returns the canonical source path.
+        oneof external_storage {
+            string external_data_source = 2; // Absolute path to the external data source.
+            string storage_pool = 3; // Database-local storage_pool_name of the source.
+        }
     }
 
     // Channel configs.

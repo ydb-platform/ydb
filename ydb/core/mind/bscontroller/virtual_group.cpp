@@ -4,11 +4,125 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/events.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+
+#include <google/protobuf/util/message_differencer.h>
+
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TCreateExternalDataSourcePool& cmd, TStatus& status, TScopeId originScope) {
+        status.SetExternalDataSourcePoolSubTxId(cmd.GetSubTxId());
+        const auto& group = cmd.GetGroup();
+        if (group.GetDatabase().empty() || group.GetName().empty() || group.GetBlobDepotId() ||
+                group.GetStoragePoolName() != group.GetDatabase() + ":" + group.GetName() ||
+                !group.HasS3BackendSettings() || !group.GetS3BackendSettings().HasSyncMode() ||
+                !group.GetS3BackendSettings().HasExternalDataSourceCredentials() || !group.ChannelProfilesSize()) {
+            throw TExError() << "Invalid external data source pool configuration";
+        }
+
+        const auto& backend = group.GetS3BackendSettings();
+        const auto& credentials = backend.GetExternalDataSourceCredentials();
+        const auto& settings = backend.GetSettings();
+        if (credentials.GetDatabase() != group.GetDatabase() || credentials.GetOwnerSid().empty() ||
+                !credentials.GetAccessKeySecretPath().StartsWith(group.GetDatabase() + '/') ||
+                !credentials.GetSecretKeySecretPath().StartsWith(group.GetDatabase() + '/') ||
+                settings.HasAccessKey() || settings.HasSecretKey() || settings.HasSecretableAccessKey() || settings.HasSecretableSecretKey()) {
+            throw TExError() << "Invalid external data source credential references";
+        }
+
+        const bool tenantRequest = originScope != TScopeId::LocallyGenerated && originScope.first;
+        if (tenantRequest && group.ChannelProfilesSize() != 3) {
+            throw TExError() << "Invalid tenant storage pool configuration";
+        }
+        auto findPool = [&](const TString& name) {
+            std::optional<TBoxStoragePoolId> result;
+            for (const auto& [id, pool] : StoragePools.Get()) {
+                if (pool.Name != name) {
+                    continue;
+                }
+                if (result || pool.DDisk || (tenantRequest && (!name.StartsWith(group.GetDatabase() + ':') ||
+                        pool.SchemeshardId != originScope.first || pool.PathItemId != originScope.second))) {
+                    throw TExError() << "External data source pool ownership mismatch";
+                }
+                result = id;
+            }
+            return result;
+        };
+        const auto dedicatedPool = findPool(group.GetStoragePoolName());
+
+        // Only adopt a retry of this EDS allocation. The generic virtual group
+        // command deduplicates on its cluster-wide group name alone.
+        bool foundGroup = false;
+        Groups.ForEach([&](TGroupId, const TGroupInfo& entry) {
+            if (entry.VirtualGroupName != group.GetName()) {
+                return;
+            }
+            NKikimrBlobDepot::TBlobDepotConfig config;
+            if (!dedicatedPool || entry.StoragePoolId != *dedicatedPool || entry.Database != group.GetDatabase() ||
+                    !entry.BlobDepotConfig || !config.ParseFromString(*entry.BlobDepotConfig) ||
+                    !google::protobuf::util::MessageDifferencer::Equals(config.GetS3BackendSettings(), group.GetS3BackendSettings()) ||
+                    !std::equal(config.GetChannelProfiles().begin(), config.GetChannelProfiles().end(),
+                        group.GetChannelProfiles().begin(), group.GetChannelProfiles().end(),
+                        [](const auto& left, const auto& right) { return google::protobuf::util::MessageDifferencer::Equals(left, right); })) {
+                throw TExError() << "External data source pool ownership mismatch";
+            }
+            if (entry.VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED) {
+                status.SetExternalDataSourcePoolError(entry.ErrorReason.GetOrElse("BlobDepot creation failed"));
+            }
+            foundGroup = true;
+            status.AddGroupId(entry.ID.GetRawId());
+            status.SetExternalDataSourcePoolReady(entry.VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING);
+        });
+        if (!status.GetExternalDataSourcePoolError().empty()) {
+            // The failed group has never been published to KV. The ordinary
+            // delete command also records any remaining Hive tablet cleanup.
+            const auto& failedPool = StoragePools.Get().at(*dedicatedPool);
+            if (failedPool.NumGroups != 1) {
+                throw TExError() << "Cannot clean up failed external data source pool with additional groups";
+            }
+            FailedExternalDataSourcePoolScope = TScopeId(failedPool.SchemeshardId.GetOrElse(0), failedPool.PathItemId.GetOrElse(0));
+            NKikimrBlobStorage::TDeleteStoragePool remove;
+            remove.SetBoxId(std::get<0>(*dedicatedPool));
+            remove.SetStoragePoolId(std::get<1>(*dedicatedPool));
+            remove.SetItemConfigGeneration(failedPool.Generation.GetOrElse(0));
+            ExecuteStep(remove, status);
+        }
+        if (foundGroup) {
+            return;
+        }
+        if (dedicatedPool) {
+            throw TExError() << "External data source pool name already in use";
+        }
+
+        // Backing names apply to a new allocation. Once BSC owns the group,
+        // the stored profiles and the dedicated pool scope identify replays.
+        const auto backingPool = findPool(group.GetChannelProfiles(0).GetStoragePoolName());
+        if (!backingPool) {
+            throw TExError() << "Cannot locate backing storage pool";
+        }
+        for (size_t i = 1; i < group.ChannelProfilesSize(); ++i) {
+            if (!findPool(group.GetChannelProfiles(i).GetStoragePoolName())) {
+                throw TExError() << "Cannot locate backing storage pool";
+            }
+        }
+        NKikimrBlobStorage::TDefineStoragePool pool;
+        pool.SetBoxId(std::get<0>(*backingPool));
+        pool.SetName(group.GetStoragePoolName());
+        pool.SetVDiskKind("Default");
+        pool.SetErasureSpecies("none");
+        const auto& backing = StoragePools.Get().at(*backingPool);
+        if (backing.SchemeshardId && backing.PathItemId) {
+            pool.MutableScopeId()->SetX1(*backing.SchemeshardId);
+            pool.MutableScopeId()->SetX2(*backing.PathItemId);
+        }
+        ExecuteStep(pool, status);
+        ExecuteStep(group, status);
+    }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TAllocateVirtualGroup& cmd, TStatus& status) {
         if (!cmd.GetName()) {

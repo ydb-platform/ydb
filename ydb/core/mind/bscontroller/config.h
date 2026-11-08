@@ -154,6 +154,8 @@ namespace NKikimr {
             TStoragePoolStat& StoragePoolStat;
 
             TConfigFitAction Fit;
+            // Used when committing cleanup and its durable failure record together.
+            TScopeId FailedExternalDataSourcePoolScope;
 
             THashSet<TGroupId> GroupContentChanged;
             TVector<ui32> GroupStateUpdates;
@@ -427,6 +429,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TRemoveDriveSerial& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TForgetDriveSerial& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMigrateToSerial& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TCreateExternalDataSourcePool& cmd, TStatus& status, TScopeId originScope);
             void ExecuteStep(const NKikimrBlobStorage::TAllocateVirtualGroup& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDecommitGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TWipeVDisk& cmd, TStatus& status);

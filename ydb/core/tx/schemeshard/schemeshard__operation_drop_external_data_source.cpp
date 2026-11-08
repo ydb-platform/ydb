@@ -153,6 +153,11 @@ public:
             return result;
         }
 
+        if (externalDataSource->Properties.GetProperties().contains("storage_pool_name") && !externalDataSource->Properties.HasStoragePoolError()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Dropping a provisioned external data source storage pool requires draining its virtual group");
+            return result;
+        }
+
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);

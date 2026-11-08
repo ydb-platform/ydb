@@ -252,6 +252,14 @@ namespace NKikimr {
         TEvControllerConfigResponse() = default;
     };
 
+    struct TEvBlobStorage::TEvExternalDataSourcePoolRequest : TEventPB<TEvExternalDataSourcePoolRequest,
+        NKikimrBlobStorage::TCreateExternalDataSourcePool, EvExternalDataSourcePoolRequest>
+    {};
+
+    struct TEvBlobStorage::TEvExternalDataSourcePoolResult : TEventPB<TEvExternalDataSourcePoolResult,
+        NKikimrBlobStorage::TEvExternalDataSourcePoolResult, EvExternalDataSourcePoolResult>
+    {};
+
     struct TEvBlobStorage::TEvControllerProposeGroupKey : public TEventPB<
         TEvBlobStorage::TEvControllerProposeGroupKey,
         NKikimrBlobStorage::TEvControllerProposeGroupKey,

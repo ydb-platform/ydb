@@ -105,6 +105,8 @@ struct TTxState {
     THashSet<TShardIdx> ShardsInProgress; // indexes of datashards or pqs that operation waits for
     THashMap<TShardIdx, std::pair<TActorId, ui32>> SchemeChangeNotificationReceived;
     bool ReadyForNotifications = false;
+    bool ExternalDataSourcePoolCompleted = false;
+    TString ExternalDataSourcePoolError;
     std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> SplitDescription;
     // Split/merge ops only: whether this op deepens the by-load split lineage
     // (propagates LoadSplitLineageDepth at op completion). Set once at Propose from

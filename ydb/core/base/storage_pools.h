@@ -33,6 +33,8 @@ using TChannelBind = NKikimrStoragePool::TChannelBind;
 
 using TChannelsBindings = TVector<TChannelBind>;
 
+bool BindChannelByPoolKind(TChannelBind& binding, const TStoragePools& pools, TStringBuf kind);
+
 struct TStorageRoom: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TStorageRoom>;

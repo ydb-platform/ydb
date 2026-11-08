@@ -242,19 +242,37 @@ public:
         }
 
         TChannelsBindings channelsBinding;
-        bool isResolved = false;
-        if (alter.HasStorageConfig()) {
-            isResolved = context.SS->ResolveSolomonChannels(alter.GetStorageConfig(), path.GetPathIdForDomain(), channelsBinding);
+        if (alter.GetInheritChannelsBinding()) {
+            if (alter.GetUpdateChannelsBinding() || solomon->Partitions.empty()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot inherit storage channels for this alter");
+                return result;
+            }
+
+            const auto shardIdx = solomon->GetFirstPartitionShardIdx();
+            channelsBinding = context.SS->ShardInfos.at(shardIdx).BindedChannels;
+        } else if (alter.HasStorageConfig()) {
+            if (!context.SS->ResolveSolomonVolumeChannels(alter.GetStorageConfig(), path,
+                    context.UserToken.Get(), channelsBinding, *result)) {
+                return result;
+            }
         } else {
             if (!alter.HasChannelProfileId()) {
                 result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, "set channel profile id, please");
                 return result;
             }
-            isResolved = context.SS->ResolveSolomonChannels(alter.GetChannelProfileId(), path.GetPathIdForDomain(), channelsBinding);
+            if (!context.SS->ResolveSolomonChannels(alter.GetChannelProfileId(), path.GetPathIdForDomain(), channelsBinding)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
+                return result;
+            }
         }
-        if (!isResolved) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
-            return result;
+
+        if (alter.GetUpdateChannelsBinding()) {
+            for (const auto& [shardIdx, _] : solomon->Partitions) {
+                if (channelsBinding.size() < context.SS->ShardInfos.at(shardIdx).BindedChannels.size()) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot remove KV storage channels");
+                    return result;
+                }
+            }
         }
 
         result->SetPathId(path.Base()->PathId.LocalPathId);
@@ -262,6 +280,11 @@ public:
         TSolomonVolumeInfo::TPtr alterSolomon = solomon->CreateAlter();
 
         NIceDb::TNiceDb db(context.GetDB());
+
+        if ((alter.GetUpdateChannelsBinding() && !solomon->Partitions.empty()) ||
+                alter.GetPartitionCount() > solomon->Partitions.size()) {
+            context.SS->PersistSolomonExternalDataSourceReferences(db, path, channelsBinding);
+        }
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterSolomonVolume,  path.Base()->PathId);
 
@@ -293,15 +316,25 @@ public:
             }
         }
 
-        if (alter.HasPartitionCount()) {
+        if (alter.GetPartitionCount() > solomon->Partitions.size()) {
             const ui64 shardsToCreate = alter.GetPartitionCount() - solomon->Partitions.size();
+            ui64 nextPartitionId = solomon->Partitions.size();
+            THashSet<ui64> occupiedIds;
+            for (const auto& [_, partition] : solomon->Partitions) {
+                if (partition->PartitionId >= nextPartitionId) {
+                    occupiedIds.insert(partition->PartitionId);
+                }
+            }
 
             for (ui64 i = 0; i < shardsToCreate; ++i) {
                 const auto shardIdx = context.SS->RegisterShardInfo(solomonPartitionInfo);
                 context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, path.Base()->PathId, OperationId.GetTxId(), solomonPartitionInfo.TabletType);
                 context.SS->PersistChannelsBinding(db, shardIdx, channelsBinding);
 
-                alterSolomon->Partitions[shardIdx] = new TSolomonPartitionInfo(solomon->Partitions.size() + i);
+                while (occupiedIds.contains(nextPartitionId)) {
+                    ++nextPartitionId;
+                }
+                alterSolomon->Partitions[shardIdx] = new TSolomonPartitionInfo(nextPartitionId++);
                 txState.Shards.emplace_back(shardIdx, TTabletTypes::KeyValue, TTxState::CreateParts);
             }
             context.SS->PersistUpdateNextShardIdx(db);

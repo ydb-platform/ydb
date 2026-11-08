@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/services/scheme_secret/client/events.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor.h>
@@ -13,10 +13,6 @@
 #include <util/generic/vector.h>
 
 namespace NKikimr::NSecret {
-
-struct TDescribeSecretSettings {
-    IRetryPolicy<>::TPtr RetryPolicy;
-};
 
 IRetryPolicy<>::TPtr MakeShortRetryPolicy();
 IRetryPolicy<>::TPtr MakeLongRetryPolicy();

@@ -669,6 +669,13 @@ message TAllocateVirtualGroup {
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 8; // if S3 is used as a backend for this instance
 }
 
+// Atomically creates a dedicated pool and its one virtual group. Replaying the
+// request is safe after either the controller or SchemeShard has restarted.
+message TCreateExternalDataSourcePool {
+    TAllocateVirtualGroup Group = 1;
+    uint32 SubTxId = 2;
+}
+
 message TDecommitGroups {
     repeated uint32 GroupIds = 1; // group ids to decommit
     oneof HiveDesignator {
@@ -831,6 +838,7 @@ message TConfigRequest {
             TChangeStoragePoolBridgeMode ChangeStoragePoolBridgeMode = 64;
 
             // commands intended for internal use
+            TCreateExternalDataSourcePool CreateExternalDataSourcePool = 68;
             TReassignGroupDisk ReassignGroupDisk = 19;
             TDefineDataCenterStates DefineDataCenterStates = 65;
             TTestResetDataCenterStates TestResetDataCenterStates = 66;
@@ -1113,6 +1121,9 @@ message TConfigResponse {
         TDeclareIntent Intent = 15;
         bool Already = 16;
         TUpdateSettings Settings = 18;
+        optional uint32 ExternalDataSourcePoolSubTxId = 20;
+        bool ExternalDataSourcePoolReady = 21;
+        string ExternalDataSourcePoolError = 22;
         uint32 InterfaceVersion = 19;
     }
 

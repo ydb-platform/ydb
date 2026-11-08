@@ -157,6 +157,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             Y_VERIFY_S(Self->PathsById.contains(pathId), "pathid: " << pathId);
             auto path = Self->PathsById.at(pathId);
             path->DecShardsInside();
+            if (tabletType == ETabletType::KeyValue && path->Dropped() && !path->GetShardsInside()) {
+                Self->ReleaseSolomonExternalDataSourceReferences(db, pathId);
+            }
 
             auto domain = Self->ResolveDomainInfo(path);
             domain->RemoveInternalShard(ShardIdx, Self);

@@ -563,11 +563,29 @@ Ydb::StatusIds::StatusCode PullStatus(const TResult &result) {
 }
 
 namespace {
-    void AssignPoolKinds(auto &storageConfig, auto *internalStorageConfig) {
-        ui32 size = storageConfig.channel_size();
+    void AssignStorageConfig(const Ydb::KeyValue::StorageConfig& config, NKikimrSchemeOp::TKeyValueStorageConfig* target) {
+        for (const auto& channel : config.channel()) {
+            auto* binding = target->AddChannel();
+            if (!channel.media().empty()) {
+                binding->SetPreferredPoolKind(channel.media());
+            }
 
-        for (ui32 channelIdx = 0; channelIdx < size; ++channelIdx) {
-            internalStorageConfig->AddChannel()->SetPreferredPoolKind(storageConfig.channel(channelIdx).media());
+            if (channel.has_external_data_source()) {
+                binding->SetExternalDataSource(channel.external_data_source());
+            } else if (channel.has_storage_pool()) {
+                binding->SetStoragePool(channel.storage_pool());
+            }
+        }
+    }
+
+    void DescribeStorageConfig(const NKikimrSchemeOp::TSolomonVolumeDescription& desc, Ydb::KeyValue::StorageConfig* config) {
+        for (const auto& binding : desc.GetBoundChannels()) {
+            auto* channel = config->add_channel();
+            if (binding.HasExternalDataSourceId()) {
+                channel->set_external_data_source(binding.GetExternalDataSourcePath());
+            } else {
+                channel->set_media(binding.GetStoragePoolKind());
+            }
         }
     }
 }
@@ -611,7 +629,7 @@ public:
         if (GetProtoRequest()->has_storage_config()) {
             auto &storageConfig = GetProtoRequest()->storage_config();
             auto *internalStorageConfig = tableDesc->MutableStorageConfig();
-            AssignPoolKinds(storageConfig, internalStorageConfig);
+            AssignStorageConfig(storageConfig, internalStorageConfig);
         } else {
             tableDesc->SetChannelProfileId(GetProtoRequest()->partition_count());
         }
@@ -814,11 +832,7 @@ protected:
         Ydb::KeyValue::DescribeVolumeResult result;
         result.set_path(this->GetProtoRequest()->path());
         result.set_partition_count(desc.PartitionsSize());
-        auto *storageConfig = result.mutable_storage_config();
-        for (auto &channel : desc.GetBoundChannels()) {
-            auto *channelBind = storageConfig->add_channel();
-            channelBind->set_media(channel.GetStoragePoolKind());
-        }
+        DescribeStorageConfig(desc, result.mutable_storage_config());
         this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, TActivationContext::AsActorContext());
     }
 
@@ -896,9 +910,11 @@ public:
 
         if (GetProtoRequest()->has_storage_config()) {
             tableDesc->SetUpdateChannelsBinding(true);
+        } else {
+            tableDesc->SetInheritChannelsBinding(true);
         }
         auto *internalStorageConfig = tableDesc->MutableStorageConfig();
-        AssignPoolKinds(StorageConfig, internalStorageConfig);
+        AssignStorageConfig(StorageConfig, internalStorageConfig);
 
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
@@ -920,10 +936,7 @@ public:
         }
 
         const NKikimrSchemeOp::TSolomonVolumeDescription &desc = request->ResultSet[0].SolomonVolumeInfo->Description;
-        for (auto &channel : desc.GetBoundChannels()) {
-            auto *channelBind = StorageConfig.add_channel();
-            channelBind->set_media(channel.GetStoragePoolKind());
-        }
+        DescribeStorageConfig(desc, &StorageConfig);
         SendProposeRequest(TActivationContext::AsActorContext());
     }
 

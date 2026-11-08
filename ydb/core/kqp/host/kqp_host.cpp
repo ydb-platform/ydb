@@ -1,5 +1,7 @@
 #include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "kqp_host_impl.h"
+#include "new_parser/kqp_new_parser.h"
+#include "new_parser/kqp_name_resolver.h"
 #include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
 #include "kqp_statement_rewrite.h"
 
@@ -1440,12 +1442,41 @@ private:
     {
         TCompileExprResult result;
         std::shared_ptr<NYql::TAstParseResult> queryAst;
-        if (!query.AstResult) {
+        if (!query.AstResult || (isSql && SessionCtx->Config().GetEnableNewYqlParser())) {
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
                 .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
                 .SetFromConfig(SessionCtx->Config());
+        }
+
+        if (isSql && SessionCtx->Config().GetEnableNewYqlParser()) {
+            TCompileTraceScope traceScope(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase,
+                "Parse query with new YQL frontend");
+            try {
+                const auto translationSettings = settingsBuilder.Build(ctx);
+                auto parsed = ParseQueryWithNewParser(query.Text, translationSettings,
+                    settingsBuilder.GetIsAmbiguityError());
+                traceScope.SetSuccess(parsed.IsOk());
+                if (!parsed.IsOk()) {
+                    ctx.IssueManager.AddIssues(parsed.Issues);
+                    return result;
+                }
+                NewParserSettings = {translationSettings.DefaultCluster, translationSettings.PathPrefix,
+                    translationSettings.ClusterPathPrefixes};
+                NewParserAst = std::move(parsed.Ast);
+                // Until direct RBO lowering is available, reuse the original
+                // pipeline's asynchronous catalog load to bind this AST.
+                ythrow TNewYqlParserFallback() << "New AST construction succeeded; AST-to-RBO lowering is not implemented";
+            } catch (const TNewYqlParserFallback& e) {
+                // No expression lowering has run yet. Resume the original pipeline
+                // with its existing AST, settings and optimizer selection intact.
+                traceScope.SetSuccess(true);
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL parser fallback: " << e.what();
+            }
+        }
+
+        if (!query.AstResult) {
             TCompileTraceScope traceScope(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase,
                 "Parse query");
             NSQLTranslation::TTranslationSettings effectiveSettings;
@@ -2316,6 +2347,7 @@ private:
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
+            .Add(CreateNewParserNameResolutionTransformer(), "ResolveNewParserNames")
             .Add(endPass("Annotate IO"), "TraceEndIOAnnotation")
             .Add(beginPass("Annotate types"), "TraceBeginTypeAnnotation")
             .AddTypeAnnotation()
@@ -2387,6 +2419,7 @@ private:
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
+            .Add(CreateNewParserNameResolutionTransformer(), "ResolveNewParserNames")
             .Add(endPass("Annotate IO"), "TraceEndIOAnnotation")
             .Add(beginPass("Annotate types"), "TraceBeginTypeAnnotation")
             .AddTypeAnnotation()
@@ -2415,6 +2448,9 @@ private:
     }
 
     void SetupSession(EKikimrQueryType queryType, TCompileTrace::TPtr trace = {}) {
+        NewParserNames.reset();
+        NewParserAst.reset();
+        NewParserNamesProcessed = false;
         SessionCtx->Reset(KeepConfigChanges);
         SessionCtx->Query().Type = queryType;
         SessionCtx->Query().CompileTrace = std::move(trace);
@@ -2435,6 +2471,78 @@ private:
         std::get<0>(TypesCtx->CachedRandom).reset();
         std::get<1>(TypesCtx->CachedRandom).reset();
         std::get<2>(TypesCtx->CachedRandom).reset();
+    }
+
+    TAutoPtr<IGraphTransformer> CreateNewParserNameResolutionTransformer() {
+        return CreateFunctorTransformer([this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            output = input;
+            if (!NewParserAst || NewParserNamesProcessed) {
+                return IGraphTransformer::TStatus::Ok;
+            }
+            NewParserNamesProcessed = true;
+            TCompileTraceScope trace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase,
+                "Resolve new YQL AST names");
+            try {
+                THashMap<std::pair<TString, TString>, NNewYql::TTableMetadataPtr> snapshots;
+                const auto lookup = [&](const TString& cluster, const TString& path) -> NNewYql::TTableMetadataPtr {
+                    const auto key = std::make_pair(cluster, path);
+                    if (const auto* snapshot = snapshots.FindPtr(key)) {
+                        return *snapshot;
+                    }
+                    const auto* description = SessionCtx->Tables().GetTables().FindPtr(key);
+                    // A missing catalog entry can mean a rewritten path, a view
+                    // or a different provider, not necessarily a missing table.
+                    if (!description || !description->Metadata) {
+                        ythrow TNewYqlParserFallback() << "Metadata is not available to the new name resolver: " << path;
+                    }
+                    const auto& metadata = *description->Metadata;
+                    if (!metadata.DoesExist) {
+                        return {};
+                    }
+                    if (metadata.Temporary || metadata.Kind == EKikimrTableKind::External
+                        || metadata.Kind == EKikimrTableKind::View || metadata.Kind == EKikimrTableKind::SysView
+                        || SessionCtx->Config().SystemColumnsEnabled()) {
+                        ythrow TNewYqlParserFallback() << "Unsupported catalog schema in new name resolution: " << path;
+                    }
+                    auto snapshot = std::make_shared<NNewYql::TTableMetadata>();
+                    snapshot->Cluster = metadata.Cluster;
+                    snapshot->Path = metadata.Name;
+                    snapshot->OwnerId = metadata.PathId.OwnerId();
+                    snapshot->TableId = metadata.PathId.TableId();
+                    snapshot->SchemaVersion = metadata.SchemaVersion;
+                    const auto addColumn = [&](const TKikimrColumnMetadata& column) {
+                        if (column.IsBuildInProgress) {
+                            ythrow TNewYqlParserFallback() << "Column schema change in progress: " << path;
+                        }
+                        snapshot->Columns.push_back({column.Name, column.Id, column.Type, column.NotNull});
+                    };
+                    if (metadata.ColumnOrder.empty()) {
+                        for (const auto& [name, column] : metadata.Columns) {
+                            Y_UNUSED(name);
+                            addColumn(column);
+                        }
+                    } else {
+                        for (const auto& name : metadata.ColumnOrder) {
+                            addColumn(metadata.Columns.at(name));
+                        }
+                    }
+                    snapshots.emplace(key, snapshot);
+                    return snapshot;
+                };
+                auto resolved = NNewYql::ResolveNames(*NewParserAst, NewParserSettings, lookup);
+                if (!resolved.IsOk()) {
+                    ctx.IssueManager.AddIssues(resolved.Issues);
+                    trace.SetSuccess(false);
+                    return IGraphTransformer::TStatus::Error;
+                }
+                NewParserNames = std::move(resolved.Names);
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL name resolution succeeded";
+            } catch (const TNewYqlParserFallback& e) {
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL name resolution fallback: " << e.what();
+            }
+            trace.SetSuccess(true);
+            return IGraphTransformer::TStatus::Ok;
+        });
     }
 
     void SetupYqlTransformer(EKikimrQueryType queryType, TCompileTrace::TPtr trace = {}) {
@@ -2481,6 +2589,10 @@ private:
     TAutoPtr<IGraphTransformer> YqlTransformer;
     TAutoPtr<IGraphTransformer> YqlTransformerNewRBO;
     TAutoPtr<IGraphTransformer> DataQueryAstTransformer;
+    mutable std::unique_ptr<NNewYql::TScript> NewParserAst;
+    mutable NNewYql::TNameResolutionSettings NewParserSettings;
+    std::unique_ptr<NNewYql::TResolvedNames> NewParserNames;
+    bool NewParserNamesProcessed = false;
     TExprNode::TPtr FakeWorld;
     TKqpAsyncResultBase<IKqpHost::TQueryResult>::TAsyncTransformStatusCallback DataProvidersFinalizer;
 

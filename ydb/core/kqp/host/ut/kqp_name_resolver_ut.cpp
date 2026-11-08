@@ -1,0 +1,243 @@
+#include <ydb/core/kqp/host/new_parser/kqp_name_resolver.h>
+#include <ydb/core/kqp/host/new_parser/kqp_new_parser.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+namespace NKikimr::NKqp {
+namespace {
+
+using namespace NNewYql;
+
+struct TFixture {
+    THashMap<std::pair<TString, TString>, TTableMetadataPtr> Catalog;
+    TVector<std::pair<TString, TString>> Lookups;
+    std::unique_ptr<TScript> Ast;
+    TNameResolutionResult Result;
+
+    TFixture() {
+        AddTable("local", "/Root/t", {{"id", 1, "Int64", true}, {"value", 2, "String", false}});
+        AddTable("local", "/Root/u", {{"id", 3, "Int64", true}, {"other", 4, "Int64", false}});
+    }
+
+    void AddTable(TString cluster, TString path, TVector<TColumnMetadata> columns) {
+        auto table = std::make_shared<TTableMetadata>();
+        table->Cluster = cluster;
+        table->Path = path;
+        table->OwnerId = 42;
+        table->TableId = 100 + Catalog.size();
+        table->SchemaVersion = 7;
+        table->Columns = std::move(columns);
+        Catalog[std::make_pair(cluster, path)] = std::move(table);
+    }
+
+    void Resolve(const TString& text, TNameResolutionSettings settings = {"local", "/Root", {}}) {
+        auto parsed = ParseQueryWithNewParser(text, {}, false);
+        UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
+        Ast = std::move(parsed.Ast);
+        Result = ResolveNames(*Ast, std::move(settings), [&](const TString& cluster, const TString& path) {
+            Lookups.emplace_back(cluster, path);
+            const auto* table = Catalog.FindPtr(std::make_pair(cluster, path));
+            return table ? *table : TTableMetadataPtr{};
+        });
+    }
+
+    void Ok(const TString& text) {
+        Resolve(text);
+        UNIT_ASSERT_C(Result.IsOk(), Result.Issues.ToString());
+    }
+
+    const TQuery& Query(size_t index = 0) const {
+        return *std::get<TQueryStatement>(Ast->Statements[index].Value).Query;
+    }
+
+    const TSelect& Select(size_t index = 0) const {
+        return std::get<TSelect>(Query(index).Body);
+    }
+
+    const TResolvedColumn& Column(const TExpression& expression) const {
+        return Result.Names->Columns.at(Result.Names->ColumnReferences.at(&expression));
+    }
+};
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
+    Y_UNIT_TEST(BindsCatalogIdentityAndColumns) {
+        TFixture f;
+        f.Ok("SELECT t.id, value FROM t WHERE id > $min ORDER BY t.id;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups[0].first, "local");
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups[0].second, "/Root/t");
+        const auto& column = f.Column(*f.Select().Columns[0].Expression);
+        UNIT_ASSERT_VALUES_EQUAL(column.Name, "id");
+        UNIT_ASSERT_VALUES_EQUAL(*column.MetadataColumnId, 1);
+        UNIT_ASSERT(column.Source == f.Select().From.get());
+        UNIT_ASSERT_VALUES_EQUAL(column.Table->OwnerId, 42);
+        UNIT_ASSERT_VALUES_EQUAL(column.Table->SchemaVersion, 7);
+        UNIT_ASSERT_VALUES_EQUAL(column.Table->Columns[0].Type, "Int64");
+        UNIT_ASSERT(column.Table->Columns[0].NotNull);
+        UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->QueryOutputs.at(&f.Query()).size(), 2);
+    }
+
+    Y_UNIT_TEST(SelfJoinHasDistinctColumnBindings) {
+        TFixture f;
+        f.Ok("SELECT l.id, r.id AS rid FROM ANY t AS l JOIN ANY t AS r ON l.id = r.id;");
+        const auto& l = f.Column(*f.Select().Columns[0].Expression);
+        const auto& r = f.Column(*f.Select().Columns[1].Expression);
+        UNIT_ASSERT(l.Source != r.Source);
+        UNIT_ASSERT(l.Table == r.Table);
+        UNIT_ASSERT_VALUES_EQUAL(l.MetadataColumnId, r.MetadataColumnId);
+        const auto& join = std::get<TJoin>(f.Select().From->Value);
+        UNIT_ASSERT(join.LeftAny && join.RightAny);
+        const auto& on = std::get<TBinary>(join.On->Value);
+        UNIT_ASSERT(f.Column(*on.Left).Source == l.Source);
+        UNIT_ASSERT(f.Column(*on.Right).Source == r.Source);
+    }
+
+    Y_UNIT_TEST(RejectsMissingAndAmbiguousNames) {
+        for (const auto& [query, message] : TVector<std::pair<TString, TString>>{
+            {"SELECT id FROM absent;", "does not exist"},
+            {"SELECT absent FROM t;", "Unknown column 'absent'"},
+            {"SELECT x.absent FROM t AS x;", "Unknown column 'x.absent'"},
+            {"SELECT id FROM t AS l JOIN u AS r ON l.id = r.id;", "Ambiguous column 'id'"},
+            {"SELECT l.id FROM t AS l JOIN u AS l ON l.id = l.id;", "Duplicate table alias 'l'"},
+            {"SELECT t.id FROM t AS hidden;", "Unknown column"},
+            {"SELECT id FROM t WHERE absent > 0;", "Unknown column 'absent'"},
+            {"SELECT COUNT(*) FROM t GROUP BY absent;", "Unknown column 'absent'"},
+            {"SELECT id FROM t ORDER BY absent;", "Unknown column 'absent'"},
+            {"SELECT missing.* FROM t;", "Unknown table alias 'missing'"},
+            {"SELECT l.id FROM t AS l JOIN u AS r ON l.absent = r.id;", "Unknown column 'l.absent'"},
+        }) {
+            TFixture f;
+            f.Resolve(query);
+            UNIT_ASSERT_C(!f.Result.IsOk(), query);
+            UNIT_ASSERT_STRING_CONTAINS(f.Result.Issues.ToString(), message);
+            UNIT_ASSERT(!f.Result.Names); // No partial binding result escapes.
+        }
+    }
+
+    Y_UNIT_TEST(QuotedNamesAndClusterPrefixes) {
+        TFixture f;
+        f.AddTable("remote", "/Data/strange`table", {{"some`column", 9, "String", false}});
+        f.Resolve("SELECT a.`some``column` FROM remote.`strange``table` AS a;",
+            {"local", "/Root", {{"remote", "/Data"}}});
+        UNIT_ASSERT_C(f.Result.IsOk(), f.Result.Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups[0].second, "/Data/strange`table");
+        UNIT_ASSERT_VALUES_EQUAL(f.Column(*f.Select().Columns[0].Expression).Name, "some`column");
+    }
+
+    Y_UNIT_TEST(AnsiQuotedAliasesAndExactCase) {
+        TFixture f;
+        f.AddTable("local", "/Root/Mixed", {{"Id", 1, "Int64", false}});
+        f.Ok("--!ansi_lexer\nSELECT \"a\"\"b\".Id FROM \"Mixed\" AS \"a\"\"b\";");
+        UNIT_ASSERT_VALUES_EQUAL(f.Column(*f.Select().Columns[0].Expression).Name, "Id");
+        f.Resolve("SELECT id FROM Mixed;");
+        UNIT_ASSERT(!f.Result.IsOk());
+    }
+
+    Y_UNIT_TEST(StarUsesCatalogColumnOrder) {
+        TFixture f;
+        f.Ok("SELECT t.* FROM t;");
+        const auto& expansion = f.Result.Names->Stars.at(f.Select().Columns[0].Expression.get());
+        UNIT_ASSERT_VALUES_EQUAL(expansion.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->Columns[expansion[0]].Name, "id");
+        UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->Columns[expansion[1]].Name, "value");
+    }
+
+    Y_UNIT_TEST(DerivedTablesAndProjectionAliases) {
+        TFixture f;
+        f.Ok("SELECT d.key FROM (SELECT id AS key FROM t) AS d ORDER BY key;");
+        const auto& derived = f.Column(*f.Select().Columns[0].Expression);
+        UNIT_ASSERT_VALUES_EQUAL(derived.Name, "key");
+        UNIT_ASSERT(derived.Input);
+        const auto& projection = f.Result.Names->Columns[*derived.Input];
+        UNIT_ASSERT(projection.Input);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Result.Names->Columns[*projection.Input].MetadataColumnId, 1);
+        f.Resolve("SELECT d.value FROM (SELECT id AS key FROM t) AS d;");
+        UNIT_ASSERT(!f.Result.IsOk());
+    }
+
+    Y_UNIT_TEST(OrderByAliasesDoNotLeakIntoWhere) {
+        TFixture f;
+        f.Ok("SELECT id + 1 AS value FROM t ORDER BY value;");
+        const auto id = f.Result.Names->ColumnReferences.at(f.Select().OrderBy[0].Expression.get());
+        UNIT_ASSERT_VALUES_EQUAL(id, f.Result.Names->QueryOutputs.at(&f.Query())[0]);
+        f.Resolve("SELECT id AS new_name FROM t WHERE new_name > 0;");
+        UNIT_ASSERT(!f.Result.IsOk());
+    }
+
+    Y_UNIT_TEST(CteShadowsCatalogAndCopiesBindings) {
+        TFixture f;
+        f.Ok("WITH t(key) AS (SELECT id FROM u) SELECT l.key, r.key AS other FROM t AS l JOIN t AS r ON l.key = r.key;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups[0].second, "/Root/u");
+        UNIT_ASSERT(f.Column(*f.Select().Columns[0].Expression).Source != f.Column(*f.Select().Columns[1].Expression).Source);
+        f.Resolve("WITH c(a,b) AS (SELECT id FROM t) SELECT a FROM c;");
+        UNIT_ASSERT(!f.Result.IsOk());
+    }
+
+    Y_UNIT_TEST(CorrelatedSubqueryAndLocalShadowing) {
+        TFixture f;
+        f.Ok("SELECT l.id FROM t AS l WHERE EXISTS (SELECT r.id FROM u AS r WHERE r.id = l.id);");
+        const auto& query = *std::get<TExists>(f.Select().Where->Value).Query;
+        const auto& predicate = std::get<TBinary>(std::get<TSelect>(query.Body).Where->Value);
+        UNIT_ASSERT(f.Column(*predicate.Right).Source == f.Select().From.get());
+        f.Resolve("SELECT l.value FROM t AS l WHERE EXISTS (SELECT l.value FROM u AS l);");
+        UNIT_ASSERT(!f.Result.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(f.Result.Issues.ToString(), "Unknown column 'l.value'");
+    }
+
+    Y_UNIT_TEST(SemiJoinExposesOnlyPreservedSide) {
+        TFixture f;
+        f.Ok("SELECT l.id FROM t AS l LEFT SEMI JOIN u AS r ON l.id = r.id;");
+        f.Resolve("SELECT r.id FROM t AS l LEFT SEMI JOIN u AS r ON l.id = r.id;");
+        UNIT_ASSERT(!f.Result.IsOk());
+    }
+
+    Y_UNIT_TEST(FunctionsAndWindowsResolveTheirArguments) {
+        TFixture f;
+        f.Ok("SELECT SUM(id) FILTER(WHERE id > 0) OVER w, Math::Abs(id) FROM t WINDOW w AS (PARTITION BY value ORDER BY id);");
+        const auto& call = std::get<TCall>(f.Select().Columns[0].Expression->Value);
+        UNIT_ASSERT(f.Result.Names->WindowReferences.at(&*call.Over) == &f.Select().Windows[0]);
+        f.Resolve("SELECT SUM(absent) OVER () FROM t;");
+        UNIT_ASSERT(!f.Result.IsOk());
+        f.Resolve("SELECT SUM(id) OVER absent FROM t;");
+        UNIT_ASSERT(!f.Result.IsOk());
+        f.Resolve("SELECT SUM(id) OVER (ORDER BY absent) FROM t;");
+        UNIT_ASSERT(!f.Result.IsOk());
+    }
+
+    Y_UNIT_TEST(PrefixPragmasAreAppliedInStatementOrder) {
+        TFixture f;
+        f.AddTable("local", "/Other/t", {{"different", 1, "String", true}});
+        f.Ok("SELECT id FROM t; PRAGMA TablePathPrefix = '/Other'; SELECT different FROM t; SELECT id FROM `/Root/t`;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups[0].second, "/Root/t");
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups[1].second, "/Other/t");
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups[2].second, "/Root/t");
+    }
+
+    Y_UNIT_TEST(ErrorsHaveSourcePositions) {
+        TFixture f;
+        f.Resolve("SELECT\n  missing FROM t;");
+        UNIT_ASSERT(!f.Result.IsOk());
+        const auto& issue = *f.Result.Issues.begin();
+        UNIT_ASSERT_VALUES_EQUAL(issue.Position.Row, 2);
+        UNIT_ASSERT_VALUES_EQUAL(issue.Position.Column, 3);
+    }
+
+    Y_UNIT_TEST(UnsupportedBindingDoesNotReturnPartialNames) {
+        for (const TString query : {
+            "SELECT * FROM t JOIN u USING(id);",
+            "SELECT id FROM t UNION ALL SELECT id FROM u;",
+            "SELECT * FROM t WITH SCHEMA (id String);",
+            "SELECT value.field FROM t;",
+            "PRAGMA AnsiQuotedIdentifiers; SELECT id FROM t;",
+            "SELECT COUNT(*) FROM t HAVING COUNT(*) > 0;",
+        }) {
+            TFixture f;
+            UNIT_ASSERT_EXCEPTION(f.Resolve(query), TNewYqlParserFallback);
+        }
+    }
+}
+
+} // namespace NKikimr::NKqp

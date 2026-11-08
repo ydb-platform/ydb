@@ -14,6 +14,7 @@ RECURSE_FOR_TESTS(
     idx_test
     join
     knn
+    new_parser
     olap
     opt
     perf

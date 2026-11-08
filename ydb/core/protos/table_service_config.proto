@@ -639,4 +639,8 @@ message TTableServiceConfig {
     optional bool EnableLookupJoinPointPrefixes = 154 [default = false, (InvalidateCompileCache) = true];
 
     optional bool UseScalarHashJoin = 155 [default = false, (InvalidateCompileCache) = true];
+
+    // Try the direct YQL frontend before the existing compilation pipeline.
+    // Currently parses with ANTLR and falls back because AST-to-RBO lowering is not implemented.
+    optional bool EnableNewYqlParser = 156 [default = false, (InvalidateCompileCache) = true];
 };

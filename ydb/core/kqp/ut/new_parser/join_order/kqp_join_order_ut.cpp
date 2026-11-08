@@ -227,6 +227,12 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
         } catch (const std::exception& error) {
             errors += context + ": " + error.what() + "\n";
             Cerr << context << ": " << error.what() << Endl;
+            // A compilation error may close the SDK session. A new session
+            // lets the remaining corpus report independent failures; the failed
+            // query remains in errors and never contributes to matched.
+            auto replacement = kikimr.GetQueryClient().GetSession().GetValueSync();
+            UNIT_ASSERT_C(replacement.IsSuccess(), replacement.GetIssues().ToString());
+            session = replacement.GetSession();
         }
     }
     Cerr << benchmark.Name << ": " << matched << '/' << checked << " native canonical join orders matched" << Endl;

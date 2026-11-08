@@ -175,6 +175,9 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         CheckType("2 BETWEEN 1 AND 3", "Bool");
         CheckType("2 NOT BETWEEN SYMMETRIC 3 AND 1", "Bool");
         CheckType("2 IN (1, 2, 3)", "Bool");
+        CheckType("2 IN (2)", "Bool");
+        CheckType("2 NOT IN (1)", "Bool");
+        CheckType("(1, 2) IN ((1, 2))", "Bool");
         CheckType("2 NOT IN (1, 3)", "Bool");
         TFixture f;
         f.Settings.AnsiIn = true;
@@ -289,7 +292,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
     // as scalar callables with a superficially compatible spelling.
     Y_UNIT_TEST(UnsupportedSemanticsRequestFallback) {
         for (const TString sql : {"COUNT(*)", "SUM(1)", "MIN(1)", "SUM(1) OVER ()", "SUM(DISTINCT 1)",
-            "Demo::Unbound(1)", "'abc' LIKE 'a%'", "(SELECT 1)", "EXISTS (SELECT 1)", "*"}) {
+            "(SELECT 1)", "EXISTS (SELECT 1)", "*"}) {
             TFixture f;
             f.Parse("SELECT " + sql + ";");
             UNIT_ASSERT_EXCEPTION(f.Lower(), TNewYqlParserFallback);

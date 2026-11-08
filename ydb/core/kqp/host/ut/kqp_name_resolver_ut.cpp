@@ -251,16 +251,59 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
     Y_UNIT_TEST(UnsupportedBindingDoesNotReturnPartialNames) {
         for (const TString query : {
             "SELECT * FROM t JOIN u USING(id);",
-            "SELECT id FROM t UNION ALL SELECT id FROM u;",
             "SELECT * FROM t WITH SCHEMA (id String);",
             "SELECT value.field FROM t;",
             "PRAGMA AnsiQuotedIdentifiers; SELECT id FROM t;",
-            "SELECT COUNT(*) FROM t HAVING COUNT(*) > 0;",
+            "PRAGMA AnsiImplicitCrossJoin = 'false'; SELECT id FROM t;",
         }) {
             TFixture f;
             UNIT_ASSERT_EXCEPTION(f.Resolve(query), TNewYqlParserFallback);
         }
     }
+
+    // A closure captures the preceding definition, not whichever definition
+    // happens to have the same spelling when the closure is later applied.
+    Y_UNIT_TEST(PreambleCapturesAndLambdaShadowing) {
+        TFixture f;
+        f.Ok("$n = 1; $f = ($x) -> { $n = $n + $x; return $n; }; "
+            "$n = 100; SELECT $f(id), $n FROM t;");
+        const auto& n = std::get<TNamedBinding>(f.Ast->Statements[0].Value);
+        const auto& fn = std::get<TNamedBinding>(f.Ast->Statements[1].Value);
+        const auto& lambda = std::get<TLambda>(fn.Value->Value);
+        const auto& local = lambda.Bindings[0];
+        const auto& sum = std::get<TBinary>(local.Value->Value);
+        const auto& references = f.Result.Names->BindingReferences;
+        UNIT_ASSERT_EQUAL(references.at(sum.Left.get()), &n.Name);
+        UNIT_ASSERT_EQUAL(references.at(sum.Right.get()), &lambda.Parameters[0]);
+        UNIT_ASSERT_EQUAL(references.at(lambda.Body.get()), &local.Name);
+        const auto& projection = f.Select(3).Columns;
+        UNIT_ASSERT_EQUAL(references.at(std::get<TCall>(projection[0].Expression->Value).Callable.get()), &fn.Name);
+        UNIT_ASSERT_EQUAL(references.at(projection[1].Expression.get()),
+            &std::get<TNamedBinding>(f.Ast->Statements[2].Value).Name);
+    }
+
+    Y_UNIT_TEST(NamedQueriesBindOnceAndExposeIndependentColumns) {
+        TFixture f;
+        f.Ok("$q = (SELECT id FROM t); $alias = $q; "
+            "SELECT l.id, r.id FROM $q AS l JOIN $alias AS r ON l.id = r.id;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups.size(), 1);
+        const auto& join = std::get<TJoin>(f.Select(2).From->Value);
+        const auto& names = *f.Result.Names;
+        UNIT_ASSERT_EQUAL(names.NamedSources.at(join.Left.get()), names.NamedSources.at(join.Right.get()));
+        UNIT_ASSERT(names.ColumnReferences.at(f.Select(2).Columns[0].Expression.get())
+            != names.ColumnReferences.at(f.Select(2).Columns[1].Expression.get()));
+    }
+
+    Y_UNIT_TEST(PreambleBindingErrorsHaveNoPartialResult) {
+        for (const TString sql : {"$f = ($x, $x) -> ($x); SELECT $f(1, 2);",
+            "$q = (SELECT id FROM $later); $later = (SELECT id FROM t); SELECT * FROM $q;"}) {
+            TFixture f;
+            f.Resolve(sql);
+            UNIT_ASSERT(!f.Result.IsOk());
+            UNIT_ASSERT(!f.Result.Issues.Empty());
+        }
+    }
+
 }
 
 } // namespace NKikimr::NKqp

@@ -124,8 +124,11 @@ public:
                 item.Value = TQueryStatement{Query(select)};
             } else if (auto* pragma = Child(core, P::RulePragma_stmt)) {
                 item.Value = Pragma(pragma);
+            } else if (auto* binding = Child(core, P::RuleNamed_nodes_stmt)) {
+                Require(item.Explain == EExplainMode::None, statement, "EXPLAIN on a named definition");
+                item.Value = NamedBinding(binding);
             } else {
-                Unsupported(core, "statements other than SELECT and PRAGMA");
+                Unsupported(core, "statements other than SELECT, PRAGMA and named definitions");
             }
             result->Statements.push_back(std::move(item));
         }
@@ -133,6 +136,51 @@ public:
     }
 
 private:
+    // Preserve the definition rather than substituting text: captures, shadowing
+    // and repeated query references are resolved by identity in the next phase.
+    TNamedBinding NamedBinding(TContext* context) {
+        const auto names = Children(Child(context, P::RuleBind_parameter_list), P::RuleBind_parameter);
+        Require(names.size() == 1, context, "tuple destructuring in named definitions");
+        TNamedBinding result{Range(context), {TString(names.front()->getText())}, {}};
+        if (auto* query = Child(context, P::RuleSelect_unparenthesized_stmt)) {
+            result.Value = MakeExpression(query, TSubquery{Query(query)});
+        } else {
+            result.Value = Expression(Child(context, P::RuleExpr));
+        }
+        return result;
+    }
+
+    TExpressionPtr Lambda(TContext* context) {
+        TLambda result;
+        // The grammar shares parenthesized expressions with argument lists.
+        // Reuse that parser, but accept only parameter names in this position.
+        auto parameters = Parenthesis(Child(context, P::RuleSmart_parenthesis));
+        const auto addParameter = [&](const TExpression& expression) {
+            const auto* parameter = std::get_if<TParameter>(&expression.Value);
+            Require(parameter, context, "non-parameter lambda arguments");
+            result.Parameters.push_back(*parameter);
+        };
+        if (const auto* tuple = std::get_if<TTuple>(&parameters->Value)) {
+            for (const auto& item : tuple->Elements) {
+                Require(!item.Alias, context, "aliased lambda arguments");
+                addParameter(*item.Expression);
+            }
+        } else {
+            addParameter(*parameters);
+        }
+        if (auto* body = Child(context, P::RuleLambda_body)) {
+            for (auto* statement : Children(body, P::RuleLambda_stmt)) {
+                auto* binding = Child(statement, P::RuleNamed_nodes_stmt);
+                Require(binding, statement, "lambda imports");
+                result.Bindings.push_back(NamedBinding(binding));
+            }
+            result.Body = Expression(Child(body, P::RuleExpr));
+        } else {
+            result.Body = Expression(Child(context, P::RuleExpr));
+        }
+        return MakeExpression(context, std::move(result));
+    }
+
     [[noreturn]] void Unsupported(TTree* tree, TStringBuf feature) const {
         const auto range = Range(tree);
         ythrow TNewYqlParserFallback() << "New AST does not support " << feature
@@ -488,8 +536,9 @@ private:
 
     // The same grammar wrapper covers grouping, tuples and relational subqueries.
     // Use its actual alternatives and comma/alias syntax to distinguish them;
-    // parentheses around one scalar alone do not create a one-element tuple.
-    TExpressionPtr Parenthesis(TContext* context) {
+    // Parentheses around one scalar normally do not create a tuple. The RHS
+    // of IN is the exception: (x) denotes a one-element membership collection.
+    TExpressionPtr Parenthesis(TContext* context, bool expectTuple = false) {
         auto* subexpr = Child(context, P::RuleSelect_subexpr);
         if (!subexpr) {
             return MakeExpression(context, TTuple{});
@@ -503,7 +552,8 @@ private:
             auto elements = Children(tuple, P::RuleNamed_expr);
             auto* alias = Child(tuple, P::RuleAn_id_or_type);
             auto first = Expression(Child(tuple, P::RuleExpr));
-            if (elements.empty() && !Token(tuple, P::TOKEN_COMMA) && !alias) {
+            if ((!expectTuple || std::holds_alternative<TSubquery>(first->Value))
+                && elements.empty() && !Token(tuple, P::TOKEN_COMMA) && !alias) {
                 first->Range = Range(context);
                 return first;
             }
@@ -656,15 +706,19 @@ private:
             case P::RuleId_expr:
             case P::RuleId_expr_in:
                 return MakeExpression(context, TName{Identifier(context), {}});
-            case P::RuleAtom_expr:
             case P::RuleIn_atom_expr:
+                if (auto* lambda = Child(context, P::RuleLambda); lambda && !Token(lambda, P::TOKEN_ARROW)) {
+                    return Parenthesis(Child(lambda, P::RuleSmart_parenthesis), true);
+                }
+                return Atom(context);
+            case P::RuleAtom_expr:
                 return Atom(context);
             case P::RuleLiteral_value:
                 return Literal(context);
             case P::RuleBind_parameter:
                 return MakeExpression(context, TParameter{TString(context->getText())});
             case P::RuleLambda:
-                Require(!Token(context, P::TOKEN_ARROW), context, "lambda expressions");
+                if (Token(context, P::TOKEN_ARROW)) { return Lambda(context); }
                 return Parenthesis(Child(context, P::RuleSmart_parenthesis));
             case P::RuleList_literal: {
                 TList list;
@@ -722,8 +776,9 @@ template <typename P>
 TQueryPtr TAstBuilder<P>::Query(TContext* context) {
     const auto rule = context->getRuleIndex();
     TQueryPtr result;
-    if (rule == P::RuleSelect_stmt || rule == P::RuleSelect_subexpr) {
-        result = Query(Child(context, rule == P::RuleSelect_stmt ? P::RuleSelect_stmt_core : P::RuleSelect_subexpr_core));
+    if (rule == P::RuleSelect_stmt || rule == P::RuleSelect_subexpr || rule == P::RuleSelect_unparenthesized_stmt) {
+        result = Query(Child(context, rule == P::RuleSelect_stmt ? P::RuleSelect_stmt_core
+            : rule == P::RuleSelect_subexpr ? P::RuleSelect_subexpr_core : P::RuleSelect_unparenthesized_stmt_core));
         if (auto* with = Child(context, P::RuleCte_with_clause)) {
             for (auto* binding : Children(with, P::RuleCte_binding)) {
                 auto* key = Child(binding, P::RuleCte_key);
@@ -743,7 +798,8 @@ TQueryPtr TAstBuilder<P>::Query(TContext* context) {
             }
         }
     } else if (rule == P::RuleSelect_stmt_core || rule == P::RuleSelect_subexpr_core
-        || rule == P::RuleSelect_stmt_intersect || rule == P::RuleSelect_subexpr_intersect)
+        || rule == P::RuleSelect_stmt_intersect || rule == P::RuleSelect_subexpr_intersect
+        || rule == P::RuleSelect_unparenthesized_stmt_core || rule == P::RuleSelect_unparenthesized_stmt_intersect)
     {
         TContext* op = nullptr;
         for (auto* tree : context->children) {

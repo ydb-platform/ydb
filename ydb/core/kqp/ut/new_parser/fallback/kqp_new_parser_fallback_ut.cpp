@@ -26,13 +26,14 @@ struct TCompileResult {
     std::pair<ui32, ui32> OptimizerCounters;
 };
 
-// Either AST success or parser fallback proves an attempted frontend parse.
+// AST success, syntax diagnostics or fallback prove an attempted frontend parse.
 // This deliberately does not establish native operator lowering: the separate
 // direct and canonical suites require stronger evidence.
 size_t CountFrontendAttempts(const TCapturedLog& logs) {
     const auto text = logs.Snapshot();
     size_t count = 0;
-    for (const TStringBuf marker : {"New YQL parser fallback:", "New YQL AST construction succeeded"}) {
+    for (const TStringBuf marker : {"New YQL parser fallback:", "New YQL AST construction succeeded",
+        "New YQL parser reported syntax errors"}) {
         for (size_t pos = text.find(marker); pos != TString::npos; pos = text.find(marker, pos + marker.size())) {
             ++count;
         }
@@ -160,8 +161,24 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
     // the native success log requirement additionally guards against silent fallback.
     Y_UNIT_TEST_TWIN(DirectRboResultsMatchLegacyFrontend, ColumnStore) {
         const TVector<TString> queries = {
+            // Real rows, NULLs and duplicate groups are compared to the existing
+            // frontend; the log assertion below requires every new path result.
+            "SELECT value, SUM(id) AS s, COUNT(*), COUNT(DISTINCT id), AVG(id) FROM `/Root/t` GROUP BY value ORDER BY value;",
+            "SELECT SUM(id), COUNT(*) FROM `/Root/t` WHERE id < 0;",
+            "SELECT value, GROUPING(value), SUM(id) FROM `/Root/t` GROUP BY ROLLUP(value) ORDER BY GROUPING(value), value;",
+            "SELECT id, SUM(id) OVER (), RANK() OVER (ORDER BY id) FROM `/Root/t` ORDER BY id;",
+            "SELECT id FROM (SELECT id FROM `/Root/t` UNION ALL SELECT id FROM `/Root/t` WHERE id <= 2) AS u ORDER BY id;",
+            "SELECT l.id, (SELECT MAX(r.id) FROM `/Root/t` AS r WHERE r.id = l.id) FROM `/Root/t` AS l ORDER BY l.id;",
+            "SELECT l.id FROM `/Root/t` AS l WHERE EXISTS (SELECT r.id FROM `/Root/t` AS r WHERE r.id = l.id) ORDER BY l.id;",
+            "SELECT COUNT(*) FROM `/Root/t` AS l WHERE EXISTS (SELECT * FROM `/Root/t` AS r "
+                "WHERE r.id = l.id AND r.value = l.value) AND NOT EXISTS "
+                "(SELECT * FROM `/Root/t` AS r WHERE r.id > l.id);",
+            "SELECT id FROM `/Root/t` WHERE id NOT IN (SELECT id FROM `/Root/t` WHERE id > 2) ORDER BY id;",
+            "SELECT id FROM `/Root/t` WHERE id IN ((SELECT id FROM `/Root/t` WHERE id > 2)) ORDER BY id;",
             "SELECT id + 1 AS n, value FROM `/Root/t` WHERE id > 0 ORDER BY id DESC LIMIT 2 OFFSET 1;",
             "SELECT id FROM `/Root/t` WHERE value IS NULL ORDER BY id;",
+            "SELECT id, id IN (1), id NOT IN (2), value IN ('one'), NULL IN (1), 1 IN (NULL), "
+                "(1, 2) IN ((1, 2)) FROM `/Root/t` ORDER BY id;",
             "SELECT DISTINCT value AS v FROM `/Root/t` ORDER BY v;",
             "SELECT d.k FROM (SELECT id + 2 AS k FROM `/Root/t`) AS d ORDER BY d.k;",
             "WITH c AS (SELECT id + 1 AS k FROM `/Root/t`) SELECT l.k AS a, r.k AS b "
@@ -170,6 +187,19 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             "SELECT * FROM `/Root/t` ORDER BY id;",
             "SELECT [1, 2][0u] AS v, CAST(3 AS Int64) + 2 AS n;",
             "SELECT 1 AS a; SELECT id AS b FROM `/Root/t` ORDER BY id LIMIT 2;",
+            // Original workload helper declarations now pass through every
+            // native phase, even when only one helper is used by the query.
+            "$to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); }; "
+                "$to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); }; "
+                "$round = ($x, $y) -> { return $x; }; "
+                "SELECT $round($to_decimal(id), 2) AS n FROM `/Root/t` ORDER BY id;",
+            "$n = 1; $f = ($x) -> { $v = $x + $n; return $v; }; $n = 100; "
+                "$q = (SELECT $f(id) AS k FROM `/Root/t`); $alias = $q; "
+                "SELECT l.k AS a, r.k AS b FROM $q AS l LEFT JOIN $alias AS r ON l.k = r.k ORDER BY a;",
+            "PRAGMA AnsiImplicitCrossJoin; $q = SELECT id FROM `/Root/t`; $r = (SELECT id + 1 AS k FROM $q); "
+                "WITH c AS (SELECT k FROM $r) SELECT k FROM c ORDER BY k;",
+            "$id = ($x) -> ($x); $make = ($x) -> (($y) -> ($x + $y)); "
+                "SELECT $id(id) AS n, $id(value) AS v, $make(id)(2) AS k FROM `/Root/t` ORDER BY n;",
         };
         TVector<TVector<TString>> baseline;
         for (const bool enable : {false, true}) {
@@ -310,7 +340,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
         UNIT_ASSERT_C(next.IsSuccess(), next.GetIssues().ToString());
     }
 
-    // COUNT currently uses frontend fallback. It must still return the same value
+    // COUNT must return the same value through the direct aggregate path
     // with either optimizer, while malformed SQL must remain a diagnostic failure.
     Y_UNIT_TEST_TWIN(SelectAndSyntaxErrors, NewRbo) {
         for (bool enableNewParser : {false, true}) {

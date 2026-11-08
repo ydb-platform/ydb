@@ -2565,12 +2565,8 @@ FROM `{table_name}`"""
         assert parsed["ok-only-d"].get("req") is None
 
         # Tuple trailing optional element omitted.
-        #
-        # The assertion is intentionally tolerant of JSON serialization style:
-        # some serialization may emit [7] for a tuple whose second element is null.
         trailing_b = parsed["ok-tuple-trailing-optional"]["top"].get("b")
-        assert trailing_b is not None
-        assert trailing_b in ([7], [7, None])
+        assert trailing_b == [7, None]
 
         # Explicit null optional list.
         ok_list_top = parsed["ok-list-null"].get("top")

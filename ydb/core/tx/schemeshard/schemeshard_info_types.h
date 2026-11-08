@@ -152,6 +152,8 @@ struct TBackupToS3Settings {
     // System Views
     TControlWrapper EnableSysViewPermissionsExport;
     TControlWrapper EnableSysViewPermissionsImport;
+    // Coordination Nodes
+    TControlWrapper EnableKesusExport;
 
     TBackupToS3Settings()
         : EnableAsyncReplicationExport(1, 0, 1)
@@ -164,6 +166,7 @@ struct TBackupToS3Settings {
         , EnableExternalTableImport(1, 0, 1)
         , EnableSysViewPermissionsExport(1, 0, 1)
         , EnableSysViewPermissionsImport(1, 0, 1)
+        , EnableKesusExport(0, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -181,6 +184,8 @@ struct TBackupToS3Settings {
 
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsExport, icb->BackupControls.S3Controls.EnableSysViewPermissionsExport);
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsImport, icb->BackupControls.S3Controls.EnableSysViewPermissionsImport);
+
+        TControlBoard::RegisterSharedControl(EnableKesusExport, icb->BackupControls.S3Controls.EnableKesusExport);
     }
 };
 

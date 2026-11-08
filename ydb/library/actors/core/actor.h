@@ -1,5 +1,7 @@
 #pragma once
 
+// CI experiment: rebuild actor-system dependents on the 128-core PR runner.
+
 #include "event.h"
 #include "mailbox.h"
 #include "monotonic.h"

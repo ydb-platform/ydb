@@ -351,4 +351,305 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
         UNIT_ASSERT_VALUES_EQUAL(proxyAfter.GetGroupGeneration(), proxyBefore.GetGroupGeneration());
     }
 
+    // The slots of the source PDisk that are out of their groups move along with the PDisk, as their data is on the drive.
+    // The node of the source PDisk is down, which is the usual reason to move the drive.
+    enum class EMovedSlot {
+        Donor, // the donor of the VDisk that has moved off the source PDisk keeps serving it from the new place
+        Acceptor, // the VDisk that has moved onto the source PDisk keeps replicating from its donor
+        BeingDeleted, // the slot moved off the source PDisk gets destroyed by the node of the destination PDisk
+    };
+
+    void PDiskMoveWithSlot(EMovedSlot movedSlot) {
+        TEnvironmentSetup env({
+            .NodeCount = 4,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::EErasureSpecies::ErasureNone,
+            .ControllerNodeId = 4,
+        });
+        env.UpdateSettings(false, movedSlot != EMovedSlot::BeingDeleted);
+        env.CreateBoxAndPool(1, 6, 3);
+        env.CommenceReplication();
+        env.Sim(TDuration::Seconds(30));
+
+        const std::pair<ui32, ui32> source(1, 1000);
+        const std::pair<ui32, ui32> spare(2, 1000);
+        const std::pair<ui32, ui32> destination(3, 1000);
+        auto pdiskOf = [](const NKikimrBlobStorage::TVSlotId& id) {
+            return std::make_pair(id.GetNodeId(), id.GetPDiskId());
+        };
+        auto vdiskIdOf = [](const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
+            return TVDiskID(TGroupId::FromValue(vslot.GetGroupId()), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
+                vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
+        };
+        auto findVSlot = [&](ui32 groupId) {
+            const auto base = env.FetchBaseConfig();
+            std::optional<NKikimrBlobStorage::TBaseConfig::TVSlot> res;
+            for (const auto& vslot : base.GetVSlot()) {
+                if (vslot.GetGroupId() == groupId) {
+                    res = vslot;
+                }
+            }
+            UNIT_ASSERT(res);
+            return *res;
+        };
+        auto reassign = [&](const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot, std::pair<ui32, ui32> target,
+                bool suppressDonorMode) {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(true);
+            request.SetIgnoreGroupFailModelChecks(true);
+            auto *cmd = request.AddCommand()->MutableReassignGroupDisk();
+            cmd->SetGroupId(vslot.GetGroupId());
+            cmd->SetGroupGeneration(vslot.GetGroupGeneration());
+            cmd->SetFailRealmIdx(vslot.GetFailRealmIdx());
+            cmd->SetFailDomainIdx(vslot.GetFailDomainIdx());
+            cmd->SetVDiskIdx(vslot.GetVDiskIdx());
+            cmd->MutableTargetPDiskId()->SetNodeId(target.first);
+            cmd->MutableTargetPDiskId()->SetPDiskId(target.second);
+            cmd->SetSuppressDonorMode(suppressDonorMode);
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        };
+        auto countDanglingDonors = [&] {
+            const auto base = env.FetchBaseConfig();
+            std::set<std::pair<ui32, ui32>> pdisks;
+            for (const auto& pdisk : base.GetPDisk()) {
+                pdisks.emplace(pdisk.GetNodeId(), pdisk.GetPDiskId());
+            }
+            ui32 res = 0;
+            for (const auto& vslot : base.GetVSlot()) {
+                for (const auto& item : vslot.GetDonors()) {
+                    res += !pdisks.contains(pdiskOf(item.GetVSlotId()));
+                }
+            }
+            return res;
+        };
+        auto slotOf = [](const NKikimrBlobStorage::TVSlotId& id) {
+            return NStorage::TNodeWarden::TVSlotId(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId());
+        };
+        auto findLocalVDisk = [&](const NStorage::TNodeWarden::TVSlotId& slot) {
+            const TActorId wardenId = env.Runtime->GetNode(slot.NodeId)->ActorSystem->LookupLocalService(
+                MakeBlobStorageNodeWardenID(slot.NodeId));
+            auto *warden = dynamic_cast<NStorage::TNodeWarden*>(env.Runtime->GetActor(wardenId));
+            UNIT_ASSERT(warden);
+            const auto it = warden->LocalVDisks.find(slot);
+            return it != warden->LocalVDisks.end() ? &it->second : nullptr;
+        };
+
+        // the VDisk to move: off the source PDisk, or onto it for the acceptor
+        const auto initial = env.FetchBaseConfig();
+        std::optional<NKikimrBlobStorage::TBaseConfig::TVSlot> chosen;
+        for (const auto& vslot : initial.GetVSlot()) {
+            if (pdiskOf(vslot.GetVSlotId()) == (movedSlot == EMovedSlot::Acceptor ? spare : source)) {
+                chosen = vslot;
+                break;
+            }
+        }
+        UNIT_ASSERT(chosen);
+        const ui32 groupId = chosen->GetGroupId();
+
+        // the destination PDisk gets empty, as in PDiskMoveBasic
+        for (const auto& vslot : initial.GetVSlot()) {
+            if (pdiskOf(vslot.GetVSlotId()) == destination) {
+                reassign(vslot, spare, true);
+            }
+        }
+        env.Sim(TDuration::Seconds(30));
+
+        const TString data(1024, 'x');
+        const TLogoBlobID blobId(1, 1, 1, 0, data.size(), 0);
+        if (movedSlot == EMovedSlot::BeingDeleted) {
+            // the node is down when the slot is moved off its PDisk, so the slot stays being deleted
+            env.StopNode(source.first);
+            env.Sim(TDuration::Seconds(5));
+            reassign(*chosen, spare, false);
+        } else {
+            // the blob stays on the donor only, as the acceptor starts with its replication paused
+            env.PutBlob(groupId, blobId, data);
+            reassign(*chosen, movedSlot == EMovedSlot::Donor ? spare : source, false);
+            env.Sim(TDuration::Seconds(10));
+            const auto acceptor = findVSlot(groupId);
+            UNIT_ASSERT_VALUES_EQUAL(acceptor.DonorsSize(), 1);
+            const auto& onSource = movedSlot == EMovedSlot::Donor
+                ? acceptor.GetDonors(0).GetVSlotId()
+                : acceptor.GetVSlotId();
+            UNIT_ASSERT(pdiskOf(onSource) == source);
+            env.StopNode(source.first);
+            env.Sim(TDuration::Seconds(5));
+        }
+
+        // the node of the destination PDisk slays the slot being deleted over the moved drive, where its data is
+        const TVDiskID deletedVDiskId = vdiskIdOf(*chosen);
+        bool slainOverMovedDrive = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NPDisk::TEvSlayResult::EventType && ev->Sender.NodeId() == destination.first) {
+                const auto *msg = ev->Get<NPDisk::TEvSlayResult>();
+                slainOverMovedDrive |= msg->Status == NKikimrProto::OK && msg->PDiskId == destination.second &&
+                    msg->VDiskId.SameExceptGeneration(deletedVDiskId);
+            }
+            return true;
+        };
+
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            auto *cmd = request.AddCommand()->MutableStopPDisk();
+            cmd->MutableTargetPDiskId()->SetNodeId(destination.first);
+            cmd->MutableTargetPDiskId()->SetPDiskId(destination.second);
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            WaitForPDiskStop(env);
+        }
+        {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
+            env.Runtime->Send(new IEventHandle(MakeBlobStoragePDiskID(destination.first, destination.second), edge,
+                new TEvMoveDrive(env.PDiskMockStates[source])), destination.first);
+        }
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreGroupFailModelChecks(true);
+            auto *cmd = request.AddCommand()->MutableMovePDisk();
+            cmd->MutableSourcePDisk()->MutableTargetPDiskId()->SetNodeId(source.first);
+            cmd->MutableSourcePDisk()->MutableTargetPDiskId()->SetPDiskId(source.second);
+            cmd->MutableDestinationPDisk()->MutableTargetPDiskId()->SetNodeId(destination.first);
+            cmd->MutableDestinationPDisk()->MutableTargetPDiskId()->SetPDiskId(destination.second);
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        }
+        env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(countDanglingDonors(), 0);
+
+        if (movedSlot == EMovedSlot::BeingDeleted) {
+            UNIT_ASSERT(slainOverMovedDrive);
+        } else {
+            const auto acceptor = findVSlot(groupId);
+            UNIT_ASSERT_VALUES_EQUAL(acceptor.DonorsSize(), 1);
+            const auto& donor = acceptor.GetDonors(0);
+            UNIT_ASSERT(pdiskOf(donor.GetVSlotId()) == (movedSlot == EMovedSlot::Donor ? destination : spare));
+
+            // the donor runs at its place, and the running acceptor knows the place: a VDisk learns where its donors
+            // are when it starts, so the acceptor of the moved donor has restarted
+            const TVDiskID donorVDiskId = VDiskIDFromVDiskID(donor.GetVDiskId());
+            const auto donorSlot = slotOf(donor.GetVSlotId());
+            const auto *donorRecord = findLocalVDisk(donorSlot);
+            UNIT_ASSERT(donorRecord && donorRecord->RuntimeData && donorRecord->RuntimeData->DonorMode);
+            const auto *acceptorRecord = findLocalVDisk(slotOf(acceptor.GetVSlotId()));
+            UNIT_ASSERT(acceptorRecord && acceptorRecord->RuntimeData);
+            const std::vector<std::pair<TVDiskID, TActorId>> donorDiskIds{{donorVDiskId, donorSlot.GetVDiskServiceId()}};
+            UNIT_ASSERT(acceptorRecord->RuntimeData->DonorDiskIds == donorDiskIds);
+
+            // the donor serves the blob from its place; the replication of a single-disk group can't show it, as the
+            // acceptor learns what to replicate from the other disks of its group
+            const auto donorInfo = MakeIntrusive<TBlobStorageGroupInfo>(env.GetGroupInfo(groupId), donorVDiskId,
+                donorSlot.GetVDiskServiceId());
+            const ui32 nodeId = env.Settings.ControllerNodeId;
+            const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            auto flowRecord = MakeIntrusive<NBackpressure::TFlowRecord>();
+            const TActorId queueId = env.Runtime->Register(CreateVDiskBackpressureClient(donorInfo, donorVDiskId,
+                NKikimrBlobStorage::EVDiskQueueId::GetFastRead, MakeIntrusive<::NMonitoring::TDynamicCounters>(),
+                MakeIntrusive<TBSProxyContext>(MakeIntrusive<::NMonitoring::TDynamicCounters>()),
+                NBackpressure::TQueueClientId(NBackpressure::EQueueClientType::DSProxy, 1000), "donor", 0, false,
+                TDuration::Seconds(60), flowRecord, NMonitoring::TCountableBase::EVisibility::Private), edge, {}, {},
+                nodeId);
+            for (;;) {
+                const auto ev = env.WaitForEdgeActorEvent<TEvProxyQueueState>(edge, false,
+                    env.Runtime->GetClock() + TDuration::Minutes(1));
+                UNIT_ASSERT(ev);
+                if (ev->Get()->IsConnected) {
+                    break;
+                }
+            }
+            env.Runtime->Send(new IEventHandle(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(donorVDiskId,
+                TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead, {}, {}, {blobId}).release()), nodeId);
+            const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge, false);
+            const auto& record = res->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(record.ResultSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetResult(0).GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->GetBlobData(record.GetResult(0)).ConvertToString(), data);
+            env.Runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, queueId, {}, nullptr, 0), nodeId);
+        }
+        env.Runtime->FilterFunction = {};
+
+        // the drive has left the host of the source PDisk, and the box no longer defines it there: the controller
+        // doesn't load a box with a drive that has no PDisk
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            auto *cmd = request.AddCommand()->MutableDefineBox();
+            cmd->SetBoxId(1);
+            cmd->SetItemConfigGeneration(1);
+            for (ui32 nodeId : env.Runtime->GetNodes()) {
+                auto *host = cmd->AddHost();
+                host->MutableKey()->SetNodeId(nodeId);
+                host->SetHostConfigId(nodeId == source.first || nodeId == env.Settings.ControllerNodeId ? 2 : 1);
+            }
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        }
+
+        // the controller has to come up with the state it has committed, the moved donor tied to its acceptor
+        env.RebootTablet(env.TabletId);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(countDanglingDonors(), 0);
+        if (movedSlot != EMovedSlot::BeingDeleted) {
+            const auto acceptor = findVSlot(groupId);
+            UNIT_ASSERT_VALUES_EQUAL(acceptor.DonorsSize(), 1);
+            UNIT_ASSERT(pdiskOf(acceptor.GetDonors(0).GetVSlotId()) == (movedSlot == EMovedSlot::Donor ? destination : spare));
+        }
+    }
+
+    Y_UNIT_TEST(PDiskMoveWithDonorOnSource) {
+        PDiskMoveWithSlot(EMovedSlot::Donor);
+    }
+
+    Y_UNIT_TEST(PDiskMoveWithAcceptorOnSource) {
+        PDiskMoveWithSlot(EMovedSlot::Acceptor);
+    }
+
+    Y_UNIT_TEST(PDiskMoveWithSlotBeingDeletedOnSource) {
+        PDiskMoveWithSlot(EMovedSlot::BeingDeleted);
+    }
+
+    Y_UNIT_TEST(PDiskMoveOntoPDiskWithVSlotsIsRefused) {
+        TEnvironmentSetup env({
+            .NodeCount = 2,
+            .Erasure = TBlobStorageGroupType::EErasureSpecies::ErasureNone,
+        });
+        env.UpdateSettings(false, false);
+        env.CreateBoxAndPool(1, 4);
+        env.Sim(TDuration::Seconds(30));
+
+        const auto before = env.FetchBaseConfig();
+        UNIT_ASSERT(std::ranges::any_of(before.GetVSlot(), [](const auto& vslot) {
+            return vslot.GetVSlotId().GetNodeId() == 2 && vslot.GetVSlotId().GetPDiskId() == 1000;
+        }));
+
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(true);
+            request.SetIgnoreGroupFailModelChecks(true);
+            auto *cmd = request.AddCommand()->MutableStopPDisk();
+            cmd->MutableTargetPDiskId()->SetNodeId(2);
+            cmd->MutableTargetPDiskId()->SetPDiskId(1000);
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            WaitForPDiskStop(env);
+        }
+
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreGroupFailModelChecks(true);
+        auto *cmd = request.AddCommand()->MutableMovePDisk();
+        cmd->MutableSourcePDisk()->MutableTargetPDiskId()->SetNodeId(1);
+        cmd->MutableSourcePDisk()->MutableTargetPDiskId()->SetPDiskId(1000);
+        cmd->MutableDestinationPDisk()->MutableTargetPDiskId()->SetNodeId(2);
+        cmd->MutableDestinationPDisk()->MutableTargetPDiskId()->SetPDiskId(1000);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT(!response.GetSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "Destination PDisk has VSlots");
+
+        const auto after = env.FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(after.PDiskSize(), before.PDiskSize());
+        UNIT_ASSERT_VALUES_EQUAL(after.VSlotSize(), before.VSlotSize());
+    }
+
 }

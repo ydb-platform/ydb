@@ -2411,6 +2411,58 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         }
     }
 
+    CUSTOM_UNIT_TEST(TestMovedDonorRestartsAcceptor) {
+        using TNodeWarden = NStorage::TNodeWarden;
+        const TNodeWarden::TVSlotId slot(1, 2095, 1);
+        const TVDiskID vdiskId(100595, 2, 0, 0, 0);
+        const TVDiskID donorVDiskId(100595, 1, 0, 0, 0);
+        const TNodeWarden::TVSlotId donorSlot(2, 1000, 1001);
+        const TNodeWarden::TVSlotId movedDonorSlot(3, 1000, 1001);
+        // the donors in the record that the running VDisk gets, and whether the VDisk restarts to reach them
+        const std::vector<std::pair<std::vector<TNodeWarden::TVSlotId>, bool>> cases{
+            {{donorSlot}, false}, // the record is sent again with the same donor, as on a generation change
+            {{}, false}, // the donor is dropped, the VDisk does not need it anymore
+            {{movedDonorSlot}, true}, // the donor has moved along with its PDisk
+        };
+        for (const auto& [donors, restart] : cases) {
+            TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+            const auto wardenId = SetupNodeWardenForSlayTest(runtime);
+            const auto actorId = runtime.AllocateEdgeActor(1);
+            runtime.WrapInActorContext(wardenId, [&](IActor* actor) {
+                auto& warden = *static_cast<TNodeWarden*>(actor);
+                auto& record = warden.LocalVDisks[slot];
+                SetSlayTestVDisk(record, 1, slot.PDiskId, slot.VDiskSlotId, vdiskId);
+                record.RuntimeData.emplace(TNodeWarden::TVDiskRecord::TRuntimeData{
+                    .GroupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone),
+                    .ActorId = actorId,
+                    .ServiceId = slot.GetVDiskServiceId(),
+                    .OrderNumber = 0,
+                    .DonorMode = false,
+                    .ReadOnly = false,
+                    .DDisk = false,
+                    .DonorDiskIds = {{donorVDiskId, donorSlot.GetVDiskServiceId()}},
+                });
+                warden.VDiskIdByActor.emplace(actorId, slot);
+
+                auto vdisk = record.Config;
+                for (const auto& donor : donors) {
+                    auto *item = vdisk.AddDonors();
+                    VDiskIDFromVDiskID(donorVDiskId, item->MutableVDiskId());
+                    auto *location = item->MutableVDiskLocation();
+                    location->SetNodeID(donor.NodeId);
+                    location->SetPDiskID(donor.PDiskId);
+                    location->SetVDiskSlotID(donor.VDiskSlotId);
+                }
+                warden.ApplyLocalVDiskInfo(vdisk);
+                UNIT_ASSERT_VALUES_EQUAL(record.RuntimeData.has_value(), !restart);
+                UNIT_ASSERT_VALUES_EQUAL(record.RestartAfterShutdown, restart);
+            });
+            if (restart) {
+                runtime.WaitForEdgeActorEvent<TEvents::TEvPoison>(actorId, false);
+            }
+        }
+    }
+
     CUSTOM_UNIT_TEST(TestVDiskOfEjectedGroupDoesNotStart) {
         using TNodeWarden = NStorage::TNodeWarden;
         TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());

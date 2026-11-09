@@ -1185,6 +1185,48 @@
             "uri": "https://{canondata_backend}/1773845/ebf77941ed44040d8edc339731afefc98084125e/resource.tar.gz#test.test_select_yql-correlated_where_group_by-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-flatten_by_aliases-default.txt-Debug]": [
+        {
+            "checksum": "3e97b1f4560229b874ff7bb9f104c922",
+            "size": 996,
+            "uri": "https://{canondata_backend}/1689644/77fb6cc4f464465d93c7988ce7615666772229e0/resource.tar.gz#test.test_select_yql-flatten_by_aliases-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-flatten_by_aliases-default.txt-Results]": [
+        {
+            "checksum": "86994b2259632122e1c6807f187520a7",
+            "size": 6850,
+            "uri": "https://{canondata_backend}/1689644/77fb6cc4f464465d93c7988ce7615666772229e0/resource.tar.gz#test.test_select_yql-flatten_by_aliases-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-flatten_by_nested_fields-default.txt-Debug]": [
+        {
+            "checksum": "222459ea060c46fdc8aaf6eb413105f2",
+            "size": 626,
+            "uri": "https://{canondata_backend}/1942525/e53a02797d88900fc6326de726a6f3285ad705e8/resource.tar.gz#test.test_select_yql-flatten_by_nested_fields-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-flatten_by_nested_fields-default.txt-Results]": [
+        {
+            "checksum": "dec90b6e6f187910d1a954103d0bba52",
+            "size": 2077,
+            "uri": "https://{canondata_backend}/1942525/e53a02797d88900fc6326de726a6f3285ad705e8/resource.tar.gz#test.test_select_yql-flatten_by_nested_fields-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-flatten_columns_sources-default.txt-Debug]": [
+        {
+            "checksum": "94e34dd7b34a7f3e2b1a4398858bfa3f",
+            "size": 1046,
+            "uri": "https://{canondata_backend}/1689644/77fb6cc4f464465d93c7988ce7615666772229e0/resource.tar.gz#test.test_select_yql-flatten_columns_sources-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-flatten_columns_sources-default.txt-Results]": [
+        {
+            "checksum": "4b1006c374cc1f66753677a38c4350ac",
+            "size": 3073,
+            "uri": "https://{canondata_backend}/1689644/77fb6cc4f464465d93c7988ce7615666772229e0/resource.tar.gz#test.test_select_yql-flatten_columns_sources-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-from_select-default.txt-Debug]": [
         {
             "checksum": "b76878003f325192fdf0d69fbbbe5480",

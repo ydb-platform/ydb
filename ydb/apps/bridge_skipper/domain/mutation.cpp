@@ -85,7 +85,8 @@ std::optional<TString> SelectMutationEndpoint(
     const std::vector<TEndpointState>& endpoints,
     const TExactUpdate& update,
     const std::vector<TConnectivityReply>& validConnectivity,
-    const std::set<TString>& exclude)
+    const std::set<TString>& exclude,
+    const TPileParticipation& participation)
 {
     auto finalStates = view.Piles;
     for (const auto& [name, state] : update) {
@@ -103,7 +104,7 @@ std::optional<TString> SelectMutationEndpoint(
             rank = 1;
         } else if (state == EPileState::NotSynchronized && !update.contains(name)) {
             // An explicit NOT_SYNCHRONIZED overlay resets the pile to stage 1.
-            if (IsParticipating(name, state, validConnectivity).value_or(false)) {
+            if (EvaluatedParticipation(name, state, validConnectivity, participation).value_or(false)) {
                 rank = 2;
             }
         } else if (state == EPileState::Suspended) {

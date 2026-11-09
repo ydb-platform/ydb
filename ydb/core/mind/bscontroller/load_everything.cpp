@@ -107,6 +107,7 @@ public:
                 Self->DatabaseSpace.SetThresholds(state.GetValue<T::DatabaseSpaceBlockColor>(),
                     state.GetValue<T::DatabaseSpaceUnblockColor>());
                 Self->BridgeSyncTotalRate = state.GetValue<T::BridgeSyncTotalRate>();
+                Self->BridgeSyncMaxSyncers = state.GetValue<T::BridgeSyncMaxSyncers>();
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;
@@ -283,6 +284,9 @@ public:
                 }
                 if (groups.HaveValue<T::FailRealmStates>()) {
                     const NKikimrBlobStorage::TFailRealmStates states = groups.GetValue<T::FailRealmStates>();
+                    if (states.HasGroupState()) {
+                        group.Mirror3dcState = states.GetGroupState();
+                    }
                     if (states.StateSize()) {
                         Y_ABORT_UNLESS(states.StateSize() == 3);
                         group.FailRealmStates.emplace();
@@ -671,6 +675,9 @@ public:
                     .LastErrorTimestamp = bridgeSyncState.GetValue<Table::LastErrorTimestamp>(),
                     .FirstErrorTimestamp = bridgeSyncState.GetValue<Table::FirstErrorTimestamp>(),
                     .ErrorCount = bridgeSyncState.GetValue<Table::ErrorCount>(),
+                    .EstimatedBytesToCopy = bridgeSyncState.HaveValue<Table::EstimatedBytesToCopy>()
+                        ? std::make_optional(bridgeSyncState.GetValue<Table::EstimatedBytesToCopy>())
+                        : std::nullopt,
                 };
                 if (!bridgeSyncState.Next()) {
                     return false;
@@ -810,7 +817,7 @@ public:
                         const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, groupId,
                             targetGroupId);
                         Y_ABORT_UNLESS(inserted);
-                        Self->SyncersRequiringAction.PushBack(&it->second);
+                        Self->EnqueueSyncer(it->second);
                     }
                 });
             }

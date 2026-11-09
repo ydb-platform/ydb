@@ -15,6 +15,35 @@ namespace {
         return QueryStorageConfig(env).GetBlobStorageConfig().GetServiceSet().VDisksSize();
     }
 
+    // the only group of the pool serving as its own bridge proxy group (inline pile), but the excluded ones
+    ui32 FindInlinePileGroup(TEnvironmentSetup& env, ui64 storagePoolId, const std::set<ui32>& excluded = {}) {
+        std::optional<ui32> res;
+        const auto baseConfig = env.FetchBaseConfig(); // groups are referenced by pointers
+        for (const auto *group : GetPoolGroups(baseConfig, storagePoolId)) {
+            const ui32 groupId = group->GetGroupId();
+            if (!excluded.contains(groupId) && GetGroupInfo(env, groupId).GetBridgeProxyGroupId() == groupId) {
+                UNIT_ASSERT_C(!res, "GroupId# " << *res << " GroupId# " << groupId);
+                res.emplace(groupId);
+            }
+        }
+        UNIT_ASSERT(res);
+        return *res;
+    }
+
+    // converted cluster (nodes 1-9 named pile_1) with pile_2 (nodes 10-17) added and synchronized; returns the group
+    // converted along with the cluster
+    ui32 PrepareConvertedTwoPileCluster(TEnvironmentSetup& env, TDataChecker& checker, bool& named) {
+        const ui32 groupId = ConvertCluster(env, checker);
+        NameConvertedClusterNodes(env, named);
+        const auto res = AddPileToConfig(env, "pile_2", 10, 17);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        StartPileNodes(env, "pile_2", 10, 17);
+        AddPileAndWait(env, "pile_2");
+        RejoinPile(env, 1);
+        return groupId;
+    }
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeRemovePile) {
@@ -589,6 +618,124 @@ Y_UNIT_TEST_SUITE(BridgeRemovePile) {
         env.Sim(TDuration::Seconds(30));
         checker.Write(groupId);
         checker.CheckAll();
+    }
+
+    // groups created in the converted cluster are inline piles in its original pile whatever piles it has, so removal of
+    // the added pile leaves them in the shape of the groups converted along with the cluster
+    Y_UNIT_TEST(ConvertedNewGroupsStayInline) {
+        const auto named = std::make_shared<bool>(false);
+        TEnvironmentSetup env(MakeConvertedClusterSettings(named));
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareConvertedTwoPileCluster(env, checker, *named);
+
+        // the group created with both piles in the cluster has its own VDisks in the original pile and a separate part
+        // in the added one
+        CreateAnotherPool(env, 2);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 newGroupId = FindInlinePileGroup(env, 2);
+        const auto info = CheckInlinePileGroup(env, newGroupId, 2);
+        for (const auto& pile : info.GetBridgeGroupState().GetPile()) {
+            UNIT_ASSERT_EQUAL_C(pile.GetStage(), NKikimrBridge::TGroupState::SYNCED, info.ShortDebugString());
+        }
+        const ui32 partId = info.GetBridgeGroupState().GetPile(1).GetGroupId();
+        UNIT_ASSERT_UNEQUAL(partId, newGroupId);
+        const auto partInfo = GetGroupInfo(env, partId);
+        UNIT_ASSERT_VALUES_EQUAL_C(partInfo.GetBridgeProxyGroupId(), newGroupId, partInfo.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(GetPoolGroups(env.FetchBaseConfig(), 2).size(), 2); // the inline pile and its part
+        UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 1, 10, 17), 2);
+        for (ui32 id : {groupId, newGroupId}) {
+            checker.Write(id);
+        }
+        checker.CheckAll();
+        CheckPileData(env, checker, 0, 1);
+        CheckPileData(env, checker, 1, 10);
+
+        // the added pile goes away, the new group keeps its id and data in the original pile
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        RemovePileAndWait(env, "pile_2");
+        CheckPileGone(env, 1, 10, 17);
+        for (ui32 id : {groupId, newGroupId}) {
+            CheckInlinePileGroup(env, id);
+            checker.Write(id);
+        }
+        checker.CheckAll();
+        CheckPileData(env, checker, 0, 1);
+
+        // the group created when the original pile is the only one again is the inline pile alone
+        SetNumGroups(env, 2, 2);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 lastGroupId = FindInlinePileGroup(env, 2, {newGroupId});
+        CheckInlinePileGroup(env, lastGroupId);
+        UNIT_ASSERT_VALUES_EQUAL(GetPoolGroups(env.FetchBaseConfig(), 2).size(), 2);
+        checker.Write(lastGroupId);
+
+        env.RestartNode(2);
+        env.Sim(TDuration::Seconds(30));
+        for (ui32 id : {groupId, newGroupId, lastGroupId}) {
+            checker.Write(id);
+        }
+        checker.CheckAll();
+    }
+
+    // the group created while the original pile is out is the inline pile there anyway; its own VDisks miss the writes,
+    // so the inline pile is synced from the added pile when the original one gets back
+    Y_UNIT_TEST(ConvertedGroupCreatedWhileOriginalPileOut) {
+        const auto named = std::make_shared<bool>(false);
+        TEnvironmentSetup env(MakeConvertedClusterSettings(named));
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareConvertedTwoPileCluster(env, checker, *named);
+
+        // distconf is asked through the nodes of the added pile while the original one is out
+        constexpr ui32 nodeId = 10;
+        auto switchOriginalPile = [&](NKikimrBridge::TClusterState::EPileState state) {
+            auto clusterState = QueryStorageConfig(env, nodeId).GetClusterState();
+            clusterState.SetGeneration(clusterState.GetGeneration() + 1);
+            TBridgePileId::FromPileIndex(1).CopyToProto(&clusterState, &NKikimrBridge::TClusterState::SetPrimaryPile);
+            TBridgePileId::FromPileIndex(1).CopyToProto(&clusterState, &NKikimrBridge::TClusterState::SetPromotedPile);
+            clusterState.SetPerPileState(0, state);
+            const auto res = InvokeDistconf(env, [&](auto& record) {
+                record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(clusterState);
+            }, nodeId);
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        };
+        switchOriginalPile(NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(30));
+
+        CreateAnotherPool(env, 2);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 newGroupId = FindInlinePileGroup(env, 2);
+        const auto info = CheckInlinePileGroup(env, newGroupId, 2);
+        UNIT_ASSERT_UNEQUAL_C(info.GetBridgeGroupState().GetPile(0).GetStage(), NKikimrBridge::TGroupState::SYNCED,
+            info.ShortDebugString());
+        UNIT_ASSERT_EQUAL_C(info.GetBridgeGroupState().GetPile(1).GetStage(), NKikimrBridge::TGroupState::SYNCED,
+            info.ShortDebugString());
+        // the node has no info of the new group, so its first request reaches the DS proxy node warden starts without
+        // configuration; the request has to get to the bridge proxy put in front of it afterwards, rather than wait for
+        // the inline pile, which is out
+        checker.Write(newGroupId, nodeId); // reaches the added pile only
+        checker.CheckAll(nodeId);
+
+        // the same goes for the converted group on the node just restarted
+        constexpr ui32 restartedNodeId = 11;
+        env.RestartNode(restartedNodeId);
+        env.Sim(TDuration::Seconds(30));
+        for (ui32 id : {groupId, newGroupId}) {
+            checker.Write(id, restartedNodeId);
+        }
+        checker.CheckAll(restartedNodeId);
+
+        switchOriginalPile(NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitUntil(env, [&] {
+            return QueryStorageConfig(env, nodeId).GetClusterState().GetPerPileState(0) ==
+                NKikimrBridge::TClusterState::SYNCHRONIZED;
+        }, "original pile synchronized");
+        const auto synced = GetGroupInfo(env, newGroupId);
+        UNIT_ASSERT_EQUAL_C(synced.GetBridgeGroupState().GetPile(0).GetStage(), NKikimrBridge::TGroupState::SYNCED,
+            synced.ShortDebugString());
+        checker.Write(newGroupId);
+        checker.CheckAll();
+        CheckPileData(env, checker, 0, 1);
+        CheckPileData(env, checker, 1, nodeId);
     }
 
     // the original pile of the converted cluster is removed when the added one has taken over: groups of the cluster lose

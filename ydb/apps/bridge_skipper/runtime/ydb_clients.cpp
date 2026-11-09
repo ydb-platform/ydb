@@ -192,7 +192,7 @@ private:
         decltype(launch()) future;
         try {
             base.Rpc.SentAt = Clock();
-            if (base.Rpc.SentAt > validUntil) {
+            if (base.Rpc.SentAt >= validUntil) {
                 return false;
             }
             future = launch();
@@ -278,7 +278,7 @@ TRedactor::TRedactor(const TLoadedCredentials& credentials)
     : TRedactor(std::make_shared<const TTokenSource>(Nothing(), credentials.Token)) {
 }
 
-TString TRedactor::Redact(TStringBuf text) const {
+TString TRedactor::Redact(TStringBuf text, size_t limit) const {
     const TString token = Tokens->Token();
     TString result(text);
     size_t offset = 0;
@@ -287,7 +287,7 @@ TString TRedactor::Redact(TStringBuf text) const {
         offset += 10;
     }
     // Redact the complete input before truncating it across a secret boundary.
-    result.resize(std::min<size_t>(result.size(), 4096));
+    result.resize(std::min(result.size(), limit));
     return result;
 }
 

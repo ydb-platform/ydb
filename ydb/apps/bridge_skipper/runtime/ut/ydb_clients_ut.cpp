@@ -193,50 +193,60 @@ std::unique_ptr<grpc::Server> StartWireServer(TWireService& service, TString& en
     return server;
 }
 
+void VerifyTokenPreparationExpiry(ui64 preparationSeconds) {
+    TWireService service;
+    TString endpoint;
+    auto server = StartWireServer(service, endpoint);
+    UNIT_ASSERT(server);
+    TTempFileHandle token;
+    TFileOutput(token.Name()).Write("token\n");
+    const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n"
+        "auth: {token_file: '" + token.Name() + "'}\n");
+    std::atomic<ui64> now{100};
+    std::atomic<ui64> preparation{preparationSeconds};
+    auto clients = CreateYdbClients(config, LoadCredentials(config), [&] {
+        return TMonotonic::Seconds(now.load());
+    }, [&](const TMaybe<TString>& file) {
+        auto loaded = LoadToken(file);
+        now.fetch_add(preparation.load());
+        return loaded;
+    });
+    const TPlan plan{42, {{"b", EPileState::Disconnected}}, endpoint};
+    auto expiredPromise = NThreading::NewPromise<TUpdateResult>();
+    auto expired = expiredPromise.GetFuture();
+    const bool launched = clients->Update({endpoint, "a", 1}, plan, {TMonotonic::Seconds(130)},
+        [expiredPromise](TUpdateResult result) mutable {
+            expiredPromise.SetValue(std::move(result));
+        });
+    if (launched) {
+        UNIT_ASSERT(expired.Wait(TDuration::Seconds(10)));
+    }
+    const auto preparedAt = now.load();
+    const auto firstCount = service.ReadCapture().Updates;
+    // Recovery with a new authorization and bounded preparation must launch.
+    preparation = 1;
+    const auto good = Await<TUpdateResult>([&](auto completed) {
+        UNIT_ASSERT(clients->Update({endpoint, "a", 2}, plan, {TMonotonic::Seconds(160)}, std::move(completed)));
+    });
+    const auto totalCount = service.ReadCapture().Updates;
+    clients->Stop();
+    UNIT_ASSERT_VALUES_EQUAL(preparedAt, 100 + preparationSeconds);
+    UNIT_ASSERT(!launched);
+    UNIT_ASSERT(!expired.HasValue());
+    UNIT_ASSERT_VALUES_EQUAL(firstCount, 0);
+    UNIT_ASSERT(good.Rpc.Success);
+    UNIT_ASSERT_VALUES_EQUAL(totalCount, 1);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
     Y_UNIT_TEST(TokenPreparationMustFinishWithinLaunchAuthorization) {
-        TWireService service;
-        TString endpoint;
-        auto server = StartWireServer(service, endpoint);
-        UNIT_ASSERT(server);
-        TTempFileHandle token;
-        TFileOutput(token.Name()).Write("token\n");
-        const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n"
-            "auth: {token_file: '" + token.Name() + "'}\n");
-        std::atomic<ui64> now{100};
-        std::atomic<ui64> preparation{31};
-        auto clients = CreateYdbClients(config, LoadCredentials(config), [&] {
-            return TMonotonic::Seconds(now.load());
-        }, [&](const TMaybe<TString>& file) {
-            auto loaded = LoadToken(file);
-            now.fetch_add(preparation.load());
-            return loaded;
-        });
-        const TPlan plan{42, {{"b", EPileState::Disconnected}}, endpoint};
-        auto expiredPromise = NThreading::NewPromise<TUpdateResult>();
-        auto expired = expiredPromise.GetFuture();
-        const bool launched = clients->Update({endpoint, "a", 1}, plan, {TMonotonic::Seconds(130)},
-            [expiredPromise](TUpdateResult result) mutable {
-                expiredPromise.SetValue(std::move(result));
-            });
-        if (launched) {
-            UNIT_ASSERT(expired.Wait(TDuration::Seconds(10)));
-        }
-        const auto firstCount = service.ReadCapture().Updates;
-        // Recovery with a new authorization and bounded preparation must launch.
-        preparation = 1;
-        const auto good = Await<TUpdateResult>([&](auto completed) {
-            UNIT_ASSERT(clients->Update({endpoint, "a", 2}, plan, {TMonotonic::Seconds(160)}, std::move(completed)));
-        });
-        const auto totalCount = service.ReadCapture().Updates;
-        clients->Stop();
-        UNIT_ASSERT(!launched);
-        UNIT_ASSERT(!expired.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(firstCount, 0);
-        UNIT_ASSERT(good.Rpc.Success);
-        UNIT_ASSERT_VALUES_EQUAL(totalCount, 1);
+        VerifyTokenPreparationExpiry(31);
+    }
+
+    Y_UNIT_TEST(TokenPreparationAtLaunchAuthorizationBoundaryDoesNotLaunch) {
+        VerifyTokenPreparationExpiry(30);
     }
 
     Y_UNIT_TEST(PinnedSdkClientsUseExactAuthorityAndInheritDriverTlsCredentials) {

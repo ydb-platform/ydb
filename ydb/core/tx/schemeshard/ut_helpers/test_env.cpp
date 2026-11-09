@@ -1370,7 +1370,10 @@ void NSchemeShardUT_Private::TTestWithReboots::Prepare(const TString &dispatchNa
 
     TxId = 1000;
 
-    TestMkDir(*Runtime, TxId++, "/MyRoot", "DirA");
+    if (CreateDefaultDirectory) {
+        TestMkDir(*Runtime, TxId, "/MyRoot", "DirA");
+    }
+    ++TxId;
 
     // This allows tablet resolver to detect deleted tablets
     EnableTabletResolverScheduling();

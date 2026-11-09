@@ -270,7 +270,12 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     if (StorageConfig->HasBlobStorageConfig()) {
         const auto& bsConfig = StorageConfig->GetBlobStorageConfig();
         if (bsConfig.HasServiceSet()) {
-            ApplyStorageConfig(bsConfig.GetServiceSet());
+            // Without self-management distconf reports the startup config, which was applied during bootstrap.
+            // It says nothing about the running services: after self-management has been turned off it is stale,
+            // and in a v2 cluster it has no static groups at all. They keep running until the node restarts.
+            if (SelfManagementEnabled) {
+                ApplyStorageConfig(bsConfig.GetServiceSet());
+            }
             if (ControllerServicesDropped && PipeClientId && canConnect) {
                 // BSC sends full state only in reply to registration; the destroyed pipe gets reestablished.
                 ControllerServicesDropped = false;

@@ -80,25 +80,40 @@ namespace NKikimr::NTabletFlatExecutor {
             Started = true;
         }
 
-        TIntrusivePtr<NTable::TPartWriter> GetWriter(ui32 index) const {
+        // Borrowed writers remain owned by this object for its lifetime.
+        NTable::TPartWriter* GetWriter(ui32 index) const {
             Y_ENSURE(Started && !Finished, "Compaction writer is not active");
-            return States.at(index).Writer;
+            return States.at(index).Writer.Get();
         }
 
-        TIntrusivePtr<NTable::TPartWriter> BeginKey(TArrayRef<const TCell> key,
+        void BeginKey(TArrayRef<const TCell> key,
                 const NTable::TRowState* row = nullptr, ui32 sourceTier = 0) {
             Y_ENSURE(Started && !Finished && !KeyActive, "Unexpected compaction key start");
             CurrentOutput = Router->RouteKey(key, row, sourceTier);
             Y_ENSURE(CurrentOutput < States.size(), "Compaction router returned an invalid output index");
-            auto writer = GetWriter(CurrentOutput);
+            auto* writer = GetWriter(CurrentOutput);
             writer->BeginKey(key);
             KeyActive = true;
-            return writer;
+        }
+
+        bool HasActiveKey() const {
+            return KeyActive;
+        }
+
+        void AddKeyLock(NTable::ELockMode mode, ui64 txId) {
+            CurrentWriter().AddKeyLock(mode, txId);
+        }
+
+        void AddKeyDelta(const NTable::TRowState& row, ui64 txId) {
+            CurrentWriter().AddKeyDelta(row, txId);
+        }
+
+        void AddKeyVersion(const NTable::TRowState& row, TRowVersion version) {
+            CurrentWriter().AddKeyVersion(row, version);
         }
 
         ui32 EndKey() {
-            Y_ENSURE(KeyActive, "Unexpected compaction key end");
-            auto written = States[CurrentOutput].Writer->EndKey();
+            auto written = CurrentWriter().EndKey();
             KeyActive = false;
             return written;
         }
@@ -160,6 +175,11 @@ namespace NKikimr::NTabletFlatExecutor {
         }
 
     private:
+        NTable::TPartWriter& CurrentWriter() const {
+            Y_ENSURE(KeyActive, "Compaction key is not active");
+            return *States[CurrentOutput].Writer;
+        }
+
         static TVector<NWriter::TConf::TSlot> CollectSlots(const TCompactCfg& conf) {
             Y_ENSURE(!conf.Outputs.empty(), "Compaction requires at least one output");
             TVector<NWriter::TConf::TSlot> slots;

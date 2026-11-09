@@ -396,6 +396,9 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
                               meta.ColumnPermutation);
     const ESide preservedSide = PreservedSideForLeftBuild(leftIsBuild);
     meta.UserTypes = ForceOptionalOnNullableSide(meta.InputTypes, joinKind, OtherSide(preservedSide), ctx.Env);
+    for (ESide side : EachSide) {
+        EnsureNoResourceKeys(meta.UserTypes.SelectSide(side), meta.KeyColumns.SelectSide(side));
+    }
 
     const auto flows = SidesForLeftBuild(leftIsBuild, leftFlow, rightFlow);
     TJoinFilters filters = ParseJoinFiltersForBuildSide(ctx, callable, filterStart, leftIsBuild);

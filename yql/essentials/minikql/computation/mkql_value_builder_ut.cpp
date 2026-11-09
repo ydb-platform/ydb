@@ -12,6 +12,8 @@
 #include <arrow/scalar.h>
 #include <arrow/chunked_array.h>
 
+#include <array>
+
 namespace NYql::NCommon {
 
 TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
@@ -108,10 +110,10 @@ private:
 
     void TestValueStringViews() {
         const IValueBuilder& builder = Builder_;
-        const char digits[] = {'4', '2', 'x'};
-        UNIT_ASSERT_VALUES_EQUAL(builder.ValueFromString(EDataSlot::Int32, TStringRef(digits, 2)).Get<i32>(), 42);
-        const char binary[] = {'a', '\0', 'b'};
-        for (const TStringRef text : {TStringRef(""), TStringRef(binary, sizeof(binary)),
+        const std::array<char, 3> digits = {'4', '2', 'x'};
+        UNIT_ASSERT_VALUES_EQUAL(builder.ValueFromString(EDataSlot::Int32, TStringRef(digits.data(), 2)).Get<i32>(), 42);
+        const std::array<char, 3> binary = {'a', '\0', 'b'};
+        for (const TStringRef text : {TStringRef(""), TStringRef(binary.data(), binary.size()),
                                       TStringRef("a string longer than an embedded value")}) {
             const auto parsed = builder.ValueFromString(EDataSlot::String, text);
             UNIT_ASSERT(parsed);

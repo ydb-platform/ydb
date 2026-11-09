@@ -10,6 +10,8 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <util/system/env.h>
+
 using namespace NYdb;
 
 namespace {
@@ -52,14 +54,16 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     void EnableDebugLogs(TKikimrWithGrpcAndRootSchema& server) {
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_DEBUG);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NActors::NLog::PRI_DEBUG);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NActors::NLog::PRI_DEBUG);
+        if (GetEnv("YDB_TEST_OLAP_VERBOSE") == "1") {
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_DEBUG);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NActors::NLog::PRI_DEBUG);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NActors::NLog::PRI_DEBUG);
+        }
     }
 
     NYdb::TDriver ConnectToServer(TKikimrWithGrpcAndRootSchema& server, const TString& token = {}) {
@@ -329,6 +333,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
     template<bool NotNull>
     void TestBulkUpsert(EPrimitiveType pkFirstType) {
         TKikimrWithGrpcAndRootSchema server(GetAppConfig());
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
         EnableDebugLogs(server);
 
         TClient annoyingClient(*server.ServerSettings);
@@ -363,7 +368,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             auto res = SendBatch(client, "log1", 100, 1, ts).GetValueSync();
             Cerr << __FILE__ << ":" << __LINE__ << " Issues: " << res.GetIssues().ToString() << "\n";
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "unknown database");
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "unknown table");
 
             TString result = RunQuery(connection, "SELECT count(*) FROM `/Root/OlapStore/log1`;");
             UNIT_ASSERT_VALUES_EQUAL(result, "[[0u]]");

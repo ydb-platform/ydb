@@ -468,7 +468,6 @@ namespace NTabletFlatExecutor {
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
         using ELockMode = NTable::ELockMode;
         using TScheme = NTable::TRowScheme;
-        using TPartWriter = NTable::TPartWriter;
         using TStorage = TIntrusivePtr<TTabletStorageInfo>;
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
@@ -544,8 +543,7 @@ namespace NTabletFlatExecutor {
 
                 Outputs.Start(*Scheme);
                 if (Conf->IsFulltextCompact) {
-                    Writer = Outputs.GetWriter(0);
-                    FtState = TFulltextCompact::Init(Conf.Get(), Scheme, Writer);
+                    FtState = TFulltextCompact::Init(Conf.Get(), Scheme, Outputs.GetWriter(0));
                 }
 
                 return EScan::Feed;
@@ -584,7 +582,7 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            Y_ENSURE(!PendingKeyActive && !Writer && BufferedDeltas.empty() && DeltasOrder.empty(),
+            Y_ENSURE(!PendingKeyActive && !Outputs.HasActiveKey() && BufferedDeltas.empty() && DeltasOrder.empty(),
                 "Previous compaction key is not finished");
             PendingKey = TOwnedCellVec(key);
             PendingKeyActive = true;
@@ -649,7 +647,7 @@ namespace NTabletFlatExecutor {
             }
 
             if (!FtState) {
-                Y_ENSURE(!Writer, "Uncommitted delta after a committed compaction row");
+                Y_ENSURE(!Outputs.HasActiveKey(), "Uncommitted delta after a committed compaction row");
                 auto [it, inserted] = BufferedDeltas.try_emplace(txId);
                 if (inserted) {
                     it->second = MakeHolder<TBufferedRow>(row);
@@ -686,8 +684,8 @@ namespace NTabletFlatExecutor {
 
             // We write the first (latest) lock we observe
             if (!IsLocked) {
-                if (Writer) {
-                    Writer->AddKeyLock(mode, txId);
+                if (Outputs.HasActiveKey()) {
+                    Outputs.AddKeyLock(mode, txId);
                 } else {
                     PendingLockMode = mode;
                     PendingLockTxId = txId;
@@ -739,10 +737,10 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            if (!Writer) {
+            if (!Outputs.HasActiveKey()) {
                 SelectWriter(&row, CurrentSourceTier);
             }
-            Writer->AddKeyVersion(row, rowVersion);
+            Outputs.AddKeyVersion(row, rowVersion);
 
             return Flush(false /* intermediate, sleep or feed */);
         }
@@ -759,11 +757,10 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            if (!Writer && (PendingLockMode != ELockMode::None || !BufferedDeltas.empty())) {
+            if (!Outputs.HasActiveKey() && (PendingLockMode != ELockMode::None || !BufferedDeltas.empty())) {
                 SelectWriter(nullptr, FallbackSourceTier);
             }
-            const ui32 written = Writer ? Outputs.EndKey() : 0;
-            Writer.Reset();
+            const ui32 written = Outputs.HasActiveKey() ? Outputs.EndKey() : 0;
             PendingKey = TOwnedCellVec();
             PendingKeyActive = false;
 
@@ -778,18 +775,18 @@ namespace NTabletFlatExecutor {
 
         void SelectWriter(const TRow* row, std::optional<ui32> sourceTier)
         {
-            Y_ENSURE(PendingKeyActive && !Writer, "Unexpected compaction writer selection");
+            Y_ENSURE(PendingKeyActive && !Outputs.HasActiveKey(), "Unexpected compaction writer selection");
             Y_ENSURE(sourceTier || !Conf->Params->Context, "Missing compaction source placement");
-            Writer = Outputs.BeginKey({PendingKey.data(), PendingKey.size()}, row,
+            Outputs.BeginKey({PendingKey.data(), PendingKey.size()}, row,
                 sourceTier.value_or(Conf->Params->TierId));
             if (PendingLockMode != ELockMode::None) {
-                Writer->AddKeyLock(PendingLockMode, PendingLockTxId);
+                Outputs.AddKeyLock(PendingLockMode, PendingLockTxId);
                 PendingLockMode = ELockMode::None;
             }
             for (ui64 txId : DeltasOrder) {
                 const auto it = BufferedDeltas.find(txId);
                 Y_ENSURE(it != BufferedDeltas.end(), "Missing buffered compaction delta");
-                Writer->AddKeyDelta(it->second->Row, txId);
+                Outputs.AddKeyDelta(it->second->Row, txId);
             }
             BufferedDeltas.clear();
             DeltasOrder.clear();
@@ -1160,7 +1157,6 @@ namespace NTabletFlatExecutor {
         TIntrusiveConstPtr<TScheme> Scheme;
 
         TCompactionOutputs Outputs;
-        TIntrusivePtr<TPartWriter> Writer;
 
         NTable::TWriteStats WriteStats;
         TVector<TCompactionOutputs::TResult> Results;

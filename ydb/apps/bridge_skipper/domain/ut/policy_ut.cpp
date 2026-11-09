@@ -805,4 +805,147 @@ Y_UNIT_TEST_SUITE(BridgeSkipperPolicy) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TLifecyclePlanning) {
+    Y_UNIT_TEST(PublicStateActionMatrixAndHealthGates) {
+        for (const auto state : {EPileState::Synchronized, EPileState::Promoted, EPileState::NotSynchronized,
+                EPileState::Suspended, EPileState::Disconnected, EPileState::Inactive, static_cast<EPileState>(999)})
+        {
+            TPolicyCase c;
+            c.Add("b", state);
+            c.Endpoints = {c.Endpoint("a"), c.Endpoint("b")};
+            TViewSelection selection;
+            selection.View = c.View;
+            const auto stable = c.DecideAt();
+            for (const auto action : {EOperationKind::Switchover, EOperationKind::TakeOffline, EOperationKind::Rejoin}) {
+                const auto result = PlanLifecycle(action, "b", selection, c.Health, c.Confirmations, stable, {}, c.Endpoints);
+                const bool expected = state == EPileState::Synchronized && action != EOperationKind::Rejoin
+                    || state == EPileState::Disconnected && action == EOperationKind::Rejoin;
+                UNIT_ASSERT_VALUES_EQUAL_C(result.Plan.has_value(), expected, ToString(state) << " / " << ToString(action));
+                UNIT_ASSERT(!PlanLifecycle(action, "a", selection, c.Health, c.Confirmations, stable, {}, c.Endpoints).Plan);
+            }
+        }
+        TPolicyCase c;
+        c.Endpoints = {c.Endpoint("a"), c.Endpoint("b")};
+        c.Health.Piles["b"].Verdict = EPileVerdict::Replicating;
+        TViewSelection selection;
+        selection.View = c.View;
+        UNIT_ASSERT(!PlanLifecycle(EOperationKind::Switchover, "b", selection, c.Health, c.Confirmations, c.DecideAt(), {}, c.Endpoints).Plan);
+        UNIT_ASSERT(PlanLifecycle(EOperationKind::TakeOffline, "b", selection, c.Health, c.Confirmations, c.DecideAt(), {}, c.Endpoints).Plan);
+        c.Add("d", EPileState::NotSynchronized);
+        for (auto& report : c.Health.Connectivity) {
+            report.Report.Piles.erase("d");
+        }
+        selection.View = c.View;
+        UNIT_ASSERT(!PlanLifecycle(EOperationKind::TakeOffline, "b", selection, c.Health, c.Confirmations, c.DecideAt(), {}, c.Endpoints).Plan);
+    }
+
+    Y_UNIT_TEST(TakeOfflineAllowsReplicatingPrimaryAndReplicatingTarget) {
+        // Pin both directions of the documented Healthy/Replicating gate:
+        // a Replicating primary may remain while Healthy b is taken offline,
+        // and Replicating b may leave while the primary remains Healthy.
+        for (const TString replicatingPile : {"a", "b"}) {
+            TPolicyCase c;
+            c.View.Piles.clear();
+            c.Health = {};
+            c.Health.BscAvailable = true;
+            c.Add("a", EPileState::Primary);
+            c.Add("b", EPileState::Synchronized);
+            c.Health.Piles[replicatingPile] = Verdict(EPileVerdict::Replicating);
+            c.Endpoints = {c.Endpoint("a"), c.Endpoint("b")};
+            TViewSelection selection;
+            selection.View = c.View;
+            const auto stable = c.DecideAt();
+            UNIT_ASSERT(stable.Kind == EDecisionKind::Stable);
+            const auto offline = PlanLifecycle(EOperationKind::TakeOffline, "b", selection, c.Health,
+                c.Confirmations, stable, {}, c.Endpoints);
+            UNIT_ASSERT_C(offline.Plan, "Replicating pile: " << replicatingPile);
+            AssertUpdate(offline, {{"b", EPileState::Suspended}});
+            UNIT_ASSERT_VALUES_EQUAL(offline.Plan->Endpoint, c.Endpoint("a").Endpoint);
+        }
+    }
+
+    Y_UNIT_TEST(ExactRolesAndOfflineDispatch) {
+        TPolicyCase c;
+        c.View.Piles["c"] = EPileState::Promoted;
+        c.Endpoints = {c.Endpoint("b"), c.Endpoint("c")};
+        TViewSelection selection;
+        selection.View = c.View;
+        const auto failover = c.DecideAt();
+        auto plan = PlanLifecycle(EOperationKind::Switchover, "b", selection, c.Health,
+            c.Confirmations, failover, {}, c.Endpoints);
+        UNIT_ASSERT(plan.Plan);
+        UNIT_ASSERT(plan.Plan->Update == (TExactUpdate{{"b", EPileState::Promoted}, {"c", EPileState::Synchronized}}));
+        plan = PlanLifecycle(EOperationKind::TakeOffline, "b", selection, c.Health,
+            c.Confirmations, failover, {}, c.Endpoints);
+        UNIT_ASSERT(plan.Plan);
+        UNIT_ASSERT_VALUES_EQUAL(plan.Plan->Endpoint, c.Endpoint("c").Endpoint);
+        UNIT_ASSERT(plan.Plan->Update == (TExactUpdate{{"b", EPileState::Suspended}}));
+    }
+
+    Y_UNIT_TEST(BscProvenStageTwoUnknownBlocksEveryLifecycleAction) {
+        TPolicyCase c;
+        c.Add("c", EPileState::NotSynchronized);
+        c.Add("d", EPileState::Disconnected);
+        for (auto& report : c.Health.Connectivity) {
+            report.Report.Piles["c"].InConfigQuorum = false;
+        }
+        c.Health.Participation["c"] = {true, At(100)}; // fresh BSC part overrides connectivity
+        c.Health.Piles["c"] = Verdict(EPileVerdict::Unknown);
+        TViewSelection selection;
+        selection.View = c.View;
+        const auto failover = c.DecideAt();
+        UNIT_ASSERT(failover.Kind == EDecisionKind::Unknown);
+        for (const auto kind : {EOperationKind::Switchover, EOperationKind::TakeOffline, EOperationKind::Rejoin}) {
+            const TString target = kind == EOperationKind::Rejoin ? "d" : "b";
+            UNIT_ASSERT(!PlanLifecycle(kind, target, selection, c.Health, c.Confirmations,
+                failover, {}, c.Endpoints).Plan);
+        }
+        c.Health.Piles["c"].Verdict = EPileVerdict::Replicating;
+        UNIT_ASSERT(PlanLifecycle(EOperationKind::TakeOffline, "b", selection, c.Health,
+            c.Confirmations, c.DecideAt(), {}, c.Endpoints).Plan);
+        c.Health.Participation["c"].Value.reset();
+        c.Health.Piles["c"].Verdict = EPileVerdict::Unknown;
+        UNIT_ASSERT(!PlanLifecycle(EOperationKind::TakeOffline, "b", selection, c.Health,
+            c.Confirmations, c.DecideAt(), {}, c.Endpoints).Plan);
+        c.Health.Participation["c"] = {false, At(100)};
+        c.Health.Participating.erase("c");
+        c.Health.Piles.erase("c");
+        UNIT_ASSERT(PlanLifecycle(EOperationKind::TakeOffline, "b", selection, c.Health,
+            c.Confirmations, c.DecideAt(), {}, c.Endpoints).Plan);
+    }
+
+    Y_UNIT_TEST(UnsafeMaintenanceAndLifecyclePendingNeverAdmitFailoverSupersets) {
+        TPolicyCase c;
+        TViewSelection selection;
+        selection.View = c.View;
+        c.Health.Piles["a"].Verdict = EPileVerdict::Unknown;
+        UNIT_ASSERT(!PlanLifecycle(EOperationKind::TakeOffline, "b", selection, c.Health,
+            c.Confirmations, c.DecideAt(), {}, c.Endpoints).Plan);
+        c.Down("b");
+        c.Confirm();
+        c.Pending = TPendingMutation{7, {{"b", EPileState::Disconnected}}, EOperationKind::Rejoin, EDispatchOrigin::Manual};
+        UNIT_ASSERT(!c.DecideAt().Plan);
+    }
+
+    Y_UNIT_TEST(RejoinNeverRefreshesSynchronizingPileAndPendingTargetBlocks) {
+        TPolicyCase c;
+        c.Add("d", EPileState::Disconnected);
+        c.Endpoints = {c.Endpoint("a")};
+        TViewSelection selection;
+        selection.View = c.View;
+        const auto stable = c.DecideAt();
+        auto plan = PlanLifecycle(EOperationKind::Rejoin, "d", selection, c.Health,
+            c.Confirmations, stable, {}, c.Endpoints);
+        UNIT_ASSERT(plan.Plan);
+        UNIT_ASSERT(plan.Plan->Update == (TExactUpdate{{"d", EPileState::NotSynchronized}}));
+        selection.View->Pending = TPendingOperation{"ADD", TString("d"), ""};
+        UNIT_ASSERT(!PlanLifecycle(EOperationKind::Rejoin, "d", selection, c.Health,
+            c.Confirmations, stable, {}, c.Endpoints).Plan);
+        selection.View->Pending.reset();
+        selection.View->Piles["d"] = EPileState::NotSynchronized;
+        UNIT_ASSERT(!PlanLifecycle(EOperationKind::Rejoin, "d", selection, c.Health,
+            c.Confirmations, stable, {}, c.Endpoints).Plan);
+    }
+}
+
 } // namespace NBridgeSkipper

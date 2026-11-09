@@ -5,8 +5,8 @@
 listeners with the existing `LiveCluster` testkit. All skipper requests use the
 real C++ SDK. No external virtualenv or YDB CLI is required.
 
-`FORK_SUBTESTS` and `SPLIT_FACTOR(10)` partition subtests into ten parallel
-chunks; a chunk can contain multiple scenarios. Configuration uses
+`FORK_SUBTESTS` and `SPLIT_FACTOR(32)` give each current scenario its own
+chunk and timeout, with room for new cases. Configuration uses
 positive whole seconds and preserves the production validator's warmup minimum
 and timing inequalities.
 All mock and controller listeners use `PortManager` reservations held until
@@ -38,3 +38,19 @@ covered by the unit tests in `config/ut`, `runtime/ut`, `http/ut` and `domain/ut
 Direct public-wire contracts belong to `ydbd_mock/tests/test_contracts.py`.
 Qualification on recorded real YDB builds is part of the release checklist in
 the [skipper README](../README.md).
+
+Fresh environments now verify healthy Observe startup with zero mutations, then
+explicitly activate Auto/Manual using the same JSON mode command as the browser.
+The YAML config contains no mode override. The API helpers carry boot/revision
+and reviewed-snapshot tokens, require no-store/no-CORS replies, and never repeat
+an uncertain POST automatically. Added command cases cover Observe GET/HEAD,
+Manual failover single-use/replay, exact lifecycle overlays, mode races and
+restart token fencing.
+
+The [browser target](browser/README.md) runs only when explicitly requested and
+is excluded from test recursion. It uses test-only pinned Node, Playwright
+1.64.1 and Chromium headless-shell r1248. Required browser bundle registration is
+still pending repository-owner approval; an explicit run needs a prepared bundle
+or fails with a specific missing-resource error. Recursive runs include the
+independent offline `browser/provenance` checks. A passing recursive run does not
+establish browser acceptance.

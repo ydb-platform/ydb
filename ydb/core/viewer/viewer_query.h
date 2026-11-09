@@ -465,6 +465,14 @@ public:
         TBase::Cancelled();
     }
 
+    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == NKqp::TKqpScriptExecutionEvents::EvFetchScriptResultsRequest) {
+            return ReplyWithError("KQP proxy is unavailable");
+        }
+
+        TBase::Undelivered(ev);
+    }
+
     void PassAway() override {
         if (QueryId) {
             Viewer->EndRunningQuery(QueryId, SelfId());
@@ -487,6 +495,7 @@ public:
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
             hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
+            hFunc(TEvents::TEvUndelivered, Undelivered);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
                 return TBase::StateWork(ev);
@@ -537,7 +546,7 @@ public:
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows),
                     OutputChunkMaxSize,
-                    Deadline));
+                    Deadline), IEventHandle::FlagTrackDelivery);
             }
             return;
         }
@@ -1136,7 +1145,7 @@ private:
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows),
                     OutputChunkMaxSize,
-                    Deadline));
+                    Deadline), IEventHandle::FlagTrackDelivery);
             } else {
                 // Operation is ready but no result sets - reply with empty result for non-streaming
                 if (Streaming == EStreamingType::None) {
@@ -1186,7 +1195,7 @@ private:
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
                     OutputChunkMaxSize,
-                    Deadline));
+                    Deadline), IEventHandle::FlagTrackDelivery);
                 return;
             } else if (FetchResultSetIndex + 1 < FetchResultSets) {
                 ++FetchResultSetIndex;
@@ -1199,7 +1208,7 @@ private:
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
                     OutputChunkMaxSize,
-                    Deadline));
+                    Deadline), IEventHandle::FlagTrackDelivery);
                 return;
             }
         }

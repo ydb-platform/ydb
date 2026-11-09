@@ -81,6 +81,39 @@ Y_UNIT_TEST_SUITE(ImportedEdsInitialToken) {
         }
     }
 
+    Y_UNIT_TEST(LegacySlashSpellingsPreserveDefinitionAndDatabaseBoundary) {
+        for (const auto reference : {"/Source//secret", "/Source/secret/", "///Source///dir//secret///"}) {
+            auto status = Ydb::StatusIds::SUCCESS;
+            TImportedSchemeResult same = PreparedEds(reference);
+            const auto original = std::get<NKikimrSchemeOp::TModifyScheme>(same).SerializeAsString();
+            RebindImportedEdsInitialToken(status, same, Query("/Source"), "/Source");
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NKikimrSchemeOp::TModifyScheme>(same).SerializeAsString(), original);
+        }
+        for (const auto& [reference, expected] : TVector<std::pair<TString, TString>>{
+                {"/Source//secret", "/Destination//secret"},
+                {"/Source/secret/", "/Destination/secret/"},
+                {"///Source///dir//secret///", "/Destination///dir//secret///"}})
+        {
+            auto status = Ydb::StatusIds::SUCCESS;
+            TImportedSchemeResult result = PreparedEds(reference);
+            RebindImportedEdsInitialToken(status, result, Query("/Source"), "/Destination");
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(Reference(result), expected);
+        }
+        auto status = Ydb::StatusIds::SUCCESS;
+        TImportedSchemeResult result = PreparedEds("//Parent///Source//secret/");
+        RebindImportedEdsInitialToken(status, result, Query("/Parent/Source"), "/Destination");
+        UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(Reference(result), "/Destination//secret/");
+        for (const auto reference : {"/Source///", "//SourceOther//secret", "/Source//../Other/secret",
+                "/Source/./secret", "/Source//secret/..", "///Other/Source/secret"})
+        {
+            CheckFailure(reference, Query("/Source"), "/Source");
+            CheckFailure(reference, Query("/Source"), "/Destination");
+        }
+    }
+
     Y_UNIT_TEST(NamedAndNonIamResultsAreExactNoOps) {
         auto status = Ydb::StatusIds::SUCCESS;
         TImportedSchemeResult result = PreparedEds("named-token");

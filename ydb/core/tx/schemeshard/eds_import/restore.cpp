@@ -37,6 +37,40 @@ bool IsCanonicalPath(TStringBuf path) {
     return false; // A trailing slash is not canonical.
 }
 
+// Scheme-secret navigation uses SplitPath, which ignores empty components.
+// Keep the literal spelling: the secret-service cache lookup still uses the
+// original requested string, so normalization here would change its behavior.
+TStringBuf NextComponent(TStringBuf& path) {
+    while (path.StartsWith('/')) {
+        path.Skip(1);
+    }
+    const auto component = path.SubStr(0, path.find('/'));
+    path.Skip(component.size());
+    return component;
+}
+
+bool IsSafeSchemaPath(TStringBuf path) {
+    if (!path.StartsWith('/') || path.Contains('\0')) {
+        return false;
+    }
+    while (const auto component = NextComponent(path)) {
+        if (component == "." || component == "..") {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool GetDatabaseSuffix(TStringBuf reference, TStringBuf database, TStringBuf& suffix) {
+    while (const auto component = NextComponent(database)) {
+        if (NextComponent(reference) != component) {
+            return false;
+        }
+    }
+    suffix = reference; // Preserve all separators after the database component.
+    return !NextComponent(reference).empty(); // A secret must be a strict descendant.
+}
+
 bool ReadSourceDatabase(TStringBuf query, TStringBuf& database) {
     query = query.SubStr(0, MetadataLimit);
     if (query.StartsWith("\xEF\xBB\xBF")) {
@@ -106,24 +140,23 @@ void RebindImportedEdsInitialToken(Ydb::StatusIds::StatusCode& status,
     };
     constexpr size_t Limit = NExternalDataSource::MAX_PROTOBUF_SIZE;
     TStringBuf sourceDatabase;
+    TStringBuf suffix;
     if (reference.size() > Limit || destinationDatabase.size() > Limit
-        || !IsCanonicalPath(reference) || !IsCanonicalPath(destinationDatabase)
+        || !IsSafeSchemaPath(reference) || !IsCanonicalPath(destinationDatabase)
         || !ReadSourceDatabase(creationQuery, sourceDatabase)
-        || !reference.StartsWith(sourceDatabase) || reference.size() <= sourceDatabase.size()
-        || (sourceDatabase != "/" && reference[sourceDatabase.size()] != '/'))
+        || !GetDatabaseSuffix(reference, sourceDatabase, suffix))
     {
         return fail();
     }
-    const auto relative = reference.SubStr(sourceDatabase.size() + (sourceDatabase == "/" ? 0 : 1));
-    const size_t separator = destinationDatabase == "/" ? 0 : 1;
-    if (destinationDatabase.size() + separator > Limit - relative.size()) {
+    if (sourceDatabase == destinationDatabase) {
+        return; // Preserve even a legacy noncanonical literal byte-for-byte.
+    }
+    const TStringBuf destinationPrefix = destinationDatabase == "/" ? TStringBuf() : destinationDatabase;
+    if (destinationPrefix.size() > Limit - suffix.size()) {
         return fail();
     }
-    TString mapped(destinationDatabase);
-    if (separator) {
-        mapped += '/';
-    }
-    mapped += relative;
+    TString mapped(destinationPrefix);
+    mapped += suffix;
     // The protobuf is the sole create payload. No SQL escaping or parser-mode
     // conversion is involved, and the caller already owns this result copy.
     scheme->MutableCreateExternalDataSource()->MutableAuth()->MutableIam()->SetInitialTokenSecretName(std::move(mapped));

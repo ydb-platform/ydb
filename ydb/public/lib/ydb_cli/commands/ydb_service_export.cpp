@@ -125,7 +125,7 @@ namespace {
         if (externalPaths) {
             for (const auto& entry : ret.Entries) {
                 if (FilterExternalSchemeObjects(entry)) {
-                    externalPaths->insert(entry.Name);
+                    externalPaths->insert(TString(entry.Name));
                 }
             }
         }
@@ -152,7 +152,7 @@ namespace {
         settings.Item_.clear();
         THashMap<TString, THashSet<TString>> destinations;
         for (auto& item : items) {
-            if (destinations[item.Src].insert(item.Dst).second) {
+            if (destinations[item.Src].insert(TString(item.Dst)).second) {
                 settings.Item_.push_back(std::move(item));
             }
         }
@@ -555,17 +555,29 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         std::stable_sort(roots.begin(), roots.end(), [](const auto& lhs, const auto& rhs) {
             return lhs.Src.size() > rhs.Src.size();
         });
+        TString exclusionRootPrefix;
+        if (!ExclusionPatterns.empty()) {
+            exclusionRootPrefix = CommonSourcePath ? CommonSourcePath : config.Database;
+            NConsoleClient::AdjustPath(exclusionRootPrefix, config);
+            exclusionRootPrefix += '/';
+        }
         THashSet<TString> selectedPaths;
         for (const auto& item : settings.Item_) {
-            selectedPaths.insert(item.Src);
+            selectedPaths.insert(TString(item.Src));
         }
         THashSet<TString> visited;
         TVector<TString> paths;
         for (const auto& root : roots) {
             paths.clear();
-            ListExternalExportPaths(schemeClient, root.Src, NormalizePath(config.Database), visited, paths);
+            ListExternalExportPaths(schemeClient, TString(root.Src), NormalizePath(config.Database), visited, paths);
             for (const auto& src : paths) {
-                TString dst = root.Dst;
+                // External exclusions are documented relative to --root-path (or
+                // the database). Keep the existing absolute-path filter below too.
+                if (!exclusionRootPrefix.empty() && src.StartsWith(exclusionRootPrefix)
+                        && IsExcluded(src.c_str() + exclusionRootPrefix.size(), ExclusionPatterns)) {
+                    continue;
+                }
+                TString dst(root.Dst);
                 if (!dst.empty() && dst.back() == '/') {
                     dst.pop_back();
                 }
@@ -575,7 +587,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
                 externalPaths.insert(src);
                 if (!expandItems && settings.Item_.empty()) {
                     settings.Item_ = roots;
-                    selectedPaths.insert(roots.front().Src);
+                    selectedPaths.insert(TString(roots.front().Src));
                 }
                 if (selectedPaths.insert(src).second) {
                     settings.AppendItem({src, dst});

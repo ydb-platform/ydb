@@ -71,7 +71,7 @@ public:
         Ydb::Export::ExportToS3Result res;
         auto* operation = response->mutable_operation();
         operation->set_ready(true);
-        operation->set_status(FirstCallBadRequest && ExportCalls == 1 ? Ydb::StatusIds::BAD_REQUEST : Ydb::StatusIds::SUCCESS);
+        operation->set_status(ExportCalls == 1 ? FirstCallStatus : Ydb::StatusIds::SUCCESS);
         operation->set_id("ydb://export/6?id=1&kind=s3");
         operation->mutable_result()->PackFrom(res);
         return grpc::Status();
@@ -103,7 +103,7 @@ public:
         ExcludeRegexps.clear();
         ExpectedExportCalls = 1;
         ExportCalls = 0;
-        FirstCallBadRequest = false;
+        FirstCallStatus = Ydb::StatusIds::SUCCESS;
     }
 
     TExportImpl& ExpectItem(TString srcPath, TString dstPrefix) {
@@ -117,7 +117,11 @@ public:
     }
 
     TExportImpl& ReturnBadRequestOnce(int expectedCalls) {
-        FirstCallBadRequest = true;
+        return ReturnStatusOnce(Ydb::StatusIds::BAD_REQUEST, expectedCalls);
+    }
+
+    TExportImpl& ReturnStatusOnce(Ydb::StatusIds::StatusCode status, int expectedCalls) {
+        FirstCallStatus = status;
         ExpectedExportCalls = expectedCalls;
         return *this;
     }
@@ -223,7 +227,7 @@ public:
     std::vector<TString> ExcludeRegexps;
     int ExpectedExportCalls = 1;
     int ExportCalls = 0;
-    bool FirstCallBadRequest = false;
+    Ydb::StatusIds::StatusCode FirstCallStatus = Ydb::StatusIds::SUCCESS;
 };
 
 class TTableImpl : public TMockGrpcServiceBase<Ydb::Table::V1::TableService::Service> {
@@ -412,6 +416,85 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         }
     }
 
+    Y_UNIT_TEST_F(DefaultCommonPrefixExplicitTableNeedsNoSchemaListing, TExportFixture) {
+        Service<TSchemeImpl>()
+            .ExpectListDirectory(GetDatabase() + "/table", Ydb::Scheme::Entry::TABLE)
+            .ExpectListDirectoryCalls(GetDatabase() + "/table", 0);
+        Service<TExportImpl>()
+            .ExpectBucket(TEST_BUCKET).ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key").ExpectS3SecretKey("test-access-key")
+            .ExpectCommonDstPrefix("dst")
+            .ExpectItem(GetDatabase() + "/table", "");
+        RunCli({
+            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+            "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+            "--access-key", "test-key", "--secret-key", "test-access-key",
+            "--destination-prefix", "dst", "--include", "table",
+        });
+    }
+
+    Y_UNIT_TEST_F(DefaultCommonPrefixDirectoryNeedsNoClientInventory, TExportFixture) {
+        Service<TSchemeImpl>()
+            .ExpectListDirectory(GetDatabase())
+            .ExpectListDirectoryCalls(GetDatabase(), 0)
+            .ExpectChild(GetDatabase(), "table", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild(GetDatabase(), "empty", Ydb::Scheme::Entry::DIRECTORY)
+            .ExpectListDirectory(GetDatabase() + "/empty")
+            .ExpectListDirectoryCalls(GetDatabase() + "/empty", 0);
+        Service<TExportImpl>()
+            .ExpectBucket(TEST_BUCKET).ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key").ExpectS3SecretKey("test-access-key")
+            .ExpectCommonDstPrefix("dst");
+        RunCli({
+            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+            "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+            "--access-key", "test-key", "--secret-key", "test-access-key",
+            "--destination-prefix", "dst",
+        });
+    }
+
+    Y_UNIT_TEST_F(DefaultExpandedDirectoryUsesOnlyLegacyTraversal, TExportFixture) {
+        for (auto status : {Ydb::StatusIds::SUCCESS, Ydb::StatusIds::BAD_REQUEST}) {
+            Service<TSchemeImpl>()
+                .ExpectListDirectory(GetDatabase())
+                .ExpectListDirectoryCalls(GetDatabase(), status == Ydb::StatusIds::SUCCESS ? 1 : 2)
+                .ExpectChild(GetDatabase(), "table", Ydb::Scheme::Entry::TABLE)
+                .ExpectChild(GetDatabase(), "source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE);
+            Service<TExportImpl>()
+                .ExpectBucket(TEST_BUCKET).ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key").ExpectS3SecretKey("test-access-key")
+                .ExpectItem(GetDatabase() + "/table", "mapped/table")
+                .ReturnStatusOnce(status, status == Ydb::StatusIds::SUCCESS ? 1 : 2);
+            RunCli({
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key", "--secret-key", "test-access-key",
+                "--item", "src=.,dst=mapped",
+            });
+        }
+    }
+
+    Y_UNIT_TEST_F(OptInExternalLeafUnsupportedOrDisabledFailsVisibly, TExportFixture) {
+        for (auto status : {Ydb::StatusIds::BAD_REQUEST, Ydb::StatusIds::UNSUPPORTED}) {
+            Service<TSchemeImpl>()
+                .ExpectListDirectory(GetDatabase() + "/source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE)
+                .ExpectListDirectoryCalls(GetDatabase() + "/source", 1);
+            Service<TExportImpl>()
+                .ExpectBucket(TEST_BUCKET).ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key").ExpectS3SecretKey("test-access-key")
+                .ExpectCommonDstPrefix("dst")
+                .ExpectItem(GetDatabase() + "/source", "")
+                .ReturnStatusOnce(status, 1);
+            ExpectFail();
+            RunCli({
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
+                "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key", "--secret-key", "test-access-key",
+                "--destination-prefix", "dst", "--include", "source",
+            });
+        }
+    }
+
     Y_UNIT_TEST_F(ExpandExternalObjects, TExportFixture) {
         Service<TSchemeImpl>()
             .ExpectListDirectory("/test_database/export-root")
@@ -435,7 +518,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         RunCli({
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
-            "export", "s3",
+            "export", "s3", "--include-external",
             "--bucket", TEST_BUCKET,
             "--s3-endpoint", TEST_S3_ENDPOINT,
             "--access-key", "test-key",
@@ -467,7 +550,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         RunCli({
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
-            "export", "s3",
+            "export", "s3", "--include-external",
             "--bucket", TEST_BUCKET,
             "--s3-endpoint", TEST_S3_ENDPOINT,
             "--access-key", "test-key",
@@ -497,7 +580,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         RunCli({
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
-            "export", "s3",
+            "export", "s3", "--include-external",
             "--bucket", TEST_BUCKET,
             "--s3-endpoint", TEST_S3_ENDPOINT,
             "--access-key", "test-key",
@@ -527,7 +610,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         RunCli({
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
-            "export", "s3",
+            "export", "s3", "--include-external",
             "--bucket", TEST_BUCKET,
             "--s3-endpoint", TEST_S3_ENDPOINT,
             "--access-key", "test-key",
@@ -552,7 +635,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 .ExpectS3SecretKey("test-access-key")
                 .ExpectItem(GetDatabase() + "/source", explicitLeaf ? "mapped" : "mapped/source");
             RunCli({
-                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
                 "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
                 "--access-key", "test-key", "--secret-key", "test-access-key",
                 "--item", TString("src=") + (explicitLeaf ? "source" : ".") + ",dst=mapped",
@@ -579,7 +662,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 .ExpectItem(GetDatabase() + "/dir", "mapped")
                 .ExpectItem(GetDatabase() + "/dir/nested/source", "mapped/nested/source");
             TList<TString> args = {
-                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
                 "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
                 "--access-key", "test-key", "--secret-key", "test-access-key",
                 "--destination-prefix", "common",
@@ -621,7 +704,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             }
             service.ExpectItem(GetDatabase() + "/dir/nested/source", "specific/source");
             RunCli({
-                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
                 "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
                 "--access-key", "test-key", "--secret-key", "test-access-key",
                 "--destination-prefix", "common",
@@ -652,7 +735,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ReturnBadRequestOnce(1);
         ExpectFail();
         RunCli({
-            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
             "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
             "--access-key", "test-key", "--secret-key", "test-access-key",
             "--destination-prefix", "common",
@@ -682,7 +765,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 service.ReturnBadRequestOnce(2);
             }
             TList<TString> args = {
-                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
                 "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
                 "--access-key", "test-key", "--secret-key", "test-access-key",
                 "--item", "src=user,dst=mapped",
@@ -714,7 +797,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ExpectItem(GetDatabase() + "/user/data", "common/user/data")
             .ExpectItem(GetDatabase() + "/user/export-12345/source", "");
         RunCli({
-            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
             "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
             "--access-key", "test-key", "--secret-key", "test-access-key",
             "--destination-prefix", "common", "--exclude", "does-not-match",
@@ -740,7 +823,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             // Both documented root-relative patterns and legacy absolute patterns
             // exclude the nested source without changing the retained source identity.
             RunCli({
-                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
                 "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
                 "--access-key", "test-key", "--secret-key", "test-access-key",
                 "--root-path", "dir", "--destination-prefix", "common",
@@ -769,7 +852,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 .ExpectItem(GetDatabase() + "/dir/data", "common/data")
                 .ExpectItem(GetDatabase() + "/dir/nested/source", "");
             RunCli({
-                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
                 "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
                 "--access-key", "test-key", "--secret-key", "test-access-key",
                 "--root-path", root, "--destination-prefix", "common",
@@ -793,7 +876,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 .ExpectCommonDstPrefix("common")
                 .ExpectItem(GetDatabase() + "/dir/nested/keep", "specific/keep");
             RunCli({
-                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
                 "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
                 "--access-key", "test-key", "--secret-key", "test-access-key",
                 "--root-path", "dir", "--destination-prefix", "common",
@@ -809,7 +892,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             Service<TExportImpl>().ExpectNoExportCall();
             ExpectFail();
             RunCli({
-                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
                 "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
                 "--access-key", "test-key", "--secret-key", "test-access-key",
                 "--destination-prefix", "common", "--include", "source", "--exclude", pattern,
@@ -834,7 +917,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             // The server derives "source" and prepends "common" exactly once.
             service.ExpectItem(GetDatabase() + "/source", "");
             TList<TString> args = {
-                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
                 "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
                 "--access-key", "test-key", "--secret-key", "test-access-key",
                 "--destination-prefix", "common",
@@ -861,7 +944,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 .ExpectCommonDstPrefix("common")
                 .ExpectItem(GetDatabase() + "/source", "");
             RunCli({
-                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external",
                 "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
                 "--access-key", "test-key", "--secret-key", "test-access-key",
                 "--root-path", GetDatabase() + suffix, "--destination-prefix", "common",

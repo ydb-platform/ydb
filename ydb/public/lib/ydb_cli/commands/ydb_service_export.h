@@ -45,6 +45,12 @@ private:
     bool UseTypeV3 = false;
 };
 
+// Legacy preserves the existing request, discovery and compatibility behavior.
+enum class EExportObjectSelection {
+    Legacy,
+    IncludeExternal,
+};
+
 class TCommandExportBase : public TYdbOperationCommand,
                            public TCommandWithOutput {
 public:
@@ -73,6 +79,7 @@ protected:
     bool IncludeIndexData = false;
     TString CommonSourcePath;
     TString CommonDestinationPrefix;
+    EExportObjectSelection ObjectSelection = EExportObjectSelection::Legacy;
 
     // Encryption params
     TString EncryptionAlgorithm;

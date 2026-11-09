@@ -1,4 +1,4 @@
-* Fixed `ydb export s3` omitting selected external data sources and external tables, and retrying rejected exports without them. External objects are exported as definitions only.
+* Added `--include-external` to `ydb export s3` to include external data source and external table definitions, with explicit validation and no silent table-only fallback. Export behavior without the option is unchanged.
 * Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.
 * Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--target-database`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.
 * Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data (asks for confirmation unless `-y` is given).

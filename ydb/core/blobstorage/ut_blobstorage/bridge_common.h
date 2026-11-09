@@ -375,6 +375,25 @@ namespace NBridgeTest {
         return res;
     }
 
+    // the group is an inline pile in the designated pile: it has its own VDisks there and serves as its own bridge proxy
+    // group, with numPiles entries in its pile list; returns its info
+    inline NKikimrBlobStorage::TGroupInfo CheckInlinePileGroup(TEnvironmentSetup& env, ui32 groupId, ui32 numPiles = 1,
+            ui32 pileIndex = 0) {
+        const auto info = GetGroupInfo(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL_C(info.GetBridgeProxyGroupId(), groupId, info.ShortDebugString());
+        UNIT_ASSERT_C(TBridgePileId::FromProto(&info, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId) ==
+            TBridgePileId::FromPileIndex(pileIndex), info.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(info.GetBridgeGroupState().PileSize(), numPiles, info.ShortDebugString());
+        const auto& pile = info.GetBridgeGroupState().GetPile(pileIndex);
+        UNIT_ASSERT_VALUES_EQUAL_C(pile.GetGroupId(), groupId, info.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(pile.GetGroupGeneration(), info.GetGroupGeneration(), info.ShortDebugString());
+        UNIT_ASSERT_C(info.RingsSize(), info.ShortDebugString());
+        const auto baseConfig = env.FetchBaseConfig(); // the group is referenced by pointer
+        const auto& group = FindGroup(baseConfig, groupId);
+        UNIT_ASSERT_C(!group.GetIsProxyGroup() && group.VSlotIdSize(), group.ShortDebugString());
+        return info;
+    }
+
     // current generation of the group as the node knows it
     inline ui32 GetNodeGroupGeneration(TEnvironmentSetup& env, ui32 groupId, ui32 nodeId) {
         const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);

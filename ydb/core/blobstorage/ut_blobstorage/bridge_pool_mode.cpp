@@ -760,14 +760,17 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         std::optional<ui32> newGroupId;
         {
             const auto current = env.FetchBaseConfig();
-            for (const auto *group : GetPoolGroups(current, 1)) {
-                if (group->GetIsProxyGroup()) {
+            const auto poolGroups = GetPoolGroups(current, 1);
+            UNIT_ASSERT_VALUES_EQUAL(poolGroups.size(), 2); // new group is born inline pile, without separate parts
+            for (const auto *group : poolGroups) {
+                if (group->GetGroupId() != groupId) {
                     UNIT_ASSERT(!newGroupId);
                     newGroupId = group->GetGroupId();
                 }
             }
         }
         UNIT_ASSERT(newGroupId);
+        CheckInlinePileGroup(env, *newGroupId);
         checker.Write(*newGroupId);
 
         auto checkAll = [&](ui32 nodeId) {

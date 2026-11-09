@@ -29,13 +29,18 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             const std::optional<TDuration>& resolvedTimestamps,
             const NJson::TJsonMap& attrs,
             bool schemaChanges,
-            bool initialScan)
+            bool initialScan,
+            bool enableOmitBackupAttribute)
     {
         using namespace NYdb::NTable;
 
         auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
             .WithRetentionPeriod(retentionPeriod)
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
+
+        if (enableOmitBackupAttribute) {
+            desc.AddAttribute(std::string(NBackup::OMIT_BACKUP_ATTRIBUTE), std::string(NBackup::OMIT_BACKUP_VALUE));
+        }
 
         if (initialScan) {
             desc.WithInitialScan();
@@ -78,39 +83,17 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     void CreateStream() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
-        case TReplication::ETargetKind::IndexTable: {
-            auto changefeed = Changefeed;
-            if (SendOmitBackupAttribute) {
-                changefeed.AddAttribute(std::string(NBackup::OMIT_BACKUP_ATTRIBUTE), std::string(NBackup::OMIT_BACKUP_VALUE));
-            }
+        case TReplication::ETargetKind::IndexTable:
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
-                .AppendAddChangefeeds(changefeed)),
+                .AppendAddChangefeeds(Changefeed)),
                 0,
                 ++RequestCookie);
             break;
-        }
         case TReplication::ETargetKind::Transfer:
             return CreateConsumer();
         }
 
         Become(&TThis::StateCreateStream);
-    }
-
-    static bool IsOmitBackupUnsupported(const NYdb::TStatus& status) {
-        if (status.GetStatus() != NYdb::EStatus::BAD_REQUEST) {
-            return false;
-        }
-
-        bool unsupported = false;
-        for (const auto& issue : status.GetIssues()) {
-            NYdb::NIssue::WalkThroughIssues(issue, false, [&](const NYdb::NIssue::TIssue& nested, ui16) {
-                // Older SchemeShards report this before creating the feed.
-                // Other validation and authorization errors must not trigger a fallback.
-                unsupported |= nested.GetMessage().find("UserAttributes: unsupported attribute '__omit_backup'")
-                    != std::string::npos;
-            });
-        }
-        return unsupported;
     }
 
     STATEFN(StateCreateStream) {
@@ -133,11 +116,6 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
-            if (SendOmitBackupAttribute && IsOmitBackupUnsupported(result)) {
-                SendOmitBackupAttribute = false;
-                YDB_LOG_INFO("Source does not support __omit_backup, retry with the legacy replication marker");
-                return CreateStream();
-            }
             if (IsRetryableError(result)) {
                 YDB_LOG_DEBUG("Retry CreateStream");
                 return Retry();
@@ -428,7 +406,8 @@ public:
             bool describeOnly,
             TDuration streamRetentionPeriod,
             TDuration consumerAvailabilityPeriod,
-            bool consumerImportant)
+            bool consumerImportant,
+            bool enableOmitBackupAttribute)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -443,7 +422,7 @@ public:
             // A schema barrier snapshots its partition membership, so topic
             // repartitioning is unsupported for schema-aware streams.
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning && !schemaChanges},
-        }, schemaChanges, initialScan))
+        }, schemaChanges, initialScan, enableOmitBackupAttribute))
         , StreamRetentionPeriod(streamRetentionPeriod)
         , ConsumerAvailabilityPeriod(consumerAvailabilityPeriod)
         , ConsumerImportant(consumerImportant)
@@ -492,7 +471,6 @@ private:
     const TString SrcStreamPath;
     const TString SrcConsumerName;
     const NYdb::NTable::TChangefeedDescription Changefeed;
-    bool SendOmitBackupAttribute = true;
     const TDuration StreamRetentionPeriod;
     const TDuration ConsumerAvailabilityPeriod;
     const bool ConsumerImportant;
@@ -529,7 +507,7 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
         supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly,
         TDuration::Seconds(AppData()->ReplicationConfig.GetStreamRetentionPeriodSeconds()),
-        consumerAvailabilityPeriod, consumerImportant);
+        consumerAvailabilityPeriod, consumerImportant, AppData()->ReplicationConfig.GetEnableOmitBackupAttribute());
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
@@ -537,11 +515,12 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
         const TString& streamName, const TString& streamPath, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
-        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant)
+        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant, bool enableOmitBackupAttribute)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
         streamName, streamPath, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
-        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant);
+        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant,
+        enableOmitBackupAttribute);
 }
 
 }

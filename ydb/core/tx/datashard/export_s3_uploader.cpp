@@ -1142,7 +1142,8 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     metadata.SetSourceDatabase(Task.GetSourceDatabase());
 
     TVector<TChangefeedExportDescriptions> changefeeds;
-    if (AppData()->FeatureFlags.GetEnableChangefeedsExport()) {
+    const bool exportChangefeeds = AppData()->FeatureFlags.GetEnableChangefeedsExport();
+    if (exportChangefeeds) {
         const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
         const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
         Y_ASSERT(persQueues.size() == cdcStreams.size());
@@ -1186,7 +1187,9 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     }
 
     if (scheme) {
-        int idx = changefeeds.size() + 1;
+        // Omitted feeds still reserve their slots before the indexes. This must
+        // match ComputeIndexItemSuffix in the SchemeShard export path.
+        int idx = exportChangefeeds ? Task.GetTable().GetTable().CdcStreamsSize() + 1 : 1;
         for (const auto& index : scheme->indexes()) {
             const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
             if (!indexType) {

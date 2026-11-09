@@ -3896,6 +3896,51 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
+    Y_UNIT_TEST(OmittedColumnTableIsNotDumped) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        ExecuteQuery(querySession, R"(
+            CREATE TABLE `/Root/olap_table` (
+                Key Uint32 NOT NULL,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )", true);
+        ExecuteQuery(querySession, "UPSERT INTO `/Root/olap_table` (Key, Value) VALUES (1, 'value');");
+
+        Tests::TClient legacyClient(*server.ServerSettings);
+        UNIT_ASSERT_VALUES_EQUAL(legacyClient.AlterUserAttributes("/Root", "olap_table", {{"__omit_backup", "true"}}),
+            NMsgBusProxy::MSTATUS_OK);
+        TTableClient tableClient(driver);
+        auto session = tableClient.CreateSession().ExtractValueSync().GetSession();
+        const auto description = session.DescribeTable("/Root/olap_table").ExtractValueSync();
+        UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(description.GetTableDescription().GetAttributes().at("__omit_backup"), "true");
+
+        NDump::TClient backupClient(driver);
+        for (const TString path : {"/Root", "/Root/olap_table"}) {
+            TTempDir tempDir;
+            const auto result = backupClient.Dump(path, tempDir.Path(), NDump::TDumpSettings().AvoidCopy(true).Database("/Root"));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(!tempDir.Path().Child("olap_table").Exists());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(legacyClient.AlterUserAttributes("/Root", "olap_table", {}, {"__omit_backup"}),
+            NMsgBusProxy::MSTATUS_OK);
+        const auto unmarked = session.DescribeTable("/Root/olap_table").ExtractValueSync();
+        UNIT_ASSERT_C(unmarked.IsSuccess(), unmarked.GetIssues().ToString());
+        UNIT_ASSERT(!unmarked.GetTableDescription().GetAttributes().contains("__omit_backup"));
+        TTempDir tempDir;
+        const auto result = backupClient.Dump("/Root", tempDir.Path(), NDump::TDumpSettings().AvoidCopy(true).Database("/Root"));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(tempDir.Path().Child("olap_table").Child("scheme.pb").Exists());
+        UNIT_ASSERT(tempDir.Path().Child("olap_table").Child("data_00.csv").Exists());
+    }
+
     Y_UNIT_TEST(ColumnTableSkippedWhenCopyTableFallbackTriggered) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

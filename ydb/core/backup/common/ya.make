@@ -6,6 +6,7 @@ SRCS(
     feature_flags.cpp
     fields_wrappers.cpp
     metadata.cpp
+    omit_backup.cpp
 )
 
 PEERDIR(

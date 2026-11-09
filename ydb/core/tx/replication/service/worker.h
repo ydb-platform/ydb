@@ -118,7 +118,7 @@ struct TEvWorker {
     };
 
     struct TEvGone: public TEventLocal<TEvGone, EvGone> {
-        enum EStatus {
+        enum class EStatus {
             DONE,
             S3_ERROR,
             SCHEME_ERROR,
@@ -126,7 +126,18 @@ struct TEvWorker {
             OVERLOAD,
             DATA_ERROR,
             DATA_LOSS,
+            AUTH_ERROR,
         };
+
+        // Keep existing source names while the process-local outcome is scoped.
+        static constexpr auto DONE = EStatus::DONE;
+        static constexpr auto S3_ERROR = EStatus::S3_ERROR;
+        static constexpr auto SCHEME_ERROR = EStatus::SCHEME_ERROR;
+        static constexpr auto UNAVAILABLE = EStatus::UNAVAILABLE;
+        static constexpr auto OVERLOAD = EStatus::OVERLOAD;
+        static constexpr auto DATA_ERROR = EStatus::DATA_ERROR;
+        static constexpr auto DATA_LOSS = EStatus::DATA_LOSS;
+        static constexpr auto AUTH_ERROR = EStatus::AUTH_ERROR;
 
         EStatus Status;
         TString ErrorDescription;

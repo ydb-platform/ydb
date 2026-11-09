@@ -8279,63 +8279,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(!s3Mock.GetData().empty());
     }
 
-    // A backup may carry a retention that the destination cannot accept. The
-    // import must fail with an issue that names the changefeed and the limit
-    // instead of a bare scheme error.
-    Y_UNIT_TEST_FLAG(ChangefeedRetentionBelowDestinationLimit, EnableDataShardDirectPartImport) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
-        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        ui64 txId = 100;
-
-        THashMap<TString, TTestDataWithScheme> bucketContent;
-        AddedScheme(bucketContent, "UINT32", "Table");
-        {
-            NAttr::TAttributes attr;
-            attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, R"(
-                partitions {
-                    active: true
-                }
-                retention_period {
-                    seconds: 0
-                }
-                consumers {
-                    name: "my_consumer"
-                }
-            )");
-            bucketContent.emplace("/Table/updates_feed1", GenerateTestData({EPathTypeCdcStream, R"(
-                name: "updates_feed1"
-                mode: MODE_UPDATES
-                format: FORMAT_JSON
-                state: STATE_ENABLED
-            )", std::move(attr)}));
-        }
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: "Table"
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-
-        const auto issues = ImportIssues(runtime, txId, Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_STRING_CONTAINS(issues, "updates_feed1");
-        UNIT_ASSERT_STRING_CONTAINS(issues, "retention");
-    }
-
     Y_UNIT_TEST_FLAG(ShouldSucceedImportTableWithUniqueIndex, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

@@ -6,6 +6,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -337,38 +338,6 @@ public:
             const auto ast = result.GetStats()->GetAst();
             UNIT_ASSERT_C(ast, "EXPLAIN did not return an AST");
             UNIT_ASSERT_VALUES_EQUAL_C(ast->find("KqpCnSequencer") != std::string::npos, runtimeDefault, *ast);
-        }
-    }
-
-    void CheckLiteralNull(const TString& tablePath, const TVector<TString>& names, bool notNull = false) {
-        const auto describe = Kikimr.GetTestClient().Ls(tablePath);
-        const auto& table = describe->Record.GetPathDescription().GetTable();
-
-        for (const auto& name : names) {
-            const auto it = FindIf(table.GetColumns(), [&](const auto& column) { return column.GetName() == name; });
-            UNIT_ASSERT_C(it != table.GetColumns().end(), name);
-
-            UNIT_ASSERT_C(it->HasDefaultFromLiteral(), it->DebugString());
-            UNIT_ASSERT_C(it->GetDefaultFromLiteral().value().has_null_flag_value(), it->DebugString());
-            UNIT_ASSERT_C(!it->GetIsBuildInProgress(), it->DebugString());
-            UNIT_ASSERT_VALUES_EQUAL_C(it->GetNotNull(), notNull, it->DebugString());
-        }
-
-        for (size_t reload = 0; reload != 2; ++reload) {
-            auto loader = std::make_shared<TKqpTableMetadataLoader>("local_ut",
-                Kikimr.GetTestServer().GetRuntime()->GetAnyNodeActorSystem(), nullptr);
-            const auto result = loader->LoadTableMetadata("local_ut", tablePath, {}, "/Root", nullptr).GetValueSync();
-            UNIT_ASSERT_C(result.Success(), result.Issues().ToString());
-
-            for (const auto& name : names) {
-                const auto& column = result.Metadata->Columns.at(name);
-                UNIT_ASSERT_C(column.DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL, name);
-                UNIT_ASSERT_C(column.IsDefaultKindDefined(), name);
-                UNIT_ASSERT_C(column.IsDefaultFromLiteral(), name);
-                UNIT_ASSERT_C(column.DefaultFromLiteral.value().has_null_flag_value(), name);
-                UNIT_ASSERT_C(!column.IsBuildInProgress, name);
-                UNIT_ASSERT_VALUES_EQUAL_C(column.NotNull, notNull, name);
-            }
         }
     }
 
@@ -6859,9 +6828,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 PRIMARY KEY (k)
             );
         )");
-        fixture.CheckLiteralNull("/Root/TestTable", {"value", "number", "counter", "amount", "pg_text", "pg_number"});
+        fixture.CheckNoDefault("/Root/TestTable", {"value", "number", "counter", "amount", "pg_text", "pg_number"});
         fixture.CheckNoDefault("/Root/TestTable", {"plain"});
-        fixture.CheckDefaultGeneration("/Root/TestTable", "k", "100", true);
+        fixture.CheckDefaultGeneration("/Root/TestTable", "k", "100", false);
 
         int key = 0;
         for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
@@ -6877,7 +6846,56 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             "[[#;#;#;#;#]]");
         fixture.Exec("REPLACE INTO TestTable (k) VALUES (1);");
         fixture.Check("SELECT value, plain FROM TestTable WHERE k = 1;", "[[#;#]]");
-        fixture.CheckLiteralNull("/Root/TestTable", {"value", "number", "counter", "amount", "pg_text", "pg_number"});
+        fixture.CheckNoDefault("/Root/TestTable", {"value", "number", "counter", "amount", "pg_text", "pg_number"});
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullCreateAndWriteScript, CompileTimeDefaults) {
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        NScripting::TScriptingClient client(fixture.Kikimr.GetDriver());
+        const auto result = client.ExecuteYqlScript(R"(
+            CREATE TABLE TestTable (k Int32 NOT NULL, value String DEFAULT NULL,
+                number Int32 DEFAULT CAST(NULL AS Int32), PRIMARY KEY (k));
+            COMMIT;
+            INSERT INTO TestTable (k) VALUES (1);
+            COMMIT;
+            UPSERT INTO TestTable (k, value) VALUES (1, 'saved');
+            COMMIT;
+            UPSERT INTO TestTable (k) VALUES (1), (2);
+            COMMIT;
+            SELECT k, value, number FROM TestTable ORDER BY k;
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+        CompareYson(R"([[1;["saved"];#];[2;#;#]])", FormatResultSetYson(result.GetResultSets()[0]));
+        fixture.CheckNoDefault("/Root/TestTable", {"value", "number"});
+
+        const auto rejected = client.ExecuteYqlScript(R"(
+            CREATE TABLE RequiredTable (k Int32 NOT NULL, value String NOT NULL DEFAULT NULL, PRIMARY KEY (k));
+            COMMIT;
+            INSERT INTO RequiredTable (k) VALUES (1);
+        )").GetValueSync();
+        UNIT_ASSERT(!rejected.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "Missing not null column");
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullRowIdSequence, CompileTimeDefaults) {
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (k Int32 NOT NULL,
+                __ydb_row_id Uint64 NOT NULL DEFAULT NULL, PRIMARY KEY (k));
+        )");
+        const auto describe = fixture.Kikimr.GetTestClient().Ls("/Root/TestTable");
+        const auto& columns = describe->Record.GetPathDescription().GetTable().GetColumns();
+        const auto rowId = FindIf(columns, [](const auto& column) { return column.GetName() == "__ydb_row_id"; });
+        UNIT_ASSERT(rowId != columns.end());
+        UNIT_ASSERT_C(!rowId->HasDefaultFromLiteral(), rowId->DebugString());
+        UNIT_ASSERT_C(rowId->HasDefaultFromSequence(), rowId->DebugString());
+        int key = 0;
+        for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
+            fixture.Exec(TStringBuilder() << operation << " INTO TestTable (k) VALUES (" << ++key << ");");
+            fixture.Reject(operation + " INTO TestTable (k, __ydb_row_id) VALUES (100, NULL);", "Failed to convert type");
+        }
+        fixture.Check("SELECT COUNT(*), COUNT(DISTINCT __ydb_row_id) FROM TestTable;", "[[3u;3u]]");
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullBulkUpsert, CompileTimeDefaults) {
@@ -6886,14 +6904,13 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             CREATE TABLE BulkTable (k Int32 NOT NULL, value String DEFAULT NULL,
                 number Uint32 DEFAULT NULL, pg_text PgText DEFAULT NULL, plain String, PRIMARY KEY (k));
         )");
-        fixture.CheckLiteralNull("/Root/BulkTable", {"value", "number", "pg_text"});
+        fixture.CheckNoDefault("/Root/BulkTable", {"value", "number", "pg_text"});
 
         TValueBuilder missing;
         missing.BeginList().AddListItem().BeginStruct().AddMember("k").Int32(1).EndStruct().EndList();
-        const auto rejected = fixture.Kikimr.GetTableClient().BulkUpsert("/Root/BulkTable", missing.Build()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), EStatus::SCHEME_ERROR, rejected.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "Missing default columns:");
-        fixture.Check("SELECT COUNT(*) FROM BulkTable;", "[[0u]]");
+        const auto omitted = fixture.Kikimr.GetTableClient().BulkUpsert("/Root/BulkTable", missing.Build()).GetValueSync();
+        UNIT_ASSERT_C(omitted.IsSuccess(), omitted.GetIssues().ToString());
+        fixture.Check("SELECT k, value, number, pg_text, plain FROM BulkTable;", "[[1;#;#;#;#]]");
 
         TValueBuilder rows;
         rows.BeginList()
@@ -6915,8 +6932,15 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Check("SELECT k, value, number, pg_text, plain FROM BulkTable ORDER BY k;",
             R"([[1;#;#;#;#];[2;["explicit"];[42u];"pg";#]])");
 
+        TValueBuilder existing;
+        existing.BeginList().AddListItem().BeginStruct().AddMember("k").Int32(2).EndStruct().EndList();
+        const auto unchanged = fixture.Kikimr.GetTableClient().BulkUpsert("/Root/BulkTable", existing.Build()).GetValueSync();
+        UNIT_ASSERT_C(unchanged.IsSuccess(), unchanged.GetIssues().ToString());
+        fixture.Check("SELECT value, number, pg_text, plain FROM BulkTable WHERE k = 2;",
+            R"([[["explicit"];[42u];"pg";#]])");
+
         fixture.Exec("CREATE TABLE RequiredTable (k Int32 NOT NULL, value String NOT NULL DEFAULT NULL, PRIMARY KEY (k));");
-        fixture.CheckLiteralNull("/Root/RequiredTable", {"value"}, true);
+        fixture.CheckNoDefault("/Root/RequiredTable", {"value"}, true);
         TValueBuilder explicitRequired;
         explicitRequired.BeginList().AddListItem().BeginStruct()
             .AddMember("k").Int32(1).AddMember("value").String("explicit").EndStruct().EndList();
@@ -6938,7 +6962,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Check("SELECT k, value FROM RequiredTable;", R"([[1;"explicit"]])");
     }
 
-    Y_UNIT_TEST_TWIN(DefaultNullAddAndBackfill, CompileTimeDefaults) {
+    Y_UNIT_TEST_TWIN(DefaultNullAddWithoutBackfill, CompileTimeDefaults) {
         TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
         fixture.Exec("CREATE TABLE TestTable (k Int32 NOT NULL, value String, PRIMARY KEY (k));");
         fixture.Exec("INSERT INTO TestTable (k, value) VALUES (1, 'existing'), (2, NULL);");
@@ -6946,11 +6970,11 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Exec("ALTER TABLE TestTable ADD COLUMN pg_text PgText DEFAULT NULL;");
         fixture.Exec("ALTER TABLE TestTable ADD COLUMN amount Decimal(22,9) DEFAULT NULL;");
         fixture.Exec("ALTER TABLE TestTable ADD COLUMN plain String;");
-        fixture.CheckLiteralNull("/Root/TestTable", {"extra", "pg_text", "amount"});
+        fixture.CheckNoDefault("/Root/TestTable", {"extra", "pg_text", "amount"});
         fixture.CheckNoDefault("/Root/TestTable", {"plain"});
         fixture.Check("SELECT k, value, extra, pg_text, amount, plain FROM TestTable ORDER BY k;",
             R"([[1;["existing"];#;#;#;#];[2;#;#;#;#;#]])");
-        fixture.CheckDefaultGeneration("/Root/TestTable", "k", "100", true);
+        fixture.CheckDefaultGeneration("/Root/TestTable", "k", "100", false);
         fixture.Exec("INSERT INTO TestTable (k) VALUES (3);");
         fixture.Check("SELECT value, extra, pg_text, amount, plain FROM TestTable WHERE k = 3;", "[[#;#;#;#;#]]");
         fixture.Exec("UPSERT INTO TestTable (k, extra) VALUES (1, 42);");
@@ -6988,17 +7012,19 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Check("SELECT k, required FROM TestTable ORDER BY k;", "[[1;42u];[2;0u];[3;42u];[4;0u];[5;42u];[6;0u]]");
     }
 
-    Y_UNIT_TEST_TWIN(DefaultNullAddRequiresFeatureFlag, CompileTimeDefaults) {
+    Y_UNIT_TEST_TWIN(DefaultNullAddWithoutFeatureFlag, CompileTimeDefaults) {
         TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults, false));
         fixture.Exec("CREATE TABLE TestTable (k Int32 NOT NULL, value String, PRIMARY KEY (k));");
         fixture.Exec("INSERT INTO TestTable (k, value) VALUES (1, 'existing');");
-        fixture.Reject("ALTER TABLE TestTable ADD COLUMN extra Uint32 DEFAULT NULL;", "Adding columns with defaults is disabled");
-        fixture.Reject("ALTER TABLE TestTable ADD COLUMN extra Uint32 DEFAULT CAST(NULL AS Uint32);", "Adding columns with defaults is disabled");
+        fixture.Exec("ALTER TABLE TestTable ADD COLUMN extra Uint32 DEFAULT NULL;");
+        fixture.Exec("ALTER TABLE TestTable ADD COLUMN typed_null Uint32 DEFAULT CAST(NULL AS Uint32);");
         fixture.Exec("ALTER TABLE TestTable ADD COLUMN plain String;");
-        fixture.CheckNoDefault("/Root/TestTable", {"value", "plain"});
+        fixture.CheckNoDefault("/Root/TestTable", {"value", "extra", "typed_null", "plain"});
+        fixture.CheckDefaultGeneration("/Root/TestTable", "k", "100", false);
         const auto describe = fixture.Kikimr.GetTestClient().Ls("/Root/TestTable");
-        UNIT_ASSERT_VALUES_EQUAL(describe->Record.GetPathDescription().GetTable().ColumnsSize(), 3);
-        fixture.Check("SELECT k, value, plain FROM TestTable;", R"([[1;["existing"];#]])");
+        UNIT_ASSERT_VALUES_EQUAL(describe->Record.GetPathDescription().GetTable().ColumnsSize(), 5);
+        fixture.Check("SELECT k, value, extra, typed_null, plain FROM TestTable;", R"([[1;["existing"];#;#;#]])");
+        fixture.Reject("ALTER TABLE TestTable ADD COLUMN with_value Uint32 DEFAULT 42u;", "Adding columns with defaults is disabled");
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullSetAndDrop, CompileTimeDefaults) {
@@ -7010,9 +7036,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Exec("INSERT INTO TestTable (k, value) VALUES (2, 'explicit');");
         for (size_t repeat = 0; repeat != 2; ++repeat) {
             fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT NULL;");
-            fixture.CheckLiteralNull("/Root/TestTable", {"value"});
+            fixture.CheckNoDefault("/Root/TestTable", {"value"});
             fixture.Check("SELECT k, value FROM TestTable ORDER BY k;", R"([[1;["original"]];[2;["explicit"]]])");
-            fixture.CheckDefaultGeneration("/Root/TestTable", "k", "100", !CompileTimeDefaults);
+            fixture.CheckDefaultGeneration("/Root/TestTable", "k", "100", false);
         }
         fixture.Exec("UPSERT INTO TestTable (k) VALUES (1), (3);");
         fixture.Check("SELECT k, value FROM TestTable ORDER BY k;", R"([[1;["original"]];[2;["explicit"]];[3;#]])");
@@ -7025,7 +7051,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT 'new';");
         fixture.Exec("INSERT INTO TestTable (k) VALUES (4);");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT NULL;");
-        fixture.CheckLiteralNull("/Root/TestTable", {"value"});
+        fixture.CheckNoDefault("/Root/TestTable", {"value"});
         fixture.Exec("INSERT INTO TestTable (k) VALUES (5);");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value DROP DEFAULT;");
         fixture.CheckNoDefault("/Root/TestTable", {"value"});
@@ -7039,10 +7065,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Exec(R"(
             CREATE TABLE TestTable (k Int32 NOT NULL, value String NOT NULL DEFAULT NULL, PRIMARY KEY (k));
         )");
-        fixture.CheckLiteralNull("/Root/TestTable", {"value"}, true);
+        fixture.CheckNoDefault("/Root/TestTable", {"value"}, true);
         int key = 0;
-        const TString omittedColumnIssue = CompileTimeDefaults ? "not null"
-            : "NULL value violates not null constraint for column: value";
+        const TString omittedColumnIssue = "not null";
         for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
             fixture.Exec(TStringBuilder() << operation << " INTO TestTable (k, value) VALUES (" << ++key << ", 'explicit');");
             fixture.Reject(operation + " INTO TestTable (k) VALUES (100);", omittedColumnIssue);
@@ -7052,7 +7077,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Exec("INSERT INTO TestTable (k) VALUES (4);");
         for (size_t repeat = 0; repeat != 2; ++repeat) {
             fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT NULL;");
-            fixture.CheckLiteralNull("/Root/TestTable", {"value"}, true);
+            fixture.CheckNoDefault("/Root/TestTable", {"value"}, true);
             fixture.Check("SELECT k, value FROM TestTable ORDER BY k;",
                 R"([[1;"explicit"];[2;"explicit"];[3;"explicit"];[4;"temporary"]])");
             fixture.Reject("INSERT INTO TestTable (k) VALUES (100);", "not null");
@@ -7079,27 +7104,28 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 CREATE TABLE NullableKey (tenant Int32 NOT NULL, k Int32 DEFAULT NULL,
                     value String, payload String, PRIMARY KEY (tenant, k));
             )");
-            fixture.CheckLiteralNull("/Root/NullableKey", {"k"});
+            fixture.CheckNoDefault("/Root/NullableKey", {"k"});
             for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
                 fixture.Exec("DELETE FROM NullableKey WHERE tenant IN (1, 2, 3);");
-                fixture.Exec(operation + " INTO NullableKey (tenant, value, payload) VALUES (1, 'omitted', 'saved');");
+                fixture.Reject(operation + " INTO NullableKey (tenant, value, payload) VALUES (1, 'omitted', 'saved');",
+                    "Missing key column");
                 fixture.Exec(operation + " INTO NullableKey (tenant, k, value, payload) VALUES (2, NULL, 'null', 'saved');");
                 fixture.Exec(operation + " INTO NullableKey (tenant, k, value, payload) VALUES (3, 42, 'explicit', 'saved');");
                 fixture.Check("SELECT tenant, k, value, payload FROM NullableKey ORDER BY tenant;",
-                    R"([[1;#;["omitted"];["saved"]];[2;#;["null"];["saved"]];[3;[42];["explicit"];["saved"]]])");
+                    R"([[2;#;["null"];["saved"]];[3;[42];["explicit"];["saved"]]])");
                 fixture.Check(R"(
-                    UPSERT INTO NullableKey (tenant, value) VALUES (1, 'updated') RETURNING tenant, k, value, payload;
-                )", R"([[1;#;["updated"];["saved"]]])");
-                fixture.Check("SELECT tenant, k, value, payload FROM NullableKey WHERE tenant = 1;",
-                    R"([[1;#;["updated"];["saved"]]])");
+                    UPSERT INTO NullableKey (tenant, k, value) VALUES (2, NULL, 'updated') RETURNING tenant, k, value, payload;
+                )", R"([[2;#;["updated"];["saved"]]])");
+                fixture.Check("SELECT tenant, k, value, payload FROM NullableKey WHERE tenant = 2;",
+                    R"([[2;#;["updated"];["saved"]]])");
             }
 
             fixture.Exec("CREATE TABLE RequiredKey (k Int32 NOT NULL DEFAULT NULL, value String, PRIMARY KEY (k));");
-            fixture.CheckLiteralNull("/Root/RequiredKey", {"k"}, true);
+            fixture.CheckNoDefault("/Root/RequiredKey", {"k"}, true);
             int key = 0;
             for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
                 fixture.Exec(TStringBuilder() << operation << " INTO RequiredKey (k, value) VALUES (" << ++key << ", 'explicit');");
-                fixture.Reject(operation + " INTO RequiredKey (value) VALUES ('omitted');", "not null");
+                fixture.Reject(operation + " INTO RequiredKey (value) VALUES ('omitted');", "Missing key column");
                 fixture.Reject(operation + " INTO RequiredKey (k, value) VALUES (NULL, 'null');", "Failed to convert type");
             }
             fixture.Check("SELECT k, value FROM RequiredKey ORDER BY k;",
@@ -7154,8 +7180,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 plain String, PRIMARY KEY (k));
         )");
         const TVector<TString> nullableColumns{"value", "number", "counter", "amount", "flag", "stamp", "document"};
-        fixture.CheckLiteralNull("/Root/TestTable", nullableColumns);
-        fixture.CheckLiteralNull("/Root/TestTable", {"required"}, true);
+        fixture.CheckNoDefault("/Root/TestTable", nullableColumns);
+        fixture.CheckNoDefault("/Root/TestTable", {"required"}, true);
         const auto before = fixture.Kikimr.GetTestClient().Ls("/Root/TestTable")->Record.GetPathDescription().GetTable();
         const auto ddl = fixture.ShowCreateTable("/Root/TestTable");
         fixture.Exec("DROP TABLE TestTable;");
@@ -7172,8 +7198,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             UNIT_ASSERT_C(restored->GetDefaultValueCase() == column.GetDefaultValueCase(), restored->DebugString());
             UNIT_ASSERT_VALUES_EQUAL(restored->GetDefaultFromLiteral().SerializeAsString(), column.GetDefaultFromLiteral().SerializeAsString());
         }
-        fixture.CheckLiteralNull("/Root/TestTable", nullableColumns);
-        fixture.CheckLiteralNull("/Root/TestTable", {"required"}, true);
+        fixture.CheckNoDefault("/Root/TestTable", nullableColumns);
+        fixture.CheckNoDefault("/Root/TestTable", {"required"}, true);
         fixture.CheckNoDefault("/Root/TestTable", {"plain"});
 
         auto loader = std::make_shared<TKqpTableMetadataLoader>("local_ut",
@@ -7192,7 +7218,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             UNIT_ASSERT_VALUES_EQUAL(restored.Type, column.Type);
             UNIT_ASSERT_VALUES_EQUAL(restored.DefaultFromLiteral.SerializeAsString(), column.DefaultFromLiteral.SerializeAsString());
         }
-        fixture.CheckDefaultGeneration("/Root/TestTable", "k, required", "100, 'explicit'u", !CompileTimeDefaults);
+        fixture.CheckDefaultGeneration("/Root/TestTable", "k, required", "100, 'explicit'u", false);
         fixture.Reject("INSERT INTO TestTable (k) VALUES (1);", "not null");
         fixture.Exec("INSERT INTO TestTable (k, required) VALUES (1, 'saved'u);");
         fixture.Reject("UPSERT INTO TestTable (k) VALUES (1);", "not null");
@@ -7215,26 +7241,26 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             }
             UNIT_ASSERT_VALUES_EQUAL_C(count, expected, ddl);
         };
-        checkDefaults(3);
+        checkDefaults(0);
         fixture.Exec("INSERT INTO TestTable (k, value, number, required) VALUES (1, 'existing', 7u, 'saved'u);");
         fixture.Exec("ALTER TABLE TestTable ADD COLUMN extra Uint32 DEFAULT NULL;");
-        checkDefaults(4);
+        checkDefaults(0);
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN number SET DEFAULT NULL;");
-        checkDefaults(5);
+        checkDefaults(0);
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value DROP DEFAULT;");
-        checkDefaults(4);
+        checkDefaults(0);
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN k DROP DEFAULT;");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN required SET DEFAULT NULL;");
-        checkDefaults(3);
+        checkDefaults(0);
         fixture.Check("SELECT k, value, number, required, extra FROM TestTable;",
             R"([[1;["existing"];[7u];"saved";#]])");
 
         const auto ddl = fixture.ShowCreateTable("/Root/TestTable");
         fixture.Exec("DROP TABLE TestTable;");
         fixture.Exec(ddl);
-        checkDefaults(3);
-        fixture.CheckLiteralNull("/Root/TestTable", {"number", "extra"});
-        fixture.CheckLiteralNull("/Root/TestTable", {"required"}, true);
+        checkDefaults(0);
+        fixture.CheckNoDefault("/Root/TestTable", {"number", "extra"});
+        fixture.CheckNoDefault("/Root/TestTable", {"required"}, true);
         fixture.CheckNoDefault("/Root/TestTable", {"value"});
         fixture.CheckNoDefault("/Root/TestTable", {"k"}, true);
         fixture.Exec("INSERT INTO TestTable (k, required) VALUES (2, 'new'u);");
@@ -7301,11 +7327,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 UNIT_ASSERT_C(events.emplace(payload, json).second, message);
             }
             UNIT_ASSERT_VALUES_EQUAL(events.at("inserted")["key"][0].GetInteger(), 1);
-            UNIT_ASSERT(events.at("inserted")["update"].Has("value"));
-            UNIT_ASSERT(events.at("inserted")["update"]["value"].IsNull());
+            UNIT_ASSERT(!events.at("inserted")["update"].Has("value"));
             UNIT_ASSERT_VALUES_EQUAL(events.at("inserted")["update"]["required"].GetInteger(), 42);
             const auto& updated = events.at("updated")["update"];
-            UNIT_ASSERT(!updated.Has("value") || updated["value"].IsNull());
+            UNIT_ASSERT(!updated.Has("value"));
             UNIT_ASSERT_VALUES_EQUAL(updated["required"].GetInteger(), 42);
             UNIT_ASSERT(events.at("replaced")["reset"].Has("value"));
             UNIT_ASSERT(events.at("replaced")["reset"]["value"].IsNull());
@@ -7313,7 +7338,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             UNIT_ASSERT_VALUES_EQUAL(events.at("explicit")["key"][0].GetInteger(), 3);
             UNIT_ASSERT_VALUES_EQUAL(events.at("explicit")["update"]["value"].GetInteger(), 7);
             const auto& preserved = events.at("preserved")["update"];
-            UNIT_ASSERT(!preserved.Has("value") || preserved["value"].GetInteger() == 7);
+            UNIT_ASSERT(!preserved.Has("value"));
             UNIT_ASSERT(events.at("null")["update"].Has("value"));
             UNIT_ASSERT(events.at("null")["update"]["value"].IsNull());
         }
@@ -7325,19 +7350,19 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             CREATE TABLE TestTable (k Int32 NOT NULL,
                 value PgText DEFAULT 'original'pt, number PgInt4 DEFAULT NULL, PRIMARY KEY (k));
         )");
-        fixture.CheckLiteralNull("/Root/TestTable", {"number"});
+        fixture.CheckNoDefault("/Root/TestTable", {"number"});
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT NULL;");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN number SET DEFAULT NULL;");
-        fixture.CheckLiteralNull("/Root/TestTable", {"value", "number"});
-        fixture.CheckDefaultGeneration("/Root/TestTable", "k", "100", true);
+        fixture.CheckNoDefault("/Root/TestTable", {"value", "number"});
+        fixture.CheckDefaultGeneration("/Root/TestTable", "k", "100", false);
         fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT 'restored'pt;");
         fixture.Exec("INSERT INTO TestTable (k) VALUES (3);");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value DROP DEFAULT;");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value DROP DEFAULT;");
         fixture.CheckNoDefault("/Root/TestTable", {"value"});
-        fixture.CheckLiteralNull("/Root/TestTable", {"number"});
+        fixture.CheckNoDefault("/Root/TestTable", {"number"});
         fixture.Check("SELECT k, value, number FROM TestTable ORDER BY k;",
             R"([[1;"original";#];[2;#;#];[3;"restored";#]])");
     }
@@ -7351,6 +7376,14 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Reject(R"(
             CREATE TABLE TestTable (k Int32 NOT NULL,
                 value Int32 GENERATED ALWAYS AS (k + 1) STORED DEFAULT NULL, PRIMARY KEY (k));
+        )", "GENERATED");
+        fixture.Reject(R"(
+            CREATE TABLE TestTable (k Int32 NOT NULL,
+                value Int32 DEFAULT CAST(NULL AS Int32) GENERATED ALWAYS AS (k + 1) STORED, PRIMARY KEY (k));
+        )", "GENERATED");
+        fixture.Reject(R"(
+            CREATE TABLE TestTable (k Int32 NOT NULL,
+                value Int32 GENERATED ALWAYS AS (k + 1) STORED DEFAULT CAST(NULL AS Int32), PRIMARY KEY (k));
         )", "GENERATED");
         fixture.Reject(R"(
             CREATE TABLE TestTable (k Int32 NOT NULL, value Int32 DEFAULT 'wrong', PRIMARY KEY (k));
@@ -7381,7 +7414,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 amount Decimal(22,9) DEFAULT CAST(NULL AS Decimal(22,9)),
                 pg_text PgText DEFAULT CAST(NULL AS PgText), PRIMARY KEY (k));
         )");
-        fixture.CheckLiteralNull("/Root/TestTable", {"value", "number", "amount", "pg_text"});
+        fixture.CheckNoDefault("/Root/TestTable", {"value", "number", "amount", "pg_text"});
         int key = 0;
         for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
             fixture.Exec(TStringBuilder() << operation << " INTO TestTable (k) VALUES (" << ++key << ");");
@@ -7395,7 +7428,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Check("SELECT k, value, number FROM TestTable ORDER BY k;", R"([[1;#;#];[2;#;#];[3;#;#];[4;["explicit"];[7]];[5;#;#]])");
     }
 
-    Y_UNIT_TEST_TWIN(DefaultNullExpressionAddAndBackfill, CompileTimeDefaults) {
+    Y_UNIT_TEST_TWIN(DefaultNullExpressionAddWithoutBackfill, CompileTimeDefaults) {
         TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
         fixture.Exec(R"(
             CREATE TABLE TestTable (
@@ -7413,7 +7446,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         const auto describe = fixture.Kikimr.GetTestClient().Ls("/Root/TestTable");
         UNIT_ASSERT_VALUES_EQUAL(describe->Record.GetPathDescription().GetTable().ColumnsSize(), 5);
-        fixture.CheckLiteralNull("/Root/TestTable", {"number", "amount", "pg_text"});
+        fixture.CheckNoDefault("/Root/TestTable", {"number", "amount", "pg_text"});
         fixture.Check("SELECT k, value, number, amount, pg_text FROM TestTable ORDER BY k;", R"([[1;["existing"];#;#;#];[2;#;#;#;#]])");
         fixture.Exec("INSERT INTO TestTable (k) VALUES (3);");
         fixture.Check("SELECT number, amount, pg_text FROM TestTable WHERE k = 3;", R"([[#;#;#]])");
@@ -7430,10 +7463,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         )");
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT CAST(NULL AS String);");
-        fixture.CheckLiteralNull("/Root/TestTable", {"value"});
+        fixture.CheckNoDefault("/Root/TestTable", {"value"});
         fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT NULL;");
-        fixture.CheckLiteralNull("/Root/TestTable", {"value"});
+        fixture.CheckNoDefault("/Root/TestTable", {"value"});
         fixture.Exec("INSERT INTO TestTable (k) VALUES (3);");
         fixture.Exec("UPSERT INTO TestTable (k) VALUES (1);");
         fixture.Check("SELECT value FROM TestTable WHERE k = 1;", R"([[["original"]]])");
@@ -7453,7 +7486,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 PRIMARY KEY (k)
             );
         )");
-        fixture.CheckLiteralNull("/Root/TestTable", {"value"}, true);
+        fixture.CheckNoDefault("/Root/TestTable", {"value"}, true);
         int key = 0;
         for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
             fixture.Exec(TStringBuilder() << operation << " INTO TestTable (k, value) VALUES (" << ++key << ", 'explicit');");
@@ -7479,7 +7512,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
         fixture.Check("SELECT k, value FROM TestTable ORDER BY k;", R"([[1;42]])");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT NULL;");
-        fixture.CheckLiteralNull("/Root/TestTable", {"value"}, true);
+        fixture.CheckNoDefault("/Root/TestTable", {"value"}, true);
         fixture.Reject("INSERT INTO TestTable (k) VALUES (100);", "not null");
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value DROP DEFAULT;");
         fixture.CheckNoDefault("/Root/TestTable", {"value"}, true);

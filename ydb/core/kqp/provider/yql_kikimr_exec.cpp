@@ -2144,6 +2144,10 @@ public:
                                         "Column addition with a GENERATED ALWAYS AS expression is not supported"));
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
+                                    if (IsYqlNullExprNode(constraint.Value().Cast())) {
+                                        continue;
+                                    }
+
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
                                         ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                             "Default values are not supported in column tables"));
@@ -2397,15 +2401,20 @@ public:
 
                             auto defaultExpr = TExprBase(alterColumnList.Item(1));
 
-                            if (auto maybeJust = defaultExpr.Maybe<TCoJust>()) {
-                                defaultExpr = maybeJust.Cast().Input();
-                            }
+                            if (IsYqlNullExprNode(defaultExpr)) {
+                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
+                                alter_columns->ClearDefaultFromLiteral();
+                            } else {
+                                if (auto maybeJust = defaultExpr.Maybe<TCoJust>()) {
+                                    defaultExpr = maybeJust.Cast().Input();
+                                }
 
-                            alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
-                            auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
-                            if (err) {
-                                ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
-                                return SyncError();
+                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
+                                auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
+                                if (err) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
+                                    return SyncError();
+                                }
                             }
                         } else if (alterColumnAction == "dropDefault") {
                             if (table.Metadata->Kind == EKikimrTableKind::Olap) {

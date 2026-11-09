@@ -711,7 +711,7 @@ bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
 }
 
 bool IsYqlNullExprNode(const NNodes::TExprBase& literal) {
-    return literal.Maybe<TCoNull>().IsValid();
+    return literal.Maybe<TCoNull>().IsValid() || literal.Maybe<TCoNothing>().IsValid();
 }
 
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto)

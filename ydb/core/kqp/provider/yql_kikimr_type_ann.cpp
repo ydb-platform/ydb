@@ -521,29 +521,11 @@ namespace {
         const TExprBase& defaultExpr, TPositionHandle pos, const TString& name, const TKikimrTableDescription* table, TExprContext& ctx,
         const TTypeAnnotationContext& typesCtx, std::function<void(TExprNode::TPtr)> onRepeat, const bool columnNotNull)
     {
-        if (!defaultType) {
+        if (!defaultType || defaultExpr.Maybe<TCoNull>().IsValid()) {
             return std::nullopt;
         }
 
-        if (IsYqlNullExprNode(defaultExpr) && columnType) {
-            const auto* nullableType = columnType;
-            if (nullableType->GetKind() != ETypeAnnotationKind::Optional
-                && nullableType->GetKind() != ETypeAnnotationKind::Pg)
-            {
-                nullableType = ctx.MakeType<TOptionalExprType>(nullableType);
-            }
-            auto literal = Build<TCoNothing>(ctx, defaultExpr.Pos())
-                .OptionalType(BuildTypeExpr(defaultExpr.Pos(), *nullableType, ctx))
-                .Done();
-            onRepeat(ctx.Builder(defaultExpr.Pos())
-                .Callable("EvaluateExpr")
-                .Add(0, literal.Ptr())
-                .Seal()
-                .Build());
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
-        }
-
-        if (defaultType->HasNull() || IsPgNullExprNode(defaultExpr)) {
+        if (!IsYqlNullExprNode(defaultExpr) && (defaultType->HasNull() || IsPgNullExprNode(defaultExpr))) {
             if (columnNotNull) {
                 if (table) {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
@@ -878,6 +860,12 @@ namespace {
                     << " column is already set: "
                     << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
                 return false;
+            }
+
+            if (IsYqlNullExprNode(constrValue)) {
+                columnMeta.DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL;
+                columnMeta.DefaultFromLiteral.Clear();
+                return true;
             }
 
             columnMeta.SetDefaultFromLiteral();
@@ -1602,6 +1590,10 @@ private:
                         return TStatus(TStatus::Repeat, true);
                     }
                 }
+            }
+
+            if (columnMeta.DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL) {
+                columnMeta.DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
             }
 
             if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {

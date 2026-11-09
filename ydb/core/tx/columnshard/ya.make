@@ -62,11 +62,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/writer
     ydb/core/tx/columnshard/export
     ydb/core/tx/columnshard/loading
-<<<<<<< HEAD
-=======
-    ydb/core/tx/columnshard/local_db_backup
     ydb/core/tx/columnshard/maintenance/cut_history
->>>>>>> 8d993ddd89d ([KIKIMR-26789] (+) Complete ColumnShard CutHistory GC integration (#55211))
     ydb/core/tx/columnshard/normalizer
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/overload_manager

@@ -159,8 +159,8 @@ public:
         ScheduleNext();
     }
 
-    STRICT_STFUNC(StateWork, hFunc(TEvFindEmptyHistoryIntervals::TEvContinue, Handle);
-                  hFunc(TEvAccessorsReady, Handle); cFunc(TEvents::TEvPoisonPill::EventType, PassAway);)
+    STRICT_STFUNC(StateWork, hFunc(TEvFindEmptyHistoryIntervals::TEvContinue, Handle); hFunc(TEvAccessorsReady, Handle);
+                  cFunc(TEvents::TEvPoisonPill::EventType, PassAway);)
 };
 
 template <class TTable>

@@ -95,14 +95,6 @@ struct TEvPrivate {
         EvRetryConfigSubscription,
         EvUpdateChannelApproximateFreeSpace,
 
-<<<<<<< HEAD
-        EvContinueFindEmptyHistoryIntervals,
-        EvFindEmptyHistoryIntervalsPortionsReady,
-=======
-        EvPrefetchPortionsMetadata,
-        EvSetLoadedKeyRanges,
->>>>>>> 8d993ddd89d ([KIKIMR-26789] (+) Complete ColumnShard CutHistory GC integration (#55211))
-
         EvBackupExportReset,
 
         EvEnd

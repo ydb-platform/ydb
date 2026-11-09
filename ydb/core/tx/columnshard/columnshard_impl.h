@@ -20,11 +20,7 @@
 #include "data_sharing/modification/events/change_owning.h"
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
-<<<<<<< HEAD
-=======
-#include "engines/reader/transaction/scan_gate.h"
 #include "maintenance/cut_history/find_empty_history_intervals.h"
->>>>>>> 8d993ddd89d ([KIKIMR-26789] (+) Complete ColumnShard CutHistory GC integration (#55211))
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"

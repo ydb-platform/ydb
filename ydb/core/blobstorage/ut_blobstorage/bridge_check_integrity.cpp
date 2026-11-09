@@ -12,15 +12,20 @@ using namespace NBridgeTest;
 namespace {
     enum class ECondition { Healthy, Missing, Corrupt, Error };
 
-    void CheckAllCopies(ECondition condition, bool healthyFirst) {
-        TEnvironmentSetup env{{
+    TEnvironmentSetup::TSettings MakeSettings(bool enableDeepScrubbing = false) {
+        return {
             .NodeCount = 16,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .LocationGenerator = GetBridgedLocation,
             .SelfManagementConfig = true,
+            .EnableDeepScrubbing = enableDeepScrubbing,
             .NumPiles = 2,
             .AutomaticBootstrap = true,
-        }};
+        };
+    }
+
+    void CheckAllCopies(ECondition condition, bool healthyFirst) {
+        TEnvironmentSetup env(MakeSettings());
         const ui32 groupId = CreatePoolAndGetGroup(env);
         const auto groups = GetPileGroups(env, groupId);
         const TLogoBlobID id(100500, 1, 1, 0, 100, 0);
@@ -95,18 +100,6 @@ namespace {
         }
         env.Runtime->FilterFunction = {};
     }
-
-    TEnvironmentSetup::TSettings MakeSettings(bool enableDeepScrubbing = false) {
-        return {
-            .NodeCount = 16,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetBridgedLocation,
-            .SelfManagementConfig = true,
-            .EnableDeepScrubbing = enableDeepScrubbing,
-            .NumPiles = 2,
-            .AutomaticBootstrap = true,
-        };
-    }
 }
 
 Y_UNIT_TEST_SUITE(BridgeCheckIntegrity) {
@@ -174,25 +167,30 @@ Y_UNIT_TEST_SUITE(BridgeCheckIntegrity) {
             }
         }
 
-        ui32 numChecked = 0;
+        // successful checks are counted per part, the scrub actors being told apart by the parts they send checks to
+        THashMap<TActorId, ui32> scrubParts;
+        THashMap<ui32, ui32> numChecked;
         std::vector<TString> failures;
         env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvCheckIntegrityResult::EventType) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvCheckIntegrity::EventType) {
+                for (ui32 partGroupId : groups) {
+                    if (ev->Recipient == MakeBlobStorageProxyID(partGroupId)) {
+                        scrubParts[ev->Sender] = partGroupId;
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::TEvCheckIntegrityResult::EventType) {
                 const auto *msg = ev->Get<TEvBlobStorage::TEvCheckIntegrityResult>();
-                if (msg->Status == NKikimrProto::OK) {
-                    ++numChecked;
-                } else {
+                if (msg->Status != NKikimrProto::OK) {
                     failures.push_back(TStringBuilder() << NKikimrProto::EReplyStatus_Name(msg->Status) << ' '
                         << msg->ErrorReason);
+                } else if (const auto it = scrubParts.find(ev->GetRecipientRewrite()); it != scrubParts.end()) {
+                    ++numChecked[it->second];
                 }
             }
             return true;
         };
 
-        NKikimrBlobStorage::TConfigRequest request;
-        request.AddCommand()->MutableSetScrubPeriodicity()->SetScrubPeriodicity(1);
-        const auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        env.SetScrubPeriodicity(TDuration::Seconds(1));
 
         for (ui32 partGroupId : groups) { // wait for a full scrub cycle of every VDisk of both parts
             const auto info = env.GetGroupInfo(partGroupId);
@@ -200,11 +198,12 @@ Y_UNIT_TEST_SUITE(BridgeCheckIntegrity) {
                 const TActorId vdiskActorId = info->GetActorId(i);
                 const ui32 nodeId = vdiskActorId.NodeId();
                 const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+                const TInstant deadline = env.Runtime->GetClock() + TDuration::Minutes(5);
                 for (;;) {
-                    const ui64 cookie = RandomNumber<ui64>();
                     env.Runtime->Send(new IEventHandle(TEvBlobStorage::EvScrubAwait, 0, vdiskActorId, edge, nullptr,
-                        cookie), nodeId);
-                    auto ev = env.WaitForEdgeActorEvent<TEvScrubNotify>(edge, false);
+                        RandomNumber<ui64>()), nodeId);
+                    auto ev = env.WaitForEdgeActorEvent<TEvScrubNotify>(edge, false, deadline);
+                    UNIT_ASSERT_C(ev, "no successful scrub cycle of VDiskId# " << info->GetVDiskId(i));
                     if (ev->Get()->Success) {
                         break;
                     }
@@ -216,6 +215,9 @@ Y_UNIT_TEST_SUITE(BridgeCheckIntegrity) {
         if (!failures.empty()) {
             UNIT_FAIL(failures.size() << " checks failed, the first one: " << failures.front());
         }
-        UNIT_ASSERT_C(numChecked, "no blob checked by deep scrubbing");
+        for (ui32 partGroupId : groups) {
+            UNIT_ASSERT_C(numChecked[partGroupId], "no blob of the part checked by deep scrubbing GroupId# "
+                << partGroupId);
+        }
     }
 }

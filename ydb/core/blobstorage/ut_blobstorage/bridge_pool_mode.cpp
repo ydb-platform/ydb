@@ -135,10 +135,13 @@ namespace {
         for (const TActorId& vdiskActorId : vdiskActorIds) {
             const ui32 nodeId = vdiskActorId.NodeId();
             const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            const TInstant deadline = env.Runtime->GetClock() + TDuration::Minutes(5);
             for (;;) {
                 env.Runtime->Send(new IEventHandle(TEvBlobStorage::EvScrubAwait, 0, vdiskActorId, edge, nullptr,
                     RandomNumber<ui64>()), nodeId);
-                if (env.WaitForEdgeActorEvent<TEvScrubNotify>(edge, false)->Get()->Success) {
+                auto ev = env.WaitForEdgeActorEvent<TEvScrubNotify>(edge, false, deadline);
+                UNIT_ASSERT_C(ev, "no successful scrub cycle of the VDisk with ActorId# " << vdiskActorId);
+                if (ev->Get()->Success) {
                     break;
                 }
             }
@@ -470,10 +473,7 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
             env.CompactVDisk(info->GetActorId(i)); // the scrub checks the blobs it finds in SSTs
         }
 
-        NKikimrBlobStorage::TConfigRequest request;
-        request.AddCommand()->MutableSetScrubPeriodicity()->SetScrubPeriodicity(1);
-        const auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        env.SetScrubPeriodicity(TDuration::Seconds(1));
 
         MakeLocatedPoolBridged(env, 2, groups);
         UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, groupId).GetBridgeProxyGroupId(), groupId);

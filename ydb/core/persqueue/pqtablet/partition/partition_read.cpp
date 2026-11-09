@@ -149,11 +149,6 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
         ctx.Send(request.Sender, response.Release());
     };
 
-    if (request.Deadline <= ctx.Now()) {
-        sendResponse(0, false);
-        return true;
-    }
-
     if (!IsActive()) {
         if (request.Offset < GetEndOffset() && (!request.ReadTimestamp || *request.ReadTimestamp <= EndWriteTimestamp)) {
             sendResponse(GetSizeLag(request.Offset), false);
@@ -166,6 +161,9 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
         }
     } else if (request.Offset < GetEndOffset()) {
         sendResponse(GetSizeLag(request.Offset), false);
+    } else if (request.Deadline <= ctx.Now()) {
+        sendResponse(0, false);
+        return true;
     } else {
         return false;
     }

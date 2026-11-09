@@ -7,7 +7,8 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
@@ -119,10 +120,11 @@ public:
         metadata->MutableLocalDB()->SetFetchOnStart(false);
         metadata->MutableLocalDB()->SetMemoryCacheSize(128 << 20);
         if (tieredIndex) {
-            *schema->AddIndexes() =
-                NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(
-                                                         3000, "ts_max_bs", NOlap::IStoragesManager::DefaultStorageId, inheritPortionStorage, 1))
-                    .SerializeToProto();
+            *schema->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
+                std::make_shared<NOlap::NIndexes::NMinMax::TIndexMeta>(3000, "ts_min_max_bs", NOlap::IStoragesManager::DefaultStorageId,
+                    inheritPortionStorage, 1,
+                    NOlap::NIndexes::TReadDataExtractorContainer(std::make_shared<NOlap::NIndexes::TDefaultDataExtractor>())))
+                                        .SerializeToProto();
             TTestSchema::InitTiersAndTtl(specials, table->MutableTtlSettings());
         }
         for (ui32 i = 1; i < tableCount; ++i) {

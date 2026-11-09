@@ -19,10 +19,17 @@ namespace {
 void ParseHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr) {
     table.HnswSettings.reset();
     table.HnswVectorColumnTag = 0;
-    if (descr.GetVectorIndexHnsw() && descr.HasVectorIndexKmeansTreeDescription()
-            && descr.HasVectorIndexEmbeddingColumnId()) {
-        table.HnswSettings = descr.GetVectorIndexKmeansTreeDescription().GetSettings().settings();
-        table.HnswVectorColumnTag = descr.GetVectorIndexEmbeddingColumnId();
+    for (const auto& index : descr.GetTableIndexes()) {
+        if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalHnsw || !index.HasHnswIndexDescription()) {
+            continue;
+        }
+        const auto& description = index.GetHnswIndexDescription();
+        if (description.HasSettings() && description.GetSettings().has_settings()
+                && description.HasEmbeddingColumnId()) {
+            table.HnswSettings = description.GetSettings().settings();
+            table.HnswVectorColumnTag = description.GetEmbeddingColumnId();
+            return;
+        }
     }
 }
 
@@ -95,6 +102,7 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     GetSchema(schema);
 
     schema.MutableTableIndexes()->Add()->CopyFrom(indexDesc);
+    ParseHnswSettings(*this, schema);
     SetSchema(schema);
 }
 
@@ -138,6 +146,7 @@ void TUserTable::DropIndex(const TPathId& indexPathId) {
     for (auto it = indexes.begin(); it != indexes.end(); ++it) {
         if (indexPathId == TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
             indexes.erase(it);
+            ParseHnswSettings(*this, schema);
             SetSchema(schema);
             return;
         }
@@ -770,22 +779,26 @@ void TUserTable::ApplyAlter(
 
     schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
 
-    // Persist the build settings with the posting table so followers, restarted
-    // tablets and split destinations reconstruct the same graph.
-    if (delta.HasVectorIndexKmeansTreeDescription()) {
-        schema.MutableVectorIndexKmeansTreeDescription()->CopyFrom(delta.GetVectorIndexKmeansTreeDescription());
+    // Persist HNSW index descriptions with the table schema so restart and split
+    // recovery use the same graph settings. Other index types retain their
+    // existing add/drop handling.
+    for (const auto& index : delta.GetTableIndexes()) {
+        if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            continue;
+        }
+        auto& indexes = *schema.MutableTableIndexes();
+        auto it = FindIf(indexes, [&](const auto& existing) {
+            return existing.GetPathOwnerId() == index.GetPathOwnerId()
+                && existing.GetLocalPathId() == index.GetLocalPathId();
+        });
+        if (it != indexes.end()) {
+            it->CopyFrom(index);
+        } else {
+            indexes.Add()->CopyFrom(index);
+        }
     }
-    if (delta.HasVectorIndexHnsw()) {
-        schema.SetVectorIndexHnsw(delta.GetVectorIndexHnsw());
-    }
-    if (delta.HasVectorIndexEmbeddingColumn()) {
-        schema.SetVectorIndexEmbeddingColumn(delta.GetVectorIndexEmbeddingColumn());
-    }
-    if (delta.HasVectorIndexEmbeddingColumnId()) {
-        schema.SetVectorIndexEmbeddingColumnId(delta.GetVectorIndexEmbeddingColumnId());
-    }
-    // Ordinary schema deltas omit the index annotation. Restore it from the
-    // merged description, while honoring explicit parameter/marker changes.
+    // An omitted index preserves its metadata; an explicitly empty HNSW
+    // description disables the graph, including after a restart.
     ParseHnswSettings(*this, schema);
     SetSchema(schema);
 }

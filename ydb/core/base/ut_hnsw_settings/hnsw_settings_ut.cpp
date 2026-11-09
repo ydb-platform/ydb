@@ -57,7 +57,17 @@ namespace NKikimr::NKMeans {
                 CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexCreationConfig>(description);
                 CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexDescription>(description);
                 CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexAlteringConfig>(description);
+                NKikimrSchemeOp::TTableDescription table;
+                auto* index = table.AddTableIndexes();
+                index->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+                *index->MutableHnswIndexDescription() = description;
+                NKikimrSchemeOp::TTableDescription restored;
+                UNIT_ASSERT(restored.ParseFromString(table.SerializeAsString()));
+                UNIT_ASSERT_VALUES_EQUAL(restored.TableIndexesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(restored.GetTableIndexes(0).SerializeAsString(), index->SerializeAsString());
             }
+            // Empty but present index metadata is the persisted HNSW disable marker.
+            CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexDescription>({});
         }
 
         Y_UNIT_TEST(IndexTypeConversion) {

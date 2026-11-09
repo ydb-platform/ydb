@@ -406,11 +406,14 @@ struct TTestHelper {
                     UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
                     if (tx.HasCreateTable() && tx.GetCreateTable().GetName() == name) {
                         auto* table = tx.MutableCreateTable();
-                        table->SetVectorIndexHnsw(true);
-                        table->SetVectorIndexEmbeddingColumn("emb");
-                        table->SetVectorIndexEmbeddingColumnId(columns.size());
-                        auto* settings = table->MutableVectorIndexKmeansTreeDescription()
-                            ->MutableSettings()->mutable_settings();
+                        auto* index = table->AddTableIndexes();
+                        index->SetName("hnsw");
+                        index->SetPathOwnerId(table->GetPathId().GetOwnerId());
+                        index->SetLocalPathId(Max<ui64>());
+                        index->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+                        auto* description = index->MutableHnswIndexDescription();
+                        description->SetEmbeddingColumnId(columns.size());
+                        auto* settings = description->MutableSettings()->mutable_settings();
                         settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
                         settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
                         settings->set_vector_dimension(2);
@@ -6292,6 +6295,41 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
+    Y_UNIT_TEST(HnswIndexMetadataAddDropAndRestart) {
+        NKikimrSchemeOp::TTableDescription schema;
+        schema.SetPath("/Root/posting");
+        TUserTable table(1, schema, 0);
+
+        NKikimrSchemeOp::TIndexDescription index;
+        index.SetName("hnsw");
+        index.SetPathOwnerId(1);
+        index.SetLocalPathId(2);
+        index.SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+        auto* description = index.MutableHnswIndexDescription();
+        description->MutableSettings()->mutable_settings()->set_vector_dimension(2);
+        // The logical index on the base table has no posting-table column ID.
+        auto baseSchema = schema;
+        baseSchema.AddTableIndexes()->CopyFrom(index);
+        TUserTable baseTable(1, baseSchema, 0);
+        UNIT_ASSERT(!baseTable.HnswSettings);
+
+        description->SetEmbeddingColumnId(42);
+        table.AddIndex(index);
+        UNIT_ASSERT(table.HnswSettings);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswVectorColumnTag, 42);
+        table.GetSchema(schema);
+        TUserTable restored(1, schema, 0);
+        UNIT_ASSERT(restored.HnswSettings);
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswVectorColumnTag, 42);
+
+        restored.DropIndex(TPathId(1, 2));
+        UNIT_ASSERT(!restored.HnswSettings);
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswVectorColumnTag, 0);
+        restored.GetSchema(schema);
+        TUserTable dropped(1, schema, 0);
+        UNIT_ASSERT(!dropped.HnswSettings);
+    }
+
 
     Y_UNIT_TEST_TWIN(HnswRequiresDeclaredVectorColumn, WrongColumn) {
         TPortManager pm;
@@ -7148,7 +7186,12 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
                     UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
                     if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
-                        tx.MutableAlterTable()->SetVectorIndexHnsw(false);
+                        auto* index = tx.MutableAlterTable()->AddTableIndexes();
+                        index->SetName("hnsw");
+                        index->SetPathOwnerId(tx.GetAlterTable().GetPathId().GetOwnerId());
+                        index->SetLocalPathId(Max<ui64>());
+                        index->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+                        index->MutableHnswIndexDescription();
                         UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
                         ++annotationsCleared;
                     }

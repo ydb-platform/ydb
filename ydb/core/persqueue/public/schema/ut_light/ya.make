@@ -11,8 +11,9 @@ SRCS(
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/base
-    ydb/core/testlib/basics
-    ydb/core/testlib/default
+    ydb/core/testlib/basics/appdata
+    ydb/core/testlib/basics/runtime
+    yql/essentials/sql/pg_dummy
 )
 
 END()

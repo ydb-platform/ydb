@@ -4056,24 +4056,38 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         });
         TString queueUrl = GetPathFromQueueUrlMap(json);
 
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+        auto describe = [&]() -> NYdb::NTopic::TTopicDescription {
+            auto desc = client.DescribeTopic("TestSetAttrsRetention").GetValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            return desc.GetTopicDescription();
+        };
+
+        {
+            auto description = describe();
+            UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), NKikimr::NSqsTopic::V1::TOPIC_RETENTION_PERIOD);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(3600));
+        }
+
         SetQueueAttributes({
             {"QueueUrl", queueUrl},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "7200"}}}
         });
+
+        {
+            auto description = describe();
+            UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), NKikimr::NSqsTopic::V1::TOPIC_RETENTION_PERIOD);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(7200));
+        }
 
         auto attrJson = GetQueueAttributes({
             {"QueueUrl", queueUrl},
             {"AttributeNames", NJson::TJsonArray{"MessageRetentionPeriod"}}
         });
         UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], "7200");
-
-        auto driver = MakeDriver(*this);
-        auto client = TTopicClient(driver);
-        auto desc = client.DescribeTopic("TestSetAttrsRetention").GetValueSync();
-        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionPeriod(), NKikimr::NSqsTopic::V1::TOPIC_RETENTION_PERIOD);
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetConsumers().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(7200));
         driver.Stop(true);
     }
 

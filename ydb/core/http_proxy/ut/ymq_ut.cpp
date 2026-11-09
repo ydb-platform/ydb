@@ -2909,6 +2909,43 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         }, 400);
     }
 
+    Y_UNIT_TEST_F(TestSetQueueAttributesRetentionPeriod, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        const TString queueName = "SetAttrsRetention";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "3600"}}}
+        });
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        {
+            const auto description = DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), TDuration::Minutes(1));
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(3600));
+        }
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "7200"}}}
+        });
+
+        {
+            const auto description = DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), TDuration::Minutes(1));
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(7200));
+        }
+
+        const auto attrJson = GetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"AttributeNames", NJson::TJsonArray{"MessageRetentionPeriod"}}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], "7200");
+    }
+
     Y_UNIT_TEST_F(TestSetQueueAttributes_TableImplementation, THttpProxyTestMock) {
         PrepareConfigs(KikimrServer.Get());
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);

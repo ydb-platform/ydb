@@ -723,6 +723,11 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
             CurrentMessage->SetIsBatch(res.GetIsBatch());
 
         }
+
+        CurrentMessage->SetPartitionKey(blob.PartitionKey);
+        CurrentMessage->SetSourceId(blob.SourceId);
+        CurrentMessage->SetExplicitHash(blob.ExplicitHashKey);
+
         currentMessageBlobs.push_back(std::move(blob));
 
         if (isLastPart) {

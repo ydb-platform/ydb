@@ -1,3 +1,4 @@
+* Added `ydb admin database freeze` and `ydb admin database unfreeze` commands to freeze database schema changes and writes, wait for CDC delivery to topics, and remove the freeze. Both commands wait for completion and support a client `--timeout`.
 * Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.
 * Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--target-database`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.
 * Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data (asks for confirmation unless `-y` is given).

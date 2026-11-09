@@ -12,6 +12,16 @@ protected:
     virtual void Config(TConfig& config) override;
 };
 
+class TCommandDatabaseFreeze : public TYdbSimpleCommand {
+public:
+    explicit TCommandDatabaseFreeze(bool freeze);
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    const bool Freeze;
+};
+
 class TCommandDatabaseDump : public TYdbReadOnlyCommand {
 public:
     TCommandDatabaseDump();

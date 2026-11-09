@@ -3,56 +3,62 @@
   "args":
     [
       {
-        "op_name":"InnerJoin (BlockHash)",
+        "op_name":"HashShuffle",
         "args":
           [
             {
-              "op_name":"HashShuffle",
+              "op_name":"InnerJoin (BlockHash)",
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (BlockHash)",
+                    "op_name":"HashShuffle",
                     "args":
                       [
                         {
-                          "op_name":"TableFullScan",
-                          "table":"customer"
-                        },
-                        {
-                          "op_name":"HashShuffle",
+                          "op_name":"InnerJoin (BlockHash)",
                           "args":
                             [
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"customer"
+                              },
                               {
                                 "op_name":"HashShuffle",
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (BlockHash)",
+                                      "op_name":"HashShuffle",
                                       "args":
                                         [
                                           {
-                                            "op_name":"HashShuffle",
+                                            "op_name":"InnerJoin (BlockHash)",
                                             "args":
                                               [
                                                 {
-                                                  "op_name":"InnerJoin (BlockHash)",
+                                                  "op_name":"HashShuffle",
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"web_returns"
-                                                      },
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"date_dim"
+                                                        "op_name":"InnerJoin (BlockHash)",
+                                                        "args":
+                                                          [
+                                                            {
+                                                              "op_name":"TableFullScan",
+                                                              "table":"web_returns"
+                                                            },
+                                                            {
+                                                              "op_name":"TableFullScan",
+                                                              "table":"date_dim"
+                                                            }
+                                                          ]
                                                       }
                                                     ]
+                                                },
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"customer_address"
                                                 }
                                               ]
-                                          },
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"customer_address"
                                           }
                                         ]
                                     }
@@ -61,12 +67,12 @@
                             ]
                         }
                       ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"customer_address"
                   }
                 ]
-            },
-            {
-              "op_name":"TableFullScan",
-              "table":"customer_address"
             }
           ]
       },
@@ -79,32 +85,38 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (BlockHash)",
+                    "op_name":"HashShuffle",
                     "args":
                       [
                         {
-                          "op_name":"HashShuffle",
+                          "op_name":"InnerJoin (BlockHash)",
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (BlockHash)",
+                                "op_name":"HashShuffle",
                                 "args":
                                   [
                                     {
-                                      "op_name":"TableFullScan",
-                                      "table":"web_returns"
-                                    },
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"date_dim"
+                                      "op_name":"InnerJoin (BlockHash)",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"web_returns"
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"date_dim"
+                                          }
+                                        ]
                                     }
                                   ]
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"customer_address"
                               }
                             ]
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"customer_address"
                         }
                       ]
                   }

@@ -4,6 +4,7 @@
 #include "snapshot_retention/snapshot_retention.h"
 
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 
 #include <util/stream/output.h>
 
@@ -27,6 +28,7 @@ void TSnapshotManager::Reset() {
     FollowerReadEdge = TRowVersion::Min();
     FollowerReadEdgeRepeatable = false;
     SnapshotRegistryWarningLogged = false;
+    SnapshotRegistryLagWarningLogged = false;
 
     Snapshots.clear();
 }
@@ -845,7 +847,9 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
 
     const auto policy = GetSnapshotRetentionPolicy();
     const TRowVersion cleanupCandidate = Min(proposed, leastPlanned, leastAcquired, maxWriteVersion, maxRepeatableRead);
-    if (!policy.IsWaitingForRegistry()) {
+    const TRowVersion to = policy.GetCleanupBoundary(cleanupCandidate);
+    const bool waitingForRegistry = policy.IsWaitingForRegistry();
+    if (!waitingForRegistry) {
         SnapshotRegistryWarningLogged = false;
     } else if (!SnapshotRegistryWarningLogged && cleanupCandidate > TRowVersion::Min()
         && !Self->GetUserTables().empty())
@@ -857,7 +861,32 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
             {"cleanupCandidate", cleanupCandidate});
         SnapshotRegistryWarningLogged = true;
     }
-    const TRowVersion to = policy.GetCleanupBoundary(cleanupCandidate);
+
+    // A non-null registry may keep publishing a frozen boundary. Warn about
+    // cleanup it actually delays, allowing for the normal freshness margin and
+    // several exchange/update cycles even when KeepSnapshotTimeout is short.
+    const auto& config = AppData()->LongTxServiceConfig;
+    const TDuration freshnessMargin = TDuration::Seconds(config.GetLocalSnapshotPromotionTimeSeconds())
+        + TDuration::MilliSeconds(config.GetMaxClockSkewMs());
+    const TDuration updateInterval = TDuration::Seconds(config.GetSnapshotsExchangeIntervalSeconds())
+        + TDuration::Seconds(config.GetSnapshotsRegistryUpdateIntervalSeconds());
+    const TDuration lagWarningThreshold = freshnessMargin + Max(TDuration::Minutes(1), updateInterval * 3);
+    const ui64 cleanupLagMs = cleanupCandidate.Step > to.Step ? cleanupCandidate.Step - to.Step : 0;
+    const bool excessiveRegistryLag = !waitingForRegistry && !Self->GetUserTables().empty()
+        && cleanupLagMs > lagWarningThreshold.MilliSeconds();
+    if (!excessiveRegistryLag) {
+        SnapshotRegistryLagWarningLogged = false;
+    } else if (!SnapshotRegistryLagWarningLogged) {
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD,
+            "MVCC history cleanup is delayed by the snapshot registry boundary",
+            {"tabletId", Self->TabletID()},
+            {"lowWatermark", LowWatermark},
+            {"cleanupCandidate", cleanupCandidate},
+            {"cleanupBoundary", to},
+            {"cleanupLagMs", cleanupLagMs},
+            {"lagWarningThresholdMs", lagWarningThreshold.MilliSeconds()});
+        SnapshotRegistryLagWarningLogged = true;
+    }
 
     // Revisit retained points even when the watermark cannot advance. Removed
     // ranges are persisted by the executor, so this also works after a restart.

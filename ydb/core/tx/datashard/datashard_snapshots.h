@@ -263,6 +263,7 @@ private:
 
     TMonotonic LastAdvanceWatermark{};
     bool SnapshotRegistryWarningLogged = false;
+    bool SnapshotRegistryLagWarningLogged = false;
 };
 
 }   // namespace NDataShard

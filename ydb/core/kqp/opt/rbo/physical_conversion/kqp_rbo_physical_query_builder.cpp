@@ -266,14 +266,25 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
             auto readPtr = FindNode(stage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpBlockReadOlapTableRanges>(node); });
             if (readPtr) {
                 auto read = TExprBase(readPtr).Cast<TKqpBlockReadOlapTableRanges>();
-                if (!read.Ranges().Maybe<TCoVoid>()) {
-                    const auto materializeResult = BuildMaterialize(rootIdx, read.Ranges().Ptr());
+                auto settings = TKqpReadTableSettings::Parse(read.Settings());
+                // Column shards take the limit as a literal or as a parameter, so compute any other limit.
+                const bool computeLimit = settings.ItemsLimit && !TCoUint64::Match(settings.ItemsLimit.Get())
+                    && !TCoParameter::Match(settings.ItemsLimit.Get());
+                if (!read.Ranges().Maybe<TCoVoid>() || computeLimit) {
+                    auto ranges = read.Ranges().Ptr();
+                    if (!read.Ranges().Maybe<TCoVoid>()) {
+                        ranges = BuildMaterialize(rootIdx, std::move(ranges));
+                    }
+                    if (computeLimit) {
+                        TypeAnnotate(settings.ItemsLimit);
+                        settings.SetItemsLimit(BuildMaterialize(rootIdx, settings.ItemsLimit, /*asTuple=*/false));
+                    }
                     // clang-fomrat off
                     const auto newRead = Build<TKqpBlockReadOlapTableRanges>(ctx, readPtr->Pos())
                         .Table(read.Table())
-                        .Ranges(materializeResult)
+                        .Ranges(ranges)
                         .Columns(read.Columns())
-                        .Settings(read.Settings())
+                        .Settings(settings.BuildNode(ctx, readPtr->Pos()))
                         .ExplainPrompt(read.ExplainPrompt())
                         .Process(read.Process())
                     .Done().Ptr();
@@ -329,7 +340,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
     return phyStages;
 }
 
-TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(int rootIdx, TExprNode::TPtr node) {
+TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(int rootIdx, TExprNode::TPtr node, bool asTuple) {
     auto& ctx = RBOCtx.ExprCtx;
 
     TExprNode::TPtr afterPeephole;
@@ -341,17 +352,15 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(int rootIdx, TExprNode::
     }
 
     // clang-format off
-    auto rangesProgram = Build<TCoToStream>(ctx, node->Pos())
+    auto program = Build<TCoToStream>(ctx, node->Pos())
         .Input<TCoJust>()
-            .Input<TExprList>()
-                .Add({afterPeephole})
-            .Build()
+            .Input(asTuple ? ctx.NewList(node->Pos(), {afterPeephole}) : afterPeephole)
         .Build()
     .Done().Ptr();
     // clang-format on
 
     auto stageSettings = NYql::NDq::TDqStageSettings().New().SetPartitionMode(NYql::NDq::TDqStageSettings::EPartitionMode::Single).BuildNode(ctx, node->Pos());
-    auto phyStage = BuildDqPhyStage({}, {}, rangesProgram, std::move(stageSettings), ctx, node->Pos());
+    auto phyStage = BuildDqPhyStage({}, {}, program, std::move(stageSettings), ctx, node->Pos());
 
     // clang-format off
     auto result = Build<TDqCnValue>(ctx, node->Pos())

@@ -47,14 +47,17 @@ TSubplanEntry::TSubplanEntry(TSubplanEntry&&) noexcept = default;
 TSubplanEntry& TSubplanEntry::operator=(TSubplanEntry&&) noexcept = default;
 
 void TSubplans::Add(TInfoUnitId binding, TIntrusivePtr<IOperator> plan, ESubplanType type,
-    TOrderedIUs<> tuple, std::optional<TInfoUnitId> resultIU)
+    TOrderedIUs<> tuple, std::optional<TInfoUnitId> resultIU, bool optionalResult)
 {
     Y_ENSURE(binding != TUnorderedIUs::InvalidBit, "Invalid subplan binding ID");
     Y_ENSURE(plan, "Cannot register a null subplan for " << binding);
     Y_ENSURE((type != ESubplanType::EXISTS) == resultIU.has_value(), "Scalar/IN subplan requires a result binding");
     Y_ENSURE(!resultIU || *resultIU != TUnorderedIUs::InvalidBit, "Invalid subplan result ID");
     Y_ENSURE(!Contains(binding), "Duplicate subplan binding " << binding);
-    Entries.Add(binding, std::make_unique<TSubplanEntry>(std::move(plan), type, std::move(tuple), resultIU));
+    Y_ENSURE(!optionalResult || type == ESubplanType::IN_SUBPLAN, "Only an IN subplan has an optional Bool result");
+    auto entry = std::make_unique<TSubplanEntry>(std::move(plan), type, std::move(tuple), resultIU);
+    entry->OptionalResult = optionalResult;
+    Entries.Add(binding, std::move(entry));
 }
 
 void TSubplans::ReplacePlan(TInfoUnitId binding, TIntrusivePtr<IOperator> plan) {

@@ -2980,6 +2980,7 @@ message TEvInMemoryStateResponse {
 // Once the operation is done, any deleted data not used initially
 // will be included in garbage collection requests for the blobstorage.
 // Note: deleted data may still be used for a while, e.g. for history for MVCC.
+// Completion does not invalidate retained snapshots or wait for their release.
 message TEvVacuum {
     optional uint64 VacuumGeneration = 1; // increasing sequence
 }

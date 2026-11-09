@@ -2668,7 +2668,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     if (IsTopicMutateDisabled(ctx)
         && (req.CmdWriteSize() > 0 || req.HasCmdSetClientOffset()))
     {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::OVERLOAD,
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
                    "Topic mutations are temporarily disabled");
         return;
     }

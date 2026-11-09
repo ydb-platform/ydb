@@ -604,26 +604,34 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         importSettings.SymmetricKey(key);
         WaitOpSuccess(YdbImportClient().ImportFromS3(importSettings).GetValueSync());
 
-        auto reader = session.ReadTable("/Root/LargeBatchRestored/Table",
-            NYdb::NTable::TReadTableSettings().Ordered(true).ReturnNotNullAsOptional(false)).GetValueSync();
-        UNIT_ASSERT_C(reader.IsSuccess(), reader.GetIssues().ToString());
-        ui32 row = 0;
-        for (;;) {
-            auto part = reader.ReadNext().GetValueSync();
-            if (part.EOS()) {
-                break;
+        auto readStatus = YdbTableClient().RetryOperationSync([&](NYdb::NTable::TSession readSession) -> TStatus {
+            auto reader = readSession.ReadTable("/Root/LargeBatchRestored/Table",
+                NYdb::NTable::TReadTableSettings().Ordered(true).ReturnNotNullAsOptional(false)).GetValueSync();
+            if (!reader.IsSuccess()) {
+                return reader;
             }
-            UNIT_ASSERT_C(part.IsSuccess(), part.GetIssues().ToString());
-            TResultSetParser parser(part.GetPart());
-            while (parser.TryNextRow()) {
-                UNIT_ASSERT_LT(row, rowCount);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUint32(), row);
-                const auto value = parser.ColumnParser("Value").GetOptionalString();
-                UNIT_ASSERT_C(value && *value == makeValue(row), "Restored value differs at row " << row);
-                ++row;
+            ui32 row = 0;
+            for (;;) {
+                auto part = reader.ReadNext().GetValueSync();
+                if (part.EOS()) {
+                    break;
+                }
+                if (!part.IsSuccess()) {
+                    return part;
+                }
+                TResultSetParser parser(part.GetPart());
+                while (parser.TryNextRow()) {
+                    UNIT_ASSERT_LT(row, rowCount);
+                    UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUint32(), row);
+                    const auto value = parser.ColumnParser("Value").GetOptionalString();
+                    UNIT_ASSERT_C(value && *value == makeValue(row), "Restored value differs at row " << row);
+                    ++row;
+                }
             }
-        }
-        UNIT_ASSERT_VALUES_EQUAL(row, rowCount);
+            UNIT_ASSERT_VALUES_EQUAL(row, rowCount);
+            return TStatus(EStatus::SUCCESS, {});
+        }, NYdb::NTable::TRetryOperationSettings().Idempotent(true).MaxTimeout(DEFAULT_OPERATION_WAIT_TIME));
+        UNIT_ASSERT_C(readStatus.IsSuccess(), readStatus.GetIssues().ToString());
     }
 
     Y_UNIT_TEST_TWIN(EncryptionAndCompression, IsOlap) {
@@ -1098,7 +1106,9 @@ protected:
         if (isFsBackup) {
             tempDirHolder = MakeHolder<TTempDir>();
             basePath = tempDirHolder->Path();
-            Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+            auto& runtime = *Server().GetRuntime();
+            runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+            NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
         }
         // Create different objects with names that are expected to be hidden (anonymized) in encrypted exports
         // Create two object of each type in order to verify that we don't duplicate IVs
@@ -1252,7 +1262,11 @@ protected:
             WaitOpSuccess(res);
         } else {
             NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
+            // TODO: Include Kesus in the round-trip tests once its import is supported.
+            // FS tests above still cover encrypted Kesus export without importing it.
             settings
+                .AppendExcludeRegexp("^Anonymized_Dir/Anonymized_Kesus$")
+                .AppendExcludeRegexp("^Anonymized_Dir/Anonymized_Kesus2$")
                 .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
 
             auto res = YdbExportClient().ExportToS3(settings).GetValueSync();

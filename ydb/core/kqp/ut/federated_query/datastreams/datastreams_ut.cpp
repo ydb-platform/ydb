@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
@@ -681,8 +682,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             END DO;
         )", "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName));
 
+        // Checkpoint counters add a sibling host subgroup; use the raw service root.
+        const auto kqpCounters = NKikimr::GetServiceCounters(GetRuntime().GetAppData().Counters, "kqp", /* skipAddedLabels */ false);
         const auto queryCounters =
-            GetCounters()->GetSubgroup("subsystem", "streaming_queries")->GetSubgroup("host", "")->GetSubgroup("path", "/Root/hopCountersQuery");
+            kqpCounters->GetSubgroup("subsystem", "streaming_queries")->GetSubgroup("host", "")->GetSubgroup("path", "/Root/hopCountersQuery");
         const auto waitCounters = [&](i64 expectedInput, i64 expectedLate) {
             WaitFor(TDuration::Seconds(30), "streaming query Hop counters", [&](TString& error) {
                 const auto inputEvents = queryCounters->FindCounter("hop.input_events.rate");
@@ -2644,8 +2647,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(evTableReadsWithLocks.load(), 0u);
 
         // Wait for counter initialization before checking the absence of Hop sensors.
+        const auto kqpCounters = NKikimr::GetServiceCounters(GetRuntime().GetAppData().Counters, "kqp", /* skipAddedLabels */ false);
         const auto queryCounters =
-            GetCounters()->GetSubgroup("subsystem", "streaming_queries")->GetSubgroup("host", "")->GetSubgroup("path", "/Root/LocksQuery");
+            kqpCounters->GetSubgroup("subsystem", "streaming_queries")->GetSubgroup("host", "")->GetSubgroup("path", "/Root/LocksQuery");
         WaitFor(TDuration::Seconds(30), "streaming query counters without Hop", [&]() {
             const auto uptime = queryCounters->FindCounter("streaming.query.uptime.seconds");
             return uptime && uptime->Val() > 0;

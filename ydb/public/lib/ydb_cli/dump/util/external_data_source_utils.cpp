@@ -2,9 +2,13 @@
 #include "query_utils.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
+#include <util/generic/hash_set.h>
 #include <util/string/join.h>
+#include <google/protobuf/unknown_field_set.h>
 
+#include <cctype>
 #include <format>
 #include <ranges>
 
@@ -17,6 +21,61 @@ std::string PropertyToString(const std::pair<TString, TString>& property) {
     return KeyValueToString(key, value);
 }
 
+}
+
+bool ValidateDirectExternalDataSource(
+    const Ydb::Table::DescribeExternalDataSourceResult& description,
+    NYql::TIssues& issues)
+{
+    const auto reject = [&issues]() {
+        issues.AddIssue("Direct external data source dump supports only Ydb/YdbExternal sources with known properties "
+            "and AUTH_METHOD NONE or TOKEN with a legacy secret name; schema secrets, IAM, unknown formats "
+            "and values requiring SQL escaping are unsupported");
+        return false;
+    };
+    const bool ydb = description.source_type() == "Ydb";
+    if ((!ydb && description.source_type() != "YdbExternal")
+        || description.GetReflection()->GetUnknownFields(description).field_count()) {
+        return reject();
+    }
+
+    // Provider properties are defined in core/external_sources/external_source_factory.cpp.
+    // Fail closed on additions: Describe flattens provider properties and auth into one map.
+    static const THashSet<TString> commonProperties = {"AUTH_METHOD", "DATABASE_NAME", "USE_TLS", "TOKEN_SECRET_NAME"};
+    static const THashSet<TString> ydbProperties = {"DATABASE_ID", "SHARED_READING", "SHARED_READING_GROUP"};
+    const auto isLiteral = [](std::string_view value) {
+        return value.find_first_of("'\\\r\n") == std::string_view::npos && value.find('\0') == std::string_view::npos;
+    };
+    // The existing serializer embeds the source name in backticks without escaping.
+    const auto& name = description.self().name();
+    if (name.find_first_of("`\\\r\n") != TString::npos || name.find('\0') != TString::npos
+        || !isLiteral(description.location())) {
+        return reject();
+    }
+    const auto& properties = description.properties();
+    for (const auto& [key, value] : properties) {
+        if ((!commonProperties.contains(key) && !(ydb && ydbProperties.contains(key))) || !isLiteral(value)) {
+            return reject();
+        }
+    }
+    const auto auth = properties.find("AUTH_METHOD");
+    const auto secret = properties.find("TOKEN_SECRET_NAME");
+    if (auth == properties.end()) {
+        return reject();
+    }
+    if (auth->second == "NONE") {
+        return secret == properties.end() ? true : reject();
+    }
+    if (auth->second != "TOKEN" || secret == properties.end() || secret->second.empty() || secret->second.front() == '/') {
+        return reject();
+    }
+    // Old restore parsers match secret settings as a single non-whitespace token.
+    for (const unsigned char c : secret->second) {
+        if (std::isspace(c)) {
+            return reject();
+        }
+    }
+    return true;
 }
 
 TString BuildCreateExternalDataSourceQuery(

@@ -4,6 +4,7 @@ SIZE(SMALL)
 
 SRCS(
     replication_utils_ut.cpp
+    external_data_source_utils_ut.cpp
 )
 
 PEERDIR(

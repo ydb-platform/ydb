@@ -3381,7 +3381,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         Directory,
     };
 
-    void TestSelectedExternalDataSourceBackupRestore(const TString& parent, EExternalSourceDumpRoot dumpRoot) {
+    void TestSelectedExternalDataSourceBackupRestore(const TString& parent, EExternalSourceDumpRoot dumpRoot,
+        EAuthType authType = EAuthType::AuthTypeToken) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         TKikimrWithGrpcAndRootSchema server(config);
@@ -3404,17 +3405,20 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         const TString source = parent + "/selectedSource";
         const TString secretValue = "direct-source-backup-private-token-948372";
-        ExecuteQuery(querySession, Sprintf(
-            "CREATE OBJECT `eds_secret` (TYPE SECRET) WITH (value = '%s');", secretValue.c_str()), true);
+        const bool hasSecret = authType == EAuthType::AuthTypeToken;
+        if (hasSecret) {
+            ExecuteQuery(querySession, Sprintf(
+                "CREATE OBJECT `eds_secret` (TYPE SECRET) WITH (value = '%s');", secretValue.c_str()), true);
+        }
         ExecuteQuery(querySession, Sprintf(R"(
             CREATE EXTERNAL DATA SOURCE `%s` WITH (
                 SOURCE_TYPE = "Ydb",
                 LOCATION = "remote.example.test:2135",
                 DATABASE_NAME = "/Remote/database",
-                AUTH_METHOD = "TOKEN",
-                TOKEN_SECRET_NAME = "eds_secret"
+                AUTH_METHOD = "%s"
+                %s
             );
-        )", source.c_str()), true);
+        )", source.c_str(), hasSecret ? "TOKEN" : "NONE", hasSecret ? ", TOKEN_SECRET_NAME = 'eds_secret'" : ""), true);
         const auto grant = schemeClient.ModifyPermissions(source, TModifyPermissionsSettings()
             .AddGrantPermissions(TPermissions("root@builtin", {"ydb.generic.read"}))).GetValueSync();
         UNIT_ASSERT_C(grant.IsSuccess(), grant.GetIssues().ToString());
@@ -3438,7 +3442,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         const auto creationSql = TFileInput(creationFile).ReadAll();
         UNIT_ASSERT_STRING_CONTAINS(creationSql, "remote.example.test:2135");
         UNIT_ASSERT_STRING_CONTAINS(creationSql, "/Remote/database");
-        UNIT_ASSERT_STRING_CONTAINS(creationSql, "eds_secret");
+        if (hasSecret) {
+            UNIT_ASSERT_STRING_CONTAINS(creationSql, "eds_secret");
+        }
         UNIT_ASSERT_STRING_CONTAINS(TFileInput(permissionsFile).ReadAll(), "ydb.generic.read");
         TVector<TFsPath> pendingDirectories = {archive};
         while (!pendingDirectories.empty()) {
@@ -3478,8 +3484,64 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestSelectedExternalDataSourceBackupRestore(Nested ? "/Root/nested" : "/Root", EExternalSourceDumpRoot::Source);
     }
 
+    Y_UNIT_TEST_TWIN(DirectUnauthenticatedExternalDataSourceBackupRestore, Nested) {
+        TestSelectedExternalDataSourceBackupRestore(Nested ? "/Root/nested" : "/Root", EExternalSourceDumpRoot::Source,
+            EAuthType::AuthTypeNone);
+    }
+
     Y_UNIT_TEST(DirectoryExternalDataSourceBackupRestore) {
         TestSelectedExternalDataSourceBackupRestore("/Root/nested", EExternalSourceDumpRoot::Directory);
+    }
+
+    Y_UNIT_TEST_TWIN(DirectSchemaSecretDumpIsRejected, SavePartialResult) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort()))
+            .SetDatabase("/Root").SetAuthToken("root@builtin"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        TSchemeClient schemeClient(driver);
+        const auto grant = schemeClient.ModifyPermissions("/Root", TModifyPermissionsSettings()
+            .AddGrantPermissions(TPermissions("root@builtin", {"ydb.generic.full"}))).GetValueSync();
+        UNIT_ASSERT_C(grant.IsSuccess(), grant.GetIssues().ToString());
+        ExecuteQuery(session, "CREATE SECRET `credential` WITH (value = 'private-schema-token');", true);
+        const auto mkdir = schemeClient.MakeDirectory("/Root/nested").GetValueSync();
+        UNIT_ASSERT_C(mkdir.IsSuccess(), mkdir.GetIssues().ToString());
+
+        for (const auto& source : {"/Root/source", "/Root/nested/source"}) {
+            ExecuteQuery(session, Sprintf(R"(
+                CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                    SOURCE_TYPE = "Ydb", LOCATION = "remote.example.test:2135",
+                    DATABASE_NAME = "/Remote/database", AUTH_METHOD = "TOKEN",
+                    TOKEN_SECRET_PATH = "/Root/credential"
+                );
+            )", source), true);
+            const auto original = DescribeExternalDataSource(tableSession, source);
+            TTempDir tempDir;
+            const auto archive = tempDir.Path().Child("dump");
+            NDump::TClient backupClient(driver);
+            const auto result = backupClient.Dump(source, archive,
+                NDump::TDumpSettings().Database("/Root").SavePartialResult(SavePartialResult));
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Direct external data source dump supports only");
+            UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, source), original);
+            if (SavePartialResult) {
+                UNIT_ASSERT(archive.Child(NDump::NFiles::Incomplete().FileName).Exists());
+                UNIT_ASSERT(archive.Child("source").Child(NDump::NFiles::Incomplete().FileName).Exists());
+                UNIT_ASSERT(!archive.Child("source").Child(NDump::NFiles::CreateExternalDataSource().FileName).Exists());
+                UNIT_ASSERT(!backupClient.Restore(archive, "/Root/restored").IsSuccess());
+            } else {
+                UNIT_ASSERT(!archive.Exists());
+            }
+        }
+        // The restriction applies only to explicit source selections, not existing directory dumps.
+        TTempDir recursive;
+        CreateBackupLambda(driver, recursive.Path())();
+        UNIT_ASSERT(recursive.Path().Child("source").Child(NDump::NFiles::CreateExternalDataSource().FileName).Exists());
+        UNIT_ASSERT(recursive.Path().Child("nested/source").Child(NDump::NFiles::CreateExternalDataSource().FileName).Exists());
     }
 
     Y_UNIT_TEST_TWIN(RestoreExternalDataSourceWithoutSecret, UseSchemeSecret) {

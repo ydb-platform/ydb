@@ -945,14 +945,30 @@ void CanonizeForBackup(Ydb::Table::DescribeExternalDataSourceResult& desc) {
 
 }
 
-void BackupExternalDataSource(TDriver driver, const TString& db, const TString& dbPath, const TFsPath& fsBackupFolder) {
+enum class EExternalSourceSelection {
+    Direct,
+    Recursive,
+};
+
+void BackupExternalDataSource(TDriver driver, const TString& db, const TString& dbPath, const TFsPath& fsBackupFolder,
+    EExternalSourceSelection selection) {
     Y_ENSURE(!dbPath.empty());
     LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
     Ydb::Table::DescribeExternalDataSourceResult description;
     NTable::TTableClient client(driver);
-    VerifyStatusOrSkip(NDump::DescribeExternalDataSource(client, dbPath, description), "error describing external data source");
+    const auto status = NDump::DescribeExternalDataSource(client, dbPath, description);
+    if (selection == EExternalSourceSelection::Direct) {
+        // A selected source must fail visibly, including on servers without Describe support.
+        VerifyStatus(status, "error describing selected external data source");
+    } else {
+        VerifyStatusOrSkip(status, "error describing external data source");
+    }
     CanonizeForBackup(description);
+    if (selection == EExternalSourceSelection::Direct) {
+        NYql::TIssues issues;
+        Y_ENSURE(NDump::ValidateDirectExternalDataSource(description, issues), issues.ToString());
+    }
     const auto creationQuery = NDump::BuildCreateExternalDataSourceQuery(description, db);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalDataSource());
@@ -1140,7 +1156,9 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 } else if (dbIt.IsReplication()) {
                     BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 } else if (dbIt.IsExternalDataSource()) {
-                    BackupExternalDataSource(driver, database, dbIt.GetFullPath(), childFolderPath);
+                    const auto selection = dbIt.GetTraverseRoot() == dbPrefix
+                        ? EExternalSourceSelection::Recursive : EExternalSourceSelection::Direct;
+                    BackupExternalDataSource(driver, database, dbIt.GetFullPath(), childFolderPath, selection);
                 } else if (dbIt.IsExternalTable()) {
                     BackupExternalTable(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 } else if (dbIt.IsSystemView()) {

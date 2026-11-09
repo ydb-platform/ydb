@@ -4,6 +4,12 @@
 
 namespace NKikimr::NReplication::NService {
 
-IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts);
+enum class EAuthFailurePolicy {
+    SourceRejectionOnly,
+    StaticLoginInitialization,
+};
+
+IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts,
+    EAuthFailurePolicy authFailurePolicy = EAuthFailurePolicy::SourceRejectionOnly);
 
 }

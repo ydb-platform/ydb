@@ -31,9 +31,10 @@ from _common import (  # noqa: E402
 )
 
 TICKET_FILENAME = "remote-ticket.json"
-# Polls are 30s apart: ~60 min for a claim, ~20 h for the executor run.
+# Polls are 30s apart: ~60 min for a claim, 24 h for the executor run
+# (2880 × 30s), matching the host execute job timeout of 1440 minutes.
 CLAIM_WAIT_ATTEMPTS = 120
-EXECUTOR_WAIT_ATTEMPTS = 2400
+EXECUTOR_WAIT_ATTEMPTS = 2880
 
 
 def api(repo: str) -> str:

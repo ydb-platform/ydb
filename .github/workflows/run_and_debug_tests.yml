@@ -22,7 +22,7 @@ on:
         type: string
         default: 'ydb/tests/olap/'
       build_preset:
-        description: 'ydb_yc: presets (comma-separated); remote uses remote.job.build_preset or first value via resolve defaults'
+        description: 'ydb_yc: presets (comma-separated). remote: one preset only (this input or remote.job.build_preset); commas are rejected'
         required: false
         type: string
         default: 'relwithdebinfo, release-asan'

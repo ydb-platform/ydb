@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Merge remote execution JSON with defaults → dispatch_remote `config` output.
 
+repository, workflow_file, host_s3_endpoint, and host_s3_bucket are pinned to
+DEFAULT_REMOTE. A caller value that differs is rejected.
+
 Env:
   REMOTE_JSON — optional caller override (object or empty)
   CODE_REF, GITHUB_WORKFLOW, DEFAULT_BUILD_TARGET, DEFAULT_BUILD_PRESET,
@@ -51,8 +54,18 @@ _DEFAULT_JOB: dict[str, Any] = {
     "additional_ya_make_args": "",
     "test_retry_count": "",
     "put_build_results_to_cache": True,
-    "collect_coredumps": False,
+    # Match run_tests: local /coredumps loop volume, not a host S3 upload.
+    "collect_coredumps": True,
 }
+
+# Caller JSON cannot retarget the host repo or its public bucket.
+_PINNED_REMOTE_KEYS = (
+    "repository",
+    "workflow_file",
+    "host_s3_endpoint",
+    "host_s3_bucket",
+)
+
 
 DEFAULT_REMOTE: dict[str, Any] = {
     # Host repo / workflow identity (waiter polls GH; VM dispatches this WF).
@@ -67,6 +80,34 @@ DEFAULT_REMOTE: dict[str, Any] = {
     "code_ref": "",
     "analytics_branch": "",
 }
+
+
+def _reject_pinned_overrides(remote: dict[str, Any]) -> None:
+    """Identity and host S3 stay on DEFAULT_REMOTE (equal repeats are allowed)."""
+    for key in _PINNED_REMOTE_KEYS:
+        if key not in remote:
+            continue
+        expected = DEFAULT_REMOTE[key]
+        got = remote[key]
+        if type(got) is not type(expected) or got != expected:
+            die(
+                f"remote JSON .{key} is fixed to {expected!r}; "
+                f"refusing override {got!r}"
+            )
+
+
+def _require_single_preset(raw: str, *, where: str) -> str:
+    """Remote runs one preset. Comma-separated lists are a caller error."""
+    text = str(raw).strip()
+    if not text:
+        die(f"{where} is empty")
+    if "," in text:
+        die(
+            f"{where} must be a single build preset for remote "
+            f"(got {raw!r}). Comma-separated presets are rejected; "
+            "pass one preset via remote.job.build_preset or build_preset."
+        )
+    return text
 
 
 def _job_input_str(v: Any) -> str:
@@ -98,6 +139,7 @@ def build_config() -> dict[str, Any]:
         die("remote JSON .job must be an object")
     _reject_unknown(set(remote), set(DEFAULT_REMOTE), "remote JSON")
     _reject_unknown(set(remote_job), set(_DEFAULT_JOB), "remote JSON .job")
+    _reject_pinned_overrides(remote)
 
     cfg = {**DEFAULT_REMOTE, **remote}
     job = {**_DEFAULT_JOB, **remote_job}
@@ -110,9 +152,11 @@ def build_config() -> dict[str, Any]:
         if seed:
             job["build_target"] = seed
     if "build_preset" not in remote_job:
-        seed = (os.environ.get("DEFAULT_BUILD_PRESET") or "").split(",")[0].strip()
+        seed = (os.environ.get("DEFAULT_BUILD_PRESET") or "").strip()
         if seed:
-            job["build_preset"] = seed
+            job["build_preset"] = _require_single_preset(
+                seed, where="DEFAULT_BUILD_PRESET"
+            )
 
     # Prefer REMOTE_JSON.code_ref so callers can pin a SHA while CODE_REF is github.sha.
     remote_code_ref = cfg["code_ref"].strip()
@@ -131,9 +175,7 @@ def build_config() -> dict[str, Any]:
         )
     cfg["analytics_branch"] = analytics
 
-    preset = job["build_preset"].split(",")[0].strip()
-    if not preset:
-        die("build_preset is empty")
+    preset = _require_single_preset(job["build_preset"], where="build_preset")
     fetch_depth = "0" if job["increment"] else "2"
 
     cfg["caller_workflow"] = (os.environ.get("GITHUB_WORKFLOW") or "").strip()

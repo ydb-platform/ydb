@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve seeds, discover_attempts, manifest download, retry, claim attempt, contracts."""
+"""Resolve seeds, discover_attempts, manifest download, retry, claim attempt, s3cmd ls, contracts."""
 
 from __future__ import annotations
 
@@ -27,7 +27,8 @@ from ingest_remote_executor_results import (  # noqa: E402
     normalize_manifest_files,
     rewrite_ci_metrics_attribution,
 )
-from resolve_remote_execution import build_config  # noqa: E402
+from resolve_remote_execution import DEFAULT_REMOTE, build_config  # noqa: E402
+from s3cmd_ls import parse_s3cmd_ls_line  # noqa: E402
 
 
 def patch_env(test: unittest.TestCase, **values: str) -> None:
@@ -73,11 +74,12 @@ class ResolveSeedsTest(unittest.TestCase):
 
     def test_ui_seeds_override_defaults_when_remote_omits_job_keys(self):
         os.environ["DEFAULT_BUILD_TARGET"] = "ydb/core/foo"
-        os.environ["DEFAULT_BUILD_PRESET"] = "release-asan,relwithdebinfo"
+        os.environ["DEFAULT_BUILD_PRESET"] = "release-asan"
         os.environ["REMOTE_JSON"] = "{}"
         cfg = build_config()
         self.assertEqual(cfg["inputs"]["job_inputs"]["build_target"], "ydb/core/foo")
         self.assertEqual(cfg["inputs"]["job_inputs"]["build_preset"], "release-asan")
+        self.assertEqual(cfg["inputs"]["job_inputs"]["collect_coredumps"], "true")
         self.assertEqual(cfg["host_s3_endpoint"], "https://s3.us-east-1.amazonaws.com")
         self.assertNotIn("platform_run_id", cfg["inputs"])
         self.assertNotIn("job", cfg)
@@ -109,6 +111,84 @@ class ResolveSeedsTest(unittest.TestCase):
         os.environ["REMOTE_JSON"] = json.dumps({"job": {"build_preset": 7}})
         with self.assertRaises(SystemExit):
             build_config()
+
+    def test_comma_separated_ui_preset_dies(self):
+        os.environ["DEFAULT_BUILD_PRESET"] = "relwithdebinfo, release-asan"
+        with self.assertRaises(SystemExit):
+            build_config()
+
+    def test_comma_separated_remote_preset_dies(self):
+        os.environ["REMOTE_JSON"] = json.dumps(
+            {"job": {"build_preset": "relwithdebinfo,release-asan"}}
+        )
+        with self.assertRaises(SystemExit):
+            build_config()
+
+    def test_single_remote_preset_ignores_comma_ui_seed(self):
+        os.environ["DEFAULT_BUILD_PRESET"] = "relwithdebinfo, release-asan"
+        os.environ["REMOTE_JSON"] = json.dumps({"job": {"build_preset": "release-asan"}})
+        cfg = build_config()
+        self.assertEqual(cfg["inputs"]["job_inputs"]["build_preset"], "release-asan")
+
+    def test_collect_coredumps_can_be_disabled(self):
+        os.environ["REMOTE_JSON"] = json.dumps({"job": {"collect_coredumps": False}})
+        self.assertEqual(build_config()["inputs"]["job_inputs"]["collect_coredumps"], "false")
+
+    def test_pinned_remote_fields_reject_overrides(self):
+        cases = {
+            "repository": "evil/ydb",
+            "workflow_file": "other.yml",
+            "host_s3_endpoint": "https://evil.example",
+            "host_s3_bucket": "other-bucket",
+        }
+        for key, value in cases.items():
+            with self.subTest(key=key):
+                os.environ["REMOTE_JSON"] = json.dumps({key: value})
+                with self.assertRaises(SystemExit):
+                    build_config()
+
+    def test_pinned_defaults_may_be_repeated(self):
+        os.environ["REMOTE_JSON"] = json.dumps(
+            {key: DEFAULT_REMOTE[key] for key in (
+                "repository",
+                "workflow_file",
+                "host_s3_endpoint",
+                "host_s3_bucket",
+            )}
+        )
+        cfg = build_config()
+        self.assertEqual(cfg["repository"], DEFAULT_REMOTE["repository"])
+        self.assertEqual(cfg["workflow_file"], DEFAULT_REMOTE["workflow_file"])
+        self.assertEqual(cfg["host_s3_endpoint"], DEFAULT_REMOTE["host_s3_endpoint"])
+        self.assertEqual(cfg["host_s3_bucket"], DEFAULT_REMOTE["host_s3_bucket"])
+
+
+class S3cmdLsLineTest(unittest.TestCase):
+    def test_uri_keeps_spaces_in_key(self):
+        line = (
+            "2024-01-01 00:00 12 "
+            "s3://bucket/nebius/ydb/CI remote executor/123/file.txt"
+        )
+        uri = parse_s3cmd_ls_line(line)
+        self.assertEqual(
+            uri,
+            "s3://bucket/nebius/ydb/CI remote executor/123/file.txt",
+        )
+        self.assertNotEqual(uri, line.split()[-1])
+
+    def test_plain_key(self):
+        line = "2024-01-01 00:00 12 s3://bucket/plain.txt"
+        self.assertEqual(parse_s3cmd_ls_line(line), "s3://bucket/plain.txt")
+
+    def test_dir_marker_with_spaces(self):
+        line = "                          DIR   s3://bucket/CI remote executor/"
+        self.assertEqual(parse_s3cmd_ls_line(line), "s3://bucket/CI remote executor/")
+
+    def test_ignores_non_listing(self):
+        self.assertIsNone(parse_s3cmd_ls_line(""))
+        self.assertIsNone(parse_s3cmd_ls_line("not a listing"))
+        self.assertIsNone(parse_s3cmd_ls_line("notes3://bucket/x"))
+        self.assertIsNone(parse_s3cmd_ls_line("s3://"))
 
 
 class SafePathTest(unittest.TestCase):
@@ -551,6 +631,13 @@ class WorkflowContractTest(unittest.TestCase):
     def test_run_and_debug_passes_analytics_branch(self):
         text = (_GITHUB / "workflows/run_and_debug_tests.yml").read_text(encoding="utf-8")
         self.assertIn("ANALYTICS_BRANCH: ${{ github.ref_name }}", text)
+        self.assertNotIn("first value", text)
+
+    def test_wait_job_covers_host_day(self):
+        text = (_GITHUB / "workflows/dispatch_remote.yml").read_text(encoding="utf-8")
+        self.assertIn("timeout-minutes: 1500", text)
+        self.assertGreaterEqual(dre.EXECUTOR_WAIT_ATTEMPTS * 30, 24 * 60 * 60)
+        self.assertEqual(dre.EXECUTOR_WAIT_ATTEMPTS, 2880)
 
 
 if __name__ == "__main__":

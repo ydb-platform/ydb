@@ -127,7 +127,7 @@ def object_url(endpoint: str, bucket: str, key: str) -> str:
 
 
 def discover_attempts(public_dir: Path) -> list[dict[str, Any]]:
-    """Scan try_*/report.json. started_at is optional and used only when present."""
+    """Scan try_*/report.json. started_at is best-effort and used only when present."""
     found: list[dict[str, Any]] = []
     if not public_dir.is_dir():
         return found

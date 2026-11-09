@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Post-wait ingest: remote-repo artifacts → caller S3 + YDB QA + enriched summary.
+"""Post-wait ingest: copy listed host artifacts to caller S3 and write a summary.
+
+ci_metrics.jsonl, started_at, and test-results upload are best-effort. The host
+workflow does not promise those files; missing ones are skipped and ingest
+still succeeds.
 
 Env (from dispatch_remote.yml ingest): CONFIG_JSON (resolve output),
 EXECUTOR_RUN_ID / EXECUTOR_RUN_URL / EXECUTOR_CONCLUSION,
@@ -118,7 +122,11 @@ def _write_bytes(path: Path, data: bytes) -> None:
 
 
 def _is_required_artifact(rel: str) -> bool:
-    """Listed report/html must download. ci_metrics.jsonl and started_at are optional."""
+    """Listed report/html must download.
+
+    ci_metrics.jsonl and started_at are best-effort. The host does not promise
+    them; a missing file is not a failed ingest.
+    """
     rel = rel.strip("/")
     if rel == "index.html":
         return True
@@ -136,8 +144,8 @@ def validate_downloaded_manifest(
 ) -> None:
     """Fail only when a listed report/html object did not download.
 
-    ci_metrics.jsonl and started_at are optional. report.json and index.html
-    are required only when the host listed them.
+    ci_metrics.jsonl and started_at are best-effort and are not a host contract.
+    report.json and index.html are required only when the host listed them.
     """
     failed_set = set(failed)
     for rel in files:
@@ -357,10 +365,16 @@ def flush_ci_metrics(
     caller_workflow: str,
     job_name: str,
 ) -> None:
-    """Flush remote-buffered ci_metrics.jsonl into caller analytics/ci_metrics."""
+    """Best-effort flush when a listing happens to include ci_metrics.jsonl.
+
+    Absence is normal: the remote host does not promise this file.
+    """
     metrics_path = public_dir / "ci_metrics.jsonl"
     if not metrics_path.is_file() or metrics_path.stat().st_size == 0:
-        print(f"No ci_metrics at {metrics_path}; skipping analytics flush")
+        print(
+            f"No ci_metrics at {metrics_path}; skipping analytics flush "
+            "(best-effort; host does not promise this file)"
+        )
         return
 
     rewritten = rewrite_ci_metrics_attribution(
@@ -407,13 +421,13 @@ def upload_attempts(
         started_at = str(att.get("started_at") or "").strip()
         if not started_at:
             print(
-                f"::warning::no started_at for try_{att['retry']}; "
-                "skipping test-results upload"
+                f"no started_at for try_{att['retry']}; "
+                "skipping test-results upload (best-effort)"
             )
             continue
         report = public_dir / att["report_relpath"]
         if not report.is_file():
-            print(f"::warning::missing {report}; skipping test-results upload")
+            print(f"missing {report}; skipping test-results upload (best-effort)")
             continue
         cmd = [
             sys.executable,

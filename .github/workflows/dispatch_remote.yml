@@ -48,7 +48,8 @@ jobs:
   wait:
     needs: enqueue
     runs-on: [self-hosted, runner-waiter]
-    timeout-minutes: 1440
+    # Claim poll is at most 60 min; executor poll is 2880×30s (24h host timeout).
+    timeout-minutes: 1500
     outputs:
       executor_run_id: ${{ steps.wait.outputs.executor_run_id }}
       executor_run_url: ${{ steps.wait.outputs.executor_run_url }}

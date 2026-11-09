@@ -1,5 +1,5 @@
-#include "schemeshard_scheme_builders.h"
 #include "schemeshard_export_helpers.h"
+#include "schemeshard_scheme_builders.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -12,8 +12,8 @@
 #include <ydb/core/ydb_convert/replication_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
-#include <ydb/library/backup/proto/proto.h>
 
+#include <ydb/library/backup/proto/proto.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -25,9 +25,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
-
+#include <util/stream/str.h>
 #include <util/string/builder.h>
+#include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -187,6 +188,14 @@ bool BuildExternalDataSourceScheme(
     dataSourceDescResult.mutable_properties()->erase("REFERENCES");
 
     scheme = NYdb::NDump::BuildCreateExternalDataSourceQuery(dataSourceDescResult, database);
+    if (!dataSourceDesc.GetInstallation().empty()) {
+        TStringStream escapedInstallation;
+        NYql::EscapeArbitraryAtom(dataSourceDesc.GetInstallation(), '"', &escapedInstallation);
+        TString option = ",\n  INSTALLATION = ";
+        option += escapedInstallation.Str();
+        // BuildCreateExternalDataSourceQuery always ends in "\n);".
+        scheme.insert(scheme.size() - 3, option);
+    }
 
     return true;
 }

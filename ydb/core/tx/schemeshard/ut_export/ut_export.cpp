@@ -7003,6 +7003,48 @@ WITH (
         TestExternalDataSource(scheme, expectedProperties);
     }
 
+    Y_UNIT_TEST(ExternalDataSourceInstallation) {
+        Env();
+        TControlBoard::SetValue(1, Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableExternalDataSourceExport);
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Installation: "cloud"
+            Auth { None {} }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'ObjectStorage'",
+            "LOCATION = 'https://s3.cloud.net/bucket'",
+            "AUTH_METHOD = 'NONE'",
+            "INSTALLATION = \"cloud\"",
+        };
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceInstallationExportDisabled) {
+        Env();
+        ui64 txId = 100;
+        TestCreateExternalDataSource(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Installation: "cloud"
+            Auth { None {} }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+        TControlBoard::SetValue(0, Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableExternalDataSourceExport);
+        const TString request = Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_path: "/MyRoot/DataSource" destination_prefix: "DataSource" }
+            }
+        )", S3Port());
+        TestExport(Runtime(), ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
+    }
+
     Y_UNIT_TEST(ExternalDataSourceAuthBasic) {
         TString scheme = R"(
             Name: "DataSource"

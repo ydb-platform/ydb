@@ -21,7 +21,7 @@
 #include "datashard_trans_queue.h"
 #include "datashard_user_table.h"
 #include "datashard_write.h"
-#include "hnsw_index.h"
+#include "hnsw_index/hnsw_index.h"
 #include "hnsw_index_build_actor.h"
 #include "hnsw_memory_tracker.h"
 #include "incr_restore_scan.h"

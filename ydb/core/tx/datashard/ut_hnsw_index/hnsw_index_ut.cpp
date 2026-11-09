@@ -1,4 +1,4 @@
-#include <ydb/core/tx/datashard/hnsw_index.h>
+#include <ydb/core/tx/datashard/hnsw_index/hnsw_index.h>
 
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>

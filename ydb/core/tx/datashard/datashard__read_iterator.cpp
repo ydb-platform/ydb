@@ -2,7 +2,7 @@
 #include "read_iterator_sampling.h"
 #include "datashard_impl.h"
 #include "datashard_read_operation.h"
-#include "hnsw_index.h"
+#include "hnsw_index/hnsw_index.h"
 #include "hnsw_index_build_actor.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"

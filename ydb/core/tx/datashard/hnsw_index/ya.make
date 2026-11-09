@@ -5,7 +5,7 @@ ADDINCL(
 )
 
 SRCS(
-    ../hnsw_index.cpp
+    hnsw_index.cpp
 )
 
 PEERDIR(

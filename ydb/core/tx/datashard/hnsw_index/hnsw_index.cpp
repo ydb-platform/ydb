@@ -415,7 +415,7 @@ namespace NKikimr::NDataShard {
         // allocations use the fixed overhead. Saturate all estimate arithmetic.
         const size_t friendSlots = SaturatingAdd(SaturatingMultiply(connectivity, 2), 1);
         const size_t friendBytes = SaturatingMultiply(friendSlots,
-            sizeof(similarity::HnswNode*) + sizeof(similarity::IdType));
+                                                      sizeof(similarity::HnswNode*) + sizeof(similarity::IdType));
         // NMSLIB retains the source Object and copies its raw vector into the
         // contiguous optimized-search index. We no longer retain a third copy in
         // YDB wire format; GetVector() reconstructs its trailing format byte.

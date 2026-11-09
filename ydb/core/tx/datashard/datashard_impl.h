@@ -1954,7 +1954,10 @@ public:
     void SetHnswIndexBuilding(ui32 localTid, bool building, TPathId indexId = {}) {
         if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
             entry->Building = building;
-            if (!building) { entry->BuildObsolete = false; }
+            if (!building) {
+                HnswBuildsInFlight.erase(entry->BuildToken);
+                entry->BuildObsolete = false;
+            }
         }
     }
 
@@ -1962,6 +1965,19 @@ public:
         const auto* entry = FindHnswIndexEntry(localTid, indexId);
         return entry && entry->BuildObsolete;
     }
+
+    struct THnswIndexStats {
+        bool Ready = false;
+        bool Building = false;
+        ui64 MemoryBytes = 0;
+        ui64 CacheHits = 0;
+        ui64 CacheMisses = 0;
+        ui64 Rebuilds = 0;
+        ui64 UnsupportedReads = 0;
+        ui64 RangeFallbacks = 0;
+        ui64 CandidateFallbacks = 0;
+    };
+    std::optional<THnswIndexStats> GetHnswIndexStats(ui32 localTid, TPathId indexId) const;
 
     void InvalidateHnswIndex(ui32 localTid, TPathId indexId = {});
     void InvalidateHnswTable(ui32 localTid);
@@ -1989,7 +2005,7 @@ public:
         if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
             entry->Building = false;
             entry->NextScanAttemptAt = TInstant::Max();
-            if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetDemand(); }
+            if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetDemand(entry->MemoryOwner); }
         }
     }
 
@@ -2009,14 +2025,15 @@ public:
         return HnswCacheMemoryTracker && HnswCacheMemoryTracker->HasLimit();
     }
 
-    std::shared_ptr<void> TryReserveHnswCacheMemory(ui64 bytes) {
+    std::shared_ptr<void> TryReserveHnswCacheMemory(ui64 bytes, ui64 owner = 0) {
         struct TReservation {
             std::shared_ptr<THnswCacheMemoryTracker> Tracker;
             ui64 Size = 0;
+            ui64 Owner = 0;
 
             ~TReservation() {
                 if (Size) {
-                    Tracker->Release(Size);
+                    Tracker->Release(Size, Owner);
                 }
             }
         };
@@ -2024,7 +2041,8 @@ public:
         GetHnswCacheMemoryLimit();
         auto reservation = std::make_shared<TReservation>();
         reservation->Tracker = HnswCacheMemoryTracker;
-        if (!reservation->Tracker->TryAcquire(bytes)) {
+        reservation->Owner = owner;
+        if (!reservation->Tracker->TryAcquire(bytes, owner)) {
             return nullptr;
         }
         reservation->Size = bytes;
@@ -2050,7 +2068,6 @@ public:
             });
         }
         if (HnswCacheMemoryTracker->GetUsed() > limit) {
-            HnswCacheMemoryTracker->ResetDemand();
             ForEachHnswIndexEntry([&](ui32 localTid, const TPathId& indexId, auto&) {
                 if (HnswCacheMemoryTracker->GetUsed() > limit) { InvalidateHnswIndex(localTid, indexId); }
             });
@@ -3211,6 +3228,7 @@ private:
         std::shared_ptr<NDataShard::THnswIndex> Index;
         ui64 RowCountAtBuild = 0;
         ui64 IndexSchemaVersion = 0;
+        ui64 MemoryOwner = 0;
         ui32 VectorColumnTag = 0;
         Ydb::Table::VectorIndexSettings Settings;
         std::shared_ptr<THnswIndexChanges> Changes = std::make_shared<THnswIndexChanges>();
@@ -3234,6 +3252,10 @@ private:
         ui64 CandidateFallbacks = 0;
     };
     ui64 NextHnswBuildToken = 0;
+    ui64 NextHnswMemoryOwner = 0;
+    static constexpr size_t MaxConcurrentHnswBuilds = 2;
+    THashSet<ui64> HnswBuildsInFlight;
+    TVector<std::pair<ui32, TPathId>> HnswBuildQueue;
     using THnswTableIndexes = THashMap<TPathId, THnswIndexCacheEntry>;
     THashMap<ui32, THnswTableIndexes> HnswIndexCache;
 
@@ -3258,7 +3280,9 @@ private:
     THnswIndexCacheEntry* GetOrCreateHnswIndexEntry(ui32 localTid, TPathId indexId) {
         indexId = ResolveHnswIndexId(localTid, indexId);
         if (!FindHnswIndexInfo(localTid, indexId)) { return nullptr; }
-        return &HnswIndexCache[localTid][indexId];
+        auto& entry = HnswIndexCache[localTid][indexId];
+        if (!entry.MemoryOwner) { entry.MemoryOwner = ++NextHnswMemoryOwner; }
+        return &entry;
     }
 
     THnswIndexCacheEntry* FindHnswIndexEntry(ui32 localTid, TPathId indexId) {
@@ -3278,7 +3302,7 @@ private:
         }
     }
 
-    static void InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry);
+    void InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry);
     std::shared_ptr<THnswCacheMemoryTracker> HnswCacheMemoryTracker;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;

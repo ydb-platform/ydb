@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/memory_controller_iface.h>
 #include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
 
 #include <mutex>
 #include <utility>
@@ -39,52 +40,80 @@ namespace NKikimr::NDataShard {
             return Used;
         }
 
-        bool TryAcquire(ui64 bytes) noexcept {
+        ui64 GetUsed(ui64 owner) const noexcept {
             std::lock_guard guard(Mutex);
-            if (bytes > Max<ui64>() - Used) {
-                return false;
-            }
-            // A graph must fit as a whole. Report failed reservations as demand so
-            // the controller can grow our share beyond the bootstrap allowance.
+            const auto* account = Accounts.FindPtr(owner);
+            return account ? account->Used : 0;
+        }
+
+        bool TryAcquire(ui64 bytes, ui64 owner = 0) {
+            std::lock_guard guard(Mutex);
+            auto& account = Accounts[owner];
             if (!Limit || Used > Limit || bytes > Limit - Used) {
-                PendingDemand = Max(PendingDemand, Used + bytes);
+                account.Demand = Max(account.Demand, SaturatingAdd(account.Used, bytes));
                 Report();
                 return false;
             }
+            account.Used += bytes;
             Used += bytes;
             Report();
             return true;
         }
 
-        void Release(ui64 bytes) noexcept {
+        void Release(ui64 bytes, ui64 owner = 0) noexcept {
             std::lock_guard guard(Mutex);
-            const ui64 released = Min(bytes, Used);
-            Used -= released;
+            if (auto* account = Accounts.FindPtr(owner)) {
+                const ui64 released = Min(bytes, account->Used);
+                account->Used -= released;
+                Used -= released;
+                if (!account->Used && !account->Demand) { Accounts.erase(owner); }
+            }
             Report();
         }
 
-        void ResetDemand() {
+        void ResetDemand(ui64 owner = 0) {
             std::lock_guard guard(Mutex);
-            PendingDemand = 0;
+            if (auto* account = Accounts.FindPtr(owner)) {
+                account->Demand = 0;
+                if (!account->Used) { Accounts.erase(owner); }
+            }
+            Report();
+        }
+
+        void ResetAllDemand() {
+            std::lock_guard guard(Mutex);
+            for (auto it = Accounts.begin(); it != Accounts.end();) {
+                it->second.Demand = 0;
+                if (!it->second.Used) { it = Accounts.erase(it); } else { ++it; }
+            }
             Report();
         }
 
     private:
+        static ui64 SaturatingAdd(ui64 a, ui64 b) {
+            return b > Max<ui64>() - a ? Max<ui64>() : a + b;
+        }
+
         void Report() {
             if (Consumer) {
-                // Serialize reports with reservations: a release on a build/reader
-                // thread must not overwrite a newer report with stale usage.
-                Consumer->SetReport({.Used = Used, .Demand = Max(Used, PendingDemand)});
+                ui64 demand = Used;
+                for (const auto& [_, account] : Accounts) {
+                    demand = SaturatingAdd(demand, account.Demand > account.Used ? account.Demand - account.Used : 0);
+                }
+                // Serialize reports with reservations released by worker threads.
+                Consumer->SetReport({.Used = Used, .Demand = demand});
             }
         }
 
+        struct TAccount {
+            ui64 Used = 0;
+            ui64 Demand = 0;
+        };
+        THashMap<ui64, TAccount> Accounts;
         mutable std::mutex Mutex;
         ui64 Limit = 0;
         bool LimitKnown = false;
         ui64 Used = 0;
-        // Preserve the whole request when an unsuccessful build releases its
-        // partial reservations. Cleared on completion, invalidation, or eviction.
-        ui64 PendingDemand = 0;
         TIntrusivePtr<NMemory::IMemoryConsumer> Consumer;
     };
 

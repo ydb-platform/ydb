@@ -102,6 +102,7 @@ namespace NKikimr::NDataShard {
     void TDataShard::Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TActorContext& ctx) {
         Actors.erase(ev->Sender);
         auto* result = ev->Get();
+        HnswBuildsInFlight.erase(result->BuildToken);
         if (!IsHnswBuildCurrent(result->LocalTid, result->BuildToken, result->IndexId)) {
             auto* it = FindHnswIndexEntry(result->LocalTid, result->IndexId);
             if (it && it->BuildToken == result->BuildToken) {
@@ -125,7 +126,7 @@ namespace NKikimr::NDataShard {
         }
         if (result->Index) {
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                       TabletID() << " HNSW: lazy build completed for localTid=" << result->LocalTid
+                       TabletID() << " HNSW: lazy build completed for localTid=" << result->LocalTid << " indexId=" << result->IndexId
                                   << " size=" << result->Index->Size()
                                   << " baseVersion=" << result->BaseVersion << " buildToken=" << result->BuildToken);
             SetHnswIndex(result->LocalTid, std::move(result->Index), std::move(result->MemoryReservation),
@@ -135,7 +136,7 @@ namespace NKikimr::NDataShard {
             DeferHnswIndexBuild(result->LocalTid, TDuration::Seconds(5), result->IndexId);
             ScheduleHnswRebuild(result->LocalTid, result->IndexId);
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-                         TabletID() << " HNSW: lazy build failed for localTid=" << result->LocalTid
+                         TabletID() << " HNSW: lazy build failed for localTid=" << result->LocalTid << " indexId=" << result->IndexId
                                     << ": " << result->Error);
         }
     }

@@ -3515,6 +3515,39 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
+    Y_UNIT_TEST(DirectExternalSourceDefaultDumpNeedsOnlyReadAccess) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto ownerDriver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
+        NQuery::TQueryClient queryClient(ownerDriver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        ExecuteQuery(session, R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/readOnlySource` WITH (
+                SOURCE_TYPE = "Ydb", LOCATION = "remote.example.test:2135", AUTH_METHOD = "NONE"
+            );
+        )", true);
+        TSchemeClient ownerSchemeClient(ownerDriver);
+        const auto grant = ownerSchemeClient.ModifyPermissions("/Root", TModifyPermissionsSettings()
+            .AddGrantPermissions(TPermissions("root@builtin", {"ydb.generic.full"}))
+            .AddGrantPermissions(TPermissions("reader@builtin", {"ydb.granular.describe_schema"}))).GetValueSync();
+        UNIT_ASSERT_C(grant.IsSuccess(), grant.GetIssues().ToString());
+        auto readerDriver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("reader@builtin"));
+        TSchemeClient readerSchemeClient(readerDriver);
+        const auto forbiddenWrite = readerSchemeClient.MakeDirectory("/Root/reader_must_not_write").GetValueSync();
+        UNIT_ASSERT_C(!forbiddenWrite.IsSuccess(), "Test principal unexpectedly has root write access");
+        TTempDir tempDir;
+        const auto archive = tempDir.Path().Child("dump");
+        NDump::TClient backupClient(readerDriver);
+        // Default copy/schema settings: a definition-only source needs no temporary database writes.
+        const auto result = backupClient.Dump("/Root/readOnlySource", archive,
+            NDump::TDumpSettings().Database("/Root").EnableDirectExternalDataSource(true));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(archive.Child("readOnlySource").Child(NDump::NFiles::CreateExternalDataSource().FileName).Exists());
+        UNIT_ASSERT(archive.Child("readOnlySource").Child(NDump::NFiles::Permissions().FileName).Exists());
+        UNIT_ASSERT(readerSchemeClient.DescribePath("/Root/readOnlySource").GetValueSync().IsSuccess());
+    }
+
     Y_UNIT_TEST(DirectNamedTokenDumpRejectsOwnerAndGrantee) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);

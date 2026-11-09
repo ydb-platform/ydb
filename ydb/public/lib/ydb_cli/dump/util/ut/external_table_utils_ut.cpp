@@ -2,6 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/builder.h>
+#include <util/string/subst.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NYdb::NDump {
@@ -146,7 +147,7 @@ Y_UNIT_TEST_SUITE(ExternalTablePathMapping) {
 
     Y_UNIT_TEST(InvalidCreateStatementDoesNotLeavePartialRewrite) {
         auto query = Query("/Source", "/Source/a", "/Source/a/eds");
-        query.SubstGlobal("CREATE EXTERNAL TABLE IF NOT EXISTS", "CREATE SOMETHING ELSE");
+        UNIT_ASSERT_VALUES_EQUAL(SubstGlobal(query, "CREATE EXTERNAL TABLE IF NOT EXISTS", "CREATE SOMETHING ELSE"), 1);
         const auto original = query;
         NYql::TIssues issues;
         UNIT_ASSERT(

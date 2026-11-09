@@ -128,10 +128,12 @@ public:
 
             bool isCDCStream = false;
             TString cdcStreamName;
+            bool isAsyncReplication = false;
 
             if (auto it = CDCPaths.find(realPath); it != CDCPaths.end()) {
                 isCDCStream = true;
                 cdcStreamName = it->second.CdcStreamName;
+                isAsyncReplication = it->second.IsAsyncReplication;
             }
 
             switch (entry.Status) {
@@ -172,7 +174,8 @@ public:
                         PathToOriginalPaths[streamImplPath] = std::move(originalsCopy);
                         CDCPaths[streamImplPath] = {
                             .CdcStreamName = entry.Self->Info.GetName(),
-                            .AccountDatabase = RequestDatabaseName
+                            .AccountDatabase = RequestDatabaseName,
+                            .IsAsyncReplication = entry.Attributes.contains("__async_replication")
                         };
                         break;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
@@ -203,6 +206,7 @@ public:
                                     .CdcStreamName = cdcStreamName,
                                     .CreateStep = entry.CreateStep,
                                     .IsServerless = entry.DomainInfo && entry.DomainInfo->IsServerless(),
+                                    .IsAsyncReplication = isAsyncReplication,
                                     .Info = entry.PQGroupInfo,
                                     .Self = entry.Self,
                                     .SecurityObject = entry.SecurityObject
@@ -355,6 +359,7 @@ private:
     struct TCDCTopicInfo {
         TString CdcStreamName;
         TString AccountDatabase;
+        bool IsAsyncReplication = false;
     };
     absl::flat_hash_map<TString, TCDCTopicInfo> CDCPaths;
     absl::flat_hash_map<TString, TTopicInfo> Result;

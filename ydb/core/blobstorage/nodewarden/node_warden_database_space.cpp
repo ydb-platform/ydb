@@ -77,6 +77,11 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerDatabaseSpaceState::TPtr e
 }
 
 void TNodeWarden::Handle(TEvents::TEvUndelivered::TPtr ev) {
+    if (ev->Get()->SourceType == TEvents::TSystem::Poison) { // no actor is holding the device
+        FinishReleasePDiskPath(ev->Cookie);
+        return;
+    }
+
     if (ev->Get()->SourceType != TEvBlobStorage::EvControllerDatabaseSpaceState) {
         return;
     }

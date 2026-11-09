@@ -18,6 +18,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 #include <ydb/library/yql/providers/pq/comp_nodes/yql_pq_factory.h>
+#include <ydb/library/yql/providers/pq/gateway/native/topic_client_settings.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -25,7 +26,6 @@
 #include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider.h>
 #include <ydb/library/yql/providers/yt/gateway/clients/message_stream/yql_yt_client.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
-#include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/discovery_mutator/discovery_mutator.h>
 
@@ -217,23 +217,7 @@ std::unique_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::
 }
 
 NYdb::NTopic::TTopicClientSettings MakeCommonTopicClientSettings(ui64 handlersExecutorThreadsNum, ui64 compressionExecutorThreadsNum) {
-    NYdb::NTopic::TTopicClientSettings settings;
-
-    if (handlersExecutorThreadsNum) {
-        auto threadPool = CreateThreadPool(
-            handlersExecutorThreadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_client").SetBlocking(true).SetCatching(false));
-        settings.DefaultHandlersExecutor(
-            NYdb::NAdapters::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
-    }
-
-    if (compressionExecutorThreadsNum) {
-        auto threadPool = CreateThreadPool(compressionExecutorThreadsNum, 0,
-            IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_compression").SetBlocking(true).SetCatching(false));
-        settings.DefaultCompressionExecutor(
-            NYdb::NAdapters::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
-    }
-
-    return settings;
+    return NYql::MakeCommonTopicClientSettings(handlersExecutorThreadsNum, compressionExecutorThreadsNum);
 }
 
 NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver,

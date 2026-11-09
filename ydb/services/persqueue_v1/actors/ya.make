@@ -1,6 +1,8 @@
 LIBRARY()
 
 PEERDIR(
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/library/actors/core
     ydb/library/wilson_ids
     library/cpp/containers/disjoint_interval_tree

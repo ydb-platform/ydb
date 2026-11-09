@@ -188,6 +188,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.SetPartitionGraph(pqInfo->PartitionGraph);
     if (topicInfo.CdcStream) {
         topicsIter->second.CdcStreamPath = CanonizePath(topicsIter->first);
+        topicsIter->second.IsAsyncReplication = topicInfo.IsAsyncReplication;
     }
 
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
@@ -374,7 +375,8 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
             holder.FolderId,
             holder.MeteringMode,
             holder.Partitions,
-            holder.GetPartitionGraph()
+            holder.GetPartitionGraph(),
+            holder.IsAsyncReplication
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

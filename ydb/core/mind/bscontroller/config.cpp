@@ -394,7 +394,7 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
-            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking || state.ResetDataCenterStates); !result) {
+            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking, parameters.SuppressDegradedGroupsChecking); !result) {
                 *errorDescription = result.error();
                 return false;
             }
@@ -708,9 +708,12 @@ namespace NKikimr::NBsController {
                 if (overlay->second) {
                     NKikimrBlobStorage::TFailRealmStates states;
                     if (overlay->second->FailRealmStates) {
-                        for (NKikimrBlobStorage::TGroupInfo::TFailRealm::EState value : *overlay->second->FailRealmStates) {
+                        for (NKikimrBlobStorage::TDataCenterState::EState value : *overlay->second->FailRealmStates) {
                             states.AddState(value);
                         }
+                    }
+                    if (overlay->second->Mirror3dcState) {
+                        states.SetGroupState(*overlay->second->Mirror3dcState);
                     }
                     db.Table<Schema::Group>().Key(overlay->first.GetRawId())
                         .Update<Schema::Group::FailRealmStates>(states);
@@ -1582,11 +1585,14 @@ namespace NKikimr::NBsController {
                 const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo) {
             pb->SetGroupId(group.ID.GetRawId());
             pb->SetGroupGeneration(group.Generation);
+            if (group.Mirror3dcState) {
+                pb->SetMirror3dcState(*group.Mirror3dcState);
+            }
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
             if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
                 for (ui32 realm = 0; realm < 3; ++realm) {
                     pb->AddFailRealms()->SetState(group.FailRealmStates ? (*group.FailRealmStates)[realm]
-                        : NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
+                        : NKikimrBlobStorage::TDataCenterState::INCLUDED);
                 }
             }
             for (const TVSlotInfo *vslot : group.VDisksInGroup) {
@@ -1690,6 +1696,9 @@ namespace NKikimr::NBsController {
                 pb->SetX2(x.second);
             }
 
+            if (groupInfo.Mirror3dcState) {
+                group->SetMirror3dcState(*groupInfo.Mirror3dcState);
+            }
             if (groupInfo.VDisksInGroup) {
                 group->SetErasureSpecies(groupInfo.ErasureSpecies);
                 group->SetDeviceType(PDiskTypeToPDiskType(groupInfo.GetCommonDeviceType()));
@@ -1765,6 +1774,7 @@ namespace NKikimr::NBsController {
             settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
             settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
             settings->AddBridgeSyncTotalRateBytesPerSecond(BridgeSyncTotalRate);
+            settings->AddBridgeSyncMaxSyncers(BridgeSyncMaxSyncers);
         }
 
         void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,

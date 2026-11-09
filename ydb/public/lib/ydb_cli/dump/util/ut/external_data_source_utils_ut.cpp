@@ -1,4 +1,5 @@
 #include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -27,6 +28,22 @@ bool Supported(const Ydb::Table::DescribeExternalDataSourceResult& source) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(DirectExternalDataSourceDump) {
+    Y_UNIT_TEST(DirectDumpRequiresExplicitOptIn) {
+        UNIT_ASSERT(!TDumpSettings().EnableDirectExternalDataSource_);
+        UNIT_ASSERT(TDumpSettings().EnableDirectExternalDataSource(true).EnableDirectExternalDataSource_);
+    }
+
+    Y_UNIT_TEST(CompleteSourcePathMustBeSafe) {
+        NYql::TIssues issues;
+        UNIT_ASSERT(ValidateDirectExternalDataSourcePath("/Root/nested/source", issues));
+        for (const auto& path : {"/Root/parent`name/source", "/Root/parent name/source", "/Root/parent\tname/source",
+                "/Root/parent\\name/source", "/Root/my source"}) {
+            NYql::TIssues pathIssues;
+            UNIT_ASSERT_C(!ValidateDirectExternalDataSourcePath(path, pathIssues), path);
+            UNIT_ASSERT(!pathIssues.Empty());
+        }
+    }
+
     Y_UNIT_TEST(KnownProvidersWithoutCredentials) {
         UNIT_ASSERT(Supported(Source("Ydb", "NONE")));
         UNIT_ASSERT(Supported(Source("YdbExternal", "NONE")));

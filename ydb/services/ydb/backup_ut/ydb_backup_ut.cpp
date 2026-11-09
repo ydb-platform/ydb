@@ -3432,7 +3432,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         TTempDir tempDir;
         const auto archive = tempDir.Path().Child("dump");
-        CreateBackupLambda(driver, archive, dumpRoot == EExternalSourceDumpRoot::Source ? source : "/Root")();
+        CreateBackupLambda(driver, archive, dumpRoot == EExternalSourceDumpRoot::Source ? source : "/Root", "/Root",
+            NDump::TDumpSettings().EnableDirectExternalDataSource(dumpRoot == EExternalSourceDumpRoot::Source))();
         const auto sourceArchive = dumpRoot == EExternalSourceDumpRoot::Source
             ? archive.Child("selectedSource") : archive.Child("nested/selectedSource");
         const auto creationFile = sourceArchive.Child(NDump::NFiles::CreateExternalDataSource().FileName);
@@ -3488,6 +3489,32 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestSelectedExternalDataSourceBackupRestore("/Root/nested", EExternalSourceDumpRoot::Directory, EAuthType::AuthTypeToken);
     }
 
+    Y_UNIT_TEST_TWIN(DirectExternalSourceDumpFeatureGate, EnableDirect) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        ExecuteQuery(session, R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/gatedSource` WITH (
+                SOURCE_TYPE = "Ydb", LOCATION = "remote.example.test:2135", AUTH_METHOD = "NONE"
+            );
+        )", true);
+        TTempDir tempDir;
+        const auto archive = tempDir.Path().Child("dump");
+        NDump::TClient backupClient(driver);
+        const auto settings = NDump::TDumpSettings().Database("/Root").EnableDirectExternalDataSource(EnableDirect).SavePartialResult(true);
+        const auto result = backupClient.Dump("/Root/gatedSource", archive, settings);
+        if (EnableDirect) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(archive.Child("gatedSource").Child(NDump::NFiles::CreateExternalDataSource().FileName).Exists());
+        } else {
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EnableDirectExternalDataSource");
+            UNIT_ASSERT(!archive.Exists());
+        }
+    }
+
     Y_UNIT_TEST(DirectNamedTokenDumpRejectsOwnerAndGrantee) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
@@ -3522,7 +3549,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             TTempDir tempDir;
             const auto archive = tempDir.Path().Child("dump");
             NDump::TClient backupClient(*driver);
-            const auto result = backupClient.Dump("/Root/sharedSource", archive, NDump::TDumpSettings().Database("/Root").AvoidCopy(true));
+            const auto result = backupClient.Dump("/Root/sharedSource", archive, NDump::TDumpSettings().Database("/Root").AvoidCopy(true).EnableDirectExternalDataSource(true));
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "AUTH_METHOD NONE");
             UNIT_ASSERT(!archive.Exists());
@@ -3554,11 +3581,27 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto archive = tempDir.Path().Child("dump");
         NDump::TClient backupClient(driver);
-        const auto result = backupClient.Dump("/Root/my source", archive, NDump::TDumpSettings().Database("/Root"));
+        const auto result = backupClient.Dump("/Root/my source", archive,
+            NDump::TDumpSettings().Database("/Root").EnableDirectExternalDataSource(true).SavePartialResult(true));
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Direct external data source dump supports only");
         UNIT_ASSERT(!archive.Exists());
         UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, "/Root/my source"), original);
+        TSchemeClient schemeClient(driver);
+        const auto mkdir = schemeClient.MakeDirectory("/Root/my parent").GetValueSync();
+        UNIT_ASSERT_C(mkdir.IsSuccess(), mkdir.GetIssues().ToString());
+        ExecuteQuery(session, R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/my parent/source` WITH (
+                SOURCE_TYPE = "Ydb", LOCATION = "remote.example.test:2135", AUTH_METHOD = "NONE"
+            );
+        )", true);
+        const auto parentArchive = tempDir.Path().Child("parentDump");
+        const auto parentResult = backupClient.Dump("/Root/my parent/source", parentArchive,
+            NDump::TDumpSettings().Database("/Root").EnableDirectExternalDataSource(true).SavePartialResult(true));
+        UNIT_ASSERT(!parentResult.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(parentResult.GetIssues().ToString(), "Direct external data source dump supports only");
+        UNIT_ASSERT(!parentArchive.Exists());
+        UNIT_ASSERT(tableSession.DescribeExternalDataSource("/Root/my parent/source").GetValueSync().IsSuccess());
     }
 
     Y_UNIT_TEST_TWIN(DirectSchemaSecretDumpIsRejected, SavePartialResult) {
@@ -3592,7 +3635,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             const auto archive = tempDir.Path().Child("dump");
             NDump::TClient backupClient(driver);
             const auto result = backupClient.Dump(source, archive,
-                NDump::TDumpSettings().Database("/Root").SavePartialResult(SavePartialResult));
+                NDump::TDumpSettings().Database("/Root").SavePartialResult(SavePartialResult).EnableDirectExternalDataSource(true));
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Direct external data source dump supports only");
             UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, source), original);

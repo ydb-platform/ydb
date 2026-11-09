@@ -23,6 +23,19 @@ std::string PropertyToString(const std::pair<TString, TString>& property) {
 
 }
 
+bool ValidateDirectExternalDataSourcePath(const TString& path, NYql::TIssues& issues) {
+    // Old restore embeds the complete destination in backticks without escaping. Validate every
+    // original component, not just the basename, so an in-place restore has a representable path.
+    for (const unsigned char c : path) {
+        if (c == '`' || c == '\\' || c == '\0' || std::isspace(c)) {
+            issues.AddIssue("Direct external data source dump supports only source paths without whitespace, "
+                "backticks, backslashes or NUL; this includes every parent component");
+            return false;
+        }
+    }
+    return true;
+}
+
 bool ValidateDirectExternalDataSource(
     const Ydb::Table::DescribeExternalDataSourceResult& description,
     NYql::TIssues& issues)

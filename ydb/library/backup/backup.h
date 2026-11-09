@@ -33,6 +33,11 @@ public:
     void LogToStderr() const;
 };
 
+enum class EDirectExternalDataSourceDump {
+    Disabled,
+    Enabled,
+};
+
 void BackupFolder(
     const TDriver& driver,
     const TString& database,
@@ -44,7 +49,8 @@ void BackupFolder(
     bool avoidCopy = false,
     bool savePartialResult = false,
     bool preservePoolKinds = false,
-    bool ordered = false);
+    bool ordered = false,
+    EDirectExternalDataSourceDump directExternalDataSource = EDirectExternalDataSourceDump::Disabled);
 
 void BackupCluster(const TDriver& driver, TFsPath folderPath);
 void BackupDatabase(const TDriver& driver, const TString& database, TFsPath folderPath);

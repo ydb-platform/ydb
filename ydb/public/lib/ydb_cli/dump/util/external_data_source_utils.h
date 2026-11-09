@@ -12,6 +12,8 @@ namespace NYql {
 
 namespace NYdb::NDump {
 
+bool ValidateDirectExternalDataSourcePath(const TString& path, NYql::TIssues& issues);
+
 // Direct credential-bearing archives cannot be safely restored by older clients in all supported cases.
 bool ValidateDirectExternalDataSource(
     const Ydb::Table::DescribeExternalDataSourceResult& description,

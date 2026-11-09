@@ -1092,7 +1092,8 @@ bool SkipItem(const TVector<TRegExMatch>& exclusionPatterns, const THashSet<TStr
 void BackupFolderImpl(TDriver driver, const TString& database, const TString& dbPrefix, const TString& backupPrefix,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
-        NYql::TIssues& issues
+        NYql::TIssues& issues,
+        EDirectExternalDataSourceDump directExternalDataSource = EDirectExternalDataSourceDump::Disabled
 ) {
     TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
@@ -1158,6 +1159,13 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 } else if (dbIt.IsExternalDataSource()) {
                     const auto selection = dbIt.GetTraverseRoot() == dbPrefix
                         ? EExternalSourceSelection::Recursive : EExternalSourceSelection::Direct;
+                    if (selection == EExternalSourceSelection::Direct) {
+                        // Recheck after listing: the selected path may have been recreated since preflight.
+                        Y_ENSURE(directExternalDataSource == EDirectExternalDataSourceDump::Enabled,
+                            "Direct external data source dump requires EnableDirectExternalDataSource(true)");
+                        NYql::TIssues pathIssues;
+                        Y_ENSURE(NDump::ValidateDirectExternalDataSourcePath(dbIt.GetFullPath(), pathIssues), pathIssues.ToString());
+                    }
                     BackupExternalDataSource(driver, database, dbIt.GetFullPath(), childFolderPath, selection);
                 } else if (dbIt.IsExternalTable()) {
                     BackupExternalTable(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
@@ -1572,14 +1580,26 @@ void CheckedCreateBackupFolder(const TFsPath& folderPath) {
 // folderPath - relative path to folder in local filesystem where backup will be stored
 void BackupFolder(const TDriver& driver, const TString& database, const TString& relDbPath, TFsPath folderPath,
         const TVector<TRegExMatch>& exclusionPatterns,
-        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool savePartialResult, bool preservePoolKinds, bool ordered) {
+        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool savePartialResult, bool preservePoolKinds, bool ordered,
+        EDirectExternalDataSourceDump directExternalDataSource) {
+    const TString dbPrefix = JoinDatabasePath(database, relDbPath);
+    NScheme::TSchemeClient schemeClient(driver);
+    const auto selection = schemeClient.ListDirectory(dbPrefix).GetValueSync();
+    VerifyStatus(selection, "error listing selected dump path");
+    if (selection.GetEntry().Type == NScheme::ESchemeEntryType::ExternalDataSource) {
+        Y_ENSURE(directExternalDataSource == EDirectExternalDataSourceDump::Enabled,
+            "Direct external data source dump is disabled; opt in with EnableDirectExternalDataSource(true) "
+            "or --enable-direct-external-data-source");
+        NYql::TIssues issues;
+        Y_ENSURE(NDump::ValidateDirectExternalDataSourcePath(dbPrefix, issues), issues.ToString());
+    }
+
     TString temporalBackupPostfix = CreateTemporalBackupName();
     if (!folderPath) {
         folderPath = temporalBackupPostfix;
     }
     CheckedCreateBackupFolder(folderPath);
 
-    TString dbPrefix = JoinDatabasePath(database, relDbPath);
     LOG_I("Backup " << dbPrefix.Quote() << " to " << folderPath.GetPath().Quote());
 
     // full path to temporal directory in database
@@ -1593,7 +1613,7 @@ void BackupFolder(const TDriver& driver, const TString& database, const TString&
 
         NYql::TIssues issues;
         BackupFolderImpl(driver, database, dbPrefix, tmpDbFolder, folderPath, exclusionPatterns,
-            schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, issues
+            schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, issues, directExternalDataSource
         );
 
         if (issues) {

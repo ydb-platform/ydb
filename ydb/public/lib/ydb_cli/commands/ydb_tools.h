@@ -44,6 +44,7 @@ private:
     TString ConsistencyLevel;
     bool PreservePoolKinds = false;
     bool Ordered = false;
+    bool EnableDirectExternalDataSource = false;
 };
 
 class TCommandRestore : public TToolsCommand, public TCommandWithPath {

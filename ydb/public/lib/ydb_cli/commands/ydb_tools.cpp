@@ -89,6 +89,10 @@ void TCommandDump::Config(TConfig& config) {
         .ChoicesWithCompletion({{"database", "Consistent snapshot of all tables"}, {"table", "Per-table snapshot"}});
     config.Opts->AddLongOption("ordered", "Preserve order by primary key in backup files.")
         .DefaultValue(defaults.Ordered_).StoreTrue(&Ordered);
+    config.Opts->AddLongOption("enable-direct-external-data-source",
+            "Opt in to experimental direct dumps of Ydb/YdbExternal sources with AUTH_METHOD NONE."
+            " Does not affect recursive directory dumps.")
+        .DefaultValue(defaults.EnableDirectExternalDataSource_).StoreTrue(&EnableDirectExternalDataSource);
 }
 
 void TCommandDump::ExtractParams(TConfig& config) {
@@ -111,7 +115,8 @@ int TCommandDump::Run(TConfig& config) {
         .AvoidCopy(AvoidCopy)
         .SavePartialResult(SavePartialResult)
         .PreservePoolKinds(PreservePoolKinds)
-        .Ordered(Ordered);
+        .Ordered(Ordered)
+        .EnableDirectExternalDataSource(EnableDirectExternalDataSource);
 
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));

@@ -17,7 +17,7 @@ check_dependency() {
 check_dependency "yfm" "YFM builder" "https://diplodoc.com/docs/en/tools/docs/"
 check_dependency "python3" "Python 3" "https://www.python.org/downloads/"
 
-DIR=${1:-"$TMPDIR"docs}
+DIR=${1:-"$(python3 -c "import os; print(os.path.realpath('${TMPDIR:-/tmp}'))")docs"}
 
 if ! python3 -c 'import grpc_tools, yaml' &> /dev/null; then
   echo

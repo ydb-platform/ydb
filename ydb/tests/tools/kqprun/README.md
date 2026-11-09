@@ -99,6 +99,13 @@ For profiling memory allocations build kqprun with ya make flag `-D PROFILE_MEMO
 
     `--trace-dataset` sets the `dataset.name` resource attribute (default: `kqprun`); `--trace-level` accepts 1 through 15 (default: 15).
 
+    For warm compilation measurements, add `--warmup-count 5 --loop-count 1` with
+    `-C query -A explain`. This first EXPLAINs every input five times in the same
+    process, without tracing, then collects one pass. Warmups are also excluded
+    from the duration summary. Disable `TableServiceConfig.EnableAstCache` and
+    set `TableServiceConfig.CompileQueryCacheSize` to zero when measuring full
+    compilation; ANTLR's parser caches remain available between requests.
+
     Generic query requests have a `kqprun.query` parent span with `query.name` set to the input basename, or the zero-based request number for inline SQL, and `query.index` set to that request number. Labels do not depend on SQL text or its redaction. Query and script requests are traced; schema creation is not. `--trace-id` remains a separate text correlation ID and does not enable span collection.
 
     Normal finalization waits 300 ms for spans that end after the query response and checks for writer errors. This is a grace period, not a guarantee that arbitrarily delayed spans have arrived. Span detail depends on the instrumentation in the binary; detailed compilation phases require the separate KQP compilation tracing changes.

@@ -269,7 +269,9 @@ public:
         const bool isOlap = std::any_of(query->Execution.TableOperations.begin(), query->Execution.TableOperations.end(),
             [this](const auto& op) { return SessionCtx->Tables().ExistingTable(Cluster, op.GetTable()).Metadata->IsOlap(); });
         if (TransformCtx->QueryCtx->Type == EKikimrQueryType::Query) { ConfigureBlockEngine(isOlap); }
-        YQL_ENSURE(query->Results.size() == query->Roots.size());
+        const auto resultRoots = static_cast<size_t>(std::count_if(query->Roots.begin(), query->Roots.end(),
+            [](const auto& root) { return !root->PlanProps.WithEffects || root->PlanProps.WithReturning; }));
+        YQL_ENSURE(query->Results.size() == resultRoots);
         if (TransformCtx->QueryCtx->Type == EKikimrQueryType::Dml) {
             for (size_t i = 0; i < query->Results.size(); ++i) {
                 auto& result = *TransformCtx->QueryCtx->PreparingQuery->AddResults();

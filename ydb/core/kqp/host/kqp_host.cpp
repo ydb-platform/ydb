@@ -1594,6 +1594,15 @@ private:
                     result.QueryExpr = ctx.NewWorld(TPositionHandle());
                     result.KeepInCache = true;
                     result.CommandTagName = "SELECT";
+                    for (const auto& statement : NewParserAst->Statements) {
+                        if (const auto* write = std::get_if<NNewYql::TWriteStatement>(&statement.Value)) {
+                            switch (write->Kind) {
+                                case NNewYql::EWriteKind::Insert: result.CommandTagName = "INSERT"; break;
+                                case NNewYql::EWriteKind::Update: result.CommandTagName = "UPDATE"; break;
+                                case NNewYql::EWriteKind::Delete: result.CommandTagName = "DELETE"; break;
+                            }
+                        }
+                    }
                     sqlVersion = 1;
                     return result;
                 }
@@ -1601,6 +1610,7 @@ private:
                 // No expression lowering has run yet. Resume the original pipeline
                 // with its existing AST, settings and optimizer selection intact.
                 traceScope.SetSuccess(true);
+                TraceNativeFallback(e);
                 YQL_CLOG(INFO, ProviderKqp) << "New YQL parser fallback: " << e.what();
             }
         }
@@ -2620,34 +2630,44 @@ private:
 
     bool BuildNativeQuery(TExprContext& ctx) {
         auto* trace = SessionCtx->Query().CompileTrace.Get();
-        TCompileTraceScope buildTrace(trace, TCompileTraceLevels::Phase, "Build native query");
+        size_t executableStatements = 0;
+        bool hasWrites = false;
         for (const auto& statement : NewParserAst->Statements) {
             if (statement.Explain != NNewYql::EExplainMode::None) {
                 ythrow TNewYqlParserFallback() << "EXPLAIN statement execution";
             }
+            executableStatements += std::holds_alternative<NNewYql::TQueryStatement>(statement.Value)
+                || std::holds_alternative<NNewYql::TWriteStatement>(statement.Value);
+            hasWrites |= std::holds_alternative<NNewYql::TWriteStatement>(statement.Value);
+        }
+        if (hasWrites && (executableStatements != 1 || SessionCtx->Config().GetEnableFallbackOnDML())) {
+            ythrow TNewYqlParserFallback() << "Native multi-statement writes or configured DML fallback";
         }
         if (!NewParserTablesCollected) {
-            TCompileTraceScope tablesTrace(trace, TCompileTraceLevels::Step, "Collect native tables");
-            auto references = NNewYql::CollectTableReferences(*NewParserAst, NewParserSettings);
-            if (!references.IsOk()) {
-                ctx.IssueManager.AddIssues(references.Issues);
-                return false;
-            }
             bool pending = false;
-            for (const auto& [cluster, path] : references.Tables) {
-                const auto* description = SessionCtx->Tables().GetTables().FindPtr(std::make_pair(cluster, path));
-                if (description && description->Metadata) { continue; }
-                if (cluster != Cluster) {
-                    ythrow TNewYqlParserFallback() << "Cross-cluster catalog lookup";
+            {
+                TCompileTraceScope tablesTrace(trace, TCompileTraceLevels::Step, "Collect native tables");
+                auto references = NNewYql::CollectTableReferences(*NewParserAst, NewParserSettings);
+                tablesTrace.SetSuccess(references.IsOk());
+                if (!references.IsOk()) {
+                    ctx.IssueManager.AddIssues(references.Issues);
+                    return false;
                 }
-                auto& table = SessionCtx->Tables().GetOrAddTable(cluster, SessionCtx->GetDatabase(), path);
-                if (table.Metadata) {
-                    ythrow TNewYqlParserFallback() << "Catalog path was rewritten: " << path;
+                for (const auto& [cluster, path] : references.Tables) {
+                    const auto* description = SessionCtx->Tables().GetTables().FindPtr(std::make_pair(cluster, path));
+                    if (description && description->Metadata) { continue; }
+                    if (cluster != Cluster) {
+                        ythrow TNewYqlParserFallback() << "Cross-cluster catalog lookup";
+                    }
+                    auto& table = SessionCtx->Tables().GetOrAddTable(cluster, SessionCtx->GetDatabase(), path);
+                    if (table.Metadata) {
+                        ythrow TNewYqlParserFallback() << "Catalog path was rewritten: " << path;
+                    }
+                    table.RequireStats();
+                    pending = true;
                 }
-                table.RequireStats();
-                pending = true;
+                NewParserTablesCollected = true;
             }
-            NewParserTablesCollected = true;
             if (pending) { throw TNativeMetadataPending{}; }
         }
         if (!NewParserNames) {
@@ -2687,8 +2707,10 @@ private:
                 snapshot->OwnerId = metadata.PathId.OwnerId();
                 snapshot->TableId = metadata.PathId.TableId();
                 snapshot->SchemaVersion = metadata.SchemaVersion;
+                snapshot->KeyColumns = metadata.KeyColumnNames;
+                for (const auto& index : metadata.Indexes) { snapshot->HasWriteIndexes |= index.ItUsedForWrite(); }
                 const auto addColumn = [&](const TKikimrColumnMetadata& column) {
-                    if (column.IsBuildInProgress) {
+                    if (column.IsBuildInProgress || column.SetNotNullInProgress) {
                         ythrow TNewYqlParserFallback() << "Column schema change in progress: " << path;
                     }
                     const auto* type = description->GetColumnType(column.Name);
@@ -2696,6 +2718,8 @@ private:
                         ythrow TNewYqlParserFallback() << "Column type is not available: " << path << "." << column.Name;
                     }
                     snapshot->Columns.push_back({column.Name, column.Id, FormatType(type), column.NotNull});
+                    snapshot->HasDefaults |= column.DefaultKind != NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED
+                        || bool(column.DefaultExpression);
                 };
                 // Catalog order determines native star expansion and result columns.
                 if (metadata.ColumnOrder.empty()) {
@@ -2712,6 +2736,7 @@ private:
                 return snapshot;
             };
             auto resolved = NNewYql::ResolveNames(*NewParserAst, NewParserSettings, lookup);
+            namesTrace.SetSuccess(resolved.IsOk());
             if (!resolved.IsOk()) {
                 ctx.IssueManager.AddIssues(resolved.Issues);
                 return false;
@@ -2746,10 +2771,29 @@ private:
             return {table, metadata.Kind == EKikimrTableKind::Olap ? NYql::EStorageType::ColumnStorage : NYql::EStorageType::RowStorage};
         };
 
+        THashSet<const NNewYql::TSource*> writeOnlyTargets;
+        for (const auto& statement : NewParserAst->Statements) {
+            const auto* write = std::get_if<NNewYql::TWriteStatement>(&statement.Value);
+            if (!write) { continue; }
+            const auto& snapshot = *NewParserNames->Tables.at(write->Target.get());
+            const auto& metadata = *SessionCtx->Tables().ExistingTable(snapshot.Cluster, snapshot.Path).Metadata;
+            for (const auto& index : metadata.Indexes) {
+                if (index.ItUsedForWrite() && !index.IsWrittenBySink(SessionCtx->Config().GetEnableIndexStreamWrite())) {
+                    ythrow TNewYqlParserFallback() << "Native writes require sink-maintained indexes";
+                }
+            }
+            if (write->Input) { writeOnlyTargets.insert(write->Target.get()); }
+            auto& op = native->Execution.TableOperations.emplace_back();
+            op.SetTable(snapshot.Path);
+            const auto operation = write->Kind == NNewYql::EWriteKind::Insert ? TYdbOperation::InsertAbort
+                : write->Kind == NNewYql::EWriteKind::Update ? (write->Input ? TYdbOperation::UpdateOn : TYdbOperation::Update)
+                : TYdbOperation::Delete;
+            op.SetOperation(static_cast<ui32>(operation));
+        }
         THashSet<TString> tables;
         for (const auto& [source, snapshot] : NewParserNames->Tables) {
-            Y_UNUSED(source);
             lookup(*snapshot); // Validate identity and provider even for unused definitions.
+            if (writeOnlyTargets.contains(source)) { continue; }
             if (tables.insert(snapshot->Path).second) {
                 auto& op = native->Execution.TableOperations.emplace_back();
                 op.SetTable(snapshot->Path);
@@ -2759,6 +2803,14 @@ private:
         const bool dataQuery = SessionCtx->Query().Type == EKikimrQueryType::Dml;
         const auto cap = dataQuery ? FillSettings.RowsLimitPerWrite : Nothing();
         for (const auto& statement : NewParserAst->Statements) {
+            if (const auto* write = std::get_if<NNewYql::TWriteStatement>(&statement.Value)) {
+                TCompileTraceScope lowerTrace(trace, TCompileTraceLevels::Step, "Lower native AST to RBO");
+                auto root = NNewYql::LowerWriteToRbo(*write, *NewParserAst, *NewParserNames, *NewParserTypes, ctx, lookup);
+                root->PlanProps.PhysicalTxGroup = 0;
+                root->PlanProps.EffectPriority = 0;
+                native->Roots.push_back(std::move(root));
+                continue;
+            }
             const auto* query = std::get_if<NNewYql::TQueryStatement>(&statement.Value);
             if (!query) { continue; }
             TCompileTraceScope lowerTrace(trace, TCompileTraceLevels::Step, "Lower native AST to RBO");
@@ -2784,6 +2836,7 @@ private:
         }
         if (native->Roots.empty()) { ythrow TNewYqlParserFallback() << "No native query results"; }
         for (const auto& root : native->Roots) {
+            if (root->PlanProps.WithEffects) { continue; }
             native->Results.push_back({root->GetQueryColumns(), cap.GetOrElse(0)});
         }
         // Annotation can clone the same parameter into several expressions.
@@ -2829,18 +2882,33 @@ private:
         return true;
     }
 
+    void TraceNativeFallback(const TNewYqlParserFallback& reason) const {
+        if (auto* trace = SessionCtx->Query().CompileTrace.Get()) {
+            auto span = trace->StartSpan(TCompileTraceLevels::Step, "New YQL frontend fallback");
+            span.Attribute("fallback.reason", TString(reason.what()));
+            TCompileTrace::EndSpan(span);
+        }
+    }
+
     void SetupNativeFrontend() {
-        NativeMetadataTransformer = CreateKiSourceLoadTableMetadataTransformer(
-            CreateKqpGatewayProxy(Gateway, SessionCtx, ActorSystem), SessionCtx, *TypesCtx, ExternalSourceFactory, IsInternalCall);
+        NativeMetadataTransformer = CreateCompileTraceTransformer(
+            CreateKiSourceLoadTableMetadataTransformer(
+                CreateKqpGatewayProxy(Gateway, SessionCtx, ActorSystem), SessionCtx, *TypesCtx, ExternalSourceFactory, IsInternalCall),
+            [this] { return SessionCtx->Query().CompileTrace.Get(); }, TCompileTraceLevels::Phase, "Load native table metadata");
         NativePrepareTransformer = new TPrepareNativeQueryTransformer(KqpRunner, TransformCtx);
         NativeFrontendTransformer = new TNativeFrontendTransformer([this](TExprNode::TPtr& input, TExprContext& ctx)
             -> std::pair<IGraphTransformer*, bool> {
+            TCompileTraceScope buildTrace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase, "Build native query");
             try {
-                if (!BuildNativeQuery(ctx)) { return {nullptr, false}; }
+                if (!BuildNativeQuery(ctx)) {
+                    buildTrace.SetSuccess(false);
+                    return {nullptr, false};
+                }
                 return {NativePrepareTransformer.Get(), false};
             } catch (const TNativeMetadataPending&) {
                 return {NativeMetadataTransformer.Get(), true};
             } catch (const TNewYqlParserFallback& e) {
+                TraceNativeFallback(e);
                 YQL_CLOG(INFO, ProviderKqp) << "New YQL frontend fallback: " << e.what();
                 TransformCtx->NativeQuery.reset();
                 NewParserTypes.reset();

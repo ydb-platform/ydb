@@ -920,7 +920,7 @@ private:
             .ResultRowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit(),
             .ResultSizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit(),
             .QueryId = query.QueryId,
-            .WilsonTraceId = NewTraceId(),
+            .WilsonTraceId = query.TraceEnabled ? NewTraceId() : NWilson::TTraceId(),
             .QueryLabel = query.QueryLabel };
     }
 

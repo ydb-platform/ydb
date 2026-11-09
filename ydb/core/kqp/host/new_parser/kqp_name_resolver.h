@@ -26,6 +26,9 @@ struct TTableMetadata {
     ui64 TableId = 0;
     ui64 SchemaVersion = 0;
     TVector<TColumnMetadata> Columns; // Catalog column order.
+    TVector<TString> KeyColumns;
+    bool HasWriteIndexes = false;
+    bool HasDefaults = false;
 };
 
 using TTableMetadataPtr = std::shared_ptr<const TTableMetadata>;
@@ -59,6 +62,8 @@ struct TResolvedColumn {
 // Pointer keys refer to the unchanged input AST, which must outlive this result.
 // Column IDs are local to this result; RBO lowering can allocate IUs for them.
 struct TResolvedNames {
+    THashMap<const TDeclareStatement*, TString> DeclarationNames;
+    THashMap<const TWriteStatement*, TVector<TString>> WriteColumns;
     // Decoded static optimizer pragmas. The host dispatches these in statement
     // order after native lowering succeeds; an empty value means DEFAULT.
     THashMap<const TPragmaStatement*, TMaybe<TString>> CostBasedOptimizationPragmas;

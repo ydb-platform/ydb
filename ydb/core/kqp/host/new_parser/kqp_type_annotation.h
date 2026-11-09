@@ -33,6 +33,8 @@ struct TAnnotatedAggregate {
     const TExpression* Argument; // Null for COUNT(*).
     TString Function;
     bool Distinct = false;
+    const TExpression* Key = nullptr; // MIN_BY/MAX_BY compare this, retaining Argument.
+    bool OptionalState = false;
 };
 struct TAnnotatedGrouping {
     TVector<std::pair<TColumnId, const TExpression*>> Keys;
@@ -58,6 +60,7 @@ struct TAnnotatedSubquery {
 // Keep both owners alive. Annotation stores rewritten expressions separately
 // so the same immutable syntax and name bindings can be lowered again.
 struct TAnnotatedAst {
+    THashMap<const TWriteStatement*, TVector<std::pair<TString, TAnnotatedExpression>>> Writes;
     // Scalar roots of relational clauses: projections, predicates, sort keys,
     // LIMIT/OFFSET. A star projection has a tuple body in catalog column order.
     THashMap<const TExpression*, TAnnotatedExpression> Expressions;

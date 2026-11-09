@@ -66,6 +66,49 @@ public:
         // Expressions hold a pointer to their plan properties. Moving ownership
         // into the returned root requires rebinding every expression before the
         // short-lived lowerer and its original Props member are destroyed.
+        return Finish(std::move(root));
+    }
+
+    TIntrusivePtr<TOpRoot> RunWrite(const TWriteStatement& write) {
+        const auto pos = Pos(write.Target->Range);
+        const auto& metadata = *Names.Tables.at(write.Target.get());
+        const auto table = Tables(metadata);
+        if (table.StorageType != NYql::EStorageType::RowStorage) {
+            Unsupported(write.Target->Range, "native column-table writes");
+        }
+        auto relation = write.Input ? Query(*write.Input) : Source(*write.Target);
+        if (write.Where) {
+            relation.Op = MakeIntrusive<TOpFilter>(relation.Op, pos, Predicate(*write.Where, relation.Bindings));
+        }
+        TMapIUs values;
+        TEffectOptions options;
+        for (const auto& [name, expression] : Annotations.Writes.at(&write)) {
+            const auto id = Props.InfoUnitRegistry.AddGenerated("write");
+            values.Add(id, AnnotatedExpression(expression, write.Target->Range, relation.Bindings));
+            options.Columns.Append(id, name);
+        }
+        auto input = MakeIntrusive<TOpMap>(relation.Op, pos, std::move(values));
+        EEffectType kind;
+        switch (write.Kind) {
+            case EWriteKind::Insert:
+                kind = metadata.HasWriteIndexes ? EEffectType::InsertRowsIndex : EEffectType::InsertRows;
+                options.OnConflict = "abort";
+                break;
+            case EWriteKind::Update:
+                kind = metadata.HasWriteIndexes ? EEffectType::UpdateRowsIndex : EEffectType::UpdateRows;
+                break;
+            case EWriteKind::Delete:
+                kind = metadata.HasWriteIndexes ? EEffectType::DeleteRowsIndex : EEffectType::DeleteRows;
+                break;
+        }
+        auto effect = MakeIntrusive<TOpTableEffect>(input, pos, table.Table, kind, std::move(options));
+        auto root = MakeIntrusive<TOpRoot>(effect, pos, TOrderedIUs<TString>{});
+        Props.WithEffects = true;
+        return Finish(std::move(root));
+    }
+
+private:
+    TIntrusivePtr<TOpRoot> Finish(TIntrusivePtr<TOpRoot> root) {
         root->PlanProps = std::move(Props);
         for (const auto& item : IterateSubtreeWithSubplans(root.Get(), root->PlanProps)) { item.Current->BindExpressionPlanProps(&root->PlanProps); }
         root->RecomputeOutputIUsSubtree();
@@ -73,7 +116,6 @@ public:
         return root;
     }
 
-private:
     TPositionHandle Pos(const TSourceRange& range) {
         return Ctx.AppendPosition(TPosition(range.Column + 1, range.Line, Script.File));
     }
@@ -267,12 +309,13 @@ private:
             auto bindings = left.Bindings;
             bindings.insert(right.Bindings.begin(), right.Bindings.end());
             TJoinIUs keys;
+            TMapIUs leftKeys, rightKeys;
             TVector<TRboExpression> filters;
             if (join->On) {
                 auto predicate = Predicate(*join->On, bindings);
-                // Extract only equalities crossing the two inputs and orient keys
-                // left-to-right. Same-side equalities and all other conjuncts remain
-                // join filters, including residual predicates of outer joins.
+                // Evaluate side-local computed keys before the join, including
+                // outer joins: computing them after null-extension changes ON
+                // semantics and leaves RBO without equality keys.
                 for (auto& term : predicate.SplitConjunct()) {
                     if (term.MaybeEquiJoinCondition()) {
                         TEquiJoinCondition condition(term);
@@ -283,9 +326,30 @@ private:
                             continue;
                         }
                     }
+                    if (term.MaybeExprEquiJoinCondition()) {
+                        const auto body = term.GetExpressionBody();
+                        const size_t first = body->IsCallable("PgResolvedOp") ? 2 : 0;
+                        TRboExpression a(body->ChildPtr(first), &Ctx, &Props), b(body->ChildPtr(first + 1), &Ctx, &Props);
+                        const auto belongs = [](const TRboExpression& expression, const TRelation& input) {
+                            return !expression.GetInputIUs().Empty() && expression.GetInputIUs().IsSubsetOf(input.Op->GetOutputIUs());
+                        };
+                        if (belongs(a, right) && belongs(b, left)) { std::swap(a, b); }
+                        if (belongs(a, left) && belongs(b, right)) {
+                            const auto key = [&](TRboExpression expression, TMapIUs& definitions) {
+                                if (expression.IsColumnAccess()) { return *expression.GetRawInputIUs().begin(); }
+                                const auto id = Props.InfoUnitRegistry.AddGenerated("join_key");
+                                definitions.Add(id, std::move(expression));
+                                return id;
+                            };
+                            keys.Add(key(std::move(a), leftKeys), key(std::move(b), rightKeys));
+                            continue;
+                        }
+                    }
                     filters.push_back(std::move(term));
                 }
             }
+            if (!leftKeys.Keys().Empty()) { left.Op = MakeIntrusive<TOpMap>(left.Op, pos, std::move(leftKeys)); }
+            if (!rightKeys.Keys().Empty()) { right.Op = MakeIntrusive<TOpMap>(right.Op, pos, std::move(rightKeys)); }
             TString kind;
             switch (join->Kind) {
                 case EJoinKind::Inner: kind = "Inner"; break;
@@ -304,7 +368,7 @@ private:
             return {MakeIntrusive<TOpJoin>(std::move(left.Op), std::move(right.Op), pos, kind,
                 std::move(keys), filters), std::move(bindings)};
         }
-        const auto& columns = SourceColumns.at(&source);
+        const auto& columns = SourceColumns[&source];
         TRelation result;
         // Allocate IUs for stored columns, then resolve alias IDs through Input.
         // Keep the complete read schema here; column pruning, ranges and physical
@@ -331,6 +395,17 @@ private:
             }
             result.Op = MakeIntrusive<TOpRead>(alias, std::move(ius), table.StorageType,
                 table.Table, nullptr, nullptr, std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, pos);
+        } else if (const auto* expression = std::get_if<TExpressionSource>(&source.Value)) {
+            const auto& annotated = Annotations.Expressions.at(expression->Expression.get());
+            Y_ENSURE(annotated.Inputs.empty());
+            TUnorderedIUs ius;
+            for (const auto id : columns) {
+                if (Names.Columns[id].Input) { continue; }
+                const auto iu = Props.InfoUnitRegistry.Add(TInfoUnit("", Names.Columns[id].Name));
+                ius.Add(iu);
+                result.Bindings[id] = iu;
+            }
+            result.Op = MakeIntrusive<TOpEmptySource>(pos, annotated.Lambda->TailPtr(), std::move(ius));
         } else {
             const auto* derived = std::get_if<TDerivedTable>(&source.Value);
             const auto* named = Names.NamedSources.FindPtr(&source);
@@ -368,6 +443,26 @@ private:
         for (const auto& aggregate : grouping->Aggregates) {
             auto argument = aggregate.Argument ? Expression(*aggregate.Argument, relation.Bindings)
                 : MakeConstant("Uint64", "1", pos, &Ctx);
+            if (aggregate.Key) {
+                auto key = Expression(*aggregate.Key, relation.Bindings);
+                auto row = Ctx.NewArgument(pos, "row");
+                auto payload = Ctx.ReplaceNode(argument.GetExpressionBody(), argument.GetLambda()->Head().Head(), row);
+                auto keyValue = Ctx.ReplaceNode(key.GetExpressionBody(), key.GetLambda()->Head().Head(), row);
+                TExprNode::TPtr body;
+                const auto keyType = Annotations.Expressions.at(aggregate.Key).GetType();
+                if (keyType->GetKind() == ETypeAnnotationKind::Null) {
+                    auto tuple = Ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
+                        keyType, Annotations.Expressions.at(aggregate.Argument).GetType()});
+                    body = Ctx.NewCallable(pos, "Nothing", {ExpandType(pos, *Ctx.MakeType<TOptionalExprType>(tuple), Ctx)});
+                } else if (keyType->IsOptionalOrNull()) {
+                    auto present = Ctx.NewArgument(pos, "key");
+                    body = Ctx.NewCallable(pos, "Map", {keyValue,
+                        Ctx.NewLambda(pos, Ctx.NewArguments(pos, {present}), Ctx.NewList(pos, {present, payload}))});
+                } else {
+                    body = Ctx.NewList(pos, {keyValue, payload});
+                }
+                argument = TRboExpression(Ctx.NewLambda(pos, Ctx.NewArguments(pos, {row}), std::move(body)), &Ctx, &Props);
+            }
             const auto input = map(std::move(argument), "aggregate_argument");
             const auto output = Props.InfoUnitRegistry.AddGenerated("aggregate");
             aggregates.Add(output, TOpAggregationTraits{input, aggregate.Function, aggregate.Distinct});
@@ -406,6 +501,32 @@ private:
             }
             relation.Op = MakeIntrusive<TOpMap>(relation.Op, pos, std::move(constants));
         }
+        TMapIUs payloads;
+        for (const auto& aggregate : grouping->Aggregates) {
+            if (!aggregate.Key) { continue; }
+            auto row = Ctx.NewArgument(pos, "row");
+            auto state = Ctx.NewCallable(pos, "Member", {row, Ctx.NewAtom(pos, outputs.at(aggregate.Output))});
+            const auto payload = [&](TExprNode::TPtr tuple) {
+                return Ctx.NewCallable(pos, "Nth", {std::move(tuple), Ctx.NewAtom(pos, "1")});
+            };
+            TExprNode::TPtr body;
+            if (Annotations.Columns.at(aggregate.Output)->GetKind() == ETypeAnnotationKind::Null) {
+                body = Ctx.NewCallable(pos, "Null", {});
+            } else if (aggregate.OptionalState) {
+                auto present = Ctx.NewArgument(pos, "state");
+                auto value = payload(present);
+                if (!Annotations.Expressions.at(aggregate.Argument).GetType()->IsOptionalOrNull()) {
+                    value = Ctx.NewCallable(pos, "Just", {std::move(value)});
+                }
+                body = Ctx.NewCallable(pos, "IfPresent", {state,
+                    Ctx.NewLambda(pos, Ctx.NewArguments(pos, {present}), std::move(value)),
+                    Ctx.NewCallable(pos, "Nothing", {ExpandType(pos, *Annotations.Columns.at(aggregate.Output), Ctx)})});
+            } else { body = payload(state); }
+            const auto output = Props.InfoUnitRegistry.AddGenerated("aggregate_payload");
+            payloads.Add(output, TRboExpression(Ctx.NewLambda(pos, Ctx.NewArguments(pos, {row}), std::move(body)), &Ctx, &Props));
+            outputs[aggregate.Output] = output;
+        }
+        if (!payloads.Keys().Empty()) { relation.Op = MakeIntrusive<TOpMap>(relation.Op, pos, std::move(payloads)); }
         relation.Bindings = std::move(outputs);
     }
 
@@ -666,6 +787,13 @@ TIntrusivePtr<TOpRoot> LowerToRbo(const TQuery& query, const TScript& script,
     const TRboTableLookup& tables, bool orderedColumns)
 {
     return TLowerer(script, names, annotations, ctx, tables).Run(query, orderedColumns);
+}
+
+TIntrusivePtr<TOpRoot> LowerWriteToRbo(const TWriteStatement& write, const TScript& script,
+    const TResolvedNames& names, const TAnnotatedAst& annotations, TExprContext& ctx,
+    const TRboTableLookup& tables)
+{
+    return TLowerer(script, names, annotations, ctx, tables).RunWrite(write);
 }
 
 } // namespace NKikimr::NKqp::NNewYql

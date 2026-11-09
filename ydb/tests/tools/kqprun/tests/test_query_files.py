@@ -1,3 +1,4 @@
+import json
 import pathlib
 import subprocess
 import tempfile
@@ -93,6 +94,48 @@ class TestQueryFiles(unittest.TestCase):
         self.assertIn(f"Query 0 ('{failed}') failed:", result.stdout)
         self.assertIn(f"Executing query 1 ('{succeeded}')", result.stdout)
         self.assertIn("1 of 2 query requests failed", result.stdout)
+
+    def test_explain_warmup_without_tracing(self):
+        query = self.write("query.sql", "SELECT 42;")
+        trace = self.root / "trace.jsonl"
+        config = self.write(
+            "warmup.conf",
+            "TableServiceConfig { EnableAstCache: false CompileQueryCacheSize: 0 }\nLogConfig { DefaultLevel: 2 }",
+        )
+        result = self.run_queries(
+            "--app-config",
+            config,
+            "--script-query",
+            query,
+            "-C",
+            "query",
+            "-A",
+            "explain",
+            "--warmup-count",
+            "3",
+            "--loop-count",
+            "2",
+            "--trace-file",
+            trace,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(result.stdout.count("Executing query"), 5, result.stdout)
+        self.assertEqual(result.stdout.count("(warmup, tracing disabled)"), 3, result.stdout)
+        spans = [
+            span
+            for line in trace.read_text().splitlines()
+            for resource in json.loads(line)["resourceSpans"]
+            for scope in resource["scopeSpans"]
+            for span in scope["spans"]
+        ]
+        compilations = [span for span in spans if span["name"] == "Compile query"]
+        self.assertEqual(len(compilations), 2)
+        self.assertEqual(len({span["traceId"] for span in spans}), 2)
+
+    def test_warmup_rejects_execution(self):
+        result = self.run_queries("--sql", "SELECT 42;", "--warmup-count", "3")
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("Warmup requires synchronous query EXPLAIN requests", result.stdout)
 
     def test_results_printed_after_failure(self):
         result = self.run_queries(

@@ -8,7 +8,7 @@ Use the `admin cluster bridge destroy-pile` command to delete a disconnected pil
 
 {% note warning %}
 
-Before running the command, ensure that no ordinary group has VDisks in the pile and no bridged group depends solely on its part there.
+Before making any changes, the command checks that no ordinary group has VDisks in the pile and no bridged group depends solely on its part there. If either condition is violated, the command returns an error with the group ID and does not start the `REMOVE` operation.
 
 {% endnote %}
 

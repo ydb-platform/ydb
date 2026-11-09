@@ -24,12 +24,18 @@ Piles are not standalone {{ ydb-short-name }} clusters; they are parts of a sing
 - each pile runs its own [static group](glossary.md#static-group) and storage-group parts with regular [VDisk](glossary.md#vdisk)s. Bridged storage groups are accessed through bridge proxy, which exposes the [DS-proxy](glossary.md#ds-proxy) interface to tablets and performs operations through the DS-proxy instances of the participating piles;
 - each pile runs its own set of replicas of [StateStorage](glossary.md#state-storage), [SchemeBoard](glossary.md#scheme-board), and [Board](glossary.md#board). Access to StateStorage, SchemeBoard, and Board is through similar proxy components.
 
+## Converting an ordinary cluster {#conversion}
+
+You can [convert an existing cluster that initially ran without bridge mode](../devops/deployment-options/manual/bridge-management.md#convert) while preserving its data. Initially, all its nodes are combined into a single pile. System storage always switches to bridge mode. Existing database pools also switch by default, but you can leave them ordinary and convert them later.
+
+A single-pile configuration is an intermediate stage: data remains only in the original part of the cluster, so this configuration provides no additional resilience to a data center failure. To obtain fault tolerance across data centers, [add and synchronize more piles](../devops/deployment-options/manual/bridge-management.md#add-pile). Databases using bridged storage are then replicated between piles, while databases on ordinary storage are not converted automatically and may remain in the original pile without bridge replication.
+
 ## Database storage modes {#storage-pools}
 
 A bridge cluster supports two database storage modes:
 
 - **Bridged storage** keeps one part of each storage group in every participating pile and synchronously replicates writes between them.
-- **Ordinary storage** uses regular storage groups and their configured redundancy without synchronous replication between piles.
+- **Ordinary storage** uses regular storage groups and their configured redundancy without using bridge's synchronous replication between piles.
 
 Cluster conversion makes all existing database pools bridged by default. To allow bridged and ordinary databases to coexist, set `bridge_config.enable_non_uniform_storage: true`. You can also leave existing pools ordinary during conversion and later switch each database between the two modes as described in [Managing a cluster in bridge mode](../devops/deployment-options/manual/bridge-management.md#database-mode).
 

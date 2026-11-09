@@ -16,12 +16,13 @@ Conversion enables bridge mode for system storage and, by default, for all exist
     {{ ydb-cli }} -e grpc://<node>:2135 admin cluster config fetch > config.yaml
     ```
 
-3. Add exactly one pile to `bridge_config` in `config.yaml`:
+3. Add exactly one pile to `config.bridge_config` in `config.yaml`, preserving `metadata` and the other settings:
 
     ```yaml
-    bridge_config:
-      piles:
-        - name: pile-a
+    config:
+      bridge_config:
+        piles:
+          - name: pile-a
     ```
 
     To leave existing database pools ordinary, also set `bridge_config.enable_non_uniform_storage: true`. Do not set this option for default conversion; it can be enabled after conversion completes if mixed storage modes are required.
@@ -32,17 +33,21 @@ Conversion enables bridge mode for system storage and, by default, for all exist
     {{ ydb-cli }} -e grpc://<node>:2135 -y admin cluster config replace -f config.yaml
     ```
 
-5. Run one of the following commands:
+5. Select the required scenario and run only one of these commands.
+
+    For the standard conversion of system storage and all existing database pools to bridge mode, run:
 
     ```bash
-    # Convert system storage and all existing database pools:
     {{ ydb-cli }} -y admin cluster bridge convert
+    ```
 
-    # Convert system storage only, leaving existing database pools ordinary:
+    To convert only system storage while leaving existing database pools ordinary, run this command instead:
+
+    ```bash
     {{ ydb-cli }} -y admin cluster bridge convert --skip-storage-pool-conversion
     ```
 
-    The second command requires `bridge_config.enable_non_uniform_storage: true`. Existing databases can later be [switched to bridged storage](#database-mode) individually.
+    The second scenario requires `bridge_config.enable_non_uniform_storage: true` from step 3. Existing databases can later be [switched to bridged storage](#database-mode) individually.
 
 6. Use [bridge list](#list) to wait until conversion completes. While the output contains `Conversion from non-bridged cluster is in progress, piles can't be added yet`, do not change the pile list. After completion, the single pile is `PRIMARY`.
 
@@ -52,13 +57,103 @@ Conversion puts all existing nodes into one pile; it does not create a separate 
 
 Adding a pile allocates its storage and synchronizes bridged data without stopping the cluster.
 
-1. Complete [cluster conversion](#convert) and wait for it to finish. Before adding another pile, assign the converted pile's name to every existing static and dynamic node with `location.bridge_pile_name`. Restart the nodes if this setting changes.
+1. If you ran [ordinary-cluster conversion](#convert), wait for it to complete. If the cluster initially ran in bridge mode or conversion has already completed, no additional wait is required. In either case, check the cluster state before adding a pile:
 
-2. Add the new pile to `bridge_config.piles`, add its `host_configs` and `hosts`, and set `location.bridge_pile_name` for every new host as described in the [hosts configuration](../../../reference/configuration/hosts.md#hosts-bridge). If `system_tablets` explicitly lists node IDs, include nodes from the new pile so system tablets can run there after a switchover or failover.
+    ```bash
+    {{ ydb-cli }} admin cluster bridge list
+    ```
 
-3. Replace the configuration and start the new pile's static nodes. They remain idle while [bridge list](#list) shows the pile as `INACTIVE`.
+    Wait until the `Conversion from non-bridged cluster is in progress, piles can't be added yet` message and any pending `ADD` or `REMOVE` operations disappear.
 
-4. Provision storage for the pile:
+2. If every existing node already has its pile name assigned, skip this step. Otherwise, assign the names before adding the new pile to `bridge_config`.
+
+    Fetch the current configuration:
+
+    ```bash
+    {{ ydb-cli }} -e grpc://<node>:2135 admin cluster config fetch > config.yaml
+    ```
+
+    In `config.hosts`, find every existing static node's entry and add `location.bridge_pile_name` with the name of its current pile. Edit the existing entries instead of duplicating them, and preserve the other `location` fields:
+
+    ```yaml
+    config:
+      hosts:
+        - host: node-a1
+          host_config_id: 1
+          location:
+            data_center: dc-a
+            rack: rack-a1
+            bridge_pile_name: pile-a
+        # ... update all other existing static nodes in the same way
+    ```
+
+    For every existing dynamic node, specify its current pile in the `ydbd server` command-line option, for example `--bridge-pile-name pile-a`. Dynamic nodes are not listed in `hosts`.
+
+    Apply the static-node configuration change:
+
+    ```bash
+    {{ ydb-cli }} -e grpc://<node>:2135 -y admin cluster config replace -f config.yaml
+    ```
+
+    Perform a [rolling restart](../../../maintenance/manual/node_restarting.md) of every static and dynamic node whose settings changed. Do not add the new pile to `bridge_config` until the restart is complete.
+
+3. Fetch the current configuration again to use its current version:
+
+    ```bash
+    {{ ydb-cli }} -e grpc://<node>:2135 admin cluster config fetch > config.yaml
+    ```
+
+    Add the new pile to `bridge_config.piles` and its static nodes to `hosts`. Set `location.bridge_pile_name` for every new node as described in the [hosts configuration](../../../reference/configuration/hosts.md#hosts-bridge). If an existing `host_configs` entry describes the new nodes' disks, reuse its `host_config_id`; otherwise, add a new host configuration.
+
+    For example, the following `config` fragment defines `pile-a` and `pile-b` with the same disk configuration. Only one static node per pile is shown for brevity. Add all the required nodes and preserve `metadata`, existing entries, and the other settings in `config.yaml`:
+
+    ```yaml
+    config:
+      bridge_config:
+        piles:
+          - name: pile-a
+          - name: pile-b
+
+      host_configs:
+        - host_config_id: 1
+          drive:
+            - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+              type: SSD
+
+      hosts:
+        - host: node-a1
+          host_config_id: 1
+          location:
+            data_center: dc-a
+            rack: rack-a1
+            bridge_pile_name: pile-a
+        # ... other static nodes in pile-a
+        - host: node-b1
+          host_config_id: 1
+          location:
+            data_center: dc-b
+            rack: rack-b1
+            bridge_pile_name: pile-b
+        # ... other static nodes in pile-b
+    ```
+
+    If `system_tablets` explicitly lists node IDs, include nodes from the new pile so system tablets can run there after a switchover or failover.
+
+4. Apply the updated configuration through an available node:
+
+    ```bash
+    {{ ydb-cli }} -e grpc://<node>:2135 -y admin cluster config replace -f config.yaml
+    ```
+
+    Start the new pile's static nodes and check its state:
+
+    ```bash
+    {{ ydb-cli }} -e grpc://<node>:2135 admin cluster bridge list
+    ```
+
+    The nodes remain idle while the command output shows the pile as `INACTIVE`.
+
+5. Provision storage for the pile:
 
     ```bash
     {{ ydb-cli }} -y admin cluster bridge provision-pile --pile pile-b
@@ -66,7 +161,7 @@ Adding a pile allocates its storage and synchronizes bridged data without stoppi
 
     This starts an `ADD` operation that creates the new pile's parts of static and bridged storage groups. Ordinary groups are not changed. Use [bridge list](#list) to wait until the pending operation clears and the pile becomes `DISCONNECTED`.
 
-5. Join the provisioned pile to the cluster:
+6. Join the provisioned pile to the cluster:
 
     ```bash
     {{ ydb-cli }} -y admin cluster bridge join-pile --pile pile-b
@@ -74,7 +169,7 @@ Adding a pile allocates its storage and synchronizes bridged data without stoppi
 
     The pile enters `NOT_SYNCHRONIZED`, synchronizes in the background, and then automatically becomes `SYNCHRONIZED`. Wait for this state with [bridge list](#list).
 
-6. Start the new pile's dynamic nodes with `bridge_pile_name: pile-b`.
+7. Start the new pile's dynamic nodes by adding the `--bridge-pile-name pile-b` option to the `ydbd server` command along with the other startup options.
 
 For command details, see [provision-pile](../../../reference/ydb-cli/commands/bridge/provision-pile.md) and [join-pile](../../../reference/ydb-cli/commands/bridge/rejoin.md).
 
@@ -82,9 +177,19 @@ For command details, see [provision-pile](../../../reference/ydb-cli/commands/br
 
 Removing a pile permanently deletes its storage-group parts and all data in them.
 
-1. Make sure no ordinary storage group has VDisks in the pile and no bridged group depends solely on its part in this pile. If necessary, [change the database storage mode](#database-mode) and wait for background synchronization or cleanup to finish.
+1. If the only retained copies of any database are in the pile being removed, for example after switching to ordinary storage with `--retain-pile pile-b`, first [switch that database to bridged storage](#database-mode). Pile states may remain unchanged. Before switching the database back to ordinary storage with `--retain-pile pile-a`, wait until every storage group being converted has a `SYNCED` part in `pile-a`, as described in [Verifying a database mode change](#verify-database-mode). After the switch to ordinary storage, redundant group parts enter `BLOCKS` and are deleted in the background.
 
-2. If the pile is `PRIMARY`, perform a [switchover](#switchover). Then [take the pile down](#takedown) and wait until it is `DISCONNECTED`. Stop all its nodes.
+2. If `pile-b` is `PRIMARY`, first perform a [switchover](#switchover) to another synchronized pile, such as `pile-a`. Then [take down](#takedown) the pile being removed and check its state:
+
+    ```bash
+    # Only if pile-b is the current PRIMARY:
+    {{ ydb-cli }} admin cluster bridge switchover --new-primary pile-a
+
+    {{ ydb-cli }} admin cluster bridge takedown --pile pile-b
+    {{ ydb-cli }} admin cluster bridge list
+    ```
+
+    Repeat `bridge list` until `pile-b` becomes `DISCONNECTED`, then stop all its nodes.
 
 3. Destroy the pile:
 
@@ -92,7 +197,9 @@ Removing a pile permanently deletes its storage-group parts and all data in them
     {{ ydb-cli }} -y admin cluster bridge destroy-pile --pile pile-b
     ```
 
-    The command starts a `REMOVE` operation. Use [bridge list](#list) to wait until the pending operation clears and the pile becomes `INACTIVE`. Without the global `-y` option, the command asks for confirmation before deleting data.
+    Before starting the `REMOVE` operation, {{ ydb-short-name }} checks that no ordinary storage group has VDisks in this pile and no bridged group depends solely on its part there. If this check fails, the command returns an error with the group ID and does not start removal. Resolve the cause of the error and rerun the command.
+
+    After the check succeeds, the command starts a `REMOVE` operation. Use [bridge list](#list) to wait until the pending operation clears and the pile becomes `INACTIVE`. Without the global `-y` option, the command asks for confirmation before deleting data.
 
 4. After the pile becomes `INACTIVE`, remove it and its hosts from `bridge_config`, `hosts`, and `host_configs`, and remove its node IDs from any explicit `system_tablets` lists.
 
@@ -108,15 +215,60 @@ The following commands change all storage pools of the selected database without
 # Replicate the database across all provisioned piles:
 {{ ydb-cli }} -y admin cluster bridge set-database-mode bridged --target-database /Root/db1
 
-# Keep ordinary copies and delete redundant bridged copies in the background:
+# Retain copies in pile-a and delete redundant copies in other piles in the background:
 {{ ydb-cli }} -y admin cluster bridge set-database-mode ordinary --target-database /Root/db1 --retain-pile pile-a
 ```
 
 `--target-database` must be the absolute path of the database and is independent of the global `--database` connection option. For a serverless database, specify its shared database; the change applies to that shared database and all its serverless databases.
 
-When switching to ordinary storage, `--retain-pile` is optional. If it is omitted, {{ ydb-short-name }} selects retained copies automatically, potentially in different piles for different groups. The selected pile must already have synchronized copies. When switching to bridged storage, every existing group must reside within a single pile; a group spanning several piles cannot be converted directly.
+When switching to ordinary storage, `--retain-pile` selects the pile whose group parts must be retained. It does not disconnect the pile or change its role: you can specify `PRIMARY` or another pile in the `SYNCHRONIZED` state. The selected pile must already contain synchronized parts of every group being converted. If this option is omitted, {{ ydb-short-name }} selects retained copies automatically, potentially in different piles for different groups.
 
-The command changes the storage mode before background synchronization or cleanup completes. For command details, see [admin cluster bridge set-database-mode](../../../reference/ydb-cli/commands/bridge/set-database-mode.md).
+When switching to bridged storage, every existing group must reside within a single pile; a group spanning several piles cannot be converted directly.
+
+The command changes all database pool modes atomically: if validation fails, no pool mode is changed. After the mode change succeeds, background synchronization or cleanup may still be in progress. For command details, see [admin cluster bridge set-database-mode](../../../reference/ydb-cli/commands/bridge/set-database-mode.md).
+
+### Verify a database mode change {#verify-database-mode}
+
+Successful completion of `set-database-mode` confirms the atomic mode change of all database pools, not the completion of background synchronization or cleanup. The `bridge list` command does not show these operations on the database's storage groups; pile states may remain unchanged.
+
+For diagnostics, use the [`.sys/ds_groups` system view](../../../devops/observability/system-views.md#ds_groups). First, find the database's storage pool IDs:
+
+```bash
+{{ ydb-cli }} sql -s '
+SELECT BoxId, StoragePoolId, Name
+FROM `/Root/.sys/ds_storage_pools`
+WHERE Name LIKE "/Root/db1:%";
+'
+```
+
+Then inspect the groups in each pool:
+
+```bash
+{{ ydb-cli }} sql -s '
+SELECT
+    GroupId,
+    ProxyGroupId,
+    BridgePileId,
+    BridgeSyncStage,
+    BridgeDataSyncProgress,
+    BridgeSyncRunning,
+    BridgeSyncLastError
+FROM `/Root/.sys/ds_groups`
+WHERE BoxId = <box-id>
+  AND StoragePoolId = <storage-pool-id>
+ORDER BY GroupId;
+'
+```
+
+Here, `<box-id>` and `<storage-pool-id>` are the IDs returned by the first query. Inspect physical group-part rows with `BridgePileId` set; synchronization fields can be empty for logical proxy groups. `ProxyGroupId` associates a physical part with its logical group. For an original inline part, this field can be empty while its `GroupId` matches the logical group ID.
+
+Completion criteria depend on the selected mode:
+
+- **Full transition to bridged storage:** every participating pile is `PRIMARY` or `SYNCHRONIZED`, and all its physical parts of every logical group are `SYNCED`.
+- **Readiness to switch to ordinary storage with `--retain-pile`:** the selected pile is `PRIMARY` or `SYNCHRONIZED`, and its part in every logical group being converted is already `SYNCED`.
+- **Cleanup after switching to ordinary storage:** redundant part rows first show `BLOCKS` and then disappear, leaving only the retained physical parts.
+
+`BridgeSyncLastError` contains the most recent synchronization error. `BridgeDataSyncProgress` covers only the data-copy stage, not the entire conversion. Do not use `BridgeSyncRunning = false` as the sole completion indicator: synchronization may still be waiting to start.
 
 ### View current state {#list}
 

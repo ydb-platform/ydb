@@ -1375,8 +1375,10 @@ private:
                             State.ReadVersion);
     }
 
-    // Distinct posting-table keys may refer to the same base row. Widen
-    // the candidate set until K distinct keys exist or the graph is exhausted.
+    // Distinct posting-table keys may refer to the same base row. Allow one
+    // candidate expansion, then fall back to the exact scan. Each Search scans
+    // the change journal, so low-cardinality distinct keys must not cause an
+    // unbounded number of graph searches and journal distance calculations.
     // Non-key distinct values require the exact table path.
     THnswSearchResult SearchHnswDistinct() const {
         const auto& topK = *State.VectorTopK;
@@ -1391,7 +1393,8 @@ private:
         }
         const size_t available = topK.HnswIndex->Size() + topK.HnswIndex->ChangeCount();
         size_t requested = Min(available, static_cast<size_t>(topK.Limit));
-        while (true) {
+        constexpr size_t MaxSearchAttempts = 2;
+        for (size_t attempt = 0; attempt < MaxSearchAttempts; ++attempt) {
             auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion);
             if (!candidates.Covered || positions.empty()) {
                 return candidates;
@@ -1416,6 +1419,7 @@ private:
             }
             requested += Min(requested, available - requested);
         }
+        return THnswSearchResult{.Covered = false};
     }
 
     std::optional<EReadStatus> MaterializeHnswResults(

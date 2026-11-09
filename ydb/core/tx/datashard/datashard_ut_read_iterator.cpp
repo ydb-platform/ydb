@@ -6648,6 +6648,96 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2);
     }
 
+    void TestHnswDistinctCandidateBudget(ui32 duplicateRows, bool withChanges) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(settings);
+        helper.CreateCustomTable("hnsw-distinct", {{"parent", "Uint32", true, false},
+                                                 {"key", "Uint32", true, false},
+                                                 {"emb", "String", false, false}}, true);
+        auto writeRows = [&](bool changed) {
+            TStringBuilder sql;
+            sql << "UPSERT INTO `/Root/hnsw-distinct` (parent, key, emb) VALUES ";
+            for (ui32 parent = 0; parent <= duplicateRows; ++parent) {
+                if (parent) {
+                    sql << ", ";
+                }
+                const bool far = parent == duplicateRows;
+                sql << "(" << parent << ", " << (far ? 2 : 1) << ", "
+                    << (far ? "\"\\x00\\x00\\x80\\xBF" : "\"\\x00\\x00\\x80\\x3F")
+                    << (changed ? "\\x00\\x00\\x00\\x3F\\x01\")" : "\\x00\\x00\\x00\\x00\\x01\")");
+            }
+            // Duplicate keys are closest to (1, 0); key 2 is farther away.
+            // Changing the second component from 0 to 0.5 preserves this order.
+            sql << ";";
+            ExecSQL(helper.Server, helper.Sender, sql);
+        };
+        writeRows(false);
+
+        auto& runtime = *helper.Server->GetRuntime();
+        ui64 readId = 0;
+        auto read = [&](bool distinct) {
+            auto request = helper.GetBaseReadRequest("hnsw-distinct", ++readId,
+                NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion::Max());
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(2);
+            top->SetLimit(distinct ? 2 : 1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            if (distinct) {
+                top->AddDistinctColumns(1);
+            }
+            auto* vector = top->MutableSettings();
+            vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            vector->set_vector_dimension(2);
+            vector->set_min_rows(1);
+            vector->set_delta_rows(1000);
+            auto result = helper.SendRead("hnsw-distinct", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            return result;
+        };
+        bool accelerated = false;
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            if (read(false)->Record.GetStats().GetRows() == 1) {
+                accelerated = true;
+                break;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(accelerated, "HNSW graph did not become ready");
+        if (withChanges) {
+            writeRows(true);
+            auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(
+                ResolveTablet(runtime, helper.Tables.at("hnsw-distinct").TabletId)));
+            UNIT_ASSERT(shard);
+            const auto& table = *shard->GetUserTables().begin()->second;
+            auto graph = shard->GetHnswIndex(table.LocalTid, 3, *table.HnswSettings, false);
+            UNIT_ASSERT(graph);
+            UNIT_ASSERT_VALUES_EQUAL(graph->ChangeCount(), duplicateRows + 1);
+        }
+
+        auto result = read(true);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].AsValue<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(1)[1].AsValue<ui32>(), 2);
+        // Enough duplicates must exhaust the ANN budget and take the exact scan,
+        // even though wider graph searches could eventually find the second key.
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), duplicateRows > 2 ? duplicateRows + 1 : 2);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswDistinctCandidateBudgetFallsBack, WithChanges) {
+        TestHnswDistinctCandidateBudget(16, WithChanges);
+    }
+
+    Y_UNIT_TEST(HnswDistinctCandidateBudgetAllowsOneExpansion) {
+        TestHnswDistinctCandidateBudget(2, false);
+    }
+
     Y_UNIT_TEST(HnswSharesPageCacheBudgetAndEvictsOnLimit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

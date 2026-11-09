@@ -67,6 +67,12 @@ namespace NKikimr {
             RequestFrom = TActorId();
         }
 
+        void Handle(TEvProxyQueueState::TPtr &ev, const TActorContext &ctx) {
+            Y_UNUSED(ev, ctx);
+            // the backpressure client reports its connection state to us as its parent; it answers a request in
+            // flight itself, with an error if the connection is lost, so there is nothing to do here
+        }
+
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
             ActiveActors.KillAndClear(ctx);
@@ -76,6 +82,7 @@ namespace NKikimr {
         STRICT_STFUNC(StateFunc,
                       HFunc(TEvAnubisVGet, Handle)
                       HFunc(TEvBlobStorage::TEvVGetResult, Handle)
+                      HFunc(TEvProxyQueueState, Handle)
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
                       )
 

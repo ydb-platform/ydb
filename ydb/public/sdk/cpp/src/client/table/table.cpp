@@ -4576,6 +4576,14 @@ TExternalDataSourceDescription::TExternalDataSourceDescription(Ydb::Table::Descr
 {
 }
 
+std::optional<std::string> TExternalDataSourceDescription::GetInstallation() const {
+    const auto& proto = Impl_->GetProto();
+    if (!proto.has_installation()) {
+        return std::nullopt;
+    }
+    return proto.installation();
+}
+
 const Ydb::Table::DescribeExternalDataSourceResult& TExternalDataSourceDescription::GetProto() const {
     return Impl_->GetProto();
 }

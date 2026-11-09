@@ -1870,6 +1870,9 @@ message ExecuteScanQueryPartialResult {
 message DescribeExternalDataSourceRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string path = 2;
+    // Request the source's installation, including an explicit empty value.
+    // Older servers can ignore this option; check the result field's presence.
+    bool include_installation = 3;
 }
 
 message DescribeExternalDataSourceResponse {
@@ -1883,6 +1886,8 @@ message DescribeExternalDataSourceResult {
     optional string source_type = 2;
     optional string location = 3;
     map<string, string> properties = 4;
+    // Present when include_installation was requested and supported.
+    optional string installation = 5;
 }
 
 // Returns information about an external table with a given path.

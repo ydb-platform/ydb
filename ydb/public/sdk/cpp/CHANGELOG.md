@@ -1,3 +1,5 @@
+* Added `TDescribeExternalDataSourceSettings::IncludeInstallation` and `TExternalDataSourceDescription::GetInstallation` to opt into the source's installation and distinguish an empty value from an older server that does not return it.
+
 * Topic and PersQueue writers now schedule RAW and pre-encoded messages on the configured compression executor, reducing request construction on the caller thread.
 
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.

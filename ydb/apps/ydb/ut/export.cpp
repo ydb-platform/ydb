@@ -252,11 +252,27 @@ public:
         Ydb::Table::DescribeTableResult res;
         res.mutable_self()->set_name(TStringBuf(request->path()).RNextTok('/'));
         res.mutable_self()->set_type(Ydb::Scheme::Entry::TABLE);
+        if (const auto it = TableAttributes.find(request->path()); it != TableAttributes.end()) {
+            for (const auto& [name, value] : it->second) {
+                (*res.mutable_attributes())[name] = value;
+            }
+        }
         FillOperation(response, res);
         return grpc::Status();
     }
 
+    TTableImpl& SetTableAttribute(TString path, TString name, TString value) {
+        TableAttributes[std::move(path)][std::move(name)] = std::move(value);
+        return *this;
+    }
+
+    void ClearExpectations() override {
+        TableAttributes.clear();
+    }
+
 private:
+    THashMap<TString, THashMap<TString, TString>> TableAttributes;
+
     template <typename TResponse, typename TResult>
     void FillOperation(TResponse* response, const TResult& result) {
         auto* operation = response->mutable_operation();
@@ -436,6 +452,48 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 "--root-path", "/test_database/export-root",
                 "--destination-prefix", "dst",
                 "--exclude", "skip",
+            }
+        );
+    }
+
+    Y_UNIT_TEST_F(SkipNotExportableTables, TExportFixture) {
+        Service<TSchemeImpl>()
+            .ExpectListDirectory("/test_database/export-root")
+            .ExpectChild("/test_database/export-root", "keep", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/export-root", "omit", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/export-root", "replica", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/export-root", "both", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/export-root", "false_attributes", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/export-root", "topic", Ydb::Scheme::Entry::TOPIC);
+
+        Service<TTableImpl>()
+            .SetTableAttribute("/test_database/export-root/omit", "__omit_export", "true")
+            .SetTableAttribute("/test_database/export-root/replica", "__async_replica", "true")
+            .SetTableAttribute("/test_database/export-root/both", "__async_replica", "true")
+            .SetTableAttribute("/test_database/export-root/both", "__omit_export", "true")
+            .SetTableAttribute("/test_database/export-root/false_attributes", "__async_replica", "false")
+            .SetTableAttribute("/test_database/export-root/false_attributes", "__omit_export", "false");
+
+        Service<TExportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectItem("/test_database/export-root/keep", "dst/keep")
+            .ExpectItem("/test_database/export-root/false_attributes", "dst/false_attributes")
+            .ExpectItem("/test_database/export-root/topic", "dst/topic");
+
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "export", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--item", "src=export-root,dst=dst",
             }
         );
     }

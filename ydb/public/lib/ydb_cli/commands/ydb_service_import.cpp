@@ -192,8 +192,16 @@ bool IsSupportedObject(TStringBuf& key) {
     return key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
         || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
         || key.ChopSuffix(NDump::NFiles::CreateTopic().FileName)
-        || key.ChopSuffix(NDump::NFiles::CreateExternalDataSource().FileName)
-        || key.ChopSuffix(NDump::NFiles::CreateExternalTable().FileName);
+        || key.ChopSuffix(NDump::NFiles::CreateExternalDataSource().FileName);
+}
+
+bool IsUnsupportedExternalTable(TStringBuf key, const TVector<TRegExMatch>& exclusionPatterns) {
+    if (!key.ChopSuffix(NDump::NFiles::CreateExternalTable().FileName)) {
+        return false;
+    }
+    key.ChopSuffix("/");
+    // --item expansion sets only Src; IsItemExcluded applies this same predicate to it.
+    return !IsExcluded(TString(key).c_str(), exclusionPatterns);
 }
 
 template <typename TSettings>
@@ -249,6 +257,11 @@ void TCommandImportBase::FillItemsFromItemParam(NImport::TImportFromS3Settings& 
                 auto listResult = s3Client->ListObjectKeys(item.Source, token);
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
+                    if (IsUnsupportedExternalTable(key, ExclusionPatterns)) {
+                        throw TMisuseException() << "External tables cannot be imported with --item: " << key
+                            << ". Data source references cannot be safely remapped. "
+                            << "Exclude this object explicitly with --exclude to import the remaining objects.";
+                    }
                     if (IsSupportedObject(key)) {
                         key.ChopSuffix("/");
                         TString destination;

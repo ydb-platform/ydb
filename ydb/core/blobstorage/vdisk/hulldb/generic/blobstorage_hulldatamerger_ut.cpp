@@ -1,5 +1,6 @@
 #include "blobstorage_hulldatamerger.h"
 
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_arena.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -62,6 +63,58 @@ namespace NKikimr {
             UNIT_ASSERT(merger.GetSavedHugeBlobs().front() == blob.HugeLocation);
             UNIT_ASSERT(merger.GetSlotsToAllocate().empty());
             UNIT_ASSERT(merger.GetDeletedHugeBlobs().empty());
+        }
+
+        Y_UNIT_TEST(InliningFreesHugeCopyOfPartFoundInMemory) {
+            // part 1 was written twice across a MinHugeBlobInBytes change: into a huge slot, then again, small, into
+            // the fresh segment; compaction inlines the blob from the in-memory copy and must free the huge slot
+            const TBlobStorageGroupType gtype(TBlobStorageGroupType::ErasureMirror3dc);
+            const EBlobHeaderMode headerMode = EBlobHeaderMode::OLD_HEADER;
+            const TLogoBlobID id(1, 1, 1, 0, 100 << 10, 0);
+            const NMatrix::TVectorType part = NMatrix::TVectorType::MakeOneHot(0, gtype.TotalPartCount());
+            const TDiskPart hugeLocation(20, 0, TDiskBlob::CalculateBlobSize(gtype, id, part, headerMode));
+            const TRope data(TString(gtype.PartSize(TLogoBlobID(id, 1)), 'x'));
+
+            TDataMerger merger(gtype, headerMode);
+            TMemRecLogoBlob huge(TIngress().ReplaceLocal(gtype, part));
+            huge.SetHugeBlob(hugeLocation);
+            merger.Add(huge, static_cast<const TDiskPart*>(nullptr), 1, id);
+            TMemRecLogoBlob mem(TIngress().ReplaceLocal(gtype, part));
+            mem.SetMemBlob(0, data.GetSize());
+            merger.Add(mem, &data, 2, id);
+            merger.Finish(false /*targetingHugeBlob*/, id, true /*keepData*/);
+
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(merger.GetType()), static_cast<int>(TBlobType::DiskBlob));
+            UNIT_ASSERT(merger.GetSavedHugeBlobs().empty());
+            UNIT_ASSERT_VALUES_EQUAL(merger.GetDeletedHugeBlobs().size(), 1); // nothing refers to the huge copy any more
+            UNIT_ASSERT(merger.GetDeletedHugeBlobs().front() == hugeLocation);
+        }
+
+        Y_UNIT_TEST(FilterOutMetadataPartWhenInlining) {
+            // every part of a zero-size blob is a metadata part; two of them come from one inplace record on disk,
+            // and Finish puts them into the blob merger without reading anything
+            const TBlobStorageGroupType gtype(TBlobStorageGroupType::Erasure4Plus2Block);
+            const EBlobHeaderMode headerMode = EBlobHeaderMode::OLD_HEADER;
+            const TLogoBlobID id(1, 1, 1, 0, 0, 0);
+            NMatrix::TVectorType parts(0, gtype.TotalPartCount());
+            parts.Set(0);
+            parts.Set(1);
+            const NMatrix::TVectorType kept = NMatrix::TVectorType::MakeOneHot(0, gtype.TotalPartCount());
+            const TDiskPart location(10, 0, TDiskBlob::CalculateBlobSize(gtype, id, parts, headerMode));
+
+            TDataMerger merger(gtype, headerMode);
+            TMemRecLogoBlob memRec(TIngress().ReplaceLocal(gtype, parts));
+            memRec.SetDiskBlob(location);
+            merger.Add(memRec, static_cast<const TDiskPart*>(nullptr), 1, id);
+            merger.Finish(false /*targetingHugeBlob*/, id, true /*keepData*/);
+            merger.FilterLocalParts(kept);
+            UNIT_ASSERT(merger.GetParts() == kept);
+
+            // reads and compaction parse the inlined blob with the parts of its record; the OLD_HEADER mask must match
+            TRopeArena arena(&TRopeArenaBackend::Allocate);
+            const TRope rope = merger.CreateDiskBlob(arena);
+            const TDiskBlob blob(&rope, merger.GetParts(), gtype, id);
+            UNIT_ASSERT(blob.GetParts() == kept);
         }
     }
 

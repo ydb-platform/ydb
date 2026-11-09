@@ -439,14 +439,16 @@ class TDataShard
         };
 
         struct TEvRebuildHnswIndex : public TEventLocal<TEvRebuildHnswIndex, EvRebuildHnswIndex> {
-            explicit TEvRebuildHnswIndex(ui32 localTid, bool initialBuild = false)
-                : LocalTid(localTid), InitialBuild(initialBuild) {}
+            explicit TEvRebuildHnswIndex(ui32 localTid, bool initialBuild = false, TPathId indexId = {})
+                : LocalTid(localTid), IndexId(indexId), InitialBuild(initialBuild) {}
             ui32 LocalTid;
+            TPathId IndexId;
             bool InitialBuild;
         };
 
         struct TEvStartHnswSnapshotScan : public TEventLocal<TEvStartHnswSnapshotScan, EvStartHnswSnapshotScan> {
             ui32 LocalTid = 0;
+            TPathId IndexId;
             TUserTable::TCPtr Table;
             TRowVersion BaseVersion;
             ui64 BuildToken = 0;
@@ -455,6 +457,7 @@ class TDataShard
 
         struct TEvHnswIndexBuildResult : public TEventLocal<TEvHnswIndexBuildResult, EvHnswIndexBuildResult> {
             ui32 LocalTid = 0;
+            TPathId IndexId;
             ui32 VectorColumnTag = 0;
             ui64 RowCountAtBuild = 0;
             ui64 BuildToken = 0;
@@ -1895,7 +1898,7 @@ public:
         SysLocks.RemoveSchema(tableId, locksDb);
         Pipeline.GetDepTracker().RemoveSchema(tableId);
         if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end()) {
-            InvalidateHnswIndex(it->second->LocalTid);
+            InvalidateHnswTable(it->second->LocalTid);
             HnswIndexCache.erase(it->second->LocalTid);
         }
         TableInfos.erase(tableId.LocalPathId);
@@ -1904,7 +1907,7 @@ public:
     void SetUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
         if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end() && (it->second->LocalTid != tableInfo->LocalTid
                 || it->second->GetSchema() != tableInfo->GetSchema())) {
-            InvalidateHnswIndex(it->second->LocalTid);
+            InvalidateHnswTable(it->second->LocalTid);
             HnswIndexCache.erase(it->second->LocalTid);
         }
         TableInfos[tableId.LocalPathId] = tableInfo;
@@ -1921,77 +1924,73 @@ public:
         SetUserTable(tableId, tableInfo);
     }
 
-    // Returns the cached HNSW index for the given local table id, or nullptr.
-    // A missing index is reconstructed asynchronously by the read path.
+    // An omitted identity is supported only for a table with one local index.
     std::shared_ptr<NDataShard::THnswIndex> GetHnswIndex(ui32 localTid, ui32 vectorColumnTag,
         const Ydb::Table::VectorIndexSettings& settings, bool useCachedHnswParameters,
-        TRowVersion readVersion = TRowVersion::Max()) const;
+        TRowVersion readVersion = TRowVersion::Max(), TPathId indexId = {}) const;
 
-    void RegisterHnswCacheLookup(ui32 localTid, bool hit) {
-        auto& entry = HnswIndexCache[localTid];
-        if (hit) {
-            ++entry.CacheHits;
-        } else {
-            ++entry.CacheMisses;
+    void RegisterHnswCacheLookup(ui32 localTid, bool hit, TPathId indexId = {}) {
+        if (auto* entry = GetOrCreateHnswIndexEntry(localTid, indexId)) {
+            if (hit) { ++entry->CacheHits; } else { ++entry->CacheMisses; }
         }
     }
 
     enum class EHnswFallback { UnsupportedRead, PartialRange, Candidates };
-    void RegisterHnswFallback(ui32 localTid, EHnswFallback reason) {
-        auto& entry = HnswIndexCache[localTid];
-        switch (reason) {
-            case EHnswFallback::UnsupportedRead: ++entry.UnsupportedReads; break;
-            case EHnswFallback::PartialRange: ++entry.RangeFallbacks; break;
-            case EHnswFallback::Candidates: ++entry.CandidateFallbacks; break;
+    void RegisterHnswFallback(ui32 localTid, EHnswFallback reason, TPathId indexId = {}) {
+        if (auto* entry = GetOrCreateHnswIndexEntry(localTid, indexId)) {
+            switch (reason) {
+                case EHnswFallback::UnsupportedRead: ++entry->UnsupportedReads; break;
+                case EHnswFallback::PartialRange: ++entry->RangeFallbacks; break;
+                case EHnswFallback::Candidates: ++entry->CandidateFallbacks; break;
+            }
         }
     }
 
     bool TryStartHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
         const Ydb::Table::VectorIndexSettings& settings,
-        TRowVersion baseVersion = TRowVersion::Min());
-    ui64 GetHnswBuildToken(ui32 localTid) const;
-    bool IsHnswBuildCurrent(ui32 localTid, ui64 token) const;
+        TRowVersion baseVersion = TRowVersion::Min(), TPathId indexId = {});
+    ui64 GetHnswBuildToken(ui32 localTid, TPathId indexId = {}) const;
+    bool IsHnswBuildCurrent(ui32 localTid, ui64 token, TPathId indexId = {}) const;
 
-    void SetHnswIndexBuilding(ui32 localTid, bool building) {
-        auto& entry = HnswIndexCache[localTid];
-        entry.Building = building;
-        if (!building) {
-            entry.BuildObsolete = false;
+    void SetHnswIndexBuilding(ui32 localTid, bool building, TPathId indexId = {}) {
+        if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
+            entry->Building = building;
+            if (!building) { entry->BuildObsolete = false; }
         }
     }
 
-    bool IsHnswIndexBuildObsolete(ui32 localTid) const {
-        auto it = HnswIndexCache.find(localTid);
-        return it != HnswIndexCache.end() && it->second.BuildObsolete;
+    bool IsHnswIndexBuildObsolete(ui32 localTid, TPathId indexId = {}) const {
+        const auto* entry = FindHnswIndexEntry(localTid, indexId);
+        return entry && entry->BuildObsolete;
     }
 
-    void InvalidateHnswIndex(ui32 localTid);
-    void InvalidateHnswIndex(ui32 localTid, const TPathId& indexId);
+    void InvalidateHnswIndex(ui32 localTid, TPathId indexId = {});
     void InvalidateHnswTable(ui32 localTid);
     void InvalidateHnswIndexes();
     void PruneHnswIndexes();
-    void ScheduleHnswRebuild(ui32 localTid);
+    void ScheduleHnswRebuild(ui32 localTid, TPathId indexId = {});
     void ScheduleHnswInitialBuilds();
-    void TrackHnswOpenTransactions(ui32 localTid, const NTable::TDatabase& db);
+    void TrackHnswOpenTransactions(ui32 localTid, const NTable::TDatabase& db, TPathId indexId = {});
     TRowVersion GetHnswBuildVersion() const;
     void StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table, TRowVersion base,
-        TTransactionContext& txc, THnswSnapshotScanCallback finish = {});
+        TTransactionContext& txc, THnswSnapshotScanCallback finish = {}, TPathId indexId = {});
     void Handle(TEvPrivate::TEvRebuildHnswIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStartHnswSnapshotScan::TPtr& ev, const TActorContext& ctx);
     class TTxRebuildHnswIndex;
 
-    void DeferHnswIndexBuild(ui32 localTid, TDuration delay) {
-        auto& entry = HnswIndexCache[localTid];
-        entry.Building = false;
-        // Use the runtime clock for both the deadline and its retry checks.
-        entry.NextScanAttemptAt = AppData()->TimeProvider->Now() + delay;
+    void DeferHnswIndexBuild(ui32 localTid, TDuration delay, TPathId indexId = {}) {
+        if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
+            entry->Building = false;
+            entry->NextScanAttemptAt = AppData()->TimeProvider->Now() + delay;
+        }
     }
 
-    void DisableHnswIndexBuild(ui32 localTid) {
-        auto& entry = HnswIndexCache[localTid];
-        entry.Building = false;
-        entry.NextScanAttemptAt = TInstant::Max();
-        HnswCacheMemoryTracker->ResetDemand();
+    void DisableHnswIndexBuild(ui32 localTid, TPathId indexId = {}) {
+        if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
+            entry->Building = false;
+            entry->NextScanAttemptAt = TInstant::Max();
+            if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetDemand(); }
+        }
     }
 
     ui64 GetHnswCacheMemoryLimit() {
@@ -2043,36 +2042,31 @@ public:
         const ui64 previousLimit = HnswCacheMemoryTracker->GetLimit();
         HnswCacheMemoryTracker->SetLimit(limit);
         if (limit > previousLimit) {
-            for (auto& [localTid, entry] : HnswIndexCache) {
+            ForEachHnswIndexEntry([&](ui32 localTid, const TPathId& indexId, auto& entry) {
                 if (entry.NextScanAttemptAt != TInstant::Max()) {
                     entry.NextScanAttemptAt = TInstant::Zero();
-                    if (entry.InitialBuildAttemptsLeft) {
-                        ScheduleHnswRebuild(localTid);
-                    }
+                    if (entry.InitialBuildAttemptsLeft) { ScheduleHnswRebuild(localTid, indexId); }
                 }
-            }
+            });
         }
         if (HnswCacheMemoryTracker->GetUsed() > limit) {
             HnswCacheMemoryTracker->ResetDemand();
-            for (auto& [localTid, entry] : HnswIndexCache) {
-                InvalidateHnswIndex(localTid);
-                if (HnswCacheMemoryTracker->GetUsed() <= limit) {
-                    break;
-                }
-            }
+            ForEachHnswIndexEntry([&](ui32 localTid, const TPathId& indexId, auto&) {
+                if (HnswCacheMemoryTracker->GetUsed() > limit) { InvalidateHnswIndex(localTid, indexId); }
+            });
         }
     }
 
     void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index,
         std::shared_ptr<void> memoryReservation, ui64 rowCountAtBuild = 0,
         ui32 vectorColumnTag = 0, const Ydb::Table::VectorIndexSettings& settings = {},
-        TRowVersion baseVersion = TRowVersion::Min(), ui64 buildToken = 0);
+        TRowVersion baseVersion = TRowVersion::Min(), ui64 buildToken = 0, TPathId indexId = {});
     void UpdateHnswIndex(ui32 localTid, NTable::ERowOp rowOp,
         TConstArrayRef<TCell> keyCells, TArrayRef<const NIceDb::TUpdateOp> ops,
-        NTable::TDatabase& db, TRowVersion version, ui64 writeTxId = 0);
-    void CommitHnswIndexChanges(ui32 localTid, ui64 txId, TRowVersion version, NTable::TDatabase& db);
-    void AbortHnswIndexChanges(ui32 localTid, ui64 txId, NTable::TDatabase& db);
-    void ApplyHnswIndexChange(ui32 localTid, TString key, THnswIndexChanges::TVersion change);
+        NTable::TDatabase& db, TRowVersion version, ui64 writeTxId = 0, TPathId indexId = {});
+    void CommitHnswIndexChanges(ui32 localTid, ui64 txId, TRowVersion version, NTable::TDatabase& db, TPathId indexId = {});
+    void AbortHnswIndexChanges(ui32 localTid, ui64 txId, NTable::TDatabase& db, TPathId indexId = {});
+    void ApplyHnswIndexChange(ui32 localTid, TString key, THnswIndexChanges::TVersion change, TPathId indexId = {});
 
     bool IsUserTable(const TTableId& tableId) const {
         return (TableInfos.find(tableId.PathId.LocalPathId) != TableInfos.end())
@@ -3216,6 +3210,7 @@ private:
         static constexpr ui64 PendingTransactionBytes = 256;
         std::shared_ptr<NDataShard::THnswIndex> Index;
         ui64 RowCountAtBuild = 0;
+        ui64 IndexSchemaVersion = 0;
         ui32 VectorColumnTag = 0;
         Ydb::Table::VectorIndexSettings Settings;
         std::shared_ptr<THnswIndexChanges> Changes = std::make_shared<THnswIndexChanges>();
@@ -3239,18 +3234,48 @@ private:
         ui64 CandidateFallbacks = 0;
     };
     ui64 NextHnswBuildToken = 0;
-    THashMap<ui32, THnswIndexCacheEntry> HnswIndexCache;  // LocalTid -> cache entry
     using THnswTableIndexes = THashMap<TPathId, THnswIndexCacheEntry>;
-    THashMap<ui32, THnswTableIndexes> HnswIndexesByTable;
+    THashMap<ui32, THnswTableIndexes> HnswIndexCache;
 
-    THnswIndexCacheEntry* FindHnswIndexEntry(ui32 localTid, const TPathId& indexId) {
-        auto table = HnswIndexesByTable.find(localTid);
-        return table == HnswIndexesByTable.end() ? nullptr : table->second.FindPtr(indexId);
+    TPathId ResolveHnswIndexId(ui32 localTid, TPathId indexId) const {
+        if (indexId) { return indexId; }
+        for (const auto& [_, table] : TableInfos) {
+            if (table->LocalTid == localTid && table->HnswIndexes.size() == 1) {
+                return table->HnswIndexes.begin()->first;
+            }
+        }
+        return {};
     }
 
-    const THnswIndexCacheEntry* FindHnswIndexEntry(ui32 localTid, const TPathId& indexId) const {
-        auto table = HnswIndexesByTable.find(localTid);
-        return table == HnswIndexesByTable.end() ? nullptr : table->second.FindPtr(indexId);
+    const TUserTable::THnswIndexInfo* FindHnswIndexInfo(ui32 localTid, TPathId indexId) const {
+        indexId = ResolveHnswIndexId(localTid, indexId);
+        for (const auto& [_, table] : TableInfos) {
+            if (table->LocalTid == localTid) { return table->HnswIndexes.FindPtr(indexId); }
+        }
+        return nullptr;
+    }
+
+    THnswIndexCacheEntry* GetOrCreateHnswIndexEntry(ui32 localTid, TPathId indexId) {
+        indexId = ResolveHnswIndexId(localTid, indexId);
+        if (!FindHnswIndexInfo(localTid, indexId)) { return nullptr; }
+        return &HnswIndexCache[localTid][indexId];
+    }
+
+    THnswIndexCacheEntry* FindHnswIndexEntry(ui32 localTid, TPathId indexId) {
+        auto table = HnswIndexCache.find(localTid);
+        return table == HnswIndexCache.end() ? nullptr : table->second.FindPtr(ResolveHnswIndexId(localTid, indexId));
+    }
+
+    const THnswIndexCacheEntry* FindHnswIndexEntry(ui32 localTid, TPathId indexId) const {
+        auto table = HnswIndexCache.find(localTid);
+        return table == HnswIndexCache.end() ? nullptr : table->second.FindPtr(ResolveHnswIndexId(localTid, indexId));
+    }
+
+    template <class TCallback>
+    void ForEachHnswIndexEntry(TCallback&& callback) {
+        for (auto& [localTid, indexes] : HnswIndexCache) {
+            for (auto& [indexId, entry] : indexes) { callback(localTid, indexId, entry); }
+        }
     }
 
     static void InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry);

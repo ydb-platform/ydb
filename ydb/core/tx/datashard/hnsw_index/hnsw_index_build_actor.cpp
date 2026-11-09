@@ -68,12 +68,13 @@ namespace NKikimr::NDataShard {
                               const Ydb::Table::VectorIndexSettings& settings,
                               std::vector<std::pair<TString, TString>> keysAndVectors,
                               std::shared_ptr<void> memoryReservation,
-                              ui64 maxMemoryBytes, TRowVersion baseVersion, ui64 buildToken, bool allowEmpty) {
+                              ui64 maxMemoryBytes, TRowVersion baseVersion, ui64 buildToken, bool allowEmpty, TPathId indexId) {
             return CreateHnswIndexBuildWorker(settings, std::move(keysAndVectors),
                                               std::move(memoryReservation), maxMemoryBytes,
-                                              [replyTo, localTid, vectorColumnTag, rowCountAtBuild, settings, baseVersion, buildToken](THnswIndexBuildResult&& buildResult, const TActorContext& ctx) mutable {
+                                              [replyTo, localTid, indexId, vectorColumnTag, rowCountAtBuild, settings, baseVersion, buildToken](THnswIndexBuildResult&& buildResult, const TActorContext& ctx) mutable {
                                                   auto result = MakeHolder<TDataShard::TEvPrivate::TEvHnswIndexBuildResult>();
                                                   result->LocalTid = localTid;
+                                                  result->IndexId = indexId;
                                                   result->VectorColumnTag = vectorColumnTag;
                                                   result->RowCountAtBuild = rowCountAtBuild;
                                                   result->Settings = settings;
@@ -92,33 +93,33 @@ namespace NKikimr::NDataShard {
                                       const Ydb::Table::VectorIndexSettings& settings,
                                       std::vector<std::pair<TString, TString>> keysAndVectors,
                                       std::shared_ptr<void> memoryReservation,
-                                      ui64 maxMemoryBytes, TRowVersion baseVersion, ui64 buildToken, bool allowEmpty) {
+                                      ui64 maxMemoryBytes, TRowVersion baseVersion, ui64 buildToken, bool allowEmpty, TPathId indexId) {
         return THnswIndexBuildActor::Create(replyTo, localTid, vectorColumnTag,
                                             rowCountAtBuild, settings, std::move(keysAndVectors),
-                                            std::move(memoryReservation), maxMemoryBytes, baseVersion, buildToken, allowEmpty);
+                                            std::move(memoryReservation), maxMemoryBytes, baseVersion, buildToken, allowEmpty, indexId);
     }
 
     void TDataShard::Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TActorContext& ctx) {
         Actors.erase(ev->Sender);
         auto* result = ev->Get();
-        if (!IsHnswBuildCurrent(result->LocalTid, result->BuildToken)) {
-            auto it = HnswIndexCache.find(result->LocalTid);
-            if (it != HnswIndexCache.end() && it->second.BuildToken == result->BuildToken) {
-                DeferHnswIndexBuild(result->LocalTid, TDuration::Seconds(1));
-                ScheduleHnswRebuild(result->LocalTid);
+        if (!IsHnswBuildCurrent(result->LocalTid, result->BuildToken, result->IndexId)) {
+            auto* it = FindHnswIndexEntry(result->LocalTid, result->IndexId);
+            if (it && it->BuildToken == result->BuildToken) {
+                DeferHnswIndexBuild(result->LocalTid, TDuration::Seconds(1), result->IndexId);
+                ScheduleHnswRebuild(result->LocalTid, result->IndexId);
             }
             return;
         }
         if (result->BelowMinRows) {
             // A successful scan of a small partition is not a failed build. Writes
             // and settings changes re-enable it; reads alone must not scan again.
-            const auto& entry = HnswIndexCache.at(result->LocalTid);
+            const auto& entry = *FindHnswIndexEntry(result->LocalTid, result->IndexId);
             if (entry.Changes->CountAfter(entry.BuildVersion)) {
                 // The table may have grown while the snapshot scan was running.
-                DeferHnswIndexBuild(result->LocalTid, TDuration::Zero());
-                ScheduleHnswRebuild(result->LocalTid);
+                DeferHnswIndexBuild(result->LocalTid, TDuration::Zero(), result->IndexId);
+                ScheduleHnswRebuild(result->LocalTid, result->IndexId);
             } else {
-                DisableHnswIndexBuild(result->LocalTid);
+                DisableHnswIndexBuild(result->LocalTid, result->IndexId);
             }
             return;
         }
@@ -129,10 +130,10 @@ namespace NKikimr::NDataShard {
                                   << " baseVersion=" << result->BaseVersion << " buildToken=" << result->BuildToken);
             SetHnswIndex(result->LocalTid, std::move(result->Index), std::move(result->MemoryReservation),
                          result->RowCountAtBuild, result->VectorColumnTag, result->Settings,
-                         result->BaseVersion, result->BuildToken);
+                         result->BaseVersion, result->BuildToken, result->IndexId);
         } else {
-            DeferHnswIndexBuild(result->LocalTid, TDuration::Seconds(5));
-            ScheduleHnswRebuild(result->LocalTid);
+            DeferHnswIndexBuild(result->LocalTid, TDuration::Seconds(5), result->IndexId);
+            ScheduleHnswRebuild(result->LocalTid, result->IndexId);
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
                          TabletID() << " HNSW: lazy build failed for localTid=" << result->LocalTid
                                     << ": " << result->Error);

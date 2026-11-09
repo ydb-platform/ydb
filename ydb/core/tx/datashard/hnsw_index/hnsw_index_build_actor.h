@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hnsw_index.h"
+#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -46,6 +47,6 @@ namespace NKikimr::NDataShard {
         std::vector<std::pair<TString, TString>> keysAndVectors,
         std::shared_ptr<void> memoryReservation,
         ui64 maxMemoryBytes,
-        TRowVersion baseVersion, ui64 buildToken, bool allowEmpty = false);
+        TRowVersion baseVersion, ui64 buildToken, bool allowEmpty = false, TPathId indexId = {});
 
 } // namespace NKikimr::NDataShard

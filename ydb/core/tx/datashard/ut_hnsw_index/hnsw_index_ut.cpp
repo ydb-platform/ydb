@@ -350,6 +350,25 @@ namespace NKikimr::NDataShard {
             UNIT_ASSERT_STRING_CONTAINS(error, "exceeds budget");
         }
 
+        Y_UNIT_TEST(AcceptsHnswConstructionSettings) {
+            auto settings = MakeSettings(
+                Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+                2);
+            settings.set_m(8);
+            settings.set_ef_construction(64);
+            settings.set_min_rows(1);
+            settings.set_delta_rows(1000);
+            std::vector<std::pair<TString, TString>> data = {
+                {"a", SerializeFloatVector({1.0f, 0.0f})},
+                {"b", SerializeFloatVector({0.0f, 1.0f})},
+            };
+            TString error;
+            auto index = THnswIndex::Build(settings, data, 0, error);
+            UNIT_ASSERT_C(index, error);
+            UNIT_ASSERT_VALUES_EQUAL(index->Size(), data.size());
+        }
+
         Y_UNIT_TEST(RejectsUnsafeHnswSettingsBeforeNmslibBuild) {
             auto settings = MakeSettings(
                 Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,

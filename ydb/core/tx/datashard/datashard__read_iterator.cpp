@@ -2872,11 +2872,19 @@ public:
             } else if (!topK.HasTargetVector()) {
                 error = "Target vector is not specified";
             } else {
+                // The exact-scan distance calculator does not consume HNSW
+                // construction settings. Keep them in topK for graph selection
+                // and rebuilds, including when this read falls back to a scan.
+                auto distanceSettings = topK.GetSettings();
+                distanceSettings.clear_m();
+                distanceSettings.clear_ef_construction();
+                distanceSettings.clear_min_rows();
+                distanceSettings.clear_delta_rows();
                 // Use auto-detect if vector_dimension is 0 (brute force search without index)
-                if (topK.GetSettings().vector_dimension() == 0) {
-                    topState->KMeans = NKMeans::CreateClustersAutoDetect(topK.GetSettings(), topK.GetTargetVector(), 0, error);
+                if (distanceSettings.vector_dimension() == 0) {
+                    topState->KMeans = NKMeans::CreateClustersAutoDetect(distanceSettings, topK.GetTargetVector(), 0, error);
                 } else {
-                    topState->KMeans = NKMeans::CreateClusters(topK.GetSettings(), 0, error);
+                    topState->KMeans = NKMeans::CreateClusters(distanceSettings, 0, error);
                 }
                 if (!topState->KMeans && error.empty()) {
                     error = "CreateClusters failed";

@@ -428,8 +428,10 @@ namespace NKikimr::NDataShard {
             return nullptr;
         }
 
+        Ydb::Table::KMeansTreeSettings hnswSettings;
+        *hnswSettings.mutable_settings() = settings;
         TString settingsError;
-        if (!NKMeans::ValidateSettingsPartial(settings, settingsError)) {
+        if (!NKMeans::ValidateHnswSettingsPartial(hnswSettings, settingsError)) {
             error = TStringBuilder() << "Invalid HNSW settings: " << settingsError;
             return nullptr;
         }

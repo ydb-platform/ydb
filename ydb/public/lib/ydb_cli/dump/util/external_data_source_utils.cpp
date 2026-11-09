@@ -42,7 +42,7 @@ bool ValidateDirectExternalDataSource(
 {
     const auto reject = [&issues]() {
         issues.AddIssue("Direct external data source dump supports only Ydb/YdbExternal/ObjectStorage sources with known properties "
-            "and AUTH_METHOD NONE; credential-bearing sources, unknown formats "
+            "and AUTH_METHOD NONE; non-NONE authentication modes, unknown formats "
             "and values requiring SQL escaping are unsupported");
         return false;
     };

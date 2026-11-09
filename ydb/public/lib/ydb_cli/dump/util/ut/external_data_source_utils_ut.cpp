@@ -69,6 +69,20 @@ Y_UNIT_TEST_SUITE(DirectExternalDataSourceDump) {
         UNIT_ASSERT(!Supported(source));
     }
 
+    Y_UNIT_TEST(ObjectStorageLocationIsSerializedVerbatim) {
+        auto source = Source("ObjectStorage", "NONE");
+        source.mutable_properties()->erase("DATABASE_NAME");
+        source.mutable_self()->set_name("bucketSource");
+        source.set_location("https://archive_user:location_password@bucket.example.test/prefix/");
+        UNIT_ASSERT(Supported(source));
+        UNIT_ASSERT_STRING_CONTAINS(BuildCreateExternalDataSourceQuery(source, "/Root"),
+            "LOCATION = 'https://archive_user:location_password@bucket.example.test/prefix/'");
+        source.set_location("https://bucket.example.test/prefix/?X-Amz-Credential=caller%2Fscope&X-Amz-Signature=caller-signature");
+        UNIT_ASSERT(Supported(source));
+        UNIT_ASSERT_STRING_CONTAINS(BuildCreateExternalDataSourceQuery(source, "/Root"),
+            "LOCATION = 'https://bucket.example.test/prefix/?X-Amz-Credential=caller%2Fscope&X-Amz-Signature=caller-signature'");
+    }
+
     Y_UNIT_TEST(AllNamedTokenCredentialsAreRejected) {
         // Even a simple name can be shared by a non-owner who cannot pass old restore's access preflight.
         for (const auto& name : {"eds_secret", "secret:colon", "secret`backtick", "/Root/schemaSecret", "", "secret with spaces"}) {

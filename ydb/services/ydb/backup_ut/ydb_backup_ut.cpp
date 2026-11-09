@@ -3556,6 +3556,37 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         UNIT_ASSERT(!schemeClient.DescribePath(table).GetValueSync().IsSuccess());
     }
 
+    Y_UNIT_TEST_TWIN(DirectObjectStorageExternalDataSourceLocationIsPreserved, UserInfo) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        const TString location = UserInfo
+            ? "https://archive_user:location_password@bucket.example.test/prefix/"
+            : "https://bucket.example.test/prefix/?X-Amz-Credential=caller%2Fscope&X-Amz-Signature=caller-signature";
+        ExecuteQuery(session, Sprintf(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/bucketSource` WITH (
+                SOURCE_TYPE = "ObjectStorage", LOCATION = "%s", AUTH_METHOD = "NONE"
+            );
+        )", location.c_str()), true);
+        const auto original = DescribeExternalDataSource(tableSession, "/Root/bucketSource");
+        UNIT_ASSERT_VALUES_EQUAL(original.location(), location);
+        TTempDir tempDir;
+        const auto archive = tempDir.Path().Child("dump");
+        CreateBackupLambda(driver, archive, "/Root/bucketSource", "/Root",
+            NDump::TDumpSettings().EnableDirectExternalDataSource(true))();
+        const auto sql = TFileInput(archive.Child("bucketSource").Child(NDump::NFiles::CreateExternalDataSource().FileName)).ReadAll();
+        UNIT_ASSERT_STRING_CONTAINS(sql, TString("LOCATION = '") + location + "'");
+        ExecuteQuery(session, "DROP EXTERNAL DATA SOURCE `/Root/bucketSource`;", true);
+        CreateRestoreLambda(driver, archive)();
+        const auto restored = DescribeExternalDataSource(tableSession, "/Root/bucketSource");
+        UNIT_ASSERT_VALUES_EQUAL(restored.location(), location);
+        UNIT_ASSERT_VALUES_EQUAL(restored, original);
+    }
+
     Y_UNIT_TEST(DirectAuthenticatedObjectStorageExternalDataSourceIsRejected) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);

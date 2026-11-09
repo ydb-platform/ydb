@@ -796,6 +796,7 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
         if (chunkStateSize > i
                 && (ChunkState[i].CommitState == TChunkState::DATA_COMMITTED
                     || ChunkState[i].CommitState == TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS
+                    || ChunkState[i].CommitState == TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS
                     || ChunkState[i].CommitState == TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE)
                 && IsOwnerUser(ChunkState[i].OwnerId)) {
             info.OwnerId = ChunkState[i].OwnerId;

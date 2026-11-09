@@ -1433,7 +1433,7 @@ Y_UNIT_TEST_SUITE(BridgeSyncerLimit) {
             .NodeCount = 8,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .ConfigPreprocessor = [](ui32, TNodeWardenConfig& conf) {
-                conf.BlobStorageConfig->MutableBscSettings()->SetBridgeSyncMaxSyncers(limit);
+                conf.BlobStorageConfig.MutableBscSettings()->SetBridgeSyncMaxSyncers(limit);
             },
         }};
         env.Sim(TDuration::Seconds(5));

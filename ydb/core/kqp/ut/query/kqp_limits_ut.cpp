@@ -1460,7 +1460,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()
             ->MutableWriteActorSettings()
-            ->SetInFlightMemoryLimitPerActorBytes(1024);
+            ->SetInFlightMemoryLimitPerActorBytes(64_KB);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableStreamWrite(false);
 
         TKikimrRunner kikimr(settings);

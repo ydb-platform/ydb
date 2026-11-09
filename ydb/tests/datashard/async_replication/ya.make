@@ -17,6 +17,9 @@ TEST_SRCS(
 
 PEERDIR(
     contrib/python/boto3
+    contrib/python/grpcio
+    ydb/public/api/grpc
+    ydb/public/api/protos
     ydb/tests/datashard/lib
     ydb/tests/library
     ydb/tests/sql/lib

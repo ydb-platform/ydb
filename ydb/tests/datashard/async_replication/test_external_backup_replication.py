@@ -6,8 +6,12 @@ import boto3
 import grpc
 import yatest.common
 
-from ydb._grpc.common import ydb_export_v1_pb2_grpc, ydb_import_v1_pb2_grpc, ydb_operation_v1_pb2_grpc
-from ydb._grpc.common.protos import ydb_export_pb2, ydb_import_pb2, ydb_operation_pb2, ydb_status_codes_pb2
+try:
+    from ydb.public.api.grpc import ydb_export_v1_pb2_grpc, ydb_import_v1_pb2_grpc, ydb_operation_v1_pb2_grpc
+    from ydb.public.api.protos import ydb_export_pb2, ydb_import_pb2, ydb_operation_pb2, ydb_status_codes_pb2
+except ImportError:
+    from contrib.ydb.public.api.grpc import ydb_export_v1_pb2_grpc, ydb_import_v1_pb2_grpc, ydb_operation_v1_pb2_grpc
+    from contrib.ydb.public.api.protos import ydb_export_pb2, ydb_import_pb2, ydb_operation_pb2, ydb_status_codes_pb2
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.multicluster_test_base import MulticlusterTestBase
 from ydb.tests.library.common.wait_for import wait_for
@@ -180,6 +184,8 @@ class TestExternalBackupReplication(MulticlusterTestBase):
         blocked_replication = self.run_s3_operation(
             destination_cluster, "export", bucket, [(replication_path, f"{base}/controller")])
         assert blocked_replication.status == ydb_status_codes_pb2.StatusIds.UNSUPPORTED, blocked_replication
+        assert any("not supported in export" in issue.message and replication_path in issue.message
+                   for issue in blocked_replication.issues), blocked_replication
         prefixes = {"row": f"{base}/row", "source": f"{base}/source", "external": f"{base}/external"}
         exported = self.run_s3_operation(source_cluster, "export", bucket, [
             (row_path, prefixes["row"]), (eds_path, prefixes["source"]),
@@ -233,22 +239,33 @@ class TestExternalBackupReplication(MulticlusterTestBase):
         original_prefixes = [(source_path, f"{base}/source"), (table_path, f"{base}/external")]
         exported = self.run_s3_operation(source_cluster, "export", bucket, original_prefixes)
         assert exported.status == ydb_status_codes_pb2.StatusIds.SUCCESS, exported
+        keys = {obj["Key"] for obj in self.s3_client().list_objects_v2(Bucket=bucket).get("Contents", [])}
+        assert {
+            f"{base}/source/create_external_data_source.sql",
+            f"{base}/external/create_external_table.sql",
+        } <= keys, keys
 
         disabled = self.build_cluster_with_external_backup(False)
         try:
             disabled_query = Query.create(self.get_database(), self.get_endpoint(disabled))
-            existing_source = f"/Root/{base}_existing_source"
+            # The imported table references this exact path. Creating it directly
+            # prevents a missing-source error from masking an ignored table flag.
             existing_table = f"/Root/{base}_existing_external"
-            self.create_external_objects(disabled_query, existing_source, existing_table)
-            for path, name in ((existing_source, "source"), (existing_table, "external")):
+            self.create_external_objects(disabled_query, source_path, existing_table)
+            assert self.describe(disabled, existing_table)["data_source_path"] == source_path
+            for path, name in ((source_path, "source"), (existing_table, "external")):
                 blocked = self.run_s3_operation(disabled, "export", bucket, [(path, f"blocked/{name}")])
                 assert blocked.status == ydb_status_codes_pb2.StatusIds.UNSUPPORTED, blocked
+                assert any("not supported in export" in issue.message and path in issue.message
+                           for issue in blocked.issues), blocked
             assert not self.s3_client().list_objects_v2(Bucket=bucket, Prefix="blocked/").get("Contents", [])
 
             for _, name in original_prefixes:
                 destination_path = f"/Root/{base}_imported_{name.rsplit('/', 1)[-1]}"
                 blocked = self.run_s3_operation(disabled, "import", bucket, [(name, destination_path)])
-                assert blocked.status != ydb_status_codes_pb2.StatusIds.SUCCESS, blocked
+                assert blocked.status == ydb_status_codes_pb2.StatusIds.CANCELLED, blocked
+                assert any("unsupported scheme object type" in issue.message.lower()
+                           for issue in blocked.issues), blocked
             children = {entry.name for entry in disabled_query.driver.scheme_client.list_directory("/Root").children}
             assert f"{base}_imported_source" not in children
             assert f"{base}_imported_external" not in children

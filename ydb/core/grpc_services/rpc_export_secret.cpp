@@ -254,12 +254,11 @@ private:
             Request_->GetInternalToken()->GetUserSID(), NACLib::EInheritanceType::InheritNone
         );
         tx.MutableModifyACL()->SetDiffACL(acl.SerializeAsString());
-        ++SetupCookie;
-        SetupActor = Register(NPQ::NSchema::CreateSchemaOperation(SelfId(), TopicPath, std::move(request), SetupCookie));
+        SetupActor = Register(NPQ::NSchema::CreateSchemaOperation(SelfId(), TopicPath, std::move(request)));
     }
 
     void Handle(NPQ::NSchema::TEvSchemaOperationResponse::TPtr& ev) {
-        if (ev->Sender != SetupActor || ev->Cookie != SetupCookie) {
+        if (ev->Sender != SetupActor) {
             return;
         }
         SetupActor = {};
@@ -367,7 +366,6 @@ private:
     bool TopicCreationAttempted = false;
     TActorId SetupActor;
     TActorId TopicPreparer;
-    ui64 SetupCookie = 0;
 };
 
 void DoExportSecretRequest(std::unique_ptr<IRequestOpCtx> request, const IFacilityProvider& facility) {

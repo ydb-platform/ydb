@@ -177,6 +177,29 @@ message RemovePileResponse {
 message RemovePileResult {
 }
 
+// Report how far the rollback of a cluster prepared for bridge mode has gone. Such cluster (its nodes run with a
+// single-pile bridge config, but it has not been converted into a bridged one) gets back to ordinary mode when the bridge
+// config is removed from the cluster configuration and every node is restarted without it; Hive and node registration
+// drop the piles of nodes by themselves then. Dynamic nodes not connected to the cluster are not reported.
+message GetRollbackStatusRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message GetRollbackStatusResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetRollbackStatusResult {
+    // The cluster has been converted into a bridged one; rolling back the conversion is not supported yet.
+    bool bridged = 1;
+    // Connected nodes still running with a bridge config; they have to be restarted without one.
+    repeated uint32 bridge_config_node_ids = 2;
+    // Static nodes that have not reported their config, as they are not running or not connected.
+    repeated uint32 unreported_static_node_ids = 3;
+    // The cluster is not bridged, and every node has reported running without a bridge config.
+    bool complete = 4;
+}
+
 message BridgeHistoryEvent {
     // Timestamp of the event
     google.protobuf.Timestamp timestamp = 1;

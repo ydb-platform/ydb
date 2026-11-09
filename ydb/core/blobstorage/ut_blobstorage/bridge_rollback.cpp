@@ -3,9 +3,11 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/utility.h>
 
 #include <algorithm>
 #include <map>
+#include <set>
 #include <ranges>
 
 using namespace NBridgeTest;
@@ -45,6 +47,54 @@ namespace {
         }
     }
 
+    struct TRollbackStatus {
+        bool HasClusterState = false;
+        std::set<ui32> BridgeConfigNodeIds;
+        std::set<ui32> UnreportedStaticNodeIds;
+    };
+
+    // rollback status as distconf reports it (what the GetRollbackStatus RPC replies with)
+    TRollbackStatus QueryRollbackStatus(TEnvironmentSetup& env) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        const TInstant deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+        for (;;) {
+            const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryBridgeRollbackStatus(); });
+            if (res.GetStatus() == TResult::OK) {
+                UNIT_ASSERT_C(res.HasBridgeRollbackStatus(), res.DebugString());
+                const auto& status = res.GetBridgeRollbackStatus();
+                return {
+                    .HasClusterState = status.GetHasClusterState(),
+                    .BridgeConfigNodeIds = std::set<ui32>(status.GetBridgeConfigNodeIds().begin(),
+                        status.GetBridgeConfigNodeIds().end()),
+                    .UnreportedStaticNodeIds = std::set<ui32>(status.GetUnreportedStaticNodeIds().begin(),
+                        status.GetUnreportedStaticNodeIds().end()),
+                };
+            }
+            UNIT_ASSERT_C(res.GetStatus() == TResult::RACE && env.Runtime->GetClock() < deadline, res.DebugString());
+            env.Sim(TDuration::MilliSeconds(10));
+        }
+    }
+
+    void CheckRollbackStatus(TEnvironmentSetup& env, const std::set<ui32>& bridgeConfigNodeIds,
+            const std::set<ui32>& unreportedStaticNodeIds = {}, bool hasClusterState = false) {
+        const auto status = QueryRollbackStatus(env);
+        UNIT_ASSERT_VALUES_EQUAL(status.HasClusterState, hasClusterState);
+        UNIT_ASSERT_EQUAL_C(status.BridgeConfigNodeIds, bridgeConfigNodeIds,
+            "BridgeConfigNodeIds# " << FormatList(status.BridgeConfigNodeIds));
+        UNIT_ASSERT_EQUAL_C(status.UnreportedStaticNodeIds, unreportedStaticNodeIds,
+            "UnreportedStaticNodeIds# " << FormatList(status.UnreportedStaticNodeIds));
+    }
+
+    std::set<ui32> GetAllNodeIds(TEnvironmentSetup& env) {
+        std::set<ui32> res;
+        for (ui32 nodeId : env.Runtime->GetNodes()) {
+            if (nodeId <= env.ConfiguredNodeCount) { // the rest are not started
+                res.insert(nodeId);
+            }
+        }
+        return res;
+    }
+
     // restart nodes without bridge config one by one, the node hosting Hive first
     void RollingRestartWithoutBridgeConfig(TEnvironmentSetup& env, TDataChecker& checker, ui32 groupId,
             const std::function<void(ui32)>& afterRestart = {}) {
@@ -81,16 +131,22 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         TDataChecker checker(env);
         checker.Write(groupId);
         CheckHiveNodePiles(env, 0);
+        CheckRollbackStatus(env, {});
 
         RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
         const ui32 implicitPileId = TBridgePileId::FromPileIndex(0).GetLocalDb(); // the value reported in protobufs
         CheckHiveNodePiles(env, implicitPileId);
         UNIT_ASSERT(!QueryStorageConfig(env).HasClusterState());
+        auto bridgeConfigNodeIds = GetAllNodeIds(env);
+        CheckRollbackStatus(env, bridgeConfigNodeIds);
 
-        RollingRestartWithoutBridgeConfig(env, checker, groupId, [&](ui32) {
+        RollingRestartWithoutBridgeConfig(env, checker, groupId, [&](ui32 nodeId) {
             CheckHiveNodePiles(env, 0); // the node hosting Hive has been restarted first
+            bridgeConfigNodeIds.erase(nodeId);
+            CheckRollbackStatus(env, bridgeConfigNodeIds);
         });
         UNIT_ASSERT(!QueryStorageConfig(env).HasClusterState());
+        CheckRollbackStatus(env, {});
 
         // Hive loads in ordinary mode again
         env.RestartNode(env.Settings.ControllerNodeId);
@@ -106,6 +162,7 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
         env.Sim(TDuration::Minutes(1));
         UNIT_ASSERT(QueryStorageConfig(env).HasClusterState());
+        CheckRollbackStatus(env, GetAllNodeIds(env), {}, true);
         checker.Write(groupId);
         checker.CheckAll();
     }
@@ -121,9 +178,20 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
             env.Settings.ControllerNodeId, 2, 3});
         const auto piles = GetHiveNodePiles(env);
         UNIT_ASSERT(std::ranges::all_of(piles | std::views::values, [](ui32 pileId) { return pileId != 0; }));
+        CheckRollbackStatus(env, {env.Settings.ControllerNodeId, 2, 3});
 
         RollingRestartWithoutBridgeConfig(env, checker, groupId);
         CheckHiveNodePiles(env, 0);
+        CheckRollbackStatus(env, {});
+
+        // static node not running can't be confirmed to run without bridge config
+        constexpr ui32 stoppedNodeId = 5;
+        env.StopNode(stoppedNodeId);
+        env.Sim(TDuration::Seconds(30));
+        CheckRollbackStatus(env, {}, {stoppedNodeId});
+        env.StartNode(stoppedNodeId);
+        env.Sim(TDuration::Seconds(30));
+        CheckRollbackStatus(env, {});
     }
 
 }

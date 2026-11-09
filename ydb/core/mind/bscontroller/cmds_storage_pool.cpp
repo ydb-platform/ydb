@@ -327,20 +327,12 @@ namespace NKikimr::NBsController {
         }
 
         // parts of bridged groups go along with their bridge proxy groups
-        const THashSet<TGroupId> listed(groups.begin(), groups.end());
-        THashSet<TGroupId> deleted;
-        for (const TGroupId groupId : groups) {
-            if (deleted.contains(groupId)) {
-                continue;
-            } else if (const TGroupInfo *groupInfo = Groups.Find(groupId); !groupInfo) {
-                throw TExError() << "GroupId# " << groupId << " not found";
-            } else if (const TGroupInfo *proxy = FindBridgeProxyGroup(*groupInfo); proxy && !listed.contains(proxy->ID)) {
-                throw TExError() << "GroupId# " << groupId << " is a part of bridged GroupId# " << proxy->ID
-                    << " of another storage pool";
-            } else {
-                DeleteGroupWithBridgeParts(*groupInfo, deleted);
-            }
-        }
+        DeleteGroupsWithBridgeParts(groups, [](TGroupId groupId) {
+            throw TExError() << "GroupId# " << groupId << " not found";
+        }, [](TGroupId groupId, TGroupId proxyId) {
+            throw TExError() << "GroupId# " << groupId << " is a part of bridged GroupId# " << proxyId
+                << " of another storage pool";
+        });
 
         storagePools.erase(id);
     }
@@ -786,29 +778,28 @@ namespace NKikimr::NBsController {
                     it != storagePoolGroups.end() && it->first == originId; ++it) {
                 groups.push_back(it->second);
             }
-        } else {
-            // a bridge proxy group moves along with its parts, and a part doesn't move without it
-            THashSet<TGroupId> listed(groups.begin(), groups.end());
-            TVector<TGroupId> parts;
-            for (const TGroupId groupId : groups) {
-                const TGroupInfo *group = Groups.Find(groupId);
-                if (!group) {
-                    continue; // reported as missing in the origin pool below
-                } else if (const TGroupInfo *proxy = FindBridgeProxyGroup(*group); proxy && !listed.contains(proxy->ID)) {
-                    throw TExError() << "GroupId# " << groupId << " is a part of bridged GroupId# " << proxy->ID
-                        << ", move the bridged group instead";
-                } else if (group->BridgeGroupInfo) {
-                    NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
-                            const NKikimrBridge::TGroupState::TPile& pile) {
-                        const auto partId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                        if (storagePoolGroups.contains({originId, partId}) && listed.insert(partId).second) {
-                            parts.push_back(partId);
-                        }
-                    });
+        }
+
+        // a bridge proxy group moves along with its parts in the origin pool, and a part moves without its proxy group
+        // only to the pool of the proxy group, which joins the ones left apart by earlier versions
+        THashSet<TGroupId> listed(groups.begin(), groups.end());
+        TVector<TGroupId> parts;
+        for (const TGroupId groupId : groups) {
+            const TGroupInfo *group = Groups.Find(groupId);
+            if (!group) {
+                continue; // reported as missing in the origin pool below
+            } else if (const TGroupInfo *proxy = FindBridgeProxyGroup(*group); proxy && !listed.contains(proxy->ID) &&
+                    proxy->StoragePoolId != targetId) {
+                throw TExError() << "GroupId# " << groupId << " is a part of bridged GroupId# " << proxy->ID
+                    << ", move the bridged group instead";
+            }
+            for (const TGroupId partId : GetBridgeParts(*group)) {
+                if (storagePoolGroups.contains({originId, partId}) && listed.insert(partId).second) {
+                    parts.push_back(partId);
                 }
             }
-            groups.insert(groups.end(), parts.begin(), parts.end());
         }
+        groups.insert(groups.end(), parts.begin(), parts.end());
 
         for (TGroupId groupId : groups) {
             // find the group belonging to the origin storage pool and remove it from the multimap
@@ -1408,25 +1399,17 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& /*status*/) {
-        // a bridge proxy group goes along with its parts (Hive and Console know proxy groups only), while a part alone
-        // can't go, as its proxy group would refer to a group that doesn't exist
-        THashSet<TGroupId> listed;
+        // a bridge proxy group goes along with its parts (Hive and Console know proxy groups only)
+        std::vector<TGroupId> groups;
         for (const ui32 groupId : cmd.GetGroupIds()) {
-            listed.insert(TGroupId::FromValue(groupId));
+            groups.push_back(TGroupId::FromValue(groupId));
         }
-        THashSet<TGroupId> deleted;
-        for (const ui32 groupId : cmd.GetGroupIds()) {
-            if (deleted.contains(TGroupId::FromValue(groupId))) {
-                continue; // a part listed along with its bridge proxy group
-            } else if (const TGroupInfo *groupInfo = Groups.Find(TGroupId::FromValue(groupId)); !groupInfo) {
-                throw TExGroupNotFound(groupId);
-            } else if (const TGroupInfo *proxy = FindBridgeProxyGroup(*groupInfo); proxy && !listed.contains(proxy->ID)) {
-                throw TExError() << "GroupId# " << groupId << " is a part of bridged GroupId# " << proxy->ID
-                    << ", delete the bridged group instead";
-            } else {
-                DeleteGroupWithBridgeParts(*groupInfo, deleted);
-            }
-        }
+        DeleteGroupsWithBridgeParts(groups, [](TGroupId groupId) {
+            throw TExGroupNotFound(groupId.GetRawId());
+        }, [](TGroupId groupId, TGroupId proxyId) {
+            throw TExError() << "GroupId# " << groupId << " is a part of bridged GroupId# " << proxyId
+                << ", delete the bridged group instead";
+        });
     }
 
 } // NKikimr::NBsController

@@ -1128,14 +1128,7 @@ namespace NKikimr::NBsController {
                     if (group->BridgeGroupInfo) {
                         // bridged group is decommitted as a whole: release piles along with their VDisks (except for
                         // the inline one, which is the group itself) and turn this group into an ordinary virtual one
-                        std::vector<TGroupId> pileGroupIds;
-                        NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
-                                const NKikimrBridge::TGroupState::TPile& pile) {
-                            const auto pileGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                            if (pileGroupId != group->ID) {
-                                pileGroupIds.push_back(pileGroupId);
-                            }
-                        });
+                        const std::vector<TGroupId> pileGroupIds = TConfigState::GetBridgeParts(*group);
                         group->BridgeGroupInfo.reset();
                         group->BridgePileId = TBridgePileId();
                         group->BridgeProxyGroupId.reset();

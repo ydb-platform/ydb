@@ -23,7 +23,8 @@ namespace {
     // bridge proxy groups of the pool; the base config lists their parts under the pool too
     std::vector<ui32> GetProxyGroups(TEnvironmentSetup& env, ui64 storagePoolId) {
         std::vector<ui32> res;
-        for (const auto *group : GetPoolGroups(env.FetchBaseConfig(), storagePoolId)) {
+        const auto baseConfig = env.FetchBaseConfig(); // groups are referenced by pointers
+        for (const auto *group : GetPoolGroups(baseConfig, storagePoolId)) {
             if (GetGroupInfo(env, group->GetGroupId()).HasBridgeGroupState()) {
                 res.push_back(group->GetGroupId());
             }
@@ -124,6 +125,7 @@ Y_UNIT_TEST_SUITE(BridgeGroupDeletion) {
         for (const ui32 part : parts) {
             UNIT_ASSERT(HasGroup(config, part));
         }
+        checker.CheckAll(); // the data is still there
 
         // deleting the part along with its bridge proxy group is fine
         const auto both = DeleteGroups(env, {parts.back(), proxy});
@@ -185,6 +187,54 @@ Y_UNIT_TEST_SUITE(BridgeGroupDeletion) {
         for (const ui32 part : parts) {
             UNIT_ASSERT_VALUES_EQUAL(FindGroup(config, part).GetStoragePoolId(), 1);
         }
+    }
+
+    // the moved groups get a new generation, and their VDisks keep their state with it: a read-only VDisk stays such on
+    // its node
+    Y_UNIT_TEST(MovingKeepsReadOnlyVDisk) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 proxy = CreatePoolAndGetGroup(env);
+        const ui32 part = GetPileGroups(env, proxy).front();
+        CreateAnotherPool(env, 2);
+
+        const TVDiskID vdiskId = env.GetGroupInfo(part)->GetVDiskId(0);
+        std::optional<NKikimrBlobStorage::TVSlotId> vslotId;
+        {
+            const auto baseConfig = env.FetchBaseConfig();
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() == part && vslot.GetFailRealmIdx() == vdiskId.FailRealm &&
+                        vslot.GetFailDomainIdx() == vdiskId.FailDomain && vslot.GetVDiskIdx() == vdiskId.VDisk) {
+                    vslotId = vslot.GetVSlotId();
+                }
+            }
+        }
+        UNIT_ASSERT(vslotId);
+        env.SetVDiskReadOnly(vslotId->GetNodeId(), vslotId->GetPDiskId(), vslotId->GetVSlotId(), vdiskId, true);
+        env.Sim(TDuration::Seconds(10));
+
+        // the VDisk as BS_CONTROLLER publishes it to its node
+        std::optional<NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk> published;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                for (const auto& vdisk : record.GetServiceSet().GetVDisks()) {
+                    const auto& location = vdisk.GetVDiskLocation();
+                    if (location.GetNodeID() == vslotId->GetNodeId() && location.GetPDiskID() == vslotId->GetPDiskId() &&
+                            location.GetVDiskSlotID() == vslotId->GetVSlotId()) {
+                        published = vdisk;
+                    }
+                }
+            }
+            return true;
+        };
+        const auto response = MoveGroups(env, 1, 2, {proxy});
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        env.Sim(TDuration::Seconds(10));
+        env.Runtime->FilterFunction = {};
+
+        UNIT_ASSERT(published);
+        UNIT_ASSERT_GT(VDiskIDFromVDiskID(published->GetVDiskID()).GroupGeneration, vdiskId.GroupGeneration);
+        UNIT_ASSERT_C(published->GetReadOnly(), published->DebugString());
     }
 
     // without explicit groups MoveGroups moves the parts too, and they must not change NumGroups of the pools

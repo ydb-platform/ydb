@@ -290,8 +290,9 @@ namespace NKikimr::NBsController {
                     // the slot mood has changed
                     AddVSlotToProtobuf(vslotId, cur, static_cast<TMood::EValue>(cur.Mood));
                 } else if (prev.GroupGeneration != cur.GroupGeneration) {
-                    // the slot generation has changed
-                    AddVSlotToProtobuf(vslotId, cur, TMood::Normal);
+                    // the slot generation has changed; the slot keeps its mood, as on registration of the node, so
+                    // that a read-only VDisk stays read-only and the one being wiped finishes the wipe
+                    AddVSlotToProtobuf(vslotId, cur, static_cast<TMood::EValue>(cur.Mood));
                 }
             }
 
@@ -947,6 +948,32 @@ namespace NKikimr::NBsController {
                             base->second->StatusFlags, std::nullopt);
                     }
                 }
+            }
+
+            // apply groups moved to another storage pool: their status and the space allocated by their VDisks, donors
+            // included, go along with them
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                if (!base || !overlay->second || base->second->StoragePoolId == overlay->second->StoragePoolId) {
+                    continue;
+                }
+                const TGroupInfo& group = *overlay->second;
+                i64 allocatedSize = 0;
+                for (const TVSlotInfo *vslot : group.VDisksInGroup) {
+                    allocatedSize += vslot->Metrics.GetAllocatedSize();
+                    for (const TVSlotId& donorId : vslot->Donors) {
+                        if (const TVSlotInfo *donor = state.VSlots.Find(donorId)) {
+                            allocatedSize += donor->Metrics.GetAllocatedSize();
+                        }
+                    }
+                }
+                if (state.StoragePools.Get().count(base->second->StoragePoolId)) {
+                    const auto origin = TStoragePoolStat::ConvertId(base->second->StoragePoolId);
+                    StoragePoolStat->Update(origin, base->second->StatusFlags, std::nullopt);
+                    StoragePoolStat->UpdateAllocatedSize(origin, -allocatedSize);
+                }
+                const auto target = TStoragePoolStat::ConvertId(group.StoragePoolId);
+                StoragePoolStat->Update(target, std::nullopt, group.StatusFlags);
+                StoragePoolStat->UpdateAllocatedSize(target, allocatedSize);
             }
 
             // apply VDisks going for destruction

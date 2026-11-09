@@ -22,6 +22,7 @@
 #include <ydb/library/actors/core/executor_pool_base.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/scope.h>

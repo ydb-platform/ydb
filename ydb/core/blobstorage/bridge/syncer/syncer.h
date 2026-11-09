@@ -17,7 +17,6 @@ namespace NKikimr::NBridge {
     };
 
     IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-        std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter,
-        TBlobStorageGroupType sourceGroupType);
+        std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter);
 
 } // NKikimr::NBridge

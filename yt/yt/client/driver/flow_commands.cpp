@@ -28,12 +28,26 @@ void ExecuteGetPipelineSpecCommand(
     auto spec = SyncYPathGet(ConvertToNode(result.Spec), specPath);
 
     ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
+        // clang-format off
         BuildYsonFluently(consumer)
             .BeginMap()
                 .Item("spec").Value(spec)
                 .Item("version").Value(result.Version)
             .EndMap();
-        });
+        // clang-format on
+    });
+}
+
+void ProduceSpecVersion(const ICommandContextPtr& context, NFlow::TVersion version)
+{
+    ProduceOutput(context, [&] (IYsonConsumer* consumer) {
+        // clang-format off
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("version").Value(version)
+            .EndMap();
+        // clang-format on
+    });
 }
 
 void ExecuteSetPipelineSpecCommand(
@@ -74,11 +88,13 @@ void ExecuteSetPipelineSpecCommand(
     }();
 
     ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
+        // clang-format off
         BuildYsonFluently(consumer)
             .BeginMap()
                 .Item("version").Value(setResult.Version)
             .EndMap();
-        });
+        // clang-format on
+    });
 }
 
 void ExecuteRemovePipelineSpecCommand(
@@ -110,11 +126,13 @@ void ExecuteRemovePipelineSpecCommand(
         .ValueOrThrow();
 
     ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
+        // clang-format off
         BuildYsonFluently(consumer)
             .BeginMap()
                 .Item("version").Value(setResult.Version)
             .EndMap();
-        });
+        // clang-format on
+    });
 }
 
 } // namespace
@@ -140,7 +158,9 @@ void TGetPipelineSpecCommand::DoExecute(ICommandContextPtr context)
         context,
         SpecPath,
         Options,
-        [&] (const auto& client, const auto& options) { return client->GetPipelineSpec(PipelinePath, options); });
+        [&] (const auto& client, const auto& options) {
+            return client->GetPipelineSpec(PipelinePath, options);
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -169,9 +189,13 @@ void TSetPipelineSpecCommand::DoExecute(ICommandContextPtr context)
         context,
         SpecPath,
         TGetPipelineSpecOptions(),
-        [&] (const auto& client, const auto& options) { return client->GetPipelineSpec(PipelinePath, options); },
+        [&] (const auto& client, const auto& options) {
+            return client->GetPipelineSpec(PipelinePath, options);
+        },
         Options,
-        [&] (const auto& client, const auto& spec, const auto& options) { return client->SetPipelineSpec(PipelinePath, spec, options); });
+        [&] (const auto& client, const auto& spec, const auto& options) {
+            return client->SetPipelineSpec(PipelinePath, spec, options);
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -199,9 +223,13 @@ void TRemovePipelineSpecCommand::DoExecute(ICommandContextPtr context)
         context,
         SpecPath,
         TGetPipelineSpecOptions(),
-        [&] (const auto& client, const auto& options) { return client->GetPipelineSpec(PipelinePath, options); },
+        [&] (const auto& client, const auto& options) {
+            return client->GetPipelineSpec(PipelinePath, options);
+        },
         Options,
-        [&] (const auto& client, const auto& spec, const auto& options) { return client->SetPipelineSpec(PipelinePath, spec, options); });
+        [&] (const auto& client, const auto& spec, const auto& options) {
+            return client->SetPipelineSpec(PipelinePath, spec, options);
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -210,15 +238,45 @@ void TGetPipelineDynamicSpecCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("spec_path", &TThis::SpecPath)
         .Default();
+    registrar.ParameterWithUniversalAccessor<EDynamicSpecView>(
+        "view",
+        [] (TThis* command) -> auto& {
+            return command->Options.View;
+        })
+        .Default(EDynamicSpecView::Effective);
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "blame",
+        [] (TThis* command) -> auto& {
+            return command->Options.Blame;
+        })
+        .Default(false);
 }
 
 void TGetPipelineDynamicSpecCommand::DoExecute(ICommandContextPtr context)
 {
+    if (Options.Blame) {
+        auto result = WaitFor(context->GetClient()->GetPipelineDynamicSpec(PipelinePath, Options))
+            .ValueOrThrow();
+        auto spec = SyncYPathGet(ConvertToNode(result.Spec), SpecPath);
+        ProduceOutput(context, [&] (IYsonConsumer* consumer) {
+            // clang-format off
+            BuildYsonFluently(consumer)
+                .BeginMap()
+                    .Item("spec").Value(spec)
+                    .Item("version").Value(result.Version)
+                    .Item("blame").Value(result.Blame)
+                .EndMap();
+            // clang-format on
+        });
+        return;
+    }
     ExecuteGetPipelineSpecCommand(
         context,
         SpecPath,
         Options,
-        [&] (const auto& client, const auto& options) { return client->GetPipelineDynamicSpec(PipelinePath, options); });
+        [&] (const auto& client, const auto& options) {
+            return client->GetPipelineDynamicSpec(PipelinePath, options);
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -237,20 +295,27 @@ void TSetPipelineDynamicSpecCommand::Register(TRegistrar registrar)
 
 void TSetPipelineDynamicSpecCommand::DoExecute(ICommandContextPtr context)
 {
+    TGetPipelineDynamicSpecOptions getOptions;
+    getOptions.View = EDynamicSpecView::Base;
     ExecuteSetPipelineSpecCommand(
         context,
         SpecPath,
-        TGetPipelineDynamicSpecOptions(),
-        [&] (const auto& client, const auto& options) { return client->GetPipelineDynamicSpec(PipelinePath, options); },
+        getOptions,
+        [&] (const auto& client, const auto& options) {
+            return client->GetPipelineDynamicSpec(PipelinePath, options);
+        },
         Options,
-        [&] (const auto& client, const auto& spec, const auto& options) { return client->SetPipelineDynamicSpec(PipelinePath, spec, options); });
+        [&] (const auto& client, const auto& spec, const auto& options) {
+            return client->SetPipelineDynamicSpec(PipelinePath, spec, options);
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void TRemovePipelineDynamicSpecCommand::Register(TRegistrar registrar)
 {
-    registrar.Parameter("spec_path", &TThis::SpecPath);
+    registrar.Parameter("spec_path", &TThis::SpecPath)
+        .Default();
     registrar.ParameterWithUniversalAccessor<std::optional<NFlow::TVersion>>(
         "expected_version",
         [] (TThis* command) -> auto& {
@@ -261,13 +326,129 @@ void TRemovePipelineDynamicSpecCommand::Register(TRegistrar registrar)
 
 void TRemovePipelineDynamicSpecCommand::DoExecute(ICommandContextPtr context)
 {
+    TGetPipelineDynamicSpecOptions getOptions;
+    getOptions.View = EDynamicSpecView::Base;
     ExecuteRemovePipelineSpecCommand(
         context,
         SpecPath,
-        TGetPipelineDynamicSpecOptions(),
-        [&] (const auto& client, const auto& options) { return client->GetPipelineDynamicSpec(PipelinePath, options); },
+        getOptions,
+        [&] (const auto& client, const auto& options) {
+            return client->GetPipelineDynamicSpec(PipelinePath, options);
+        },
         Options,
-        [&] (const auto& client, const auto& spec, const auto& options) { return client->SetPipelineDynamicSpec(PipelinePath, spec, options); });
+        [&] (const auto& client, const auto& spec, const auto& options) {
+            return client->SetPipelineDynamicSpec(PipelinePath, spec, options);
+        });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TGetPipelineDynamicSpecPatchesCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<std::optional<NFlow::TVersion>>(
+        "patch",
+        [] (TThis* command) -> auto& {
+            return command->Options.Patch;
+        })
+        .Optional(/*init*/ false);
+}
+
+void TGetPipelineDynamicSpecPatchesCommand::DoExecute(ICommandContextPtr context)
+{
+    auto result = WaitFor(context->GetClient()->GetPipelineDynamicSpecPatches(PipelinePath, Options))
+        .ValueOrThrow();
+    ProduceOutput(context, [&] (IYsonConsumer* consumer) {
+        Serialize(result, consumer);
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPatchPipelineDynamicSpecCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<std::optional<NYPath::TYPath>>(
+        "set_path",
+        [] (TThis* command) -> auto& {
+            return command->Options.SetPath;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::vector<TPipelineDynamicSpecPatchChange>>(
+        "set_changes",
+        [] (TThis* command) -> auto& {
+            return command->Options.SetChanges;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<NFlow::TVersion>>(
+        "patch",
+        [] (TThis* command) -> auto& {
+            return command->Options.Patch;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "comment",
+        [] (TThis* command) -> auto& {
+            return command->Options.Comment;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<NFlow::TVersion>>(
+        "expected_version",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExpectedVersion;
+        })
+        .Optional(/*init*/ false);
+}
+
+void TPatchPipelineDynamicSpecCommand::DoExecute(ICommandContextPtr context)
+{
+    if (Options.SetPath) {
+        Options.SetValue = context->ConsumeInputValue();
+    }
+    auto result = WaitFor(context->GetClient()->PatchPipelineDynamicSpec(PipelinePath, Options))
+        .ValueOrThrow();
+    ProduceOutput(context, [&] (IYsonConsumer* consumer) {
+        // clang-format off
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("version").Value(result.Version)
+                .Item("patch_id").Value(result.PatchId)
+            .EndMap();
+        // clang-format on
+    });
+}
+
+void TCancelPipelineDynamicSpecPatchCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("patch", &TThis::Version);
+    registrar.ParameterWithUniversalAccessor<std::optional<NFlow::TVersion>>(
+        "expected_version",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExpectedVersion;
+        })
+        .Optional(/*init*/ false);
+}
+
+void TCancelPipelineDynamicSpecPatchCommand::DoExecute(ICommandContextPtr context)
+{
+    auto result = WaitFor(context->GetClient()->CancelPipelineDynamicSpecPatch(PipelinePath, Version, Options))
+        .ValueOrThrow();
+    ProduceSpecVersion(context, result.Version);
+}
+
+void TResetPipelineDynamicSpecCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<std::optional<NFlow::TVersion>>(
+        "expected_version",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExpectedVersion;
+        })
+        .Optional(/*init*/ false);
+}
+
+void TResetPipelineDynamicSpecCommand::DoExecute(ICommandContextPtr context)
+{
+    auto result = WaitFor(context->GetClient()->ResetPipelineDynamicSpec(PipelinePath, Options))
+        .ValueOrThrow();
+    ProduceSpecVersion(context, result.Version);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -334,7 +515,7 @@ void TGetFlowViewCommand::Register(TRegistrar registrar)
     registrar.Parameter("view_path", &TThis::ViewPath)
         .Default();
 
-     registrar.ParameterWithUniversalAccessor<bool>(
+    registrar.ParameterWithUniversalAccessor<bool>(
         "cache",
         [] (TThis* command) -> auto& {
             return command->Options.Cache;

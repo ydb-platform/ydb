@@ -18,7 +18,7 @@ RPC_TIMEOUT = 30
 RETRY_TIMEOUT = 120
 
 
-def invoke(request, stopped):
+def invoke(request, stopped, *, retryable_grpc_codes=(grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED)):
     deadline = time.monotonic() + RETRY_TIMEOUT
     while True:
         try:
@@ -30,7 +30,7 @@ def invoke(request, stopped):
                 return response
             error = str(response)
         except grpc.RpcError as exc:
-            if exc.code() not in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED):
+            if exc.code() not in retryable_grpc_codes:
                 raise
             error = str(exc)
         if time.monotonic() >= deadline or stopped.wait(0.1):
@@ -153,3 +153,4 @@ def run_kv_workload(endpoints, path, partitions=3, writers=3, readers=3, writes_
             stopped.set()
             for _ in range(readers):
                 acknowledged.put(None)
+    return written

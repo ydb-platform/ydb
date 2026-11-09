@@ -28,7 +28,6 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/comp_nodes
-    yql/essentials/providers/common/mkql
     yql/essentials/providers/common/schema/mkql
     yql/essentials/providers/common/schema/parser
     yt/yql/providers/yt/codec

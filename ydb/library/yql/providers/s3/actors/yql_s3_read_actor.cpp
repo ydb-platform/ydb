@@ -794,6 +794,108 @@ public:
         return arrow::Buffer::FromString(data);
     }
 
+    struct TRowGroupDecodeContext {
+        const std::vector<int>& ColumnIndices;
+        std::vector<TColumnConverter>& ColumnConverters;
+        const TMissingColumns& MissingColumns;
+    };
+
+    struct TRowGroupDecodeResult {
+        ui64 DecodedBytes = 0;
+        ui64 NumRows = 0;
+    };
+
+    void WaitIfPaused() {
+        if (IsPaused()) {
+            CpuTime += GetCpuTimeDelta();
+            auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+            HandleEvent(*ev);
+            StartCycleCount = GetCycleCountFast();
+        }
+    }
+
+    void SendBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const TRowGroupDecodeContext& context, TRowGroupDecodeResult& result) {
+        auto convertedBatch = ConvertArrowColumns(batch, context.ColumnConverters, context.MissingColumns);
+        auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
+        result.DecodedBytes += size;
+        result.NumRows += convertedBatch->num_rows();
+        if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {
+            SetDownstreamPause(true);
+        }
+        Send(ParentActorId, new TEvS3Provider::TEvNextRecordBatch(convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
+    }
+
+    ui64 ChooseBatchRows(const parquet::RowGroupMetaData& rowGroupMetadata, const std::vector<int>& columnIndices) const {
+        const i64 numRows = rowGroupMetadata.num_rows();
+        if (numRows <= 0) {
+            return 1;
+        }
+        ui64 uncompressedSize = 0;
+        for (const auto columnIndex : columnIndices) {
+            const i64 chunkSize = rowGroupMetadata.ColumnChunk(columnIndex)->total_uncompressed_size();
+            if (chunkSize < 0) {
+                throw parquet::ParquetException(
+                    "Invalid parquet metadata: negative total_uncompressed_size ", chunkSize, " of column ", columnIndex);
+            }
+            const ui64 unsignedChunkSize = static_cast<ui64>(chunkSize);
+            if (unsignedChunkSize > Max<ui64>() - uncompressedSize) {
+                throw parquet::ParquetException("Invalid parquet metadata: total_uncompressed_size sum overflow", " at column ", columnIndex);
+            }
+            uncompressedSize += unsignedChunkSize;
+        }
+        const ui64 bytesPerRow = std::max<ui64>(1, uncompressedSize / static_cast<ui64>(numRows));
+        return std::clamp<ui64>(ReadActorFactoryCfg.BatchDecodeTargetBytes / bytesPerRow, 1, static_cast<ui64>(numRows));
+    }
+
+    TRowGroupDecodeResult DecodeRowGroupWhole(parquet::arrow::FileReader& reader, int rowGroup, const TRowGroupDecodeContext& context) {
+        TRowGroupDecodeResult result;
+        std::shared_ptr<arrow::Table> table;
+        {
+            StartUnit();
+            Y_DEFER {
+                StopUnit();
+            };
+            ThrowParquetNotOk(reader.DecodeRowGroups({ rowGroup }, context.ColumnIndices, &table));
+        }
+        arrow::TableBatchReader batchReader(*table);
+        std::shared_ptr<arrow::RecordBatch> batch;
+        arrow::Status status;
+        while (status = batchReader.ReadNext(&batch), status.ok() && batch) {
+            StartUnit();
+            Y_DEFER {
+                StopUnit();
+            };
+            SendBatch(batch, context, result);
+        }
+        ThrowParquetNotOk(status);
+        return result;
+    }
+
+    TRowGroupDecodeResult DecodeRowGroupBatched(parquet::arrow::FileReader& reader, int rowGroup, const TRowGroupDecodeContext& context) {
+        TRowGroupDecodeResult result;
+        const auto rowGroupMetadata = reader.parquet_reader()->metadata()->RowGroup(rowGroup);
+        if (rowGroupMetadata->num_rows() == 0) {
+            return result;
+        }
+        reader.set_batch_size(static_cast<i64>(ChooseBatchRows(*rowGroupMetadata, context.ColumnIndices)));
+        std::unique_ptr<arrow::RecordBatchReader> batchReader;
+        ThrowParquetNotOk(reader.GetRecordBatchReader({ rowGroup }, context.ColumnIndices, &batchReader));
+        while (true) {
+            WaitIfPaused();
+            StartUnit();
+            Y_DEFER {
+                StopUnit();
+            };
+            std::shared_ptr<arrow::RecordBatch> batch;
+            ThrowParquetNotOk(batchReader->ReadNext(&batch));
+            if (!batch) {
+                break;
+            }
+            SendBatch(batch, context, result);
+        }
+        return result;
+    }
+
     void RunCoroBlockArrowParserOverHttp() {
         LOG_CORO_D("RunCoroBlockArrowParserOverHttp");
 
@@ -890,16 +992,16 @@ public:
                 RowGroupReaderIndex[i] = i;
             }
 
+            const TRowGroupDecodeContext decodeContext{
+                .ColumnIndices = columnIndices,
+                .ColumnConverters = columnConverters,
+                .MissingColumns = missingColumns,
+            };
             ui64 nextGroup = readerCount;
             ui64 readyGroupCount = 0;
 
             while (readyGroupCount < numGroups) {
-                if (IsPaused()) {
-                    CpuTime += GetCpuTimeDelta();
-                    auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
-                    HandleEvent(*ev);
-                    StartCycleCount = GetCycleCountFast();
-                }
+                WaitIfPaused();
 
                 ui64 readyGroupIndex;
                 if (!columnIndices.empty()) {
@@ -922,53 +1024,21 @@ public:
                 auto readyReaderIndex = RowGroupReaderIndex[readyGroupIndex];
                 RowGroupReaderIndex.erase(readyGroupIndex);
 
-                std::shared_ptr<arrow::Table> table;
-
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
-                // TODO:
-                // Current unit takes <=100ms typically, which is fine; only large groups can overrun.
-                // Consider to split DecodeRowGroups for large row groups (arrow async / column streaming).
-                {
-                    StartUnit();
-                    Y_DEFER {
-                        StopUnit();
-                    };
-                    ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups(
-                        { hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) },
-                        columnIndices, &table));
-                }
+                const int rowGroup = hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex);
+                const auto result = ReadActorFactoryCfg.BatchedRowGroupDecode
+                                        ? DecodeRowGroupBatched(*readers[readyReaderIndex], rowGroup, decodeContext)
+                                        : DecodeRowGroupWhole(*readers[readyReaderIndex], rowGroup, decodeContext);
                 readyGroupCount++;
 
                 auto downloadedBytes = ReadInflightSize[readyGroupIndex];
-                ui64 decodedBytes = 0;
                 ReadInflightSize.erase(readyGroupIndex);
 
-                auto reader = std::make_unique<arrow::TableBatchReader>(*table);
-
-                std::shared_ptr<arrow::RecordBatch> batch;
-                arrow::Status status;
                 bool isCancelled = false;
-                ui64 numRows = 0;
-                while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                    StartUnit();
-                    Y_DEFER {
-                        StopUnit();
-                    };
-                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
-                    auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
-                    decodedBytes += size;
-                    if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {
-                        SetDownstreamPause(true);
-                    }
-                    Send(
-                        ParentActorId, new TEvS3Provider::TEvNextRecordBatch(convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
-                    numRows += convertedBatch->num_rows();
-                }
-                if (StopIfConsumedEnough(numRows)) {
+                if (StopIfConsumedEnough(result.NumRows)) {
                     isCancelled = true;
                 }
-                ThrowParquetNotOk(status);
-                SourceContext->UpdateProgress(downloadedBytes, decodedBytes, table->num_rows());
+                SourceContext->UpdateProgress(downloadedBytes, result.DecodedBytes, result.NumRows);
                 if (RawInflightSize) {
                     RawInflightSize->Sub(downloadedBytes);
                 }

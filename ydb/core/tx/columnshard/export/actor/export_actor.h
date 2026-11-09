@@ -18,25 +18,30 @@
 namespace NKikimr::NOlap::NExport {
 
 class TActor: public NBackground::TSessionActor {
-private:
+public:
     enum class EStage {
         Initialization,
         WaitData,
         WaitWriting,
         WaitSaveCursor,
+        WaitSaveCursorBeforeReset,
+        WaitSaveResetCursor,
+        WaitSaveCursorBeforeFinish,
+        WaitSaveFinalCursor,
         Finished
     };
 
+private:
     using TBase = NBackground::TSessionActor;
     std::optional<TActorId> ScanActorId;
     bool AllowScanPings = false;
     std::optional<TString> PendingAbortReason;
+    ui32 ScanGeneration = 0;
 
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NExport::TSession> ExportSession;
     TActorId Exporter;
     static inline const ui64 FreeSpace = ((ui64)128) << 20;
-    static constexpr TDuration OperationTimeout = TDuration::Minutes(240);
     static constexpr TDuration WarningInterval = TDuration::Seconds(60);
     static constexpr TDuration TimeoutCheckInterval = TDuration::Seconds(15);
 
@@ -47,15 +52,19 @@ private:
     TInstant StageStartTime;
 
     void SwitchStage(const EStage from, const EStage to);
+    bool IsSavingCursor() const;
+    bool IsFinishing() const;
+    void SaveCursor(EStage stage);
 
     void AbortExport(const TString& errorMessage);
     void KillExporter();
     void AbortScanIfKnown(const TString& reason);
+    void StartScan();
+    void ResetCursor();
+    void FinishExport();
 
     void ScheduleTimeoutCheck();
     void HandleWakeup();
-
-    static TString StageToString(EStage stage);
 
     void PassAway() override;
 
@@ -76,6 +85,8 @@ protected:
 
     void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& /*ev*/);
 
+    void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportReset::TPtr& ev);
+
     virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
 
     std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> BuildRequestInitiator(const TCursor& cursor) const;
@@ -91,6 +102,7 @@ public:
                 hFunc(NKqp::TEvKqpCompute::TEvScanError, HandleExecute);
                 hFunc(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult, HandleExecute);
                 hFunc(NColumnShard::TEvPrivate::TEvBackupExportError, HandleExecute);
+                hFunc(NColumnShard::TEvPrivate::TEvBackupExportReset, HandleExecute);
                 cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
                 default:
                     TBase::StateInProgress(ev);

@@ -775,13 +775,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestVectorIndexPlanShape(F_COVERING, EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST_QUAD(BadFormat, OnBuild, EnableIndexStreamWrite) {
+    void DoTestBadFormat(bool onBuild, bool streamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(streamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -795,40 +795,72 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const TString createTableSql(R"(
                 --!syntax_v1
                 CREATE TABLE TestVector2 (id Uint64, embedding String, PRIMARY KEY (id))
-                WITH (PARTITION_AT_KEYS = (9));
+                WITH (PARTITION_AT_KEYS = (100));
             )");
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        auto create = [&](bool expected_result) {
+        auto create = [&](bool expectOk, ui8 bad) {
             const TString createIndex(Q_(R"(
                 ALTER TABLE `/Root/TestVector2` ADD INDEX idx_vector_3_200 GLOBAL USING vector_kmeans_tree
                 ON (embedding) WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
             )"));
             auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess() == expected_result, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.IsSuccess() == expectOk, result.GetIssues().ToString());
+            if (!expectOk) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), Sprintf("Invalid vector format byte, got %02x, expected 02", bad));
+            }
         };
 
-        auto insert = [&]() {
-            const TString query1(Q_(R"(UPSERT INTO TestVector2 (id, embedding) VALUES
-                (1, ""), (2, "1"), (3, "40"), (4, "abcd"),
-                (5, "00\x02"), (6, "01\x02"), (7, "10\x02"), (8, "11\x02"),
-                (9, ""), (10, "1"), (11, "40"), (12, "abcd"),
-                (13, "00\x02"), (14, "01\x02"), (15, "10"), (16, "11\x02"),
-                (17, null);)"));
+        TVector<TString> badValues = { "1", "40", "abcd", "02\\x81" };
+        TVector<ui8> badByte = { 0x31, 0x30, 0x64, 0x81 };
+        auto exec = [&](const TString query1) {
             auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
 
-        if (OnBuild) {
-            insert();
-            create(false);
+        if (onBuild) {
+            for (size_t i = 0; i < badValues.size(); i++) {
+                auto& bad = badValues[i];
+                TStringBuilder query1;
+                // One bad value + all good values for each partition
+                // "" and null in the beginning to check their skip
+                exec(Sprintf(
+                    R"(UPSERT INTO TestVector2 (id, embedding) VALUES
+                    (1, ""), (2, null), (3, "%s"), (4, "%s"), (5, "%s"),
+                    (10, "00\x02"), (11, "01\x02"), (12, "10\x02"), (13, "11\x02"),
+                    (100, ""), (101, null), (102, "%s"), (103, "%s"), (104, "%s"),
+                    (105, "00\x02"), (106, "01\x02"), (107, "10\x02"), (108, "11\x02"))",
+                    bad.c_str(), bad.c_str(), bad.c_str(),
+                    bad.c_str(), bad.c_str(), bad.c_str()
+                ));
+                create(false, badByte[i]);
+            }
         } else {
-            create(true);
-            insert();
+            create(true, 0);
+            // Add all bad and good values once
+            TStringBuilder query1;
+            query1 << "UPSERT INTO TestVector2 (id, embedding) VALUES (1, \"\"), (2, null)";
+            for (size_t i = 0; i < badValues.size(); i++) {
+                query1 << Sprintf(", (%zu, \"%s\")", 10+i, badValues[i].c_str());
+            }
+            query1 << R"(, (20, "00\x02"), (21, "01\x02"), (22, "10\x02"), (23, "11\x02"))";
+            exec(query1);
         }
+    }
+
+    Y_UNIT_TEST(BadFormat) {
+        DoTestBadFormat(false, false);
+    }
+
+    Y_UNIT_TEST(BadFormatWithStreamWrite) {
+        DoTestBadFormat(false, true);
+    }
+
+    Y_UNIT_TEST(BadFormatOnBuild) {
+        DoTestBadFormat(true, false);
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithBitQuantization, Nullable, Overlap) {
@@ -1622,7 +1654,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         // Check that the index has a stub cluster hierarchy but the posting table is empty
         const TString level = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplLevelTable");
-        UNIT_ASSERT_VALUES_EQUAL(level, "[[[0u];[1u];[\"  \\2\"]];[[1u];[9223372036854775810u];[\"  \\2\"]]]");
+        UNIT_ASSERT_VALUES_EQUAL(level, "[[[0u];[1u];[\"\\0\\0\\2\"]];[[1u];[9223372036854775810u];[\"\\0\\0\\2\"]]]");
         const TString posting = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
         UNIT_ASSERT_VALUES_EQUAL(posting, "[]");
 
@@ -2445,6 +2477,162 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const TString plainQuery = target + "SELECT pk FROM `/Root/TestTable`" + order;
             const TString indexQuery = TStringBuilder() << "PRAGMA ydb.KMeansTreeSearchTopSize = \"4\";\n"
                 << target << "SELECT pk FROM `/Root/TestTable` VIEW vector_idx" << order;
+            DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
+
+            status = session.ExecuteSchemeQuery("ALTER TABLE `/Root/TestTable` DROP INDEX vector_idx;").ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(Int4VectorIndex, Signed, Prefixed) {
+        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString type = Signed ? "Int4" : "Uint4";
+        const TString suffix = Signed ? "t" : "ut";
+        const int targetCoord = Signed ? -8 : 0;
+        const TString sqlType = Signed ? "int4" : "uint4";
+        auto status = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TestTable` (
+                pk Int64 NOT NULL, bucket Uint32 NOT NULL, emb String, PRIMARY KEY (pk));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        TStringBuilder insert;
+        insert << "UPSERT INTO `/Root/TestTable` (pk, bucket, emb) VALUES ";
+        for (ui32 bucket = 1; bucket <= (Prefixed ? 2u : 1u); ++bucket) {
+            for (ui32 i = 0; i < 8; ++i) {
+                if (bucket != 1 || i != 0) {
+                    insert << ", ";
+                }
+                insert << "(" << (bucket * 100 + i) << ", " << bucket << "u, Untag(Knn::ToBinaryString" << type
+                    << "([" << (Signed ? static_cast<int>(i) - 4 : static_cast<int>(i) + 1) << suffix << ", 2" << suffix << ", 1" << suffix << "]), \"" << type << "Vector\"))";
+            }
+        }
+        auto inserted = ExecuteDataQuery(session, insert);
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+
+        for (bool autoDetect : {false, true}) {
+            TStringBuilder ddl;
+            ddl << "ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx GLOBAL USING vector_kmeans_tree ON ("
+                << (Prefixed ? "bucket, " : "") << "emb) WITH (distance=euclidean, levels=2, clusters=2";
+            if (!autoDetect) {
+                ddl << ", vector_type=" << sqlType << ", vector_dimension=3";
+            }
+            ddl << ");";
+            status = session.ExecuteSchemeQuery(ddl).ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto described = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+            const auto indexes = described.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1);
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes.front().GetIndexSettings()).Settings;
+            UNIT_ASSERT_VALUES_EQUAL(settings.VectorType, Signed
+                ? TVectorIndexSettings::EVectorType::Int4 : TVectorIndexSettings::EVectorType::Uint4);
+            UNIT_ASSERT_VALUES_EQUAL(settings.VectorDimension, 3);
+
+            auto qSession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto shown = qSession.ExecuteQuery("SHOW CREATE TABLE `/Root/TestTable`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(shown.IsSuccess(), shown.GetIssues().ToString());
+            TResultSetParser parser(shown.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_STRING_CONTAINS(parser.ColumnParser(0).GetOptionalUtf8().value_or(""),
+                TStringBuilder() << "vector_type = '" << sqlType << "'");
+
+            const TString target = TStringBuilder() << "$target = Knn::ToBinaryString" << type << "([" << targetCoord << suffix << ", 2" << suffix << ", 1" << suffix << "]);\n";
+            const TString order = TStringBuilder() << (Prefixed ? " WHERE bucket = 1u" : "")
+                << " ORDER BY Knn::EuclideanDistance(emb, $target) LIMIT 3;";
+            const TString plainQuery = target + "SELECT pk FROM `/Root/TestTable`" + order;
+            const TString indexQuery = TStringBuilder() << "PRAGMA ydb.KMeansTreeSearchTopSize = \"4\";\n"
+                << target << "SELECT pk FROM `/Root/TestTable` VIEW vector_idx" << order;
+            DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
+
+            // Exercise writes after the populated-table index build, then check
+            // that removing the closest vector is reflected by indexed search.
+            const TString upsert = TStringBuilder() << "UPSERT INTO `/Root/TestTable` (pk, bucket, emb) VALUES "
+                << "(100, 1u, Untag(Knn::ToBinaryString" << type << "([" << targetCoord << suffix << ", 2" << suffix << ", 1" << suffix << "]), \"" << type << "Vector\"));";
+            inserted = ExecuteDataQuery(session, upsert);
+            UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+            DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
+            inserted = ExecuteDataQuery(session, "DELETE FROM `/Root/TestTable` WHERE pk = 100;");
+            UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+            DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
+
+            status = session.ExecuteSchemeQuery("ALTER TABLE `/Root/TestTable` DROP INDEX vector_idx;").ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(Float8VectorIndex, E5M2, Prefixed) {
+        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString type = E5M2 ? "Float8E5M2" : "Float8E4M3";
+        const TString sqlType = E5M2 ? "float8_e5m2" : "float8_e4m3";
+        auto status = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TestTable` (
+                pk Int64 NOT NULL, bucket Uint32 NOT NULL, emb String, PRIMARY KEY (pk));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        TStringBuilder insert;
+        insert << "UPSERT INTO `/Root/TestTable` (pk, bucket, emb) VALUES ";
+        for (ui32 bucket = 1; bucket <= (Prefixed ? 2u : 1u); ++bucket) {
+            for (ui32 i = 0; i < 8; ++i) {
+                if (bucket != 1 || i != 0) {
+                    insert << ", ";
+                }
+                insert << "(" << (bucket * 100 + i) << ", " << bucket << "u, Untag(Knn::ToBinaryString" << type
+                    << "([" << Sprintf("%.2f", static_cast<double>(i) / 4 - 1.0) << "f, 0.25f]), \"" << type << "Vector\"))";
+            }
+        }
+        auto inserted = ExecuteDataQuery(session, insert);
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+
+        for (bool autoDetect : {false, true}) {
+            TStringBuilder ddl;
+            ddl << "ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx GLOBAL USING vector_kmeans_tree ON ("
+                << (Prefixed ? "bucket, " : "") << "emb) WITH (distance=euclidean, levels=2, clusters=2";
+            if (!autoDetect) {
+                ddl << ", vector_type=" << sqlType << ", vector_dimension=2";
+            }
+            ddl << ");";
+            status = session.ExecuteSchemeQuery(ddl).ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto described = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+            const auto indexes = described.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1);
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes.front().GetIndexSettings()).Settings;
+            UNIT_ASSERT_VALUES_EQUAL(settings.VectorType, E5M2
+                ? TVectorIndexSettings::EVectorType::Float8E5M2 : TVectorIndexSettings::EVectorType::Float8E4M3);
+            UNIT_ASSERT_VALUES_EQUAL(settings.VectorDimension, 2);
+
+            auto qSession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto shown = qSession.ExecuteQuery("SHOW CREATE TABLE `/Root/TestTable`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(shown.IsSuccess(), shown.GetIssues().ToString());
+            TResultSetParser parser(shown.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_STRING_CONTAINS(parser.ColumnParser(0).GetOptionalUtf8().value_or(""),
+                TStringBuilder() << "vector_type = '" << sqlType << "'");
+
+            const TString target = TStringBuilder() << "$target = Knn::ToBinaryString" << type << "([0.3125f, 0.25f]);\n";
+            const TString order = TStringBuilder() << (Prefixed ? " WHERE bucket = 1u" : "")
+                << " ORDER BY Knn::EuclideanDistance(emb, $target) LIMIT 3;";
+            const TString plainQuery = target + "SELECT pk FROM `/Root/TestTable`" + order;
+            const TString indexQuery = TStringBuilder() << "PRAGMA ydb.KMeansTreeSearchTopSize = \"4\";\n"
+                << target << "SELECT pk FROM `/Root/TestTable` VIEW vector_idx" << order;
+            DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
+
+            // Exercise writes after the populated-table index build, then check
+            // that removing the closest vector is reflected by indexed search.
+            const TString upsert = TStringBuilder() << "UPSERT INTO `/Root/TestTable` (pk, bucket, emb) VALUES "
+                << "(100, 1u, Untag(Knn::ToBinaryString" << type << "([0.3125f, 0.25f]), \"" << type << "Vector\"));";
+            inserted = ExecuteDataQuery(session, upsert);
+            UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+            DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
+            inserted = ExecuteDataQuery(session, "DELETE FROM `/Root/TestTable` WHERE pk = 100;");
+            UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
             DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
 
             status = session.ExecuteSchemeQuery("ALTER TABLE `/Root/TestTable` DROP INDEX vector_idx;").ExtractValueSync();

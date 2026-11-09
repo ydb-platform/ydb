@@ -276,7 +276,7 @@ If you are not a member of the {{ ydb-short-name }} team, build/test checks do n
 
 Checks are restarted every time new changes are pushed; the previous check is interrupted if it has not yet completed. Each iteration of checks creates its own comment on the PR page, so the check history is preserved there.
 
-If you are a member of the {{ ydb-short-name }} team, you can rebase the PR branch onto the current base branch without pushing locally. To do so, add label `rebase-and-check` (or the alias `rebase-user-branch`) to the PR. After a successful rebase, checks restart automatically.
+If you are a member of the {{ ydb-short-name }} team, you can rebase the PR branch onto the current base branch without pushing locally. To do so, add label `rebase-and-check` (or the alias `rebase-user-branch`) to the PR. After a successful rebase, checks restart automatically, including when the branch is already up to date.
 
 ### Test results {#test-results}
 

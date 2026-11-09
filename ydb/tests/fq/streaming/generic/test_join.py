@@ -1306,6 +1306,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
         if not local:
             kikimr.ydb_client.query(f"DROP EXTERNAL DATA SOURCE {source_name}")
 
+    @pytest.mark.parametrize("kikimr", [{"enable_kqp_constraints_transformer": False}], indirect=["kikimr"])  # TEMPORARY workaround YQ-5804
     @pytest.mark.parametrize("partitions_count", [1, 2])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("streamlookup", [True, False], ids=["slj", "map"])

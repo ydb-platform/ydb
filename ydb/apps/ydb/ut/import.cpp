@@ -623,6 +623,105 @@ Y_UNIT_TEST_SUITE(ImportTest) {
         });
     }
 
+    Y_UNIT_TEST_F(ExpandExternalTablesWhenRequested, TImportFixture) {
+        using namespace NYdb::NDump;
+        const TString root = "/" + TEST_BUCKET + "/archive/selected/";
+        PutS3Object(root + "nested/source/" + NFiles::CreateExternalDataSource().FileName);
+        PutS3Object(root + "nested/table/" + NFiles::CreateExternalTable().FileName);
+        PutS3Object(root + "nested/excluded/" + NFiles::CreateExternalTable().FileName);
+        PutS3Object(root + "sidecar/old_" + NFiles::CreateExternalTable().FileName);
+        PutS3Object(root + "sidecar/" + NFiles::CreateExternalTable().FileName + ".sha256");
+        PutS3TableExport("archive/selected/regular");
+
+        const TString s3Endpoint = GetS3Endpoint();
+        Service<TImportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(s3Endpoint)
+            .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectDisableVirtualAddressing(true)
+            .ExpectItem("archive/selected/nested/source", "/test_database/import-root/nested/source")
+            .ExpectItem("archive/selected/nested/table", "/test_database/import-root/nested/table")
+            .ExpectItem("archive/selected/regular", "/test_database/import-root/regular");
+
+        RunCli({
+            "-e", GetEndpoint(), "-d", GetDatabase(), "import", "s3", "--bucket", TEST_BUCKET, "--s3-endpoint", s3Endpoint, "--scheme", "http",
+            "--access-key", "test-key", "--secret-key", "test-access-key", "--use-virtual-addressing", "false", "--item",
+            "src=archive/selected,dst=import-root/.", "--include-external-tables", "--exclude", "nested/excluded",
+        });
+    }
+
+    Y_UNIT_TEST_F(ExpandSelectedExternalTableLeaf, TImportFixture) {
+        const TString prefix = "/" + TEST_BUCKET + "/archive/table/";
+        PutS3Object(prefix + NYdb::NDump::NFiles::CreateExternalTable().FileName);
+        const TString s3Endpoint = GetS3Endpoint();
+        Service<TImportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(s3Endpoint)
+            .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectDisableVirtualAddressing(true)
+            .ExpectItem("archive/table", "/test_database/target");
+        RunCli({
+            "-e", GetEndpoint(), "-d", GetDatabase(), "import", "s3", "--bucket", TEST_BUCKET, "--s3-endpoint", s3Endpoint, "--scheme", "http",
+            "--access-key", "test-key", "--secret-key", "test-access-key", "--use-virtual-addressing", "false", "--item",
+            "src=archive/table,dst=target", "--include-external-tables",
+        });
+    }
+
+    Y_UNIT_TEST_F(RejectExternalTableHiddenByIndexFiltering, TImportFixture) {
+        PutS3TableExport("archive/selected/table");
+        PutS3Object("/" + TEST_BUCKET + "/archive/selected/table/index/impl/" + NYdb::NDump::NFiles::CreateExternalTable().FileName);
+        Service<TImportImpl>().ExpectNoImportCall();
+        TString failure;
+        try {
+            RunCli({
+                "-e", GetEndpoint(), "-d", GetDatabase(), "import", "s3", "--bucket", TEST_BUCKET, "--s3-endpoint", GetS3Endpoint(), "--scheme",
+                "http", "--access-key", "test-key", "--secret-key", "test-access-key", "--use-virtual-addressing", "false", "--item",
+                "src=archive/selected,dst=target", "--include-external-tables",
+            });
+        } catch (const yexception& error) {
+            failure = error.what();
+        }
+        Service<TImportImpl>().CheckExpectations();
+        UNIT_ASSERT_STRING_CONTAINS(failure, "External table would be skipped");
+    }
+
+    Y_UNIT_TEST_F(RejectAmbiguousExternalTableArchive, TImportFixture) {
+        PutS3TableExport("archive/selected/table");
+        PutS3Object("/" + TEST_BUCKET + "/archive/selected/table/" + NYdb::NDump::NFiles::CreateExternalTable().FileName);
+        Service<TImportImpl>().ExpectNoImportCall();
+        TString failure;
+        try {
+            RunCli({
+                "-e", GetEndpoint(), "-d", GetDatabase(), "import", "s3", "--bucket", TEST_BUCKET, "--s3-endpoint", GetS3Endpoint(), "--scheme",
+                "http", "--access-key", "test-key", "--secret-key", "test-access-key", "--use-virtual-addressing", "false", "--item",
+                "src=archive/selected,dst=target", "--include-external-tables",
+            });
+        } catch (const yexception& error) {
+            failure = error.what();
+        }
+        Service<TImportImpl>().CheckExpectations();
+        UNIT_ASSERT_STRING_CONTAINS(failure, "Multiple schema definitions");
+    }
+
+    Y_UNIT_TEST_F(ExternalTableOptionRequiresItem, TImportFixture) {
+        Service<TImportImpl>().ExpectNoImportCall();
+        TString failure;
+        try {
+            RunCli({
+                "-e", GetEndpoint(), "-d", GetDatabase(), "import", "s3", "--bucket", TEST_BUCKET, "--s3-endpoint", GetS3Endpoint(), "--scheme",
+                "http", "--access-key", "test-key", "--secret-key", "test-access-key", "--source-prefix", "archive", "--include-external-tables",
+            });
+        } catch (const yexception& error) {
+            failure = error.what();
+        }
+        Service<TImportImpl>().CheckExpectations();
+        UNIT_ASSERT_STRING_CONTAINS(failure, "--include-external-tables requires --item");
+    }
+
     Y_UNIT_TEST_F(RejectSelectedExternalTable, TImportFixture) {
         using namespace NYdb::NDump;
         const TString root = "/" + TEST_BUCKET + "/archive/selected/";

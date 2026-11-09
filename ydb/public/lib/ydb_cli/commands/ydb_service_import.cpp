@@ -264,24 +264,36 @@ void TCommandImportBase::FillItemsFromItemParam(NImport::TImportFromS3Settings& 
             }
 
             TVector<NImport::TImportFromS3Settings::TItem> items;
+            THashSet<TString> externalTables;
             do {
                 auto listResult = s3Client->ListObjectKeys(item.Source, token);
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
-                    if (IsUnsupportedExternalTable(key, ExclusionPatterns)) {
+                    if (!IncludeExternalTables && IsUnsupportedExternalTable(key, ExclusionPatterns)) {
                         throw TMisuseException() << "External tables cannot be imported with --item: " << key
-                            << ". Data source references cannot be safely remapped. "
-                            << "Exclude this object explicitly with --exclude to import the remaining objects.";
+                                                 << ". Use --include-external-tables after checking the source-path mapping, "
+                                                 << "or exclude this object explicitly with --exclude.";
                     }
-                    if (IsSupportedObject(key)) {
-                        key.ChopSuffix("/");
-                        TString destination;
-                        if (const auto suffix = key.substr(item.Source.size())) {
-                            destination = item.Destination + suffix;
-                        } else {
-                            destination = NormalizePath(item.Destination);
+                    bool isExternalTable = false;
+                    if (!IsSupportedObject(key)) {
+                        isExternalTable = IncludeExternalTables && ChopDefinitionBasename(key, NDump::NFiles::CreateExternalTable().FileName);
+                        if (!isExternalTable) {
+                            continue;
                         }
-                        items.push_back({TString(key), std::move(destination)});
+                    }
+                    key.ChopSuffix("/");
+                    if (isExternalTable && IsExcluded(TString(key).c_str(), ExclusionPatterns)) {
+                        continue;
+                    }
+                    TString destination;
+                    if (const auto suffix = key.substr(item.Source.size())) {
+                        destination = item.Destination + suffix;
+                    } else {
+                        destination = NormalizePath(item.Destination);
+                    }
+                    items.push_back({ TString(key), std::move(destination) });
+                    if (isExternalTable) {
+                        externalTables.insert(TString(key));
                     }
                 }
             } while (token);
@@ -292,11 +304,17 @@ void TCommandImportBase::FillItemsFromItemParam(NImport::TImportFromS3Settings& 
 
             THashSet<TString> seen;
             for (auto& item : items) {
+                if (externalTables.contains(item.Src) && seen.contains(item.Src)) {
+                    throw TMisuseException() << "Multiple schema definitions for external table: " << item.Src;
+                }
                 TStringBuf key = item.Src;
                 // try to skip /<index_name>/<indexImplTable>
                 key.RNextTok('/');
                 key.RNextTok('/');
                 if (seen.contains(key)) {
+                    if (externalTables.contains(item.Src)) {
+                        throw TMisuseException() << "External table would be skipped by index filtering: " << item.Src;
+                    }
                     continue;
                 }
                 seen.insert(TString{item.Src});
@@ -367,6 +385,17 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("item", TItemS3::FormatHelp("Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
+    config.Opts
+        ->AddLongOption("include-external-tables",
+            "Include external tables when expanding --item. The server rebases data source paths from the "
+            "database root recorded in the archive to the destination database root, not the table destination. "
+            "Use this option only for source references inside the recorded root. An existing data source at "
+            "the mapped path may be reused without comparing settings. For example, /old/source maps to "
+            "/new/source even when the table is restored under /new/subdir. Provision and verify sources and "
+            "credentials separately; external data and secret values are not copied. IAM initial-token "
+            "secret paths may retain their source paths and must be verified on the destination.")
+        .StoreTrue(&IncludeExternalTables);
+
     config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
             << "Sets bucket URL style. Value "
             << colors.BoldColor() << "true" << colors.OldColor()
@@ -381,6 +410,15 @@ void TCommandImportFromS3::Config(TConfig& config) {
 
 void TCommandImportFromS3::Parse(TConfig& config) {
     TCommandImportBase::Parse(config);
+
+    if (IncludeExternalTables && Items.empty()) {
+        throw TMisuseException() << "--include-external-tables requires --item";
+    }
+#if defined(_win32_)
+    if (IncludeExternalTables) {
+        throw TMisuseException() << "--include-external-tables is not supported on Windows";
+    }
+#endif
 
     ParseAwsProfile(config, "aws-profile");
     ParseAwsAccessKey(config, "access-key");

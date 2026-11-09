@@ -9806,6 +9806,115 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
+    Y_UNIT_TEST_FLAG(ExternalTableImportUsesExistingMappedDataSource, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true).SetupKqpProxy(true));
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        ui64 txId = 100;
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/existing"
+            Auth { None {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        bucketContent.emplace("/ExternalTable", GenerateTestData({ EPathTypeExternalTable, R"(
+                -- database: "/AnotherRoot"
+                -- backup root: "/AnotherRoot"
+                CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
+                    key Uint64 NOT NULL
+                ) WITH (
+                    DATA_SOURCE = '/AnotherRoot/DataSource',
+                    LOCATION = 'records'
+                );
+            )" }));
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "ExternalTable"
+                    destination_path: "/MyRoot/ExternalTable"
+                }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        const auto table = DescribePath(runtime, "/MyRoot/ExternalTable");
+        UNIT_ASSERT(table.GetPathDescription().HasExternalTableDescription());
+        UNIT_ASSERT_VALUES_EQUAL(table.GetPathDescription().GetExternalTableDescription().GetDataSourcePath(), "/MyRoot/DataSource");
+        const auto source = DescribePath(runtime, "/MyRoot/DataSource");
+        UNIT_ASSERT(source.GetPathDescription().HasExternalDataSourceDescription());
+        UNIT_ASSERT_VALUES_EQUAL(source.GetPathDescription().GetExternalDataSourceDescription().GetLocation(), "https://s3.cloud.net/existing");
+    }
+
+    Y_UNIT_TEST(DisabledExternalTableImportCancelsTheOperation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
+        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        TControlBoard::SetValue(0, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableExternalTableImport);
+        ui64 txId = 100;
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        bucketContent.emplace("/ExternalTable",
+            GenerateTestData({ EPathTypeExternalTable,
+                R"(CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (key Uint64) WITH (DATA_SOURCE = '/MyRoot/DataSource', LOCATION = 'records');)" }));
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_prefix: "ExternalTable" destination_path: "/MyRoot/ExternalTable" }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), { NLs::PathNotExist });
+    }
+
+    Y_UNIT_TEST(DisabledExternalDataSourceImportCancelsTheOperation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
+        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        TControlBoard::SetValue(0, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableExternalDataSourceImport);
+        ui64 txId = 100;
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        bucketContent.emplace("/DataSource",
+            GenerateTestData({ EPathTypeExternalDataSource,
+                R"(CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource` WITH (SOURCE_TYPE = 'ObjectStorage', LOCATION = 'https://s3.cloud.net/existing', AUTH_METHOD = 'NONE');)" }));
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_prefix: "DataSource" destination_path: "/MyRoot/DataSource" }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DataSource"), { NLs::PathNotExist });
+    }
+
     Y_UNIT_TEST_FLAG(ExternalTableExportImport, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         auto options = TTestEnvOptions()

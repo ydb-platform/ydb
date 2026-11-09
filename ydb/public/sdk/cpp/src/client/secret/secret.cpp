@@ -18,7 +18,7 @@ public:
         : TClientImplCommon(std::move(connections), settings) {}
 
     TAsyncStatus ExportSecret(const std::string& secretPath, const std::string& topicPath,
-        const TExportSecretSettings& settings)
+        const NScheme::TExportSecretSettings& settings)
     {
         auto request = MakeOperationRequest<::Ydb::Secret::ExportSecretRequest>(settings);
         request.set_secret_path(TStringType{secretPath});
@@ -97,7 +97,7 @@ TSecretClient::TSecretClient(const TDriver& driver, const TCommonClientSettings&
 {}
 
 TAsyncStatus TSecretClient::ExportSecret(const std::string& secretPath, const std::string& topicPath,
-    const TExportSecretSettings& settings)
+    const NScheme::TExportSecretSettings& settings)
 {
     return Impl_->ExportSecret(secretPath, topicPath, settings);
 }

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/services/scheme_secret/export)
+UNITTEST_FOR(ydb/core/grpc_services)
 
 FORK_SUBTESTS()
 
@@ -9,9 +9,11 @@ ENDIF()
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/persqueue/public/schema
     ydb/core/protos
     ydb/core/testlib
     ydb/core/tx/replication/ut_helpers
+    ydb/core/tx/scheme_cache
     ydb/public/sdk/cpp/src/client/secret
 )
 

@@ -1,9 +1,9 @@
+#include "service_secret.h"
+#include "rpc_scheme_base.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/grpc_services/service_secret.h>
-#include <ydb/core/grpc_services/rpc_scheme_base.h>
-#include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/persqueue/public/schema/schema_operation.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
@@ -13,8 +13,9 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_secret.pb.h>
-#include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+
+#include <library/cpp/retry/retry_policy.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -33,17 +34,17 @@ class TExportSecretRPC: public TRpcSchemeRequestActor<TExportSecretRPC, TEvExpor
     using TBase = TRpcSchemeRequestActor<TExportSecretRPC, TEvExportSecretRequest>;
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-    enum class ESetupStage {
-        None,
-        Directory,
-        Topic,
-    };
-
 public:
     using TBase::TBase;
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
+
+        const auto token = Request_->GetInternalToken();
+        if (!token || token->GetUserSID().empty() || !IsAdministrator(AppData(), token.Get())) {
+            return Fail(Ydb::StatusIds::UNAUTHORIZED, "Secret export requires a cluster administrator");
+        }
+
         const auto* request = GetProtoRequest();
         Database = CanonizePath(Request_->GetDatabaseName().GetOrElse(""));
         TopicPath = CanonicalizePath(Request_->NormalizePath(request->topic_path()), Database);
@@ -51,18 +52,13 @@ public:
         if (Database.empty() || !TopicPath.StartsWith(Database + "/") || !SecretPath.StartsWith(Database + "/")) {
             return Fail(Ydb::StatusIds::BAD_REQUEST, "Secret and topic paths must belong to the source database");
         }
-        const auto token = Request_->GetInternalToken();
-        if (!token || token->GetUserSID().empty()) {
-            return Fail(Ydb::StatusIds::UNAUTHORIZED, "Secret export requires an authenticated source user");
+
+        if (!AppData()->FeatureFlags.GetEnableSchemaSecrets()) {
+            return Fail(Ydb::StatusIds::UNSUPPORTED, "Schema secrets are disabled");
         }
-        Become(&TThis::StateExport);
-        const auto actorSystem = ActorContext().ActorSystem();
-        const auto selfId = SelfId();
-        NSecret::DescribeSecret({SecretPath}, token, Database, actorSystem,
-            {.RetryPolicy = NSecret::MakeShortRetryPolicy()})
-            .Subscribe([actorSystem, selfId](const auto& result) {
-                actorSystem->Send(selfId, new NKqp::TEvDescribeSecretsResponse(result.GetValue()));
-            });
+
+        Become(&TThis::StateDescribeSecret);
+        DescribeSecret();
     }
 
 private:
@@ -71,17 +67,66 @@ private:
         Reply(status, ActorContext());
     }
 
-    void Handle(NKqp::TEvDescribeSecretsResponse::TPtr& ev) {
-        const auto& description = ev->Get()->Description;
-        if (description.Status != Ydb::StatusIds::SUCCESS) {
-            Request_->RaiseIssues(description.Issues);
-            return Reply(description.Status, ActorContext());
+    void DescribeSecret() {
+        auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        SetDatabase(request.Get(), *Request_);
+        auto* describe = request->Record.MutableDescribePath();
+        // The caller is a cluster administrator; secret ACLs are not required.
+        describe->SetPath(SecretPath);
+        describe->MutableOptions()->SetReturnSecretValue(true);
+        Send(MakeTxProxyID(), request.Release());
+    }
+
+    void Retry(IRetryPolicy<>::IRetryState::TPtr& state, ui64 tag, const TString& errorMessage) {
+        if (!state) {
+            static const auto policy = IRetryPolicy<>::GetExponentialBackoffPolicy(
+                [] { return ERetryErrorClass::ShortRetry; },
+                TDuration::MilliSeconds(100), TDuration::MilliSeconds(500),
+                TDuration::Seconds(5), 10, TDuration::Seconds(10));
+            state = policy->CreateRetryState();
         }
-        if (description.SecretValues.size() != 1) {
-            return Fail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected number of resolved secrets");
+        if (const auto delay = state->GetNextRetryDelay()) {
+            Schedule(*delay, new TEvents::TEvWakeup(tag));
+        } else {
+            Fail(Ydb::StatusIds::UNAVAILABLE, errorMessage);
         }
-        Value = description.SecretValues.front();
+    }
+
+    void RetryTopic() {
+        Retry(TopicRetryState, WakeupTagRetryTopic, "Secret export topic is temporarily unavailable");
+    }
+
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        const auto& record = ev->Get()->GetRecord();
+        switch (record.GetStatus()) {
+        case NKikimrScheme::StatusSuccess:
+            break;
+        case NKikimrScheme::StatusNotAvailable:
+            return Retry(SecretRetryState, WakeupTagRetrySecret, "Secret is temporarily unavailable");
+        case NKikimrScheme::StatusAccessDenied:
+            return Fail(Ydb::StatusIds::UNAUTHORIZED, "Cannot read secret");
+        default:
+            return Fail(Ydb::StatusIds::SCHEME_ERROR, "Cannot describe secret");
+        }
+        const auto& description = record.GetPathDescription();
+        if (description.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeSecret
+            || !description.HasSecretDescription() || !description.GetSecretDescription().HasValue())
+        {
+            return Fail(Ydb::StatusIds::SCHEME_ERROR, "Secret value is missing");
+        }
+        Value = description.GetSecretDescription().GetValue();
+        Become(&TThis::StateExport);
         NavigateTopic();
+    }
+
+    void HandleRetry(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Tag == WakeupTagRetrySecret) {
+            DescribeSecret();
+        } else if (ev->Get()->Tag == WakeupTagRetryTopic) {
+            NavigateTopic();
+        } else {
+            TBase::HandleWakeup(ev, ctx);
+        }
     }
 
     void NavigateTopic() {
@@ -103,22 +148,20 @@ private:
         }
         const auto& entry = entries.front();
         if (entry.Status == TNavigate::EStatus::PathErrorUnknown && !TopicCreationAttempted) {
-            if (!IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
-                return Fail(Ydb::StatusIds::UNAUTHORIZED, "Creating a secret export topic requires a cluster administrator");
-            }
             TopicCreationAttempted = true;
-            return PrepareTopicDirectory();
+            return PrepareTopic();
         }
         if (entry.Status != TNavigate::EStatus::Ok) {
             switch (entry.Status) {
             case TNavigate::EStatus::AccessDenied:
                 return Fail(Ydb::StatusIds::UNAUTHORIZED, "Cannot access secret export topic for writing");
+            case TNavigate::EStatus::PathErrorUnknown:
             case TNavigate::EStatus::Unknown:
             case TNavigate::EStatus::TableCreationNotComplete:
             case TNavigate::EStatus::LookupError:
             case TNavigate::EStatus::RedirectLookupError:
-                // Other secret targets can be preparing the same topic.
-                return Fail(Ydb::StatusIds::UNAVAILABLE, "Secret export topic is not ready");
+                // Wait for concurrent creation and SchemeCache publication.
+                return RetryTopic();
             default:
                 return Fail(Ydb::StatusIds::SCHEME_ERROR, "Cannot resolve secret export topic");
             }
@@ -133,7 +176,7 @@ private:
         const auto token = Request_->GetInternalToken();
         const NACLib::TUserToken ownerToken(owner, TVector<NACLib::TSID>());
         // Use verified groups only when they belong to the actual topic owner.
-        const auto* ownerIdentity = owner == token->GetUserSID() ? token.Get() : &ownerToken;
+        const auto* ownerIdentity = (owner == token->GetUserSID()) ? token.Get() : &ownerToken;
         if (!IsAdministrator(AppData(), ownerIdentity)) {
             return Fail(Ydb::StatusIds::UNAUTHORIZED, "Secret export topic must be owned by a cluster administrator");
         }
@@ -167,22 +210,6 @@ private:
             .WithToken(Request_->GetSerializedToken());
         const auto& partition = description.GetPartitions(0);
         Writer = Register(NPQ::CreatePartitionWriter(SelfId(), partition.GetTabletId(), partition.GetPartitionId(), opts));
-    }
-
-    void PrepareTopicDirectory() {
-        const TString directory{ExtractParent(TopicPath)};
-        if (directory == Database) {
-            return PrepareTopic();
-        }
-        auto request = CreateProposeTransaction();
-        auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
-        tx.SetWorkingDir(TString{ExtractParent(directory)});
-        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
-        tx.SetFailOnExist(false);
-        tx.MutableMkDir()->SetName(TString{ExtractBase(directory)});
-        SetupStage = ESetupStage::Directory;
-        SetupActor = Register(NPQ::NSchema::CreateSchemaOperation(SelfId(), directory,
-            std::move(request), ++SetupCookie));
     }
 
     void PrepareTopic() {
@@ -222,12 +249,13 @@ private:
         // Protect the new topic before its first reader can attach.
         NACLib::TDiffACL acl;
         acl.SetInterruptInheritance(true);
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull,
-            Request_->GetInternalToken()->GetUserSID(), NACLib::EInheritanceType::InheritNone);
+        acl.AddAccess(
+            NACLib::EAccessType::Allow, NACLib::GenericFull,
+            Request_->GetInternalToken()->GetUserSID(), NACLib::EInheritanceType::InheritNone
+        );
         tx.MutableModifyACL()->SetDiffACL(acl.SerializeAsString());
-        SetupStage = ESetupStage::Topic;
-        SetupActor = Register(NPQ::NSchema::CreateSchemaOperation(SelfId(), TopicPath,
-            std::move(request), ++SetupCookie));
+        ++SetupCookie;
+        SetupActor = Register(NPQ::NSchema::CreateSchemaOperation(SelfId(), TopicPath, std::move(request), SetupCookie));
     }
 
     void Handle(NPQ::NSchema::TEvSchemaOperationResponse::TPtr& ev) {
@@ -236,21 +264,18 @@ private:
         }
         SetupActor = {};
         const auto status = ev->Get()->Status;
+        if (status == Ydb::StatusIds::OVERLOADED || status == Ydb::StatusIds::UNAVAILABLE) {
+            // Resolve again before retrying an idempotent create: another exporter
+            // may have created the topic, or our previous proposal may have succeeded.
+            TopicCreationAttempted = false;
+            return RetryTopic();
+        }
         if (status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::ALREADY_EXISTS) {
             return Fail(status, TStringBuilder() << "Cannot prepare secret export transport: " << ev->Get()->ErrorMessage);
         }
-        const auto stage = SetupStage;
-        SetupStage = ESetupStage::None;
-        switch (stage) {
-        case ESetupStage::Directory:
-            return PrepareTopic();
-        case ESetupStage::Topic:
-            // An existing topic keeps its ACL. Validate its actual owner and
-            // write permissions after the source-side scheme operation.
-            return NavigateTopic();
-        case ESetupStage::None:
-            return;
-        }
+        // An existing topic keeps its ACL. Validate its actual owner and
+        // write permissions after the source-side scheme operation.
+        NavigateTopic();
     }
 
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev) {
@@ -270,7 +295,8 @@ private:
         auto request = MakeHolder<NPQ::TEvPartitionWriter::TEvWriteRequest>(1);
         auto& write = *request->Record.MutablePartitionRequest()->AddCmdWrite();
         write.SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SecretPath));
-        // A retained topic represents one export: retries of this source are deduplicated.
+        // Each canonical secret path has its own SourceId. SeqNo=1 deduplicates
+        // retries of that secret while other secrets write independently.
         write.SetSeqNo(1);
         write.SetCreateTimeMS(Now().MilliSeconds());
         write.SetData(chunk.SerializeAsString());
@@ -305,9 +331,17 @@ private:
         TBase::PassAway();
     }
 
+    STATEFN(StateDescribeSecret) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(TEvents::TEvWakeup, HandleRetry);
+        default:
+            TBase::StateWork(ev);
+        }
+    }
+
     STATEFN(StateExport) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NKqp::TEvDescribeSecretsResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             hFunc(NPQ::NSchema::TEvSchemaOperationResponse, Handle);
@@ -315,18 +349,22 @@ private:
             hFunc(NPQ::TEvPartitionWriter::TEvWriteResponse, Handle);
             hFunc(NPQ::TEvPartitionWriter::TEvDisconnected, Handle);
             IgnoreFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted);
+            HFunc(TEvents::TEvWakeup, HandleRetry);
         default:
             TBase::StateWork(ev);
         }
     }
 
+    static constexpr ui64 WakeupTagRetrySecret = 100;
+    static constexpr ui64 WakeupTagRetryTopic = 101;
+    IRetryPolicy<>::IRetryState::TPtr SecretRetryState;
+    IRetryPolicy<>::IRetryState::TPtr TopicRetryState;
     TString Database;
     TString TopicPath;
     TString SecretPath;
     TString Value;
     TActorId Writer;
     bool TopicCreationAttempted = false;
-    ESetupStage SetupStage = ESetupStage::None;
     TActorId SetupActor;
     TActorId TopicPreparer;
     ui64 SetupCookie = 0;

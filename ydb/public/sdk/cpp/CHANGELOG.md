@@ -1,4 +1,4 @@
-* Added `TSecretClient::ExportSecret()` to export a secret into a topic in the same database, returning only the operation status.
+* Added `TSecretClient::ExportSecret()` with `NScheme::TExportSecretSettings` to export a secret into a topic in the same database, returning only the operation status.
 
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
 

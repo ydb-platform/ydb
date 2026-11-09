@@ -387,6 +387,37 @@ namespace NKikimr {
                 GroupFailureModelChanged.erase(groupId);
             }
 
+            // the bridge proxy group the part belongs to; nullptr for groups that are not parts of existing bridged ones
+            const TGroupInfo *FindBridgeProxyGroup(const TGroupInfo& group) const {
+                return group.IsBridgePileOnly() && group.BridgeProxyGroupId
+                    ? Groups.Find(*group.BridgeProxyGroupId)
+                    : nullptr;
+            }
+
+            // delete the group along with its VDisks and, for a bridge proxy group, along with its parts, which nothing
+            // else refers to then; every deleted group is added to the set
+            void DeleteGroupWithBridgeParts(const TGroupInfo& group, THashSet<TGroupId>& deleted) {
+                if (group.BridgeGroupInfo) {
+                    std::vector<TGroupId> parts;
+                    NBridge::ForEachGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                            const NKikimrBridge::TGroupState::TPile& pile) {
+                        if (const auto partId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                                partId != group.ID) { // the inline pile is the proxy group itself
+                            parts.push_back(partId);
+                        }
+                    });
+                    for (const TGroupId partId : parts) {
+                        // group entries are held by pointers, so deleting other groups keeps `group` valid
+                        if (const TGroupInfo *part = Groups.Find(partId)) {
+                            DeleteExistingGroupWithVSlots(*part);
+                            deleted.insert(partId);
+                        }
+                    }
+                }
+                deleted.insert(group.ID);
+                DeleteExistingGroupWithVSlots(group);
+            }
+
         private:
             template<typename TCommand, typename TKey, typename TValue>
             static ui64 CheckGeneration(const TCommand &cmd, const TMap<TKey, TValue> &map, const TKey &id) {

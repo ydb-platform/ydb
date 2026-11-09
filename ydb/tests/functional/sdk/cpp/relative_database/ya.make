@@ -13,7 +13,7 @@ USE_RECIPE(
     ydb/tests/functional/sdk/cpp/relative_database/recipe/recipe
 )
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1200)

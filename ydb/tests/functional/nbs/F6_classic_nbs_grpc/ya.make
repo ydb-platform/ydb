@@ -16,4 +16,7 @@ TEST_SRCS(
     test_grpc.py
 )
 
+
+REQUIREMENTS(cpu:1)
+
 END()

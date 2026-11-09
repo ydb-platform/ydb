@@ -11,4 +11,7 @@ TEST_SRCS(
     F4_12_no_user_iops_throttle.py
 )
 
+
+REQUIREMENTS(cpu:1)
+
 END()

@@ -22,4 +22,7 @@ TEST_SRCS(
     F3_19_no_demote_no_rebalance.py
 )
 
+
+REQUIREMENTS(cpu:1)
+
 END()

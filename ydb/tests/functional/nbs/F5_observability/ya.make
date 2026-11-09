@@ -11,4 +11,7 @@ TEST_SRCS(
     F5_05_ddisk_directio.py
 )
 
+
+REQUIREMENTS(cpu:1)
+
 END()

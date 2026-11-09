@@ -6,4 +6,10 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/common.inc)
 TEST_SRCS(
     ydb/tests/functional/sqs/common/test_garbage_collection.py
 )
+
+IF (SANITIZER_TYPE)
+ELSE()
+    REQUIREMENTS(cpu:1)
+ENDIF()
+
 END()

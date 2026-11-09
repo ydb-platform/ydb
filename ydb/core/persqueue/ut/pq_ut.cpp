@@ -623,7 +623,9 @@ Y_UNIT_TEST(CmdWriteRejectsExplicitHashLongerThan255) {
             return event.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
         });
     UNIT_ASSERT(response);
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
+    UNIT_ASSERT_VALUES_EQUAL(
+        static_cast<ui32>(response->Record.GetErrorCode()),
+        static_cast<ui32>(NPersQueue::NErrorCode::BAD_REQUEST));
     UNIT_ASSERT_VALUES_EQUAL(response->Record.GetErrorReason(), "too long explicit hash");
 }
 

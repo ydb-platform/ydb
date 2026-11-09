@@ -238,6 +238,9 @@ namespace NKikimr::NStorage {
                     case TQuery::kQueryBridgeRollbackStatus:
                         return QueryBridgeRollbackStatus();
 
+                    case TQuery::kRollbackBridge:
+                        return RollbackBridge(op.Command.GetRollbackBridge());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
 

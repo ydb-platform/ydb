@@ -106,6 +106,7 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Bridge.RemovePile", ERequestType::BRIDGE_REMOVEPILE},
     {"Bridge.SetDatabaseBridgeMode", ERequestType::BRIDGE_SETDATABASEBRIDGEMODE},
     {"Bridge.GetRollbackStatus", ERequestType::BRIDGE_GETROLLBACKSTATUS},
+    {"Bridge.Rollback", ERequestType::BRIDGE_ROLLBACK},
 
     {"DistributedStorage.StreamStorageState", ERequestType::DISTRIBUTED_STORAGE_STREAMSTORAGESTATE},
     {"DistributedStorage.ReassignVDisk", ERequestType::DISTRIBUTED_STORAGE_REASSIGNVDISK},

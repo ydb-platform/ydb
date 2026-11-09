@@ -115,6 +115,7 @@ public:
     class TTxBridgePileOperation;
     class TTxAddBridgePile;
     class TTxRemoveBridgePile;
+    class TTxBridgeRollback;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
@@ -2215,6 +2216,7 @@ private:
         std::unique_ptr<IEventHandle> response);
     // validate removal of the pile, then send the response
     ITransaction* CreateTxValidateRemoveBridgePile(TBridgePileId pileId, std::unique_ptr<IEventHandle> response);
+    ITransaction* CreateTxValidateBridgeRollback(TBridgePileId pileId, std::unique_ptr<IEventHandle> response);
 
     struct TAuditLogInfo {
         TString PeerName;
@@ -2400,6 +2402,12 @@ private:
     // group having VDisks in the pile has to be such part, as its data is lost otherwise; returns the number of bridged
     // groups that have lost their part
     size_t RemoveBridgePileGroups(TConfigState& state, TBridgePileId pileId);
+
+    // make bridged pools and groups ordinary ones when the bridged cluster is being rolled back: the pile is the only one
+    // left (the implicit one), and every bridged group has to be the inline pile in it; pools get the settings the pile
+    // has for them (pile overrides included); returns the number of groups made ordinary, throws TExError naming the
+    // groups that can't be made such
+    size_t RollbackBridgedGroups(TConfigState& state, TBridgePileId pileId);
 
     // delete the part of the bridged group in the pile along with its data; the group serves as bridge proxy only when
     // its inline pile goes away

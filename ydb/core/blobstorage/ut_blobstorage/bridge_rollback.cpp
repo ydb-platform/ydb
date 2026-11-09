@@ -117,6 +117,20 @@ namespace {
         }
     }
 
+    // prepare the rolled back cluster for bridge mode again and convert it
+    void ConvertClusterAgain(TEnvironmentSetup& env, TDataChecker& checker, ui32 groupId) {
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+        const auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            res.GetErrorReason());
+        env.Sim(TDuration::Minutes(1));
+        const auto config = QueryStorageConfig(env);
+        UNIT_ASSERT(config.HasClusterState());
+        UNIT_ASSERT(!config.HasBridgeRollback());
+        UNIT_ASSERT(!config.GetClusterStateDetails().GetBscConversionPending());
+        UNIT_ASSERT_VALUES_UNEQUAL(config.GetClusterStateDetails().GetNextStaticGroupId(), 0);
+    }
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeRollback) {
@@ -192,6 +206,133 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         env.StartNode(stoppedNodeId);
         env.Sim(TDuration::Seconds(30));
         CheckRollbackStatus(env, {});
+    }
+
+    // the converted cluster is rolled back: static groups become ordinary ones, BSC makes its pools and groups such, the
+    // cluster state goes away; running nodes keep serving the groups (their bridge proxies pass requests through), and
+    // then they are restarted without bridge config; the cluster can be converted again afterwards
+    Y_UNIT_TEST(ConvertedClusterBackToOrdinary) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TEnvironmentSetup env(MakeUnbridgedSettings(true));
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertCluster(env, checker, 2);
+        CreateAnotherPool(env, 2); // created bridged, inline in the original pile
+        env.Sim(TDuration::Seconds(30));
+        std::vector<ui32> groupIds;
+        for (ui32 id : env.GetGroups()) {
+            groupIds.push_back(id);
+        }
+        {
+            const auto baseConfig = env.FetchBaseConfig(); // groups are referenced by pointers
+            for (const auto *group : GetPoolGroups(baseConfig, 2)) {
+                groupIds.push_back(group->GetGroupId());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(groupIds.size(), 3);
+        for (ui32 id : groupIds) {
+            CheckInlinePileGroup(env, id);
+        }
+        const ui32 staticGroupId = 0;
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, staticGroupId).GetBridgeProxyGroupId(), staticGroupId);
+        const std::vector<ui32> dynamicGroupIds = groupIds;
+        groupIds.push_back(staticGroupId);
+        for (ui32 id : groupIds) {
+            checker.Write(id);
+        }
+        checker.CheckAll();
+
+        // static groups are ordinary ones as soon as the rollback is accepted
+        auto res = InvokeDistconf(env, [](auto& record) { record.MutableRollbackBridge(); });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        const auto accepted = QueryStorageConfig(env); // a temporary would be gone before the loop body (pre-C++23)
+        for (const auto& group : accepted.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            UNIT_ASSERT_C(!group.HasBridgeGroupState() && !group.HasBridgeProxyGroupId() && !group.HasBridgePileId(),
+                group.ShortDebugString());
+        }
+        WaitUntil(env, [&] { return !QueryStorageConfig(env).HasClusterState(); }, "cluster state removed",
+            [&] { return QueryStorageConfig(env).GetClusterStateDetails().ShortDebugString(); });
+
+        // nothing bridged is left in the storage config and in BSC
+        const auto config = QueryStorageConfig(env);
+        UNIT_ASSERT(!config.HasClusterStateDetails());
+        UNIT_ASSERT_C(config.HasBridgeRollback(), config.ShortDebugString());
+        UNIT_ASSERT_VALUES_UNEQUAL(config.GetBridgeRollback().GetNextStaticGroupId(), 0);
+        for (const auto *pb : {&config.GetStateStorageConfig(), &config.GetStateStorageBoardConfig(),
+                &config.GetSchemeBoardConfig()}) {
+            for (const auto& ringGroup : pb->GetRingGroups()) {
+                UNIT_ASSERT_C(!ringGroup.HasBridgePileId(), ringGroup.ShortDebugString());
+            }
+        }
+        for (ui32 id : groupIds) {
+            const auto info = GetGroupInfo(env, id);
+            UNIT_ASSERT_C(!info.HasBridgeGroupState() && !info.HasBridgeProxyGroupId() && !info.HasBridgePileId(),
+                info.ShortDebugString());
+            UNIT_ASSERT_C(info.RingsSize(), info.ShortDebugString());
+        }
+        for (ui64 storagePoolId : {1, 2}) {
+            UNIT_ASSERT(!ReadStoragePool(env, storagePoolId).GetBridgeMode());
+        }
+
+        // running nodes serve the groups as ordinary ones, the data is in place
+        for (ui32 nodeId : env.Runtime->GetNodes()) {
+            for (ui32 id : groupIds) {
+                checker.Write(id, nodeId);
+            }
+            checker.CheckAll(nodeId);
+        }
+        ReassignOneDisk(env, groupId); // self-heal works for the group made ordinary
+        env.Sim(TDuration::Minutes(1));
+        checker.CheckAll();
+
+        // the cluster is prepared for bridge mode now, the rest of the rollback is restarting nodes without bridge config
+        CheckRollbackStatus(env, GetAllNodeIds(env));
+        RollingRestartWithoutBridgeConfig(env, checker, groupId);
+        CheckRollbackStatus(env, {});
+        CheckHiveNodePiles(env, 0);
+        for (ui32 id : groupIds) {
+            checker.Write(id);
+        }
+        checker.CheckAll();
+
+        // the cluster can be converted again, static group ids are not reused
+        ConvertClusterAgain(env, checker, groupId);
+        for (ui32 id : dynamicGroupIds) {
+            CheckInlinePileGroup(env, id);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, staticGroupId).GetBridgeProxyGroupId(), staticGroupId);
+        for (ui32 id : groupIds) {
+            checker.Write(id);
+        }
+        checker.CheckAll();
+    }
+
+    // the cluster bridged with several piles from the very beginning has no original pile to get back to
+    Y_UNIT_TEST(NativeBridgedClusterRefused) {
+        TEnvironmentSetup env({
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        });
+        const auto res = InvokeDistconf(env, [](auto& record) { record.MutableRollbackBridge(); });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+            res.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "no original pile");
+        UNIT_ASSERT(QueryStorageConfig(env).HasClusterState());
+    }
+
+    // the ordinary cluster has nothing to roll back
+    Y_UNIT_TEST(OrdinaryClusterRefused) {
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, env.GetGroups().front());
+        const auto res = InvokeDistconf(env, [](auto& record) { record.MutableRollbackBridge(); });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+            res.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "not converted to bridged one");
     }
 
 }

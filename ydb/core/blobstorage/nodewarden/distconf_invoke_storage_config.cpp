@@ -805,6 +805,15 @@ namespace NKikimr::NStorage {
         auto request = std::make_unique<TEvBlobStorage::TEvControllerDistconfRequest>();
         auto& record = request->Record;
 
+        if (ControllerOp == EControllerOp::BRIDGE_ROLLBACK) {
+            if (response.GetStatus(0).GetInterfaceVersion() < BSC_INTERFACE_BRIDGE_ROLLBACK) {
+                throw TExError() << "BS_CONTROLLER is way too old to roll the bridged cluster back";
+            }
+            record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateBridgeRollback);
+            BridgePileOpPileId.CopyToProto(&record, &NKikimrBlobStorage::TEvControllerDistconfRequest::SetBridgePileId);
+            NTabletPipe::SendData(SelfId(), ControllerPipeId, request.release());
+            return;
+        }
         if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE || ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE) {
             const bool adding = ControllerOp == EControllerOp::ADD_BRIDGE_PILE;
             if (response.GetStatus(0).GetInterfaceVersion() < (adding ? BSC_INTERFACE_BRIDGE_PILE_OPS :
@@ -868,6 +877,7 @@ namespace NKikimr::NStorage {
 
             case EControllerOp::ADD_BRIDGE_PILE:
             case EControllerOp::REMOVE_BRIDGE_PILE:
+            case EControllerOp::BRIDGE_ROLLBACK:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }
@@ -903,6 +913,14 @@ namespace NKikimr::NStorage {
             {"selfId", SelfId()},
             {"record", getRecord()});
 
+        if (ControllerOp == EControllerOp::BRIDGE_ROLLBACK) {
+            if (record.GetStatus() != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
+                throw TExError() << "Can't roll the bridged cluster back: BSC can't make its groups ordinary ones: "
+                    << record.GetErrorReason();
+            }
+            NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId); // BSC is not needed anymore
+            return StartProposition(&ProposedStorageConfig);
+        }
         if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE || ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE) {
             if (record.GetStatus() != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
                 throw TExError() << (ControllerOp == EControllerOp::ADD_BRIDGE_PILE
@@ -946,6 +964,7 @@ namespace NKikimr::NStorage {
 
             case EControllerOp::ADD_BRIDGE_PILE:
             case EControllerOp::REMOVE_BRIDGE_PILE:
+            case EControllerOp::BRIDGE_ROLLBACK:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }

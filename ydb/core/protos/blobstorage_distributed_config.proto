@@ -39,6 +39,7 @@ message TStorageConfig { // contents of storage metadata
     optional uint64 ExpectedStorageYamlVersion = 15;
     NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones
     NKikimrBridge.TClusterStateDetails ClusterStateDetails = 17; // history of unsynced state changes
+    NKikimrBridge.TBridgeRollbackRecord BridgeRollback = 18; // set when the bridged cluster has been rolled back
 }
 
 message TPDiskMetadataRecord {
@@ -403,6 +404,15 @@ message TEvNodeConfigInvokeOnRoot {
     // which nodes still run with BridgeConfig.
     message TQueryBridgeRollbackStatus {}
 
+    // Roll the bridged cluster back to ordinary one: its only pile has to be the implicit (original) one, and every
+    // bridged group has to be inline in it. Static groups become ordinary ones right away, BSC makes its pools and
+    // groups ordinary ones afterwards, then the cluster state is removed.
+    message TRollbackBridge {
+        // don't ask BSC whether it can make its groups ordinary ones before static groups are made such; for the case
+        // when BSC can't start, as it relies on static groups (BSC reports what blocks it when it starts)
+        bool SkipBscValidation = 1;
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -433,6 +443,7 @@ message TEvNodeConfigInvokeOnRoot {
         TRemoveBridgePile RemoveBridgePile = 30;
         TQueryPileConnectivity QueryPileConnectivity = 31;
         TQueryBridgeRollbackStatus QueryBridgeRollbackStatus = 32;
+        TRollbackBridge RollbackBridge = 33;
     }
 }
 
@@ -498,6 +509,8 @@ message TEvNodeConfigInvokeOnRootResult {
         bool HasClusterState = 1; // the cluster is bridged one (converted), its storage has to be rolled back first
         repeated uint32 BridgeConfigNodeIds = 2; // connected nodes running with BridgeConfig
         repeated uint32 UnreportedStaticNodeIds = 3; // static nodes not connected (or of older versions not reporting)
+        bool RollbackInProgress = 4; // the rollback of the bridged cluster is pending, BSC is making its groups ordinary
+        optional string ErrorReason = 5; // why BSC has failed to do its part last time (it retries meanwhile)
     }
 
     EStatus Status = 1;

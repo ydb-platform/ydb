@@ -12,6 +12,7 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
 import ydb.public.api.protos.ydb_config_pb2 as config
 
 from common import kv_readable, kv_works
@@ -21,11 +22,7 @@ logger = logging.getLogger(__name__)
 PILE_NAME = "r1"
 
 
-class TestBridgeRollback(object):
-    """A cluster prepared for bridge mode (its nodes run with single-pile bridge config, but it is not converted yet)
-    gets back to ordinary mode when the bridge config is removed from the cluster configuration and every node is
-    restarted without it; the rollback status tells which nodes still run with the bridge config."""
-
+class BridgeRollbackBase(object):
     erasure = Erasure.BLOCK_4_2
     nodes_count = 8
 
@@ -107,12 +104,42 @@ class TestBridgeRollback(object):
             result = self.bridge_client.get_rollback_status_result()
             last[:] = [result]
             logger.debug("GetRollbackStatus result# %s", result)
-            return (result is not None
-                and not result.bridged
-                and set(result.bridge_config_node_ids) == set(bridge_config_node_ids)
-                and not result.unreported_static_node_ids
-                and result.complete == complete)
+            return (result is not None and
+                    not result.bridged and
+                    set(result.bridge_config_node_ids) == set(bridge_config_node_ids) and
+                    not result.unreported_static_node_ids and
+                    result.complete == complete)
         assert_that(wait_for(matches, timeout_seconds=60), "rollback status %s" % last)
+
+    def create_kv_tablets(self, table_path):
+        tablet_ids = create_kv_tablets_and_wait_for_start(
+            self.cluster.client,
+            self.cluster.kv_client,
+            self.swagger_client,
+            5,
+            table_path,
+            timeout_seconds=3
+        )
+        assert_that(self.kv_works(table_path, tablet_ids, "initial"))
+        return tablet_ids
+
+    def add_bridge_config(self, table_path, tablet_ids, key):
+        def change(cfg):
+            cfg["bridge_config"] = {"piles": [{"name": PILE_NAME}]}
+        self.replace_config(change)
+        for node_id in sorted(self.cluster.nodes.keys()):
+            self.restart_node(node_id, table_path, tablet_ids, "%s%d" % (key, node_id))
+
+    def drop_bridge_config(self):
+        def change(cfg):
+            del cfg["bridge_config"]
+        self.replace_config(change)
+
+
+class TestBridgeRollback(BridgeRollbackBase):
+    """A cluster prepared for bridge mode (its nodes run with single-pile bridge config, but it is not converted yet)
+    gets back to ordinary mode when the bridge config is removed from the cluster configuration and every node is
+    restarted without it; the rollback status tells which nodes still run with the bridge config."""
 
     def test_rollback_of_prepared_cluster(self):
         table_path = '/Root/mydb/bridge_rollback'
@@ -159,3 +186,55 @@ class TestBridgeRollback(object):
         for node_id in sorted(self.cluster.nodes.keys()):
             self.restart_node(node_id, table_path, tablet_ids, "restart%d" % node_id)
         self.wait_rollback_status([], complete=True)
+
+
+class TestBridgeConvertedRollback(BridgeRollbackBase):
+    """A cluster converted into a single-pile bridged one is rolled back: static groups become ordinary ones, the storage
+    controller makes its groups such, and the cluster state goes away while nodes keep serving the groups; then the
+    bridge config is removed and every node is restarted without it."""
+
+    def get_cluster_state(self):
+        response = self.bridge_client.get_cluster_state()
+        if response.operation.status != StatusIds.SUCCESS:
+            return response.operation.status, None
+        result = bridge.GetClusterStateResult()
+        response.operation.result.Unpack(result)
+        return response.operation.status, result
+
+    def test_rollback_of_converted_cluster(self):
+        table_path = '/Root/mydb/bridge_converted_rollback'
+        tablet_ids = self.create_kv_tablets(table_path)
+        static_node_ids = {node.node_id for node in self.cluster.nodes.values()}
+
+        # convert the cluster into a single-pile bridged one
+        self.add_bridge_config(table_path, tablet_ids, "prepare")
+
+        def converted():
+            # the node restarted last may not have reported its bridge config yet
+            return self.bridge_client.convert_to_bridge().operation.status == StatusIds.SUCCESS
+        assert_that(wait_for(converted, timeout_seconds=60))
+
+        def conversion_finished():
+            status, result = self.get_cluster_state()
+            return status == StatusIds.SUCCESS and not result.conversion_in_progress
+        assert_that(wait_for(conversion_finished, timeout_seconds=120))
+        assert_that(wait_for(lambda: self.kv_works(table_path, tablet_ids, "converted"), timeout_seconds=60))
+
+        # roll it back; running nodes keep serving the groups
+        operation = self.bridge_client.rollback().operation
+        assert_that(operation.status == StatusIds.SUCCESS, str(operation))
+        self.wait_rollback_status(static_node_ids, complete=False)
+        assert_that(wait_for(lambda: self.kv_works(table_path, tablet_ids, "rolled_back"), timeout_seconds=60))
+        for key in ["initial", "converted"] + ["prepare%d" % node_id for node_id in self.cluster.nodes.keys()]:
+            assert_that(self.kv_readable(table_path, tablet_ids, key))
+
+        # the rest of the rollback is the one of the prepared cluster
+        self.drop_bridge_config()
+        remaining = set(static_node_ids)
+        for node_id in sorted(self.cluster.nodes.keys()):
+            self.restart_node(node_id, table_path, tablet_ids, "rollback%d" % node_id)
+            remaining.discard(self.cluster.nodes[node_id].node_id)
+            self.wait_rollback_status(remaining, complete=not remaining)
+        for key in ["initial", "converted", "rolled_back"]:
+            assert_that(self.kv_readable(table_path, tablet_ids, key))
+        assert_that(self.kv_works(table_path, tablet_ids, "after"))

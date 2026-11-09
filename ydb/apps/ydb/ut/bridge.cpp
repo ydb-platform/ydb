@@ -61,6 +61,8 @@ public:
     std::atomic<size_t> ProvisionCalls{0};
     std::atomic<size_t> DestroyCalls{0};
     std::atomic<size_t> RollbackStatusCalls{0};
+    std::atomic<size_t> RollbackCalls{0};
+    bool SkipBscValidation = false;
     Ydb::Bridge::GetRollbackStatusResult RollbackStatus;
 
     grpc::Status SetDatabaseBridgeMode(grpc::ServerContext* context,
@@ -107,6 +109,14 @@ public:
         auto status = ReplySuccess(context, response);
         response->mutable_operation()->mutable_result()->PackFrom(RollbackStatus);
         return status;
+    }
+
+    grpc::Status Rollback(grpc::ServerContext* context,
+                          const Ydb::Bridge::RollbackRequest* request,
+                          Ydb::Bridge::RollbackResponse* response) override {
+        ++RollbackCalls;
+        CHECK_EXP(request->skip_bsc_validation() == SkipBscValidation, "Incorrect skip_bsc_validation");
+        return ReplySuccess(context, response);
     }
 
 private:
@@ -232,6 +242,23 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
                                    {{"YDB_TOKEN", "bridge-admin-token"}});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().DestroyCalls.load(), 1);
         UNIT_ASSERT_STRING_CONTAINS(output, "Pile destroyed successfully");
+    }
+
+    Y_UNIT_TEST_F(RollbackRequiresConfirmation, TBridgeCliFixture) {
+        ExpectFail();
+        RunCliWithInput({"-e", GetEndpoint(), "-d", GetDatabase(), "admin", "cluster", "bridge", "rollback"},
+                        "n\n",
+                        {{"YDB_TOKEN", "bridge-admin-token"}});
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().RollbackCalls.load(), 0);
+        auto output = RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "-y", "admin", "cluster", "bridge", "rollback"},
+                             {{"YDB_TOKEN", "bridge-admin-token"}});
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().RollbackCalls.load(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(output, "Rollback started");
+        Service<TBridgeService>().SkipBscValidation = true;
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "-y", "admin", "cluster", "bridge", "rollback",
+                "--skip-bsc-validation"},
+               {{"YDB_TOKEN", "bridge-admin-token"}});
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().RollbackCalls.load(), 2);
     }
 
     Y_UNIT_TEST_F(RollbackStatusListsNodesWithBridgeConfig, TBridgeCliFixture) {

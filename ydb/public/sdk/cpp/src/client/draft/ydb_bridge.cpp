@@ -170,9 +170,13 @@ public:
                 std::vector<uint32_t> bridgeConfigNodeIds;
                 std::vector<uint32_t> unreportedStaticNodeIds;
                 bool complete = false;
+                bool rollbackInProgress = false;
+                std::string errorReason;
                 if (any) {
                     Ydb::Bridge::GetRollbackStatusResult result;
                     if (any->UnpackTo(&result)) {
+                        rollbackInProgress = result.rollback_in_progress();
+                        errorReason = result.error_reason();
                         bridged = result.bridged();
                         bridgeConfigNodeIds.assign(result.bridge_config_node_ids().begin(),
                             result.bridge_config_node_ids().end());
@@ -182,7 +186,8 @@ public:
                     }
                 }
                 promise.SetValue(TGetRollbackStatusResult(TStatus(std::move(status)), bridged,
-                    std::move(bridgeConfigNodeIds), std::move(unreportedStaticNodeIds), complete));
+                    std::move(bridgeConfigNodeIds), std::move(unreportedStaticNodeIds), complete, rollbackInProgress,
+                    std::move(errorReason)));
             };
 
         Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::GetRollbackStatusRequest, Ydb::Bridge::GetRollbackStatusResponse>(
@@ -194,6 +199,16 @@ public:
             TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
+    }
+
+    TAsyncStatus Rollback(const TRollbackSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::RollbackRequest>(settings);
+        request.set_skip_bsc_validation(settings.SkipBscValidation_);
+
+        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::RollbackRequest, Ydb::Bridge::RollbackResponse>(
+            std::move(request),
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncRollback,
+            TRpcRequestSettings::Make(settings));
     }
 };
 
@@ -231,6 +246,10 @@ TAsyncStatus TBridgeClient::RemovePile(const std::string& pileName, const TRemov
 
 TAsyncGetRollbackStatusResult TBridgeClient::GetRollbackStatus(const TGetRollbackStatusSettings& settings) {
     return Impl_->GetRollbackStatus(settings);
+}
+
+TAsyncStatus TBridgeClient::Rollback(const TRollbackSettings& settings) {
+    return Impl_->Rollback(settings);
 }
 
 }

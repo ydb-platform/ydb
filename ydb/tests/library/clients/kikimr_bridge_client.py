@@ -137,6 +137,11 @@ class BridgeClient(object):
         request.pile_name = pile_name
         return self.invoke(request, 'RemovePile')
 
+    def rollback(self, skip_bsc_validation=False):
+        request = bridge_api.RollbackRequest()
+        request.skip_bsc_validation = skip_bsc_validation
+        return self.invoke(request, 'Rollback')
+
     def get_rollback_status(self):
         request = bridge_api.GetRollbackStatusRequest()
         return self.invoke(request, 'GetRollbackStatus')

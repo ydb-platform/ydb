@@ -34,4 +34,7 @@ service BridgeService {
     // Report how far the rollback of a cluster prepared for bridge mode back to ordinary mode has gone
     rpc GetRollbackStatus(Ydb.Bridge.GetRollbackStatusRequest) returns (Ydb.Bridge.GetRollbackStatusResponse);
 
+    // Roll a cluster converted from an ordinary one back to it, while it has the only pile, the original one
+    rpc Rollback(Ydb.Bridge.RollbackRequest) returns (Ydb.Bridge.RollbackResponse);
+
 }

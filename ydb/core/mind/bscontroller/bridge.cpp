@@ -548,6 +548,101 @@ private:
     }
 };
 
+class TBlobStorageController::TTxBridgeRollback : public TTxBridgePileOperation {
+public:
+    TTxBridgeRollback(TBlobStorageController *controller, TBridgePileId pileId, ui64 operationId,
+            std::unique_ptr<IEventHandle> response = nullptr)
+        : TTxBridgePileOperation(controller, pileId, TOperation::ROLLBACK, operationId, std::nullopt, std::move(response))
+    {}
+
+    TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_BRIDGE_ROLLBACK; }
+
+private:
+    size_t DoStep(TConfigState& state) override {
+        return Self->RollbackBridgedGroups(state, PileId);
+    }
+};
+
+ITransaction* TBlobStorageController::CreateTxValidateBridgeRollback(TBridgePileId pileId,
+        std::unique_ptr<IEventHandle> response) {
+    return new TTxBridgeRollback(this, pileId, 0, std::move(response));
+}
+
+size_t TBlobStorageController::RollbackBridgedGroups(TConfigState& state, TBridgePileId pileId) {
+    if (!pileId || !BridgeInfo || std::ranges::count_if(BridgeInfo->Piles,
+            [](const auto& pile) { return !pile.IsFreeSlot; }) != 1) {
+        throw TExError() << "the cluster has to have the only pile to be rolled back";
+    }
+
+    // the pools get the settings the pile has for them, so that their groups keep matching them
+    for (auto& [id, pool] : state.StoragePools.Unshare()) {
+        if (!pool.BridgeMode) {
+            continue;
+        }
+        const auto effective = ResolveStoragePoolForPile(id, pool, pileId, BridgeInfo.get(), StorageConfig.get());
+        pool.ErasureSpecies = effective.ErasureSpecies;
+        pool.SetGroupGeometry(effective.GetGroupGeometry());
+        pool.PDiskFilters = effective.PDiskFilters;
+        pool.BridgeMode = false;
+        pool.Generation = pool.Generation.GetOrElse(0) + 1;
+    }
+
+    // every bridged group has to be the inline pile in the pile, holding all the data of the group
+    size_t numGroups = 0;
+    TStringBuilder unsupported;
+    std::vector<TGroupId> groupIds;
+    state.Groups.ForEach([&](TGroupId groupId, const TGroupInfo& group) {
+        if (!group.BridgeGroupInfo && !group.BridgePileId && !group.BridgeProxyGroupId) {
+            return; // ordinary group, it stays as it is
+        }
+        const NKikimrBridge::TGroupState::TPile *pile = group.BridgeGroupInfo
+            ? NBridge::GetGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), pileId)
+            : nullptr;
+        std::optional<TString> reason;
+        if (!group.IsInlinePile() || group.BridgePileId != pileId) {
+            reason = "it is not the inline pile in the original pile";
+        } else if (group.VDisksInGroup.empty()) {
+            reason = "it has no VDisks";
+        } else if (group.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
+            reason = "it is being decommitted";
+        } else if (!pile || pile->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+            reason = "its part is not synced";
+        } else if (const auto authority = NBridge::GetAuthorityPileId(group.BridgeGroupInfo->GetBridgeGroupState());
+                authority && authority != pileId) {
+            reason = "it relies on another pile";
+        } else {
+            size_t numParts = 0;
+            NBridge::ForEachGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                    const NKikimrBridge::TGroupState::TPile&) {
+                ++numParts;
+            });
+            if (numParts != 1) {
+                reason = "it has parts in other piles";
+            }
+        }
+        if (reason) {
+            unsupported << (unsupported.empty() ? "" : "; ") << "GroupId# " << groupId << ": " << *reason;
+        } else {
+            groupIds.push_back(groupId);
+        }
+    });
+    if (!unsupported.empty()) {
+        throw TExError() << "groups can't be made ordinary ones: " << unsupported;
+    }
+    for (const TGroupId groupId : groupIds) {
+        TGroupInfo *group = state.Groups.FindForUpdate(groupId);
+        Y_ABORT_UNLESS(group);
+        // the group keeps its id, VDisks and data; its generation is bumped along with the content change, and the
+        // syncer bookkeeping goes away with its pile (see CommitSyncerUpdates)
+        group->BridgeGroupInfo.reset();
+        group->BridgePileId = {};
+        group->BridgeProxyGroupId.reset();
+        state.GroupContentChanged.insert(groupId);
+        ++numGroups;
+    }
+    return numGroups;
+}
+
 ITransaction* TBlobStorageController::CreateTxValidateAddBridgePile(TBridgePileId pileId,
         NKikimrBlobStorage::TStorageConfig&& storageConfig, std::unique_ptr<IEventHandle> response) {
     return new TTxAddBridgePile(this, pileId, std::move(storageConfig), std::move(response));
@@ -694,6 +789,10 @@ void TBlobStorageController::CheckBridgePileOperation() {
 
         case TOperation::REMOVE:
             Execute(std::make_unique<TTxRemoveBridgePile>(this, pileId, operationId));
+            break;
+
+        case TOperation::ROLLBACK:
+            Execute(std::make_unique<TTxBridgeRollback>(this, pileId, operationId));
             break;
 
         case NKikimrBridge::TClusterStateDetails_TPendingPileOperation_EKind_TClusterStateDetails_TPendingPileOperation_EKind_INT_MIN_SENTINEL_DO_NOT_USE_:

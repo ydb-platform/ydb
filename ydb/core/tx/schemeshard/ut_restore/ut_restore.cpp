@@ -10455,7 +10455,8 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
             Env.TestWaitNotification(Runtime, id);
             const auto response = TestGetImport(Runtime, id, "/MyRoot", status);
             if (issue) {
-                UNIT_ASSERT_STRING_CONTAINS(response.DebugString(), issue);
+                UNIT_ASSERT_STRING_CONTAINS(
+                    NYql::IssuesFromMessageAsString(response.GetResponse().GetEntry().GetIssues()), issue);
             }
             if (status == Ydb::StatusIds::SUCCESS) {
                 UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
@@ -11358,8 +11359,15 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         const ui64 secondParentTxId = proposals[1]->Get()->Record.GetTxId();
         const TActorId schemeShard = proposals[0]->Sender;
         t.Runtime.EnableScheduleForActor(schemeShard);
-        TBlockEvents<TEvPrivate::TEvOperationPlan> plans(t.Runtime, [&](const auto& ev) {
-            return InFlight && ev->Get()->TxId == firstParentTxId;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> plans(t.Runtime, [&](const auto& ev) {
+            if (InFlight) {
+                for (const auto& tx : ev->Get()->Record.GetTransactions()) {
+                    if (tx.GetTxId() == firstParentTxId) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         });
         // In the completed case keep the first item's subscription alive while the second
         // sees an existing parent. In the in-flight case hold the actual parent creation.

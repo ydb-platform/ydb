@@ -470,6 +470,7 @@ public:
         enum EAction {
             CREATE = 1,
             REMOVE,
+            SET_FREEZE,
         };
 
         TTenant(const TString &path,
@@ -486,6 +487,7 @@ public:
         bool IsCreating() const;
         bool IsRemoving() const;
         bool IsRunning() const;
+        ui64 FreezeEpoch = 0;
         bool HasPoolsToCreate() const;
         bool HasPoolsToDelete() const;
         bool HasSubDomainKey() const;
@@ -748,6 +750,15 @@ public:
 
 public:
     class TTxAlterTenant;
+    class TTxFreezeTenant;
+    class TTxFreezeTenantDone;
+    ITransaction* CreateTxFreezeTenant(TEvConsole::TEvAlterTenantRequest::TPtr& ev);
+    ITransaction* CreateTxFreezeTenantDone(ui64 epoch, ui32 status, const TString& issue);
+    void StartDatabaseFreeze(ui64 epoch, const TActorContext& ctx);
+    void FillDatabaseFreezeOperation(ui64 epoch, Ydb::Operations::Operation& result);
+    void NotifyDatabaseFreeze(ui64 epoch, const TActorContext& ctx);
+    bool IsDatabaseFreezePending(TTenant::TPtr tenant) const;
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDatabaseFreezeResult::TPtr& ev, const TActorContext& ctx);
     class TTxCreateTenant;
     class TTxRemoveComputationalUnits;
     class TTxRemoveTenant;
@@ -999,6 +1010,7 @@ public:
         TRACE_EVENT(NKikimrServices::CMS_TENANTS);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvConsole::TEvAlterTenantRequest, Handle);
+            HFuncTraced(NSchemeShard::TEvSchemeShard::TEvDatabaseFreezeResult, Handle);
             HFuncTraced(TEvConsole::TEvCreateTenantRequest, Handle);
             HFuncTraced(TEvConsole::TEvDescribeTenantOptionsRequest, Handle);
             HFuncTraced(TEvConsole::TEvGetOperationRequest, Handle);
@@ -1070,6 +1082,10 @@ private:
     THashMap<TString, TTenant::TPtr> Tenants;
     THashMap<TDomainId, TString> TenantIdToName;
     THashMap<TString, TRemovedTenant> RemovedTenants;
+    ui64 NextDatabaseFreezeEpoch = 1;
+    THashMap<ui64, NKikimrConsole::TDatabaseFreezeOperation> DatabaseFreezeOperations;
+    THashMap<ui64, TActorId> DatabaseFreezeWorkers;
+    THashMap<ui64, TVector<TActorId>> DatabaseFreezeSubscribers;
     TTenantsConfig Config;
     TTxProcessor::TPtr TxProcessor;
     TQueue<THolder<ITransaction>> DelayedTxs;

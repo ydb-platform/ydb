@@ -1,0 +1,38 @@
+# doc_continue on a translation PR resumes the accepted ydbdoc-review-ng checkpoint.
+# Post `/ydbdoc continue` with operator context before applying the label.
+
+name: ydbdoc-review (doc_continue label)
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: read
+
+concurrency:
+  group: ydbdoc-continue-${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  ydbdoc-continue:
+    if: github.event.label.name == 'doc_continue'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Continue translation with operator feedback
+        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.0.1
+        with:
+          mode: continue
+          pr: ${{ github.event.pull_request.number }}
+        env:
+          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
+          YANDEX_API_KEY: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
+          YDB_GH_TOKEN: ${{ github.token }}
+          GITHUB_ACTOR: ${{ github.event.sender.login }}
+          YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
+          YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE: ${{ vars.YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE }}
+          YDBDOC_MAX_SOURCE_CHARACTERS: ${{ vars.YDBDOC_MAX_SOURCE_CHARACTERS }}
+          YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}

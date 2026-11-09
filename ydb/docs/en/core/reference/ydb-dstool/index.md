@@ -1,6 +1,6 @@
 # {{ ydb-short-name }} DSTool overview
 
-With the {{ ydb-short-name }} DSTool utility, you can manage your {{ ydb-short-name }} cluster's disk subsystem. To install and configure the utility, follow the [instructions](install.md).
+With the {{ ydb-short-name }} DSTool utility, you can manage your {{ ydb-short-name }} cluster's disk subsystem. To install and configure the utility, follow the [instructions](install.md). Before you work with a cluster, configure [connection and authentication](connect.md).
 
 {{ ydb-short-name }} DSTool includes the following commands:
 
@@ -24,7 +24,6 @@ With the {{ ydb-short-name }} DSTool utility, you can manage your {{ ydb-short-n
 | group take-snapshot | Take a snapshot of storage group metadata. |
 | group list | List storage groups. |
 | pool list | List pools. |
-| [pool set-bridge-mode](pool-set-bridge-mode.md) | Change a pool between bridged and ordinary modes. |
 | box list | List sets of PDisks. |
 | node list | List nodes. |
 | cluster balance | Move VDisks from overloaded PDisks. |

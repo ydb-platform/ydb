@@ -6,6 +6,7 @@ register, answer gRPC UNIMPLEMENTED and record an `rpc.unimplemented` event.
 """
 import base64
 import asyncio
+import time
 import grpc
 from google.protobuf import json_format
 
@@ -30,6 +31,10 @@ DISCOVERY = ydb_discovery_v1_pb2.DESCRIPTOR.services_by_name["DiscoveryService"]
 CONFIG = ydb_config_v1_pb2.DESCRIPTOR.services_by_name["ConfigService"].full_name
 MONITORING = ydb_monitoring_v1_pb2.DESCRIPTOR.services_by_name["MonitoringService"].full_name
 BRIDGE = ydb_bridge_v1_pb2.DESCRIPTOR.services_by_name["BridgeService"].full_name
+
+# The `binding_flap` fault: binding_in_progress is set for the first `binding_flap_duty` fraction of every
+# BINDING_FLAP_PERIOD while global quorum is lost, as distconf keeps re-binding to dead peers.
+BINDING_FLAP_PERIOD = 4.0
 
 
 def operation_status(response) -> str:
@@ -163,6 +168,16 @@ class MonitoringServicer(_Servicer, ydb_monitoring_v1_pb2_grpc.MonitoringService
 class BridgeServicer(_Servicer, ydb_bridge_v1_pb2_grpc.BridgeServiceServicer):
     SERVICE = BRIDGE
 
+    def _binding_flaps(self, state) -> bool:
+        """With the `binding_flap` fault, report re-binding for the duty fraction of each period while a config-quorum pile,
+        as seen by this responder, lacks its static node quorum."""
+        faults = self.rt.faults
+        on = BINDING_FLAP_PERIOD * faults.binding_flap_duty
+        if not faults.binding_flap or time.monotonic() % BINDING_FLAP_PERIOD >= on:
+            return False
+        return any(model.requires_config_quorum(state.stored(i)) and not self.inst.has_static_quorum(i)
+                   for i in range(len(self.inst.names)))
+
     async def GetClusterState(self, request, context):
         async def call():
             state = self.inst.replica.state
@@ -184,6 +199,26 @@ class BridgeServicer(_Servicer, ydb_bridge_v1_pb2_grpc.BridgeServiceServicer):
                 result.pending_pile_operation.pile_name = pending["pile_name"]
                 result.pending_pile_operation.kind = ydb_bridge_pb2.PendingPileOperation.Kind.Value(pending["kind"])
                 result.pending_pile_operation.error_reason = pending.get("error_reason", "")
+            if request.include_pile_connectivity:
+                report = result.pile_connectivity
+                report.reporter_node_id = self.node.node_id
+                # Synthetic root placement: the first up node of the stored primary pile.
+                first_up = next((n.node_id for n, f in zip(self.inst.pile_info.nodes, self.inst.node_faults)
+                                 if not f.down), None)
+                report.reporter_is_root = self.inst.index == state.primary and self.node.node_id == first_up
+                report.binding_in_progress = self._binding_flaps(state) or any(
+                    i != self.inst.index and model.requires_config_quorum(state.stored(i)) and
+                    self.inst.reach.reachable(i) and i not in self.inst.reach.last_static_up
+                    for i in range(len(self.inst.names)))
+                report.generation = state.generation
+                for name in state.registered_names(self.inst.names):
+                    i = self.inst.names.index(name)
+                    report.piles.add(
+                        pile_name=name, static_nodes=self.inst.topo.nodes_per_pile[name],
+                        connected_static_nodes=self.inst.connected_static_nodes(i),
+                        has_node_quorum=self.inst.has_static_quorum(i),
+                        in_config_quorum=model.requires_config_quorum(state.stored(i)),
+                        in_data_quorum=model.requires_data_quorum(state.stored(i)))
             return await self._read("GetClusterState", context, result, ydb_bridge_pb2.GetClusterStateResponse)
 
         return await self._run("GetClusterState", context, call, request=request)
@@ -191,8 +226,11 @@ class BridgeServicer(_Servicer, ydb_bridge_v1_pb2_grpc.BridgeServiceServicer):
     async def UpdateClusterState(self, request, context):
         updates = [(u.pile_name, u.state) for u in request.updates]
         quorum = list(request.quorum_piles)
+        expected_generation = request.expected_generation if request.HasField("expected_generation") else None
         summary = "updates=[%s] quorum=%s" % (
             ", ".join("%s=%s" % (n, model.public_name(s)) for n, s in updates), quorum)
+        if expected_generation is not None:
+            summary += " expected_generation=%d" % expected_generation
 
         async def call():
             if not self._authorized(context, mutation=True):
@@ -200,7 +238,7 @@ class BridgeServicer(_Servicer, ydb_bridge_v1_pb2_grpc.BridgeServiceServicer):
                     model.UNAUTHORIZED, "Bridge operations require administrator privileges"))
             self.rt.track_update_reply(context)
             outcome = await self.inst.admin_update(updates, quorum, accepted=lambda: self._checkpoint(
-                "UpdateClusterState", "after_acceptance", context))
+                "UpdateClusterState", "after_acceptance", context), expected_generation=expected_generation)
             if outcome.error is not None:
                 return ydb_bridge_pb2.UpdateClusterStateResponse(
                     operation=operations.error(outcome.error.status, outcome.error.message))

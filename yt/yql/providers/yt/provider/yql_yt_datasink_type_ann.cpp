@@ -1724,7 +1724,8 @@ private:
             | EYtSettingType::Columns;
 
         if (State_->Types->EngineType == EEngineType::Ytflow) {
-            acceptedSettings |= EYtSettingType::PrimaryKey;
+            acceptedSettings |= EYtSettingType::PrimaryKey
+                | EYtSettingType::Producer;
         }
 
         if (!ValidateSettings(*settings, acceptedSettings, ctx))

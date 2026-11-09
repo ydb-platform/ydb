@@ -408,19 +408,16 @@ public:
     }
 
     TMaybe<TVector<TString>> Columns() const {
-        return std::visit(
-            TOverloaded{
-                [&](const TVector<TNodePtr>& terms) -> TMaybe<TVector<TString>> {
-                    TVector<TString> columns(Reserve(terms.size()));
-                    for (const auto& term : terms) {
-                        columns.emplace_back(term->GetLabel());
-                    }
-                    return columns;
-                },
-                [](const TPlainAsterisk&) -> TMaybe<TVector<TString>> {
-                    return Nothing();
-                },
-            }, Projection);
+        TVector<TString> columns(Reserve(Projection.size()));
+        for (const auto& term : Projection) {
+            if (term->IsAsterisk()) {
+                return Nothing();
+            }
+
+            columns.emplace_back(term->GetLabel());
+        }
+
+        return columns;
     }
 
 private:
@@ -449,16 +446,8 @@ private:
     }
 
     TMaybe<TVector<TProjectionItem>> InitProjection(TContext& ctx, ISource* src) const {
-        return std::visit(
-            TOverloaded{
-                [&](const TVector<TNodePtr>& terms) {
-                    YQL_ENSURE(!terms.empty());
-                    return InitTerms(ctx, src, terms);
-                },
-                [&](const TPlainAsterisk&) -> TMaybe<TVector<TProjectionItem>> {
-                    return TVector<TProjectionItem>{};
-                },
-            }, Projection);
+        YQL_ENSURE(!Projection.empty());
+        return InitTerms(ctx, src, Projection);
     }
 
     TMaybe<TVector<TProjectionItem>>
@@ -468,6 +457,11 @@ private:
         TVector<TProjectionItem> items(Reserve(terms.size()));
         for (size_t i = 0; i < terms.size(); ++i) {
             const TNodePtr& term = terms[i];
+
+            if (term->IsAsterisk()) {
+                items.push_back({.Term = term});
+                continue;
+            }
 
             auto [label, isSyntheticA] = TermAlias(term, i, used);
             used.emplace(label);
@@ -590,19 +584,11 @@ private:
     }
 
     TNodePtr BuildYqlResultItems(const TVector<TProjectionItem>& projection, TContext& ctx) const {
-        if (projection.empty()) {
-            return BuildYqlResultItems(TPlainAsterisk(), ctx);
-        }
-
         TNodePtr items = Y();
         for (const auto& [term, isSynthetic] : projection) {
             items->Add(BuildYqlResultItem(isSynthetic, term, ctx));
         }
         return items;
-    }
-
-    TNodePtr BuildYqlResultItems(const TPlainAsterisk&, TContext& ctx) const {
-        return Y(BuildYqlResultItem(/*isSynthetic=*/false, Y("YqlStar"), ctx));
     }
 
     TNodePtr BuildYqlResultItem(bool isSynthetic, TNodePtr term, TContext& ctx) const {
@@ -1254,6 +1240,34 @@ private:
     TNodePtr Node_;
 };
 
+class TYqlStarNode final: public TAstListNode {
+public:
+    TYqlStarNode(TPosition position, TMaybe<TString> source)
+        : TAstListNode(std::move(position))
+        , Source_(std::move(source))
+    {
+        Add(Source_ ? "YqlQualifiedStar" : "YqlStar");
+        if (Source_) {
+            Add(BuildQuotedAtom(Pos_, *Source_));
+        }
+    }
+
+    bool IsAsterisk() const override {
+        return true;
+    }
+
+    const TString* GetSourceName() const override {
+        return Source_ ? &*Source_ : nullptr;
+    }
+
+    TNodePtr DoClone() const override {
+        return new TYqlStarNode(Pos_, Source_);
+    }
+
+private:
+    TMaybe<TString> Source_;
+};
+
 EYqlSetOp AllQualified(EYqlSetOp op) {
     switch (op) {
         case EYqlSetOp::Push:
@@ -1297,7 +1311,7 @@ TSourcePtr ToTableExpression(TYqlSource source) {
     TYqlSelectArgs select = {
         .SetItems = {{
             .Position = position,
-            .Projection = TPlainAsterisk{},
+            .Projection = {BuildYqlStar(position)},
             .Source = TYqlJoin{
                 .Sources = {std::move(source)},
             },
@@ -1330,6 +1344,10 @@ TNodePtr BuildYqlSelf(TPosition position) {
     TNodePtr x = new TAstListNodeImpl(std::move(position));
     x->Add("YqlSelf");
     return x;
+}
+
+TNodePtr BuildYqlStar(TPosition position, TMaybe<TString> source) {
+    return new TYqlStarNode(std::move(position), std::move(source));
 }
 
 TSourcePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args) {

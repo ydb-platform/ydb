@@ -818,7 +818,8 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
                 {"pos", currentPosition});
             auto chunk = (*it)->Slice(positions[idx] - currentPosition, positions[idx + 1] - positions[idx]);
             YDB_LOG_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx],
-{"length", chunk->length()},{"expect", positions[idx + 1] - positions[idx]});
+                {"length", chunk->length()},
+                {"expect", positions[idx + 1] - positions[idx]});
             if (positions[idx + 1] - currentPosition == length) {
                 ++it;
                 initializeIt();

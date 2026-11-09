@@ -220,8 +220,9 @@ TPortionMeta::TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& m
     , RecordSnapshotMin(min)
     , RecordSnapshotMax(max)
 {
-    YDB_LOG_VERIFY_DEBUG(IndexKeyStart() <= IndexKeyEnd())
-    ("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
+    YDB_LOG_VERIFY_DEBUG(IndexKeyStart() <= IndexKeyEnd(),
+        {"start", IndexKeyStart().DebugString()},
+        {"end", IndexKeyEnd().DebugString()});
 }
 
 void TPortionMeta::FullValidation() const {

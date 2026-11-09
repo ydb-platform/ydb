@@ -259,9 +259,15 @@ void TColumnShardScan::CheckHanging(const bool logging) const {
             {"last", LastResultInstant});
     }
     const bool ok = !!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting();
-    YDB_LOG_VERIFY_DEBUG(ok)
-    ("finished", ScanIterator->Finished())("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)(
-        "debug", ScanIterator->DebugString())("counters", ScanCountersPool.DebugString());
+    YDB_LOG_VERIFY_DEBUG(ok,
+        {"finished", ScanIterator->Finished()},
+        {"scan_actor_id", ScanActorId},
+        {"tx_id", TxId},
+        {"scan_id", ScanId},
+        {"gen", ScanGen},
+        {"tablet", TabletId},
+        {"debug", ScanIterator->DebugString()},
+        {"counters", ScanCountersPool.DebugString()});
     if (!ok) {
         YDB_LOG_CRIT_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
             {"error", "CheckHanging"},

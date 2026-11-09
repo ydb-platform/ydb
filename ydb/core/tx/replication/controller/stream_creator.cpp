@@ -135,18 +135,6 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
     }
 
-    TString BuildStreamPath() const {
-        switch (Kind) {
-        case TReplication::ETargetKind::Table:
-            return CanonizePath(ChildPath(SplitPath(SrcPath), TString{Changefeed.GetName()}));
-        case TReplication::ETargetKind::IndexTable:
-            return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", TString{Changefeed.GetName()}}));
-        case TReplication::ETargetKind::Transfer:
-        case TReplication::ETargetKind::Topic:
-            return CanonizePath(SplitPath(SrcPath));
-        }
-    }
-
     bool IsOwnedChangefeed() const {
         return Kind == TReplication::ETargetKind::Table
             || Kind == TReplication::ETargetKind::IndexTable;
@@ -183,7 +171,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             break;
         }
 
-        Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(BuildStreamPath(), settings), 0, ++RequestCookie);
+        Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(SrcStreamPath, settings), 0, ++RequestCookie);
         Become(&TThis::StateAlterTopic);
     }
 
@@ -242,8 +230,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     void CheckConsumerExists(bool verifySettings = false) {
         VerifyConsumerSettings = verifySettings;
-        const auto streamPath = BuildStreamPath();
-        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(streamPath, {}), 0, ++RequestCookie);
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(SrcStreamPath, {}), 0, ++RequestCookie);
         Become(&TThis::StateCheckConsumerExists);
     }
 
@@ -269,14 +256,14 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 YDB_LOG_WARN("Error of resolving topic",
-                    {"streamPath", BuildStreamPath()},
+                    {"streamPath", SrcStreamPath},
                     {"ev", ev->Get()->ToString()},
                     {"outcome", "retry"});
                 return Retry();
             }
 
             YDB_LOG_ERROR("Error of resolving topic",
-                {"streamPath", BuildStreamPath()},
+                {"streamPath", SrcStreamPath},
                 {"ev", ev->Get()->ToString()},
                 {"outcome", "stop"});
             NYdb::NIssue::TIssues issues = result.GetIssues();
@@ -416,6 +403,7 @@ public:
             ui64 tid,
             const TReplication::ITarget::IConfig::TPtr& config,
             const TString& streamName,
+            const TString& streamPath,
             const TString& consumerName,
             const TDuration& retentionPeriod,
             const std::optional<TDuration>& resolvedTimestamps,
@@ -434,6 +422,7 @@ public:
         , TargetId(tid)
         , Kind(config->GetKind())
         , SrcPath(config->GetSrcPath())
+        , SrcStreamPath(streamPath)
         , SrcConsumerName(consumerName)
         , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
             {"path", config->GetDstPath()},
@@ -487,6 +476,7 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
+    const TString SrcStreamPath;
     const TString SrcConsumerName;
     const NYdb::NTable::TChangefeedDescription Changefeed;
     const TDuration StreamRetentionPeriod;
@@ -521,7 +511,7 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),
-        target->GetConfig(), target->GetStreamName(), target->GetStreamConsumerName(),
+        target->GetConfig(), target->GetStreamName(), target->GetStreamPath(), target->GetStreamConsumerName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
         supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly,
         TDuration::Seconds(AppData()->ReplicationConfig.GetStreamRetentionPeriodSeconds()),
@@ -530,13 +520,13 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
         const TReplication::ITarget::IConfig::TPtr& config,
-        const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
+        const TString& streamName, const TString& streamPath, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
         TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant, bool enableOmitBackupAttribute)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
-        streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
+        streamName, streamPath, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
         schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant, enableOmitBackupAttribute);
 }
 

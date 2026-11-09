@@ -59,6 +59,17 @@ private:
     bool Detailed = false;
 };
 
+class TCommandBridgeRollbackStatus : public TYdbReadOnlyCommand, public TCommandWithOutput {
+public:
+    TCommandBridgeRollbackStatus(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase;
+};
+
 class TCommandBridgeSwitchover : public TYdbCommand {
 public:
     TCommandBridgeSwitchover(bool allowEmptyDatabase);

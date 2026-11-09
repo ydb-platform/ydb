@@ -399,6 +399,10 @@ message TEvNodeConfigInvokeOnRoot {
     // Read the static-node connectivity of the top of this binding component, even without global quorum.
     message TQueryPileConnectivity {}
 
+    // Report how far the rollback of the bridge mode has gone: whether the cluster still has its cluster state, and
+    // which nodes still run with BridgeConfig.
+    message TQueryBridgeRollbackStatus {}
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -428,6 +432,7 @@ message TEvNodeConfigInvokeOnRoot {
         TNotifyBridgePileOperation NotifyBridgePileOperation = 29;
         TRemoveBridgePile RemoveBridgePile = 30;
         TQueryPileConnectivity QueryPileConnectivity = 31;
+        TQueryBridgeRollbackStatus QueryBridgeRollbackStatus = 32;
     }
 }
 
@@ -489,6 +494,12 @@ message TEvNodeConfigInvokeOnRootResult {
         repeated TPile Piles = 5; // free registry slots are omitted
     }
 
+    message TBridgeRollbackStatus {
+        bool HasClusterState = 1; // the cluster is bridged one (converted), its storage has to be rolled back first
+        repeated uint32 BridgeConfigNodeIds = 2; // connected nodes running with BridgeConfig
+        repeated uint32 UnreportedStaticNodeIds = 3; // static nodes not connected (or of older versions not reporting)
+    }
+
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
@@ -503,6 +514,7 @@ message TEvNodeConfigInvokeOnRootResult {
         TReassignGroupDisk ReassignGroupDisk = 13;
         TValidateTargetedProposition ValidateTargetedProposition = 14;
         TPileConnectivity PileConnectivity = 15;
+        TBridgeRollbackStatus BridgeRollbackStatus = 16;
     }
 }
 

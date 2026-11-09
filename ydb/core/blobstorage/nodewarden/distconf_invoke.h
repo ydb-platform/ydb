@@ -209,6 +209,7 @@ namespace NKikimr::NStorage {
         void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
 
         void ConvertToBridge(const TQuery::TConvertToBridge& cmd);
+        void QueryBridgeRollbackStatus();
 
         // check that every node runs with BridgeConfig (and supports bridge features of minFeatureLevel, when it is set),
         // then invoke the callback; every static node listed in requiredNodeIds must report it, while nodes listed in

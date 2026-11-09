@@ -79,6 +79,7 @@ TCommandBridge::TCommandBridge(bool allowEmptyDatabase)
     AddCommand(std::make_unique<TCommandBridgeConvert>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeProvisionPile>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeDestroyPile>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandBridgeRollbackStatus>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeSetDatabaseMode>());
 }
 
@@ -294,6 +295,86 @@ int TCommandBridgeList::Run(TConfig& config) {
                 if (!op->ErrorReason.empty()) {
                     ss << "Last attempt has failed (being retried): " << op->ErrorReason << Endl;
                 }
+            }
+            Cout << ss.Str();
+            break;
+        }
+    }
+
+    return EXIT_SUCCESS;
+}
+
+TCommandBridgeRollbackStatus::TCommandBridgeRollbackStatus(bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("rollback-status", {}, "Show how far the rollback of a cluster prepared for bridge mode has "
+        "gone. To roll back, remove bridge_config from the cluster configuration and restart every node without it. "
+        "Dynamic nodes not connected to the cluster are not reported.")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{}
+
+void TCommandBridgeRollbackStatus::Config(TConfig& config) {
+    TYdbReadOnlyCommand::Config(config);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    config.SetFreeArgsNum(0);
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::Json,
+    });
+}
+
+void TCommandBridgeRollbackStatus::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParseOutputFormats();
+}
+
+int TCommandBridgeRollbackStatus::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
+
+    auto result = client.GetRollbackStatus().GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    auto printNodeIds = [](IOutputStream& out, const std::vector<uint32_t>& nodeIds) {
+        for (size_t i = 0; i < nodeIds.size(); ++i) {
+            out << (i ? ", " : "") << nodeIds[i];
+        }
+    };
+
+    switch (OutputFormat) {
+        case EDataFormat::Json: {
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json.InsertValue("bridged", result.IsBridged());
+            for (const auto& [key, nodeIds] : {
+                    std::make_pair("bridge_config_node_ids", &result.GetBridgeConfigNodeIds()),
+                    std::make_pair("unreported_static_node_ids", &result.GetUnreportedStaticNodeIds())}) {
+                NJson::TJsonValue items(NJson::JSON_ARRAY);
+                for (const uint32_t nodeId : *nodeIds) {
+                    items.AppendValue(nodeId);
+                }
+                json.InsertValue(key, items);
+            }
+            json.InsertValue("complete", result.IsComplete());
+            NJson::WriteJson(&Cout, &json, true);
+            Cout << Endl;
+            break;
+        }
+        default: {
+            TStringStream ss;
+            if (result.IsBridged()) {
+                ss << "The cluster has been converted into a bridged one; rolling back the conversion is not supported"
+                    " yet" << Endl;
+            }
+            if (const auto& nodeIds = result.GetBridgeConfigNodeIds(); !nodeIds.empty()) {
+                ss << "Nodes still running with bridge config (restart them without it): ";
+                printNodeIds(ss, nodeIds);
+                ss << Endl;
+            }
+            if (const auto& nodeIds = result.GetUnreportedStaticNodeIds(); !nodeIds.empty()) {
+                ss << "Static nodes that have not reported their config (not running or not connected): ";
+                printNodeIds(ss, nodeIds);
+                ss << Endl;
+            }
+            if (result.IsComplete()) {
+                ss << "The cluster runs in ordinary mode, every node has reported running without bridge config" << Endl;
             }
             Cout << ss.Str();
             break;

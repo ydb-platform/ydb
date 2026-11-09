@@ -988,6 +988,7 @@ message TReqExplainQuery
     optional int32 syntax_version = 13 [default = 1];
     optional int64 min_row_count_per_subquery = 14;
     optional int32 hyper_log_log_precision = 15;
+    optional bool merge_versioned_rows = 16;
 }
 
 message TRspExplainQuery

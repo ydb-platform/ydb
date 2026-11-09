@@ -14,7 +14,9 @@
 #include <util/folder/path.h>
 #include <util/generic/is_in.h>
 #include <util/generic/utility.h>
+#include <util/string/builder.h>
 #include <util/string/join.h>
+#include <util/string/subst.h>
 
 namespace NYql::NCommon {
 
@@ -159,6 +161,27 @@ const TStructExprType* BuildCommonTableListType(TExprContext& ctx) {
 
 TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& ann, TExprContext& ctx) {
     return ExpandType(pos, ann, ctx);
+}
+
+TMaybe<TString> TryGetUdfName(const TExprNode& node) {
+    if (NNodes::TCoUdf::Match(&node)) {
+        // MethodName is "Module.Func"; normalize to Module::Func like in sql query.
+        TString name(node.Head().Content());
+        const auto module = TStringBuf(name).Before('.');
+        if (module == "Yson2") {
+            name.replace(0, module.size(), "Yson");
+        } else if (module == "DateTime2") {
+            name.replace(0, module.size(), "DateTime");
+        }
+        SubstGlobal(name, ".", "::");
+        return name;
+    }
+
+    if (NNodes::TCoScriptUdf::Match(&node)) {
+        return TStringBuilder() << node.Head().Content() << "::" << node.Child(1)->Content();
+    }
+
+    return Nothing();
 }
 
 bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option) {

@@ -677,6 +677,47 @@ Y_UNIT_TEST(FromSubquery) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
 }
 
+Y_UNIT_TEST(FlattenColumns) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    const TString query = "PRAGMA OrderedColumns; SELECT * FROM plato.Input FLATTEN COLUMNS;";
+    const auto result = SqlToYqlWithSettings(query, settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+
+    TWordCountHive stat = {"YqlSelect", "YqlFlattenColumns", "FlattenStructs", "OrderedFlatMap"};
+    VerifyProgram(result, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlFlattenColumns"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["FlattenStructs"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["OrderedFlatMap"], 0);
+}
+
+Y_UNIT_TEST(FlattenByModes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+    const TVector<TString> queries = {
+        "PRAGMA OrderedColumns; SELECT * FROM plato.Input FLATTEN BY value;",
+        "PRAGMA OrderedColumns; SELECT * FROM plato.Input FLATTEN LIST BY value;",
+        "PRAGMA OrderedColumns; SELECT * FROM plato.Input FLATTEN DICT BY value;",
+        "PRAGMA OrderedColumns; SELECT * FROM plato.Input FLATTEN OPTIONAL BY value;",
+    };
+    for (const auto& query : queries) {
+        const auto result = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(result.IsOk(), query << Endl << Err2Str(result));
+
+        TWordCountHive stat = {"YqlSelect", "YqlFlattenBy", "FlattenByColumns", "flatten_by", "OrderedFlatMap"};
+        VerifyProgram(result, stat);
+        UNIT_ASSERT_VALUES_EQUAL_C(stat["YqlSelect"], 1, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(stat["YqlFlattenBy"], 1, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(stat["FlattenByColumns"], 1, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(stat["flatten_by"], 1, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(stat["OrderedFlatMap"], 0, query);
+    }
+}
+
 Y_UNIT_TEST(Join2) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
@@ -1622,8 +1663,8 @@ Y_UNIT_TEST(LegacySourceBindTriggersFallbackInAutoMode) {
         PRAGMA YqlSelect = 'auto';
         $x = (
             SELECT *
-            FROM AsTable([<|a: [1], b: 2|>])
-            FLATTEN BY a
+            FROM AsTable([<|a: 1|>])
+            ASSUME ORDER BY a
         );
         SELECT * FROM $x;
     )sql", settings);

@@ -717,7 +717,6 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
             }
             AFL_ENSURE(CurrentMessage->GetSeqNo() == res.GetSeqNo());
             (*CurrentMessage->MutableData()) += res.GetData();
-            CurrentMessage->SetPartitionKey(res.GetPartitionKey());
             CurrentMessage->SetPartNo(res.GetPartNo());
             CurrentMessage->SetUncompressedSize(CurrentMessage->GetUncompressedSize() + res.GetUncompressedSize());
             CurrentMessage->SetLogicalMessageCount(res.GetLogicalMessageCount());

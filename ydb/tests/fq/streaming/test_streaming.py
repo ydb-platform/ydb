@@ -9,6 +9,7 @@ from typing import Callable
 import ydb
 
 from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, counter_nodes, get_sensors, max_json_depth
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule, create_stream, delete_stream
@@ -2868,3 +2869,71 @@ FROM `{table_name}`"""
                 # The fixture is shared: stopping processes does not immediately remove them
                 # from KQP placement snapshots. Wait before the next case creates a query.
                 kikimr.wait_kqp_node_count(original_node_count)
+
+    @pytest.mark.parametrize("kikimr", [{"max_message_size": 136314880}], indirect=True)
+    @pytest.mark.parametrize("local_topics", [True, False], ids=["local", "external"])
+    def test_read_large_topic_message(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+    ) -> None:
+        max_message_size = 136314880
+        partition_write_speed = 50 * 1024 * 1024
+        timeout = plain_or_under_sanitizer(60, 300)
+        source_name = entity_name("large_topic_message")
+        self.init_topics(source_name, endpoint=kikimr.endpoint)
+        input_name = f"`{self.input_topic}`"
+        output_name = f"`{self.output_topic}`"
+        if not local_topics:
+            # Use the same cluster through gRPC to exercise the C++ SDK driver limits.
+            self.create_source(kikimr, source_name, endpoint=kikimr.endpoint)
+            input_name = f"`{source_name}`.{input_name}"
+            output_name = f"`{source_name}`.{output_name}"
+
+        driver_config = ydb.DriverConfig(
+            endpoint=kikimr.endpoint.endpoint,
+            database=kikimr.get_database_name(),
+            auth_token="root@builtin",
+            channel_options=[
+                ("grpc.max_receive_message_length", max_message_size),
+                ("grpc.max_send_message_length", max_message_size),
+            ],
+        )
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=10, fail_fast=True)
+            topic_client = driver.topic_client
+            for topic in (self.input_topic, self.output_topic):
+                topic_client.alter_topic(
+                    topic,
+                    set_partition_write_speed_bytes_per_second=partition_write_speed,
+                    set_partition_write_burst_bytes=partition_write_speed,
+                )
+
+            future = kikimr.ydb_client.query_async(
+                f"""
+                    INSERT INTO {output_name}
+                    SELECT Data FROM {input_name} WITH (
+                        STREAMING = "TRUE",
+                        FORMAT = "raw",
+                        SCHEMA = (Data String NOT NULL)
+                    )
+                    LIMIT 1;
+                """,
+                timeout=timeout,
+            )
+            data = b"x" * 130000000
+            writer = topic_client.writer(self.input_topic, codec=ydb.TopicCodec.RAW)
+            try:
+                writer.write_with_ack(data, timeout=timeout)
+            finally:
+                writer.close(flush=False, timeout=timeout)
+
+            with topic_client.reader(self.output_topic, consumer=self.consumer_name) as reader:
+                message = reader.receive_message(timeout=timeout)
+                assert len(message.data) == len(data)
+                # Keep assertion diagnostics from printing the entire 130 MB payload.
+                contents_match = message.data == data
+                assert contents_match, "Large topic message contents differ"
+                reader.commit_with_ack(message, timeout=timeout)
+            future.result(timeout=timeout)

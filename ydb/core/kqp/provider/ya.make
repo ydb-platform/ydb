@@ -38,6 +38,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
+    ydb/core/util
     ydb/library/aclib
     ydb/library/aclib/protos
     ydb/library/ydb_issue/proto

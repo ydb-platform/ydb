@@ -574,10 +574,16 @@ private:
             it->second = partitionSession;
         }
 
+        std::optional<ui64> retainedStartOffset;
+        if (message.has_retained_start_offset()) {
+            retainedStartOffset = message.retained_start_offset();
+        }
         AddOutgoingEvent(TReadSessionEvent::TStartPartitionSessionEvent(
             std::move(partitionSession),
             committedOffset,
-            offsets.end()
+            offsets.start(),
+            offsets.end(),
+            retainedStartOffset
         ));
     }
 

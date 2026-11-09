@@ -86,9 +86,12 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .IsTheSameDomain(domainPath);
+
+            if (checks && (!request.GetInternal() || !tablePath.IsImportingReplica())) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!checks) {
                 return Reply(checks.GetStatus(), checks.GetError());

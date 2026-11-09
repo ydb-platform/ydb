@@ -1,3 +1,4 @@
+* Async replication descriptions and SQL dumps now include the availability period.
 
 * Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
 * Fixed a memory leak when closing producers in `ydb workload topic run write|full`.

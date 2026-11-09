@@ -134,7 +134,7 @@ TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSch
     const auto description = GetDescription(ss, tablePathId);
     const auto& table = description.GetTable();
     auto indexes = GetTableIndexesExportMetadata(table, encrypted);
-    if (indexes && snapshot) {
+    if (indexes.IsSuccess() && snapshot) {
         snapshot->Clear();
         auto& savedTable = *snapshot->MutableTable()->MutableTable();
         *savedTable.MutableTableIndexes() = table.GetTableIndexes();

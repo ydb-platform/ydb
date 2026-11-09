@@ -110,6 +110,8 @@ public:
     struct TDirectory {
         Ydb::Scheme::Entry::Type SelfType = Ydb::Scheme::Entry::DIRECTORY;
         std::vector<std::pair<TString, Ydb::Scheme::Entry::Type>> Children;
+        int Calls = 0;
+        int ExpectedCalls = -1;
     };
 
     grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) {
@@ -128,6 +130,7 @@ public:
             self->set_name(TEST_DATABASE);
             self->set_type(Ydb::Scheme::Entry::DATABASE);
         } else {
+            ++directory->second.Calls;
             auto* self = res.mutable_self();
             self->set_name(TStringBuf(request->path()).RNextTok('/'));
             self->set_type(directory->second.SelfType);
@@ -147,6 +150,22 @@ public:
     TSchemeImpl& ExpectListDirectory(TString path, Ydb::Scheme::Entry::Type selfType = Ydb::Scheme::Entry::DIRECTORY) {
         Directories[std::move(path)].SelfType = selfType;
         return *this;
+    }
+
+    TSchemeImpl& ExpectListDirectoryCalls(const TString& path, int calls) {
+        Directories[path].ExpectedCalls = calls;
+        return *this;
+    }
+
+    void CheckExpectations() override {
+        for (const auto& [path, directory] : Directories) {
+            if (directory.ExpectedCalls >= 0) {
+                CHECK_EXP(directory.Calls == directory.ExpectedCalls,
+                    "Incorrect ListDirectory calls for " << path << ": " << directory.Calls
+                    << " instead of " << directory.ExpectedCalls);
+            }
+        }
+        TChecker::CheckExpectations();
     }
 
     TSchemeImpl& ExpectChild(TString path, TString name, Ydb::Scheme::Entry::Type type) {

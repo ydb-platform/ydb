@@ -599,8 +599,10 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         for (const bool nestedFirst : {false, true}) {
             Service<TSchemeImpl>()
                 .ExpectListDirectory(GetDatabase() + "/dir")
+                .ExpectListDirectoryCalls(GetDatabase() + "/dir", 1)
                 .ExpectChild(GetDatabase() + "/dir", "nested", Ydb::Scheme::Entry::DIRECTORY)
                 .ExpectListDirectory(GetDatabase() + "/dir/nested")
+                .ExpectListDirectoryCalls(GetDatabase() + "/dir/nested", 1)
                 .ExpectChild(GetDatabase() + "/dir/nested", "source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE);
             auto& service = Service<TExportImpl>();
             service.ExpectBucket(TEST_BUCKET)
@@ -654,6 +656,68 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
             "--access-key", "test-key", "--secret-key", "test-access-key",
             "--destination-prefix", "common",
+        });
+    }
+
+    Y_UNIT_TEST_F(ExpandedExportValidatesNestedLegacyExternalObjectsWithoutAddingHiddenTables, TExportFixture) {
+        for (const int mode : {0, 1, 2}) {
+            Service<TSchemeImpl>()
+                .ExpectListDirectory(GetDatabase() + "/user")
+                .ExpectChild(GetDatabase() + "/user", "data", Ydb::Scheme::Entry::TABLE)
+                .ExpectChild(GetDatabase() + "/user", "export-12345", Ydb::Scheme::Entry::DIRECTORY)
+                .ExpectListDirectory(GetDatabase() + "/user/export-12345")
+                .ExpectChild(GetDatabase() + "/user/export-12345", "hidden_table", Ydb::Scheme::Entry::TABLE)
+                .ExpectChild(GetDatabase() + "/user/export-12345", "source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE);
+            auto& service = Service<TExportImpl>();
+            service.ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectItem(GetDatabase() + "/user/data", "mapped/data");
+            if (mode != 2) {
+                service.ExpectItem(GetDatabase() + "/user/export-12345/source", "mapped/export-12345/source");
+                service.ReturnBadRequestOnce(1);
+                ExpectFail();
+            } else {
+                service.ReturnBadRequestOnce(2);
+            }
+            TList<TString> args = {
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key", "--secret-key", "test-access-key",
+                "--item", "src=user,dst=mapped",
+            };
+            if (mode != 0) {
+                service.ExpectCommonDstPrefix("common");
+                args.insert(args.end(), {"--destination-prefix", "common", "--exclude", mode == 1 ? "does-not-match" : "source"});
+            }
+            RunCli(args);
+        }
+    }
+
+    Y_UNIT_TEST_F(ExpandedExportSkipsInternalDirsOnlyAtDatabaseRootForExternalObjects, TExportFixture) {
+        Service<TSchemeImpl>()
+            .ExpectListDirectory(GetDatabase())
+            .ExpectChild(GetDatabase(), "export-ignored", Ydb::Scheme::Entry::DIRECTORY)
+            .ExpectChild(GetDatabase(), "user", Ydb::Scheme::Entry::DIRECTORY)
+            .ExpectListDirectory(GetDatabase() + "/user")
+            .ExpectChild(GetDatabase() + "/user", "data", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild(GetDatabase() + "/user", "export-12345", Ydb::Scheme::Entry::DIRECTORY)
+            .ExpectListDirectory(GetDatabase() + "/user/export-12345")
+            .ExpectChild(GetDatabase() + "/user/export-12345", "source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE);
+        Service<TExportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectCommonDstPrefix("common")
+            .ExpectItem(GetDatabase() + "/user/data", "common/user/data")
+            .ExpectItem(GetDatabase() + "/user/export-12345/source", "common/user/export-12345/source");
+        RunCli({
+            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+            "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+            "--access-key", "test-key", "--secret-key", "test-access-key",
+            "--destination-prefix", "common", "--exclude", "does-not-match",
         });
     }
 

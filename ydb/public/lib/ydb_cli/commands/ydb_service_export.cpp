@@ -48,12 +48,17 @@ namespace {
             || entry.Type == NScheme::ESchemeEntryType::ExternalTable;
     }
 
-    TVector<TString> ListExternalExportPaths(
-        NScheme::TSchemeClient& client, const TString& path, const TString& databaseRoot)
+    void ListExternalExportPaths(
+        NScheme::TSchemeClient& client, const TString& path, const TString& databaseRoot,
+        THashSet<TString>& visited, TVector<TString>& result)
     {
+        // Roots are visited most-specific first. A completed subtree already has
+        // its authoritative mapping, so overlapping parents need not list it again.
+        if (!visited.insert(path).second) {
+            return;
+        }
         auto listing = client.ListDirectory(path).ExtractValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(listing);
-        TVector<TString> result;
         if (FilterExternalSchemeObjects(listing.GetEntry())) {
             result.push_back(path);
         }
@@ -69,11 +74,9 @@ namespace {
                 result.push_back(childPath);
             } else if (child.Type == NScheme::ESchemeEntryType::Directory
                     || child.Type == NScheme::ESchemeEntryType::SubDomain) {
-                auto descendants = ListExternalExportPaths(client, childPath, databaseRoot);
-                result.insert(result.end(), descendants.begin(), descendants.end());
+                ListExternalExportPaths(client, childPath, databaseRoot, visited, result);
             }
         }
-        return result;
     }
 
     TStatus FilterAsyncReplicaTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
@@ -516,64 +519,62 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     }
     auto originalItems = settings.Item_;
     if (expandItems) {
+        // Preserve existing selection of tables and other non-external objects;
+        // external leaves use the server-compatible traversal below.
         ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns,
             [](const TSchemeEntry& entry) {
-                return FilterAllSupportedSchemeObjects(entry) && (isS3 || !FilterExternalSchemeObjects(entry));
+                return FilterAllSupportedSchemeObjects(entry) && !FilterExternalSchemeObjects(entry);
             }, &externalPaths);
-        if (settings.Item_.empty()) {
-            if (!ExclusionPatterns.empty()) {
-                Cerr << "No items to export after applying exclude filters" << Endl;
-            } else {
-                Cerr << "No items to export" << Endl;
-            }
-            return EXIT_FAILURE;
-        }
     }
 
     if constexpr (isS3) {
-        if (!expandItems) {
-            // Retain directory roots and their mappings. Explicit external leaves are
-            // validated by the server before its recursive unsupported-object filter.
-            // In particular, adding leaves must not replace an implicit database root.
-            auto roots = settings.Item_;
-            if (roots.empty()) {
-                TString source = CommonSourcePath ? CommonSourcePath : config.Database;
-                NConsoleClient::AdjustPath(source, config);
-                roots.push_back({source, {}});
-            }
-            // The server preserves an explicitly selected nested directory's mapping
-            // when expanding its parent, regardless of the order of selected roots.
-            std::stable_sort(roots.begin(), roots.end(), [](const auto& lhs, const auto& rhs) {
-                return lhs.Src.size() > rhs.Src.size();
-            });
-            THashSet<TString> selectedPaths;
-            for (const auto& item : settings.Item_) {
-                selectedPaths.insert(item.Src);
-            }
-            for (const auto& root : roots) {
-                for (const auto& src : ListExternalExportPaths(schemeClient, root.Src, NormalizePath(config.Database))) {
-                    TString dst = root.Dst;
-                    if (!dst.empty() && dst.back() == '/') {
-                        dst.pop_back();
-                    }
-                    if (!dst.empty()) {
-                        dst += src.substr(root.Src.size());
-                    }
-                    externalPaths.insert(src);
-                    if (settings.Item_.empty()) {
-                        settings.Item_ = roots;
-                        selectedPaths.insert(roots.front().Src);
-                    }
-                    if (selectedPaths.insert(src).second) {
-                        settings.AppendItem({src, dst});
-                    }
+        // Retain directory roots and their mappings. Explicit external leaves are
+        // validated by the server before its recursive unsupported-object filter.
+        // In particular, adding leaves must not replace an implicit database root.
+        auto roots = originalItems;
+        if (roots.empty()) {
+            TString source = CommonSourcePath ? CommonSourcePath : config.Database;
+            NConsoleClient::AdjustPath(source, config);
+            roots.push_back({source, {}});
+        }
+        // The server preserves an explicitly selected nested directory's mapping
+        // when expanding its parent, regardless of the order of selected roots.
+        std::stable_sort(roots.begin(), roots.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.Src.size() > rhs.Src.size();
+        });
+        THashSet<TString> selectedPaths;
+        for (const auto& item : settings.Item_) {
+            selectedPaths.insert(item.Src);
+        }
+        THashSet<TString> visited;
+        TVector<TString> paths;
+        for (const auto& root : roots) {
+            paths.clear();
+            ListExternalExportPaths(schemeClient, root.Src, NormalizePath(config.Database), visited, paths);
+            for (const auto& src : paths) {
+                TString dst = root.Dst;
+                if (!dst.empty() && dst.back() == '/') {
+                    dst.pop_back();
+                }
+                if (!dst.empty()) {
+                    dst += src.substr(root.Src.size());
+                }
+                externalPaths.insert(src);
+                if (!expandItems && settings.Item_.empty()) {
+                    settings.Item_ = roots;
+                    selectedPaths.insert(roots.front().Src);
+                }
+                if (selectedPaths.insert(src).second) {
+                    settings.AppendItem({src, dst});
                 }
             }
         }
-    }
-
-    if constexpr (isS3) {
+        ExcludeItems(settings, ExclusionPatterns);
         DeduplicateExportItems(settings);
+    }
+    if (expandItems && settings.Item_.empty()) {
+        Cerr << (ExclusionPatterns.empty() ? "No items to export" : "No items to export after applying exclude filters") << Endl;
+        return EXIT_FAILURE;
     }
     const bool hasExternalItems = isS3 && std::any_of(settings.Item_.begin(), settings.Item_.end(),
         [&externalPaths](const auto& item) { return externalPaths.contains(item.Src); });

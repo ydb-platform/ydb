@@ -52,6 +52,7 @@ namespace NCompGen {
             THolder<TCompactionParams> params,
             THolder<TCompactionResult> result) override;
         void CompactionCancelled(ui64 compactionId, const TCompactionParams& params) override;
+        bool TryReserveCompaction(TCompactionParams& params) override;
         void PartMerged(TPartView part, ui32 level) override;
         void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override;
         TCompactionChanges PartsRemoved(TArrayRef<const TLogoBlobID> parts) override;
@@ -59,6 +60,11 @@ namespace NCompGen {
         TCompactionChanges ApplyChanges() override;
         bool AllowForcedCompaction() override;
         void OutputHtml(IOutputStream& out) override;
+
+        ui32 GetTierCompactionConflicts(ui32 generation) const;
+        std::optional<ui32> GetSerialTierCompactionGeneration() const {
+            return SerialTierGeneration;
+        }
 
     public:
         enum class EState {
@@ -212,6 +218,17 @@ namespace NCompGen {
         struct TPartAggregator;
         struct TExtraState;
 
+        struct TTierCompaction {
+            ui64 CompactionId = 0;
+            TIntrusiveConstPtr<TCompactionContext> Context;
+            TCompactionParams* Params = nullptr;
+        };
+
+        struct TTierConflicts {
+            ui32 Count = 0;
+            std::optional<ui64> WaitRevision;
+        };
+
     private:
         void SubmitTask(TCompactionTask& task, TString type, ui32 priority, ui32 generation);
         void UpdateTask(TCompactionTask& task, TString type, ui32 priority);
@@ -248,7 +265,11 @@ namespace NCompGen {
         void ValidateTierEpochs() const;
         void RebuildTierStats();
         void CheckTierGenerations();
-        void CancelTierCompactions(bool cancelMemory, TTaskId keepTask = 0);
+        bool CanStartTierCompaction(ui32 generation) const;
+        bool HasFreeTierInputs(ui32 generation) const;
+        void ReleaseTierCompaction(ui32 generation, ui64 compactionId, bool success);
+        void NoteTierCompactionConflict(ui32 generation);
+        void CancelTierCompactions();
         void BeginTierGenCompaction(TTaskId taskId, ui32 generation);
         ui64 PrepareTierCompaction(TTaskId taskId, TSnapEdge edge, ui32 generation,
             TExtraState& extra, bool forced, bool sweep);
@@ -281,7 +302,11 @@ namespace NCompGen {
         TIntrusiveConstPtr<TCompactionPolicy> Policy;
 
         bool TierManaged = false;
-        ui64 TierCompactionId = 0;
+        THashMap<ui32, TTierCompaction> TierCompactions;
+        THashMap<TLogoBlobID, ui32> BusyTierParts;
+        THashMap<ui32, TTierConflicts> TierConflicts;
+        std::optional<ui32> SerialTierGeneration;
+        ui64 TierOccupancyRevision = 0;
         std::optional<ui32> TierSweepGeneration;
         size_t NextTierSweep = 0;
 

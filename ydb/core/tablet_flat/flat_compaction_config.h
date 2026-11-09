@@ -94,7 +94,8 @@ namespace NKikimr::NTabletFlatExecutor {
             output.Layout.Final = params.IsFinal;
             if (params.Context) {
                 auto garbage = NTable::MakeCompactionGarbageConf(
-                    scheme.Keys, params.Context->Remaining, policy.KeepEraseMarkers);
+                    scheme.Keys, params.Context->Remaining,
+                    policy.KeepEraseMarkers || (params.Tiering && params.Tiering->HasUnknownRemaining));
                 output.Layout.Final = garbage.Final;
                 output.OwnedUnderlayMask = std::move(garbage.UnderlayMask);
             }

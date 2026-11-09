@@ -50,6 +50,8 @@ namespace NKikimr::NTabletFlatExecutor {
         const TInstant Now;
         const TVector<ui32> TierOrder;
         const bool AllowCooling;
+        const bool UseConservativeMasks;
+        const bool HasUnknownRemaining;
         THashMap<ui32, ui32> OutputByTier;
         THolder<NTable::TTierPredicate> Predicate;
         THolder<NTable::TCompactionTierCap> Cap;

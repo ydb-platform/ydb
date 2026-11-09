@@ -5386,6 +5386,12 @@ bool TExecutor::IsDataTieringEnabled() const
     return AppData()->FeatureFlags.GetEnableDataTiering();
 }
 
+void TExecutor::RequestMemCompactionRetry(ui32 table)
+{
+    CompactionLogic->RequestMemCompactionRetry(table);
+    PlanCompactionChangesActivation();
+}
+
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 {
     Y_ENSURE(params->Tiering || params->Mode == NTable::TCompactionParams::EMode::Regular,
@@ -5469,6 +5475,12 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
             *snapshot->Subset, TableParts(table), TableColdParts(table),
             IsDataTieringEnabled(), Time->Now());
         comp->Epoch = snapshot->Subset->Epoch();
+        if (!CompactionLogic->TryReserveCompaction(*comp->Params)) {
+            // Preparation may have frozen memory, but no data was replaced
+            // and no blobs were written. The caller still owns its broker task.
+            CheckCollectionBarrier(snapshot->Barrier);
+            return 0;
+        }
     }
 
     TCompactionOutputSettings outputSettings;

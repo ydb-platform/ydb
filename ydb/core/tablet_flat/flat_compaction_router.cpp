@@ -14,6 +14,10 @@ TTierCompactionRouter::TTierCompactionRouter(const TCompactCfg& conf,
     , Now(now)
     , TierOrder(std::move(tierOrder))
     , AllowCooling(allowCooling)
+    , UseConservativeMasks(conf.Params && conf.Params->Tiering
+        && conf.Params->Tiering->UseConservativeMasks)
+    , HasUnknownRemaining(conf.Params && conf.Params->Tiering
+        && conf.Params->Tiering->HasUnknownRemaining)
 {
     Y_ENSURE(conf.Params && conf.Params->Mode == NTable::TCompactionParams::EMode::TierAware,
         "Tier-aware router requires a tier-aware compaction");
@@ -53,7 +57,8 @@ void TTierCompactionRouter::Prepare(const NTable::TRowScheme& scheme)
     if (Policy) {
         Predicate = MakeHolder<NTable::TTierPredicate>(*Policy, Now, scheme);
     }
-    Cap = MakeHolder<NTable::TCompactionTierCap>(scheme.Keys, Context->Remaining, TierOrder);
+    Cap = MakeHolder<NTable::TCompactionTierCap>(scheme.Keys, Context->Remaining, TierOrder,
+        UseConservativeMasks, HasUnknownRemaining);
     Prepared = true;
 }
 

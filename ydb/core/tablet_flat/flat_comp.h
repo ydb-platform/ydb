@@ -24,6 +24,14 @@ namespace NTable {
         TInstant Now;
         bool AllowCooling = false;
         THashMap<ui32, ui32> OutputTiers;
+        // Parallel scans pin an envelope of keys that other compactions may
+        // relocate. The exclusive retry can use the exact per-tier masks.
+        bool UseConservativeMasks = false;
+        bool HasUnknownRemaining = false;
+        bool HasMemoryInputs = false;
+        // Executor-thread validation state, advanced only by known successful
+        // publications. Context keeps the original metadata for scan masks.
+        TVector<TCompactionPartInfo> ExpectedInventory;
     };
 
     /**
@@ -56,11 +64,11 @@ namespace NTable {
         // revalidate this context before publishing the compaction.
         TIntrusiveConstPtr<TCompactionContext> Context;
 
-        // Non-null for the serialized, tier-managed strategy path. The backend
+        // Non-null for the tier-managed strategy path. The backend
         // closes the interval using the actual frozen-memory snapshot.
         THolder<TTieringCompaction> Tiering;
 
-        // Broker task id used for compaction. Once BeginCompaction is called
+        // Broker task id used for compaction. Once BeginCompaction succeeds
         // task ownership is moved to the backend, which will call FinishTask
         // as appropriate. It is possible to leave this as zero, in which
         // case FinishTask will not be called.
@@ -228,8 +236,12 @@ namespace NTable {
             return false;
         }
 
+        virtual void RequestMemCompactionRetry(ui32) {
+        }
+
         /**
-         * Begins compaction with the specified params
+         * Begins compaction with the specified params. Returns zero if the
+         * prepared inputs cannot be reserved; the caller still owns TaskId.
          */
         virtual ui64 BeginCompaction(THolder<TCompactionParams> params) = 0;
 
@@ -273,6 +285,12 @@ namespace NTable {
          */
         virtual void ReflectSchema() = 0;
 
+        // Called by the backend after preparing the actual snapshot, before
+        // starting a scan. A failed reservation has no publication side effects.
+        virtual bool TryReserveCompaction(TCompactionParams&) {
+            return true;
+        }
+
         virtual void CompactionCancelled(ui64, const TCompactionParams&) {
         }
 
@@ -309,8 +327,9 @@ namespace NTable {
         /**
          * Called when backend needs to compact in-memory data
          *
-         * Strategy is required to start compaction with the specified task id
-         * and snapshot edge, then return the resulting compaction id. Strategy
+         * Strategy starts compaction with the specified task id and snapshot
+         * edge, then returns its id, or zero to defer a conflicting request.
+         * A deferred request retains its steps, snapshot and forced ids. Strategy
          * may choose to compact some parts in addition to in-memory data, as
          * long as consistency guarantees are not broken.
          *

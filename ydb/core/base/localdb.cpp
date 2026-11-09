@@ -124,6 +124,7 @@ TCompactionPolicy::TCompactionPolicy()
     , DroppedRowsPercentToCompact(50)
     , CompactionStrategy(NKikimrCompaction::CompactionStrategyUnset)
     , KeepEraseMarkers(false)
+    , TieringCompactionConflictLimit(5)
 {}
 
 TCompactionPolicy::TCompactionPolicy(const NKikimrCompaction::TCompactionPolicy& policyPb)
@@ -149,6 +150,7 @@ TCompactionPolicy::TCompactionPolicy(const NKikimrCompaction::TCompactionPolicy&
     , DroppedRowsPercentToCompact(policyPb.HasDroppedRowsPercentToCompact() ? policyPb.GetDroppedRowsPercentToCompact() : 50)
     , CompactionStrategy(policyPb.GetCompactionStrategy())
     , KeepEraseMarkers(policyPb.HasKeepEraseMarkers() ? policyPb.GetKeepEraseMarkers() : false)
+    , TieringCompactionConflictLimit(policyPb.GetTieringCompactionConflictLimit())
 {
     if (!InMemResourceBrokerTask)
         InMemResourceBrokerTask = LegacyQueueIdToTaskName(InMemCompactionBrokerQueue);
@@ -188,6 +190,7 @@ void TCompactionPolicy::Serialize(NKikimrCompaction::TCompactionPolicy& policyPb
     policyPb.SetLogOverheadSizeToSnapshot(LogOverheadSizeToSnapshot);
     policyPb.SetLogOverheadCountToSnapshot(LogOverheadCountToSnapshot);
     policyPb.SetDroppedRowsPercentToCompact(DroppedRowsPercentToCompact);
+    policyPb.SetTieringCompactionConflictLimit(TieringCompactionConflictLimit);
     if (CompactionStrategy != NKikimrCompaction::CompactionStrategyUnset) {
         policyPb.SetCompactionStrategy(CompactionStrategy);
     }
@@ -223,6 +226,10 @@ TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
 }
 
 bool ValidateCompactionPolicy(const TCompactionPolicy& policy, TString& err) {
+    if (policy.TieringCompactionConflictLimit == 0) {
+        err = "TieringCompactionConflictLimit must be positive";
+        return false;
+    }
     THashSet<ui32> seenTiers;
     std::optional<ui32> previousTier;
     for (size_t i = 0; i < policy.Generations.size(); ++i) {

@@ -722,6 +722,36 @@ Y_UNIT_TEST_SUITE(TCompactionOutputConfigTest) {
         UNIT_ASSERT(!conf.Outputs[0].Layout.UnderlayMask);
     }
 
+    Y_UNIT_TEST(UnknownConcurrentMemoryPreservesEraseMarkersInEveryOutput) {
+        TOutputConfigFixture env;
+        for (const bool withRemaining : {false, true}) {
+            TVector<TCompactionPartInfo> remaining;
+            if (withRemaining) {
+                const TIntrusiveConstPtr<TColdPart> part = new TColdPart(
+                    TLogoBlobID(1, 1, 1, 1, 0, 0), TEpoch::FromIndex(10));
+                remaining.emplace_back(part, 2, TOutputConfigFixture::ColdTier);
+            }
+            TCompactCfg conf(MakeHolder<TCompactionParams>());
+            conf.Params->Mode = TCompactionParams::EMode::TierAware;
+            conf.Params->IsFinal = true;
+            conf.Params->Tiering = MakeHolder<TTieringCompaction>();
+            conf.Params->Tiering->HasUnknownRemaining = true;
+            conf.Params->Context = TCompactionContext::Build(std::move(remaining), TVector<TLogoBlobID>{});
+            env.Prepare(conf);
+
+            UNIT_ASSERT_VALUES_EQUAL(conf.Outputs.size(), 3);
+            for (const auto& output : conf.Outputs) {
+                UNIT_ASSERT(!output.Layout.Final);
+                UNIT_ASSERT(!output.Layout.UnderlayMask);
+                const auto eggs = NTest::TPartCook(env.RowLayout, output.Layout)
+                    .AddOpN(ERowOp::Erase, ui32(20)).Finish();
+                UNIT_ASSERT(eggs.Written);
+                UNIT_ASSERT_VALUES_EQUAL(eggs.Written->Rows, 1);
+                UNIT_ASSERT_VALUES_EQUAL(eggs.Written->Drops, 1);
+            }
+        }
+    }
+
     Y_UNIT_TEST(PreparedRegularContextCannotChangeItsTier) {
         TOutputConfigFixture env;
         const TIntrusiveConstPtr<TColdPart> part = new TColdPart(

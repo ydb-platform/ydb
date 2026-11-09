@@ -595,6 +595,47 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
         UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&absent, 1}, 0, 9), 7);
     }
 
+    Y_UNIT_TEST(ParallelCapCoversKeysThatAnotherCompactionMayRelocate) {
+        TFixture f;
+        const TVector<TCompactionPartInfo> remaining{{f.Part(10, 20, 20), 1, 0}};
+        TCompactionTierCap exact(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7});
+        TCompactionTierCap parallel(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7}, true);
+        const auto key = TCell::Make(ui32(20));
+
+        // Although the intermediate tier is empty now, a concurrent operation
+        // may put this remaining key there before the current scan publishes.
+        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 0, 7), 7);
+        UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 0, 7), 42);
+        exact.Reset();
+        parallel.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 7, 0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 7, 0), 42);
+    }
+
+    Y_UNIT_TEST(ParallelCapStillSkipsWhenNoRemainingSourceCanContainTheKey) {
+        TFixture f;
+        const TVector<TCompactionPartInfo> remaining{{f.Part(10, 10, 10), 1, 0},
+            {f.Part(20, 30, 30), 3, 7}};
+        TCompactionTierCap cap(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7}, true);
+        const auto key = TCell::Make(ui32(20));
+
+        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 0, 7), 7);
+        cap.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 7, 0), 0);
+    }
+
+    Y_UNIT_TEST(UnknownConcurrentKeysStopAtTheFirstIntermediateTier) {
+        TFixture f;
+        TCompactionTierCap cap(f.Layout.RowScheme()->Keys, {}, {0, 42, 7, 9}, true, true);
+        const auto key = TCell::Make(ui32(20));
+
+        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 0, 9), 42);
+        cap.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 9, 0), 7);
+        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 42, 7), 7);
+        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 7, 7), 7);
+    }
+
     Y_UNIT_TEST(CapRejectsAmbiguousOrUnknownTierOrders) {
         TFixture f;
         const TVector<TCompactionPartInfo> remaining{{f.Part(10), 3, 42}};

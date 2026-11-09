@@ -42,6 +42,7 @@ SRCS(
     ut_compaction.cpp
     ut_compaction_context.cpp
     ut_compaction_levels.cpp
+    ut_compaction_logic.cpp
     ut_compaction_router.cpp
     ut_compaction_tiering.cpp
     ut_compaction_outputs.cpp

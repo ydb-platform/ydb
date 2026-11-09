@@ -88,6 +88,19 @@ void TCompactionLogic::RequestChanges(ui32 table)
     tableInfo->ChangesRequested = true;
 }
 
+void TCompactionLogic::RequestMemCompactionRetry(ui32 table) {
+    if (auto* info = State->Tables.FindPtr(table)) {
+        info->MemCompactionRetryRequested = true;
+        info->ChangesRequested = true;
+    }
+}
+
+bool TCompactionLogic::TryReserveCompaction(NTable::TCompactionParams& params) {
+    auto* info = State->Tables.FindPtr(params.Table);
+    Y_ENSURE(info && info->Strategy, "Cannot reserve inputs of a dropped table");
+    return info->Strategy->TryReserveCompaction(params);
+}
+
 TVector<TTableCompactionChanges> TCompactionLogic::ApplyChanges()
 {
     TVector<TTableCompactionChanges> results;
@@ -101,6 +114,13 @@ TVector<TTableCompactionChanges> TCompactionLogic::ApplyChanges()
             result.Table = tableId;
             result.Changes = tableInfo->Strategy->ApplyChanges();
             result.Strategy = tableInfo->StrategyType;
+            if (std::exchange(tableInfo->MemCompactionRetryRequested, false)
+                    && tableInfo->InMem.CompactionTask.TaskId == 0
+                    && tableInfo->InMem.CompactionTask.CompactionId == 0) {
+                // A reservation conflict retains the request in its scan
+                // state, without owning a broker task. Retry only on a wakeup.
+                ResubmitCompactions(*tableInfo);
+            }
         }
     }
 
@@ -360,6 +380,7 @@ void TCompactionLogic::StopTable(TCompactionLogicState::TTableInfo &table)
     }
 
     table.ChangesRequested = false;
+    table.MemCompactionRetryRequested = false;
 
     auto &inMem = table.InMem;
     switch (inMem.State) {
@@ -390,6 +411,7 @@ void TCompactionLogic::StrategyChanging(TCompactionLogicState::TTableInfo &table
     }
 
     table.ChangesRequested = false;
+    table.MemCompactionRetryRequested = false;
 
     // Compactions have been cancelled, we may need to resubmit
     ResubmitCompactions(table);
@@ -598,6 +620,12 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
     }
 
     inMem.CompactionTask.CompactionId = tableInfo->Strategy->BeginMemCompaction(taskId, edge, forcedCompactionId);
+    if (inMem.CompactionTask.CompactionId == 0) {
+        // No scan was started. Keep Steps, SnapRequests and forced ids intact;
+        // the strategy wakes this request after conflicting work is released.
+        inMem.CompactionTask.TaskId = 0;
+        return false;
+    }
     return true;
 }
 

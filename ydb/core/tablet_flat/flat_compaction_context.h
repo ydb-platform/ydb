@@ -120,8 +120,11 @@ namespace NKikimr::NTable {
     public:
         // The strategy supplies the physical tier order. Family ids are never
         // sorted numerically; level 255 is not interpreted as a coldest tier.
+        // Parallel operations use the union of remaining keys in every tier;
+        // unknown memory sources conservatively stop at the first intermediate tier.
         TCompactionTierCap(TIntrusiveConstPtr<TKeyCellDefaults> keys,
-            TConstArrayRef<TCompactionPartInfo> remaining, TVector<ui32> tierOrder);
+            TConstArrayRef<TCompactionPartInfo> remaining, TVector<ui32> tierOrder,
+            bool useConservativeMasks = false, bool hasUnknownRemaining = false);
 
         void Reset();
         ui32 LimitTier(TCellsRef key, ui32 sourceTier, ui32 desiredTier);
@@ -129,6 +132,7 @@ namespace NKikimr::NTable {
     private:
         TVector<ui32> TierOrder;
         TVector<THolder<NPage::IKeySpace>> Masks;
+        const bool HasUnknownRemaining;
     };
 
 }

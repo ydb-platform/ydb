@@ -127,8 +127,10 @@ TCompactionGarbageConf MakeCompactionGarbageConf(
 }
 
 TCompactionTierCap::TCompactionTierCap(TIntrusiveConstPtr<TKeyCellDefaults> keys,
-        TConstArrayRef<TCompactionPartInfo> remaining, TVector<ui32> tierOrder)
+        TConstArrayRef<TCompactionPartInfo> remaining, TVector<ui32> tierOrder,
+        bool useConservativeMasks, bool hasUnknownRemaining)
     : TierOrder(std::move(tierOrder))
+    , HasUnknownRemaining(hasUnknownRemaining)
 {
     Y_ENSURE(!TierOrder.empty(), "Compaction tier order must not be empty");
     THashSet<ui32> tiers;
@@ -142,7 +144,10 @@ TCompactionTierCap::TCompactionTierCap(TIntrusiveConstPtr<TKeyCellDefaults> keys
 
     Masks.reserve(TierOrder.size());
     for (ui32 tierId : TierOrder) {
-        Masks.push_back(MakeCompactionKeySpace(keys, remaining, tierId));
+        // A concurrent TAC may move a remaining key to another tier. Its
+        // replacement cannot add keys to this pinned union of disk sources.
+        Masks.push_back(MakeCompactionKeySpace(keys, remaining,
+            useConservativeMasks ? std::nullopt : std::optional<ui32>(tierId)));
     }
 }
 
@@ -164,14 +169,14 @@ ui32 TCompactionTierCap::LimitTier(TCellsRef key, ui32 sourceTier, ui32 desiredT
     const size_t desiredIndex = desired - TierOrder.begin();
     if (sourceIndex < desiredIndex) {
         for (size_t index = sourceIndex + 1; index < desiredIndex; ++index) {
-            if (Masks[index]->HasKey(key)) {
+            if (HasUnknownRemaining || Masks[index]->HasKey(key)) {
                 return TierOrder[index];
             }
         }
     } else {
         for (size_t index = sourceIndex; index > desiredIndex + 1;) {
             --index;
-            if (Masks[index]->HasKey(key)) {
+            if (HasUnknownRemaining || Masks[index]->HasKey(key)) {
                 return TierOrder[index];
             }
         }

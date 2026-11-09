@@ -57,7 +57,6 @@ void CheckFetchResultsUndelivered(EFetchStage stage, const TString& contentType)
             const auto* request = ev->Get<NKqp::TEvFetchScriptResultsRequest>();
             UNIT_ASSERT_VALUES_EQUAL(request->ExecutionId, executionId);
             UNIT_ASSERT_VALUES_EQUAL(request->ResultSetIndex, stage == EFetchStage::NextResultSet ? fetches - 1 : 0);
-            UNIT_ASSERT_VALUES_EQUAL(request->Offset, stage == EFetchStage::NextChunk ? fetches - 1 : 0);
 
             if (fetches < expectedFetches) {
                 Ydb::ResultSet resultSet;

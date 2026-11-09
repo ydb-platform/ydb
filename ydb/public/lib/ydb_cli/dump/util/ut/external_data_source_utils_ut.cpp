@@ -32,16 +32,13 @@ Y_UNIT_TEST_SUITE(DirectExternalDataSourceDump) {
         UNIT_ASSERT(Supported(Source("YdbExternal", "NONE")));
     }
 
-    Y_UNIT_TEST(LegacyTokenNameKeepsItsIdentity) {
-        auto source = Source("Ydb", "TOKEN");
-        (*source.mutable_properties())["TOKEN_SECRET_NAME"] = "eds_secret";
-        UNIT_ASSERT(Supported(source));
-        (*source.mutable_properties())["TOKEN_SECRET_NAME"] = "/Root/schemaSecret";
-        UNIT_ASSERT(!Supported(source));
-        (*source.mutable_properties())["TOKEN_SECRET_NAME"] = "";
-        UNIT_ASSERT(!Supported(source));
-        (*source.mutable_properties())["TOKEN_SECRET_NAME"] = "secret with spaces";
-        UNIT_ASSERT(!Supported(source));
+    Y_UNIT_TEST(AllNamedTokenCredentialsAreRejected) {
+        // Even a simple name can be shared by a non-owner who cannot pass old restore's access preflight.
+        for (const auto& name : {"eds_secret", "secret:colon", "secret`backtick", "/Root/schemaSecret", "", "secret with spaces"}) {
+            auto source = Source("Ydb", "TOKEN");
+            (*source.mutable_properties())["TOKEN_SECRET_NAME"] = name;
+            UNIT_ASSERT_C(!Supported(source), name);
+        }
     }
 
     Y_UNIT_TEST(SchemaAndIamCredentialsAreRejected) {
@@ -88,8 +85,10 @@ Y_UNIT_TEST_SUITE(DirectExternalDataSourceDump) {
         source.set_location("endpoint\nmalformed");
         UNIT_ASSERT(!Supported(source));
         source = Source("Ydb", "NONE");
-        source.mutable_self()->set_name("source`name");
-        UNIT_ASSERT(!Supported(source));
+        for (const auto& name : {"source`name", "my source", "source\tname", "source\vname", "source\fname"}) {
+            source.mutable_self()->set_name(name);
+            UNIT_ASSERT_C(!Supported(source), name);
+        }
     }
 }
 

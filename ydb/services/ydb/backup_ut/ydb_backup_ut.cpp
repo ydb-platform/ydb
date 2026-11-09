@@ -3382,7 +3382,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     };
 
     void TestSelectedExternalDataSourceBackupRestore(const TString& parent, EExternalSourceDumpRoot dumpRoot,
-        EAuthType authType = EAuthType::AuthTypeToken) {
+        EAuthType authType = EAuthType::AuthTypeNone) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         TKikimrWithGrpcAndRootSchema server(config);
@@ -3484,13 +3484,81 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestSelectedExternalDataSourceBackupRestore(Nested ? "/Root/nested" : "/Root", EExternalSourceDumpRoot::Source);
     }
 
-    Y_UNIT_TEST_TWIN(DirectUnauthenticatedExternalDataSourceBackupRestore, Nested) {
-        TestSelectedExternalDataSourceBackupRestore(Nested ? "/Root/nested" : "/Root", EExternalSourceDumpRoot::Source,
-            EAuthType::AuthTypeNone);
+    Y_UNIT_TEST(DirectoryExternalDataSourceBackupRestore) {
+        TestSelectedExternalDataSourceBackupRestore("/Root/nested", EExternalSourceDumpRoot::Directory, EAuthType::AuthTypeToken);
     }
 
-    Y_UNIT_TEST(DirectoryExternalDataSourceBackupRestore) {
-        TestSelectedExternalDataSourceBackupRestore("/Root/nested", EExternalSourceDumpRoot::Directory);
+    Y_UNIT_TEST(DirectNamedTokenDumpRejectsOwnerAndGrantee) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
+        TKikimrWithGrpcAndRootSchema server(config);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto ownerDriver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
+        TSchemeClient schemeClient(ownerDriver);
+        const auto grant = schemeClient.ModifyPermissions("/Root", TModifyPermissionsSettings()
+            .AddGrantPermissions(TPermissions("root@builtin", {"ydb.generic.full"}))
+            .AddGrantPermissions(TPermissions("reader@builtin", {"ydb.generic.full"}))).GetValueSync();
+        UNIT_ASSERT_C(grant.IsSuccess(), grant.GetIssues().ToString());
+        NQuery::TQueryClient ownerClient(ownerDriver);
+        auto ownerSession = ownerClient.GetSession().ExtractValueSync().GetSession();
+        ExecuteQuery(ownerSession, "CREATE OBJECT `shared_token` (TYPE SECRET) WITH (value = 'private-shared-token');", true);
+        ExecuteQuery(ownerSession, "CREATE OBJECT `shared_token:reader@builtin` (TYPE SECRET_ACCESS);", true);
+
+        auto granteeDriver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("reader@builtin"));
+        NQuery::TQueryClient granteeClient(granteeDriver);
+        auto granteeSession = granteeClient.GetSession().ExtractValueSync().GetSession();
+        // EDS creation/use permits the grantee, while old restore's access preflight requires ownership.
+        ExecuteQuery(granteeSession, R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/sharedSource` WITH (
+                SOURCE_TYPE = "Ydb", LOCATION = "remote.example.test:2135",
+                DATABASE_NAME = "/Remote/database", AUTH_METHOD = "TOKEN", TOKEN_SECRET_NAME = "shared_token"
+            );
+        )", true);
+        TTableClient tableClient(ownerDriver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        const auto original = DescribeExternalDataSource(tableSession, "/Root/sharedSource");
+        for (const auto* driver : {&ownerDriver, &granteeDriver}) {
+            TTempDir tempDir;
+            const auto archive = tempDir.Path().Child("dump");
+            NDump::TClient backupClient(*driver);
+            const auto result = backupClient.Dump("/Root/sharedSource", archive, NDump::TDumpSettings().Database("/Root").AvoidCopy(true));
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "AUTH_METHOD NONE");
+            UNIT_ASSERT(!archive.Exists());
+            UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, "/Root/sharedSource"), original);
+        }
+    }
+
+    Y_UNIT_TEST(DirectSourceWithConfiguredSpaceInNameIsRejected) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        NKikimr::Tests::TClient schemaClient(*server.ServerSettings);
+        schemaClient.SetSecurityToken("root@builtin");
+        const auto alter = schemaClient.AlterSubdomain("/", R"(
+            Name: "Root"
+            SchemeLimits { ExtraPathSymbolsAllowed: "_.- " }
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(alter, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        ExecuteQuery(session, R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/my source` WITH (
+                SOURCE_TYPE = "Ydb", LOCATION = "remote.example.test:2135", AUTH_METHOD = "NONE"
+            );
+        )", true);
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        const auto original = DescribeExternalDataSource(tableSession, "/Root/my source");
+        TTempDir tempDir;
+        const auto archive = tempDir.Path().Child("dump");
+        NDump::TClient backupClient(driver);
+        const auto result = backupClient.Dump("/Root/my source", archive, NDump::TDumpSettings().Database("/Root"));
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Direct external data source dump supports only");
+        UNIT_ASSERT(!archive.Exists());
+        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, "/Root/my source"), original);
     }
 
     Y_UNIT_TEST_TWIN(DirectSchemaSecretDumpIsRejected, SavePartialResult) {

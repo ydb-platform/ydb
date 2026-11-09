@@ -29,7 +29,7 @@ bool ValidateDirectExternalDataSource(
 {
     const auto reject = [&issues]() {
         issues.AddIssue("Direct external data source dump supports only Ydb/YdbExternal sources with known properties "
-            "and AUTH_METHOD NONE or TOKEN with a legacy secret name; schema secrets, IAM, unknown formats "
+            "and AUTH_METHOD NONE; credential-bearing sources, unknown formats "
             "and values requiring SQL escaping are unsupported");
         return false;
     };
@@ -41,7 +41,7 @@ bool ValidateDirectExternalDataSource(
 
     // Provider properties are defined in core/external_sources/external_source_factory.cpp.
     // Fail closed on additions: Describe flattens provider properties and auth into one map.
-    static const THashSet<TString> commonProperties = {"AUTH_METHOD", "DATABASE_NAME", "USE_TLS", "TOKEN_SECRET_NAME"};
+    static const THashSet<TString> commonProperties = {"AUTH_METHOD", "DATABASE_NAME", "USE_TLS"};
     static const THashSet<TString> ydbProperties = {"DATABASE_ID", "SHARED_READING", "SHARED_READING_GROUP"};
     const auto isLiteral = [](std::string_view value) {
         return value.find_first_of("'\\\r\n") == std::string_view::npos && value.find('\0') == std::string_view::npos;
@@ -52,6 +52,12 @@ bool ValidateDirectExternalDataSource(
         || !isLiteral(description.location())) {
         return reject();
     }
+    // Old restore matches the archived identifier as a single non-whitespace token.
+    for (const unsigned char c : name) {
+        if (std::isspace(c)) {
+            return reject();
+        }
+    }
     const auto& properties = description.properties();
     for (const auto& [key, value] : properties) {
         if ((!commonProperties.contains(key) && !(ydb && ydbProperties.contains(key))) || !isLiteral(value)) {
@@ -59,21 +65,10 @@ bool ValidateDirectExternalDataSource(
         }
     }
     const auto auth = properties.find("AUTH_METHOD");
-    const auto secret = properties.find("TOKEN_SECRET_NAME");
-    if (auth == properties.end()) {
+    // Named-secret restore requires ownership, while EDS use also permits a shared-secret grantee.
+    // Reject every credential mode: dump cannot establish the privileges of a future restoring principal.
+    if (auth == properties.end() || auth->second != "NONE") {
         return reject();
-    }
-    if (auth->second == "NONE") {
-        return secret == properties.end() ? true : reject();
-    }
-    if (auth->second != "TOKEN" || secret == properties.end() || secret->second.empty() || secret->second.front() == '/') {
-        return reject();
-    }
-    // Old restore parsers match secret settings as a single non-whitespace token.
-    for (const unsigned char c : secret->second) {
-        if (std::isspace(c)) {
-            return reject();
-        }
     }
     return true;
 }

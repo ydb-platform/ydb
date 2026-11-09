@@ -12,7 +12,7 @@ namespace NYql {
 
 namespace NYdb::NDump {
 
-// Direct archives cannot safely relocate schema-secret references with older restore clients.
+// Direct credential-bearing archives cannot be safely restored by older clients in all supported cases.
 bool ValidateDirectExternalDataSource(
     const Ydb::Table::DescribeExternalDataSourceResult& description,
     NYql::TIssues& issues);

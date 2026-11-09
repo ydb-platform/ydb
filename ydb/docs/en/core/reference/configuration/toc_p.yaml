@@ -39,6 +39,15 @@ items:
   href: resource_broker_config.md
 - name: security_config
   href: security_config.md
+<<<<<<< HEAD
+=======
+- name: self_management_config
+  href: self_management_config.md
+- name: statistics_config
+  href: statistics_config.md
+- name: system_tablet_backup_config
+  href: system_tablet_backup_config.md
+>>>>>>> 44522199216 (Document ANALYZE sampling, column statistics, and statistics_config (#55229))
 - name: tls
   href: tls.md
 - name: table_service_config

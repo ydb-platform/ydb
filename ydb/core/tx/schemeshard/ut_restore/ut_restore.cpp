@@ -9529,6 +9529,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         THashSet<TString> columnNames;
         for (const auto& column : table.GetColumns()) {
             columnNames.insert(column.GetName());
+            UNIT_ASSERT_VALUES_EQUAL(column.GetType(), column.GetName() == "value2" ? "Utf8" : "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(column.GetNotNull(), column.GetName() != "value1");
         }
         UNIT_ASSERT(columnNames.contains("key"));
         UNIT_ASSERT(columnNames.contains("value1"));

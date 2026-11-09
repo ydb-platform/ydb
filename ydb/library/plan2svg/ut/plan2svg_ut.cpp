@@ -984,6 +984,25 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         return svg;
     }
 
+    TString CsSubtree(TStringBuf svg, TStringBuf opening) {
+        const auto begin = svg.find(opening);
+        UNIT_ASSERT(begin != TStringBuf::npos);
+        size_t position = begin, depth = 0;
+        do {
+            const auto next = svg.find("<svg", position), close = svg.find("</svg>", position);
+            UNIT_ASSERT(close != TStringBuf::npos);
+            if (next != TStringBuf::npos && next < close) {
+                position = svg.find('>', next) + 1;
+                UNIT_ASSERT(position > 0);
+                depth += svg[position - 2] != '/';
+            } else {
+                position = close + 6;
+                --depth;
+            }
+        } while (depth);
+        return TString(svg.substr(begin, position - begin));
+    }
+
     TString CsRow(TStringBuf svg, TStringBuf meta, TStringBuf path, TStringBuf kind, TStringBuf family = "SIMPLE/TRIVIAL") {
         const TString marker = TStringBuilder() << "data-cs-family='" << family << "' data-cs-meta='" << meta
             << "' data-cs-path='" << path << "' data-cs-kind='" << kind << '\'';
@@ -1075,6 +1094,8 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT(svg.Contains("data-cs-stage-id='3'") && svg.Contains("data-cs-stage-id='4'"));
         UNIT_ASSERT(svg.Contains("data-cs-storage-bytes='100'") && svg.Contains("data-cs-storage-bytes='200'"));
         UNIT_ASSERT(!svg.Contains("data-cs-storage-bytes='300'"));
+        UNIT_ASSERT_VALUES_EQUAL(CsOccurrences(svg, ">DataSource</text>"), 2);
+        UNIT_ASSERT(!svg.Contains(">Storage</text>") && !svg.Contains(">Unit</text>"));
         UNIT_ASSERT(svg.Contains("node.hasAttribute(\"data-cs-panel\")"));
         UNIT_ASSERT(svg.Contains("g.selected [data-cs-panel] rect.stage"));
     }
@@ -1096,6 +1117,14 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
            ]}
         ])json");
         UNIT_ASSERT(svg.Contains("class='cs-ui cs-stats'") && svg.Contains("class='cs-ui cs-details'"));
+        for (const TStringBuf column : {"Step", "Tablets", "Calls", "Statistics", "Details"}) {
+            UNIT_ASSERT_C(svg.Contains(TStringBuilder() << ">" << column << "</text>"), column);
+        }
+        const auto statisticCells = CsOccurrences(svg, "data-cs-cell='cs-stats'");
+        UNIT_ASSERT(statisticCells > 0);
+        UNIT_ASSERT_VALUES_EQUAL(CsOccurrences(svg, "data-cs-cell='cs-tablets'"), statisticCells);
+        UNIT_ASSERT_VALUES_EQUAL(CsOccurrences(svg, "data-cs-cell='cs-calls'"), statisticCells);
+        UNIT_ASSERT_VALUES_EQUAL(CsOccurrences(svg, "data-cs-cell='cs-details'"), statisticCells);
         UNIT_ASSERT(svg.Contains("class='cs-coverage'"));
         UNIT_ASSERT(svg.Contains(">Aggregation</text>") && svg.Contains(">Filter</text>"));
         UNIT_ASSERT(!svg.Contains(">Aggregation(") && !svg.Contains(">Filter(column_a"));
@@ -1106,6 +1135,18 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT(svg.Contains("Encoded") || svg.Contains("Bytes input"));
         UNIT_ASSERT(!svg.Contains("Active sum / mean / max"));
         UNIT_ASSERT(!svg.Contains("Details · own boundary"));
+    }
+
+    Y_UNIT_TEST(MetaStatsDurationUnitsStayCompactAtUnsignedBounds) {
+        const TString svg = RenderScans(R"json([
+          {"StatsScanId":"a","TabletId":11,"ReaderKind":"TRIVIAL","Finished":true,
+           "Steps":[{"StepId":1,"StepKind":"Filter","MetaStep":"Filter",
+             "OwnedExecutionDuration":18446744073709551615,"IntegralWaitDuration":0}]}
+        ])json");
+        const TString row = CsSubtree(svg, CsRow(svg, "Filter", "", "Filter"));
+        UNIT_ASSERT_C(row.Contains("data-cs-active-sum='18446744073709551615'"), row);
+        UNIT_ASSERT_C(row.Contains("class='cs-unit'>ky</span>"), row);
+        UNIT_ASSERT(!row.Contains(">18446744073709551616.00<span"));
     }
 
     Y_UNIT_TEST(StorageV3IsAdditiveWithinStagesAndDeduplicatesDecorations) {
@@ -1141,6 +1182,9 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT_C(StorageRow(stageA, "grand-total").Contains("data-cs-storage-bytes='1152'"), stageA);
         UNIT_ASSERT_C(StorageRow(stageB, "grand-total").Contains("data-cs-storage-bytes='768'"), stageB);
         UNIT_ASSERT_C(StorageRow(stageA, "source-total", "BlobStorage", "default").Contains("data-cs-storage-bytes='1024'"), stageA);
+        const TString sourceRow = CsSubtree(svg, StorageRow(stageA, "source-total", "BlobStorage", "default"));
+        UNIT_ASSERT_C(sourceRow.Contains("class='cs-number cs-bytes'")
+            && sourceRow.Contains("class='cs-value'>1.00</span><span class='cs-unit'>KB</span>"), sourceRow);
         UNIT_ASSERT_C(StorageRow(stageB, "source-total", "BlobStorage", "default").Contains("data-cs-storage-bytes='512'"), stageB);
         UNIT_ASSERT_C(StorageRow(stageA, "source-total", "BlobCache", "blob").Contains("data-cs-storage-bytes='128'"), stageA);
         UNIT_ASSERT_VALUES_EQUAL(CsOccurrences(stageA, "data-cs-storage-row='grand-total'"), 1);
@@ -1756,7 +1800,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         ])");
         UNIT_ASSERT_C(headerOnly.Contains("data-columnshard='read'"), headerOnly);
         UNIT_ASSERT_C(headerOnly.Contains("data-cs-attempts='0'"), headerOnly);
-        UNIT_ASSERT_C(headerOnly.Contains("Runtime not observed") && headerOnly.Contains("<div class='cs-stat-summary'>"), headerOnly);
+        UNIT_ASSERT_C(headerOnly.Contains("Runtime not observed") && headerOnly.Contains("data-cs-cell='cs-tablets'"), headerOnly);
         UNIT_ASSERT_C(!headerOnly.Contains("<div class='cs-stat cs-stat-head'>"), headerOnly);
         UNIT_ASSERT_C(CsRow(headerOnly, "", "", "", "UNKNOWN").Contains("data-cs-calls='0'"), headerOnly);
         UNIT_ASSERT_C(headerOnly.Contains("data-cs-received-shards='0'"), headerOnly);

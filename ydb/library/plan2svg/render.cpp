@@ -2460,36 +2460,48 @@ TString ColumnShardWidgetStyles() {
         << R"CS(
       .cs-ui{color:var(--stage-text,#262626);line-height:1.375;box-sizing:border-box}
       .cs-ui *{box-sizing:border-box;min-width:0}.cs-ui .cs-label{color:var(--stage-text,#262626);font-weight:normal}
-      .cs-ui .cs-value{font-weight:bold}.cs-ui .cs-unit{margin-left:2px;font-weight:normal}
+      .cs-ui .cs-value,.cs-ui b,.cs-ui strong{font-weight:normal}.cs-ui .cs-unit{margin-left:2px;font-weight:normal}
+      .cs-number,.cs-stat>.cs-value{background:var(--stage-clone,#d9d9d9);color:var(--stage-text,#262626);padding:0 2px}
+      .cs-number.cs-bytes,.cs-stat-read>.cs-number{background:var(--input-medium,#5a8183);color:var(--text-light,#ffffff)}
+      .cs-stat-read>.cs-number{grid-column:2/4;justify-self:start}
+      .cs-stat>.cs-value{background:var(--stage-grid,#b2b2b2)}
+      .cs-flow .cs-field:first-child .cs-number{background:var(--input-medium,#5a8183);color:var(--text-light,#ffffff)}
+      .cs-flow .cs-field:last-child .cs-number{background:var(--output-medium,#5781b9);color:var(--text-light,#ffffff)}
+      .cs-field.cs-memory .cs-number{background:var(--mem-medium,#7e4e5b);color:var(--text-light,#ffffff)}
+      .cs-field.cs-input .cs-number{background:var(--input-medium,#5a8183);color:var(--text-light,#ffffff)}
+      .cs-field.cs-output .cs-number{background:var(--output-medium,#5781b9);color:var(--text-light,#ffffff)}
       .cs-ui .cs-observed{color:#87620a}.cs-ui .cs-unknown{color:#7f7f7f;font-weight:normal}
       .cs-stats{padding:2px;display:grid;align-content:start;gap:0}
       .cs-reader-header{padding:2px;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px}
-      .cs-stat{display:grid;grid-template-columns:29px repeat(4,minmax(0,1fr));align-items:baseline;column-gap:2px;min-height:11px}
+      .cs-stat{display:grid;grid-template-columns:29px repeat(4,minmax(60px,1fr));align-items:baseline;column-gap:3px;min-height:11px}
       .cs-stat-head{color:#7f7f7f;text-align:right}.cs-stat-head>span:first-child{text-align:left}
       .cs-stat>.cs-number,.cs-stat>.cs-value{text-align:right}.cs-stat>.cs-unknown{text-align:right;overflow-wrap:anywhere}
-      .cs-stat-summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px;min-height:11px}
-      .cs-stat-summary .cs-calls-label{margin-left:4px}.cs-stat-summary .cs-count{gap:2px}
+      .cs-tablets,.cs-calls{padding:2px;display:flex;flex-direction:column;align-items:flex-start;gap:1px}
+      .cs-tablets .cs-count{flex-wrap:wrap;gap:1px 3px}
       .cs-chevron{transform:rotate(90deg);transform-origin:3px 4px}
       svg.folded>g>.cs-row-toggle .cs-chevron{transform:none}
       .cs-coverage{height:4px;width:24px;background:var(--stage-clone,#d9d9d9);display:inline-block;align-self:center}
       .cs-coverage>i{display:block;height:100%;background:var(--stage-grid,#b2b2b2)}
       .cs-shards{display:flex;align-items:baseline;gap:4px;flex-wrap:wrap}
-      .cs-count{display:inline-flex;gap:3px;align-items:baseline}.cs-count b,.cs-count small{font-size:inherit}
+      .cs-count{display:inline-flex;gap:3px;align-items:baseline}.cs-count b,.cs-count small{font-size:inherit;font-weight:normal}
+      .cs-count b{background:var(--stage-clone,#d9d9d9);color:var(--stage-text,#262626);padding:0 2px}
       .cs-count small{color:#7f7f7f}.cs-number{display:inline-block;white-space:nowrap}
-      .cs-details{padding:2px;display:flex;flex-wrap:wrap;align-content:flex-start;align-items:baseline;gap:3px 10px}
-      .cs-field{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;column-gap:5px;flex:0 1 auto;order:3}
+      .cs-details{padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:flex-start;align-items:stretch;gap:0}
+      .cs-field{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;column-gap:5px;padding:3px;order:3;background:#ffffff}
+      .cs-details>.cs-field:nth-child(4n+1),.cs-details>.cs-field:nth-child(4n+4){background:var(--stage-main,#f2f2f2)}
       .cs-field>.cs-label{display:block}.cs-field-value{overflow-wrap:anywhere}
-      .cs-field.cs-wide{flex-basis:100%;display:block;order:1}.cs-field.cs-wide>.cs-label{margin-bottom:1px}
+      .cs-field.cs-wide{grid-column:1/-1;display:block;order:1}.cs-field.cs-wide>.cs-label{margin-bottom:1px}
       .cs-field[data-cs-field='Predicate'],.cs-field[data-cs-field='Expression']{order:0}
       .cs-expression{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}
       .cs-expression+.cs-expression{margin-top:3px}
       .cs-chips{display:flex;flex-wrap:wrap;gap:1px 8px}.cs-chip{overflow-wrap:anywhere}
-      .cs-flow{display:grid;grid-template-columns:minmax(0,1fr) 10px minmax(0,1fr);align-items:start;gap:4px;flex-basis:100%;order:2}
+      .cs-flow{display:grid;grid-template-columns:minmax(0,1fr) 10px minmax(0,1fr);align-items:stretch;gap:0;grid-column:1/-1;order:2}
+      .cs-flow .cs-field:first-child{background:var(--stage-main,#f2f2f2)}
       .cs-flow .cs-field{grid-template-columns:minmax(0,1fr) auto;align-items:baseline;order:0}
       .cs-flow svg{width:10px;height:10px;margin-top:1px}.cs-flow path{fill:none;stroke:var(--stage-grid,#b2b2b2);stroke-width:1.5}
       .cs-meter{height:2px;background:var(--stage-main,#f2f2f2);margin-top:1px}
       .cs-meter i{display:block;height:100%;background:var(--stage-grid,#b2b2b2)}
-      .cs-index,.cs-provider{flex-basis:100%;order:0;grid-template-columns:46px minmax(0,1fr)}
+      .cs-index,.cs-provider{grid-column:1/-1;order:0;grid-template-columns:46px minmax(0,1fr)}
       .cs-index>.cs-field-value{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
       .cs-index .cs-chips{flex:0 1 auto}.cs-provider{order:4}.cs-provider>.cs-field-value{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px}
       .cs-state{display:inline-flex;align-items:baseline;gap:3px;color:#7f7f7f;order:0;flex-wrap:wrap}
@@ -2497,7 +2509,8 @@ TString ColumnShardWidgetStyles() {
       .cs-state.cs-warning i{background:var(--block-medium,#d9ae61)}
       .cs-availability{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px}
       .cs-names{fill:var(--stage-text,#262626)}.cs-metastep{font-weight:bold}.cs-heading{fill:#7f7f7f}
-      .cs-storage-values{align-items:baseline;gap:3px 6px}.cs-storage-values .cs-shards{width:100%}
+      .cs-details>.cs-state,.cs-details>.cs-unknown{grid-column:1/-1;padding:3px}
+      .cs-storage-values{display:flex;flex-wrap:wrap;padding:2px;align-items:baseline;gap:3px 6px}.cs-storage-values .cs-shards{width:100%}
     </style>)CS";
 }
 
@@ -2506,7 +2519,7 @@ TString ColumnShardWidgetNumber(ui64 value, bool bytes) {
     const size_t split = text.find_first_not_of("0123456789.,");
     const TString amount = text.substr(0, split);
     const TString unit = split == TString::npos ? TString() : text.substr(split);
-    return TStringBuilder() << "<span class='cs-number'><span class='cs-value'>" << SvgEscape(amount) << "</span>"
+    return TStringBuilder() << "<span class='cs-number" << (bytes ? " cs-bytes" : "") << "'><span class='cs-value'>" << SvgEscape(amount) << "</span>"
         << "<span class='cs-unit'>" << SvgEscape(unit) << "</span></span>";
 }
 
@@ -2549,9 +2562,13 @@ TString ColumnShardWidgetChips(const std::set<TString>& values) {
 TString ColumnShardWidgetMetric(const TStepGroup& group, TStringBuf path, TStringBuf name, bool bytes = false) {
     const auto metric = group.Metric(path);
     if (!metric.Count) { return {}; }
+    TString css = metric.Overflow || metric.Count < group.Steps.size() ? "cs-observed" : "";
+    if (path == "Details.ReservationBytes") { css += " cs-memory"; }
+    if (path == "Details.PageRows" || path == "Details.PageInputBytes") { css += " cs-input"; }
+    if (path == "Details.ResultRows" || path == "Details.ResultBytes" || path == "Details.DecodedRows") { css += " cs-output"; }
     return ColumnShardWidgetField(name, metric.Overflow
         ? TString("<span class='cs-unknown'>Overflow</span>") : ColumnShardWidgetNumber(metric.Sum, bytes),
-        metric.Overflow || metric.Count < group.Steps.size() ? "cs-observed" : "");
+        css);
 }
 
 TString ColumnShardWidgetFlow(const TStepGroup& group, TStringBuf input, TStringBuf output, TStringBuf title, bool bytes = false) {
@@ -2763,15 +2780,19 @@ TString ColumnShardWidgetDetails(const TColumnShardNode& node, bool partial) {
     return html;
 }
 
-TString ColumnShardWidgetStatistics(const TColumnShardNode& node, const TColumnShardRead& read) {
+TString ColumnShardWidgetTablets(const TColumnShardNode& node, const TColumnShardRead& read) {
     TStringBuilder html;
     const ui64 total = read.Denominator(), active = node.ActiveTablets.size();
     const double coverage = total ? std::min(100.0, 100.0 * active / total) : 0;
-    html << "<div class='cs-stat-summary'><span class='cs-label'>Shards</span>"
-        << "<div class='cs-coverage'><i style='width:" << coverage << "%'></i></div>"
-        << "<span class='cs-count'><b>" << active << "</b><small>active</small></span>"
+    html << "<span class='cs-count'><b>" << active << "</b><small>active</small></span>"
         << "<span class='cs-count'><b>" << total << "</b><small>" << (read.ExpectedKnown ? "planned" : "received")
-        << "</small></span><span class='cs-label cs-calls-label'>Calls</span>" << ColumnShardWidgetNumber(node.Calls, false) << "</div>";
+        << "</small></span><div class='cs-coverage'><i style='width:" << coverage << "%'></i></div>";
+    return html;
+}
+
+TString ColumnShardWidgetStatistics(const TColumnShardNode& node, const TColumnShardRead& read) {
+    TStringBuilder html;
+    const ui64 active = node.ActiveTablets.size();
     if (!node.Calls && !node.Active.Summary().ExpectedCalls && !node.Wait.Summary().ExpectedCalls && !node.Read.Summary().ExpectedCalls) {
         return html;
     }
@@ -2779,9 +2800,13 @@ TString ColumnShardWidgetStatistics(const TColumnShardNode& node, const TColumnS
     auto timing = [&](const auto& metric, TStringBuf name) {
         const auto value = metric.Summary();
         auto amount = [&](double number) -> TString {
-            const double scale = number >= 1000000 ? 1000000 : number >= 1000 ? 1000 : 1;
-            return TStringBuilder() << "<span class='cs-value'>" << Sprintf("%.2f", number / scale)
-                << "<span class='cs-unit'>" << (scale == 1 ? "us" : scale == 1000 ? "ms" : "s") << "</span></span>";
+            const double scale = number >= 31536000000000000.0 ? 31536000000000000.0 : number >= 31536000000000.0 ? 31536000000000.0
+                : number >= 86400000000.0 ? 86400000000.0 : number >= 3600000000.0 ? 3600000000.0
+                : number >= 60000000.0 ? 60000000.0 : number >= 1000000 ? 1000000 : number >= 1000 ? 1000 : 1;
+            return TStringBuilder() << "<span class='cs-value' title='" << Sprintf("%.2f", number) << " us'>" << Sprintf("%.2f", number / scale)
+                << "<span class='cs-unit'>" << (scale == 1 ? "us" : scale == 1000 ? "ms" : scale == 1000000 ? "s"
+                    : scale == 60000000 ? "m" : scale == 3600000000 ? "h" : scale == 86400000000.0 ? "d"
+                    : scale == 31536000000000.0 ? "y" : "ky") << "</span></span>";
         };
         const TString unknown = "<span class='cs-unknown'>Not recorded</span>";
         html << "<div class='cs-stat" << (value.KnownCalls < value.ExpectedCalls ? " cs-observed" : "")
@@ -2923,13 +2948,13 @@ void PrintColumnShardBoundaryMetrics(TStringBuilder& svg, const TColumnShardNode
 }
 
 ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TColumnShardRead& read,
-    const TColumnShardNode& node, ui32 top, ui32 depth) {
+    const TColumnShardNode& node, ui32 top, ui32 depth, ui32 sibling = 0) {
     constexpr ui32 rowHeight = 60;
     const auto children = ColumnShardOrderedChildren(node);
     TStringBuilder body;
     ui32 height = rowHeight;
-    for (const auto* child : children) {
-        height += PrintColumnShardNode(body, viz, read, *child, height - rowHeight, depth + 1);
+    for (size_t index = 0; index < children.size(); ++index) {
+        height += PrintColumnShardNode(body, viz, read, *children[index], height - rowHeight, depth + 1, index);
     }
     const bool structural = node.Row == "step" && !node.Calls && !node.Skipped && !children.empty();
     const bool collapsed = node.Row == "meta" && !children.empty();
@@ -2940,14 +2965,14 @@ ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TCo
         << "' height='" << visibleHeight << "'><svg class='" << (collapsed ? "folded" : "")
         << "' data-cs-header='true' width='" << viz.Config.Width << "' height='" << rowHeight << "'><g>"
         << "<rect class='cs-row-background' width='" << viz.Config.Width << "' height='" << rowHeight
-        << "' fill='" << (node.Row == "step" ? "#ffffff" : "var(--stage-main,#f2f2f2)") << "'/>";
+        << "' fill='" << (sibling % 2 ? "var(--stage-main,#f2f2f2)" : "#ffffff") << "'/>";
     if (!children.empty()) {
         svg << "<g class='plus button cs-row-toggle' data-cs-toggle='row' transform='translate(" << depth * INDENT_X + 4
             << ",3)'><rect width='12' height='12' fill='transparent'/>"
             << "<path class='cs-chevron' d='M0 0L6 4L0 8Z' fill='var(--stage-text,#262626)'/></g>";
     }
-    const ui32 statisticsEnd = std::min(viz.Config.TimelineLeft, viz.Config.Width * 3 / 4);
-    const ui32 nameEnd = std::min(viz.Config.SummaryLeft, statisticsEnd * 2 / 3);
+    const ui32 statisticsEnd = std::min(std::max(viz.Config.TimelineLeft, viz.Config.SummaryLeft + 285), viz.Config.Width * 3 / 4);
+    const ui32 nameEnd = viz.Config.OperatorLeft;
     const ui32 indent = std::min<ui32>(depth * INDENT_X + INTERNAL_WIDTH, nameEnd > 70 ? nameEnd - 70 : 0);
     TString name = node.Row == "step" && node.Kind ? node.Kind : node.Name;
     svg << "<text data-cs-name='true' class='cs-names" << (node.Row == "step" ? "" : " cs-metastep")
@@ -2957,7 +2982,11 @@ ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TCo
             : node.Skipped ? "Skipped" : !read.Attempts || read.Partial ? "Not observed" : "Not executed";
         svg << "<text class='cs-heading' x='" << indent << "' y='22'>" << status << "</text>";
     }
-    PrintColumnShardWidget(svg, nameEnd, 0, statisticsEnd - nameEnd, rowHeight,
+    PrintColumnShardWidget(svg, nameEnd, 0, viz.Config.TaskLeft - nameEnd, rowHeight,
+        "cs-tablets", ColumnShardWidgetTablets(node, read));
+    PrintColumnShardWidget(svg, viz.Config.TaskLeft, 0, viz.Config.SummaryLeft - viz.Config.TaskLeft, rowHeight,
+        "cs-calls", ColumnShardWidgetNumber(node.Calls, false));
+    PrintColumnShardWidget(svg, viz.Config.SummaryLeft, 0, statisticsEnd - viz.Config.SummaryLeft, rowHeight,
         "cs-stats", ColumnShardWidgetStatistics(node, read));
     PrintColumnShardWidget(svg, statisticsEnd, 0, viz.Config.Width - statisticsEnd, rowHeight,
         "cs-details", ColumnShardWidgetDetails(node, read.Partial));
@@ -3135,17 +3164,12 @@ ui32 PrintColumnShardStorage(TStringBuilder& svg, const TVisualizer& viz, ui32 t
     constexpr ui32 headerHeight = INTERNAL_HEIGHT + INTERNAL_GAP_Y;
     const ui32 sourceEnd = viz.Config.Width * 32 / 100;
     const ui32 readEnd = viz.Config.Width * 69 / 100;
-    const ui32 bytesEnd = viz.Config.Width * 84 / 100;
-    const ui32 unitEnd = viz.Config.Width * 91 / 100;
+    const ui32 bytesEnd = viz.Config.Width * 91 / 100;
     TStringBuilder rows;
     ui32 height = 2 * headerHeight;
     auto row = [&](TStringBuf kind, const TColumnShardSourceKey& source, const TString& read,
                    const TColumnShardSourceTotals& value) {
         const bool partial = storage.PopulationPartial || value.Unknown || value.Overflow;
-        TString amount = FormatBytes(value.Bytes);
-        const size_t suffix = amount.find_first_not_of("0123456789.");
-        const TString unit = suffix == TString::npos ? TString("B") : amount.substr(suffix);
-        amount = amount.substr(0, suffix);
         rows << "<svg data-cs-storage-row='" << kind << "' data-cs-source-kind='" << ColumnShardAttribute(source.first)
             << "' data-cs-source-name='" << ColumnShardAttribute(source.second) << "' data-cs-storage-read='"
             << ColumnShardAttribute(read) << "' data-cs-storage-bytes='" << value.Bytes << "' data-cs-storage-reads='" << value.Reads
@@ -3166,12 +3190,12 @@ ui32 PrintColumnShardStorage(TStringBuilder& svg, const TVisualizer& viz, ui32 t
             << "<span class='cs-count'><b>" << value.Unknown << "</b><small>unknown volume</small></span></div>";
         PrintColumnShardWidget(rows, sourceEnd, 0, readEnd - sourceEnd, rowHeight, "cs-details cs-storage-values", coverage);
         TStringBuilder volume;
-        volume << (partial && !value.Bytes ? TString("<span class='cs-unknown'>Not recorded</span>")
-            : TString("<span class='cs-value'>") + SvgEscape(amount) + "</span>");
+        volume << (!value.Bytes && (value.Overflow || (value.Unknown && !known)) ? TString("<span class='cs-unknown'>Not recorded</span>")
+            : ColumnShardWidgetNumber(value.Bytes, true));
         if (partial) { volume << "<div class='cs-state cs-warning'><i></i>Observed</div>"; }
         PrintColumnShardWidget(rows, readEnd, 0, bytesEnd - readEnd, rowHeight, "cs-details cs-storage-values", volume);
-        StepCell(rows, bytesEnd, unitEnd - bytesEnd, unit);
-        StepCell(rows, unitEnd, viz.Config.Width - unitEnd, FormatInteger(value.Reads));
+        PrintColumnShardWidget(rows, bytesEnd, 0, viz.Config.Width - bytesEnd, rowHeight,
+            "cs-details cs-storage-values", ColumnShardWidgetNumber(value.Reads, false));
         rows << "</g></svg>" << Endl;
         height += rowHeight;
     };
@@ -3184,13 +3208,12 @@ ui32 PrintColumnShardStorage(TStringBuilder& svg, const TVisualizer& viz, ui32 t
         << "' data-cs-plan-index='" << onlyStage->ColumnShardPlanIndex.value() << "' data-cs-stage-id='" << onlyStage->PhysicalStageId
         << "' x='0' y='" << top << "' width='" << viz.Config.Width << "' height='" << height << "'>"
         << SvgRect(0, 0, viz.Config.Width, 2 * headerHeight, "columns");
-    StepCell(svg, INTERNAL_WIDTH, viz.Config.Width - INTERNAL_WIDTH, "Storage");
+    StepCell(svg, INTERNAL_WIDTH, viz.Config.Width - INTERNAL_WIDTH, "DataSource");
     svg << "<svg data-cs-storage-header='true' x='0' y='" << headerHeight << "' width='" << viz.Config.Width << "' height='" << headerHeight << "'>";
-    StepCell(svg, INTERNAL_WIDTH, sourceEnd > INTERNAL_WIDTH ? sourceEnd - INTERNAL_WIDTH : 0, "Datasource");
+    StepCell(svg, INTERNAL_WIDTH, sourceEnd > INTERNAL_WIDTH ? sourceEnd - INTERNAL_WIDTH : 0, "Source");
     StepCell(svg, sourceEnd, readEnd - sourceEnd, "Volume coverage");
     StepCell(svg, readEnd, bytesEnd - readEnd, "Read bytes");
-    StepCell(svg, bytesEnd, unitEnd - bytesEnd, "Unit");
-    StepCell(svg, unitEnd, viz.Config.Width - unitEnd, "Reads");
+    StepCell(svg, bytesEnd, viz.Config.Width - bytesEnd, "Reads");
     svg << "</svg>" << rows << "</svg>" << Endl;
     return height;
 }
@@ -3385,8 +3408,9 @@ ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz
                 read.MaxPendingOperations = cohortContext.MaxPendingOperations;
                 TStringBuilder body;
                 ui32 readHeight = 2 * rowHeight;
+                ui32 blockIndex = 0;
                 for (TStringBuf block : {TStringBuf("Preparation"), TStringBuf("Execution"), TStringBuf("Output")}) {
-                    readHeight += PrintColumnShardNode(body, viz, read, read.Blocks.at(TString(block)), readHeight - rowHeight, 0);
+                    readHeight += PrintColumnShardNode(body, viz, read, read.Blocks.at(TString(block)), readHeight - rowHeight, 0, blockIndex++);
                 }
                 if (!HasColumnShardStorageStats(viz)) {
                     readHeight += PrintColumnShardCache(body, viz, read, readHeight - rowHeight);
@@ -3417,10 +3441,12 @@ ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz
                     << "</div></foreignObject>"
                     << "</g></svg><svg data-cs-read-body='true' x='0' y='" << rowHeight << "' width='" << viz.Config.Width << "' height='" << readHeight - rowHeight << "'>"
                     << "<svg data-cs-column-header='true' width='" << viz.Config.Width << "' height='" << rowHeight << "'>";
-    const ui32 statisticsEnd = std::min(viz.Config.TimelineLeft, viz.Config.Width * 3 / 4);
-    const ui32 nameEnd = std::min(viz.Config.SummaryLeft, statisticsEnd * 2 / 3);
+    const ui32 statisticsEnd = std::min(std::max(viz.Config.TimelineLeft, viz.Config.SummaryLeft + 285), viz.Config.Width * 3 / 4);
+    const ui32 nameEnd = viz.Config.OperatorLeft;
     StepCell(svg, INTERNAL_WIDTH, nameEnd - INTERNAL_WIDTH, "Step");
-    StepCell(svg, nameEnd, statisticsEnd - nameEnd, "Statistics");
+    StepCell(svg, nameEnd, viz.Config.TaskLeft - nameEnd, "Tablets");
+    StepCell(svg, viz.Config.TaskLeft, viz.Config.SummaryLeft - viz.Config.TaskLeft, "Calls");
+    StepCell(svg, viz.Config.SummaryLeft, statisticsEnd - viz.Config.SummaryLeft, "Statistics");
     StepCell(svg, statisticsEnd, viz.Config.Width - statisticsEnd, "Details");
                 svg << "</svg>" << body << "</svg></svg>" << Endl;
                 height += readHeight + INTERNAL_GAP_Y;

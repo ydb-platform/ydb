@@ -211,6 +211,47 @@ if (document.fonts) {
     document.fonts.ready.then(schedule_cs_layout);
 }
 
+window.addEventListener("load", function() {
+    const grids = Array.from(document.querySelectorAll(".cs-details"));
+    if (!grids.length) return;
+    let pending = false;
+    function paint() {
+        pending = false;
+        for (const grid of grids) {
+            const cells = Array.from(grid.children).flatMap(node =>
+                node.classList.contains("cs-flow") ? Array.from(node.querySelectorAll(":scope > .cs-field")) : [node])
+                .filter(node => node.classList.contains("cs-field") || node.classList.contains("cs-state") || node.classList.contains("cs-unknown"));
+            const positioned = cells.map(cell => ({cell, box: cell.getBoundingClientRect()}))
+                .filter(item => item.box.width && item.box.height)
+                .sort((a, b) => Math.abs(a.box.top - b.box.top) < 0.5 ? a.box.left - b.box.left : a.box.top - b.box.top);
+            let row = -1, top = -Infinity, column = 0;
+            for (const {cell, box} of positioned) {
+                if (Math.abs(box.top - top) >= 0.5) {
+                    ++row;
+                    top = box.top;
+                    column = 0;
+                }
+                const shade = String((row + column++) % 2);
+                if (cell.dataset.csChecker !== shade) {
+                    cell.dataset.csChecker = shade;
+                    cell.style.backgroundColor = shade === "0" ? "#ffffff" : "var(--stage-main, #f2f2f2)";
+                }
+            }
+        }
+    }
+    function schedule() {
+        if (!pending) {
+            pending = true;
+            requestAnimationFrame(paint);
+        }
+    }
+    const observer = new ResizeObserver(schedule);
+    grids.forEach(grid => observer.observe(grid));
+    window.addEventListener("resize", schedule);
+    if (document.fonts) document.fonts.ready.then(schedule);
+    schedule();
+});
+
 function shift_nodes(node, delta) {
         while(node && node.tagName == "svg") {
             node.setAttribute("y", Number(node.getAttribute("y")) + delta);

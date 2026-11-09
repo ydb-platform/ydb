@@ -10,6 +10,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/grpc_services/rpc_import_base.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -2247,6 +2248,63 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
+    Y_UNIT_TEST(RejectImportWithUnknownSettingsBeforeUidLookup) {
+        Env();
+        ui64 txId = 100;
+
+        // Keep a real import under this uid: an unrecognized request must not
+        // return that import as a successful idempotent retry.
+        const TString knownRequest = Sprintf(R"(
+            OperationParams { labels { key: "uid" value: "existing-import" } }
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_prefix: "missing" destination_path: "/MyRoot/Target" }
+            }
+        )", S3Port());
+        TestImport(Runtime(), ++txId, "/MyRoot", knownRequest);
+        const ui64 existingId = txId;
+        TestImport(Runtime(), ++txId, "/MyRoot", knownRequest);
+        TestGetImport(Runtime(), txId, "/MyRoot", {Ydb::StatusIds::NOT_FOUND});
+
+        auto reject = [&](bool addUnknownField, bool reuseUid) {
+            NKikimrImport::TCreateImportRequest request;
+            if (addUnknownField) {
+                // Wire-format length-delimited field 100, representing a
+                // oneof member introduced by a newer sender.
+                UNIT_ASSERT(request.ParseFromString(TString("\xA2\x06\x00", 3)));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(request.GetSettingsCase(), NKikimrImport::TCreateImportRequest::SETTINGS_NOT_SET);
+            if (reuseUid) {
+                (*request.MutableOperationParams()->mutable_labels())["uid"] = "existing-import";
+            }
+
+            const ui64 rejectedId = ++txId;
+            AsyncSend(Runtime(), TTestTxConfig::SchemeShard,
+                new TEvImport::TEvCreateImportRequest(rejectedId, "/MyRoot", request));
+            TAutoPtr<IEventHandle> handle;
+            auto response = Runtime().GrabEdgeEvent<TEvImport::TEvCreateImportResponse>(handle);
+            const auto& entry = response->Record.GetResponse().GetEntry();
+            UNIT_ASSERT_VALUES_EQUAL(entry.GetStatus(), Ydb::StatusIds::UNSUPPORTED);
+            UNIT_ASSERT(!entry.HasId());
+            UNIT_ASSERT(entry.IssuesSize());
+
+            const auto operation = NKikimr::NGRpcService::TImportConv::ToOperation(entry);
+            UNIT_ASSERT(operation.ready());
+            UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::UNSUPPORTED);
+            UNIT_ASSERT(operation.id().empty());
+            TestGetImport(Runtime(), rejectedId, "/MyRoot", {Ydb::StatusIds::NOT_FOUND});
+        };
+
+        reject(false, false);
+        reject(true, false);
+        reject(false, true);
+        reject(true, true);
+        // The tablet still serves both the existing import and schema reads.
+        TestGetImport(Runtime(), existingId, "/MyRoot", {Ydb::StatusIds::SUCCESS, Ydb::StatusIds::CANCELLED});
+        TestLs(Runtime(), "/MyRoot", false, NLs::PathExist);
+    }
+
     Y_UNIT_TEST(CompletionMarkerDestination) {
         struct TCase {
             TString Destination;

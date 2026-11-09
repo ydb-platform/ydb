@@ -255,6 +255,16 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         auto response = MakeHolder<TEvImport::TEvCreateImportResponse>(request.GetTxId());
 
+        // A newer sender may provide a oneof member this tablet does not know.
+        // Validate before the uid lookup so it cannot be mistaken for a
+        // successful retry of an unrelated, previously accepted import.
+        const auto settingsCase = request.GetRequest().GetSettingsCase();
+        if (settingsCase != NKikimrImport::TCreateImportRequest::kImportFromS3Settings &&
+            settingsCase != NKikimrImport::TCreateImportRequest::kImportFromFsSettings)
+        {
+            return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "Unsupported import settings");
+        }
+
         const ui64 id = request.GetTxId();
         if (Self->Imports.contains(id)) {
             return Reply(
@@ -384,7 +394,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             break;
 
         default:
-            Y_DEBUG_ABORT("Unknown import kind");
+            return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "Unsupported import settings");
         }
 
         Y_ABORT_UNLESS(importInfo != nullptr);

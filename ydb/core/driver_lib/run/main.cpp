@@ -3,6 +3,13 @@
 #include <ydb/core/driver_lib/cli_utils/cli.h>
 #include <ydb/core/base/backtrace.h>
 
+#include <util/system/env.h>
+
+#ifndef _win_
+#include <sys/mman.h>
+#endif
+
+
 namespace {
 std::terminate_handler defaultTerminateHandler;
 }
@@ -30,6 +37,12 @@ void SetupTerminateHandler() {
 
 int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFactories> factories) {
     try {
+#ifndef _win_
+        // Short-lived test processes can skip locking and unlocking their mappings.
+        if (GetEnv("YDB_TEST_DISABLE_MLOCK") != "1") {
+            mlockall(MCL_CURRENT);
+        }
+#endif
         NKikimr::EnableYDBBacktraceFormat();
         return NKikimr::NDriverClient::NewClient(argc, argv, std::move(factories));
     }

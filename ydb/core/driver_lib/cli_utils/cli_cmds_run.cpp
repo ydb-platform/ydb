@@ -35,8 +35,6 @@ public:
 
         TOpts opts;
         configParser.SetupGlobalOpts(opts);
-        // Already applied by the root command; accept it when re-parsing argv.
-        opts.AddLongOption("no-mlock").NoArgument();
         opts.AllowUnknownCharOptions_ = true;
         opts.AllowUnknownLongOptions_ = true;
         opts.SetFreeArgsMin(0);

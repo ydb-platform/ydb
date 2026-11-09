@@ -12,10 +12,6 @@
 
 #include <filesystem>
 
-#ifndef _win_
-#include <sys/mman.h>
-#endif
-
 namespace {
 
 void PrintAllocatorInfoAndExit() {
@@ -42,8 +38,6 @@ using namespace NYdb::NConsoleClient;
 extern void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories);
 
 class TClientCommandRoot : public TClientCommandRootKikimrBase {
-    bool NoMlock = false;
-
     // Dummy storage for hidden global opts consumed by "run" command.
     // The actual values are re-parsed from InitialArgV inside TCommandRun::Run().
     TString DummyClusterName;
@@ -91,8 +85,6 @@ public:
             .RequiredArgument("HOST[:PORT]").StoreResult(&Address);
 
         NLastGetopt::TOpts& nOpts = config.Opts->GetOpts();
-        nOpts.AddLongOption("no-mlock", "Skip locking memory at startup (for short-lived test processes)")
-            .NoArgument().StoreTrue(&NoMlock);
         nOpts.AddLongOption(0, "allocator-info", "Print the name of allocator linked to the binary and exit")
             .NoArgument().Handler(&PrintAllocatorInfoAndExit);
         nOpts.AddLongOption(0, "compatibility-info", "Print compatibility info of this binary and exit")
@@ -185,16 +177,6 @@ public:
                 (*it)->RenderCommandDescription(stream, renderTree, colors, lastCommand ? END : MIDDLE, prefix, shortForm);
             }
         }
-    }
-
-    void Parse(TConfig& config) override {
-#ifndef _win_
-        // Apply the startup option before parsing the server configuration.
-        if (!NoMlock) {
-            mlockall(MCL_CURRENT);
-        }
-#endif
-        TClientCommandRootKikimrBase::Parse(config);
     }
 
     void ParseAddress(TConfig& config) override {

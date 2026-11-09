@@ -215,7 +215,6 @@ class KikimrConfigGenerator(object):
             lb_user_database_root=None,
             shutdown_config=None,
             replication_config=None,
-            lock_memory=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -233,7 +232,6 @@ class KikimrConfigGenerator(object):
         self.simple_config = simple_config
         self.bridge_config = bridge_config
         self.suppress_version_check = suppress_version_check
-        self.lock_memory = lock_memory
         self.explicit_hosts_and_host_configs = explicit_hosts_and_host_configs
         if use_self_management:
             self.suppress_version_check = False

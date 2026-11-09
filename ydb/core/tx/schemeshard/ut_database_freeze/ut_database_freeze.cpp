@@ -1,5 +1,10 @@
+#include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/tablet_flat/defs.h>
+#include <ydb/core/tablet_flat/flat_redo_player.h>
+#include <ydb/core/tablet_flat/flat_sausage_slicer.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -7,8 +12,12 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/maybe.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
+
+#include <cstring>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -130,6 +139,46 @@ struct TFreezeEnv {
         Env.TestWaitNotification(Runtime, TxId, Owner);
     }
 };
+
+// Identify the commit containing this record's actual erase, rather than an
+// unrelated DataShard commit or the earlier TEvRemoveRecords notification.
+bool RemovesChangeRecord(const TEvTablet::TEvCommit& commit, ui32 changeRecordsTableId, ui64 order) {
+    if (commit.IsSnapshot || commit.EmbeddedLogBody.empty()) {
+        return false;
+    }
+    const auto redo = NPageCollection::TSlicer::Lz4()->Decode(commit.EmbeddedLogBody);
+    NTable::NRedo::TReader reader({redo.data(), redo.size()});
+    while (const auto chunk = reader.Next()) {
+        const auto* label = reinterpret_cast<const NTable::NRedo::TChunk*>(chunk.data());
+        if (label->Event != NTable::NRedo::ERedo::Update && label->Event != NTable::NRedo::ERedo::UpdateV) {
+            continue;
+        }
+        UNIT_ASSERT(chunk.size() >= sizeof(NTable::NRedo::TEvUpdate));
+        const auto* update = reinterpret_cast<const NTable::NRedo::TEvUpdate*>(chunk.data());
+        if (update->Table != changeRecordsTableId
+            || update->Rop != NTable::ERowOp::Erase)
+        {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(update->Keys, 1);
+        size_t keyOffset = sizeof(*update);
+        if (label->Event == NTable::NRedo::ERedo::UpdateV) {
+            keyOffset += sizeof(NTable::NRedo::TEvUpdateV);
+        }
+        UNIT_ASSERT(chunk.size() >= keyOffset + sizeof(NTable::NRedo::TValue));
+        const auto* key = reinterpret_cast<const NTable::NRedo::TValue*>(chunk.data() + keyOffset);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(key->TypeId), ui32(NScheme::NTypeIds::Uint64));
+        UNIT_ASSERT_VALUES_EQUAL(key->Size, sizeof(ui64));
+        keyOffset += sizeof(*key);
+        UNIT_ASSERT(chunk.size() >= keyOffset + sizeof(ui64));
+        ui64 removedOrder;
+        std::memcpy(&removedOrder, chunk.data() + keyOffset, sizeof(removedOrder));
+        if (removedOrder == order) {
+            return true;
+        }
+    }
+    return false;
+}
 
 void CheckGlobalBarrier(TStage::EStage heldStage) {
     TFreezeEnv env;
@@ -300,6 +349,147 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         env.Write("NewTable", false);
         env.Wait(2, false);
         env.Write("NewTable");
+    }
+
+    Y_UNIT_TEST(FreezeWaitsForEarlierCdcRemovalCleanup) {
+        TFreezeEnv env;
+        env.CreateTable();
+        env.CreateStream();
+        const auto shard = env.Shards().front();
+        const auto shardActor = ResolveTablet(env.Runtime, shard);
+        const TPathId streamId(env.Owner, DescribePath(env.Runtime, env.Path("Table/Stream")).GetPathId());
+        // Resolve the local table ID without depending on DataShard's private schema.
+        NTabletFlatScheme::TSchemeChanges localSchema;
+        TString schemaError;
+        const auto schemaStatus = LocalSchemeTx(env.Runtime, shard, "", true, localSchema, schemaError);
+        UNIT_ASSERT_VALUES_EQUAL_C(ui32(schemaStatus), ui32(NKikimrProto::OK), schemaError);
+        TMaybe<ui32> changeRecordsTableId;
+        for (const auto& delta : localSchema.GetDelta()) {
+            if (delta.GetDeltaType() == NTabletFlatScheme::TAlterRecord::AddTable
+                && delta.GetTableName() == "ChangeRecords")
+            {
+                changeRecordsTableId = delta.GetTableId();
+                break;
+            }
+        }
+        UNIT_ASSERT_C(changeRecordsTableId, localSchema.ShortDebugString());
+        TMaybe<ui64> recordOrder;
+        auto records = env.Runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>([&](auto& ev) {
+            if (ev->Sender == shardActor && !recordOrder) {
+                for (const auto& record : ev->Get()->Records) {
+                    if (record.PathId == streamId) {
+                        recordOrder = record.Order;
+                        break;
+                    }
+                }
+            }
+        });
+        // Hold the write itself: an ACK delay would still allow the topic to
+        // persist the row and would not reproduce discarded, undelivered data.
+        TBlockEvents<NPQ::TEvPartitionWriter::TEvWriteRequest> delivery(env.Runtime);
+        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvRemoveRecords> cleanup(env.Runtime, [&](const auto& ev) {
+            if (ev->GetRecipientRewrite() == shardActor && recordOrder) {
+                for (const auto order : ev->Get()->Records) {
+                    if (order == *recordOrder) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+        env.Write();
+        env.Runtime.WaitFor("CDC write before reaching the topic", [&] {
+            return recordOrder && !delivery.empty();
+        }, TDuration::Seconds(10));
+        const auto queued = ReadSystemTable(env.Runtime, shard, "ChangeRecords", {"Order"}, {"Order"});
+        const auto queuedRows = NClient::TValue::Create(queued)["Result"]["List"];
+        UNIT_ASSERT_VALUES_EQUAL(queuedRows.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ui64(queuedRows[0]["Order"]), *recordOrder);
+
+        TestDropCdcStream(env.Runtime, ++env.TxId, env.Root, R"(
+            TableName: "Table" StreamName: "Stream"
+        )");
+        const auto dropTx = env.TxId;
+        env.Runtime.WaitFor("discard cleanup for the removed CDC stream", [&] {
+            return !cleanup.empty();
+        }, TDuration::Seconds(10));
+        // Allow the accepted DDL to advance independently of its blocked
+        // asynchronous cleanup. Do not assume DDL completion implies cleanup.
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+
+        TMaybe<std::pair<ui32, ui32>> cleanupCommit;
+        auto commits = env.Runtime.AddObserver<TEvTablet::TEvCommit>([&](auto& ev) {
+            const auto& commit = *ev->Get();
+            if (commit.TabletID == shard && RemovesChangeRecord(commit, *changeRecordsTableId, *recordOrder)) {
+                UNIT_ASSERT(!cleanupCommit);
+                cleanupCommit = std::make_pair(commit.Generation, commit.Step);
+            }
+        });
+        auto isCleanupCommit = [&](const TEvTablet::TEvCommitResult& result) {
+            return result.TabletID == shard && cleanupCommit
+                && cleanupCommit->first == result.Generation && cleanupCommit->second == result.Step;
+        };
+        TBlockEvents<TEvTablet::TEvCommitResult> commitAck(env.Runtime, [&](const auto& ev) {
+            return isCleanupCommit(*ev->Get());
+        });
+        bool cleanupCommitted = false;
+        bool fenceInstalled = false;
+        // Register after the blocker: a held ACK must not count as committed
+        // from the executor's perspective until it is actually released.
+        auto committed = env.Runtime.AddObserver<TEvTablet::TEvCommitResult>([&](auto& ev) {
+            if (isCleanupCommit(*ev->Get())) {
+                UNIT_ASSERT_VALUES_EQUAL(ui32(ev->Get()->Status), ui32(NKikimrProto::OK));
+                cleanupCommitted = true;
+            }
+        });
+        auto replies = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreezeResult>([&](auto& ev) {
+            const auto& result = ev->Get()->Record;
+            if (result.GetTabletId() == shard && result.GetEpoch() == 1 && result.GetStage() == TStage::FENCE_WRITES
+                && result.GetStatus() == Ydb::StatusIds::SUCCESS && result.GetReady())
+            {
+                fenceInstalled = true;
+            }
+        });
+        env.CheckPending();
+        // A removed stream has no delivery obligation. Its queued records do
+        // not prevent installing the write fence, but still need cleanup.
+        env.Runtime.WaitFor("write fence while CDC removal cleanup is blocked", [&] {
+            return fenceInstalled;
+        }, TDuration::Seconds(10));
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        env.CheckPending();
+        env.CheckSchemaBlocked();
+        env.Write("Table", false, 2);
+        UNIT_ASSERT(!cleanupCommit);
+        UNIT_ASSERT(!cleanupCommitted);
+
+        cleanup.Stop().Unblock();
+        env.Runtime.WaitFor("cleanup commit awaiting its durable acknowledgement", [&] {
+            return !commitAck.empty();
+        }, TDuration::Seconds(10));
+        // The change record is already erased in Execute(), but cleanup has
+        // not completed. An empty queue must not complete the overall freeze.
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        env.CheckPending();
+        UNIT_ASSERT(!cleanupCommitted);
+        UNIT_ASSERT(fenceInstalled);
+
+        commitAck.Stop().Unblock();
+        env.Runtime.WaitFor("cleanup commit acknowledged to DataShard", [&] {
+            return cleanupCommitted;
+        }, TDuration::Seconds(10));
+        env.Env.TestWaitNotification(env.Runtime, dropTx);
+        env.Wait(1, true);
+        const auto removed = ReadSystemTable(env.Runtime, shard, "ChangeRecords", {"Order"}, {"Order"});
+        UNIT_ASSERT_VALUES_EQUAL(NClient::TValue::Create(removed)["Result"]["List"].Size(), 0);
+        // Keep the old write blocked: delivery to the intentionally deleted
+        // destination is outside this freeze boundary and is not required.
+        UNIT_ASSERT(!delivery.empty());
+        delivery.Stop();
+        env.Write("Table", false, 2);
+        env.Wait(2, false);
+        env.AdvancePlanStep();
+        env.Write("Table", true, 2);
     }
 
     Y_UNIT_TEST(AlreadyRunningIndexBuildFinishesBeforeFreeze) {

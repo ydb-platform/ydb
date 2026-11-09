@@ -491,6 +491,105 @@ jobs:
           echo "Blacklist file created at $BLACKLIST_FILE with content:"
           cat "$BLACKLIST_FILE"
 
+      - name: Start bounded kernel CPU profiling
+        id: kernel_profile
+        shell: bash
+        run: |
+          profile_dir=$(mktemp -d "$RUNNER_TEMP/kernel-profile.XXXXXX")
+          echo "KERNEL_PROFILE_DIR=$profile_dir" >> "$GITHUB_ENV"
+          exec > >(tee "$profile_dir/setup.log") 2>&1
+          uname -a
+          if ! perf --version; then
+            sudo -n timeout 180 apt-get update
+            sudo -n timeout 180 apt-get install -y "linux-tools-$(uname -r)" || \
+              sudo -n timeout 180 apt-get install -y linux-tools-generic
+          fi
+          perf_bin=$(command -v perf)
+          if ! "$perf_bin" --version; then
+            perf_bin=$(find /usr/lib/linux-tools -type f -name perf | sort -V | tail -1)
+          fi
+          "$perf_bin" --version
+          # Software sampling works without a virtualized hardware PMU. Only kernel stacks;
+          # no user-memory dumps and no scanning/caching build IDs of huge test binaries.
+          sudo -n timeout -s INT -k 5 15 "$perf_bin" record -a -e cpu-clock:k -F 49 \
+            -g --kernel-callchains --no-buildid --no-buildid-cache -m 128 \
+            -o "$profile_dir/probe.data" -- sleep 2
+          cat > "$profile_dir/collect.py" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import time
+
+          out, workspace, perf = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+          monitor = workspace / 'tmp/results/try_1/resources_monitor.jsonl'
+          stop = out / 'stop'
+          deadline = time.monotonic() + 6 * 3600
+          count, high, last_ts, next_capture = 0, 0, 0, 0
+
+          def snapshot(prefix):
+              for name in ('stat', 'vmstat', 'meminfo', 'pressure/cpu', 'pressure/io', 'pressure/memory'):
+                  try:
+                      (out / (prefix + '-' + name.replace('/', '-') + '.txt')).write_text(
+                          Path('/proc', name).read_text())
+                  except OSError as error:
+                      print(name, error, flush=True)
+              with (out / (prefix + '-processes.txt')).open('w') as target:
+                  subprocess.run(['ps', '-eo', 'pid,ppid,nlwp,stat,comm'], stdout=target, check=False)
+
+          with (out / 'kallsyms.txt').open('w') as target:
+              subprocess.run(['sudo', '-n', 'cat', '/proc/kallsyms'], stdout=target, check=True)
+          with (out / 'host.txt').open('w') as target:
+              subprocess.run(['uname', '-a'], stdout=target, check=True)
+              subprocess.run(['lscpu'], stdout=target, check=False)
+
+          while count < 3 and time.monotonic() < deadline and not stop.exists():
+              if (workspace / 'tmp/results/try_2').exists() or (monitor.parent / 'summary_report.txt').exists():
+                  break
+              try:
+                  with monitor.open('rb') as source:
+                      source.seek(max(0, os.fstat(source.fileno()).st_size - 16384))
+                      complete = source.read().split(b'\n')[:-1]
+                  row = json.loads(complete[-1])
+              except (OSError, IndexError, ValueError):
+                  time.sleep(5)
+                  continue
+              if row['ts'] != last_ts:
+                  last_ts = row['ts']
+                  high = high + 1 if row['cpu_system_pct'] >= 40 else 0
+              if time.time() - row['ts'] > 120:
+                  print('try_1 monitoring stopped; leaving profiler', flush=True)
+                  break
+              if high < 3 or time.monotonic() < next_capture:
+                  time.sleep(5)
+                  continue
+              count += 1
+              name = f'capture-{count}'
+              data = out / (name + '.data')
+              info = {'start_epoch': time.time(), 'trigger_sample': row, 'frequency_hz': 49, 'duration_s': 90}
+              print(name, 'system CPU', row['cpu_system_pct'], 'start', info['start_epoch'], flush=True)
+              snapshot(name + '-before')
+              with (out / (name + '-record.log')).open('w') as target:
+                  result = subprocess.run(['sudo', '-n', 'timeout', '-s', 'INT', '-k', '5', '110',
+                      perf, 'record', '-a', '-e', 'cpu-clock:k', '-F', '49', '-g', '--kernel-callchains',
+                      '--no-buildid', '--no-buildid-cache', '-m', '128', '-o', str(data), '--', 'sleep', '90'],
+                      stdout=target, stderr=subprocess.STDOUT, check=False)
+              info.update(end_epoch=time.time(), returncode=result.returncode)
+              (out / (name + '.json')).write_text(json.dumps(info, indent=2))
+              snapshot(name + '-after')
+              next_capture = time.monotonic() + 15 * 60
+              high = 0
+              if result.returncode != 0:
+                  print('perf failed; inspect', name + '-record.log', flush=True)
+                  break
+          print('Finished, captures:', count, flush=True)
+          PY
+          echo "$perf_bin" > "$profile_dir/perf-bin"
+          nohup python3 -u "$profile_dir/collect.py" "$profile_dir" "$GITHUB_WORKSPACE" "$perf_bin" \
+            > "$profile_dir/collector.log" 2>&1 < /dev/null &
+          echo "$!" > "$profile_dir/collector.pid"
+
       - name: Run YDB Tests
         id: run_tests
         timeout-minutes: ${{ fromJson(env.timeout) }}
@@ -514,3 +613,33 @@ jobs:
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+
+      - name: Finish kernel CPU profiling
+        if: always() && env.KERNEL_PROFILE_DIR != ''
+        continue-on-error: true
+        shell: bash
+        run: |
+          touch "$KERNEL_PROFILE_DIR/stop"
+          if [ -f "$KERNEL_PROFILE_DIR/collector.pid" ]; then
+            timeout 125 tail --pid="$(<"$KERNEL_PROFILE_DIR/collector.pid")" -f /dev/null || true
+          fi
+          if [ -f "$KERNEL_PROFILE_DIR/perf-bin" ]; then
+            perf_bin=$(<"$KERNEL_PROFILE_DIR/perf-bin")
+            for data in "$KERNEL_PROFILE_DIR"/capture-*.data; do
+              [ -f "$data" ] || continue
+              sudo -n timeout 60 "$perf_bin" report --stdio --no-children \
+                --sort comm,dso,symbol --percent-limit 0.5 \
+                --kallsyms "$KERNEL_PROFILE_DIR/kallsyms.txt" -i "$data" \
+                > "$data.report.txt" 2>&1 || true
+            done
+          fi
+          sudo -n chown -R "$(id -u):$(id -g)" "$KERNEL_PROFILE_DIR"
+
+      - name: Upload kernel CPU profiles
+        if: always() && env.KERNEL_PROFILE_DIR != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-cpu-profile-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.KERNEL_PROFILE_DIR }}
+          retention-days: 14
+          compression-level: 1

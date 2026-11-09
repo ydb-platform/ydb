@@ -323,6 +323,14 @@ ui32 GetNumericDataTypeLevel(EDataSlot dataSlot);
 EDataSlot GetNumericDataTypeByLevel(ui32 level);
 ui32 GetDateTypeLevel(EDataSlot dataSlot);
 EDataSlot GetDateTypeByLevel(ui32 level);
+// Effects propagate through expressions/lambdas. D2 deliberately treats every
+// async occurrence as externally effectful; replay is a separate D4 contract.
+struct TAsyncExpressionEffects {
+    bool MaySuspend = false;
+    bool HasExternalEffects = false;
+};
+TAsyncExpressionEffects GetAsyncExpressionEffects(const TExprNode& node);
+
 bool IsPureIsolatedLambda(const TExprNode& lambdaBody, TSyncMap* syncList = nullptr);
 TString GetIntegralAtomValue(ui64 value, bool hasSign);
 bool AllowIntegralConversion(NNodes::TCoIntegralCtor node, bool negate, EDataSlot toType,

@@ -4,6 +4,8 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 
+#include <functional>
+
 namespace NKikimr::NKqp::NNewYql {
 
 // The caller translates logical bindings into values in its own expression
@@ -19,6 +21,12 @@ struct TExpressionBindings {
     // Relational expressions (aggregate results, grouped keys and sublinks)
     // become ordinary typed arguments at the scalar annotation boundary.
     THashMap<const TExpression*, NYql::TExprNode::TPtr> Expressions;
+    // Optional lazy bindings. Called only for references actually reached by
+    // lowering, after checking the corresponding explicit binding map. A null
+    // result leaves the reference unresolved. Callbacks must return nodes owned
+    // by the destination context and live only for this LowerExpression call.
+    std::function<NYql::TExprNode::TPtr(TColumnId)> ResolveColumn;
+    std::function<NYql::TExprNode::TPtr(const TExpression&)> ResolveExpression;
     THashMap<TString, NYql::TExprNode::TPtr> Parameters; // Includes '$'.
     // Already resolved callable values (e.g. Udf nodes or lambdas). Module
     // names use the decoded SQL spelling "Module::Function".
@@ -38,7 +46,8 @@ struct TExpressionLoweringSettings {
 
 // Produces ordinary YQL expressions for the existing type annotation pipeline
 // (e.g. InstantAnnotateTypes with wholeProgram=false). Does not assign types or
-// mutate the AST/bindings. Arguments supplied by the caller must be enclosed in
+// mutate the AST. Explicit binding maps are read directly; lazy callbacks may
+// populate them. Arguments supplied by the caller must be enclosed in
 // their owning lambda before annotation. Keep the rewritten root returned by
 // the annotator, which may insert coercions and replace callables.
 // Returns null and adds a positioned diagnostic to ctx for invalid input.

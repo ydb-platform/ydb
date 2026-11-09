@@ -1544,7 +1544,7 @@ private:
             try {
                 const auto translationSettings = settingsBuilder.Build(ctx);
                 auto parsed = ParseQueryWithNewParser(query.Text, translationSettings,
-                    settingsBuilder.GetIsAmbiguityError());
+                    settingsBuilder.GetIsAmbiguityError(), SessionCtx->Query().CompileTrace.Get());
                 traceScope.SetSuccess(parsed.IsOk());
                 if (!parsed.IsOk()) {
                     YQL_CLOG(INFO, ProviderKqp) << "New YQL parser reported syntax errors";
@@ -2594,6 +2594,7 @@ private:
         NewParserTypes.reset();
         NewParserTypeSettings = {};
         NewParserNames.reset();
+        NewParserTablesCollected = false;
         NewParserAst.reset();
         SessionCtx->Reset(KeepConfigChanges);
         SessionCtx->Query().Type = queryType;
@@ -2618,12 +2619,39 @@ private:
     }
 
     bool BuildNativeQuery(TExprContext& ctx) {
+        auto* trace = SessionCtx->Query().CompileTrace.Get();
+        TCompileTraceScope buildTrace(trace, TCompileTraceLevels::Phase, "Build native query");
         for (const auto& statement : NewParserAst->Statements) {
             if (statement.Explain != NNewYql::EExplainMode::None) {
                 ythrow TNewYqlParserFallback() << "EXPLAIN statement execution";
             }
         }
+        if (!NewParserTablesCollected) {
+            TCompileTraceScope tablesTrace(trace, TCompileTraceLevels::Step, "Collect native tables");
+            auto references = NNewYql::CollectTableReferences(*NewParserAst, NewParserSettings);
+            if (!references.IsOk()) {
+                ctx.IssueManager.AddIssues(references.Issues);
+                return false;
+            }
+            bool pending = false;
+            for (const auto& [cluster, path] : references.Tables) {
+                const auto* description = SessionCtx->Tables().GetTables().FindPtr(std::make_pair(cluster, path));
+                if (description && description->Metadata) { continue; }
+                if (cluster != Cluster) {
+                    ythrow TNewYqlParserFallback() << "Cross-cluster catalog lookup";
+                }
+                auto& table = SessionCtx->Tables().GetOrAddTable(cluster, SessionCtx->GetDatabase(), path);
+                if (table.Metadata) {
+                    ythrow TNewYqlParserFallback() << "Catalog path was rewritten: " << path;
+                }
+                table.RequireStats();
+                pending = true;
+            }
+            NewParserTablesCollected = true;
+            if (pending) { throw TNativeMetadataPending{}; }
+        }
         if (!NewParserNames) {
+            TCompileTraceScope namesTrace(trace, TCompileTraceLevels::Step, "Resolve native names");
             THashMap<std::pair<TString, TString>, NNewYql::TTableMetadataPtr> snapshots;
             const auto lookup = [&](const TString& cluster, const TString& path) -> NNewYql::TTableMetadataPtr {
                 const auto key = std::make_pair(cluster, path);
@@ -2691,7 +2719,12 @@ private:
             NewParserNames = std::move(resolved.Names);
             YQL_CLOG(INFO, ProviderKqp) << "New YQL name resolution succeeded";
         }
-        NewParserTypes = NNewYql::AnnotateAst(*NewParserAst, *NewParserNames, ctx, *TypesCtx, NewParserTypeSettings);
+        {
+            TCompileTraceScope typesTrace(trace, TCompileTraceLevels::Step, "Annotate native AST");
+            NewParserTypeSettings.CompileTrace = trace;
+            NewParserTypes = NNewYql::AnnotateAst(*NewParserAst, *NewParserNames, ctx, *TypesCtx, NewParserTypeSettings);
+            typesTrace.SetSuccess(bool(NewParserTypes));
+        }
         if (!NewParserTypes) { return false; }
         YQL_CLOG(INFO, ProviderKqp) << "New YQL type annotation succeeded";
         auto native = std::make_shared<TNativeQuery>();
@@ -2728,6 +2761,7 @@ private:
         for (const auto& statement : NewParserAst->Statements) {
             const auto* query = std::get_if<NNewYql::TQueryStatement>(&statement.Value);
             if (!query) { continue; }
+            TCompileTraceScope lowerTrace(trace, TCompileTraceLevels::Step, "Lower native AST to RBO");
             auto lowered = NNewYql::LowerToRbo(*query->Query, *NewParserAst, *NewParserNames, *NewParserTypes,
                 ctx, lookup, TypesCtx->OrderedColumns);
             TVector<TString> columns;
@@ -2771,6 +2805,21 @@ private:
         TExprNode::TPtr output;
         if (TCollectParametersTransformer(SessionCtx->QueryPtr())(parameters, output, ctx) == IGraphTransformer::TStatus::Error) {
             return false;
+        }
+        // Static KQP settings apply to the whole compilation, as in the legacy
+        // configuration transformer. Defer mutation until all native fallback
+        // points have passed, so a retry through legacy starts unmodified.
+        for (const auto& statement : NewParserAst->Statements) {
+            const auto* pragma = std::get_if<NNewYql::TPragmaStatement>(&statement.Value);
+            if (!pragma) { continue; }
+            const auto* value = NewParserNames->CostBasedOptimizationPragmas.FindPtr(pragma);
+            if (!value) { continue; }
+            const auto pos = ctx.AppendPosition(TPosition(pragma->Name.Range.Column + 1,
+                pragma->Name.Range.Line, NewParserAst->File));
+            if (!SessionCtx->Config().Dispatch(NCommon::ALL_CLUSTERS, "CostBasedOptimizationLevel", *value,
+                NCommon::ISettingDispatcher::EStage::STATIC, NCommon::GetErrorCallback(pos, ctx))) {
+                return false;
+            }
         }
         TransformCtx->NativeQuery = std::move(native);
         YQL_CLOG(INFO, ProviderKqp) << "New YQL native execution contract built";
@@ -2857,6 +2906,7 @@ private:
     std::unique_ptr<NNewYql::TAnnotatedAst> NewParserTypes;
     TAutoPtr<IGraphTransformer> NativeFrontendTransformer;
     TAutoPtr<IGraphTransformer> NativeMetadataTransformer;
+    bool NewParserTablesCollected = false;
     TAutoPtr<IGraphTransformer> NativePrepareTransformer;
     mutable bool NativeFrontendActive = false;
     mutable bool LegacyFrontendRequested = false;

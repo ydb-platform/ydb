@@ -11,6 +11,8 @@
 
 namespace NKikimr::NKqp {
 
+class TCompileTrace;
+
 // Only unsupported functionality requests fallback. Parser errors are returned
 // as diagnostics; unexpected exceptions must remain failures.
 class TNewYqlParserFallback : public yexception {};
@@ -31,6 +33,6 @@ struct TNewYqlParseResult {
 // lexer/dialect for this parse. The returned AST owns all spelling and source
 // location data and may outlive queryText and the temporary parser objects.
 TNewYqlParseResult ParseQueryWithNewParser(const TString& queryText,
-    NSQLTranslation::TTranslationSettings settings, bool isAmbiguityError);
+    NSQLTranslation::TTranslationSettings settings, bool isAmbiguityError, TCompileTrace* trace = nullptr);
 
 } // namespace NKikimr::NKqp

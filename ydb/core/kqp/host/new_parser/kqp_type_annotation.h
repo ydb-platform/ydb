@@ -6,6 +6,10 @@ namespace NYql {
 struct TTypeAnnotationContext;
 }
 
+namespace NKikimr::NKqp {
+class TCompileTrace;
+}
+
 namespace NKikimr::NKqp::NNewYql {
 
 using TColumnTypes = THashMap<TColumnId, const NYql::TTypeAnnotationNode*>;
@@ -66,6 +70,7 @@ struct TAnnotatedAst {
     THashMap<const TQuery*, TColumnTypes> Captures;
     // Per-column operand conversions are the actual rewritten YQL lambdas,
     // including Just/optional mapping and decimal/numeric coercions.
+    // Both lambdas are null when the operand types already match.
     THashMap<const TQuery*, TVector<std::pair<TAnnotatedExpression, TAnnotatedExpression>>> SetConversions;
     TVector<const NYql::TTypeAnnotationNode*> Columns; // Indexed by resolved column ID.
     // Source-local output types preserve the distinction between an input's
@@ -80,6 +85,7 @@ struct TAstTypeAnnotationSettings {
     TExpressionLoweringSettings Expressions;
     // Types belong to the destination expression context; names include '$'.
     THashMap<TString, const NYql::TTypeAnnotationNode*> Parameters;
+    TCompileTrace* CompileTrace = nullptr;
 };
 
 // Annotates the supported scalar-query subset using the existing YQL callable

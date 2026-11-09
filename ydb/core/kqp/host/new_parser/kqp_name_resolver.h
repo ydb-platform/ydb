@@ -4,6 +4,7 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <util/generic/hash.h>
+#include <util/generic/maybe.h>
 
 #include <functional>
 
@@ -58,6 +59,9 @@ struct TResolvedColumn {
 // Pointer keys refer to the unchanged input AST, which must outlive this result.
 // Column IDs are local to this result; RBO lowering can allocate IUs for them.
 struct TResolvedNames {
+    // Decoded static optimizer pragmas. The host dispatches these in statement
+    // order after native lowering succeeds; an empty value means DEFAULT.
+    THashMap<const TPragmaStatement*, TMaybe<TString>> CostBasedOptimizationPragmas;
     TVector<TResolvedColumn> Columns;
     THashMap<const TSource*, TTableMetadataPtr> Tables;
     THashMap<const TExpression*, TColumnId> ColumnReferences;
@@ -81,6 +85,18 @@ struct TNameResolutionResult {
 
     bool IsOk() const { return bool(Names); }
 };
+
+struct TTableReferencesResult {
+    TVector<std::pair<TString, TString>> Tables; // Unique (cluster, path), in first-use order.
+    NYql::TIssues Issues;
+
+    bool IsOk() const { return Issues.Empty(); }
+};
+
+// Discover physical reads without catalog IO or column binding. This lets the
+// host load metadata in one batch before resolving names. CTE visibility and
+// path pragmas follow the same rules as resolution; unsupported rules fall back.
+TTableReferencesResult CollectTableReferences(const TScript& script, TNameResolutionSettings settings);
 
 // Resolution reads catalog snapshots but does not construct ExprNodes or infer
 // types. A user name error returns Issues and no partial Names; unsupported

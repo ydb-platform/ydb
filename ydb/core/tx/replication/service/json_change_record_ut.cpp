@@ -824,9 +824,9 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         UNIT_ASSERT_VALUES_EQUAL(firstSchema.SerializeAsString(), secondSchema.SerializeAsString());
     }
 
-    Y_UNIT_TEST(SchemaChangeColumnFamilies) {
+    void CheckSchemaChangeColumnFamilies(bool zstd) {
         auto record = TChangeRecordBuilder()
-            .WithBody(R"json({
+            .WithBody(TStringBuilder() << R"json({
                 "ts": [10, 20],
                 "tableChanges": [{
                     "table": {
@@ -840,7 +840,7 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
                             "default": {"compression": "off", "cacheMode": "regular"},
                             "archive": {
                                 "data": {"media": "ssd"},
-                                "compression": "lz4",
+                                "compression": ")json" << (zstd ? "zstd" : "lz4") << R"json(",
                                 "cacheMode": "in_memory"
                             }
                         }
@@ -854,11 +854,64 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         UNIT_ASSERT_VALUES_EQUAL(schema.FamiliesSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).GetName(), "archive");
         UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).GetMedia(), "ssd");
-        UNIT_ASSERT(schema.GetFamilies(0).GetCompression() == TFamily::COMPRESSION_LZ4);
+        UNIT_ASSERT(schema.GetFamilies(0).GetCompression() == (zstd ? TFamily::COMPRESSION_ZSTD : TFamily::COMPRESSION_LZ4));
         UNIT_ASSERT(schema.GetFamilies(0).GetCacheMode() == TFamily::CACHE_MODE_IN_MEMORY);
         UNIT_ASSERT(schema.GetFamilies(1).GetCompression() == TFamily::COMPRESSION_OFF);
         UNIT_ASSERT(schema.GetFamilies(1).GetCacheMode() == TFamily::CACHE_MODE_REGULAR);
         UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(1).GetFamily(), "archive");
+    }
+
+    Y_UNIT_TEST(SchemaChangeColumnFamilies) {
+        CheckSchemaChangeColumnFamilies(false);
+    }
+
+    Y_UNIT_TEST(SchemaChangeZstdColumnFamilies) {
+        CheckSchemaChangeColumnFamilies(true);
+    }
+
+    Y_UNIT_TEST(SchemaChangeZstdCompressionLevels) {
+        for (const int level : {-1, 0, 1, 22}) {
+            TStringBuilder body;
+            body << R"json({"ts":[10,20],"tableChanges":[{"table":{
+                "schemaVersion":3,"primaryKeyColumnNames":["key"],
+                "columns":{"key":{"type":"Uint64","family":"default"}},
+                "columnFamilies":{"default":{"compression":"zstd","cacheMode":"regular"
+            )json";
+            if (level >= 0) {
+                body << ",\"compressionLevel\":" << level;
+            }
+            body << "}}}}]}";
+            auto record = TChangeRecordBuilder().WithBody(body).Build();
+            NKikimrReplication::TSchemaChange schema;
+            TString error;
+            UNIT_ASSERT_C(record->TryGetSchemaChange(schema, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).HasCompressionLevel(), level >= 0);
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).GetCompressionLevel(), level >= 0 ? level : 1);
+        }
+    }
+
+    Y_UNIT_TEST(SchemaChangeRejectsInvalidCompressionLevels) {
+        const std::pair<TStringBuf, TStringBuf> cases[] = {
+            {R"("compression":"zstd","compressionLevel":-1)", "must be between 0 and 22: -1"},
+            {R"("compression":"zstd","compressionLevel":23)", "must be between 0 and 22: 23"},
+            {R"("compression":"zstd","compressionLevel":18446744073709551615)", "must be between 0 and 22: 18446744073709551615"},
+            {R"("compression":"zstd","compressionLevel":"1")", "must be an integer"},
+            {R"("compression":"zstd","compressionLevel":1.5)", "must be an integer"},
+            {R"("compression":"lz4","compressionLevel":1)", "is only supported for ZSTD"},
+            {R"("compression":"off","compressionLevel":0)", "is only supported for ZSTD"},
+        };
+        for (const auto& [settings, expectedError] : cases) {
+            const TString body = TStringBuilder() << R"json({"ts":[10,20],"tableChanges":[{"table":{
+                "schemaVersion":3,"primaryKeyColumnNames":["key"],
+                "columns":{"key":{"type":"Uint64","family":"default"}},
+                "columnFamilies":{"default":{"cacheMode":"regular",)json" << settings << "}}}}]}";
+            auto record = TChangeRecordBuilder().WithBody(body).Build();
+            NKikimrReplication::TSchemaChange schema;
+            TString error;
+            UNIT_ASSERT(!record->TryGetSchemaChange(schema, error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "compression level in column family default");
+            UNIT_ASSERT_STRING_CONTAINS(error, expectedError);
+        }
     }
 
     Y_UNIT_TEST(SchemaChangeRejectsDuplicateFamilyNames) {
@@ -948,7 +1001,7 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
                 "archive": {"compression": "off", "cacheMode": "regular"}
             })json",
             R"json("columnFamilies": {
-                "default": {"compression": "zstd", "cacheMode": "regular"}
+                "default": {"compression": "unsupported", "cacheMode": "regular"}
             })json",
             R"json("columnFamilies": {
                 "default": {"compression": "off", "cacheMode": "unknown"}

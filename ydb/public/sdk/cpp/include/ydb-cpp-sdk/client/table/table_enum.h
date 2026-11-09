@@ -9,6 +9,7 @@ namespace NTable {
 enum class EColumnFamilyCompression {
     None,
     LZ4,
+    ZSTD,
 };
 
 //! Column family cache mode

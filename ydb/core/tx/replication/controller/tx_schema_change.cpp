@@ -34,6 +34,11 @@ bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
                 return false;
             }
 
+            if (family.HasCompressionLevel() && (family.GetCompression() !=
+                    NKikimrReplication::TSchemaChange::TFamily::COMPRESSION_ZSTD || family.GetCompressionLevel() > 22)) {
+                return false;
+            }
+
             if (family.HasMedia() && family.GetMedia().empty()) {
                 return false;
             }

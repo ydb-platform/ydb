@@ -479,8 +479,25 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
                 return false;
             }
 
+            if (definition.Has("compressionLevel")) {
+                if (compression != NKikimrReplication::TSchemaChange::TFamily::COMPRESSION_ZSTD) {
+                    error = TStringBuilder() << "compression level in column family " << name << " is only supported for ZSTD";
+                    return false;
+                }
+                const auto& level = definition["compressionLevel"];
+                if (!level.IsInteger() && !level.IsUInteger()) {
+                    error = TStringBuilder() << "compression level in column family " << name << " must be an integer";
+                    return false;
+                }
+                if (!level.IsUInteger() || level.GetUInteger() > 22) {
+                    error = TStringBuilder() << "compression level in column family " << name
+                        << " must be between 0 and 22: " << level.GetStringRobust();
+                    return false;
+                }
+            }
+
             for (const auto& [setting, value] : definition.GetMap()) {
-                if (setting != "data" && setting != "compression" && setting != "cacheMode") {
+                if (setting != "data" && setting != "compression" && setting != "compressionLevel" && setting != "cacheMode") {
                     error = TStringBuilder() << "unsupported setting '" << setting << "' in column family " << name;
                     return false;
                 }
@@ -507,6 +524,9 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
             family->SetName(name);
             family->SetCompression(CompressionFromString(definition["compression"].GetString()));
             family->SetCacheMode(CacheModeFromString(definition["cacheMode"].GetString()));
+            if (definition.Has("compressionLevel")) {
+                family->SetCompressionLevel(definition["compressionLevel"].GetUInteger());
+            }
             if (definition.Has("data")) {
                 family->SetMedia(definition["data"]["media"].GetString());
             }

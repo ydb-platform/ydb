@@ -2903,7 +2903,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(CreateAlterTableWithCodec) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        auto& featureFlags = runtime.GetAppData().FeatureFlags;
+        UNIT_ASSERT(!featureFlags.GetEnableRowTableZstdCompression());
         ui64 txId = 123;
+        NKikimrSchemeOp::TDescribeOptions describeOptions;
+        describeOptions.SetReturnPartitionConfig(true);
+        describeOptions.SetReturnPartitioningInfo(false);
+        const auto describeTable = [&](const TString& path) {
+            auto result = DescribePath(runtime, path, describeOptions);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPathDescription().GetTable().GetPartitionConfig().ColumnFamiliesSize(), 1);
+            return result;
+        };
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
                         Name: "Table1"
@@ -2921,14 +2931,34 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         })_");
         env.TestWaitNotification(runtime, txId);
 
-        auto t1 = DescribePath(runtime, "/MyRoot/Table1");
+        auto t1 = describeTable("/MyRoot/Table1");
 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
-        auto t2 = DescribePath(runtime, "/MyRoot/Table1");
+        auto t2 = describeTable("/MyRoot/Table1");
 
         UNIT_ASSERT_VALUES_EQUAL(t1.DebugString(), t2.DebugString());
+
+        for (const auto* family : {"Id: 0", "Name: \"archive\""}) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"_(
+                Name: "DisabledZstd"
+                Columns { Name: "key" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+                PartitionConfig { ColumnFamilies { )_" << family << R"_( ColumnCodec: ColumnCodecZSTD } }
+            )_", {NKikimrScheme::StatusInvalidParameter});
+            TestAlterTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"_(
+                Name: "Table1"
+                PartitionConfig { ColumnFamilies { )_" << family << R"_( ColumnCodec: ColumnCodecZSTD } }
+            )_", {NKikimrScheme::StatusInvalidParameter});
+            TestCreateTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"_(
+                Name: "DisabledZstdCopy"
+                CopyFromTable: "/MyRoot/Table1"
+                PartitionConfig { ColumnFamilies { )_" << family << R"_( ColumnCodec: ColumnCodecZSTD } }
+            )_", {NKikimrScheme::StatusInvalidParameter});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(t2.DebugString(), describeTable("/MyRoot/Table1").DebugString());
+        featureFlags.SetEnableRowTableZstdCompression(true);
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
                         Name: "Table1"
@@ -2936,9 +2966,39 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             ColumnFamilies {
                                 Id: 0
                                 ColumnCodec: ColumnCodecZSTD
+                                ColumnCodecLevel: 7
                                 ColumnCache: ColumnCacheNone
                             }
-                        })_", {NKikimrScheme::StatusInvalidParameter});
+                        })_");
+        env.TestWaitNotification(runtime, txId);
+
+        auto compressed = describeTable("/MyRoot/Table1");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(compressed.GetPathDescription().GetTable().GetPartitionConfig()
+            .GetColumnFamilies(0).GetColumnCodec()), static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
+        UNIT_ASSERT_VALUES_EQUAL(compressed.GetPathDescription().GetTable().GetPartitionConfig()
+            .GetColumnFamilies(0).GetColumnCodecLevel(), 7);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        UNIT_ASSERT_VALUES_EQUAL(compressed.DebugString(), describeTable("/MyRoot/Table1").DebugString());
+
+        for (const i32 level : {0, 22}) {
+            TestAlterTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"_(
+                Name: "Table1"
+                PartitionConfig { ColumnFamilies { Id: 0 ColumnCodecLevel: )_" << level << " } }");
+            env.TestWaitNotification(runtime, txId);
+            const auto described = describeTable("/MyRoot/Table1");
+            const auto& family = described.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(family.GetColumnCodec()), static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
+            UNIT_ASSERT(family.HasColumnCodecLevel());
+            UNIT_ASSERT_VALUES_EQUAL(family.GetColumnCodecLevel(), level);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+            UNIT_ASSERT_VALUES_EQUAL(described.DebugString(), describeTable("/MyRoot/Table1").DebugString());
+        }
+        for (const i32 level : {-1, 23}) {
+            TestAlterTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"_(
+                Name: "Table1"
+                PartitionConfig { ColumnFamilies { Id: 0 ColumnCodecLevel: )_" << level << " } }",
+                {NKikimrScheme::StatusInvalidParameter});
+        }
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
                         Name: "Table1"
@@ -2951,12 +3011,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         })_");
         env.TestWaitNotification(runtime, txId);
 
-        auto t3 = DescribePath(runtime, "/MyRoot/Table1");
+        auto t3 = describeTable("/MyRoot/Table1");
         UNIT_ASSERT(t2.DebugString() != t3.DebugString());
+        UNIT_ASSERT(!t3.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0).HasColumnCodecLevel());
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
+            Name: "Table1"
+            PartitionConfig { ColumnFamilies { Id: 0 ColumnCodecLevel: 5 } }
+        )_", {NKikimrScheme::StatusInvalidParameter});
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
+            Name: "Table1"
+            PartitionConfig { ColumnFamilies { Name: "archive" ColumnCodecLevel: 5 } }
+        )_", {NKikimrScheme::StatusInvalidParameter});
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
-        auto t4 = DescribePath(runtime, "/MyRoot/Table1");
+        auto t4 = describeTable("/MyRoot/Table1");
         UNIT_ASSERT_VALUES_EQUAL(t3.DebugString(), t4.DebugString());
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
@@ -2972,7 +3042,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 ColumnCodec: ColumnCodecZSTD
                                 ColumnCache: ColumnCacheNone
                             }
-                        })_", {NKikimrScheme::StatusInvalidParameter});
+                        })_");
+        env.TestWaitNotification(runtime, txId);
+        auto created = describeTable("/MyRoot/Table2");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(created.GetPathDescription().GetTable().GetPartitionConfig()
+            .GetColumnFamilies(0).GetColumnCodec()), static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        UNIT_ASSERT_VALUES_EQUAL(created.DebugString(), describeTable("/MyRoot/Table2").DebugString());
     }
 
     Y_UNIT_TEST(CreateAlterTableWithCacheMode) {

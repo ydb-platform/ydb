@@ -1,3 +1,4 @@
+#include "column_families.h"
 #include "table_description.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
@@ -461,6 +462,77 @@ storage_settings {
   external_data_channels_count: 7
 }
 )");
+    }
+
+    Y_UNIT_TEST(RowTableZstdCompression) {
+        TActorSystemStub actorSystem;
+        Ydb::Table::CreateTableRequest create;
+        auto& key = *create.add_columns();
+        key.set_name("key");
+        key.mutable_type()->set_type_id(Ydb::Type::UINT32);
+        create.add_primary_key("key");
+        for (const auto* name : {"default", "archive"}) {
+            auto& family = *create.add_column_families();
+            family.set_name(name);
+            family.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+        }
+
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        NKikimrSchemeOp::TModifyScheme scheme;
+        UNIT_ASSERT_C(FillTableDescription(scheme, create, TTableProfiles{}, status, error), error);
+        const auto& table = scheme.GetCreateTable();
+        UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionConfig().ColumnFamiliesSize(), 2);
+        for (const auto& family : table.GetPartitionConfig().GetColumnFamilies()) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(family.GetColumnCodec()), static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
+        }
+
+        Ydb::Table::DescribeTableResult described;
+        FillColumnFamilies(described, table);
+        UNIT_ASSERT_VALUES_EQUAL(described.column_families_size(), 2);
+        for (const auto& family : described.column_families()) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(family.compression()), static_cast<int>(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD));
+            UNIT_ASSERT(!family.has_compression_level());
+        }
+
+        for (const bool addFamily : {false, true}) {
+            Ydb::Table::AlterTableRequest alter;
+            alter.set_path("/Root/Table");
+            auto& family = *(addFamily ? alter.add_add_column_families() : alter.add_alter_column_families());
+            family.set_name("archive");
+            family.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+            family.set_compression_level(7);
+            NKikimrSchemeOp::TModifyScheme altered;
+            UNIT_ASSERT_C(BuildAlterTableModifyScheme(&alter, &altered, TTableProfiles{}, TPathId{}, status, error), error);
+            const auto& families = altered.GetAlterTable().GetPartitionConfig().GetColumnFamilies();
+            UNIT_ASSERT_VALUES_EQUAL(families.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "archive");
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(families[0].GetColumnCodec()), static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetColumnCodecLevel(), 7);
+        }
+    }
+
+    Y_UNIT_TEST(RowTableZstdCompressionLevels) {
+        for (const i32 level : {0, 1, 7, 22}) {
+            NKikimrSchemeOp::TPartitionConfig config;
+            TColumnFamilyManager manager(&config);
+            Ydb::Table::ColumnFamily family;
+            family.set_name("default");
+            family.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+            family.set_compression_level(level);
+            auto code = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT_C(manager.ApplyFamilySettings(family, &code, &error), error);
+            UNIT_ASSERT(config.GetColumnFamilies(0).HasColumnCodecLevel());
+            UNIT_ASSERT_VALUES_EQUAL(config.GetColumnFamilies(0).GetColumnCodecLevel(), level);
+
+            NKikimrSchemeOp::TTableDescription table;
+            table.MutablePartitionConfig()->CopyFrom(config);
+            Ydb::Table::DescribeTableResult described;
+            FillColumnFamilies(described, table);
+            UNIT_ASSERT(described.column_families(0).has_compression_level());
+            UNIT_ASSERT_VALUES_EQUAL(described.column_families(0).compression_level(), level);
+        }
     }
 
     Y_UNIT_TEST(ColumnFamilies) {

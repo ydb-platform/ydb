@@ -34,6 +34,7 @@ namespace {
         switch (codec) {
             case NPage::ECodec::Plain:
             case NPage::ECodec::LZ4:
+            case NPage::ECodec::ZSTD:
                 return true;
         }
         return false;
@@ -189,6 +190,11 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         auto &family = tableInfo.Families[delta.GetFamilyId()];
 
         auto codec = delta.HasCodec() ? CodecFromProto(delta.GetCodec()) : family.Codec;
+        const ui32 codecLevel = delta.HasCodecLevel() ? delta.GetCodecLevel()
+            : delta.HasCodec() ? 1 : family.CodecLevel;
+        Y_ENSURE(codecLevel <= 22, "Invalid page compression level " << codecLevel);
+        Y_ENSURE(codec == NPage::ECodec::ZSTD || codecLevel == 1,
+            "Compression level is only supported for ZSTD");
 
         // FIXME: for now these changes will affect old parts on boot only (see RequestInMemPagesForPartStore)
         bool ever = delta.HasInMemory() && delta.GetInMemory();
@@ -210,6 +216,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         }
         changes |= ChangeTableSetting(table, family.Cache, cache);
         changes |= ChangeTableSetting(table, family.Codec, codec);
+        changes |= ChangeTableSetting(table, family.CodecLevel, codecLevel);
         changes |= ChangeTableSetting(table, family.Small, small);
         changes |= ChangeTableSetting(table, family.Large, large);
         changes |= ChangeTableSetting(table, family.CacheMode, cacheMode);

@@ -1261,6 +1261,14 @@ bool TPartitionConfigMerger::ApplyChanges(
     const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
     const TAppData *appData, const bool isServerlessDomain, TString &errDescr)
 {
+    for (const auto& family : changes.GetColumnFamilies()) {
+        if (family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecZSTD
+            && !appData->FeatureFlags.GetEnableRowTableZstdCompression()) {
+            errDescr = "ZSTD compression for row tables is disabled";
+            return false;
+        }
+    }
+
     result.CopyFrom(src); // inherit all data from src
 
     if (!ApplyChangesInColumnFamilies(result, src, changes, columns, isServerlessDomain, errDescr)) {
@@ -1587,12 +1595,25 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
         }
 
         if (changesFamily.HasColumnCodec()) {
-            if (changesFamily.GetColumnCodec() == NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD) {
-                errDescr = TStringBuilder()
-                    << "Unsupported ColumnCodec. ColumnFamily id: " << familyId << " name: " << familyName;
+            dstFamily.SetColumnCodec(changesFamily.GetColumnCodec());
+            if (changesFamily.GetColumnCodec() != NKikimrSchemeOp::ColumnCodecZSTD) {
+                dstFamily.ClearColumnCodecLevel();
+            }
+        }
+
+        if (changesFamily.HasColumnCodecLevel()) {
+            dstFamily.SetColumnCodecLevel(changesFamily.GetColumnCodecLevel());
+        }
+
+        if (dstFamily.HasColumnCodecLevel()) {
+            if (dstFamily.GetColumnCodec() != NKikimrSchemeOp::ColumnCodecZSTD) {
+                errDescr = "COMPRESSION_LEVEL is supported only for ZSTD compression";
                 return false;
             }
-            dstFamily.SetColumnCodec(changesFamily.GetColumnCodec());
+            if (dstFamily.GetColumnCodecLevel() < 0 || dstFamily.GetColumnCodecLevel() > 22) {
+                errDescr = "COMPRESSION_LEVEL for ZSTD must be in range [0, 22]";
+                return false;
+            }
         }
 
         if (changesFamily.HasColumnCache()) {

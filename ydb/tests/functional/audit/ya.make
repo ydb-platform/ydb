@@ -1,6 +1,8 @@
 PY3TEST()
 
 FORK_SUBTESTS()
+# Keep test cases isolated: audit log capture can affect neighbouring tests.
+SPLIT_FACTOR(40)
 SIZE(MEDIUM)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)

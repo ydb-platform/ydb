@@ -13,14 +13,15 @@
 * `kind` — тип операции. Возможные значения:
   * `analyze` — операции сбора статистики [ANALYZE](../../yql/reference/syntax/analyze.md);
   * `buildindex` — операции построения индекса;
-  * `compaction` — операции компакшна таблиц;
-  * `export/s3` — операции экспорта в S3;
-  * `export/nfs` — операции экспорта на NFS;
-  * `import/s3` — операции импорта из S3;
-  * `import/nfs` — операции импорта с NFS;
+  * `compaction` — операции [компакшна](../../concepts/glossary.md#compaction) таблиц;
+  * `export/s3` — операции [экспорта в S3](export-import/export-s3.md);
+  * `export/nfs` — операции [экспорта на NFS](export-import/export-nfs.md);
+  * `import/s3` — операции [импорта из S3](export-import/import-s3.md);
+  * `import/nfs` — операции [импорта с NFS](export-import/import-nfs.md);
   * `scriptexec` — операции выполнения скриптов;
-  * `incbackup` — операции инкрементального резервного копирования;
-  * `restore` — операции восстановления из резервной копии;
+  * `fullbackup` — операции [полного резервного копирования](../../concepts/backup.md#full-backup);
+  * `incbackup` — операции [инкрементального резервного копирования](../../concepts/backup.md#incremental-backup);
+  * `restore` — операции восстановления из [коллекции резервных копий](../../concepts/datamodel/backup-collection.md);
   * `setnotnull` — операции выставления ограничения `NOT NULL`.
 
 Посмотрите описание команды получения списка фоновых операций:

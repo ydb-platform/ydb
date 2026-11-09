@@ -50,7 +50,6 @@ message TOAuthToken {
     optional string TokenSecretName = 2;
 }
 
-// Payload of the initial-copy topic, never an RPC result.
 message TSecretRecord {
     optional string SourcePath = 1;
     optional bytes Value = 2 [(Ydb.sensitive) = true];

@@ -107,11 +107,11 @@ class TestBridgeRollback(object):
             result = self.bridge_client.get_rollback_status_result()
             last[:] = [result]
             logger.debug("GetRollbackStatus result# %s", result)
-            return (result is not None
-                and not result.bridged
-                and set(result.bridge_config_node_ids) == set(bridge_config_node_ids)
-                and not result.unreported_static_node_ids
-                and result.complete == complete)
+            return (result is not None and
+                    not result.bridged and
+                    set(result.bridge_config_node_ids) == set(bridge_config_node_ids) and
+                    not result.unreported_static_node_ids and
+                    result.complete == complete)
         assert_that(wait_for(matches, timeout_seconds=60), "rollback status %s" % last)
 
     def test_rollback_of_prepared_cluster(self):

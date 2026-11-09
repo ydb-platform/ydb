@@ -627,6 +627,81 @@ column_families {
 
     using TFillIndexDescFn = void(*)(Ydb::Table::DescribeTableResult&, const NKikimrSchemeOp::TTableDescription&);
 
+    void CheckVectorIndexDescriptionRoundTrip(bool hnsw) {
+        for (const bool prefixed : {false, true}) {
+            Ydb::Table::CreateTableRequest request;
+            auto* index = request.add_indexes();
+            index->set_name("vidx");
+            if (prefixed) {
+                index->add_index_columns("scope");
+            }
+            index->add_index_columns("embedding");
+            auto* tree = hnsw
+                ? index->mutable_global_hnsw_index()->mutable_vector_settings()
+                : index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+            tree->set_levels(1);
+            tree->set_clusters(hnsw ? 1 : 2);
+            tree->set_overlap_clusters(1);
+            tree->set_overlap_ratio(0.25);
+            tree->set_adaptive_clusters(true);
+            tree->set_autoupdate(false);
+            auto* vector = tree->mutable_settings();
+            vector->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
+            vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            vector->set_vector_dimension(200);
+            if (hnsw) {
+                vector->set_min_rows(0);
+                vector->set_m(24);
+                vector->set_ef_construction(300);
+                vector->set_delta_rows(1ULL << 40);
+            }
+
+            NKikimrSchemeOp::TIndexedTableCreationConfig converted;
+            Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT_C(FillIndexDescription(converted, request, false, status, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(converted.IndexDescriptionSize(), 1);
+            const auto& internal = converted.GetIndexDescription(0);
+            UNIT_ASSERT_VALUES_EQUAL(internal.GetType(), hnsw
+                ? NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                : NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+            UNIT_ASSERT_VALUES_EQUAL(internal.HasHnswIndexDescription(), hnsw);
+            UNIT_ASSERT_VALUES_EQUAL(internal.HasVectorIndexKmeansTreeDescription(), !hnsw);
+            UNIT_ASSERT_VALUES_EQUAL(internal.IndexImplTableDescriptionsSize(), prefixed ? 3 : 2);
+
+            NKikimrSchemeOp::TTableDescription table;
+            auto* stored = table.AddTableIndexes();
+            stored->SetName(internal.GetName());
+            stored->SetType(internal.GetType());
+            stored->SetState(NKikimrSchemeOp::EIndexStateReady);
+            *stored->MutableKeyColumnNames() = internal.GetKeyColumnNames();
+            if (hnsw) {
+                *stored->MutableHnswIndexDescription() = internal.GetHnswIndexDescription();
+            } else {
+                *stored->MutableVectorIndexKmeansTreeDescription() = internal.GetVectorIndexKmeansTreeDescription();
+            }
+            *stored->MutableIndexImplTableDescriptions() = internal.GetIndexImplTableDescriptions();
+            Ydb::Table::DescribeTableResult described;
+            FillIndexDescription(described, table);
+            UNIT_ASSERT_VALUES_EQUAL(described.indexes_size(), 1);
+            const auto& actual = described.indexes(0);
+            UNIT_ASSERT_VALUES_EQUAL(actual.has_global_hnsw_index(), hnsw);
+            UNIT_ASSERT_VALUES_EQUAL(actual.has_global_vector_kmeans_tree_index(), !hnsw);
+            const auto& actualSettings = hnsw
+                ? actual.global_hnsw_index().vector_settings()
+                : actual.global_vector_kmeans_tree_index().vector_settings();
+            UNIT_ASSERT_VALUES_EQUAL(actualSettings.SerializeAsString(), tree->SerializeAsString());
+        }
+    }
+
+    Y_UNIT_TEST(HnswIndexDescriptionRoundTrip) {
+        CheckVectorIndexDescriptionRoundTrip(true);
+    }
+
+    Y_UNIT_TEST(KMeansIndexDescriptionRoundTrip) {
+        CheckVectorIndexDescriptionRoundTrip(false);
+    }
+
     Y_UNIT_TEST(IndexDescriptionLocalBloomFilter) {
         Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(
             static_cast<TFillIndexDescFn>(&FillIndexDescription), R"(

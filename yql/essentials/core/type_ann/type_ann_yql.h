@@ -117,4 +117,7 @@ IGraphTransformer::TStatus YqlAggWinWrapper(
 IGraphTransformer::TStatus YqlWinWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
+IGraphTransformer::TStatus YqlFlattenWrapper(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+
 } // namespace NYql::NTypeAnnImpl

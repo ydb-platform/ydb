@@ -84,4 +84,104 @@ Y_UNIT_TEST_SUITE(Discover) {
         // check that now TEvGet returns BLOCKED for blocked generation with reader params
         SendGet(test, originalBlobId, data, NKikimrProto::BLOCKED, tabletId, tabletGeneration);
     }
+
+    void PutBlobs(TEnvironmentSetup& env, TActorId edge, ui32 groupId, const std::vector<TLogoBlobID>& ids,
+            const TString& data) {
+        for (const TLogoBlobID& id : ids) {
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            });
+            const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        }
+    }
+
+    TAutoPtr<TEventHandle<TEvBlobStorage::TEvDiscoverResult>> RunDiscover(TEnvironmentSetup& env, TActorId edge,
+            ui32 groupId, ui64 tabletId, bool discoverBlockedGeneration) {
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvDiscover(tabletId, 0, true, discoverBlockedGeneration,
+                TInstant::Max(), 0, true));
+        });
+        return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvDiscoverResult>(edge, false);
+    }
+
+    void BlockedGenerationTest(TBlobStorageGroupType::EErasureSpecies erasure) {
+        TEnvironmentSetup env{{.Erasure = erasure}};
+        env.CreateBoxAndPool();
+        env.Sim(TDuration::Minutes(1));
+        const ui32 groupId = env.GetGroups().front();
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1);
+
+        const ui64 tabletId = 1;
+        const ui32 blockedGeneration = 5;
+        const TString data = "hello, world";
+        const TLogoBlobID id(tabletId, 1, 1, 0, data.size(), 0);
+        PutBlobs(env, edge, groupId, {id}, data);
+
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvBlock(tabletId, blockedGeneration, TInstant::Max()));
+        });
+        const auto block = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(block->Get()->Status, NKikimrProto::OK);
+
+        const auto res = RunDiscover(env, edge, groupId, tabletId, true);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Id, id);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->BlockedGeneration, blockedGeneration);
+    }
+
+    Y_UNIT_TEST(BlockedGeneration_block42) {
+        BlockedGenerationTest(TBlobStorageGroupType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(BlockedGeneration_mirror3dc) {
+        BlockedGenerationTest(TBlobStorageGroupType::ErasureMirror3dc);
+    }
+
+    Y_UNIT_TEST(BlockedGeneration_mirror3of4) {
+        BlockedGenerationTest(TBlobStorageGroupType::ErasureMirror3of4);
+    }
+
+    void UnreadableNewestBlobTest(TBlobStorageGroupType::EErasureSpecies erasure) {
+        TEnvironmentSetup env{{.Erasure = erasure}};
+        env.CreateBoxAndPool();
+        env.Sim(TDuration::Minutes(1));
+        const ui32 groupId = env.GetGroups().front();
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1);
+
+        const ui64 tabletId = 1;
+        const TString data = "hello, world";
+        const TLogoBlobID older(tabletId, 1, 1, 0, data.size(), 0);
+        const TLogoBlobID newest(tabletId, 1, 2, 0, data.size(), 0);
+        PutBlobs(env, edge, groupId, {older, newest}, data);
+        env.Sim(TDuration::Seconds(10));
+
+        // The newest blob is written in full, but reading it gives NODATA, as it would after its data was lost.
+        // Discover must report the loss instead of returning the older blob as the newest one.
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult && ev->Recipient != edge) {
+                auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+                if (msg->ResponseSz == 1 && msg->Responses[0].Id == newest) {
+                    msg->Responses[0].Status = NKikimrProto::NODATA;
+                    msg->Responses[0].Buffer = {};
+                }
+            }
+            return true;
+        };
+
+        const auto res = RunDiscover(env, edge, groupId, tabletId, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::ERROR, "Id# " << res->Get()->Id);
+    }
+
+    Y_UNIT_TEST(UnreadableNewestBlob_block42) {
+        UnreadableNewestBlobTest(TBlobStorageGroupType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(UnreadableNewestBlob_mirror3dc) {
+        UnreadableNewestBlobTest(TBlobStorageGroupType::ErasureMirror3dc);
+    }
+
+    Y_UNIT_TEST(UnreadableNewestBlob_mirror3of4) {
+        UnreadableNewestBlobTest(TBlobStorageGroupType::ErasureMirror3of4);
+    }
 }

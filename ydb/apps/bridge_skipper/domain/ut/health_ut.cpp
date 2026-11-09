@@ -19,7 +19,7 @@ TClusterView View() {
 }
 
 Ydb::Monitoring::SelfCheckResult Fixture(const TString& name) {
-    TFileInput input(ArcadiaSourceRoot() + "/ydb/apps/bridge_skipper/domain/ut/fixtures/" + name + ".pbtxt");
+    TFileInput input(ArcadiaFromCurrentLocation(__SOURCE_FILE__, "fixtures/" + name + ".pbtxt"));
     Ydb::Monitoring::SelfCheckResult result;
     UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(input.ReadAll(), &result));
     return result;

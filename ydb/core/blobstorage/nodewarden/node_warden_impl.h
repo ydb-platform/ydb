@@ -349,6 +349,15 @@ namespace NKikimr::NStorage {
         TControlWrapper CommonStaticLogChunks;
         TControlWrapper MaxActiveCompactionsPerPDisk;
 
+        struct TReplPDiskRate {
+            ui64 ReadBytesPerSecond;
+            ui64 WriteBytesPerSecond;
+        };
+
+        ui64 ReplTotalRequestBytesPerSecond = 0;
+        ui64 ReplTotalResponseBytesPerSecond = 0;
+        THashMap<NPDisk::EDeviceType, TReplPDiskRate> ReplPDiskRates;
+
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 
@@ -878,6 +887,7 @@ namespace NKikimr::NStorage {
         void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
         void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse::TPtr ev);
         void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
+        void ApplyReplBrokerConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge syncer operation

@@ -18,7 +18,9 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQuer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationCommitFailure
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationDoubleCommitIsOk+LocalTopics
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationDoubleCommitIsOk-LocalTopics
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.ExactlyOnceWritingWithMultipleSinks-LocalTopics
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.ExactlyOnceWritingWithMultipleSinksAndSameTopic
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.RestartStreamingQueryWithExactlyOnceWriting+LocalTopics+ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.RestartStreamingQueryWithExactlyOnceWriting+LocalTopics-ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.RestartStreamingQueryWithExactlyOnceWriting-LocalTopics+ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.RestartStreamingQueryWithExactlyOnceWriting-LocalTopics-ModernChannels
@@ -122,7 +124,9 @@ ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlook
 ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlookup_watermarks[False-local-slj-2-2]
 ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_read_write
 ydb/tests/fq/streaming_optimize py3test.sole chunk
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopExprKey-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_gs_simp-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_ru_join-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part1 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part1 test.py.test[aggregate-group_by_rollup_grouping_hum-]
@@ -173,6 +177,7 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part6 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part6 test.py.test[aggregate-aggregate_subquery_yql_15869-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part6 test.py.test[aggregate-aggregation_by_udf-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 test.py.test[action-evaluate_queries-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 test.py.test[aggregate-GroupByTwoFields-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 test.py.test[aggregate-group_by_cube_expr_trio-]

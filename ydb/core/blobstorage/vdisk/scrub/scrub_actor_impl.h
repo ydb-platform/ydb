@@ -20,6 +20,7 @@ namespace NKikimr {
         const TIntrusivePtr<TVDiskContext> VCtx;
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         ui32 GroupGeneration; // the current one, Info keeps the generation the VDisk has started with
+        bool IsBridgePart; // the current one too: the group may become an inline pile of bridged group while running
         const TString LogPrefix;
 
         std::optional<NKikimrVDiskData::TScrubState> State;

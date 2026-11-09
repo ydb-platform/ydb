@@ -14,6 +14,7 @@ namespace NKikimr {
         , VCtx(ScrubCtx->VCtx)
         , Info(ScrubCtx->Info)
         , GroupGeneration(Info->GroupGeneration)
+        , IsBridgePart(Info->GetBridgeProxyGroupId().has_value())
         , LogPrefix(VCtx->VDiskLogPrefix)
         , Counters(VCtx->VDiskCounters->GetSubgroup("subsystem", "scrub"))
         , MonGroup(Counters)
@@ -48,7 +49,9 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::HandleGenerationChange(TAutoPtr<IEventHandle> ev) {
-        GroupGeneration = ev->Get<TEvVGenerationChange>()->NewInfo->GroupGeneration;
+        const auto& newInfo = ev->Get<TEvVGenerationChange>()->NewInfo;
+        GroupGeneration = newInfo->GroupGeneration;
+        IsBridgePart = newInfo->GetBridgeProxyGroupId().has_value();
         ForwardToBlobRecoveryActor(ev);
     }
 
@@ -272,7 +275,7 @@ namespace NKikimr {
         auto ev = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(blobId, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::LowRead,
                 /*singleLine*/ true, /*omitDataInfoUnlessError*/ true);
-        if (Info->GetBridgeProxyGroupId()) {
+        if (IsBridgePart) {
             // the part of bridged group is reached with its generation only; the inline pile would be checked through
             // its bridge proxy along with the other parts otherwise
             ev->ForceGroupGeneration = GroupGeneration;

@@ -75,6 +75,30 @@ struct TFixture : NTests::TIdTestContext {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
+    Y_UNIT_TEST(SetProjectionOrderSurvivesTypeRecomputation) {
+        for (const TString op : {"UNION ALL", "UNION", "INTERSECT", "EXCEPT"}) {
+            TFixture f;
+            auto root = f.Run("SELECT DISTINCT value AS z, id AS a FROM t " + op
+                + " SELECT value AS z, a AS a FROM t ORDER BY a + 1 DESC, z LIMIT 2 OFFSET 1;");
+            auto annotator = CreateTypeAnnotationTransformer(CreateExtCallableTypeAnnotationTransformer(f.TypeCtx, true), f.TypeCtx);
+            TRBOContext ctx(f.KqpCtx, f.ExprCtx, f.TypeCtx, *annotator, *f.FuncRegistry);
+            UNIT_ASSERT_C(root->ComputeTypes(ctx) == IGraphTransformer::TStatus::Ok, f.ExprCtx.IssueManager.GetIssues().ToString());
+            const auto& columns = root->GetColumns().Items();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].second, "z");
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].second, "a");
+            // Look up fields by IU identity: the annotated struct does not
+            // retain the order in root's explicit result-column contract.
+            const auto* row = root->GetInput()->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            UNIT_ASSERT_VALUES_EQUAL(FormatType(row->FindItemType(f.ExprCtx.GetIndexAsString(columns[0].first))), "Optional<String>");
+            UNIT_ASSERT_VALUES_EQUAL(FormatType(row->FindItemType(f.ExprCtx.GetIndexAsString(columns[1].first))), "Int64");
+            auto* sort = static_cast<TOpSort*>(f.Find(*root, EOperator::Sort).at(0));
+            UNIT_ASSERT_VALUES_EQUAL(sort->GetSortElements().Items()[1].first, columns[0].first);
+            UNIT_ASSERT_VALUES_EQUAL(f.Find(*root, EOperator::Limit).size(), 1);
+            f.Lower();
+        }
+    }
+
     // Recompute every operator type as well as validating IU ownership. This
     // catches mismatches between scalar annotations and relational result types.
     Y_UNIT_TEST(RelationalExpressionsLowerAndReannotate) {

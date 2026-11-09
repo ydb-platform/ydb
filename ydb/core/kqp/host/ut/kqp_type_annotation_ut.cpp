@@ -62,6 +62,19 @@ struct TFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
+    Y_UNIT_TEST(SetOrderingUsesCoercedPositionalTypes) {
+        TFixture f;
+        f.Ok("SELECT value AS z, id AS a FROM t UNION ALL SELECT 'text' AS z, score AS a FROM t "
+            "ORDER BY a + 1, z LIMIT 2 OFFSET 1;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(0), "Optional<String>");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(1), "Optional<Int64>");
+        const auto& query = f.Query();
+        UNIT_ASSERT_VALUES_EQUAL(FormatType(f.Result->Expressions.at(query.OrderBy[0].Expression.get()).GetType()), "Optional<Int64>");
+        UNIT_ASSERT_VALUES_EQUAL(FormatType(f.Result->Expressions.at(query.OrderBy[1].Expression.get()).GetType()), "Optional<String>");
+        UNIT_ASSERT_VALUES_EQUAL(FormatType(f.Result->Expressions.at(query.Limit.get()).GetType()), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(FormatType(f.Result->Expressions.at(query.Offset.get()).GetType()), "Uint64");
+    }
+
     // The annotation table must keep coercions and access rewrites, not merely
     // attach a result type to the old unrewritten expression.
     Y_UNIT_TEST(AnnotatesScalarQueryAndRetainsRewrites) {

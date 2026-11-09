@@ -394,6 +394,9 @@ struct TQuery {
     TSourceRange Range;
     TVector<TCte> With;
     std::variant<TSelect, TSetOperation> Body;
+    // Compound-query ordering is resolved against the set operation's output.
+    TVector<TSortSpecification> OrderBy;
+    bool Parenthesized = false;
     TExpressionPtr Limit;
     TExpressionPtr Offset;
 };

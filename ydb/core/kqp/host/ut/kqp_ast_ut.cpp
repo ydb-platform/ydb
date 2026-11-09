@@ -34,6 +34,37 @@ void LiteralIs(const TExpressionPtr& expression, TStringBuf spelling) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
+    Y_UNIT_TEST(SetOperationRejectsMisplacedTrailingClauses) {
+        for (const TString sql : {
+            "SELECT 1 AS n ORDER BY n UNION ALL SELECT 2 AS n;",
+            "SELECT 1 AS n LIMIT 1 INTERSECT SELECT 2 AS n;",
+            "SELECT 1 AS n UNION ALL SELECT 2 AS n ORDER BY n EXCEPT SELECT 3 AS n;",
+            "SELECT 1 AS n UNION ALL SELECT 2 AS n ASSUME ORDER BY n;"}) {
+            UNIT_ASSERT_EXCEPTION(Parse(sql), TNewYqlParserFallback);
+        }
+    }
+
+    Y_UNIT_TEST(SetOperationTrailingClauses) {
+        auto ast = Parse("SELECT 3 AS n UNION ALL SELECT 2 AS n INTERSECT SELECT 1 AS n ORDER BY n DESC LIMIT 2 OFFSET 1;");
+        const auto& query = *std::get<TQueryStatement>(ast->Statements[0].Value).Query;
+        UNIT_ASSERT_VALUES_EQUAL(query.OrderBy.size(), 1);
+        LiteralIs(query.Limit, "2");
+        LiteralIs(query.Offset, "1");
+        const auto& right = *std::get<TSetOperation>(query.Body).Right;
+        UNIT_ASSERT(right.OrderBy.empty() && !right.Limit);
+        const auto& last = *std::get<TSetOperation>(right.Body).Right;
+        UNIT_ASSERT(std::get<TSelect>(last.Body).OrderBy.empty() && !last.Limit);
+
+        auto local = Parse("(SELECT 3 AS n ORDER BY n LIMIT 1) UNION ALL (SELECT 2 AS n ORDER BY n DESC LIMIT 1);");
+        const auto& compound = *std::get<TQueryStatement>(local->Statements[0].Value).Query;
+        UNIT_ASSERT(compound.OrderBy.empty() && !compound.Limit);
+        const auto& set = std::get<TSetOperation>(compound.Body);
+        for (const auto* branch : {set.Left.get(), set.Right.get()}) {
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TSelect>(branch->Body).OrderBy.size(), 1);
+            LiteralIs(branch->Limit, "1");
+        }
+    }
+
     // Check the tree, not evaluated constants: wrong associativity can still
     // produce the same value for convenient literal inputs.
     Y_UNIT_TEST(PrecedenceAndAssociativity) {

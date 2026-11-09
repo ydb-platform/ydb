@@ -71,6 +71,8 @@ struct TAnnotatedAst {
     // Source-local output types preserve the distinction between an input's
     // schema and the nullable output of an enclosing outer join.
     THashMap<const TSource*, TColumnTypes> Sources;
+    // Positional types corresponding to TResolvedNames::QueryOutputs, not to
+    // TStructExprType::GetItems(), which does not preserve projection order.
     THashMap<const TQuery*, TVector<const NYql::TTypeAnnotationNode*>> QueryOutputs;
 };
 

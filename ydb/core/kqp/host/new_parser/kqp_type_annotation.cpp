@@ -181,9 +181,6 @@ private:
             if (const auto* argument = bindings.Columns.FindPtr(id)) {
                 auto value = *argument;
                 if (const auto* in = std::get_if<TIn>(&node->Value); in && in->Negated) { value = Call(pos, "Not", {value}); }
-                if (const auto* call = std::get_if<TCall>(&node->Value); call && AggregateName(*node) == "variance_1_1") {
-                    value = Call(pos, "SqlCall", {Ctx.NewAtom(pos, "Math.Sqrt"), Ctx.NewList(pos, {Call(pos, "PositionalArgs", {value})})});
-                }
                 bindings.Expressions[node] = std::move(value);
             }
         }
@@ -590,6 +587,9 @@ private:
                 };
                 Result.SetConversions[&query].emplace_back(conversion(0), conversion(1));
             }
+            TColumnTypes orderScope;
+            for (const auto id : Names.QueryOutputs.at(&query)) { orderScope[id] = Result.Columns[id]; }
+            for (const auto& sort : query.OrderBy) { Expression(*sort.Expression, orderScope, EUse::SortKey); }
             if (query.Limit) { Expression(*query.Limit, {}, EUse::Limit); }
             if (query.Offset) { Expression(*query.Offset, {}, EUse::Offset); }
             Result.QueryOutputs[&query] = std::move(outputs);

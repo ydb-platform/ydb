@@ -32,6 +32,17 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_REGISTER_NODE; }
 
+    static TNodeLocation WithBridgePileName(const TNodeLocation& location, const std::optional<TString>& pileName) {
+        NActorsInterconnect::TNodeLocation proto;
+        location.Serialize(&proto, false);
+        if (pileName) {
+            proto.SetBridgePileName(*pileName);
+        } else {
+            proto.ClearBridgePileName();
+        }
+        return TNodeLocation(proto);
+    }
+
     bool Error(TStatus::ECode code,
                const TString &reason,
                const TActorContext &ctx)
@@ -88,6 +99,7 @@ public:
             {"tenantName", (rec.HasPath() ? rec.GetPath() : "<unspecified>")});
 
         TNodeLocation loc(rec.GetLocation());
+        const bool bridgeMode = AppData()->BridgeModeEnabled;
 
         Response = new TEvNodeBroker::TEvRegistrationResponse;
 
@@ -122,13 +134,26 @@ public:
                 return Error(TStatus::WRONG_REQUEST, errorText, ctx);
             }
 
-            // node of the implicit pile may get the name of its pile, the pile of the node stays the same then
+            if (!bridgeMode && loc.GetBridgePileName()) {
+                if (node.Location.GetBridgePileName() && node.Location.GetBridgePileName() != loc.GetBridgePileName()) {
+                    return Error(TStatus::WRONG_REQUEST, TStringBuilder() << "Bridge pile specified while bridge mode is"
+                        " disabled for " << host << ':' << port, ctx);
+                }
+                // the node still runs with the bridge config the cluster was prepared for bridge mode with, and it is
+                // being restarted without one; piles are not used without bridge mode, so the node loses its pile; it
+                // may be started with the pile name again (e.g. restarted with the same arguments after a crash) after
+                // it has lost the name already
+                loc = WithBridgePileName(loc, std::nullopt);
+            }
+
+            // node of the implicit pile may get the name of its pile, or lose it, the pile of the node stays the same
+            // then; without bridge mode, the node loses the pile it had while the cluster was prepared for bridge mode
             TNodeLocation expected = node.Location;
             if (!expected.GetBridgePileName() && ImplicitPileName && loc.GetBridgePileName() == ImplicitPileName) {
-                NActorsInterconnect::TNodeLocation proto;
-                expected.Serialize(&proto, false);
-                proto.SetBridgePileName(*ImplicitPileName);
-                expected = TNodeLocation(proto);
+                expected = WithBridgePileName(expected, ImplicitPileName);
+            } else if (expected.GetBridgePileName() && !loc.GetBridgePileName() &&
+                    (!bridgeMode || (ImplicitPileName && expected.GetBridgePileName() == ImplicitPileName))) {
+                expected = WithBridgePileName(expected, std::nullopt);
             }
 
             if (expected != loc && node.Location != TNodeLocation()) {
@@ -144,6 +169,7 @@ public:
                 Self->Dirty.UpdateLocation(node, loc);
                 Self->Dirty.DbAddNode(node, txc);
                 SetLocation = true;
+                Location = loc;
             }
 
             if (!node.IsFixed() && rec.GetFixedNodeId()) {
@@ -177,6 +203,11 @@ public:
                 }
             }
         } else {
+            if (!bridgeMode && loc.GetBridgePileName()) {
+                return Error(TStatus::WRONG_REQUEST, TStringBuilder() << "Bridge pile specified while bridge mode is"
+                    " disabled for " << host << ':' << port, ctx);
+            }
+
             if (Self->Dirty.FreeIds.Empty())
                 return Error(TStatus::ERROR_TEMP, "No free node IDs", ctx);
 
@@ -230,7 +261,7 @@ public:
 
         auto &node = Self->Committed.Nodes.at(NodeId);
         if (SetLocation) {
-            Self->Committed.UpdateLocation(node, TNodeLocation(Event->Get()->Record.GetLocation()));
+            Self->Committed.UpdateLocation(node, Location);
         }
 
         if (FixNodeId) {
@@ -271,6 +302,7 @@ private:
     const TSubDomainKey ServicedSubDomain;
     TString ResolveError;
     std::optional<TString> ImplicitPileName;
+    TNodeLocation Location; // the location stored when SetLocation is set; may differ from the requested one in pile
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
     THolder<TNodeInfo> Node;
     ui32 NodeId;

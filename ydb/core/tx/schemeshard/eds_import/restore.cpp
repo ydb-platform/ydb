@@ -2,6 +2,7 @@
 #include "limits.h"
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 
 #include <util/string/ascii.h>

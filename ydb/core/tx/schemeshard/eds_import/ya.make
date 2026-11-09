@@ -8,6 +8,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/protos/schemeshard
     ydb/public/api/protos
+    yql/essentials/public/issue
     yql/essentials/sql/settings
 )
 

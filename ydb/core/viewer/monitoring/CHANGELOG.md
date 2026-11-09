@@ -1,5 +1,12 @@
 # Changelog
 
+## [18.1.0-hotfix.2](https://github.com/ydb-platform/ydb-embedded-ui/compare/v18.1.0-hotfix.1...v18.1.0-hotfix.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* **nodes:** backport grouped search to hotfix 18.1.0 ([#4566](https://github.com/ydb-platform/ydb-embedded-ui/issues/4566)) ([4ee95ee](https://github.com/ydb-platform/ydb-embedded-ui/commit/4ee95eed07f5817b62268125573c67ec3d8efae6))
+
 ## [18.1.0-hotfix.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v18.1.0...v18.1.0-hotfix.1) (2026-10-21)
 
 

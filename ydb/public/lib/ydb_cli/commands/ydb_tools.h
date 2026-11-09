@@ -64,6 +64,7 @@ private:
     bool SavePartialResult = false;
     bool Replace = false;
     bool VerifyExistence = false;
+    TString ExternalTableSourceMapping = "database-root";
     TString UploadBandwidth;
     TString UploadRps;
     TString RowsPerRequest;

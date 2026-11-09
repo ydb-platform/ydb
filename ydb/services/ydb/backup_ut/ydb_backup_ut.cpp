@@ -3434,6 +3434,46 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
+    Y_UNIT_TEST(ExternalTableBackupRootMapping) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrWithGrpcAndRootSchema server(config);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TSchemeClient schemeClient(driver);
+        UNIT_ASSERT(schemeClient.MakeDirectory("/Root/source").GetValueSync().IsSuccess());
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        ExecuteQuery(querySession, R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/source/eds` WITH (
+                SOURCE_TYPE = "ObjectStorage", LOCATION = "192.168.1.1:8123", AUTH_METHOD = "NONE"
+            );
+            CREATE EXTERNAL TABLE `/Root/source/table` (key Utf8 NOT NULL) WITH (
+                DATA_SOURCE = "/Root/source/eds", LOCATION = "folder", FORMAT = "csv_with_names"
+            );
+        )", true);
+        TTempDir tempDir;
+        NDump::TClient client(driver);
+        const auto dump = client.Dump("/Root/source", tempDir.Path(), NDump::TDumpSettings().Database("/Root"));
+        UNIT_ASSERT_C(dump.IsSuccess(), dump.GetIssues().ToString());
+
+        auto settings = NDump::TRestoreSettings().ExternalTableSourceMapping(NDump::EExternalTableSourceMapping::BackupRoot);
+        const auto result = client.Restore(tempDir.Path(), "/Root/target", settings);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalTable(tableSession, "/Root/target/table").data_source_path(), "/Root/target/eds");
+
+        const auto replace = client.Restore(tempDir.Path(), "/Root/target", NDump::TRestoreSettings(settings).Replace(true));
+        UNIT_ASSERT(!replace.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalTable(tableSession, "/Root/target/table").data_source_path(), "/Root/target/eds");
+
+        // Existing server-side feature control still applies to the opt-in restore.
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(false);
+        const auto disabled = client.Restore(tempDir.Path(), "/Root/disabled", settings);
+        UNIT_ASSERT(!disabled.IsSuccess());
+    }
+
     void TestExternalTableBackupRestore() {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");

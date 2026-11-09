@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
@@ -103,6 +104,7 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
     FLUENT_SETTING_DEFAULT(bool, SkipDocumentTables, false);
     FLUENT_SETTING_DEFAULT(bool, SavePartialResult, false);
     FLUENT_SETTING_DEFAULT(bool, Replace, false);
+    FLUENT_SETTING_DEFAULT(EExternalTableSourceMapping, ExternalTableSourceMapping, EExternalTableSourceMapping::DatabaseRoot);
     // only makes sense when used together with the replace option
     FLUENT_SETTING_DEFAULT(bool, VerifyExistence, false);
 

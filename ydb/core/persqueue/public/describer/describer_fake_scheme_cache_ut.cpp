@@ -482,6 +482,25 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc2--account--topic"].RealPath, "/Root/Federation/account/topic");
     }
 
+    Y_UNIT_TEST(ResolvedPathsKeepsLegacyPrimary) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/PQ/rt3.dc2--account--topic");
+            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+            FillOkTopic(entry, /*balancerTabletId=*/21);
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        NDescriber::TDescribeSettings settings;
+        settings.ResolvedPaths = true;
+        env.StartDescribe({"/Root/PQ/rt3.dc2--account--topic"}, settings);
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/PQ/rt3.dc2--account--topic"].Status, NDescriber::EStatus::Success);
+        UNIT_ASSERT_VALUES_EQUAL(
+            ev->Topics["/Root/PQ/rt3.dc2--account--topic"].RealPath,
+            "/Root/PQ/rt3.dc2--account--topic");
+    }
+
     Y_UNIT_TEST(LegacyShortNameResolved) {
         TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
             UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic");

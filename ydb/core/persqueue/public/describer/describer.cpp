@@ -52,21 +52,36 @@ public:
         RetryWithSyncVersion = Settings.ForceSyncVersion;
         UsedSyncVersion = Settings.ForceSyncVersion;
 
+        const TString lbRoot = AppData()->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
         for (const auto& topic : TopicPaths) {
-            auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
-            if (!resolved) {
-                LOG_D("Name resolve failed",
-                    {"topic", topic},
-                    {"reason", resolved.error()});
-                SetErrorResult(topic, EStatus::BadRequest);
-                continue;
+            TString resolvedPath;
+            TString navigateDatabase;
+            if (Settings.ResolvedPaths) {
+                resolvedPath = CanonizePath(topic);
+                navigateDatabase = DatabasePath;
+                if (auto target = NNameResolver::TryFederationAccountTarget(resolvedPath, lbRoot)) {
+                    resolvedPath = target->Path;
+                    navigateDatabase = target->AccountDatabase;
+                }
+            } else {
+                auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
+                if (!resolved) {
+                    LOG_D("Name resolve failed",
+                        {"topic", topic},
+                        {"reason", resolved.error()});
+                    SetErrorResult(topic, EStatus::BadRequest);
+                    continue;
+                }
+                resolvedPath = resolved->Path;
+                navigateDatabase = resolved->NavigateDatabase;
             }
             LOG_D("Name resolved",
                 {"topic", topic},
-                {"resolvedPath", resolved->Path},
-                {"navigateDatabase", resolved->NavigateDatabase});
-            PathToOriginalPaths[resolved->Path].push_back(topic);
-            PendingByDatabase[resolved->NavigateDatabase].insert(resolved->Path);
+                {"resolvedPath", resolvedPath},
+                {"navigateDatabase", navigateDatabase},
+                {"resolvedPaths", Settings.ResolvedPaths});
+            PathToOriginalPaths[resolvedPath].push_back(topic);
+            PendingByDatabase[navigateDatabase].insert(resolvedPath);
         }
 
         if (PendingByDatabase.empty()) {

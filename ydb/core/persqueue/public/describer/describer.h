@@ -76,6 +76,9 @@ struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TAccessRights AccessRights;
     bool ForceSyncVersion = false;
+    // Topic strings are already scheme paths (discovery primary/secondary).
+    // Do not run ResolveName, which rewrites legacy paths under LbUserDatabaseRoot.
+    bool ResolvedPaths = false;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,

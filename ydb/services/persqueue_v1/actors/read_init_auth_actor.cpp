@@ -102,9 +102,17 @@ void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext&) {
         AFL_ENSURE(topic.second.DiscoveryConverter->IsValid());
         topics.insert(topic.second.DiscoveryConverter->GetPrimaryPath());
     }
+    DescribePaths(std::move(topics));
+}
 
+void TReadInitAndAuthActor::DescribePaths(absl::flat_hash_set<TString> topics) {
+    // Paths come from the discovery converter (primary, then modern secondary).
+    // ResolveName would rewrite a legacy primary path under LbUserDatabaseRoot
+    // and drop the dc baked into -mirrored-from-.
+    NPQ::NDescriber::TDescribeSettings settings;
+    settings.ResolvedPaths = true;
     DescriberId = RegisterWithSameMailbox(NPQ::NDescriber::CreateDescriberActor(
-        SelfId(), Database, std::move(topics)));
+        SelfId(), Database, std::move(topics), settings));
 }
 
 void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
@@ -206,26 +214,56 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
 void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     LOG_D("Handle describe topics response");
     DescriberId = {};
+    const bool secondaryPass = SecondaryDescribe;
+    SecondaryDescribe = false;
+
+    absl::flat_hash_set<TString> secondaryPaths;
+    const TString lbRoot = AppData(ctx)->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
 
     for (const auto& [path, topicInfo] : ev->Get()->Topics) {
-        auto it = Topics.find(path);
-        AFL_ENSURE(it != Topics.end())("path", path);
+        TString original = path;
+        if (secondaryPass) {
+            auto mapped = SecondaryToOriginal.find(path);
+            AFL_ENSURE(mapped != SecondaryToOriginal.end())("path", path);
+            original = mapped->second;
+        }
+        auto it = Topics.find(original);
+        AFL_ENSURE(it != Topics.end())("path", original);
 
-        if (topicInfo.Status != NPQ::NDescriber::EStatus::Success) {
-            auto processResult = DescribeFailure(path, topicInfo.Status);
-            Topics.erase(it);
-            if (Topics.empty()) {
-                TStringBuilder reason;
-                reason << "Discovery for all topics failed. The last error was: " << processResult.Reason;
-                return CloseSession(reason, processResult.ErrorCode, ctx);
+        if (topicInfo.Status == NPQ::NDescriber::EStatus::Success) {
+            if (!ProcessTopicSchemeCacheResponse(topicInfo, it, ctx)) {
+                return;
             }
             continue;
         }
 
-        if (!ProcessTopicSchemeCacheResponse(topicInfo, it, ctx)) {
-            return;
+        // Metacache looks up the legacy primary path first and, on a miss,
+        // retries the modern path under LbUserDatabaseRoot/account.
+        if (!secondaryPass && topicInfo.Status == NPQ::NDescriber::EStatus::NotFound) {
+            if (auto secondary = it->second.DiscoveryConverter->TrySecondaryDiscoveryPath(lbRoot)) {
+                if (*secondary != original) {
+                    SecondaryToOriginal[*secondary] = original;
+                    secondaryPaths.insert(*secondary);
+                    continue;
+                }
+            }
+        }
+
+        auto processResult = DescribeFailure(original, topicInfo.Status);
+        Topics.erase(it);
+        if (Topics.empty() && secondaryPaths.empty()) {
+            TStringBuilder reason;
+            reason << "Discovery for all topics failed. The last error was: " << processResult.Reason;
+            return CloseSession(reason, processResult.ErrorCode, ctx);
         }
     }
+
+    if (!secondaryPaths.empty()) {
+        SecondaryDescribe = true;
+        DescribePaths(std::move(secondaryPaths));
+        return;
+    }
+    SecondaryToOriginal.clear();
 
     if (Topics.empty()) {
         CloseSession("no topics found", PersQueue::ErrorCode::BAD_REQUEST, ctx);

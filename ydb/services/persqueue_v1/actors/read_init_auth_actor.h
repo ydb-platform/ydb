@@ -2,6 +2,8 @@
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
+
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
@@ -51,6 +53,7 @@ private:
     void CloseSession(const TString& errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode code, const TActorContext& ctx);
 
     void DescribeTopics(const NActors::TActorContext& ctx);
+    void DescribePaths(absl::flat_hash_set<TString> topics);
     bool ProcessTopicSchemeCacheResponse(const NPQ::NDescriber::TTopicInfo& topicInfo,
                                          THashMap<TString, TTopicHolder>::iterator topicsIter, const TActorContext& ctx);
     void HandleClientSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
@@ -74,6 +77,9 @@ private:
     const TString Database;
     const TActorId NewSchemeCache;
     TActorId DescriberId;
+    bool SecondaryDescribe = false;
+    // secondary scheme path -> Topics key (primary path)
+    THashMap<TString, TString> SecondaryToOriginal;
 
     const TString ClientId;
     const TString ClientPath;

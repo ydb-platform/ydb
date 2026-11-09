@@ -48,11 +48,11 @@ host workflow inlines the same function, because the checked-out platform SHA
 may predate this helper. Ingest copies listed objects. `report.json` and
 `index.html` are used when the host listed them.
 
-`ci_metrics.jsonl`, `started_at`, and test-results upload are **optional
-best-effort**. The host workflow does not promise those files. This path does
-not add `started_at` or metrics writes to `build_and_test_ya`. If a listed tree
-happens to contain them, ingest flushes metrics and uploads test results. If
-they are absent, ingest skips those steps and still succeeds.
+The host still sets `CI_DISABLE_YDB_QA=1` (no QA writes on the executor). With
+that flag, `build_and_test_ya` writes `try_N/started_at` and buffers metrics as
+`PUBLIC_DIR/ci_metrics.jsonl` for S3. Ingest (platform, with QA credentials)
+uploads test results and flushes metrics when those files are present;
+otherwise it skips those steps best-effort and still succeeds.
 
 ## Flow
 

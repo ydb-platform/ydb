@@ -88,7 +88,6 @@ def load_manifest(
         endpoint, bucket, f"{host_repo}/{host_workflow}/{run_id}/remote_artifacts.json"
     )
     print(f"Fetching remote_artifacts.json from {url}")
-    # Wait already saw host run completed; host publishes this in its final step.
     raw = http_get_bytes_retry(url)
     if not raw:
         die(f"missing remote_artifacts.json at {url}")
@@ -125,11 +124,7 @@ def _write_bytes(path: Path, data: bytes) -> None:
 
 
 def _is_required_artifact(rel: str) -> bool:
-    """Listed report/html must download.
-
-    ci_metrics.jsonl and started_at are best-effort. The host does not promise
-    them; a missing file is not a failed ingest.
-    """
+    """Listed report/html must download."""
     rel = rel.strip("/")
     if rel == "index.html":
         return True
@@ -145,11 +140,7 @@ def _is_required_artifact(rel: str) -> bool:
 def validate_downloaded_manifest(
     files: list[str], dest: Path, failed: list[str]
 ) -> None:
-    """Fail only when a listed report/html object did not download.
-
-    ci_metrics.jsonl and started_at are best-effort and are not a host contract.
-    report.json and index.html are required only when the host listed them.
-    """
+    """Fail only when a listed report/html object did not download."""
     failed_set = set(failed)
     for rel in files:
         if not _is_required_artifact(rel):

@@ -68,12 +68,10 @@ _PINNED_REMOTE_KEYS = (
 
 
 DEFAULT_REMOTE: dict[str, Any] = {
-    # Host repo / workflow identity (waiter polls GH; VM dispatches this WF).
     "repository": "nebius/ydb",
     "workflow_file": "ci_remote_executor.yml",
     "workflow_name": "CI remote executor",
     "executor_ref": "nebius-ci",
-    # Host public S3 (claims + build outputs). Platform never points host at YC S3.
     "host_s3_endpoint": "https://s3.us-east-1.amazonaws.com",
     "host_s3_bucket": "ydb-nebius-ci-public-609722444123-us-east-1",
     "runs_on": ["self-hosted", "linux", "amd64-large"],

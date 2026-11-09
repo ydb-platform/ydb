@@ -95,6 +95,17 @@ enum EEv {
     EvOverloadReady,
     EvOverloadUnsubscribe,
 
+<<<<<<< HEAD
+=======
+    // local DB backup actor <-> tablet, see local_db_backup/events.h
+    EvLocalDbBackupStart,
+    EvLocalDbBackupStarted,
+    EvLocalDbBackupCancel,
+    EvLocalDbBackupProgress,
+
+    EvFindEmptyHistoryIntervalsScanFinished,
+
+>>>>>>> 8d993ddd89d ([KIKIMR-26789] (+) Complete ColumnShard CutHistory GC integration (#55211))
     EvEnd
 };
 

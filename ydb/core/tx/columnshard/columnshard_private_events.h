@@ -95,8 +95,13 @@ struct TEvPrivate {
         EvRetryConfigSubscription,
         EvUpdateChannelApproximateFreeSpace,
 
+<<<<<<< HEAD
         EvContinueFindEmptyHistoryIntervals,
         EvFindEmptyHistoryIntervalsPortionsReady,
+=======
+        EvPrefetchPortionsMetadata,
+        EvSetLoadedKeyRanges,
+>>>>>>> 8d993ddd89d ([KIKIMR-26789] (+) Complete ColumnShard CutHistory GC integration (#55211))
 
         EvBackupExportReset,
 
@@ -104,19 +109,6 @@ struct TEvPrivate {
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-    struct TEvContinueFindEmptyHistoryIntervals
-        : NActors::TEventLocal<TEvContinueFindEmptyHistoryIntervals, EvContinueFindEmptyHistoryIntervals> {};
-
-    struct TEvFindEmptyHistoryIntervalsPortionsReady
-        : NActors::TEventLocal<TEvFindEmptyHistoryIntervalsPortionsReady, EvFindEmptyHistoryIntervalsPortionsReady> {
-        std::vector<std::pair<TInternalPathId, ui64>> Portions;
-
-        explicit TEvFindEmptyHistoryIntervalsPortionsReady(std::vector<std::pair<TInternalPathId, ui64>>&& portions)
-            : Portions(std::move(portions))
-        {
-        }
-    };
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
     private:

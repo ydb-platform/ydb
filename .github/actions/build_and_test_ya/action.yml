@@ -211,7 +211,8 @@ runs:
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         analytics start init
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml
+        # PyGithub: comment-pr.py (and other PR helpers) import `github`.
+        python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml 'PyGithub==2.5.0'
         analytics end init --conclusion success
         if [ "${GH_PROXY_MEASURED:-}" = 1 ]; then
           chosen_mbps="${GH_PROXY_DIRECT_MBPS}"
@@ -308,11 +309,12 @@ runs:
           ulimit -c 0
         fi
 
-        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-
-        # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
+        # Save original HEAD before comment-pr / graph_compare / checkouts so
+        # remote publish can still read ORIGINAL_HEAD if a later helper fails.
         ORIGINAL_HEAD=$(git rev-parse HEAD)
         echo "ORIGINAL_HEAD=$ORIGINAL_HEAD" >> $GITHUB_ENV
+
+        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")

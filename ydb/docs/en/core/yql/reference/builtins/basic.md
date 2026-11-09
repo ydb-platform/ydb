@@ -495,14 +495,11 @@ SELECT
 
 ### Variant over a tuple
 
-A variant over a tuple lists its alternative types directly. For example,
-`Variant<Int32, String>` has two alternatives with indexes `0` and `1`.
-In contrast, `Variant<Tuple<Int32, String>>` has one alternative whose value
-is a tuple, so only index `0` exists.
+A variant over a tuple lists unnamed alternatives in the type, with indexes `0`, `1`, and so on. In `Variant<Int32, String>` there are two alternatives; exactly one is active in a value. `Variant()` takes one value of the chosen type and a string with the index of that alternative.
 
-The index passed to `Variant()` is written as a string. [Way](#way) returns
-the active index as `Uint32`. Use dot notation to access an alternative by
-its compile-time index:
+The type `Variant<Tuple<Int32, String>>` uses a different passing scheme: the type has one alternative at index `0`, and its type is a tuple. You pass a single tuple with both elements to `Variant()`, not an integer or a string separately.
+
+The active alternative index in the second argument to `Variant()` is a string. [Way](#way) returns the active index as `Uint32`. Dot notation with a compile-time index yields `Optional<T>`: the value of the active alternative, or `NULL` for the others.
 
 ```yql
 $tuple = (7, "seven");
@@ -516,11 +513,9 @@ SELECT
     Way($variant) AS active_alternative;   -- 1 (Uint32)
 ```
 
-`Variant()` uses a string for the tuple index because the same argument also
-accepts a field name for a variant over a structure. This does not change the
-return type of `Way()`.
+`Variant()` accepts the tuple index as a string because the same argument sets the field name for a variant over a structure. This does not affect the return type of `Way()`.
 
-If a query must handle any possible active alternative, use [Visit](#visit).
+To handle a value for whichever alternative is active, call [Visit](#visit).
 
 ## AsVariant {#asvariant}
 

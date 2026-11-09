@@ -44,10 +44,14 @@ namespace NKikimr::NTabletFlatExecutor {
 
             THashSet<ui32> ids;
             THashSet<NTable::NPage::ISplitKeys*> splitKeys;
+            THashSet<NTable::NPage::IKeySpace*> underlayMasks;
             for (const auto& output : Conf.Outputs) {
                 Y_ENSURE(ids.insert(output.OutputId).second, "Duplicate compaction output id");
                 Y_ENSURE(!output.Layout.SplitKeys || splitKeys.insert(output.Layout.SplitKeys).second,
                     "Compaction outputs must not share a stateful split-key cursor");
+                Y_ENSURE(!output.Layout.UnderlayMask
+                        || underlayMasks.insert(output.Layout.UnderlayMask).second,
+                    "Compaction outputs must not share a stateful underlay cursor");
                 Y_ENSURE(output.Writer.Groups.size() == output.Layout.Groups.size()
                         + output.Layout.Layout.SeparateDescriptorCollection,
                     "Compaction output page collection groups do not match its layout");

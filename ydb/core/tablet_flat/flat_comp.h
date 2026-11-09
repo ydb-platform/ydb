@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flat_broker.h"
+#include "flat_compaction_context.h"
 #include "flat_page_conf.h"
 #include "flat_part_iface.h"
 #include "flat_row_versions.h"
@@ -36,6 +37,10 @@ namespace NTable {
         // Tier of the inputs and of the sole regular output (family id).
         // Tier-aware compaction also prepares this output to retain keys.
         ui32 TierId = 0;
+
+        // Prepared inputs and remaining sources. The strategy must protect and
+        // revalidate this context before publishing the compaction.
+        TIntrusiveConstPtr<TCompactionContext> Context;
 
         // Broker task id used for compaction. Once BeginCompaction is called
         // task ownership is moved to the backend, which will call FinishTask

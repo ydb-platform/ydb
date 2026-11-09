@@ -83,10 +83,11 @@ namespace {
             Settings.MaxBlobSize = 256;
         }
 
-        void Prepare(TCompactCfg& conf) const {
+        void Prepare(TCompactCfg& conf, const TSubset* preparedSubset = nullptr) const {
             const auto scheme = RowLayout.RowScheme();
             TSubset subset(TEpoch::Zero(), scheme);
-            PrepareCompactionOutputs(conf, Table, *scheme, subset, Settings,
+            PrepareCompactionOutputs(conf, Table, *scheme,
+                preparedSubset ? *preparedSubset : subset, Settings,
                 [](ui8 channel) { return ui32(channel) + 10; });
         }
     };
@@ -590,6 +591,100 @@ Y_UNIT_TEST_SUITE(TCompactionOutputConfigTest) {
         conf.IsFulltextCompact = true;
         UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf), yexception, "Tier-aware fulltext compaction is not supported");
     }
+
+    Y_UNIT_TEST(PreparedContextCreatesIndependentUnderlayCursors) {
+        TOutputConfigFixture env;
+        const TIntrusiveConstPtr<TColdPart> remaining = new TColdPart(
+            TLogoBlobID(1, 1, 1, 1, 0, 0), TEpoch::FromIndex(10));
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->Mode = TCompactionParams::EMode::TierAware;
+        conf.Params->IsFinal = true;
+        conf.Params->Context = TCompactionContext::Build(
+            {{remaining, 2, TOutputConfigFixture::ColdTier}}, TVector<TLogoBlobID>{});
+        env.Prepare(conf);
+
+        THashSet<NPage::IKeySpace*> masks;
+        for (const auto& output : conf.Outputs) {
+            UNIT_ASSERT(!output.Layout.Final);
+            UNIT_ASSERT(output.OwnedUnderlayMask);
+            UNIT_ASSERT(output.Layout.UnderlayMask == output.OwnedUnderlayMask.Get());
+            UNIT_ASSERT(masks.insert(output.Layout.UnderlayMask).second);
+            const auto key = TCell::Make(ui32(1));
+            UNIT_ASSERT(output.Layout.UnderlayMask->HasKey({&key, 1}));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(masks.size(), 3);
+        TCompactionOutputs outputs(TLogoBlobID(1, 2, 3, 0, 0, 0), conf,
+            MakeHolder<TDefaultCompactionRouter>());
+        outputs.Start(*env.RowLayout);
+    }
+
+    Y_UNIT_TEST(PreparedContextRespectsKeepEraseMarkers) {
+        TOutputConfigFixture env;
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        policy->KeepEraseMarkers = true;
+        env.Table.CompactionPolicy = policy;
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->IsFinal = true;
+        conf.Params->Context = TCompactionContext::Build({}, TVector<TLogoBlobID>{});
+        env.Prepare(conf);
+
+        UNIT_ASSERT_VALUES_EQUAL(conf.Outputs.size(), 1);
+        UNIT_ASSERT(!conf.Outputs[0].Layout.Final);
+        UNIT_ASSERT(!conf.Outputs[0].Layout.UnderlayMask);
+    }
+
+    Y_UNIT_TEST(PreparedContextWithNoRemainingSourcesIsFinal) {
+        TOutputConfigFixture env;
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->Context = TCompactionContext::Build({}, TVector<TLogoBlobID>{});
+        env.Prepare(conf);
+
+        UNIT_ASSERT(conf.Outputs[0].Layout.Final);
+        UNIT_ASSERT(!conf.Outputs[0].Layout.UnderlayMask);
+    }
+
+    Y_UNIT_TEST(PreparedRegularContextCannotChangeItsTier) {
+        TOutputConfigFixture env;
+        const TIntrusiveConstPtr<TColdPart> part = new TColdPart(
+            TLogoBlobID(1, 1, 1, 1, 0, 0), TEpoch::FromIndex(10));
+        TSubset subset(TEpoch::Zero(), env.RowLayout.RowScheme());
+        subset.ColdParts = {part};
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Epoch = part->Epoch;
+        conf.Params->Context = TCompactionContext::Build(
+            {{part, 2, TOutputConfigFixture::ColdTier}}, subset);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf, &subset), yexception,
+            "Regular compaction must stay within its input tier");
+        conf.Params->TierId = TOutputConfigFixture::ColdTier;
+        env.Prepare(conf, &subset);
+        UNIT_ASSERT_VALUES_EQUAL(conf.Outputs.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(conf.Outputs[0].TierId, TOutputConfigFixture::ColdTier);
+    }
+
+    Y_UNIT_TEST(PreparedContextRejectsUnclosedInputsAndWrongWriterEpoch) {
+        TOutputConfigFixture env;
+        const TIntrusiveConstPtr<TColdPart> part = new TColdPart(
+            TLogoBlobID(1, 1, 1, 1, 0, 0), TEpoch::FromIndex(10));
+        TSubset subset(TEpoch::Zero(), env.RowLayout.RowScheme());
+        subset.ColdParts = {part};
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->Context = TCompactionContext::Build({{part, 1, 0}}, subset);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf), yexception,
+            "does not cover the closed epoch interval");
+        conf.Epoch = TEpoch::FromIndex(11);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf, &subset), yexception,
+            "writer epoch differs from its prepared interval");
+    }
+
+    Y_UNIT_TEST(PreparedContextFulltextIsRejected) {
+        TOutputConfigFixture env;
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->Context = TCompactionContext::Build({}, TVector<TLogoBlobID>{});
+        conf.IsFulltextCompact = true;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf), yexception,
+            "Prepared compaction context is not supported for fulltext");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TCompactionOutputsTest) {
@@ -891,6 +986,19 @@ Y_UNIT_TEST_SUITE(TCompactionOutputsTest) {
             MakeHolder<TParityRouter>(calls));
         outputs.Start(*Layout());
         UNIT_ASSERT_EXCEPTION(WriteKey(outputs, 1, "value"), yexception);
+    }
+
+    Y_UNIT_TEST(RejectSharedUnderlayCursors) {
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        AddOutput(conf, 17);
+        AddOutput(conf, 31);
+        auto mask = MakeCompactionKeySpace(Layout().RowScheme()->Keys,
+            TVector<TCompactionPartInfo>{});
+        for (auto& output : conf.Outputs) {
+            output.Layout.UnderlayMask = mask.Get();
+        }
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TCompactionOutputs(TLogoBlobID(1, 2, 3, 0, 0, 0),
+            conf, MakeHolder<TDefaultCompactionRouter>()), yexception, "stateful underlay cursor");
     }
 
     Y_UNIT_TEST(RejectMultipleFulltextOutputs) {

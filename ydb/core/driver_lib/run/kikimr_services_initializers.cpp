@@ -224,6 +224,7 @@
 #include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/consumers.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/general_cache/service/service.h>
@@ -2774,66 +2775,18 @@ void TCompPrioritiesInitializer::InitializeServices(NActors::TActorSystemSetup* 
     }
 }
 
-namespace {
-
-NKikimrConfig::TGeneralCacheConfig ApplyCacheConsumerWeights(
-    NKikimrConfig::TGeneralCacheConfig config, const bool weightsEnabled, const bool scansOverCompactionByDefault) {
-    if (!weightsEnabled) {
-        if (config.ConsumersSize()) {
-            Cerr << "Warning: general cache consumers are ignored while EnableCsGeneralCacheConsumerWeights is off" << Endl;
-        }
-        config.ClearConsumers();
-        return config;
-    }
-    if (scansOverCompactionByDefault && config.ConsumersSize() == 0) {
-        using EConsumer = NOlap::NBlobOperations::EConsumer;
-        const std::pair<EConsumer, ui32> defaults[] = {
-            { EConsumer::SCAN, 8 },
-            { EConsumer::SYS_VIEW_SCAN, 8 },
-            { EConsumer::GENERAL_COMPACTION, 2 },
-        };
-        for (const auto& [consumer, weight] : defaults) {
-            auto* item = config.AddConsumers();
-            item->SetName(::ToString(consumer));
-            item->SetWeight(weight);
-        }
-    }
-    return config;
-}
-
-}   // namespace
-
 TGeneralCachePortionsMetadataInitializer::TGeneralCachePortionsMetadataInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig) {
 }
 
 void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(ApplyCacheConsumerWeights(
-        Config.GetPortionsMetadataCache(), appData->FeatureFlags.GetEnableCsGeneralCacheConsumerWeights(), true));
-    if (serviceConfig.IsFail()) {
-        YDB_LOG_ERROR("",
-            {"error", "cannot parse portions metadata cache config"},
-            {"action", "default_usage"},
-            {"#_dup_error", serviceConfig.GetErrorMessage()},
-            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
-        serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
-    } else {
-        auto names = NOlap::NBlobOperations::ValidateCacheConsumerQuotas(*serviceConfig);
-        if (names.IsFail()) {
-            YDB_LOG_ERROR("",
-                {"error", "cannot parse portions metadata cache config"},
-                {"action", "default_usage"},
-                {"#_dup_error", names.GetErrorMessage()},
-                {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
-            serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
-        }
-    }
-    AFL_VERIFY(!serviceConfig.IsFail());
+    const auto serviceConfig = NOlap::NGeneralCache::BuildCacheConfig("portions metadata cache", Config.GetPortionsMetadataCache(),
+        appData->FeatureFlags.GetEnableCsGeneralCacheConsumerWeights(), true);
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_PORTIONS_METADATA");
 
-    auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>(*serviceConfig, conveyorGroup);
+    auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>(serviceConfig, conveyorGroup);
 
     setup->LocalServices.push_back(
         std::make_pair(NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::MakeServiceId(NodeId),
@@ -2846,32 +2799,13 @@ TGeneralCacheColumnDataInitializer::TGeneralCacheColumnDataInitializer(const TKi
 }
 
 void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(ApplyCacheConsumerWeights(
-        Config.GetColumnDataCache(), appData->FeatureFlags.GetEnableCsGeneralCacheConsumerWeights(), false));
-    if (serviceConfig.IsFail()) {
-        YDB_LOG_ERROR("",
-            {"error", "cannot parse column data cache config"},
-            {"action", "default_usage"},
-            {"#_dup_error", serviceConfig.GetErrorMessage()},
-            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
-        serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
-    } else {
-        auto names = NOlap::NBlobOperations::ValidateCacheConsumerQuotas(*serviceConfig);
-        if (names.IsFail()) {
-            YDB_LOG_ERROR("",
-                {"error", "cannot parse column data cache config"},
-                {"action", "default_usage"},
-                {"#_dup_error", names.GetErrorMessage()},
-                {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
-            serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
-        }
-    }
-    AFL_VERIFY(!serviceConfig.IsFail());
+    const auto serviceConfig = NOlap::NGeneralCache::BuildCacheConfig("column data cache", Config.GetColumnDataCache(),
+        appData->FeatureFlags.GetEnableCsGeneralCacheConsumerWeights(), false);
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_COLUMN_DATA");
 
-    auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TColumnDataCachePolicy>(*serviceConfig, conveyorGroup);
+    auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TColumnDataCachePolicy>(serviceConfig, conveyorGroup);
 
     setup->LocalServices.push_back(
         std::make_pair(NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TColumnDataCachePolicy>::MakeServiceId(NodeId),

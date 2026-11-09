@@ -38,22 +38,24 @@ enum class EConsumer {
     SCAN,
 };
 
-inline NKikimr::NGeneralCache::NPublic::TCacheRequestClass GetCacheRequestClass(
-    const EConsumer consumer, const NKikimr::NGeneralCache::NPublic::TConfig& config) {
-    TString name;
+}   // namespace NGeneralCacheUt
+
+template <>
+void Out<NGeneralCacheUt::EConsumer>(IOutputStream& out, const NGeneralCacheUt::EConsumer consumer) {
     switch (consumer) {
-        case EConsumer::FETCH_ON_LOAD:
-            name = "FETCH_ON_LOAD";
+        case NGeneralCacheUt::EConsumer::FETCH_ON_LOAD:
+            out << "FETCH_ON_LOAD";
             break;
-        case EConsumer::COMPACTION:
-            name = "COMPACTION";
+        case NGeneralCacheUt::EConsumer::COMPACTION:
+            out << "COMPACTION";
             break;
-        case EConsumer::SCAN:
-            name = "SCAN";
+        case NGeneralCacheUt::EConsumer::SCAN:
+            out << "SCAN";
             break;
     }
-    return config.Classify(name);
 }
+
+namespace NGeneralCacheUt {
 
 class TProcessor;
 
@@ -212,17 +214,22 @@ void AssertIds(const THashSet<ui64>& ids, const std::vector<ui64>& allowed, cons
 }   // namespace NGeneralCacheUt
 
 Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
-    Y_UNIT_TEST(WithoutWeightsConsumersShareOneFifo) {
+    Y_UNIT_TEST(WithoutWeightsRequestsAreSentWholeInOneFifo) {
         NGeneralCacheUt::THarness harness(2);
-        harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1, 2, 3, 4, 5 });
+        auto prefetch = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1, 2, 3, 4, 5 });
         auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 20 });
         UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
-        NGeneralCacheUt::AssertIds(harness.Processor->Asks[0].Ids(), { 1, 2, 3, 4, 5 }, 2);
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks[0].Ids(), { 1, 2, 3, 4, 5 }, 5);
         UNIT_ASSERT(!scan->Ready);
+
+        harness.Finish(harness.Processor->Asks[0]);
+        UNIT_ASSERT(prefetch->Ready);
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks[1].Ids(), { 20 }, 1);
     }
 
     Y_UNIT_TEST(PrefetchIsChunkedBySourceLimit) {
-        NGeneralCacheUt::THarness harness(2);
+        NGeneralCacheUt::THarness harness(2, { { "SCAN", 1 } });
         auto callback = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1, 2, 3, 4, 5 });
         UNIT_ASSERT(!callback->Ready);
         UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
@@ -268,7 +275,7 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
     }
 
     Y_UNIT_TEST(ScansStayFifoInsideOneQueue) {
-        NGeneralCacheUt::THarness harness(1);
+        NGeneralCacheUt::THarness harness(1, { { "SCAN", 1 } });
         auto first = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1, 2 });
         const auto firstChunk = harness.Processor->Asks.at(0);
         NGeneralCacheUt::AssertIds(firstChunk.Ids(), { 1, 2 }, 1);
@@ -311,22 +318,35 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         UNIT_ASSERT(!extra->Ready);
     }
 
-    Y_UNIT_TEST(LargestRemainderGetsTheSpareSlot) {
-        NGeneralCacheUt::THarness harness(5, { { "SCAN", 2 }, { "COMPACTION", 1 } });
-        harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 100, 101, 102, 103, 104 });
+    Y_UNIT_TEST(BacklogIsSplitByWeights) {
+        NGeneralCacheUt::THarness harness(4, { { "SCAN", 3 }, { "COMPACTION", 1 } });
+        harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 100, 101, 102, 103 });
         harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1, 2, 3, 4, 5, 6 });
         harness.Add(1, NGeneralCacheUt::EConsumer::COMPACTION, { 11, 12, 13, 14, 15, 16 });
         UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
 
-        // 5 * 2 / 3 = 3 rest 1, 5 * 1 / 3 = 1 rest 2: the spare slot goes to compaction.
         harness.Finish(harness.Processor->Asks.at(0));
         UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
         const auto ids = harness.Processor->Asks.at(1).Ids();
         const auto scanCount = std::count_if(ids.begin(), ids.end(), [](const ui64 id) {
             return id < 10;
         });
-        UNIT_ASSERT_VALUES_EQUAL(ids.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(ids.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(scanCount, 3);
+    }
+
+    Y_UNIT_TEST(FewerSlotsThanQueuesDoNotStarveAWeight) {
+        NGeneralCacheUt::THarness harness(1, { { "SCAN", 8 }, { "COMPACTION", 2 } });
+        auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1, 2, 3, 4, 5 });
+        auto compaction = harness.Add(1, NGeneralCacheUt::EConsumer::COMPACTION, { 10 });
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(0).Ids(), { 1, 2, 3, 4, 5 }, 1);
+
+        harness.Finish(harness.Processor->Asks.at(0));
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(1).Ids(), { 10 }, 1);
+        harness.Finish(harness.Processor->Asks.at(1));
+        UNIT_ASSERT(compaction->Ready);
+        UNIT_ASSERT(!scan->Ready);
     }
 
     Y_UNIT_TEST(SmallWeightStillGetsOneSlot) {
@@ -336,7 +356,7 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         auto compaction = harness.Add(1, NGeneralCacheUt::EConsumer::COMPACTION, { 10 });
         UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
 
-        // 2 * 1 / 4 rounds to 0: without a minimum share compaction waits for the whole scan.
+        // 2 * 1 / 4 rounds to 0: without a minimum of one slot compaction waits for the whole scan.
         harness.Finish(harness.Processor->Asks.at(0));
         UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
         const auto ids = harness.Processor->Asks.at(1).Ids();

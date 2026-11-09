@@ -1,5 +1,6 @@
 #pragma once
 #include "counters.h"
+#include "weighted_queues.h"
 
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
@@ -13,12 +14,29 @@
 #include <library/cpp/cache/cache.h>
 
 #include <algorithm>
-#include <map>
-#include <optional>
-#include <utility>
 #include <vector>
 
 namespace NKikimr::NGeneralCache::NPrivate {
+
+template <class EConsumer>
+class TConsumerClasses {
+private:
+    const NPublic::TConfig& Config;
+    mutable THashMap<EConsumer, NPublic::TCacheRequestClass> Known;
+
+public:
+    explicit TConsumerClasses(const NPublic::TConfig& config)
+        : Config(config) {
+    }
+
+    NPublic::TCacheRequestClass Get(const EConsumer consumer) const {
+        auto it = Known.find(consumer);
+        if (it == Known.end()) {
+            it = Known.emplace(consumer, Config.Classify(::ToString(consumer))).first;
+        }
+        return it->second;
+    }
+};
 
 template <class TPolicy>
 class TRequest: public NColumnShard::TMonitoringObjectsCounter<TRequest<TPolicy>>, public TNonCopyable {
@@ -145,20 +163,15 @@ private:
     const TSourceId SourceId;
     static inline TAtomicCounter Counter = 0;
     const ui64 Cookie = Counter.Inc();
-    struct TWeightedQueue {
-        ui32 Weight = 0;
-        ui64 Inflight = 0;
-        std::deque<std::shared_ptr<TRequest>> Requests;
-    };
 
     THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> RequestedObjects;
-    std::map<ui64, TWeightedQueue> WeightedQueues;
+    TWeightedQueues<TAddress, std::shared_ptr<TRequest>> WeightedQueues;
     std::deque<std::shared_ptr<TRequest>> UnweightedQueue;
-    THashMap<TAddress, ui64> InflightQueue;
     YDB_READONLY_DEF(THashSet<ui64>, RequestsInProgress);
     THashMap<ui64, std::vector<std::shared_ptr<TRequest>>> RequestsByCookies;
     const std::shared_ptr<TManagerCounters> Counters;
     const std::shared_ptr<NSource::IObjectsProcessor<TPolicy>> ObjectsProcessor;
+    const std::shared_ptr<TConsumerClasses<EConsumer>> ConsumerClasses;
 
 public:
     ui64 GetCookie() const {
@@ -166,10 +179,12 @@ public:
     }
 
     TSourceInfo(const std::shared_ptr<TManagerCounters>& counters, const TSourceId& sourceId,
-        const std::shared_ptr<NSource::IObjectsProcessor<TPolicy>>& objectsProcessor)
+        const std::shared_ptr<NSource::IObjectsProcessor<TPolicy>>& objectsProcessor,
+        const std::shared_ptr<TConsumerClasses<EConsumer>>& consumerClasses)
         : SourceId(sourceId)
         , Counters(counters)
-        , ObjectsProcessor(objectsProcessor) {
+        , ObjectsProcessor(objectsProcessor)
+        , ConsumerClasses(consumerClasses) {
     }
 
     bool IsRequestAttached(const TAddress& address, const std::shared_ptr<TRequest>& request) const {
@@ -185,39 +200,18 @@ public:
         return false;
     }
 
-    NPublic::TCacheRequestClass ClassOf(const EConsumer consumer) const {
-        return GetCacheRequestClass(consumer, Counters->GetConfig());
-    }
-
     void EnqueueRequest(const std::shared_ptr<TRequest>& request) {
         Counters->GetQueueObjectsCount()->Add(request->GetWaitBySource(SourceId).size());
-        const auto requestClass = ClassOf(request->GetConsumer());
+        const auto requestClass = ConsumerClasses->Get(request->GetConsumer());
         if (requestClass.Weight == 0) {
             UnweightedQueue.emplace_back(request);
             return;
         }
-        auto& queue = WeightedQueues[requestClass.QueueId];
-        queue.Weight = requestClass.Weight;
-        queue.Requests.emplace_back(request);
+        WeightedQueues.Enqueue(requestClass, request);
     }
 
     void ReleaseInflight(const TAddress& address) {
-        const auto owner = InflightQueue.find(address);
-        if (owner == InflightQueue.end()) {
-            return;
-        }
-        const ui64 queueId = owner->second;
-        InflightQueue.erase(owner);
-        const auto queue = WeightedQueues.find(queueId);
-        if (queue == WeightedQueues.end()) {
-            return;
-        }
-        if (queue->second.Inflight > 0) {
-            --queue->second.Inflight;
-        }
-        if (queue->second.Requests.empty() && queue->second.Inflight == 0) {
-            WeightedQueues.erase(queue);
-        }
+        WeightedQueues.OnFinished(address);
     }
 
     void AddObjects(THashMap<TAddress, TObject>&& add, const bool isAdditional, const TMonotonic now) {
@@ -309,13 +303,9 @@ public:
             }
             queue.clear();
         };
-        for (auto& [queueId, queue] : WeightedQueues) {
-            Y_UNUSED(queueId);
-            abortQueue(queue.Requests);
-        }
-        WeightedQueues.clear();
+        WeightedQueues.ForEachRequestQueue(abortQueue);
+        WeightedQueues.Clear();
         abortQueue(UnweightedQueue);
-        InflightQueue.clear();
         for (auto&& [objAddr, requests] : RequestedObjects) {
             for (auto&& r : requests) {
                 Counters->FailedObject->Inc();
@@ -332,94 +322,6 @@ public:
 
     ~TSourceInfo() {
         AFL_VERIFY(RequestedObjects.empty() || NActors::TActorSystem::IsStopped());
-    }
-
-    bool HasWeightedWaiting() const {
-        for (const auto& [queueId, queue] : WeightedQueues) {
-            Y_UNUSED(queueId);
-            if (!queue.Requests.empty()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    std::optional<std::pair<ui64, ui64>> PickWeighted(const ui64 sourceLimit) const {
-        struct TCandidate {
-            ui64 QueueId = 0;
-            ui32 Weight = 0;
-            ui64 Inflight = 0;
-            ui64 Remainder = 0;
-            ui64 Target = 0;
-        };
-        std::vector<TCandidate> candidates;
-        ui64 sumWeight = 0;
-        for (const auto& [queueId, queue] : WeightedQueues) {
-            if (queue.Requests.empty() || queue.Weight == 0) {
-                continue;
-            }
-            sumWeight += queue.Weight;
-            candidates.push_back(TCandidate{ queueId, queue.Weight, queue.Inflight, 0, 0 });
-        }
-        if (candidates.empty() || sumWeight == 0 || sourceLimit == 0) {
-            return std::nullopt;
-        }
-        ui64 assigned = 0;
-        for (auto& candidate : candidates) {
-            const ui64 product = sourceLimit * static_cast<ui64>(candidate.Weight);
-            candidate.Target = product / sumWeight;
-            candidate.Remainder = product % sumWeight;
-            assigned += candidate.Target;
-        }
-        std::vector<size_t> order(candidates.size());
-        for (size_t i = 0; i < order.size(); ++i) {
-            order[i] = i;
-        }
-        std::sort(order.begin(), order.end(), [&](const size_t left, const size_t right) {
-            const auto& a = candidates[left];
-            const auto& b = candidates[right];
-            if (a.Remainder != b.Remainder) {
-                return a.Remainder > b.Remainder;
-            }
-            if (a.Weight != b.Weight) {
-                return a.Weight > b.Weight;
-            }
-            return a.QueueId < b.QueueId;
-        });
-        for (size_t extra = 0; extra < sourceLimit - assigned && extra < order.size(); ++extra) {
-            ++candidates[order[extra]].Target;
-        }
-        // A queued consumer with a tiny weight still gets one slot, taken from the largest share.
-        for (auto& candidate : candidates) {
-            if (candidate.Target) {
-                continue;
-            }
-            auto donor = std::max_element(candidates.begin(), candidates.end(), [](const TCandidate& a, const TCandidate& b) {
-                return a.Target < b.Target;
-            });
-            if (donor->Target <= 1) {
-                break;
-            }
-            --donor->Target;
-            candidate.Target = 1;
-        }
-
-        const TCandidate* chosen = nullptr;
-        for (const auto& candidate : candidates) {
-            if (candidate.Inflight >= candidate.Target) {
-                continue;
-            }
-            if (!chosen || candidate.Target - candidate.Inflight > chosen->Target - chosen->Inflight ||
-                (candidate.Target - candidate.Inflight == chosen->Target - chosen->Inflight && candidate.Weight > chosen->Weight) ||
-                (candidate.Target - candidate.Inflight == chosen->Target - chosen->Inflight && candidate.Weight == chosen->Weight &&
-                    candidate.QueueId < chosen->QueueId)) {
-                chosen = &candidate;
-            }
-        }
-        if (!chosen) {
-            return std::nullopt;
-        }
-        return std::make_pair(chosen->QueueId, chosen->Target - chosen->Inflight);
     }
 
     struct TDispatchResult {
@@ -483,8 +385,7 @@ public:
                 Counters->DirectObjects->Inc();
                 ++newAddresses;
                 if (weightedQueueId) {
-                    InflightQueue.emplace(addr, *weightedQueueId);
-                    WeightedQueues[*weightedQueueId].Inflight++;
+                    WeightedQueues.OnSent(*weightedQueueId, addr);
                 }
             }
             itAddress->second.emplace_back(request);
@@ -502,32 +403,30 @@ public:
         const ui64 sourceLimit = Counters->GetConfig().GetDirectInflightSourceLimit();
         const TMonotonic now = TMonotonic::Now();
 
+        // Without weights a request is sent whole and the limit is checked between requests only.
+        const bool chunked = Counters->GetConfig().GetHasWeights();
+
         while (RequestedObjects.size() < sourceLimit && Counters->CheckTotalLimit()) {
-            if (const auto chosen = PickWeighted(sourceLimit)) {
-                auto& queue = WeightedQueues[chosen->first];
-                const ui64 budget = std::min(chosen->second, sourceLimit - RequestedObjects.size());
-                const auto dispatched = DispatchFront(queue.Requests, budget, chosen->first, requestedAddresses, now);
+            if (const auto chosen = WeightedQueues.Pick(sourceLimit)) {
+                const ui64 budget = std::min(chosen->Budget, sourceLimit - RequestedObjects.size());
+                const auto dispatched =
+                    DispatchFront(WeightedQueues.MutableRequests(chosen->QueueId), budget, chosen->QueueId, requestedAddresses, now);
                 if (dispatched.PutBack && dispatched.NewAddresses == 0) {
                     break;
                 }
                 continue;
             }
-            // Weight 0 sends nothing while a weighted consumer has queued requests, even if its share is full.
-            if (HasWeightedWaiting() || UnweightedQueue.empty()) {
+            // Weight 0 sends nothing while a weighted consumer has queued requests.
+            if (WeightedQueues.HasWaiting() || UnweightedQueue.empty()) {
                 break;
             }
-            const auto dispatched = DispatchFront(UnweightedQueue, sourceLimit - RequestedObjects.size(), std::nullopt, requestedAddresses, now);
+            const ui64 budget = chunked ? sourceLimit - RequestedObjects.size() : Max<ui64>();
+            const auto dispatched = DispatchFront(UnweightedQueue, budget, std::nullopt, requestedAddresses, now);
             if (dispatched.PutBack) {
                 break;
             }
         }
-        for (auto queue = WeightedQueues.begin(); queue != WeightedQueues.end();) {
-            if (queue->second.Requests.empty() && queue->second.Inflight == 0) {
-                queue = WeightedQueues.erase(queue);
-            } else {
-                ++queue;
-            }
-        }
+        WeightedQueues.DropIdle();
         ObjectsProcessor->AskData(std::move(requestedAddresses), ObjectsProcessor, Cookie);
         Counters->ObjectsQueueSize->Set(Counters->GetQueueObjectsCount()->Val());
         Counters->ObjectsInFlight->Set(Counters->GetTotalInFlight()->Val());
@@ -547,6 +446,7 @@ private:
     const TString CacheName = TPolicy::GetCacheName();
     const std::shared_ptr<TManagerCounters> Counters;
     std::shared_ptr<NSource::IObjectsProcessor<TPolicy>> ObjectsProcessor;
+    const std::shared_ptr<TConsumerClasses<EConsumer>> ConsumerClasses;
     TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer> Cache;
     const bool UseCacheSizeFromConfig;
     static constexpr ui64 DEFAULT_CACHE_SIZE = (ui64)1 << 30;
@@ -585,7 +485,7 @@ private:
     TSourceInfo& UpsertSourceInfo(const TSourceId sourceId) {
         auto it = SourcesInfo.find(sourceId);
         if (it == SourcesInfo.end()) {
-            it = SourcesInfo.emplace(sourceId, TSourceInfo(Counters, sourceId, ObjectsProcessor)).first;
+            it = SourcesInfo.emplace(sourceId, TSourceInfo(Counters, sourceId, ObjectsProcessor, ConsumerClasses)).first;
         }
         return it->second;
     }
@@ -623,6 +523,7 @@ public:
     TManager(const NActors::TActorId& ownerActorId, const std::shared_ptr<TManagerCounters>& counters)
         : Counters(counters)
         , ObjectsProcessor(TPolicy::BuildObjectsProcessor(ownerActorId))
+        , ConsumerClasses(std::make_shared<TConsumerClasses<EConsumer>>(Counters->GetConfig()))
         , Cache(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE))
         , UseCacheSizeFromConfig(Counters->GetConfig().GetMemoryLimit().has_value()) {
         YDB_LOG_NOTICE_COMP(NKikimrServices::GENERAL_CACHE, "",

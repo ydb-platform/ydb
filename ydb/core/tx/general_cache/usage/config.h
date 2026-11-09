@@ -7,6 +7,8 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
+#include <optional>
+
 namespace NKikimrConfig {
     class TGeneralCacheConfig;
 }
@@ -25,9 +27,11 @@ private:
     YDB_READONLY(ui64, DirectInflightGlobalLimit, 20000);
     THashMap<TString, TCacheRequestClass> Consumers;
     std::optional<TCacheRequestClass> AnyConsumer;
+    YDB_READONLY(bool, HasWeights, false);
 
     TConfig() = default;
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TGeneralCacheConfig& config);
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(
+        const NKikimrConfig::TGeneralCacheConfig& config, const std::optional<THashSet<TString>>& allowedConsumers);
 
 public:
     static TConfig BuildDefault() {
@@ -35,10 +39,11 @@ public:
         return result;
     }
 
-    static TConclusion<TConfig> BuildFromProto(const NKikimrConfig::TGeneralCacheConfig& protoConfig);
+    // Without allowedConsumers any consumer name is accepted.
+    static TConclusion<TConfig> BuildFromProto(
+        const NKikimrConfig::TGeneralCacheConfig& protoConfig, const std::optional<THashSet<TString>>& allowedConsumers = std::nullopt);
 
     TCacheRequestClass Classify(const TString& consumerName) const;
-    [[nodiscard]] TConclusionStatus ValidateNames(const THashSet<TString>& allowedNames) const;
     TString DebugString() const;
 };
 

@@ -5,7 +5,8 @@
 
 namespace NKikimr::NGeneralCache::NPublic {
 
-TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TGeneralCacheConfig& config) {
+TConclusionStatus TConfig::DeserializeFromProto(
+    const NKikimrConfig::TGeneralCacheConfig& config, const std::optional<THashSet<TString>>& allowedConsumers) {
     if (config.HasDirectInflightSourceLimit()) {
         DirectInflightSourceLimit = config.GetDirectInflightSourceLimit();
     }
@@ -25,10 +26,14 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TGeneralCac
         if (!seen.emplace(name).second) {
             return TConclusionStatus::Fail(TStringBuilder() << "duplicate general cache consumer " << name);
         }
+        if (name != "*" && allowedConsumers && !allowedConsumers->contains(name)) {
+            return TConclusionStatus::Fail(TStringBuilder() << "unknown general cache consumer " << name);
+        }
         TCacheRequestClass requestClass;
         requestClass.Weight = consumer.GetWeight();
         if (requestClass.Weight > 0) {
             requestClass.QueueId = nextQueueId++;
+            HasWeights = true;
         }
         if (name == "*") {
             AnyConsumer = requestClass;
@@ -49,19 +54,10 @@ TCacheRequestClass TConfig::Classify(const TString& consumerName) const {
     return {};
 }
 
-TConclusionStatus TConfig::ValidateNames(const THashSet<TString>& allowedNames) const {
-    for (const auto& [name, requestClass] : Consumers) {
-        Y_UNUSED(requestClass);
-        if (!allowedNames.contains(name)) {
-            return TConclusionStatus::Fail(TStringBuilder() << "unknown general cache consumer " << name);
-        }
-    }
-    return TConclusionStatus::Success();
-}
-
-TConclusion<TConfig> TConfig::BuildFromProto(const NKikimrConfig::TGeneralCacheConfig& protoConfig) {
+TConclusion<TConfig> TConfig::BuildFromProto(
+    const NKikimrConfig::TGeneralCacheConfig& protoConfig, const std::optional<THashSet<TString>>& allowedConsumers) {
     TConfig config;
-    auto conclusion = config.DeserializeFromProto(protoConfig);
+    auto conclusion = config.DeserializeFromProto(protoConfig, allowedConsumers);
     if (conclusion.IsFail()) {
         return conclusion;
     }

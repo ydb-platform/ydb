@@ -48,6 +48,7 @@ public:
             .SetMonitoringPortOffset(MonPort, true);
 
         auto& securityConfig = *Settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig.SetEnforceUserTokenRequirement(true);
         securityConfig.SetEnforceUserTokenCheckRequirement(true);
         securityConfig.MutableMonitoringAllowedSIDs()->Add("ydb.clusters.monitor@as");
 
@@ -67,6 +68,7 @@ public:
         Server = std::make_unique<TServer>(Settings);
         Server->EnableGRpc(GrpcPort);
         Client = std::make_unique<TClient>(Settings);
+        Client->SetSecurityToken(ROOT_TOKEN);
         Client->InitRootScheme();
         GrantConnect(*Client);
 

@@ -10,6 +10,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/generic/array_ref.h>
+#include <util/generic/strbuf.h>
 
 Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimrHive::TDataCentersGroup*>, out, vec) {
     out << '[';
@@ -800,8 +801,16 @@ void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
         }
         Execute(CreateUpdateTabletMetrics(ev));
     } else {
+<<<<<<< HEAD
         BLOG_ERROR("THive::Handle::TEvTabletMetrics, NodeId " << nodeId << " was skipped due to reaching of MAX_UPDATE_TABLET_METRICS_IN_PROGRESS");
         Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck);
+=======
+        YDB_LOG_ERROR("THive::Handle TEvHive::TEvTabletMetrics: skipped due to max in-progress limit",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", nodeId},
+            {"updateTabletMetricsInProgress", UpdateTabletMetricsInProgress});
+        Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck, 0, ev->Cookie);
+>>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
     }
 }
 
@@ -2738,11 +2747,23 @@ void THive::AggregateMetricsMax(NKikimrTabletBase::TMetrics& aggregate, const NK
 }
 
 template <ui64 TMetrics::* field>
-static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, TTabletId tabletId, const TString& name) {
+static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, TTabletId tabletId, TStringBuf name) {
     i64 oldValue = aggregate.*field;
     i64 delta = after.*field - before.*field;
     i64 newValue = oldValue + delta;
+<<<<<<< HEAD
     Y_ENSURE_LOG(newValue >= 0, "tablet " << tabletId << " name=" << name << " oldValue=" << oldValue << " delta=" << delta << " newValue=" << newValue);
+=======
+    if (!(newValue >= 0)) {
+        YDB_LOG_ERROR("AggregateMetricsDiff: aggregated metric value became negative",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", tabletId},
+            {"metricName", TString(name)},
+            {"oldValue", oldValue},
+            {"delta", delta},
+            {"newValue", newValue});
+    }
+>>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
     newValue = Max(newValue, (i64)0);
     aggregate.*field = newValue;
 }

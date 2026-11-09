@@ -1,3 +1,9 @@
+<<<<<<< HEAD
+=======
+#include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+>>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>
@@ -6,6 +12,12 @@
 #include <util/system/compiler.h>
 #include "hive_impl.h"
 #include "balancer.h"
+<<<<<<< HEAD
+=======
+#include "ut_common.h"
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/unknown_field_set.h>
+>>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
 
 #ifdef NDEBUG
 #define Ctest Cnull
@@ -346,6 +358,500 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
         }
     }
+<<<<<<< HEAD
+=======
+
+    struct TTabletStateTest {
+        TActorSystemStub ActorSystem;
+        TIntrusivePtr<TTabletStorageInfo> Storage = [] {
+            auto storage = MakeIntrusive<TTabletStorageInfo>();
+            storage->TabletType = TTabletTypes::Hive;
+            return storage;
+        }();
+        TTestHive Hive{Storage.Get(), TActorId()};
+
+        explicit TTabletStateTest(ui32 nodeCount, bool metricsEnabled = false) {
+            Hive.UpdateConfig([&](NKikimrConfig::THiveConfig& config) {
+                config.SetLockedTabletsSendMetrics(metricsEnabled);
+                // Exercise accounting without scheduling background balancing in the actor stub.
+                config.SetResourceChangeReactionPeriod(TDuration::Max().Seconds());
+            });
+            Hive.MakeNodes(nodeCount);
+        }
+
+        TLeaderTabletInfo& CreateStoppedTablet(TTabletId tabletId) {
+            auto& tablet = Hive.GetTablet(tabletId);
+            tablet.SetType(TTabletTypes::Dummy);
+            tablet.State = NHive::ETabletState::ReadyToWork;
+            tablet.AssignDomains({1, 2}, {});
+            tablet.BecomeStopped(EHiveEventReason::StopRequest);
+            return tablet;
+        }
+    };
+
+    struct TProtoMetricsCheckpointTest {
+        class THiveWithRecreation : public TTestHive {
+        public:
+            using TTestHive::TTestHive;
+            void Remove(ui64 id) {
+                Tablets.erase(id);
+            }
+        };
+        static TIntrusivePtr<TTabletStorageInfo> MakeStorage() {
+            auto info = MakeIntrusive<TTabletStorageInfo>();
+            info->TabletType = TTabletTypes::Hive;
+            return info;
+        }
+        TActorSystemStub ActorSystem;
+        TIntrusivePtr<TTabletStorageInfo> Storage = MakeStorage();
+        THiveWithRecreation Hive{Storage.Get(), TActorId()};
+
+        TLeaderTabletInfo& Tablet(ui64 id = 1) {
+            auto& tablet = Hive.GetTablet(id);
+            tablet.SetType(TTabletTypes::Dummy);
+            tablet.State = NHive::ETabletState::ReadyToWork;
+            tablet.AssignDomains({1, 2}, {});
+            tablet.BecomeStopped(EHiveEventReason::StopRequest);
+            return tablet;
+        }
+
+        static NKikimrTabletBase::TMetrics Sample() {
+            NKikimrTabletBase::TMetrics sample;
+            sample.SetCPU(100);
+            sample.SetMemory(1000);
+            sample.SetNetwork(10);
+            sample.SetStorage(100);
+            sample.SetReadThroughput(200);
+            sample.SetWriteThroughput(300);
+            auto* group = sample.AddGroupReadThroughput();
+            group->SetGroupID(1);
+            group->SetChannel(0);
+            group->SetThroughput(111);
+            sample.AddGroupWriteThroughput()->CopyFrom(*group);
+            return sample;
+        }
+    };
+
+    Y_UNIT_TEST(ProtoMetricsRevisionPreservesPendingUpdates) {
+        TProtoMetricsCheckpointTest test;
+        auto& tablet = test.Tablet();
+        UNIT_ASSERT(!tablet.IsProtoMetricsDirty());
+        auto sample = test.Sample();
+        tablet.UpdateResourceUsage(sample);
+        const auto sent = tablet.GetProtoMetricsRevision();
+        UNIT_ASSERT(tablet.IsProtoMetricsDirty()); // Execute without Complete remains dirty.
+        auto unchangedScalars = sample;
+        unchangedScalars.ClearGroupReadThroughput();
+        unchangedScalars.ClearGroupWriteThroughput();
+        tablet.UpdateResourceUsage(unchangedScalars);
+        UNIT_ASSERT_VALUES_EQUAL(tablet.GetProtoMetricsRevision(), sent);
+        tablet.ConfirmProtoMetricsPersistence(sent);
+        UNIT_ASSERT(!tablet.IsProtoMetricsDirty());
+        tablet.UpdateResourceUsage(sample);
+        tablet.UpdateResourceUsage(NKikimrTabletBase::TMetrics{});
+        UNIT_ASSERT(!tablet.IsProtoMetricsDirty());
+        sample.SetStorage(150);
+        tablet.UpdateResourceUsage(sample);
+        const auto newer = tablet.GetProtoMetricsRevision();
+        UNIT_ASSERT(newer > sent);
+        tablet.ConfirmProtoMetricsPersistence(sent);
+        UNIT_ASSERT(tablet.IsProtoMetricsDirty());
+        tablet.ConfirmProtoMetricsPersistence(newer);
+        UNIT_ASSERT(!tablet.IsProtoMetricsDirty());
+        sample.SetReadThroughput(250);
+        tablet.UpdateResourceUsage(sample);
+        UNIT_ASSERT(tablet.IsProtoMetricsDirty());
+        tablet.ConfirmProtoMetricsPersistence(tablet.GetProtoMetricsRevision());
+        tablet.GetMutableResourceValues().Counter = 1;
+        const auto counterRevision = tablet.GetProtoMetricsRevision();
+        tablet.ConfirmProtoMetricsPersistence(counterRevision);
+        tablet.ActualizeCounter();
+        UNIT_ASSERT_VALUES_EQUAL(tablet.GetResourceValues().Counter, 0);
+        UNIT_ASSERT_VALUES_EQUAL(tablet.GetProtoMetricsRevision(), counterRevision);
+        UNIT_ASSERT(!tablet.IsProtoMetricsDirty());
+    }
+
+    Y_UNIT_TEST(ProtoMetricsThroughputComparatorMatchesSchema) {
+        using TField = google::protobuf::FieldDescriptor;
+        const auto* descriptor = NKikimrTabletBase::TThroughputRecord::descriptor();
+        UNIT_ASSERT_VALUES_EQUAL(descriptor->field_count(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(descriptor->extension_range_count(), 0);
+        const auto checkField = [&](int number, const char* name, TField::Type type) {
+            const auto* field = descriptor->FindFieldByNumber(number);
+            UNIT_ASSERT(field);
+            UNIT_ASSERT_VALUES_EQUAL(field->name(), name);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(field->type()), static_cast<int>(type));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(field->label()), static_cast<int>(TField::LABEL_OPTIONAL));
+        };
+        checkField(1, "GroupID", TField::TYPE_UINT32);
+        checkField(2, "Channel", TField::TYPE_UINT32);
+        checkField(3, "Throughput", TField::TYPE_UINT64);
+    }
+
+    Y_UNIT_TEST(ProtoMetricsRevisionTracksGroupMetadata) {
+        TProtoMetricsCheckpointTest test;
+        auto& tablet = test.Tablet();
+        auto sample = test.Sample();
+        tablet.UpdateResourceUsage(sample);
+        tablet.ConfirmProtoMetricsPersistence(tablet.GetProtoMetricsRevision());
+        sample.MutableGroupReadThroughput(0)->ClearChannel(); // GetChannel remains zero.
+        tablet.UpdateResourceUsage(sample);
+        UNIT_ASSERT(tablet.IsProtoMetricsDirty());
+        UNIT_ASSERT(!tablet.GetResourceValues().GroupReadThroughput[0].HasChannel());
+        tablet.ConfirmProtoMetricsPersistence(tablet.GetProtoMetricsRevision());
+        auto* record = sample.MutableGroupReadThroughput(0);
+        record->GetReflection()->MutableUnknownFields(record)->AddVarint(123, 1);
+        tablet.UpdateResourceUsage(sample);
+        UNIT_ASSERT(tablet.IsProtoMetricsDirty());
+        tablet.ConfirmProtoMetricsPersistence(tablet.GetProtoMetricsRevision());
+        tablet.UpdateResourceUsage(sample);
+        UNIT_ASSERT(!tablet.IsProtoMetricsDirty());
+        record->GetReflection()->MutableUnknownFields(record)->Clear();
+        record->GetReflection()->MutableUnknownFields(record)->AddVarint(123, 2);
+        tablet.UpdateResourceUsage(sample);
+        UNIT_ASSERT(tablet.IsProtoMetricsDirty());
+        UNIT_ASSERT_VALUES_EQUAL(tablet.GetResourceValues().GroupReadThroughput[0].SerializeAsString(), record->SerializeAsString());
+        tablet.ConfirmProtoMetricsPersistence(tablet.GetProtoMetricsRevision());
+        sample.AddGroupReadThroughput()->CopyFrom(*sample.MutableGroupWriteThroughput(0));
+        sample.MutableGroupReadThroughput(1)->SetGroupID(2);
+        tablet.UpdateResourceUsage(sample);
+        tablet.ConfirmProtoMetricsPersistence(tablet.GetProtoMetricsRevision());
+        sample.MutableGroupReadThroughput()->SwapElements(0, 1);
+        tablet.UpdateResourceUsage(sample);
+        UNIT_ASSERT(tablet.IsProtoMetricsDirty());
+        UNIT_ASSERT_VALUES_EQUAL(tablet.GetResourceValues().GroupReadThroughput[0].GetGroupID(), 2);
+    }
+
+    Y_UNIT_TEST(ProtoMetricsRevisionTracksCPUWindowExpiration) {
+        TTestBasicRuntime runtime(1, false);
+        TAppPrepare app;
+        SetupTabletServices(runtime, &app, true);
+        auto storage = TProtoMetricsCheckpointTest::MakeStorage();
+        THolder<TTestHive> hive;
+        runtime.RunCall([&] {
+            hive = MakeHolder<TTestHive>(storage.Get(), TActorId());
+            hive->UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+                config.SetMetricsWindowSize(24);
+            });
+            auto& tablet = hive->GetTablet(1);
+            tablet.SetType(TTabletTypes::Dummy);
+            tablet.State = NHive::ETabletState::ReadyToWork;
+            tablet.BecomeStopped(EHiveEventReason::StopRequest);
+            tablet.MutableResourceMetricsAggregates().MaximumCPU.SetWindowSize(TDuration::MilliSeconds(24));
+            auto high = TProtoMetricsCheckpointTest::Sample();
+            high.SetCPU(200);
+            tablet.UpdateResourceUsage(high);
+            UNIT_ASSERT_VALUES_EQUAL(tablet.GetResourceValues().CPU, 200);
+            tablet.ConfirmProtoMetricsPersistence(tablet.GetProtoMetricsRevision());
+            return 0;
+        });
+        runtime.AdvanceCurrentTime(TDuration::MilliSeconds(120));
+        runtime.RunCall([&] {
+            auto& tablet = hive->GetTablet(1);
+            UNIT_ASSERT(!tablet.IsProtoMetricsDirty());
+            tablet.UpdateResourceUsage(TProtoMetricsCheckpointTest::Sample());
+            UNIT_ASSERT_VALUES_EQUAL(tablet.GetResourceValues().CPU, 100);
+            UNIT_ASSERT(tablet.IsProtoMetricsDirty());
+            hive.Reset();
+            return 0;
+        });
+    }
+
+    Y_UNIT_TEST(ProtoMetricsRevisionRejectsPreviousIncarnation) {
+        TProtoMetricsCheckpointTest test;
+        auto& original = test.Tablet();
+        original.UpdateResourceUsage(test.Sample());
+        const auto saved = original.GetProtoMetricsRevision();
+        test.Hive.Remove(1);
+        auto& recreated = test.Tablet();
+        UNIT_ASSERT(!recreated.IsProtoMetricsDirty());
+        recreated.ConfirmProtoMetricsPersistence(saved);
+        UNIT_ASSERT(!recreated.IsProtoMetricsDirty());
+
+        auto sample = test.Sample();
+        sample.SetStorage(200);
+        recreated.UpdateResourceUsage(sample);
+        UNIT_ASSERT(recreated.GetProtoMetricsRevision() > saved);
+        recreated.ConfirmProtoMetricsPersistence(saved);
+        UNIT_ASSERT(recreated.IsProtoMetricsDirty());
+        recreated.ConfirmProtoMetricsPersistence(recreated.GetProtoMetricsRevision());
+        UNIT_ASSERT(!recreated.IsProtoMetricsDirty());
+    }
+
+    Y_UNIT_TEST(PartialResourceUpdatesPreserveScalarTotalsAndGroups) {
+        class TScalarAccountingHive : public TTestHive {
+        public:
+            using TTestHive::TTestHive;
+
+            const TMetrics& ObjectMetrics(TFullObjectId objectId) const {
+                return ObjectToTabletMetrics.at(objectId).Metrics;
+            }
+
+            const TMetrics& TypeMetrics(TTabletTypes::EType type) const {
+                return TabletTypeToTabletMetrics.at(type).Metrics;
+            }
+        };
+
+        TActorSystemStub actorSystem;
+        auto storage = MakeIntrusive<TTabletStorageInfo>();
+        storage->TabletType = TTabletTypes::Hive;
+        TScalarAccountingHive hive(storage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetResourceChangeReactionPeriod(TDuration::Max().Seconds());
+        });
+        hive.MakeNodes(1);
+        auto& node = hive.Node(1);
+        auto& tablet = hive.GetTablet(1);
+        tablet.SetType(TTabletTypes::Dummy);
+        tablet.State = NHive::ETabletState::ReadyToWork;
+        tablet.ObjectId = {1, 7};
+        tablet.AssignDomains({1, 2}, {});
+        tablet.GetMutableResourceValues().Counter = 1;
+        UNIT_ASSERT(tablet.BecomeRunning(node.Id, EHiveEventReason::StatusOk));
+
+        const auto check = [&](ui64 storageValue, ui64 read, ui64 write, ui64 groupRead) {
+            for (const auto* values : {&hive.ObjectMetrics(tablet.GetObjectId()),
+                                      &hive.TypeMetrics(tablet.GetTabletType())}) {
+                UNIT_ASSERT_VALUES_EQUAL(values->CPU, 100);
+                UNIT_ASSERT_VALUES_EQUAL(values->Memory, 1000);
+                UNIT_ASSERT_VALUES_EQUAL(values->Network, 10);
+                UNIT_ASSERT_VALUES_EQUAL(values->Counter, 0);
+                UNIT_ASSERT_VALUES_EQUAL(values->Storage, storageValue);
+                UNIT_ASSERT_VALUES_EQUAL(values->ReadThroughput, read);
+                UNIT_ASSERT_VALUES_EQUAL(values->WriteThroughput, write);
+                UNIT_ASSERT_VALUES_EQUAL(values->ReadIops, 0);
+                UNIT_ASSERT_VALUES_EQUAL(values->WriteIops, 0);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), 100);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::Memory>(node.ResourceValues), 1000);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::Network>(node.ResourceValues), 10);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::Counter>(node.ResourceValues), 0);
+            const auto& values = tablet.GetResourceValues();
+            UNIT_ASSERT_VALUES_EQUAL(values.GroupReadThroughput.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(values.GroupReadThroughput.front().GetThroughput(), groupRead);
+            UNIT_ASSERT_VALUES_EQUAL(values.GroupWriteThroughput.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(values.GroupWriteThroughput.front().GetThroughput(), 222);
+        };
+
+        NKikimrTabletBase::TMetrics full;
+        full.SetCPU(100);
+        full.SetMemory(1000);
+        full.SetNetwork(10);
+        full.SetStorage(100);
+        full.SetReadThroughput(200);
+        full.SetWriteThroughput(300);
+        auto* readGroup = full.AddGroupReadThroughput();
+        readGroup->SetGroupID(1);
+        readGroup->SetChannel(0);
+        readGroup->SetThroughput(111);
+        auto* writeGroup = full.AddGroupWriteThroughput();
+        writeGroup->SetGroupID(2);
+        writeGroup->SetChannel(1);
+        writeGroup->SetThroughput(222);
+        tablet.UpdateResourceUsage(full);
+        check(100, 200, 300, 111);
+
+        NKikimrTabletBase::TMetrics partial;
+        partial.SetStorage(150);
+        partial.SetReadThroughput(250);
+        partial.SetWriteThroughput(0);
+        tablet.UpdateResourceUsage(partial);
+        check(150, 250, 0, 111);
+        tablet.UpdateResourceUsage(NKikimrTabletBase::TMetrics{});
+        check(150, 250, 0, 111);
+
+        NKikimrTabletBase::TMetrics groupsOnly;
+        groupsOnly.AddGroupReadThroughput()->CopyFrom(*readGroup);
+        groupsOnly.MutableGroupReadThroughput(0)->SetThroughput(333);
+        tablet.UpdateResourceUsage(groupsOnly);
+        check(150, 250, 0, 333);
+
+        NKikimrTabletBase::TMetrics zero;
+        zero.SetStorage(0);
+        zero.SetReadThroughput(0);
+        tablet.UpdateResourceUsage(zero);
+        check(0, 0, 0, 333);
+        UNIT_ASSERT(tablet.BecomeStopped(EHiveEventReason::StopRequest));
+    }
+
+    Y_UNIT_TEST(BecomeStartingRemovesLockedTabletFromPreviousNode) {
+        TTabletStateTest test(2, true);
+        auto& hive = test.Hive;
+        auto& ownerNode = hive.Node(1);
+        auto& reportingNode = hive.Node(2);
+
+        TLeaderTabletInfo tablet(1, hive);
+        tablet.SetType(TTabletTypes::Dummy);
+        tablet.AssignDomains({1, 2}, {});
+        tablet.SetLockedToActor(TActorId(ownerNode.Id, "owner"), TDuration::Seconds(60));
+        tablet.GetMutableResourceValues().CPU = 100;
+        tablet.BecomeUnknown(&ownerNode);
+        UNIT_ASSERT_VALUES_EQUAL(ownerNode.GetTabletsTotal(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(ownerNode.ResourceValues), 100);
+
+        // A late InbootTablets report must detach the old node before registering the new one.
+        UNIT_ASSERT(tablet.BecomeStarting(reportingNode.Id, EHiveEventReason::BootQueue));
+        UNIT_ASSERT_EQUAL(tablet.GetVolatileState(), NKikimrHive::TABLET_VOLATILE_STATE_STARTING);
+        UNIT_ASSERT(tablet.Node == &reportingNode);
+        UNIT_ASSERT_VALUES_EQUAL(ownerNode.GetTabletsTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(ownerNode.ResourceValues), 0);
+        UNIT_ASSERT_VALUES_EQUAL(reportingNode.GetTabletsTotal(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reportingNode.GetTabletsScheduled(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(reportingNode.ResourceValues), 100);
+
+        UNIT_ASSERT(tablet.BecomeStopped(EHiveEventReason::StopRequest));
+        UNIT_ASSERT_VALUES_EQUAL(ownerNode.GetTabletsTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(reportingNode.GetTabletsTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(reportingNode.ResourceValues), 0);
+        // There must be no stale tablet left to trip BecomeDisconnected's empty-node assertion.
+        UNIT_ASSERT(ownerNode.BecomeDisconnected());
+        UNIT_ASSERT(ownerNode.IsDisconnected());
+    }
+
+    Y_UNIT_TEST(ConfigChangePreservesDeletingLockedTabletsAndPendingUnlock) {
+        TTabletStateTest test(1);
+        auto& hive = test.Hive;
+        auto& node = hive.Node(1);
+        const TActorId owner(node.Id, "owner");
+
+        TLeaderTabletInfo deletingTablet(1, hive);
+        deletingTablet.SetType(TTabletTypes::Dummy);
+        deletingTablet.State = NHive::ETabletState::Deleting;
+        deletingTablet.SetLockedToActor(owner, TDuration::Seconds(60));
+        deletingTablet.GetMutableResourceValues().CPU = 100;
+        deletingTablet.BecomeStopped(EHiveEventReason::StopRequest);
+
+        TLeaderTabletInfo lockedTablet(2, hive);
+        lockedTablet.SetType(TTabletTypes::Dummy);
+        lockedTablet.State = NHive::ETabletState::ReadyToWork;
+        lockedTablet.SetLockedToActor(owner, TDuration::Seconds(60));
+        lockedTablet.PendingUnlockSeqNo = 42;
+        lockedTablet.GetMutableResourceValues().CPU = 200;
+        lockedTablet.BecomeStopped(EHiveEventReason::StopRequest);
+
+        for (bool enabled : {true, false, true}) {
+            hive.UpdateConfig([&](NKikimrConfig::THiveConfig& config) {
+                config.SetLockedTabletsSendMetrics(enabled);
+            });
+            UNIT_ASSERT(deletingTablet.IsDeleting());
+            UNIT_ASSERT_EQUAL(deletingTablet.GetVolatileState(), NKikimrHive::TABLET_VOLATILE_STATE_STOPPED);
+            UNIT_ASSERT(deletingTablet.Node == nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(deletingTablet.LockedToActor, owner);
+            UNIT_ASSERT_EQUAL(lockedTablet.GetVolatileState(), enabled
+                ? NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN
+                : NKikimrHive::TABLET_VOLATILE_STATE_STOPPED);
+            UNIT_ASSERT_VALUES_EQUAL(lockedTablet.LockedToActor, owner);
+            UNIT_ASSERT_VALUES_EQUAL(lockedTablet.LockedReconnectTimeout, TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL(lockedTablet.PendingUnlockSeqNo, 42);
+            UNIT_ASSERT_VALUES_EQUAL(node.LockedTablets.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsTotal(), enabled ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), enabled ? 200 : 0);
+        }
+    }
+
+    Y_UNIT_TEST(FreezePreservesLocalTabletPlacement) {
+        for (auto state : {NKikimrHive::TABLET_VOLATILE_STATE_STARTING,
+                           NKikimrHive::TABLET_VOLATILE_STATE_RUNNING,
+                           NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN}) {
+            TTabletStateTest test(1);
+            auto& hive = test.Hive;
+            auto& node = hive.Node(1);
+            auto& tablet = test.CreateStoppedTablet(1);
+            node.SetFreeze(true, EHiveEventReason::MonitoringRequest);
+            if (state == NKikimrHive::TABLET_VOLATILE_STATE_STARTING) {
+                tablet.BecomeStarting(node.Id, EHiveEventReason::BootQueue);
+            } else if (state == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING) {
+                tablet.BecomeRunning(node.Id, EHiveEventReason::StatusOk);
+            } else {
+                // UNKNOWN with a persisted NodeId is real placement recovered from storage.
+                tablet.NodeId = node.Id;
+                tablet.BecomeUnknown(&node);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, node.Id);
+            UNIT_ASSERT(!node.FrozenTablets.empty());
+            tablet.BecomeStopped(EHiveEventReason::StopRequest);
+            UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, node.Id);
+            node.SetFreeze(false, EHiveEventReason::MonitoringRequest);
+            UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, 0);
+        }
+    }
+
+    Y_UNIT_TEST(BecomeStartingMovesAlreadyStartingTabletToAnotherNode) {
+        TTabletStateTest test(2);
+        auto& hive = test.Hive;
+        auto& tablet = test.CreateStoppedTablet(1);
+        tablet.GetMutableResourceValues().CPU = 100;
+
+        const auto checkStartingNode = [&](TNodeId nodeId) {
+            UNIT_ASSERT_EQUAL(tablet.GetVolatileState(), NKikimrHive::TABLET_VOLATILE_STATE_STARTING);
+            UNIT_ASSERT_VALUES_EQUAL(tablet.NodeId, 0);
+            UNIT_ASSERT(tablet.Node == &hive.Node(nodeId));
+            for (TNodeId id : {1, 2}) {
+                const auto& node = hive.Node(id);
+                UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsTotal(), id == nodeId ? 1 : 0);
+                UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsScheduled(), id == nodeId ? 1 : 0);
+                UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), id == nodeId ? 100 : 0);
+                // Boot failure handling must recognize the new Local and reject the old one.
+                UNIT_ASSERT_VALUES_EQUAL(tablet.IsPresentOnLocal(node.Local), id == nodeId);
+            }
+        };
+
+        UNIT_ASSERT(tablet.BecomeStarting(1, EHiveEventReason::BootQueue));
+        checkStartingNode(1);
+        UNIT_ASSERT(!tablet.BecomeStarting(1, EHiveEventReason::BootQueue));
+        checkStartingNode(1);
+        UNIT_ASSERT(tablet.BecomeStarting(2, EHiveEventReason::BootQueue));
+        checkStartingNode(2);
+        UNIT_ASSERT(!tablet.BecomeStarting(2, EHiveEventReason::BootQueue));
+        checkStartingNode(2);
+
+        UNIT_ASSERT(tablet.BecomeStopped(EHiveEventReason::StopRequest));
+        for (TNodeId id : {1, 2}) {
+            UNIT_ASSERT_VALUES_EQUAL(hive.Node(id).GetTabletsTotal(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(hive.Node(id).GetTabletsScheduled(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(hive.Node(id).ResourceValues), 0);
+        }
+    }
+
+    Y_UNIT_TEST(LocalTabletStateChangesUpdateUsageMeasurement) {
+        for (auto state : {NKikimrHive::TABLET_VOLATILE_STATE_STARTING,
+                           NKikimrHive::TABLET_VOLATILE_STATE_RUNNING,
+                           NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN}) {
+            TTabletStateTest test(1);
+            auto& hive = test.Hive;
+            auto& node = hive.Node(1);
+            auto& firstTablet = test.CreateStoppedTablet(1);
+            if (state == NKikimrHive::TABLET_VOLATILE_STATE_STARTING) {
+                UNIT_ASSERT(firstTablet.BecomeStarting(node.Id, EHiveEventReason::BootQueue));
+            } else if (state == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING) {
+                UNIT_ASSERT(firstTablet.BecomeRunning(node.Id, EHiveEventReason::StatusOk));
+            } else {
+                // UNKNOWN with a persisted NodeId is recovered local placement.
+                firstTablet.NodeId = node.Id;
+                firstTablet.BecomeUnknown(&node);
+            }
+            UNIT_ASSERT(node.LastScheduledTablet);
+            UNIT_ASSERT(node.LastScheduledTablet->TabletId == firstTablet.GetFullTabletId());
+
+            auto& secondTablet = test.CreateStoppedTablet(2);
+            UNIT_ASSERT(secondTablet.BecomeStarting(node.Id, EHiveEventReason::BootQueue));
+            UNIT_ASSERT(node.LastScheduledTablet);
+            UNIT_ASSERT(node.LastScheduledTablet->TabletId == secondTablet.GetFullTabletId());
+
+            // Stopping another local tablet changes the load being measured.
+            UNIT_ASSERT(firstTablet.BecomeStopped(EHiveEventReason::StopRequest));
+            UNIT_ASSERT(!node.LastScheduledTablet);
+            UNIT_ASSERT(secondTablet.BecomeStopped(EHiveEventReason::StopRequest));
+
+            UNIT_ASSERT(secondTablet.BecomeStarting(node.Id, EHiveEventReason::BootQueue));
+            UNIT_ASSERT(node.LastScheduledTablet);
+            UNIT_ASSERT(node.LastScheduledTablet->TabletId == secondTablet.GetFullTabletId());
+            UNIT_ASSERT(secondTablet.BecomeStopped(EHiveEventReason::StopRequest));
+            UNIT_ASSERT(!node.LastScheduledTablet);
+            UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsTotal(), 0);
+        }
+    }
+>>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
 }
 
 Y_UNIT_TEST_SUITE(TCutHistoryRestrictions) {

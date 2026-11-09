@@ -101,9 +101,11 @@ namespace NKikimr::NKMeans {
             auto settings = MakeSettings();
             auto* vector = settings.mutable_settings();
             TString error;
-            for (const auto m : {0u, MaxHnswM + 1}) {
+            for (const auto m : {0u, 1u, MaxHnswM + 1}) {
                 vector->set_m(m);
                 UNIT_ASSERT(!ValidateHnswSettings(settings, error));
+                UNIT_ASSERT_STRING_CONTAINS(error, "M");
+                UNIT_ASSERT(!ValidateHnswSettingsPartial(settings, error));
                 UNIT_ASSERT_STRING_CONTAINS(error, "M");
             }
             vector->set_m(MaxHnswM);
@@ -116,6 +118,9 @@ namespace NKikimr::NKMeans {
             vector->set_min_rows(0);
             vector->set_delta_rows(Max<ui64>());
             UNIT_ASSERT_C(ValidateHnswSettings(settings, error), error);
+            vector->set_m(MinHnswM);
+            UNIT_ASSERT_C(ValidateHnswSettings(settings, error), error);
+            UNIT_ASSERT_C(ValidateHnswSettingsPartial(settings, error), error);
         }
 
         Y_UNIT_TEST(KMeansRejectsHnswOnlySettings) {

@@ -20,6 +20,7 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <cmath>
 #include <tuple>
 
 namespace NKikimr::NDataShard {
@@ -28,7 +29,7 @@ namespace NKikimr::NDataShard {
 
         using Ydb::Table::VectorIndexSettings;
 
-        // Rough fixed per-node overhead of the HNSW graph, excluding friend ids.
+        // Rough fixed per-node overhead, excluding level-zero neighbor storage.
         constexpr size_t EstimatedBytesPerNodeOverhead = 256;
         // Construct synchronously with one NMSLIB worker; the caller controls scheduling.
         constexpr unsigned BuildThreadsPerIndex = 1;
@@ -221,6 +222,7 @@ namespace NKikimr::NDataShard {
         }
 
         bool Build(const VectorIndexSettings& settings) {
+            SquaredGraphDistances = settings.metric() == VectorIndexSettings::DISTANCE_EUCLIDEAN;
             if (Objects.empty()) {
                 return true; // Empty rebuilt generations still have a searchable journal.
             }
@@ -278,7 +280,10 @@ namespace NKikimr::NDataShard {
             // Clone it since Result() is owned by the query and Pop() is destructive.
             std::unique_ptr<similarity::KNNQueue<float>> mutableQueue(queue->Clone());
             while (!mutableQueue->Empty()) {
-                const float distance = mutableQueue->TopDistance();
+                const float graphDistance = mutableQueue->TopDistance();
+                // CreateIndex uses optimized squared L2 for SpaceLp(2), while
+                // journal scoring through Space returns ordinary L2.
+                const float distance = SquaredGraphDistances ? std::sqrt(graphDistance) : graphDistance;
                 const similarity::Object* obj = mutableQueue->Pop();
                 const size_t idx = static_cast<size_t>(obj->id());
                 if (idx < Keys.size()) {
@@ -386,6 +391,7 @@ namespace NKikimr::NDataShard {
         std::unique_ptr<similarity::Space<float>> Space;
         size_t Dimension = 0;
         ui32 Connectivity = DefaultHnswM;
+        bool SquaredGraphDistances = false;
         size_t KeyBytes = 0;
         std::vector<const similarity::Object*> Objects;
         std::vector<std::unique_ptr<similarity::Object>> OwnedObjects;
@@ -403,11 +409,13 @@ namespace NKikimr::NDataShard {
 
     size_t THnswIndex::EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 connectivity,
                                            size_t serializedKeyBytes) {
-        // NMSLIB reserves up to 2*M friend ids on level zero. Higher levels and
-        // container allocations are covered by the deliberately conservative
-        // fixed overhead. Saturate on overflow so an attacker cannot wrap the
-        // estimate and pass the build budget check.
-        const size_t friendBytes = SaturatingMultiply(connectivity, 2 * sizeof(similarity::IdType));
+        // NMSLIB retains the pointer-based graph alongside the optimized graph.
+        // Level zero reserves 2*M+1 neighbor pointers in each HnswNode and
+        // 2*M+1 ids in the optimized representation. Higher levels and container
+        // allocations use the fixed overhead. Saturate all estimate arithmetic.
+        const size_t friendSlots = SaturatingAdd(SaturatingMultiply(connectivity, 2), 1);
+        const size_t friendBytes = SaturatingMultiply(friendSlots,
+            sizeof(similarity::HnswNode*) + sizeof(similarity::IdType));
         // NMSLIB retains the source Object and copies its raw vector into the
         // contiguous optimized-search index. We no longer retain a third copy in
         // YDB wire format; GetVector() reconstructs its trailing format byte.

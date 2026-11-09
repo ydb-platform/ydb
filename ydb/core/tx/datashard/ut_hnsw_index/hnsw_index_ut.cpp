@@ -197,6 +197,38 @@ namespace NKikimr::NDataShard {
             }
         }
 
+        Y_UNIT_TEST(EuclideanGraphAndJournalDistancesUseTheSameScale) {
+            const auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                                               Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+            const auto target = SerializeFloatVector({0, 0});
+            // Squaring changes which source wins both above and below distance 1.
+            for (const auto [graphDistance, journalDistance] : {std::pair{2.0f, 3.0f}, std::pair{0.3f, 0.2f}}) {
+                TString error;
+                auto index = THnswIndex::Build(settings, {
+                    {"base", SerializeFloatVector({graphDistance, 0})},
+                    {"changed", SerializeFloatVector({10, 0})},
+                }, 0, error);
+                UNIT_ASSERT_C(index, error);
+                index->SetSnapshot({100, 0}, std::make_shared<THnswIndexChanges>());
+                UNIT_ASSERT(index->Upsert("changed", SerializeFloatVector({journalDistance, 0}), {120, 0}));
+
+                const auto before = index->Search(target, 1, {119, 0});
+                UNIT_ASSERT_VALUES_EQUAL(before.Results.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(before.Results[0].first, "base");
+                UNIT_ASSERT_DOUBLES_EQUAL(before.Results[0].second, graphDistance, 1e-5);
+
+                const auto merged = index->Search(target, 2, {120, 0});
+                UNIT_ASSERT_VALUES_EQUAL(merged.Results.size(), 2);
+                const auto expectedKey = graphDistance < journalDistance ? "base" : "changed";
+                UNIT_ASSERT_VALUES_EQUAL(merged.Results[0].first, expectedKey);
+                UNIT_ASSERT_DOUBLES_EQUAL(merged.Results[0].second, Min(graphDistance, journalDistance), 1e-5);
+                UNIT_ASSERT_DOUBLES_EQUAL(merged.Results[1].second, Max(graphDistance, journalDistance), 1e-5);
+                const auto nearest = index->Search(target, 1, {120, 0});
+                UNIT_ASSERT_VALUES_EQUAL(nearest.Results.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(nearest.Results[0].first, expectedKey);
+            }
+        }
+
         Y_UNIT_TEST(RequestedCandidatesExpandSearchBreadth) {
             constexpr ui32 dimensions = 8;
             constexpr size_t count = 256;
@@ -324,14 +356,31 @@ namespace NKikimr::NDataShard {
         Y_UNIT_TEST(MemoryEstimateAccountsForConnectivity) {
             const auto defaultEstimate = THnswIndex::EstimateMemoryBytes(100, 4, 16);
             const auto denseEstimate = THnswIndex::EstimateMemoryBytes(100, 4, 100);
-            UNIT_ASSERT_VALUES_EQUAL(defaultEstimate,
-                                     100 * (2 * 4 * sizeof(float) + 256 + 2 * 16 * sizeof(ui32)));
             UNIT_ASSERT_GT(denseEstimate, defaultEstimate);
-            UNIT_ASSERT_VALUES_EQUAL(denseEstimate - defaultEstimate,
-                                     100 * 2 * (100 - 16) * sizeof(ui32));
+            // Both the retained pointer graph and optimized ids grow with M.
+            UNIT_ASSERT_GE(denseEstimate - defaultEstimate,
+                           100 * 2 * (100 - 16) * (sizeof(void*) + sizeof(ui32)));
             UNIT_ASSERT_VALUES_EQUAL(
                 THnswIndex::EstimateMemoryBytes(100, 4, 16, 1234),
                 defaultEstimate + 1234);
+        }
+
+        Y_UNIT_TEST(DenseGraphBudgetIncludesBothNeighborRepresentations) {
+            auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                                         Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+            settings.set_m(100);
+            const std::vector<std::pair<TString, TString>> data = {
+                {"a", SerializeFloatVector({0, 0})},
+                {"b", SerializeFloatVector({1, 0})},
+            };
+            // ElList_ reserves 2*M+1 pointers per row even after optimization.
+            // The optimized graph additionally stores 2*M+1 neighbor ids.
+            const size_t neighborBytes = data.size() * (2 * settings.m() + 1)
+                * (sizeof(void*) + sizeof(ui32));
+            UNIT_ASSERT_GE(THnswIndex::EstimateMemoryBytes(data.size(), 2, settings.m(), 2), neighborBytes);
+            TString error;
+            UNIT_ASSERT(!THnswIndex::Build(settings, data, neighborBytes - 1, error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "exceeds budget");
         }
 
         Y_UNIT_TEST(BuildHonorsExactMemoryBudget) {
@@ -355,7 +404,6 @@ namespace NKikimr::NDataShard {
                 Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
                 Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
                 2);
-            settings.set_m(8);
             settings.set_ef_construction(64);
             settings.set_min_rows(1);
             settings.set_delta_rows(1000);
@@ -364,9 +412,12 @@ namespace NKikimr::NDataShard {
                 {"b", SerializeFloatVector({0.0f, 1.0f})},
             };
             TString error;
-            auto index = THnswIndex::Build(settings, data, 0, error);
-            UNIT_ASSERT_C(index, error);
-            UNIT_ASSERT_VALUES_EQUAL(index->Size(), data.size());
+            for (const auto m : {NKMeans::MinHnswM, 8u}) {
+                settings.set_m(m);
+                auto index = THnswIndex::Build(settings, data, 0, error);
+                UNIT_ASSERT_C(index, error);
+                UNIT_ASSERT_VALUES_EQUAL(index->Size(), data.size());
+            }
         }
 
         Y_UNIT_TEST(RejectsUnsafeHnswSettingsBeforeNmslibBuild) {
@@ -374,15 +425,17 @@ namespace NKikimr::NDataShard {
                 Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
                 Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
                 2);
-            settings.set_m(NKMeans::MaxHnswM + 1);
             std::vector<std::pair<TString, TString>> data = {
                 {"a", SerializeFloatVector({1.0f, 0.0f})},
             };
 
             TString error;
-            auto index = THnswIndex::Build(settings, data, 0, error);
-            UNIT_ASSERT(!index);
-            UNIT_ASSERT_STRING_CONTAINS(error, "M");
+            for (const auto m : {0u, 1u, NKMeans::MaxHnswM + 1}) {
+                settings.set_m(m);
+                auto index = THnswIndex::Build(settings, data, 0, error);
+                UNIT_ASSERT(!index);
+                UNIT_ASSERT_STRING_CONTAINS(error, "M");
+            }
         }
 
         Y_UNIT_TEST(MemoryEstimatesSaturateOnOverflow) {

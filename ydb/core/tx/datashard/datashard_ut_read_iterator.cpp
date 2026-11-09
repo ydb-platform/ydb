@@ -396,7 +396,8 @@ struct TTestHelper {
         }
     }
 
-    void CreateCustomTable(const TString & name, TVector<TShardedTableOptions::TColumn> columns, bool hnsw = false) {
+    void CreateCustomTable(const TString & name, TVector<TShardedTableOptions::TColumn> columns, bool hnsw = false,
+                           const TVector<TShardedTableOptions::TFamily>& families = {}) {
         auto &runtime = *Server->GetRuntime();
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (hnsw && ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
@@ -433,6 +434,9 @@ struct TTestHelper {
         auto opts = TShardedTableOptions()
             .Shards(ShardCount)
             .Columns(columns);
+        if (!families.empty()) {
+            opts.Families(families);
+        }
         if (WithFollower)
             opts.Followers(1);
         auto [shards, tableId] = CreateShardedTable(Server, Sender, "/Root", name, opts);
@@ -6736,6 +6740,86 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
 
     Y_UNIT_TEST(HnswDistinctCandidateBudgetAllowsOneExpansion) {
         TestHnswDistinctCandidateBudget(2, false);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswMaterializationRetriesExternalBlobs, ExternalEmbedding) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true)
+            .AddStoragePool("ssd").AddStoragePool("hdd").AddStoragePool("ext");
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(settings);
+        const TShardedTableOptions::TFamily family = {
+            .Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd",
+            .ExternalPoolKind = "ext", .DataThreshold = 1u, .ExternalThreshold = ExternalEmbedding ? 8u : 1_KB,
+        };
+        helper.CreateCustomTable("hnsw-blobs", {{"key", "Uint32", true, false},
+                                              {"payload", "String", false, false},
+                                              {"emb", "String", false, false}}, true, {family});
+        const TString payload(2_KB, 'x');
+        ExecSQL(helper.Server, helper.Sender, TStringBuilder()
+            << "UPSERT INTO `/Root/hnsw-blobs` (key, payload, emb) VALUES "
+            << "(1, \"inline\", \"\\x00\\x00\\x80\\x3F\\x00\\x00\\x00\\x00\\x01\"), "
+            << "(2, \"" << payload << "\", \"\\x00\\x00\\x00\\x00\\x00\\x00\\x80\\x3F\\x01\"), "
+            << "(3, \"unused\", \"\\x00\\x00\\x80\\xBF\\x00\\x00\\x00\\x00\\x01\");");
+        auto& runtime = *helper.Server->GetRuntime();
+        Ydb::Table::VectorIndexSettings vectorSettings;
+        vectorSettings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        vectorSettings.set_vector_dimension(2);
+        vectorSettings.set_min_rows(1);
+        vectorSettings.set_delta_rows(1000);
+        ui64 readId = 0;
+        auto read = [&] {
+            auto request = helper.GetBaseReadRequest("hnsw-blobs", ++readId,
+                NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion::Max());
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(2);
+            top->SetLimit(2);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            *top->MutableSettings() = vectorSettings;
+            auto result = helper.SendRead("hnsw-blobs", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            return result;
+        };
+        bool accelerated = false;
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            if (read()->Record.GetStats().GetRows() == 2) {
+                accelerated = true;
+                break;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(accelerated, "HNSW graph did not become ready");
+
+        // Build from in-memory rows, then write cold external blobs while keeping
+        // the graph. Neither compaction nor the graph scan preloads these blobs.
+        const auto& table = helper.Tables.at("hnsw-blobs");
+        CompactTable(runtime, table.TabletId, table.TableId, false);
+        ui32 blobRequests = 0;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvGet::EventType) {
+                blobRequests += ev->Get<TEvBlobStorage::TEvGet>()->QuerySize;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+
+        const auto result = read();
+        UNIT_ASSERT_GT(blobRequests, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[0].template AsValue<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(1)[0].template AsValue<ui32>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].AsBuf(), "inline");
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(1)[1].AsBuf(), payload);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[2].AsBuf(),
+            TStringBuf("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(1)[2].AsBuf(),
+            TStringBuf("\x00\x00\x00\x00\x00\x00\x80\x3F\x01", 9));
     }
 
     Y_UNIT_TEST(HnswSharesPageCacheBudgetAndEvictsOnLimit) {

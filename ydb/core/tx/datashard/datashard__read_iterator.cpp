@@ -1442,9 +1442,9 @@ private:
             return EReadStatus::NeedData;
         }
 
-        // All pages are resident, so no Select below can page fault; collect
-        // the rows first and only mutate VectorTopK once every key resolved,
-        // so a retry can never append the same row twice.
+        // Precharge loads pages, but Select may still request external blobs.
+        // Collect rows before mutating VectorTopK, so retrying a missing page
+        // or blob cannot append the same row twice.
         struct TFetchedRow {
             NTable::TRowState RowState;
         };
@@ -1460,9 +1460,9 @@ private:
             auto status = txc.DB.Select(TableInfo.LocalTid, rawKey, State.Columns, row.RowState, stats, 0,
                 State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
 
-            if (status == NTable::EReady::Page) {
-                // Precharge reported everything resident, so this should not
-                // happen; retry from the top rather than emit a partial result.
+            if (status == NTable::EReady::Page || txc.Env.MissingReferencesSize()) {
+                // ReadMissingReferences permits Data with unresolved cells.
+                // Retry before accepting any candidate or updating VectorTopK.
                 return EReadStatus::NeedData;
             }
             if (status == NTable::EReady::Gone) {

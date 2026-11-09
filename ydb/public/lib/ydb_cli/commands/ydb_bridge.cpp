@@ -314,7 +314,9 @@ TCommandBridgeRollbackStatus::TCommandBridgeRollbackStatus(bool allowEmptyDataba
         "in a single change, then restart every node without them (dynamic nodes without --bridge-pile-name). Dynamic "
         "nodes not connected to the cluster are not reported.")
     , AllowEmptyDatabase(allowEmptyDatabase)
-{}
+{
+    CompletionDescription = "Show the progress of rolling a cluster back to ordinary mode";
+}
 
 void TCommandBridgeRollbackStatus::Config(TConfig& config) {
     TYdbReadOnlyCommand::Config(config);
@@ -369,7 +371,10 @@ int TCommandBridgeRollbackStatus::Run(TConfig& config) {
                 ss << "The cluster is a bridged one; run \"ydb admin cluster bridge rollback\" to roll it back" << Endl;
             }
             if (const auto& nodeIds = result.GetBridgeConfigNodeIds(); !nodeIds.empty()) {
-                ss << "Nodes still running with bridge config (restart them without it): "
+                // nodes restarted without bridge config can't serve the bridged cluster, so they wait for its storage
+                ss << (result.IsBridged()
+                    ? "Nodes running with bridge config (keep them running until storage groups are ordinary ones): "
+                    : "Nodes still running with bridge config (restart them without it): ")
                     << MakeRangeJoiner(", ", nodeIds) << Endl;
             }
             if (const auto& nodeIds = result.GetUnreportedStaticNodeIds(); !nodeIds.empty()) {
@@ -431,8 +436,8 @@ int TCommandBridgeRollback::Run(TConfig& config) {
         .SkipBscValidation(SkipBscValidation)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    Cout << "Rollback started: static storage groups are ordinary ones now. Watch rollback-status until it completes."
-        << Endl;
+    Cout << "Rollback started: static storage groups are ordinary ones now. Watch rollback-status until the cluster is "
+        "not a bridged one anymore, then remove bridge_config and restart the nodes." << Endl;
 
     return EXIT_SUCCESS;
 }

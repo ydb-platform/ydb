@@ -62,8 +62,8 @@ public:
     std::atomic<size_t> DestroyCalls{0};
     std::atomic<size_t> RollbackStatusCalls{0};
     std::atomic<size_t> RollbackCalls{0};
-    bool SkipBscValidation = false;
-    Ydb::Bridge::GetRollbackStatusResult RollbackStatus;
+    std::atomic<bool> SkipBscValidation{false};
+    Ydb::Bridge::GetRollbackStatusResult RollbackStatus; // set before the CLI runs
 
     grpc::Status SetDatabaseBridgeMode(grpc::ServerContext* context,
                                        const Ydb::Bridge::SetDatabaseBridgeModeRequest* request,
@@ -254,11 +254,14 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
                              {{"YDB_TOKEN", "bridge-admin-token"}});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().RollbackCalls.load(), 1);
         UNIT_ASSERT_STRING_CONTAINS(output, "Rollback started");
+    }
+
+    Y_UNIT_TEST_F(RollbackSkipsBscValidation, TBridgeCliFixture) {
         Service<TBridgeService>().SkipBscValidation = true;
         RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "-y", "admin", "cluster", "bridge", "rollback",
                 "--skip-bsc-validation"},
                {{"YDB_TOKEN", "bridge-admin-token"}});
-        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().RollbackCalls.load(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().RollbackCalls.load(), 1);
     }
 
     Y_UNIT_TEST_F(RollbackStatusListsNodesWithBridgeConfig, TBridgeCliFixture) {
@@ -274,6 +277,20 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_STRING_CONTAINS(output, "Static nodes that have not reported their config (not running or not "
             "connected): 7");
         UNIT_ASSERT(!output.Contains("ordinary mode"));
+    }
+
+    Y_UNIT_TEST_F(RollbackStatusKeepsNodesWhileBridged, TBridgeCliFixture) {
+        // nodes restarted without bridge config can't serve the cluster that is still bridged one
+        auto& status = Service<TBridgeService>().RollbackStatus;
+        status.set_bridged(true);
+        status.set_rollback_in_progress(true);
+        status.add_bridge_config_node_ids(3);
+        const auto output = RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "admin", "cluster", "bridge",
+                                    "rollback-status"},
+                                   {{"YDB_TOKEN", "bridge-admin-token"}});
+        UNIT_ASSERT_STRING_CONTAINS(output, "storage groups are being made ordinary ones");
+        UNIT_ASSERT_STRING_CONTAINS(output, "keep them running until storage groups are ordinary ones): 3");
+        UNIT_ASSERT(!output.Contains("restart them"));
     }
 
     Y_UNIT_TEST_F(RollbackStatusReportsCompletion, TBridgeCliFixture) {

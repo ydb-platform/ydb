@@ -31,17 +31,6 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_REGISTER_NODE; }
 
-    static TNodeLocation WithBridgePileName(const TNodeLocation& location, const std::optional<TString>& pileName) {
-        NActorsInterconnect::TNodeLocation proto;
-        location.Serialize(&proto, false);
-        if (pileName) {
-            proto.SetBridgePileName(*pileName);
-        } else {
-            proto.ClearBridgePileName();
-        }
-        return TNodeLocation(proto);
-    }
-
     bool Error(TStatus::ECode code,
                const TString &reason,
                const TActorContext &ctx)
@@ -99,6 +88,10 @@ public:
 
         TNodeLocation loc(rec.GetLocation());
         const bool bridgeMode = AppData()->BridgeModeEnabled;
+        auto pileWithoutBridgeMode = [&] {
+            return Error(TStatus::WRONG_REQUEST, TStringBuilder() << "Bridge pile specified while bridge mode is"
+                " disabled for " << host << ':' << port, ctx);
+        };
 
         Response = new TEvNodeBroker::TEvRegistrationResponse;
 
@@ -135,8 +128,7 @@ public:
 
             if (!bridgeMode && loc.GetBridgePileName()) {
                 if (node.Location.GetBridgePileName() && node.Location.GetBridgePileName() != loc.GetBridgePileName()) {
-                    return Error(TStatus::WRONG_REQUEST, TStringBuilder() << "Bridge pile specified while bridge mode is"
-                        " disabled for " << host << ':' << port, ctx);
+                    return pileWithoutBridgeMode();
                 }
                 // the node still runs with the bridge config the cluster was prepared for bridge mode with, and it is
                 // being restarted without one; piles are not used without bridge mode, so the node loses its pile; it
@@ -145,13 +137,14 @@ public:
                 loc = WithBridgePileName(loc, std::nullopt);
             }
 
-            // node of the implicit pile may get the name of its pile, or lose it, the pile of the node stays the same
-            // then; without bridge mode, the node loses the pile it had while the cluster was prepared for bridge mode
+            // without bridge mode, the node loses the pile it had while the cluster was prepared for bridge mode; node
+            // of the implicit pile may get the name of its pile, or lose it, the pile of the node stays the same then
             TNodeLocation expected = node.Location;
-            if (!expected.GetBridgePileName() && ImplicitPileName && loc.GetBridgePileName() == ImplicitPileName) {
+            if (!bridgeMode) {
+                expected = WithBridgePileName(expected, std::nullopt);
+            } else if (ImplicitPileName && !expected.GetBridgePileName() && loc.GetBridgePileName() == ImplicitPileName) {
                 expected = WithBridgePileName(expected, ImplicitPileName);
-            } else if (expected.GetBridgePileName() && !loc.GetBridgePileName() &&
-                    (!bridgeMode || (ImplicitPileName && expected.GetBridgePileName() == ImplicitPileName))) {
+            } else if (ImplicitPileName && expected.GetBridgePileName() == ImplicitPileName && !loc.GetBridgePileName()) {
                 expected = WithBridgePileName(expected, std::nullopt);
             }
 
@@ -202,8 +195,7 @@ public:
             }
         } else {
             if (!bridgeMode && loc.GetBridgePileName()) {
-                return Error(TStatus::WRONG_REQUEST, TStringBuilder() << "Bridge pile specified while bridge mode is"
-                    " disabled for " << host << ':' << port, ctx);
+                return pileWithoutBridgeMode();
             }
 
             if (Self->Dirty.FreeIds.Empty())

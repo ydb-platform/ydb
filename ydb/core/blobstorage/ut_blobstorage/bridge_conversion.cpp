@@ -486,10 +486,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         };
         auto resend = [&](std::vector<std::unique_ptr<IEventHandle>>& held) {
             for (auto& ev : std::exchange(held, {})) {
-                env.Runtime->Send(ev->HasEvent()
-                    ? new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie)
-                    : new IEventHandle(ev->Type, ev->Flags, ev->Recipient, ev->Sender, ev->ReleaseChainBuffer(),
-                        ev->Cookie), nodeId);
+                ResendEvent(env, nodeId, std::move(ev));
             }
         };
 

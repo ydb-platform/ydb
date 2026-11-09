@@ -1449,7 +1449,7 @@ struct TBridgeNodeBrokerSetup {
         }
         BridgeInfo->ImplicitPile = &BridgeInfo->Piles.front();
         BridgeInfo->IsImplicit = pileNames.size() == 1;
-        Runtime.GetAppData(0).BridgeModeEnabled = true;
+        SetBridgeMode(true);
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvNodeWardenQueryStorageConfig::EventType &&
                     !ev->Get<TEvNodeWardenQueryStorageConfig>()->Subscribe) {
@@ -1459,6 +1459,11 @@ struct TBridgeNodeBrokerSetup {
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+    }
+
+    // NodeBroker runs with bridge config, or without one
+    void SetBridgeMode(bool enabled) {
+        Runtime.GetAppData(0).BridgeModeEnabled = enabled;
     }
 
     NKikimrNodeBroker::TRegistrationResponse Register(const TString& host, const std::optional<TString>& pileName) {
@@ -3098,7 +3103,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         bridge.CheckRegistration("host3", std::nullopt, std::nullopt);
 
         // NodeBroker runs without bridge config now
-        runtime.GetAppData(0).BridgeModeEnabled = false;
+        bridge.SetBridgeMode(false);
 
         // the node still running with bridge config keeps reporting its pile name, which NodeBroker drops; the node
         // restarted without one doesn't report it
@@ -3131,9 +3136,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         const ui32 node2 = bridge.CheckRegistration("host2", std::nullopt, std::nullopt);
         UNIT_ASSERT_VALUES_EQUAL(bridge.ResolvePileName(node1).value_or("<none>"), "pile_1");
 
-        runtime.GetAppData(0).BridgeModeEnabled = false;
+        bridge.SetBridgeMode(false);
         RestartNodeBroker(runtime);
-        UNIT_ASSERT_C(!bridge.ResolvePileName(node1), *bridge.ResolvePileName(node1));
+        const auto pileName = bridge.ResolvePileName(node1);
+        UNIT_ASSERT_C(!pileName, *pileName);
         UNIT_ASSERT(!bridge.ResolvePileName(node2));
 
         // the next restart finds nothing to drop

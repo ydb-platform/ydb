@@ -508,23 +508,23 @@ private:
     }
 };
 
-class TConvertToBridgeRequest : public TBridgeRequestGrpc<TConvertToBridgeRequest, TEvConvertToBridgeRequest,
-    Ydb::Bridge::ConvertToBridgeResult> {
-    using TBase = TBridgeRequestGrpc<TConvertToBridgeRequest, TEvConvertToBridgeRequest, Ydb::Bridge::ConvertToBridgeResult>;
+// request of the operation distconf performs on the root node, checking all its preconditions; it is answered when
+// distconf has done it
+template<typename TDerived, typename TEvRequest, typename TResultRecord>
+class TInvokeOnRootRequest : public TBridgeRequestGrpc<TDerived, TEvRequest, TResultRecord> {
+    using TBase = TBridgeRequestGrpc<TDerived, TEvRequest, TResultRecord>;
 
 public:
     using TBase::TBase;
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        return CheckAdministrator(status, issues);
+        return this->CheckAdministrator(status, issues);
     }
 
     void SendRequest(const TActorContext& ctx) {
-        // all the preconditions are checked by distconf on the root node
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableConvertToBridge()->SetSkipStoragePoolConversion(
-            GetProtoRequest()->skip_storage_pool_conversion());
-        ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+        static_cast<TDerived*>(this)->FillCommand(request->Record);
+        ctx.Send(MakeBlobStorageNodeWardenID(this->SelfId().NodeId()), request.release());
     }
 
     STFUNC(StateFunc) {
@@ -540,10 +540,20 @@ private:
 
         const auto& record = ev->Get()->Record;
         if (record.GetStatus() == TResult::OK) {
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Bridge::ConvertToBridgeResult(), ActorContext());
+            this->ReplyWithResult(Ydb::StatusIds::SUCCESS, TResultRecord(), this->ActorContext());
         } else {
-            ReplyWithInvokeError(record);
+            this->ReplyWithInvokeError(record);
         }
+    }
+};
+
+class TConvertToBridgeRequest : public TInvokeOnRootRequest<TConvertToBridgeRequest, TEvConvertToBridgeRequest,
+    Ydb::Bridge::ConvertToBridgeResult> {
+public:
+    using TInvokeOnRootRequest::TInvokeOnRootRequest;
+
+    void FillCommand(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot& record) {
+        record.MutableConvertToBridge()->SetSkipStoragePoolConversion(GetProtoRequest()->skip_storage_pool_conversion());
     }
 };
 
@@ -606,39 +616,12 @@ private:
 
 // rollback of the bridged cluster: distconf checks it, makes static groups ordinary ones and lets BSC do the same; the
 // request is answered then, the rest is reported by the rollback status
-class TRollbackRequest : public TBridgeRequestGrpc<TRollbackRequest, TEvRollbackRequest, Ydb::Bridge::RollbackResult> {
-    using TBase = TBridgeRequestGrpc<TRollbackRequest, TEvRollbackRequest, Ydb::Bridge::RollbackResult>;
-
+class TRollbackRequest : public TInvokeOnRootRequest<TRollbackRequest, TEvRollbackRequest, Ydb::Bridge::RollbackResult> {
 public:
-    using TBase::TBase;
+    using TInvokeOnRootRequest::TInvokeOnRootRequest;
 
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        return CheckAdministrator(status, issues);
-    }
-
-    void SendRequest(const TActorContext& ctx) {
-        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableRollbackBridge()->SetSkipBscValidation(GetProtoRequest()->skip_bsc_validation());
-        ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
-    }
-
-    STFUNC(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
-            default: return TBase::StateFuncBase(ev); // operation timeout and client cancellation
-        }
-    }
-
-private:
-    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
-        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
-
-        const auto& record = ev->Get()->Record;
-        if (record.GetStatus() == TResult::OK) {
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Bridge::RollbackResult(), ActorContext());
-        } else {
-            ReplyWithInvokeError(record);
-        }
+    void FillCommand(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot& record) {
+        record.MutableRollbackBridge()->SetSkipBscValidation(GetProtoRequest()->skip_bsc_validation());
     }
 };
 

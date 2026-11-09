@@ -973,7 +973,8 @@ namespace NKikimr::NStorage {
     void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState);
 
     // Pile registry of the bridged cluster: the one persisted in the config, or the one implied by node's BridgeConfig
-    // when there is none persisted; nullopt when the node is not bridge-capable (has no BridgeConfig).
+    // when there is none persisted (only the original pile of it when the cluster has been rolled back, see
+    // TBridgeRollbackRecord.PileName); nullopt when the node is not bridge-capable (has no BridgeConfig).
     std::optional<NKikimrBridge::TPileRegistry> GetPileRegistry(const NKikimrBlobStorage::TStorageConfig& config,
         const NKikimrConfig::TBridgeConfig *bridgeConfig);
 

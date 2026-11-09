@@ -2,6 +2,7 @@
 #include "config.h"
 
 #include <ydb/core/util/format.h>
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/blobstorage/base/utility.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
@@ -282,6 +283,7 @@ class TBlobStorageController::TTxConvertToBridge : public TTransactionBase<TBlob
     std::optional<TConfigState> State;
     bool Finished = false;
     bool Failed = false;
+    ui64 ConversionId = 0; // the one distconf has started, so that it can tell late notification of another one
 
 public:
     TTxConvertToBridge(TBlobStorageController *controller)
@@ -292,6 +294,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
+        ConversionId = Self->StorageConfig->GetClusterStateDetails().GetBscConversionId();
 
         // new groups are created bridged from now on
         auto needsBridgeMode = [](const TStoragePoolInfo& pool) { return !pool.BridgeMode && !pool.DDisk; };
@@ -341,7 +344,7 @@ public:
         }
 
         NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot request;
-        request.MutableNotifyBscConversionFinished();
+        request.MutableNotifyBscConversionFinished()->SetBscConversionId(ConversionId);
         Self->InvokeOnRoot(std::move(request), [self = Self](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
             const bool failed = result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK;
             if (failed) {
@@ -574,21 +577,26 @@ size_t TBlobStorageController::RollbackBridgedGroups(TConfigState& state, TBridg
         throw TExError() << "the cluster has to have the only pile to be rolled back";
     }
 
-    // the pools get the settings the pile has for them, so that their groups keep matching them
-    for (auto& [id, pool] : state.StoragePools.Unshare()) {
-        if (!pool.BridgeMode) {
-            continue;
-        }
-        const auto effective = ResolveStoragePoolForPile(id, pool, pileId, BridgeInfo.get(), StorageConfig.get());
-        pool.ErasureSpecies = effective.ErasureSpecies;
-        pool.SetGroupGeometry(effective.GetGroupGeometry());
-        pool.PDiskFilters = effective.PDiskFilters;
-        pool.BridgeMode = false;
-        pool.Generation = pool.Generation.GetOrElse(0) + 1;
+    // groups of the ordinary cluster follow the settings of their pools only, and Console keeps the base settings of the
+    // pools it defines, so the groups allocated with other settings for the pile can't stay as they are
+    const auto *bridgePile = BridgeInfo->FindPile(pileId);
+    if (!bridgePile) {
+        throw TExError() << "the pile is not known";
+    } else if (StorageConfig && HasStoragePoolPileOverrides(StorageConfig->GetBlobStorageConfig(), bridgePile->Name)) {
+        throw TExError() << "storage pool pile overrides for the pile '" << bridgePile->Name << "' have to be removed"
+            " first";
     }
 
-    // every bridged group has to be the inline pile in the pile, holding all the data of the group
-    size_t numGroups = 0;
+    // the pools keep their settings
+    for (auto& [id, pool] : state.StoragePools.Unshare()) {
+        if (pool.BridgeMode) {
+            pool.BridgeMode = false;
+            pool.Generation = pool.Generation.GetOrElse(0) + 1;
+        }
+    }
+
+    // every bridged group has to be the inline pile in the pile, holding all the data of the group (the same rules as
+    // distconf has for static groups, see MakeStaticGroupsOrdinary)
     TStringBuilder unsupported;
     std::vector<TGroupId> groupIds;
     state.Groups.ForEach([&](TGroupId groupId, const TGroupInfo& group) {
@@ -638,9 +646,9 @@ size_t TBlobStorageController::RollbackBridgedGroups(TConfigState& state, TBridg
         group->BridgePileId = {};
         group->BridgeProxyGroupId.reset();
         state.GroupContentChanged.insert(groupId);
-        ++numGroups;
     }
-    return numGroups;
+    state.CheckConsistency();
+    return groupIds.size();
 }
 
 ITransaction* TBlobStorageController::CreateTxValidateAddBridgePile(TBridgePileId pileId,
@@ -753,6 +761,10 @@ TBridgePileId TBlobStorageController::GetPendingOperationPileId() const {
 bool TBlobStorageController::IsBridgePileBeingRemoved(TBridgePileId pileId) const {
     return pileId && GetPendingOperationPileId() == pileId && StorageConfig->GetClusterStateDetails()
         .GetPendingPileOperation().GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::REMOVE;
+}
+
+bool TBlobStorageController::IsBeingRolledBack() const {
+    return StorageConfig && NBridge::IsRollbackPending(StorageConfig->GetClusterStateDetails());
 }
 
 bool TBlobStorageController::IsBridgePileAwaitingParts(TBridgePileId pileId) const {

@@ -175,6 +175,12 @@ namespace NKikimr::NStorage {
             BRIDGE_ROLLBACK, // BSC validates the rollback of the bridged cluster, then ProposedStorageConfig gets proposed
         } ControllerOp = EControllerOp::UNSET;
 
+        // for the operations BSC validates before ProposedStorageConfig gets proposed: the interface version BSC needs,
+        // the validation request, and what is being done (for the error message)
+        using TBridgePileControllerOp = std::tuple<ui32, NKikimrBlobStorage::TEvControllerDistconfRequest::EOperation,
+            const char*>;
+        std::optional<TBridgePileControllerOp> GetBridgePileControllerOp() const;
+
         void FetchStorageConfig(const TQuery::TFetchStorageConfig& request);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
         void HandleWakeup();

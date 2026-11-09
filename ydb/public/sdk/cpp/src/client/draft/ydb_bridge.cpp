@@ -175,14 +175,14 @@ public:
                 if (any) {
                     Ydb::Bridge::GetRollbackStatusResult result;
                     if (any->UnpackTo(&result)) {
-                        rollbackInProgress = result.rollback_in_progress();
-                        errorReason = result.error_reason();
                         bridged = result.bridged();
                         bridgeConfigNodeIds.assign(result.bridge_config_node_ids().begin(),
                             result.bridge_config_node_ids().end());
                         unreportedStaticNodeIds.assign(result.unreported_static_node_ids().begin(),
                             result.unreported_static_node_ids().end());
                         complete = result.complete();
+                        rollbackInProgress = result.rollback_in_progress();
+                        errorReason = result.error_reason();
                     }
                 }
                 promise.SetValue(TGetRollbackStatusResult(TStatus(std::move(status)), bridged,

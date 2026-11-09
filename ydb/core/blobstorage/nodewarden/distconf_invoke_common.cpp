@@ -235,9 +235,6 @@ namespace NKikimr::NStorage {
                     case TQuery::kRemoveBridgePile:
                         return RemoveBridgePile(op.Command.GetRemoveBridgePile());
 
-                    case TQuery::kQueryBridgeRollbackStatus:
-                        Y_ABORT("QueryBridgeRollbackStatus must be handled directly by the keeper");
-
                     case TQuery::kRollbackBridge:
                         return RollbackBridge(op.Command.GetRollbackBridge());
 
@@ -252,6 +249,9 @@ namespace NKikimr::NStorage {
 
                     case TQuery::kValidateTargetedProposition:
                         Y_ABORT("ValidateTargetedProposition must be handled directly by the keeper");
+
+                    case TQuery::kQueryBridgeRollbackStatus:
+                        Y_ABORT("QueryBridgeRollbackStatus must be handled directly by the keeper");
                 }
 
                 throw TExError() << "Unhandled request";
@@ -988,8 +988,7 @@ namespace NKikimr::NStorage {
             auto *status = record.MutableBridgeRollbackStatus();
             status->SetHasClusterState(StorageConfig->HasClusterState());
             const auto& details = StorageConfig->GetClusterStateDetails();
-            if (const auto& op = details.GetPendingPileOperation(); details.HasPendingPileOperation() &&
-                    op.GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ROLLBACK) {
+            if (const auto& op = details.GetPendingPileOperation(); NBridge::IsRollbackPending(details)) {
                 status->SetRollbackInProgress(true);
                 if (op.HasErrorReason()) {
                     status->SetErrorReason(op.GetErrorReason());

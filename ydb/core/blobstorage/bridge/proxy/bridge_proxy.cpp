@@ -1358,6 +1358,10 @@ namespace NKikimr {
 
                     if (common->RestartCounter >= 100) {
                         ReplyWithError(*handle, "too many restarts of the request racing with group configuration");
+                    } else if (Passthrough) {
+                        // the group is an ordinary one now (our bridged info is not updated anymore), the inner proxy
+                        // has its new info and serves the restarted request
+                        TActivationContext::Send(IEventHandle::Forward(std::move(handle), InnerProxyId).release());
                     } else if (myGeneration < msg->RacingGeneration) {
                         QueuePending(PendingForNextGeneration, std::move(handle), request->RoutingBudget);
                     } else if (msg->RacingGeneration < myGeneration) {

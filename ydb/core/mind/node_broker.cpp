@@ -1173,14 +1173,11 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadState(TTransactionContex
                 if (!node.Location.GetBridgePileName()) {
                     continue;
                 }
-                NActorsInterconnect::TNodeLocation proto;
-                node.Location.Serialize(&proto, false);
-                proto.ClearBridgePileName();
                 YDB_LOG_NOTICE_CTX(ctx, "TNodeBroker::DbLoadState: dropping pile name of the node without bridge mode",
                     {"dbLogPrefix", DbLogPrefix()},
                     {"nodeId", id},
                     {"location", node.Location});
-                node.Location = TNodeLocation(proto);
+                node.Location = WithBridgePileName(node.Location, std::nullopt);
                 node.Version = Epoch.Version + 1;
                 if (updated.insert(id).second) {
                     dbChanges.NewVersionUpdateNodes.push_back(id);
@@ -1938,6 +1935,17 @@ TStringBuf TNodeBroker::TDirtyState::LogPrefix() const {
 
 TStringBuf TNodeBroker::TDirtyState::DbLogPrefix() const {
     return "[DB]";
+}
+
+TNodeLocation TNodeBroker::WithBridgePileName(const TNodeLocation& location, const std::optional<TString>& pileName) {
+    NActorsInterconnect::TNodeLocation proto;
+    location.Serialize(&proto, false);
+    if (pileName) {
+        proto.SetBridgePileName(*pileName);
+    } else {
+        proto.ClearBridgePileName();
+    }
+    return TNodeLocation(proto);
 }
 
 TNodeBroker::TNodeInfo::TNodeInfo(ui32 nodeId, ENodeState state, ui64 version, const TNodeInfoSchema& schema)

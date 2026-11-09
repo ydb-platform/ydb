@@ -375,6 +375,7 @@ message TEvNodeConfigInvokeOnRoot {
     // Sent by BSC when it has converted all of its groups into bridged ones (and no groups remain that can't be
     // converted yet); clears ClusterStateDetails.BscConversionPending flag.
     message TNotifyBscConversionFinished {
+        uint64 BscConversionId = 1; // TClusterStateDetails.BscConversionId of the conversion BSC has performed
     }
 
     // Add INACTIVE pile to the cluster: allocate its parts of static groups and state storage, make it DISCONNECTED,

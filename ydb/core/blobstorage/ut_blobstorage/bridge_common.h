@@ -32,9 +32,9 @@ namespace NBridgeTest {
     }
 
     // settings of the cluster to be converted into bridged one
-    inline TEnvironmentSetup::TSettings MakeUnbridgedSettings(bool setupHive = false) {
+    inline TEnvironmentSetup::TSettings MakeUnbridgedSettings(bool setupHive = false, ui32 nodeCount = 9) {
         return {
-            .NodeCount = 9, // one spare node to make disk reassignment possible
+            .NodeCount = nodeCount, // 9 is one spare node to make disk reassignment possible
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .LocationGenerator = GetUnbridgedLocation,
             .SetupHive = setupHive,
@@ -46,14 +46,19 @@ namespace NBridgeTest {
     // the same with one more node than a group has VDisks, so that a node other than the controller one has no VDisks of
     // a group
     inline TEnvironmentSetup::TSettings MakeUnbridgedSettingsWithSpareNode(bool setupHive = false) {
-        return {
-            .NodeCount = 10,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetUnbridgedLocation,
-            .SetupHive = setupHive,
-            .SelfManagementConfig = true,
-            .AutomaticBootstrap = true,
-        };
+        return MakeUnbridgedSettings(setupHive, 10);
+    }
+
+    // send the event the filter function of the test runtime has held anew: runtime resolves service id of the recipient
+    // at send, and the actor it was resolved to may be gone already
+    inline void ResendEvent(TEnvironmentSetup& env, ui32 nodeId, std::unique_ptr<IEventHandle> ev) {
+        const TActorId forwardOnNondelivery = ev->GetForwardOnNondeliveryRecipient();
+        const TActorId *forward = forwardOnNondelivery ? &forwardOnNondelivery : nullptr;
+        env.Runtime->Send(ev->HasEvent()
+            ? new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie, forward)
+            // events coming from other nodes are kept serialized, and some local ones have no event object
+            : new IEventHandle(ev->Type, ev->Flags, ev->Recipient, ev->Sender, ev->ReleaseChainBuffer(), ev->Cookie,
+                forward), nodeId);
     }
 
     // check that the read result contains exactly one blob with the expected data

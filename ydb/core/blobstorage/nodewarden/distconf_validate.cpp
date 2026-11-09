@@ -206,11 +206,9 @@ namespace NKikimr::NStorage {
             }
         }
         const auto& currentDetails = current.GetClusterStateDetails();
-        const bool rollingBack = currentDetails.HasPendingPileOperation() &&
-            currentDetails.GetPendingPileOperation().GetKind() ==
-                NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ROLLBACK;
+        const bool clusterStateRemoved = NBridge::IsRollbackPending(currentDetails) && !proposed.HasClusterState();
         if (currentDetails.GetNonUniformStorageEnabled() && !proposed.GetClusterStateDetails().GetNonUniformStorageEnabled()
-                && !(rollingBack && !proposed.HasClusterState())) {
+                && !clusterStateRemoved) {
             // it goes away only along with the cluster state, when the bridged cluster is rolled back
             return "non-uniform storage activation can't be disabled";
         }

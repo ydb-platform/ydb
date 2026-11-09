@@ -117,15 +117,7 @@ namespace {
         void Release() {
             Hold = false;
             for (auto& [nodeId, ev] : std::exchange(Held, {})) {
-                // runtime resolves service id of the recipient at send, and the actor it was resolved to may be gone
-                // already, so the event is sent anew
-                const TActorId forwardOnNondelivery = ev->GetForwardOnNondeliveryRecipient();
-                const TActorId *forward = forwardOnNondelivery ? &forwardOnNondelivery : nullptr;
-                Env.Runtime->Send(ev->HasEvent()
-                    ? new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie, forward)
-                    // events coming from other nodes are kept serialized
-                    : new IEventHandle(ev->Type, ev->Flags, ev->Recipient, ev->Sender, ev->ReleaseChainBuffer(), ev->Cookie,
-                        forward), nodeId);
+                ResendEvent(Env, nodeId, std::move(ev));
             }
         }
     };

@@ -95,17 +95,32 @@ class BridgeRollbackBase(object):
         assert_that(self.kv_works(table_path, tablet_ids, "initial"))
         return tablet_ids
 
-    def add_bridge_config(self, table_path, tablet_ids, key):
+    def prepare_for_bridge_mode(self, table_path, tablet_ids, key, name_hosts=False):
+        """Single-pile bridge config, every node restarted with it; hosts get the name of the pile when asked."""
         def change(cfg):
             cfg["bridge_config"] = {"piles": [{"name": PILE_NAME}]}
+            if name_hosts:
+                for host in cfg["hosts"]:
+                    host.setdefault("location", {})["bridge_pile_name"] = PILE_NAME
         self.replace_config(change)
         for node_id in sorted(self.cluster.nodes.keys()):
             self.restart_node(node_id, table_path, tablet_ids, "%s%d" % (key, node_id))
 
     def drop_bridge_config(self):
+        """The bridge config goes away along with the pile names of hosts, as they are refused without it."""
         def change(cfg):
             del cfg["bridge_config"]
+            for host in cfg["hosts"]:
+                host.get("location", {}).pop("bridge_pile_name", None)
         self.replace_config(change)
+
+    def restart_without_bridge_config(self, static_node_ids, table_path, tablet_ids, key):
+        """Restart nodes one by one, the rollback status lists the ones left running with the bridge config."""
+        remaining = set(static_node_ids)
+        for node_id in sorted(self.cluster.nodes.keys()):
+            self.restart_node(node_id, table_path, tablet_ids, "%s%d" % (key, node_id))
+            remaining.discard(self.cluster.nodes[node_id].node_id)
+            self.wait_rollback_status(remaining, complete=not remaining)
 
 
 class TestBridgeRollback(BridgeRollbackBase):
@@ -115,37 +130,19 @@ class TestBridgeRollback(BridgeRollbackBase):
 
     def test_rollback_of_prepared_cluster(self):
         table_path = '/Root/mydb/bridge_rollback'
-        tablet_ids = create_kv_tablets_and_wait_for_start(
-            self.cluster.client,
-            self.cluster.kv_client,
-            self.swagger_client,
-            5,
-            table_path,
-            timeout_seconds=3
-        )
-        assert_that(self.kv_works(table_path, tablet_ids, "initial"))
+        tablet_ids = self.create_kv_tablets(table_path)
         static_node_ids = {node.node_id for node in self.cluster.nodes.values()}
 
         # ordinary cluster is the one the rollback ends with
         self.wait_rollback_status([], complete=True)
 
-        # prepare the cluster for bridge mode: single-pile bridge config, every node restarted with it
-        def add_bridge_config(cfg):
-            cfg["bridge_config"] = {"piles": [{"name": PILE_NAME}]}
-        self.replace_config(add_bridge_config)
-        for node_id in sorted(self.cluster.nodes.keys()):
-            self.restart_node(node_id, table_path, tablet_ids, "prepare%d" % node_id)
+        # prepare the cluster for bridge mode
+        self.prepare_for_bridge_mode(table_path, tablet_ids, "prepare")
         self.wait_rollback_status(static_node_ids, complete=False)
 
-        # roll back: drop the bridge config and restart nodes one by one; the status lists the ones left
-        def drop_bridge_config(cfg):
-            del cfg["bridge_config"]
-        self.replace_config(drop_bridge_config)
-        remaining = set(static_node_ids)
-        for node_id in sorted(self.cluster.nodes.keys()):
-            self.restart_node(node_id, table_path, tablet_ids, "rollback%d" % node_id)
-            remaining.discard(self.cluster.nodes[node_id].node_id)
-            self.wait_rollback_status(remaining, complete=not remaining)
+        # roll back: drop the bridge config and restart nodes one by one
+        self.drop_bridge_config()
+        self.restart_without_bridge_config(static_node_ids, table_path, tablet_ids, "rollback")
 
         # data written all the way is still there, and the cluster keeps working in ordinary mode
         assert_that(self.kv_readable(table_path, tablet_ids, "initial"))
@@ -179,7 +176,7 @@ class TestBridgeConvertedRollback(BridgeRollbackBase):
         static_node_ids = {node.node_id for node in self.cluster.nodes.values()}
 
         # convert the cluster into a single-pile bridged one
-        self.add_bridge_config(table_path, tablet_ids, "prepare")
+        self.prepare_for_bridge_mode(table_path, tablet_ids, "prepare")
 
         def converted():
             # the node restarted last may not have reported its bridge config yet
@@ -202,11 +199,7 @@ class TestBridgeConvertedRollback(BridgeRollbackBase):
 
         # the rest of the rollback is the one of the prepared cluster
         self.drop_bridge_config()
-        remaining = set(static_node_ids)
-        for node_id in sorted(self.cluster.nodes.keys()):
-            self.restart_node(node_id, table_path, tablet_ids, "rollback%d" % node_id)
-            remaining.discard(self.cluster.nodes[node_id].node_id)
-            self.wait_rollback_status(remaining, complete=not remaining)
+        self.restart_without_bridge_config(static_node_ids, table_path, tablet_ids, "rollback")
         for key in ["initial", "converted", "rolled_back"]:
             assert_that(self.kv_readable(table_path, tablet_ids, key))
         assert_that(self.kv_works(table_path, tablet_ids, "after"))
@@ -239,13 +232,7 @@ class TestBridgeNamedNodesRollback(BridgeRollbackBase):
         slot = slots[0]
 
         # prepare the cluster with named static nodes
-        def add_bridge_config(cfg):
-            cfg["bridge_config"] = {"piles": [{"name": PILE_NAME}]}
-            for host in cfg["hosts"]:
-                host.setdefault("location", {})["bridge_pile_name"] = PILE_NAME
-        self.replace_config(add_bridge_config)
-        for node_id in sorted(self.cluster.nodes.keys()):
-            self.restart_node(node_id, table_path, tablet_ids, "prepare%d" % node_id)
+        self.prepare_for_bridge_mode(table_path, tablet_ids, "prepare", name_hosts=True)
         self.wait_rollback_status(static_node_ids, complete=False)
 
         def status_through_dynamic_node_lists(node_ids):
@@ -262,16 +249,8 @@ class TestBridgeNamedNodesRollback(BridgeRollbackBase):
         assert_that(any("pile name can't be specified" in issue.message for issue in operation.issues), str(operation))
 
         # both go away in one change
-        def drop_bridge_config_and_pile_names(cfg):
-            del cfg["bridge_config"]
-            for host in cfg["hosts"]:
-                host.get("location", {}).pop("bridge_pile_name", None)
-        self.replace_config(drop_bridge_config_and_pile_names)
-        remaining = set(static_node_ids)
-        for node_id in sorted(self.cluster.nodes.keys()):
-            self.restart_node(node_id, table_path, tablet_ids, "rollback%d" % node_id)
-            remaining.discard(self.cluster.nodes[node_id].node_id)
-            self.wait_rollback_status(remaining, complete=not remaining)
+        self.drop_bridge_config()
+        self.restart_without_bridge_config(static_node_ids, table_path, tablet_ids, "rollback")
         assert_that(wait_for(lambda: status_through_dynamic_node_lists([]), timeout_seconds=60))
         assert_that(self.query_status_through(slot, database).complete)
         for key in ["initial"] + ["prepare%d" % node_id for node_id in self.cluster.nodes.keys()]:

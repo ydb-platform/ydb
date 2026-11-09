@@ -1,5 +1,7 @@
 #include "distconf_invoke.h"
 
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
+
 #include <ydb/core/protos/bridge.pb.h>
 
 namespace NKikimr::NStorage {
@@ -354,10 +356,7 @@ namespace NKikimr::NStorage {
         using TOperation = NKikimrBridge::TClusterStateDetails::TPendingPileOperation;
         if (!Self->SelfManagementEnabled) {
             throw TExError() << "Self-management must be enabled to roll the bridged cluster back";
-        } else if (!config.HasClusterState()) {
-            throw TExError() << "Cluster is not a bridged one";
-        } else if (details.HasPendingPileOperation() && details.GetPendingPileOperation().GetKind() ==
-                TOperation::ROLLBACK) {
+        } else if (NBridge::IsRollbackPending(details)) {
             return Finish(TResult::OK, std::nullopt); // being rolled back already, see the rollback status
         } else if (details.HasPendingPileOperation()) {
             throw TExError() << "Operation on pile is in progress";
@@ -383,6 +382,12 @@ namespace NKikimr::NStorage {
         if (NBridge::GetPileState(clusterState, pileId) != NKikimrBridge::TClusterState::SYNCHRONIZED ||
                 TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPrimaryPile) != pileId) {
             throw TExError() << "The original pile has to be the SYNCHRONIZED primary one";
+        } else if (const auto& name = registry->GetPiles(pileId.GetPileIndex()).GetName();
+                HasStoragePoolPileOverrides(config.GetBlobStorageConfig(), name)) {
+            // the groups of the ordinary cluster follow the settings of their pools only, while Console keeps the base
+            // settings of its pools, and static groups follow the self-management config
+            throw TExError() << "Storage pool pile overrides for the original pile '" << name << "' have to be removed"
+                " from the configuration first";
         }
 
         // static groups become ordinary ones right away, BSC does the same to its groups afterwards
@@ -392,6 +397,7 @@ namespace NKikimr::NStorage {
         }
         auto *mutableDetails = proposed.MutableClusterStateDetails();
         mutableDetails->ClearBscConversionPending(); // BSC makes its groups ordinary ones instead of converting them
+        mutableDetails->ClearBscConversionId();
         auto *op = mutableDetails->MutablePendingPileOperation();
         pileId.CopyToProto(op, &TOperation::SetBridgePileId);
         op->SetKind(TOperation::ROLLBACK);
@@ -493,15 +499,21 @@ namespace NKikimr::NStorage {
         });
     }
 
-    void TInvokeRequestHandlerActor::NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& /*cmd*/) {
+    void TInvokeRequestHandlerActor::NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd) {
         RunCommonChecks();
 
-        if (!Self->StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {
+        const auto& details = Self->StorageConfig->GetClusterStateDetails();
+        if (!details.GetBscConversionPending()) {
             return Finish(TResult::OK, std::nullopt); // already cleared
+        } else if (cmd.GetBscConversionId() && cmd.GetBscConversionId() != details.GetBscConversionId()) {
+            // late notification of the conversion the cluster has been rolled back from; BSC performs the current one
+            // afterwards (older versions of BSC don't report the conversion they have performed)
+            return Finish(TResult::OK, std::nullopt);
         }
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         config.MutableClusterStateDetails()->ClearBscConversionPending();
+        config.MutableClusterStateDetails()->ClearBscConversionId();
         StartProposition(&config);
     }
 

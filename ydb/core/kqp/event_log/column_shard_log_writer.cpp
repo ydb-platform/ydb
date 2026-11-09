@@ -3,13 +3,6 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
-#include <ydb/core/kqp/ut/olap/combinatory/variator.h>
-#include <ydb/core/kqp/ut/olap/helpers/get_value.h>
-#include <ydb/core/kqp/ut/olap/helpers/local.h>
-#include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
-#include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
-#include <ydb/core/kqp/ut/olap/helpers/writer.h>
-
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>

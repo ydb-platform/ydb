@@ -301,26 +301,6 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
     // ensure that barrier advances in correct direction
     Y_ABORT_UNLESS(collectGenStep >= storedGenStep);
 
-    // create list of blobs that must have Keep flag
-    TVector<TLogoBlobID> keep;
-    for (const auto &kv : RefCounts) {
-        const TLogoBlobID &id = kv.first;
-        const THelpers::TGenerationStep genStep = THelpers::GenerationStep(id);
-        if (storedGenStep < genStep && genStep <= collectGenStep) {
-            keep.push_back(id);
-        }
-    }
-
-    // A reader may still own a blob whose last index reference was removed.
-    // Protect it if this operation advances the barrier past the blob.
-    for (const auto& [id, count] : ReadBlobRefCounts) {
-        Y_ABORT_UNLESS(count);
-        const auto genStep = THelpers::GenerationStep(id);
-        if (!RefCounts.contains(id) && storedGenStep < genStep && genStep <= collectGenStep) {
-            keep.push_back(id);
-        }
-    }
-
     // create list of blobs that must have to DoNotKeep flag set; these blobs must have Keep flag written and reside in
     // Trash now
     TVector<TLogoBlobID> doNotKeep;
@@ -356,6 +336,26 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
         // No command was sent, so the stored barrier must remain unchanged.
         CollectOperation.Reset();
         return;
+    }
+
+    // create list of blobs that must have Keep flag
+    TVector<TLogoBlobID> keep;
+    for (const auto &kv : RefCounts) {
+        const TLogoBlobID &id = kv.first;
+        const THelpers::TGenerationStep genStep = THelpers::GenerationStep(id);
+        if (storedGenStep < genStep && genStep <= collectGenStep) {
+            keep.push_back(id);
+        }
+    }
+
+    // A reader may still own a blob whose last index reference was removed.
+    // Protect it if this operation advances the barrier past the blob.
+    for (const auto& [id, count] : ReadBlobRefCounts) {
+        Y_ABORT_UNLESS(count);
+        const auto genStep = THelpers::GenerationStep(id);
+        if (!RefCounts.contains(id) && storedGenStep < genStep && genStep <= collectGenStep) {
+            keep.push_back(id);
+        }
     }
 
     YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "StartCollectingIfPossible Flags",

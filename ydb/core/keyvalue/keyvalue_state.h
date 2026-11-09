@@ -872,6 +872,11 @@ public:
         return it != RefCounts.end() ? it->second : 0;
     }
 
+    ui64 GetReadBlobRefCount(const TLogoBlobID& id) const {
+        const auto it = ReadBlobRefCounts.find(id);
+        return it != ReadBlobRefCounts.end() ? it->second : 0;
+    }
+
     std::weak_ptr<TKeyValueStateLifetimeToken> GetLifetimeToken() const {
         return LifetimeToken;
     }

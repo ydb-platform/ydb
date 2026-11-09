@@ -3,11 +3,13 @@
 #include "keyvalue_flat_impl.h"
 #include "keyvalue_intermediate.h"
 #include "keyvalue_state.h"
+#include "ut/keyvalue_test_enums.h"
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
+#include <util/generic/serialized_enum.h>
 #include <ydb/core/base/blobstorage.h>
 #include <array>
 #include <bitset>
@@ -3701,8 +3703,6 @@ void ExpectContents(TTestContext& tc, const TDeque<TKeyValuePair>& expectedPairs
     }
 }
 
-enum class EOverwriteReader { Read, Range, NewRead, NewRange, Patch };
-
 void CheckOverwriteWhileReading(EOverwriteReader kind, bool fresh = false, bool failStorage = false) {
     TTestContext tc;
     TFinalizer finalizer(tc);
@@ -3849,11 +3849,9 @@ void CheckOverwriteWhileReading(EOverwriteReader kind, bool fresh = false, bool 
     CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, {replacement}, {}, tc);
 }
 
-Y_UNIT_TEST(ReadSurvivesOverwriteAndGC) { CheckOverwriteWhileReading(EOverwriteReader::Read); }
-Y_UNIT_TEST(ReadRangeSurvivesOverwriteAndGC) { CheckOverwriteWhileReading(EOverwriteReader::Range); }
-Y_UNIT_TEST(NewReadSurvivesOverwriteAndGC) { CheckOverwriteWhileReading(EOverwriteReader::NewRead); }
-Y_UNIT_TEST(NewReadRangeSurvivesOverwriteAndGC) { CheckOverwriteWhileReading(EOverwriteReader::NewRange); }
-Y_UNIT_TEST(PatchSurvivesOverwriteAndGC) { CheckOverwriteWhileReading(EOverwriteReader::Patch); }
+Y_UNIT_TEST(SurvivesOverwriteAndGC, EOverwriteReader) {
+    CheckOverwriteWhileReading(Arg<0>());
+}
 
 Y_UNIT_TEST(ReadSurvivesOverwriteAndGCAdvancingBarrier) {
     CheckOverwriteWhileReading(EOverwriteReader::Read, true);

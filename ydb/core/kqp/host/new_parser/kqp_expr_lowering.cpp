@@ -470,6 +470,15 @@ private:
         if (const auto issue = NormalizeName(Ctx.GetPosition(pos), spelling)) {
             Error(range, issue->GetMessage());
         }
+        if (spelling == "decimal") {
+            if (args.size() != 3 || !args[0]->IsCallable("String")
+                || !args[1]->IsCallable("Int32") || !args[2]->IsCallable("Int32")) {
+                Unsupported(range, "Decimal constructor without String, Int32, Int32 literals");
+            }
+            // Decimal's shared type annotator validates the value, precision
+            // and scale. Its arguments are atoms, not scalar literal callables.
+            return Call(pos, "Decimal", {args[0]->HeadPtr(), args[1]->HeadPtr(), args[2]->HeadPtr()});
+        }
         // SQL date/time constructors accept ISO text; YQL data callables
         // require the encoded integer. Use the same MiniKQL parser as SQL v1
         // rather than implementing a second calendar/interval parser.

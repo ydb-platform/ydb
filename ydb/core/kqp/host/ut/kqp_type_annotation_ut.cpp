@@ -246,6 +246,16 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_VALUES_EQUAL(f.Result->Windows.at(&f.Query()).size(), 2);
     }
 
+    Y_UNIT_TEST(RepeatedAggregatesShareResults) {
+        TFixture f;
+        f.Ok("SELECT COUNT(DISTINCT t.id), SUM(score), SUM(id) FROM t "
+            "HAVING SUM(score) > 0 ORDER BY COUNT(DISTINCT id);");
+        const auto& grouping = f.Result->Groupings.at(&f.Query());
+        UNIT_ASSERT_VALUES_EQUAL(grouping.Aggregates.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(f.Result->Values.at(f.Select().Columns[0].Expression.get()),
+            f.Result->Values.at(f.Select().OrderBy[0].Expression.get()));
+    }
+
     Y_UNIT_TEST(CorrelatedSubqueriesHaveExplicitCaptures) {
         TFixture f;
         f.Ok("SELECT l.id, (SELECT MAX(r.id) FROM t AS r WHERE r.id = l.id) FROM t AS l "

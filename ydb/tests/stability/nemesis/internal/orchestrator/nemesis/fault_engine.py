@@ -79,10 +79,23 @@ class FaultEngine:
         self._predicate_for = predicate_for
         self._admission = admission
         self._lock = threading.RLock()
+        self._stopping = threading.Event()
+
+    def begin_shutdown(self):
+        self._stopping.set()
+
+    def quiesce(self, timeout):
+        self.begin_shutdown()
+        acquired = self._lock.acquire(timeout=max(0, timeout))
+        if acquired:
+            self._lock.release()
+        return acquired
 
     def inject(self, nemesis_type, target, *, source="boundary"):
         # Serializes manual/scheduler admission and dispatch across the shared engine.
         with self._lock:
+            if self._stopping.is_set():
+                raise FaultRejected("Nemesis is stopping")
             scope, kind = self._scope_for(nemesis_type), self._kind_for(nemesis_type)
             full = self._mode_for(nemesis_type) is not GuardMode.BYPASS
             by_extract = self._recovery_mode_for(nemesis_type) == "extract"
@@ -162,6 +175,8 @@ class FaultEngine:
             return commands
 
     def _send(self, cmd):
+        if cmd.action == "inject" and self._stopping.is_set():
+            raise FaultRejected("Nemesis is stopping")
         if self._dispatch(cmd) is False:
             raise DispatchFailed(f"dispatch failed for {cmd.nemesis_type}")
 

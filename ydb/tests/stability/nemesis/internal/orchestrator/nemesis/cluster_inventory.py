@@ -43,6 +43,7 @@ class ClusterInventory:
         topology: ClusterTopologyModel,
         *,
         agent_hosts: Iterable[str] | None = None,
+        process_specs=None,
     ) -> None:
         self._topology = topology
         self._agent_hosts = [h for h in (agent_hosts or []) if h]
@@ -52,7 +53,16 @@ class ClusterInventory:
         self.slots: dict[int, SlotInfo] = {}
         # Set when nodes had to be synthesized: ids and ports are guesses, and there are no slots.
         self.degraded_reason: str | None = None
-        self._load_from_harness()
+        if process_specs is not None:
+            for spec in process_specs:
+                if spec.kind == "node":
+                    self.nodes[spec.node_id] = NodeInfo(spec.node_id, spec.host, spec.ic_port,
+                        spec.rack, spec.datacenter, spec.bridge_pile_id)
+                else:
+                    self.slots[spec.slot_idx] = SlotInfo(spec.slot_idx, spec.host, spec.ic_port,
+                        spec.node_id, spec.rack, spec.datacenter, spec.bridge_pile_id)
+        else:
+            self._load_from_harness()
 
     # -- loading ------------------------------------------------------------
 

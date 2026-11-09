@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 import sys
 import warnings
 
@@ -152,6 +153,8 @@ def parse_args():
         ),
     )
 
+    parser.add_argument('--local-process-config', metavar='PATH',
+                        help='Explicit process inventory/restart recipes for one local host (run only).')
     return parser.parse_args()
 
 
@@ -253,6 +256,10 @@ def run_liveness_checks(settings: Settings):
 
 def main():
     args = parse_args()
+    if args.local_process_config:
+        if args.command != "run":
+            raise ValueError("--local-process-config is a host-local run setting")
+        os.environ["LOCAL_PROCESS_CONFIG"] = args.local_process_config
 
     # Build kwargs from argv (only include non-None values)
     argv_kwargs = {}
@@ -315,15 +322,15 @@ def main():
         # Second Flask app + thread: no conflict as long as nemesis_mon_port != app_port.
         monitor.setup_page(settings.app_host, settings.nemesis_mon_port)
         # threaded=True is important for concurrent request handling
-        from ydb.tests.stability.nemesis.app import app, require_failure_model_or_die
+        from ydb.tests.stability.nemesis.app import app, require_failure_model_or_die, initialize_app, cleanup_app
+        from ydb.tests.stability.nemesis.internal.shutdown import serve_until_stopped
         # No usable cluster.yaml → no failure model → no chaos: exit instead of serving unguarded.
         require_failure_model_or_die(app)
-        app.run(
-            host=settings.app_host,
-            port=settings.app_port,
-            threaded=True,
-            debug=False
-        )
+        with app.app_context():
+            initialize_app()
+        raise SystemExit(serve_until_stopped(
+            app, cleanup_app, host=settings.app_host, port=settings.app_port,
+        ))
     else:
         raise ValueError(f"Unknown command: {args.command}")
 

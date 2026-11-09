@@ -88,9 +88,9 @@ selection does not change a node/slot/disk target into a whole-host action.
 The transport reports acceptance, not action completion or YDB recovery. A
 rejection or delivery error is reported as failed dispatch and is not retried;
 a timeout alone does not prove that the agent did not apply the action. Budget
-and recovery accounting remain with the callers during this first refactoring
-step. This change preserves the stability test API and does not yet implement
-the planned unified fault engine, process discovery or shutdown/restore lifecycle.
+and recovery accounting belong to the shared FaultEngine for boundary/manual
+execution. Local process control and service shutdown are described below; the
+legacy per-type scheduling path remains until the UI migration.
 
 ### Execution Flow
 
@@ -511,5 +511,132 @@ returned: a replacement slot in the same pile may restore its population.
 plan before sending, including local-budget BYPASS faults. This extension currently
 has no provider configured; it must not be mistaken for a CMS permission lifecycle.
 Permission renewal/completion and the scheduler setting remain future work.
-Independent local process discovery/control and shutdown guarantees remain the
-next stages; no live cluster fault is required by these unit tests.
+Local process discovery/control and service shutdown are implemented below.
+No live cluster fault is required by these tests.
+
+
+### Local ydbd process control (no harness)
+
+Set `LOCAL_PROCESS_CONFIG` to an absolute path on the Nemesis host, or pass
+`nemesis run --local-process-config /path/processes.yaml`. The existing cluster
+YAML still defines erasure and bridge pile names. The process file replaces
+harness inventory for local execution and gives each node/slot its own placement:
+
+```yaml
+processes:
+  - host: localhost
+    kind: node
+    node_id: 1
+    ic_port: 19001
+    executable: /opt/ydb/bin/ydbd
+    uid: 1000
+    rack: rack-a
+    datacenter: dc-a
+    bridge_pile_id: 0
+    restart:
+      argv: [/opt/ydb/bin/ydbd, server, --node, "1", --ic-port, "19001", --yaml-config, /srv/ydb/config.yaml]
+      cwd: /srv/ydb
+      environment: {}
+  - host: localhost
+    kind: slot
+    slot_idx: 0
+    node_id: 1001  # optional runtime ID for a dynamic slot
+    ic_port: 19002
+    executable: /opt/ydb/bin/ydbd
+    uid: 1000
+    rack: rack-b
+    datacenter: dc-b
+    bridge_pile_id: 1
+    restart:
+      unit: ydb-slot-0.service
+```
+
+Use the complete argv, cwd, UID and environment required by the actual deployment;
+these values are operator configuration, not data accepted from HTTP callers.
+For non-bridge clusters omit `bridge_pile_id`. All entries describe one physical
+agent host; node IDs, slot indices and interconnect ports must be unique in their
+respective namespaces. Set `YAML_CONFIG_LOCATION` to the existing cluster YAML
+and `MON_PORT` to its monitoring port as usual. Example foreground invocation:
+
+```sh
+YAML_CONFIG_LOCATION=/srv/ydb/cluster.yaml \
+LOCAL_PROCESS_CONFIG=/srv/ydb/nemesis-processes.yaml \
+NEMESIS_INSTALL_ROOT=/srv/nemesis \
+nemesis run
+```
+
+For a service, put the same environment settings in its systemd configuration.
+The local process file is host-specific: `install` does not distribute it.
+The execution service needs permissions to signal these processes and manage the
+configured systemd units (generated Nemesis units run as root).
+
+The controller scans `/proc`, matching the executable's device/inode, UID and an
+exact `--ic-port PORT` or `--ic-port=PORT` argument. It rejects missing/ambiguous
+matches and already-stopped processes. Before each signal it verifies process
+start time and uses Linux `pidfd_send_signal`, so PID reuse cannot redirect the
+signal to an unrelated process. Processes whose port is specified only inside a
+config file need an explicit ic-port argument for this discovery mechanism.
+
+Supported local types are `KillNodeNemesis`, `KillNodeDaemonNemesis`,
+`KillSlotDaemonNemesis`, `StopStartNodeNemesis` and `SuspendNodeNemesis`.
+In this mode the daemon-named kill types operate on the configured ydbd process;
+they do not search for or kill its launcher. Kill restarts the process immediately;
+stop and suspend retain recovery ownership until extract/shutdown. Suspend uses
+SIGSTOP/SIGCONT. Stop uses SIGTERM for unmanaged processes, or stops the explicitly
+configured unit after checking its MainPID. Restore is idempotent.
+
+For an existing supervisor use `restart.unit`; its MainPID must be the configured
+ydbd, not a wrapper or shared supervisor. An argv recipe is for an unmanaged
+process: restoration uses a new `systemd-run --service-type=exec` service with the
+specified UID/cwd/environment. This puts the replacement outside the Nemesis
+cgroup, so stopping Nemesis does not kill it. If a matching replacement is already
+observed, it is adopted instead of launching another one. Linux pidfds and systemd
+are required for this backend. Process existence after restart is distinct from
+YDB readiness; the FaultEngine still waits for healthcheck recovery.
+
+Local mode constructs only its supported planners. Host/network/time-skew, disks
+and topology-group faults are rejected in this mode, including manual requests;
+they cannot silently turn a process fault into an action on the entire host.
+Existing liveness/safety checks retain their interfaces and cluster configuration;
+this stage replaces process inventory/control, not every monitoring adapter.
+
+### Service shutdown and restoration
+
+`nemesis run` handles SIGTERM and SIGINT explicitly. The signal handler only wakes
+the main loop; shutdown then closes admission on the FaultEngine, legacy scheduler
+and local execution service. It waits for current dispatch and agent actions,
+restores retained impacts, then stops background checks and the HTTP server.
+`atexit` is only an idempotent fallback.
+
+Agents record recovery ownership before invoking a runner, including an inject
+that subsequently fails. A successful extract removes that record; a failed one
+remains visible in the shutdown report. Automatic/manual/shutdown extracts for
+the same recorded effect do not execute twice. An agent receiving SIGTERM drains
+its own state, independently of the orchestrator and service stop order.
+
+When the orchestrator stops, it calls the internal `/api/agent/drain` endpoint
+concurrently on remote agents and waits for execution completion, not just command
+acceptance. A new orchestrator reopens fully-drained agents through the internal
+`/api/agent/resume` endpoint; an agent processing its own SIGTERM cannot reopen.
+The `nemesis stop` command stops the orchestrator first while agents are available,
+then stops agents. Test clients continue using the existing
+`/api/scheduler/start`, `/api/scheduler/stop`, `/api/problems` and install/stop CLI.
+
+Generated units use `TimeoutStopSec=150`, `KillMode=mixed` and the
+`nemesis.service` alias. Thus `systemctl stop nemesis` first signals the Nemesis
+main process, allowing its restoration helpers to finish. Update/reload the unit
+when deploying this version; old installed units do not change by updating the
+binary alone. The application deadline defaults to 120 seconds
+(`SHUTDOWN_TIMEOUT_SEC`); keep the systemd deadline larger if changing it.
+
+The result is saved to `$NEMESIS_INSTALL_ROOT/shutdown.json` (default
+`/Berkanavt/nemesis/shutdown.json`) and failures are logged. Restore failure,
+unreachable agents or deadline expiry produce an error report and a nonzero
+Nemesis exit status. Successful cleanup means restore actions completed, not that
+YDB has already rebuilt redundancy. SIGKILL/power loss is outside this graceful
+shutdown contract; the in-memory action ledger is not a crash-recovery journal.
+
+Tests cover real isolated child processes, precise targeting, PID-generation
+checks, kill/stop/restart, suspend/resume, full local app wiring without harness,
+SIGTERM during an accepted injection, duplicate restore, timeout and failure
+reporting. They do not deploy a real YDB cluster or stop an installed systemd unit.

@@ -69,15 +69,22 @@ class ChaosOrchestratorStore:
         self,
         failure_guard: FailureModelGuard | None = None,
         inventory: ClusterInventory | None = None,
+        enabled_types=None,
     ) -> None:
         self._lock = threading.Lock()
-        self._planners: dict[str, NemesisPlannerBase] = build_all_planners()
+        self._allowed_types = None if enabled_types is None else frozenset(enabled_types)
+        self._planners: dict[str, NemesisPlannerBase] = (
+            build_all_planners() if self._allowed_types is None
+            else {name: build_planner(name) for name in self._allowed_types}
+        )
         self._failure_guard = failure_guard
         self._inventory = inventory
 
     def rebuild_planner(self, nemesis_type: str, params: dict | None = None) -> bool:
         """Re-create a planner with UI-supplied ``params``; False if that failed."""
         with self._lock:
+            if self._allowed_types is not None and nemesis_type not in self._allowed_types:
+                return False
             try:
                 self._planners[nemesis_type] = build_planner(nemesis_type, params)
                 return True

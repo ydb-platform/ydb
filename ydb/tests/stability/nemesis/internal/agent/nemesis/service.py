@@ -15,14 +15,29 @@ class AgentExecutionService:
     def __init__(self, manager: NemesisManager, definitions: Mapping[str, dict]) -> None:
         self._manager = manager
         self._definitions = definitions
+        if hasattr(manager, "configure_recovery"):
+            manager.configure_recovery(name for name, definition in definitions.items()
+                                       if definition.get("recovery") == "extract")
 
     def start(self, process_type: str, action: str = "inject", payload=None) -> dict:
         if process_type not in self._definitions:
             return {"status": "error", "message": "Invalid process type"}
-        self._manager.start_process(
-            process_type, self._definitions[process_type]["runner"], action, payload=payload,
-        )
+        try:
+            self._manager.start_process(
+                process_type, self._definitions[process_type]["runner"], action, payload=payload,
+            )
+        except (ValueError, RuntimeError) as error:
+            return {"status": "error", "message": str(error)}
         return {"status": "started"}
+
+    def begin_shutdown(self):
+        self._manager.begin_shutdown(permanent=True)
+
+    def resume(self):
+        self._manager.resume()
+
+    def shutdown(self, timeout=60):
+        return self._manager.shutdown(timeout)
 
     def get_all(self) -> list[dict]:
         return self._manager.get_all()

@@ -65,6 +65,7 @@ class OrchestratorNemesisSchedule:
         self._inventory = inventory
         self._predicate_for = predicate_for
         self._stuck_timeout_for = stuck_timeout_for
+        self._stopping = threading.Event()
         self._metrics = metrics
 
     def set_metrics(self, metrics) -> None:
@@ -93,6 +94,8 @@ class OrchestratorNemesisSchedule:
         Returns False if this process_type is already scheduled as enabled.
         """
         with self._lock:
+            if self._stopping.is_set():
+                return False
             if process_type in self._tasks and self._tasks[process_type].get("enabled"):
                 return False
             thread = threading.Thread(target=lambda: self._run_schedule_loop(process_type, interval), daemon=True)
@@ -141,6 +144,12 @@ class OrchestratorNemesisSchedule:
                 else:
                     result[pt] = {"enabled": False, "interval": None}
             return result
+
+    def begin_shutdown(self):
+        self._stopping.set()
+        with self._lock:
+            for info in self._tasks.values():
+                info["enabled"] = False
 
     def shutdown_disable_all(self) -> None:
         """App teardown: flush extract commands to agents, then disable all tasks."""
@@ -229,6 +238,8 @@ class OrchestratorNemesisSchedule:
 
     def _dispatch_and_record(self, cmd: DispatchCommand) -> None:
         """Dispatch and account for impact (no veto)."""
+        if cmd.action == "inject" and self._stopping.is_set():
+            return
         guard = self._failure_guard
         full = guard is not None and guard_mode_for(cmd.nemesis_type) is GuardMode.FULL
         probe = self._recovery_probe

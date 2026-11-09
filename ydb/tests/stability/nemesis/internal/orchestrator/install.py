@@ -3,7 +3,6 @@ import os
 import shlex
 import subprocess
 import sys
-import time
 
 import requests
 import yaml
@@ -298,8 +297,8 @@ StartLimitBurst=15
 [Service]
 Restart=always
 RestartSec=10
-TimeoutStopSec=60
-KillMode=control-group
+TimeoutStopSec=150
+KillMode=mixed
 Environment=NEMESIS_USER=robot-nemesis
 Environment=NEMESIS_TYPE=orchestrator
 Environment=STATIC_LOCATION={root}/static
@@ -321,6 +320,7 @@ LimitMEMLOCK=32212254720
 
 [Install]
 WantedBy=multi-user.target
+Alias=nemesis.service
 """
         )
 
@@ -348,8 +348,8 @@ StartLimitBurst=15
 [Service]
 Restart=always
 RestartSec=10
-TimeoutStopSec=60
-KillMode=control-group
+TimeoutStopSec=150
+KillMode=mixed
 Environment=NEMESIS_USER=robot-nemesis
 Environment=NEMESIS_TYPE=agent
 Environment=APP_HOST=::
@@ -370,6 +370,7 @@ LimitMEMLOCK=32212254720
 
 [Install]
 WantedBy=multi-user.target
+Alias=nemesis.service
 """
             )
 
@@ -431,13 +432,11 @@ def stop_agent_services(hosts, app_port: int = 31434):
     orchestrator_host = sorted_hosts[0]
     agent_hosts = sorted_hosts[1:]
 
-    graceful_disable_schedules(orchestrator_host, app_port=app_port)
-
-    extract_wait_seconds = 30
-    print(f"Waiting {extract_wait_seconds}s for extract processes to complete...")
-    time.sleep(extract_wait_seconds)
-
     errors: list[str] = []
+    try:
+        stop_agent_service(orchestrator_host)
+    except Exception as error:
+        errors.append(f"{orchestrator_host}: {error}")
     if agent_hosts:
         with ThreadPoolExecutor(max_workers=max(len(agent_hosts), 1)) as executor:
             futures = {executor.submit(stop_agent_service, host): host for host in agent_hosts}
@@ -449,12 +448,5 @@ def stop_agent_services(hosts, app_port: int = 31434):
                     errors.append(f"{host}: {e}")
                     print(f"WARNING: failed to stop agent on {host}: {e}", file=sys.stderr)
 
-    # Stop the orchestrator last (always attempted even if agents failed).
-    try:
-        stop_agent_service(orchestrator_host)
-    except Exception as e:
-        errors.append(f"{orchestrator_host}: {e}")
-        print(f"WARNING: failed to stop orchestrator on {orchestrator_host}: {e}", file=sys.stderr)
-
     if errors:
-        print(f"WARNING: {len(errors)} host(s) failed to stop: {errors}", file=sys.stderr)
+        raise RuntimeError(f"{len(errors)} host(s) failed to stop: {errors}")

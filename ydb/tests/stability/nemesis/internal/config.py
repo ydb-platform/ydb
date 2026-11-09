@@ -25,6 +25,8 @@ class BaseSettings:
                 # Try to get from environment variable (convert field name to uppercase)
                 env_var_name = key.upper()
                 env_value = os.getenv(env_var_name)
+                if key == "install_root":
+                    env_value = os.getenv("NEMESIS_INSTALL_ROOT", env_value)
 
                 # Set value with priority: kwargs > env > default
                 if key in kwargs and kwargs[key] is not None:
@@ -74,6 +76,8 @@ class Settings(BaseSettings):
     yaml_config_location: str = ''
     database_config_location: str = ''
     # Remote install layout (rsync targets, systemd ExecStart); override via NEMESIS_INSTALL_ROOT.
+    local_process_config: str = ''
+    shutdown_timeout_sec: int = 120
     install_root: str = '/Berkanavt/nemesis'
     # Log directory on agents for safety wardens (grep kikimr.start, etc.); override via KIKIMR_LOGS_DIRECTORY.
     kikimr_logs_directory: str = '/Berkanavt/kikimr/logs/'
@@ -86,6 +90,8 @@ class AgentSettings(BaseSettings):
     app_port: int = 31434
     mon_port: int = 8765
     nemesis_mon_port: int = 8666
+    local_process_config: str = ''
+    shutdown_timeout_sec: int = 120
     install_root: str = '/Berkanavt/nemesis'
     kikimr_logs_directory: str = '/Berkanavt/kikimr/logs/'
     # Same cluster.yaml as orchestrator when deployed via install (env YAML_CONFIG_LOCATION).

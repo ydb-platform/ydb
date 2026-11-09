@@ -299,7 +299,7 @@ class BoundaryNemesisScheduler:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self, *, drain=True) -> None:
         self._stop.set()
         t = self._thread
         if t and t.is_alive() and t is not threading.current_thread():
@@ -310,7 +310,7 @@ class BoundaryNemesisScheduler:
                     "anyway — start() will wait for it",
                     self._stop_join_sec,
                 )
-        if self._recovery_probe is not None:
+        if drain and self._recovery_probe is not None:
             # Drain toggles after join so nothing is extracted twice; probe stays app-owned.
             try:
                 drained = self._recovery_probe.drain_extracts()

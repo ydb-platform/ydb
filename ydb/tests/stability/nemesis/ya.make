@@ -2,6 +2,7 @@ PY3_PROGRAM()
 
 PY_SRCS(
     __main__.py
+    internal/shutdown.py
     internal/config.py
     internal/agent/agent_warden_catalog.py
     internal/orchestrator/orchestrator_warden_catalog.py
@@ -29,6 +30,7 @@ PY_SRCS(
     internal/nemesis/chaos_dispatch.py
     internal/nemesis/command_transport.py
     internal/orchestrator/nemesis/command_dispatcher.py
+    internal/agent/nemesis/local_process.py
     internal/agent/nemesis/service.py
     internal/agent/agent_warden_checker.py
     internal/agent/nemesis/runner.py

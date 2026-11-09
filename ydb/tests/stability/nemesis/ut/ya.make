@@ -16,6 +16,7 @@ TEST_SRCS(
     test_orchestrator_api.py
     test_metrics.py
     test_local_kikimr.py
+    test_local_process.py
 )
 
 PEERDIR(

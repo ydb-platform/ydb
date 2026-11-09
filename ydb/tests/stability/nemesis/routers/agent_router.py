@@ -109,3 +109,22 @@ def start_warden_checks():
 def get_warden_result():
     """Get the last warden check result."""
     return jsonify(get_warden_result_helper())
+
+
+@blueprint.route("/api/agent/drain", methods=["POST"])
+def drain_agent():
+    """Internal service lifecycle endpoint; test clients keep their old API."""
+    if execution_service is None:
+        return jsonify({"status": "ok"})
+    result = execution_service.shutdown(timeout=60)
+    return jsonify(result), (200 if result["status"] == "ok" else 503)
+
+
+@blueprint.route("/api/agent/resume", methods=["POST"])
+def resume_agent():
+    """A new orchestrator can reopen a drained agent, but never one handling SIGTERM."""
+    try:
+        execution_service.resume()
+        return jsonify({"status": "ok"})
+    except RuntimeError as error:
+        return jsonify({"status": "error", "message": str(error)}), 409

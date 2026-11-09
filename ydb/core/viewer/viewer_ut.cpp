@@ -1462,6 +1462,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     struct TClusterBridgeOptions {
         bool OffloadMerge = false;
+        bool IncludeSyncInfo = false;
         bool ProvidePileMap = true;
         bool DropNodesInfo = false;
         bool DropWhiteboard = false;
@@ -1635,12 +1636,26 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     }
                     break;
                 }
+                case NSysView::TEvSysView::EvGetGroupsResponse:
+                    if (options.IncludeSyncInfo && isClusterActor(ev->GetRecipientRewrite())) {
+                        auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
+                        record.ClearEntries();
+                        auto* group = record.AddEntries();
+                        group->MutableKey()->SetGroupId(1);
+                        auto* info = group->MutableInfo();
+                        bridgeInfo->Piles[2].BridgePileId.CopyToProto(info, &NKikimrSysView::TGroupInfo::SetBridgePileId);
+                        info->SetBridgeSyncStage("BLOCKS");
+                        info->SetBridgeSyncRemainingBytes(1200);
+                        info->SetBridgeSyncCopyBytesPerSecond(100);
+                        info->SetBridgeSyncRemainingBytesComplete(true);
+                    }
+                    [[fallthrough]];
                 case NConsole::TEvConsole::EvListTenantsResponse:
                 case TEvHive::EvResponseHiveNodeStats:
                 case NSysView::TEvSysView::EvGetPDisksResponse:
                 case NSysView::TEvSysView::EvGetVSlotsResponse:
-                case NSysView::TEvSysView::EvGetGroupsResponse:
                 case NSysView::TEvSysView::EvGetStorageStatsResponse:
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse:
                     if (options.DropClusterResponses && isClusterActor(ev->GetRecipientRewrite())) {
                         return TTestActorRuntime::EEventAction::DROP;
                     }
@@ -1775,7 +1790,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeNodeCounts, offloadMerge) {
-        const auto json = GetClusterBridgeInfo({.OffloadMerge = offloadMerge});
+        const auto json = GetClusterBridgeInfo({.OffloadMerge = offloadMerge, .IncludeSyncInfo = true});
         const auto& piles = json["BridgeInfo"]["Piles"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(piles.size(), 3);
         AssertBridgePileCounts(piles[0], 2, 2);
@@ -1785,6 +1800,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         AssertBridgePileCounts(piles[2], 0, 0);
         AssertBridgePileAliveCounts(piles[2], 0, 0);
         UNIT_ASSERT_VALUES_EQUAL(json["NodesAlive"].GetUIntegerSafe(), 4);
+        UNIT_ASSERT(!piles[0].Has("Sync"));
+        UNIT_ASSERT_VALUES_EQUAL(piles[1]["Sync"]["BytesRemaining"].GetStringRobust(), "1200");
+        UNIT_ASSERT_VALUES_EQUAL(piles[1]["Sync"]["BytesPerSecond"].GetStringRobust(), "100");
+        UNIT_ASSERT_VALUES_EQUAL(piles[1]["Sync"]["SecondsLeft"].GetStringRobust(), "12");
+        const auto& pools = piles[1]["StoragePools"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(pools.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pools[0]["Name"].GetStringSafe(), "static");
+        UNIT_ASSERT_VALUES_EQUAL(pools[0]["Sync"]["BytesRemaining"].GetStringRobust(), "1200");
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeNoAliveNodes, offloadMerge) {

@@ -64,7 +64,7 @@ using namespace NYdb::NTable;
 using namespace NYql::NNodes;
 using namespace NStat;
 
-void TestDecorrelation(bool columnTables, bool equalNullsJoinKeys = false) {
+NKikimrConfig::TAppConfig MakeSubqueryAppConfig(bool equalNullsJoinKeys = false) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
     appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
@@ -72,7 +72,11 @@ void TestDecorrelation(bool columnTables, bool equalNullsJoinKeys = false) {
     appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
     appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     appConfig.MutableTableServiceConfig()->SetEnableBlockHashJoinEqualNulls(equalNullsJoinKeys);
-    TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+    return appConfig;
+}
+
+// Creates and fills t1, t2 and t3, see the layout below.
+void CreateSubqueryTables(TKikimrRunner& kikimr, bool columnTables) {
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -130,6 +134,11 @@ void TestDecorrelation(bool columnTables, bool equalNullsJoinKeys = false) {
     fill("/Root/t1", 12, [](i64 a) { return a % 4; }, [](i64 a) { return 10 * a; }, [&](i64 a) { return group(a % 3); });
     fill("/Root/t2", 12, [](i64 a) { return a % 3; }, [](i64 a) { return a * a; }, [&](i64 a) { return group(a % 4); });
     fill("/Root/t3", 6, [](i64 a) { return a % 2; }, [](i64 a) { return a; }, [&](i64 a) { return group(a % 2); });
+}
+
+void TestDecorrelation(bool columnTables, bool equalNullsJoinKeys = false) {
+    TKikimrRunner kikimr(NKqp::TKikimrSettings(MakeSubqueryAppConfig(equalNullsJoinKeys)).SetWithSampleTables(false));
+    CreateSubqueryTables(kikimr, columnTables);
 
     auto queryClient = kikimr.GetQueryClient();
 
@@ -721,6 +730,138 @@ void TestDecorrelation(bool columnTables, bool equalNullsJoinKeys = false) {
         UNIT_ASSERT_C(!status.IsSuccess(), predicate << " unexpectedly succeeded");
         UNIT_ASSERT_STRING_CONTAINS_C(status.GetIssues().ToString(), "correlation cannot be pushed through Replicate", predicate);
     }
+}
+
+// IN and EXISTS subqueries in the projection: the result is a column, so NULL must stay NULL.
+void TestSubqueryInProjection(bool columnTables) {
+    TKikimrRunner kikimr(NKqp::TKikimrSettings(MakeSubqueryAppConfig()).SetWithSampleTables(false));
+    CreateSubqueryTables(kikimr, columnTables);
+
+    const std::string NonNullLookupInNullableSet = R"(
+        SELECT t1.a, t1.b IN (SELECT t3.e FROM `/Root/t3` as t3 WHERE t3.a < 3) AS result
+        FROM `/Root/t1` as t1
+        ORDER BY t1.a;
+    )";
+
+    // For each t1.b the correlated sets are
+    //   t2.e for t2.b == t1.b: 0 -> {3, 2, 1, 0}, 1 -> {NULL, 0, 3, 2}, 2 -> {2, 1, 0, 3}, 3 -> {}
+    //   t3.e for t3.a < 3: {NULL, 2}, for t3.a > 3: {0, 1, 2}
+    const std::vector<std::pair<std::string, std::string>> cases = {
+        // Correlated IN over non-null columns: t1.a IN {t2.a | t2.b == t1.b} holds iff a % 3 == a % 4.
+        {R"(
+            SELECT t1.c, t1.a IN (SELECT t2.a FROM `/Root/t2` as t2 WHERE t1.b = t2.b) AS result
+            FROM `/Root/t1` as t1
+            ORDER BY t1.c;
+         )",
+         R"([[10;%true];[20;%true];[30;%false];[40;%false];[50;%false];[60;%false];[70;%false];[80;%false];[90;%false];[100;%false];[110;%false];[120;%true]])"},
+
+        // Correlated nullable IN: NULL in the set (t1.b == 1), an empty set (t1.b == 3), a NULL lookup (t1.a == 1).
+        {R"(
+            SELECT t1.a, t1.e IN (SELECT t2.e FROM `/Root/t2` as t2 WHERE t1.b = t2.b) AS result
+            FROM `/Root/t1` as t1
+            ORDER BY t1.a;
+         )",
+         R"([[1;#];[2;[%true]];[3;[%false]];[4;[%true]];[5;#];[6;[%true]];[7;[%false]];[8;[%true]];[9;#];[10;[%true]];[11;[%false]];[12;[%true]]])"},
+
+        {R"(
+            SELECT t1.a, t1.e NOT IN (SELECT t2.e FROM `/Root/t2` as t2 WHERE t1.b = t2.b) AS result
+            FROM `/Root/t1` as t1
+            ORDER BY t1.a;
+         )",
+         R"([[1;#];[2;[%false]];[3;[%true]];[4;[%false]];[5;#];[6;[%false]];[7;[%true]];[8;[%false]];[9;#];[10;[%false]];[11;[%true]];[12;[%false]]])"},
+
+        // The NULL results reach a filter above the projection.
+        {R"(
+            SELECT q.a FROM (
+                SELECT t1.a AS a, t1.e IN (SELECT t2.e FROM `/Root/t2` as t2 WHERE t1.b = t2.b) AS r
+                FROM `/Root/t1` as t1
+            ) AS q
+            WHERE q.r IS NULL
+            ORDER BY q.a;
+         )",
+         R"([[1];[5];[9]])"},
+
+        // Uncorrelated nullable IN, two subqueries in one projection.
+        {R"(
+            SELECT t1.a,
+                t1.e IN (SELECT t3.e FROM `/Root/t3` as t3 WHERE t3.a < 3) AS x,
+                t1.e IN (SELECT t3.e FROM `/Root/t3` as t3 WHERE t3.a > 3) AS y
+            FROM `/Root/t1` as t1
+            ORDER BY t1.a;
+         )",
+         R"([[1;#;#];[2;[%true];[%true]];[3;#;[%false]];[4;#;[%true]];[5;#;[%true]];[6;[%true];[%true]];[7;#;[%false]];[8;#;[%true]];[9;#;[%true]];[10;[%true];[%true]];[11;#;[%false]];[12;#;[%true]]])"},
+
+        // A non-null lookup with NULL in the set. The query service enables ANSI IN, so an unmatched result is NULL.
+        {NonNullLookupInNullableSet,
+         R"([[1;#];[2;[%true]];[3;#];[4;#];[5;#];[6;[%true]];[7;#];[8;#];[9;#];[10;[%true]];[11;#];[12;#]])"},
+
+        // A correlated IN inside an expression next to an uncorrelated IN.
+        {R"(
+            SELECT t1.a,
+                (t1.a IN (SELECT t2.a FROM `/Root/t2` as t2 WHERE t2.b == t1.b)) AND t1.c > 50 AS x,
+                t1.b IN (SELECT t3.b FROM `/Root/t3` as t3) AS y
+            FROM `/Root/t1` as t1
+            ORDER BY t1.a;
+         )",
+         R"([[1;%false;%true];[2;%false;%false];[3;%false;%false];[4;%false;%true];[5;%false;%true];[6;%false;%false];[7;%false;%false];[8;%false;%true];[9;%false;%true];[10;%false;%false];[11;%false;%false];[12;%true;%true]])"},
+
+        // Correlated EXISTS with a correlation the dependent join domain cannot eliminate.
+        {R"(
+            SELECT t1.a, EXISTS (SELECT t2.a FROM `/Root/t2` as t2 WHERE t2.b == t1.b AND t2.a > t1.a) AS result
+            FROM `/Root/t1` as t1
+            ORDER BY t1.a;
+         )",
+         R"([[1;%true];[2;%true];[3;%false];[4;%true];[5;%true];[6;%true];[7;%false];[8;%true];[9;%true];[10;%true];[11;%false];[12;%false]])"},
+
+        {R"(
+            SELECT t1.a, NOT EXISTS (SELECT t2.a FROM `/Root/t2` as t2 WHERE t2.b == t1.b AND t2.a > t1.a) AS result
+            FROM `/Root/t1` as t1
+            ORDER BY t1.a;
+         )",
+         R"([[1;%false];[2;%false];[3;%true];[4;%false];[5;%false];[6;%false];[7;%true];[8;%false];[9;%false];[10;%false];[11;%true];[12;%true]])"},
+
+        // Uncorrelated EXISTS.
+        {R"(
+            SELECT t1.a,
+                EXISTS (SELECT t3.a FROM `/Root/t3` as t3 WHERE t3.a > 5) AS x,
+                EXISTS (SELECT t3.a FROM `/Root/t3` as t3 WHERE t3.a > 6) AS y
+            FROM `/Root/t1` as t1
+            WHERE t1.a <= 2
+            ORDER BY t1.a;
+         )",
+         R"([[1;%true;%false];[2;%true;%false]])"},
+    };
+
+    auto queryClient = kikimr.GetQueryClient();
+    TStringBuilder failures;
+    for (ui32 i = 0; i < cases.size(); ++i) {
+        const auto& [query, expected] = cases[i];
+        // The client takes a fresh session when a failed query closed the previous one.
+        auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        if (!result.IsSuccess()) {
+            failures << "query " << i << ": " << result.GetIssues().ToString() << "\n";
+            continue;
+        }
+        const auto actual = FormatResultSetYson(result.GetResultSet(0));
+        if (actual != expected) {
+            failures << "query " << i << ": expected " << expected << ", got " << actual << "\n";
+        }
+    }
+
+    // A data query does not enable ANSI IN: the frontend types IN over a non-null lookup as Bool, and the NULL in
+    // the set does not make the result NULL.
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    auto result = session.ExecuteDataQuery(NonNullLookupInNullableSet, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    if (!result.IsSuccess()) {
+        failures << "data query: " << result.GetIssues().ToString() << "\n";
+    } else {
+        const TString expected = R"([[1;%false];[2;%true];[3;%false];[4;%false];[5;%false];[6;%true];[7;%false];[8;%false];[9;%false];[10;%true];[11;%false];[12;%false]])";
+        const auto actual = FormatResultSetYson(result.GetResultSet(0));
+        if (actual != expected) {
+            failures << "data query: expected " << expected << ", got " << actual << "\n";
+        }
+    }
+    UNIT_ASSERT_C(failures.empty(), failures);
 }
 
 } // namespace
@@ -1328,6 +1469,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), results[i], "query " << i);
         }
+    }
+
+    Y_UNIT_TEST_TWIN(SubqueryInProjection, ColumnStore) {
+        TestSubqueryInProjection(ColumnStore);
     }
 
     Y_UNIT_TEST_QUAD(Decorrelation, ColumnStore, EqualNullsJoinKeys) {

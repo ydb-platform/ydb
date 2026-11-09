@@ -10,6 +10,8 @@
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h> // for TEvNodeConfigInvokeOnRootResult
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NBridge {
 
     class TSyncerActor : public TActorBootstrapped<TSyncerActor> {
@@ -28,6 +30,9 @@ namespace NKikimr::NBridge {
         };
         // Preserve both flags observed by assimilation: the later data read may use VDisks that do not know them yet.
         THashMap<TLogoBlobID, TSourceBlobFlags> SourceBlobFlags;
+        // blobs counted in BytesToCopy by the scan of the data stage, as the target has no data for them; the others
+        // are counted when the target turns out to lack them
+        THashSet<TLogoBlobID> CountedToCopy;
         TReplQuoter::TPtr SyncRateQuoter;
 
     public:
@@ -63,8 +68,12 @@ namespace NKikimr::NBridge {
         const ui32 MaxQueriesInFlight = 16;
         ui32 QueriesInFlight = 0;
         THashMap<ui64, TQueryPayload> Payloads;
-        THashMap<ui64, std::unique_ptr<IEventHandle>> DelayedQueries;
+        std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> QuotaQueue; // queries with in-flight slots waiting for quota
+        bool WaitingForQuota = false; // the first query in QuotaQueue has its quota taken and waits for the time to come
         std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> PendingQueries; // handle and bytes to charge
+        // The blobs read already go first, as a restart of the syncer loses them and reads for them are paid for. Reads don't
+        // starve, because every put comes from a read that has finished.
+        std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> PendingPuts;
         ui64 NextCookie = 1;
 
         bool Errors = false;
@@ -82,6 +91,7 @@ namespace NKikimr::NBridge {
         void IssueQuery(TGroupId groupId, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
             ui64 quoterBytes = 0);
         void SendQuery(std::unique_ptr<IEventHandle> handle, ui64 quoterBytes);
+        void ProcessQuotaQueue();
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
@@ -97,6 +107,9 @@ namespace NKikimr::NBridge {
 
         void ProcessRestoreQueue();
         TSourceBlobFlags TakeSourceBlobFlags(const TLogoBlobID& id);
+        bool ScansBlobs() const; // whether the current step merges blobs
+        void CountToCopy(const TLogoBlobID& id);
+        void CountCopied(const TLogoBlobID& id);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Per-group assimilation status
@@ -108,6 +121,7 @@ namespace NKikimr::NBridge {
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBlock> Blocks;
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBarrier> Barriers;
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> Blobs;
+            ui64 UnchargedReplyBytes = 0; // the size of the last page from the source group, charged with the next request
             bool RequestInFlight = false;
             bool BlocksFinished = false;
             bool BarriersFinished = false;

@@ -6,59 +6,27 @@
 
 namespace NKikimr::NBsController {
 
-namespace {
-struct TLayoutRequirements {
-    ui32 RequiredRealms;
-    ui32 RequiredCopies;
-};
-
-TLayoutRequirements GetMinimumLayoutRequirements(EMirror3dcLayout layout) {
-    switch (layout) {
-        case EMirror3dcLayout::LAYOUT_111_22:
-        case EMirror3dcLayout::LAYOUT_11:
-            return {2, 1};
-        case EMirror3dcLayout::LAYOUT_11_2:
-        case EMirror3dcLayout::LAYOUT_1:
-            return {1, 1};
-        case EMirror3dcLayout::LAYOUT_22:
-            return {2, 2};
-        case EMirror3dcLayout::LAYOUT_2:
-            return {1, 2};
-        case EMirror3dcLayout::LAYOUT_111:
-            return {3, 1};
-        case EMirror3dcLayout::LAYOUT_0:
-            return {0, 0};
+std::optional<EMirror3dcFailRealmState> GetReplicatedRealmState(
+        const TMirror3dcGroupConfiguration& config, ui32 realm) {
+    bool validRealm = realm < config.Realms.size();
+    bool validConfiguration = IsValidMirror3dcGroupConfiguration(config);
+    bool replicationTarget = validRealm && IsMirror3dcReplicationTarget(config.State, config.Realms[realm]);
+    if (!validRealm || !validConfiguration || !replicationTarget) {
+        return std::nullopt;
     }
-    Y_ABORT("Unsupported mirror-3-dc layout");
+    std::optional<TMirror3dcGroupConfiguration> next = RecoveringComplete(config);
+    return next ? std::optional(next->Realms[realm]) : std::nullopt;
+}
+
+namespace {
+std::optional<TMirror3dcGroupConfiguration> GetConfiguration(const TGroupReplicationInfo& info) {
+    if (info.GroupState) {
+        TMirror3dcGroupConfiguration config{*info.GroupState, info.States};
+        return IsValidMirror3dcGroupConfiguration(config) ? std::optional(config) : std::nullopt;
+    }
+    return std::nullopt;
 }
 } // namespace
-
-std::optional<EMirror3dcFailRealmState> GetReplicatedRealmState(const TFailRealmStates& states, ui32 realm) {
-    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-    if (realm >= 3 || states[realm] == TFailRealm::F) {
-        return std::nullopt;
-    }
-    const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(states[0], states[1], states[2]);
-    if (!state) {
-        return std::nullopt;
-    }
-    const TMirror3dcGroupLayouts layouts = *GetMirror3dcGroupLayouts(*state);
-    const TLayoutRequirements write = GetMinimumLayoutRequirements(layouts.Write);
-    const TLayoutRequirements durability = GetMinimumLayoutRequirements(layouts.Durability);
-    const ui32 requiredRealms = Min(write.RequiredRealms, durability.RequiredRealms);
-    const ui32 requiredCopies = Min(write.RequiredCopies, durability.RequiredCopies);
-    ui32 normalRealmsAfterTransition = states[realm] == TFailRealm::R;
-    for (EMirror3dcFailRealmState realmState : states) {
-        normalRealmsAfterTransition += realmState != TFailRealm::F && realmState != TFailRealm::R;
-    }
-    // N0/N1/N2 encode the minimum copy count. A surplus realm may be omitted by future writes.
-    const EMirror3dcFailRealmState target = normalRealmsAfterTransition > requiredRealms
-        ? TFailRealm::N0 : static_cast<EMirror3dcFailRealmState>(requiredCopies);
-    if (states[realm] == target || (target != TFailRealm::N0 && states[realm] == TFailRealm::N2)) {
-        return std::nullopt;
-    }
-    return target;
-}
 
 class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     const TActorId ControllerId;
@@ -94,10 +62,11 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             Proposals.erase(it->second.ProposalCookie);
         }
         Groups.erase(message.GroupId);
-        if (message.Info) {
+        std::optional<TMirror3dcGroupConfiguration> config = message.Info ? GetConfiguration(*message.Info) : std::nullopt;
+        if (config) {
             bool needsReplication = false;
             for (ui32 realm = 0; realm < 3; ++realm) {
-                needsReplication |= GetReplicatedRealmState(message.Info->States, realm).has_value();
+                needsReplication |= GetReplicatedRealmState(*config, realm).has_value();
             }
             if (needsReplication) {
                 TGroup& group = Groups[message.GroupId];
@@ -108,52 +77,44 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void CheckCompletion(ui32 groupId, TGroup* group) {
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         if (group->ProposalCookie) {
             return;
         }
-        TFailRealmStates states = group->Info.States;
-        bool recoveringRealmReplicated = false;
+        std::optional<TMirror3dcGroupConfiguration> config = GetConfiguration(group->Info);
+        if (!config) {
+            return;
+        }
+        bool hasTarget = false;
         for (ui32 realm = 0; realm < 3; ++realm) {
-            const std::optional<EMirror3dcFailRealmState> target = GetReplicatedRealmState(group->Info.States, realm);
-            if (!target) {
+            if (!GetReplicatedRealmState(*config, realm)) {
                 continue;
             }
-            bool complete = true;
+            hasTarget = true;
             ui32 disks = 0;
             for (ui32 index = 0; index < group->Info.VDisks.size(); ++index) {
                 if (group->Info.VDisks[index].Id.FailRealm == realm) {
                     ++disks;
-                    complete &= group->Replicated[index];
+                    if (!group->Replicated[index]) {
+                        return;
+                    }
                 }
             }
-            if (disks && complete) {
-                if (group->Info.States[realm] == TFailRealm::R) {
-                    recoveringRealmReplicated = true;
-                } else {
-                    states[realm] = *target;
-                }
+            if (!disks) {
+                return;
             }
         }
-        if (recoveringRealmReplicated) {
-            const std::optional<TMirror3dcFailRealmStates> next = RecoveringComplete(states);
-            if (next) {
-                states = *next;
-            }
-        }
-        if (states != group->Info.States) {
-            using TDefinition = NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition;
+        std::optional<TMirror3dcGroupConfiguration> next = hasTarget ? RecoveringComplete(*config) : std::nullopt;
+        if (next && IsAllowedMirror3dcGroupTransition(config->State, next->State)) {
+            using TDefinition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
             std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> request =
                 std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
-            NKikimrBlobStorage::TConfigRequest* config = request->Record.MutableRequest();
-            config->SetIgnoreGroupFailModelChecks(true);
-            config->SetIgnoreDegradedGroupsChecks(true);
-            config->SetIgnoreDisintegratedGroupsChecks(true);
-            TDefinition* definition = config->AddCommand()->MutableDefineFailRealmStates()->AddGroups();
+            NKikimrBlobStorage::TConfigRequest* requestConfig = request->Record.MutableRequest();
+            TDefinition* definition = requestConfig->AddCommand()->MutableDefineGroupState()->AddGroups();
             definition->SetGroupId(groupId);
             definition->SetExpectedGroupGeneration(group->Info.Generation);
-            for (EMirror3dcFailRealmState state : states) {
-                definition->AddFailRealmStates(static_cast<TDefinition::EFailRealmState>(state));
+            definition->SetGroupState(next->State);
+            for (EMirror3dcFailRealmState state : next->Realms) {
+                definition->AddFailRealmStates(state);
             }
             group->ProposalCookie = ++NextCookie;
             Proposals.emplace(group->ProposalCookie, groupId);
@@ -186,7 +147,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
                     ActiveGroups.push_back(it->first);
                     for (ui32 disk = 0; disk < group.Info.VDisks.size(); ++disk) {
                         const TGroupReplicationInfo::TVDisk& vdisk = group.Info.VDisks[disk];
-                        if (GetReplicatedRealmState(group.Info.States, vdisk.Id.FailRealm)) {
+                        if (GetReplicatedRealmState(*GetConfiguration(group.Info), vdisk.Id.FailRealm)) {
                             const ui64 cookie = ++NextCookie;
                             Queries.emplace(cookie, TQuery{it->first, disk});
                             QueryCookiesByGroup[it->first].push_back(cookie);

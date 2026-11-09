@@ -73,14 +73,8 @@ class TestKillTablets(object):
         path = '/Root/mydb'
         table_path = '/Root/mydb/mytable'
         self.scheme_client.make_directory(path)
-        all_tablet_ids = create_kv_tablets_and_wait_for_start(self.client, self.kv_client, self.swagger_client, NUMBER_OF_TABLETS, table_path)
-
-        # Assert
-        wait_tablets_state_by_id(
-            self.client,
-            TabletStates.Active,
-            tablet_ids=all_tablet_ids,
-            message='New tablets are created',
+        create_kv_tablets_and_wait_for_start(
+            self.client, self.kv_client, self.swagger_client, NUMBER_OF_TABLETS, table_path,
             timeout_seconds=TIMEOUT_SECONDS,
         )
 

@@ -1175,4 +1175,206 @@ std::shared_ptr<TTreeNode> TPredicateTreeBuilder::ComputeImpl(
     return CreateLeafNode(EPredicateKind::Unknown, &input);
 }
 
+namespace {
+
+// A predicate on one column the extractor turns into ranges: points, or ranges of which some are not points.
+struct TColumnConstraint {
+    TString Attribute;
+    bool IsPoint = true;
+    size_t Ranges = 0;
+};
+
+bool IsPointRange(const TPredicateRange& range) {
+    return range.LeftBound && range.RightBound && range.LeftInclusive && range.RightInclusive && *range.LeftBound == *range.RightBound;
+}
+
+std::optional<TColumnConstraint> ClassifyColumnConstraint(const TTreeNode& node) {
+    if (node.Operator == ELogicalOperator::Leaf) {
+        if (node.Attribute.empty()) {
+            return std::nullopt;
+        }
+        if (node.Kind == EPredicateKind::MergedRanges) {
+            // An empty And intersection has no ranges and is a point set of size 0
+            return TColumnConstraint{
+                .Attribute = node.Attribute,
+                .IsPoint = std::all_of(node.Ranges.begin(), node.Ranges.end(), IsPointRange),
+                .Ranges = node.Ranges.size(),
+            };
+        }
+        // IS NULL pins the column to the null value
+        if (node.Kind == EPredicateKind::NullCheck) {
+            return TColumnConstraint{.Attribute = node.Attribute, .IsPoint = node.UnderNot, .Ranges = 1};
+        }
+        if ((node.Kind != EPredicateKind::Comparison && node.Kind != EPredicateKind::Parameter)
+            || node.Sign == EInequalityPredicateType::NotEqual) {
+            return std::nullopt;
+        }
+        return TColumnConstraint{.Attribute = node.Attribute, .IsPoint = node.Sign == EInequalityPredicateType::Equal, .Ranges = 1};
+    }
+
+    // A disjunction on one column, e.g. an IN list with parameters which Normalize does not merge
+    if (node.Operator != ELogicalOperator::Or || node.Children.empty()) {
+        return std::nullopt;
+    }
+    TColumnConstraint result;
+    for (const auto& child : node.Children) {
+        const auto constraint = ClassifyColumnConstraint(*child);
+        if (!constraint || (!result.Attribute.empty() && constraint->Attribute != result.Attribute)) {
+            return std::nullopt;
+        }
+        result.Attribute = constraint->Attribute;
+        result.IsPoint = result.IsPoint && constraint->IsPoint;
+        result.Ranges += constraint->Ranges;
+    }
+    return result;
+}
+
+std::shared_ptr<TTreeNode> MakeLogicalNode(ELogicalOperator op, TVector<std::shared_ptr<TTreeNode>> children) {
+    if (children.size() == 1) {
+        return std::move(children.front());
+    }
+    auto node = std::make_shared<TTreeNode>();
+    node->Operator = op;
+    node->Children = std::move(children);
+    return node;
+}
+
+void FlattenConjuncts(const std::shared_ptr<TTreeNode>& node, TVector<std::shared_ptr<TTreeNode>>& conjuncts) {
+    if (node->Operator == ELogicalOperator::And) {
+        for (const auto& child : node->Children) {
+            FlattenConjuncts(child, conjuncts);
+        }
+    } else {
+        conjuncts.push_back(node);
+    }
+}
+
+// Every disjunct has to restrict the key, the ranges are their union.
+TKeyMatch MatchDisjunction(const TTreeNode& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges) {
+    TKeyMatch result{.PointPrefixLen = keyColumns.size(), .UsedPrefixLen = keyColumns.size(), .HasResidual = false};
+    TVector<TKeyMatch> matches;
+    size_t ranges = 0;
+    for (const auto& child : node.Children) {
+        auto match = MatchKey(child, keyColumns, maxRanges);
+        if (match.UsedPrefixLen == 0) {
+            return {};
+        }
+        result.PointPrefixLen = std::min(result.PointPrefixLen, match.PointPrefixLen);
+        result.UsedPrefixLen = std::min(result.UsedPrefixLen, match.UsedPrefixLen);
+        ranges += match.ExpectedMaxRanges.GetOrElse(1);
+        matches.push_back(std::move(match));
+    }
+    if (node.Children.empty() || (maxRanges && ranges > *maxRanges)) {
+        return {};
+    }
+
+    TVector<std::shared_ptr<TTreeNode>> consumed;
+    for (auto& match : matches) {
+        // A disjunct restricting more key columns than the others is widened to the common prefix
+        result.HasResidual = result.HasResidual || match.HasResidual || match.UsedPrefixLen != result.UsedPrefixLen
+            || match.PointPrefixLen != result.PointPrefixLen;
+        consumed.push_back(std::move(match.Consumed));
+    }
+    result.ExpectedMaxRanges = ranges;
+    result.Consumed = MakeLogicalNode(ELogicalOperator::Or, std::move(consumed));
+    return result;
+}
+
+// Walks the key columns over the conjuncts: a point on a column extends the prefix, a range ends it.
+TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts, const TVector<TString>& keyColumns,
+                           const TMaybe<size_t>& maxRanges) {
+    TVector<std::optional<TColumnConstraint>> constraints;
+    constraints.reserve(conjuncts.size());
+    for (const auto& conjunct : conjuncts) {
+        constraints.push_back(ClassifyColumnConstraint(*conjunct));
+    }
+
+    TKeyMatch result;
+    TVector<bool> consumed(conjuncts.size(), false);
+    TVector<std::shared_ptr<TTreeNode>> consumedNodes;
+    size_t ranges = 1;
+    for (const auto& keyColumn : keyColumns) {
+        // The extractor intersects every predicate on the column
+        bool isPoint = false;
+        size_t pointRanges = Max<size_t>();
+        size_t rangeRanges = 0;
+        TVector<size_t> onColumn;
+        for (size_t i = 0; i < conjuncts.size(); ++i) {
+            const auto& constraint = constraints[i];
+            if (!constraint || constraint->Attribute != keyColumn) {
+                continue;
+            }
+            onColumn.push_back(i);
+            if (constraint->IsPoint) {
+                isPoint = true;
+                pointRanges = std::min(pointRanges, constraint->Ranges);
+            } else {
+                rangeRanges = std::max(rangeRanges, constraint->Ranges);
+            }
+        }
+        if (onColumn.empty()) {
+            break;
+        }
+
+        const size_t columnRanges = isPoint ? pointRanges : rangeRanges;
+        if (maxRanges && ranges * columnRanges > *maxRanges) {
+            break;
+        }
+        ranges *= columnRanges;
+        for (const auto i : onColumn) {
+            consumed[i] = true;
+            consumedNodes.push_back(conjuncts[i]);
+        }
+        ++result.UsedPrefixLen;
+        if (!isPoint) {
+            break;
+        }
+        ++result.PointPrefixLen;
+    }
+
+    bool consumedHasResidual = false;
+    if (result.UsedPrefixLen == 0) {
+        // No conjunct on the first key column: one of the conjuncts may be a disjunction over several columns,
+        // e.g. (a = 1 AND b = 2) OR (a = 3 AND b = 4)
+        size_t best = conjuncts.size();
+        for (size_t i = 0; i < conjuncts.size(); ++i) {
+            if (constraints[i] || conjuncts[i]->Operator != ELogicalOperator::Or) {
+                continue;
+            }
+            auto match = MatchDisjunction(*conjuncts[i], keyColumns, maxRanges);
+            if (match.UsedPrefixLen > result.UsedPrefixLen
+                || (match.UsedPrefixLen == result.UsedPrefixLen && match.PointPrefixLen > result.PointPrefixLen)) {
+                result = std::move(match);
+                best = i;
+            }
+        }
+        if (best == conjuncts.size()) {
+            return {};
+        }
+        consumed[best] = true;
+        consumedHasResidual = result.HasResidual;
+        consumedNodes = {result.Consumed};
+        ranges = result.ExpectedMaxRanges.GetOrElse(1);
+    }
+
+    result.ExpectedMaxRanges = ranges;
+    result.HasResidual = consumedHasResidual || std::find(consumed.begin(), consumed.end(), false) != consumed.end();
+    result.Consumed = MakeLogicalNode(ELogicalOperator::And, std::move(consumedNodes));
+    return result;
+}
+
+} // anonymous namespace
+
+TKeyMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges) {
+    if (!node || keyColumns.empty()) {
+        return {};
+    }
+    if (node->Operator == ELogicalOperator::Or && !ClassifyColumnConstraint(*node)) {
+        return MatchDisjunction(*node, keyColumns, maxRanges);
+    }
+    TVector<std::shared_ptr<TTreeNode>> conjuncts;
+    FlattenConjuncts(node, conjuncts);
+    return MatchConjunction(conjuncts, keyColumns, maxRanges);
+}
+
 } // namespace NKikimr::NKqp

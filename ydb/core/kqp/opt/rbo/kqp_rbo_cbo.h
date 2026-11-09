@@ -5,6 +5,8 @@
 
 namespace NKikimr::NKqp {
 
+struct TReadAccessPath;
+
 // A CBO column is named by its decimal ID, as in expression members, and
 // qualified by the relation of the CBO leaf that outputs it.
 inline TJoinColumn MakeCBOColumn(const TString& relation, TInfoUnitId id) {
@@ -70,6 +72,15 @@ struct TRBOProviderContext : public TKqpProviderContext {
         EJoinKind joinKind
     ) override;
 
+    // The cost of reading a table, or an index of it, through the key ranges of the path
+    double ComputeAccessPathCost(const TReadAccessPath& path, double mainRows) const;
+
     const TColumnLineage& Lineage;
+
+    // Access paths, in the units of the join costs: a byte read costs as much as a byte of join input
+    double CONSTS_ACCESS_SEEK = 5000.0;
+    double CONSTS_ACCESS_BYTE = 1.0;
+    double CONSTS_ACCESS_MAIN_LOOKUP = 10000.0;
+    double CONSTS_ACCESS_RESIDUAL_ROW = 5.0;
 };
 }

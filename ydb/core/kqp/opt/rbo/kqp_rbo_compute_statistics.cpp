@@ -269,9 +269,9 @@ void TOpEmptySource::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) 
     Y_UNUSED(planProps);
     Y_ENSURE(Props.Metadata.has_value());
     Props.Statistics = TRBOStatistics();
-    Props.Statistics->ERows = 1;
-    Props.Statistics->EBytes = 1;
-    Props.Cost = 0;
+    Props.Statistics->ERows = 1.0;
+    Props.Statistics->EBytes = 1.0;
+    Props.Cost = 0.0;
 }
 
 /***
@@ -329,7 +329,7 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Statistics = TRBOStatistics();
     Props.Statistics->ERows = tableData.Metadata->RecordsCount;
     Props.Statistics->EBytes = tableData.Metadata->DataSize;
-    Props.Cost = 0;
+    Props.Cost = 0.0; // Cost remains zero regradless of read type
 
     auto overrideStats = ctx.KqpCtx.GetOverrideStatistics();
     if (overrideStats) {
@@ -357,7 +357,10 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     const auto totalColumns = tableData.Metadata->Columns.size();
     const auto readColumns = GetColumns().Size();
     if (totalColumns > 0 && readColumns < totalColumns) {
-        Props.Statistics->EBytes *= static_cast<double>(readColumns) / static_cast<double>(totalColumns);
+        // A read of no columns still returns a row per record, e.g. for COUNT(*)
+        Props.Statistics->EBytes = readColumns == 0
+            ? Props.Statistics->ERows * 8.0
+            : Props.Statistics->EBytes * static_cast<double>(readColumns) / static_cast<double>(totalColumns);
     }
 
     // Overwrite with selectivity for successfully pushed-down filters within the read operator.
@@ -481,9 +484,8 @@ void TOpMap::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
     const auto inputColumnsCount = GetInput()->Props.Metadata->ColumnsCount;
     if (Props.Metadata->ColumnsCount != inputColumnsCount) {
-        double inputDataSize = Props.Statistics->EBytes;
-        if (inputColumnsCount!=0) {
-            Props.Statistics->EBytes = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
+        if (inputColumnsCount != 0) {
+            Props.Statistics->EBytes *= Props.Metadata->ColumnsCount / (double)inputColumnsCount;
         }
         // Input may have 0 columns (e.g. EmptySource), in such case the data size depends on the number of records
         // and the number of columns in the output. We just assume each column contains 8 bytes
@@ -613,8 +615,7 @@ void TOpAggregate::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
     const auto inputColumnsCount = GetInput()->Props.Metadata->ColumnsCount;
     if (Props.Metadata->ColumnsCount != inputColumnsCount) {
-        double inputDataSize = Props.Statistics->EBytes;
-        Props.Statistics->EBytes = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
+        Props.Statistics->EBytes *= Props.Metadata->ColumnsCount / (double)inputColumnsCount;
     }
 }
 

@@ -1,6 +1,7 @@
 #include "kqp_rbo_cbo.h"
 #include "kqp_rbo_lookup_join.h"
 #include "kqp_rbo_utils.h"
+#include "rules/kqp_rbo_index_selection.h"
 
 namespace {
 
@@ -248,5 +249,14 @@ bool TRBOProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
         default:
             return false;
     }
+}
+
+double TRBOProviderContext::ComputeAccessPathCost(const TReadAccessPath& path, double mainRows) const {
+    return EstimateAccessPathCost(path, mainRows, TAccessPathCostConstants{
+        .Seek = CONSTS_ACCESS_SEEK,
+        .Byte = CONSTS_ACCESS_BYTE,
+        .MainLookup = CONSTS_ACCESS_MAIN_LOOKUP,
+        .ResidualRow = CONSTS_ACCESS_RESIDUAL_ROW,
+    });
 }
 }

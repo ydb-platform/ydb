@@ -1,11 +1,16 @@
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_statistics.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
+#include <ydb/core/kqp/opt/rbo/rules/kqp_rbo_index_selection.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 #include <yql/essentials/core/extract_predicate/extract_predicate.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+
+#include <limits>
 
 namespace NKikimr::NKqp {
 
@@ -293,21 +298,6 @@ std::optional<TOpRead::TPointPrefix> ExtractPointPrefix(size_t pointPrefixLen, c
     return prefix;
 }
 
-struct TIndexScore {
-    bool SortMatchesAndNoResidual = false;
-    bool PointCoversKey = false;
-    size_t PointPrefixLen = 0;
-    bool UsedCoversKey = false;
-    size_t UsedPrefixLen = 0;
-    bool SortMatches = false;
-
-    std::tuple<bool, bool, size_t, bool, size_t> AsTuple() const {
-        return std::make_tuple(SortMatchesAndNoResidual, PointCoversKey, PointPrefixLen, UsedCoversKey, UsedPrefixLen);
-    }
-
-    bool operator<(const TIndexScore& other) const { return AsTuple() < other.AsTuple(); }
-};
-
 // Whether the ranges cover the whole filter predicate, so the extractor pruned it to `true`.
 bool IsPrunedToTrue(const TExprNode::TPtr& prunedLambda) {
     const auto literal = TCoLambda(prunedLambda).Body().Maybe<TCoBool>();
@@ -324,45 +314,6 @@ bool HasNoResidualPredicate(const TExprNode::TPtr& prunedLambda) {
         return boolLit.IsValid() && boolLit.Cast().Literal().Value() == "true" && cond.Cast().Value().Maybe<TCoArgument>().IsValid();
     }
     return body.Maybe<TCoArgument>().IsValid();
-}
-
-TIndexScore ScoreKeyOrder(const IPredicateRangeExtractor::TBuildResult& result, size_t keyLen, const TVector<TString>& sortColumns,
-                          const TVector<TString>& keyColumns, bool covering) {
-    TIndexScore score;
-    score.PointCoversKey = keyLen != 0 && result.PointPrefixLen == keyLen;
-    score.PointPrefixLen = score.PointCoversKey ? 0 : result.PointPrefixLen;
-    score.UsedCoversKey = keyLen != 0 && result.UsedPrefixLen == keyLen;
-    score.UsedPrefixLen = score.UsedCoversKey ? 0 : result.UsedPrefixLen;
-
-    if (covering && !sortColumns.empty()) {
-        const size_t pointPrefixLen =
-            (result.ExpectedMaxRanges && *result.ExpectedMaxRanges == 1) ? std::min(result.PointPrefixLen, keyColumns.size()) : 0;
-        score.SortMatches = SortMatchesKeyOrder(sortColumns, keyColumns, pointPrefixLen);
-        score.SortMatchesAndNoResidual = score.SortMatches && HasNoResidualPredicate(result.PrunedLambda);
-    }
-
-    return score;
-}
-
-// Ties are broken deterministically, independently of the order indexes are declared
-bool IsBetterCandidate(const TIndexScore& score, bool covering, const TString& name, const TIndexScore& bestScore, bool bestCovering,
-                       const TString& bestName) {
-    if (bestScore < score) {
-        return true;
-    }
-    // Index never wins a tie against the main table
-    if (score < bestScore || bestName.empty()) {
-        return false;
-    }
-    // Covering index beats non-covering one
-    if (covering != bestCovering) {
-        return covering;
-    }
-    if (score.SortMatches != bestScore.SortMatches) {
-        return score.SortMatches;
-    }
-    // Lexicographically smallest index name wins
-    return name < bestName;
 }
 
 TVector<TString> FindConsumingTopSortColumns(const IOperator* op, TExprContext& ctx) {
@@ -555,43 +506,47 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
     const auto& mainMeta = *tableDesc->Metadata;
     const auto mainKeyColumns = ResolveExposedKeyColumns(extractorNames, mainMeta.KeyColumnNames);
-    const auto mainResult = extractor->BuildComputeNode(mainKeyColumns, ctx, typeCtx);
     const auto sortColumns =
         read->GetTableStorageType() == NYql::EStorageType::RowStorage ? FindConsumingTopSortColumns(input.get(), ctx) : TVector<TString>();
 
-    TIntrusivePtr<TKikimrTableMetadata> chosenIndexMeta;
-    IPredicateRangeExtractor::TBuildResult winnerResult;
-    TVector<TString> winnerKeyColumns;
-
-    TIntrusivePtr<TKikimrTableMetadata> lookupIndexMeta;
-    IPredicateRangeExtractor::TBuildResult lookupResult;
-    TVector<TString> lookupKeyColumns;
-    TVector<TString> lookupReadColumns;
+    // The candidates are matched on the normalized predicate, the extractor builds the ranges of the chosen one only.
+    const auto predicateTree = TPredicateTreeBuilder(nullptr).Build(lambda.Body());
+    const auto normalizedPredicate = TPredicateTreeBuilder::Normalize(predicateTree);
+    if (normalizedPredicate) {
+        YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Normalized predicate of a read of " << tablePath << ":\n"
+                                     << normalizedPredicate->ToString();
+    }
 
     // Point prefixes are computed for every table the read can be redirected to, so a lookup join can
     // choose the one which fits its keys best. Otherwise only the table chosen for the read gets one.
     // Point lookups are only applicable to row storage tables.
     const bool allPointPrefixes = kqpCtx.Config->GetEnableLookupJoinPointPrefixes();
     TVector<TOpRead::TPointPrefix> pointPrefixes;
-    auto addPointPrefix = [&](const TKikimrTableMetadata& tableMeta, const IPredicateRangeExtractor::TBuildResult& result,
-                              const TVector<TString>& exposedKeyColumns) {
+    auto addPointPrefix = [&](const TKikimrTableMetadata& tableMeta, size_t pointPrefixLen, const TVector<TString>& exposedKeyColumns) {
         if (read->GetTableStorageType() != NYql::EStorageType::RowStorage) {
             return;
         }
-        if (auto prefix = ExtractPointPrefix(result.PointPrefixLen, lambda.Ptr(), schemeType, possibleKeys, exposedKeyColumns,
+        if (auto prefix = ExtractPointPrefix(pointPrefixLen, lambda.Ptr(), schemeType, possibleKeys, exposedKeyColumns,
                                              tableMeta, settings, rboCtx)) {
             pointPrefixes.push_back(std::move(*prefix));
         }
     };
+
+    auto mainMatch = MatchKey(normalizedPredicate, mainKeyColumns, settings.MaxRanges);
     if (allPointPrefixes) {
-        addPointPrefix(mainMeta, mainResult, mainKeyColumns);
+        addPointPrefix(mainMeta, mainMatch.PointPrefixLen, mainKeyColumns);
     }
 
-    auto bestScore = ScoreKeyOrder(mainResult, mainKeyColumns.size(), sortColumns, mainKeyColumns, true);
-    TString bestIndexName;
-    bool bestCovering = false;
+    auto mainScore = ScoreKeyOrder(mainMatch, mainKeyColumns.size(), sortColumns, mainKeyColumns, true);
+    TVector<TReadCandidate> candidates;
+    candidates.push_back(TReadCandidate{
+        .KeyColumns = mainKeyColumns,
+        .Match = std::move(mainMatch),
+        .Covering = true,
+        .Score = std::move(mainScore),
+    });
 
-    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !bestScore.PointCoversKey) {
+    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !candidates.front().Score.PointCoversKey) {
         const auto filterPhysical = FilterPhysicalColumns(*filter, *read, props);
         for (const auto& index : mainMeta.Indexes) {
             if (!IsSelectableIndex(index)) {
@@ -608,15 +563,15 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             }
 
             auto indexKeyColumns = ResolveExposedKeyColumns(extractorNames, indexMeta->KeyColumnNames);
-            auto indexResult = extractor->BuildComputeNode(indexKeyColumns, ctx, typeCtx);
-            if (!indexResult.ComputeNode) {
+            auto indexMatch = MatchKey(normalizedPredicate, indexKeyColumns, settings.MaxRanges);
+            if (indexMatch.UsedPrefixLen == 0) {
                 continue;
             }
 
             // A lookup join fetches the rows it finds in a non-covering index from the main table and applies
             // the whole predicate to them, so the index needs neither to cover the read nor the predicate.
             if (allPointPrefixes) {
-                addPointPrefix(*indexMeta, indexResult, indexKeyColumns);
+                addPointPrefix(*indexMeta, indexMatch.PointPrefixLen, indexKeyColumns);
             }
 
             const bool covering = IsCovering(*read, *indexMeta, props.InfoUnitRegistry);
@@ -631,30 +586,52 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                 }
             }
 
-            const auto score = ScoreKeyOrder(indexResult, indexKeyColumns.size(), sortColumns, indexKeyColumns, covering);
-            if (!IsBetterCandidate(score, covering, index.Name, bestScore, bestCovering, bestIndexName)) {
-                continue;
-            }
-
-            bestScore = score;
-            bestIndexName = index.Name;
-            bestCovering = covering;
-            if (covering) {
-                chosenIndexMeta = indexMeta;
-                winnerResult = std::move(indexResult);
-                winnerKeyColumns = std::move(indexKeyColumns);
-                lookupIndexMeta.Reset();
-            } else {
-                lookupIndexMeta = indexMeta;
-                lookupResult = std::move(indexResult);
-                lookupKeyColumns = std::move(indexKeyColumns);
-                lookupReadColumns = BuildIndexReadColumns(mainMeta.KeyColumnNames, filterPhysical);
-                chosenIndexMeta.Reset();
-            }
+            auto score = ScoreKeyOrder(indexMatch, indexKeyColumns.size(), sortColumns, indexKeyColumns, covering);
+            candidates.push_back(TReadCandidate{
+                .IndexMeta = indexMeta,
+                .IndexName = index.Name,
+                .KeyColumns = std::move(indexKeyColumns),
+                .Match = std::move(indexMatch),
+                .Covering = covering,
+                .Score = std::move(score),
+            });
         }
     }
 
-    if (lookupIndexMeta) {
+    auto accessPaths = BuildAccessPaths(candidates, mainMeta);
+    const bool costBased = IsCostBasedIndexSelectionEnabled(kqpCtx, read->GetTableStorageType()) && candidates.size() > 1
+        && EstimateAccessPathCosts(accessPaths, candidates, *read, normalizedPredicate, mainMeta.RecordsCount, rboCtx, props);
+
+    TVector<bool> rejected(candidates.size(), false);
+    size_t winnerIdx = 0;
+    IPredicateRangeExtractor::TBuildResult chosen;
+    while (true) {
+        // The score stays the choice when the cost cannot be estimated.
+        winnerIdx = costBased ? ChooseCheapestAccessPath(accessPaths) : ChooseCandidateByScore(candidates, rejected);
+        const auto& candidate = candidates[winnerIdx];
+        chosen = extractor->BuildComputeNode(candidate.KeyColumns, ctx, typeCtx);
+        if (winnerIdx == 0 || (chosen.ComputeNode && chosen.UsedPrefixLen >= candidate.Match.UsedPrefixLen)) {
+            break;
+        }
+        YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Index " << candidate.IndexName << " uses " << chosen.UsedPrefixLen
+                                     << " key columns instead of " << candidate.Match.UsedPrefixLen << ", rejected";
+        rejected[winnerIdx] = true;
+        accessPaths[winnerIdx].Cost = std::numeric_limits<double>::infinity();
+    }
+
+    // The chosen path reports what the extractor built.
+    auto& chosenPath = accessPaths[winnerIdx];
+    chosenPath.Chosen = true;
+    chosenPath.UsedPrefixLen = chosen.UsedPrefixLen;
+    chosenPath.PointPrefixLen = chosen.PointPrefixLen;
+    chosenPath.ExpectedMaxRanges = chosen.ExpectedMaxRanges ? TMaybe<size_t>(*chosen.ExpectedMaxRanges) : TMaybe<size_t>();
+    chosenPath.HasResidual = !HasNoResidualPredicate(chosen.PrunedLambda);
+    LogAccessPaths(accessPaths);
+    const auto& winner = candidates[winnerIdx];
+
+    if (winner.IndexMeta && !winner.Covering) {
+        const auto& lookupIndexMeta = winner.IndexMeta;
+        const auto& lookupResult = chosen;
         YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Selected non-covering index " << lookupIndexMeta->Name
                                      << " for a read of " << tablePath;
 
@@ -666,9 +643,10 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges) : TMaybe<size_t>(),
         };
         if (GetStorageType(*lookupIndexMeta) == NYql::EStorageType::RowStorage) {
-            rangeInfo.LiteralRange = BuildLiteralRange(lookupResult, lookupKeyColumns, *schemeType, read->Pos, ctx);
+            rangeInfo.LiteralRange = BuildLiteralRange(lookupResult, winner.KeyColumns, *schemeType, read->Pos, ctx);
         }
 
+        const auto lookupReadColumns = BuildIndexReadColumns(mainMeta.KeyColumnNames, FilterPhysicalColumns(*filter, *read, props));
         TUnorderedIUs indexColumns;
         THashMap<TString, TInfoUnitId> indexIds;
         for (const auto& col : lookupReadColumns) {
@@ -709,11 +687,11 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return lookup;
     }
 
-    const auto& chosen = chosenIndexMeta ? winnerResult : mainResult;
     if (!chosen.ComputeNode) {
         return input;
     }
-    const auto& chosenKeyColumns = chosenIndexMeta ? winnerKeyColumns : mainKeyColumns;
+    const auto& chosenKeyColumns = winner.KeyColumns;
+    const auto& chosenIndexMeta = winner.IndexMeta;
 
     if (chosenIndexMeta) {
         YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Selected index " << chosenIndexMeta->Name << " for a read of " << tablePath;
@@ -722,7 +700,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Pruned lambda: " << KqpExprToPrettyString(*chosen.PrunedLambda, ctx);
 
     if (!allPointPrefixes) {
-        addPointPrefix(chosenIndexMeta ? *chosenIndexMeta : mainMeta, chosen, chosenKeyColumns);
+        addPointPrefix(chosenIndexMeta ? *chosenIndexMeta : mainMeta, chosen.PointPrefixLen, chosenKeyColumns);
     }
 
     TOpRead::TRangeInfo rangeInfo{

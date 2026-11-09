@@ -24,6 +24,9 @@ namespace NKikimr::NReplication::NController {
 
 class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     void AddSecret(const TString& sourcePath, const TString& destinationPath) {
+        if (!Config.GetInitialScan()) {
+            return;
+        }
         ToAdd.emplace_back(TReplication::ETargetKind::Secret,
             std::make_shared<TTargetSecret::TSecretConfig>(sourcePath, destinationPath));
     }

@@ -188,15 +188,26 @@ void TCommandImportBase::FillCommonImportSettings(TSettings& settings) {
     }
 }
 
+bool ChopDefinitionBasename(TStringBuf& key, TStringBuf fileName) {
+    if (!key.EndsWith(fileName)) {
+        return false;
+    }
+    const size_t prefixLength = key.size() - fileName.size();
+    if (prefixLength && key[prefixLength - 1] != '/') {
+        return false;
+    }
+    return key.ChopSuffix(fileName);
+}
+
 bool IsSupportedObject(TStringBuf& key) {
     return key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
         || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
         || key.ChopSuffix(NDump::NFiles::CreateTopic().FileName)
-        || key.ChopSuffix(NDump::NFiles::CreateExternalDataSource().FileName);
+        || ChopDefinitionBasename(key, NDump::NFiles::CreateExternalDataSource().FileName);
 }
 
 bool IsUnsupportedExternalTable(TStringBuf key, const TVector<TRegExMatch>& exclusionPatterns) {
-    if (!key.ChopSuffix(NDump::NFiles::CreateExternalTable().FileName)) {
+    if (!ChopDefinitionBasename(key, NDump::NFiles::CreateExternalTable().FileName)) {
         return false;
     }
     key.ChopSuffix("/");

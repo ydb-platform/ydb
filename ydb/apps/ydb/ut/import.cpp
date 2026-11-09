@@ -569,6 +569,60 @@ Y_UNIT_TEST_SUITE(ImportTest) {
         });
     }
 
+    Y_UNIT_TEST_F(IgnoreExternalDataSourceBasenameLookalike, TImportFixture) {
+        PutS3TableExport("archive/selected/regular");
+        PutS3Object("/" + TEST_BUCKET + "/archive/selected/sidecars/old_"
+            + NYdb::NDump::NFiles::CreateExternalDataSource().FileName);
+        const TString s3Endpoint = GetS3Endpoint();
+        Service<TImportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(s3Endpoint)
+            .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectDisableVirtualAddressing(true)
+            .ExpectItem("archive/selected/regular", "/test_database/import-root/regular");
+        RunCli({
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "import", "s3",
+            "--bucket", TEST_BUCKET,
+            "--s3-endpoint", s3Endpoint,
+            "--scheme", "http",
+            "--access-key", "test-key",
+            "--secret-key", "test-access-key",
+            "--use-virtual-addressing", "false",
+            "--item", "src=archive/selected,dst=import-root",
+        });
+    }
+
+    Y_UNIT_TEST_F(IgnoreExternalTableBasenameLookalike, TImportFixture) {
+        PutS3TableExport("archive/selected/regular");
+        PutS3Object("/" + TEST_BUCKET + "/archive/selected/sidecars/old_"
+            + NYdb::NDump::NFiles::CreateExternalTable().FileName);
+        const TString s3Endpoint = GetS3Endpoint();
+        Service<TImportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(s3Endpoint)
+            .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectDisableVirtualAddressing(true)
+            .ExpectItem("archive/selected/regular", "/test_database/import-root/regular");
+        RunCli({
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "import", "s3",
+            "--bucket", TEST_BUCKET,
+            "--s3-endpoint", s3Endpoint,
+            "--scheme", "http",
+            "--access-key", "test-key",
+            "--secret-key", "test-access-key",
+            "--use-virtual-addressing", "false",
+            "--item", "src=archive/selected,dst=import-root",
+        });
+    }
+
     Y_UNIT_TEST_F(RejectSelectedExternalTable, TImportFixture) {
         using namespace NYdb::NDump;
         const TString root = "/" + TEST_BUCKET + "/archive/selected/";

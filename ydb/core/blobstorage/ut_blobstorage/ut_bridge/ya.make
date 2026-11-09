@@ -19,6 +19,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         bridge_get.cpp
         bridge_keep_flags.cpp
         bridge_mixed_storage.cpp
+        bridge_patch.cpp
         bridge_piles.cpp
         bridge_pile_connectivity.cpp
         bridge_pool_mode.cpp

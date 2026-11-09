@@ -112,17 +112,21 @@ namespace NKikimr {
                 PassAway();
             }
 
-            // the request may come from any node, so the diffs are checked here as the DS proxy checks them
+            // the request may come from any node, so the diffs are checked here as the DS proxy checks them; the offsets
+            // are taken from the record, as Diffs keeps them narrowed to ui32
             bool CheckDiffs() {
+                const NKikimrBlobStorage::TEvVMovedPatch &record = Event->Get()->Record;
+                ui64 prevEnd = 0;
                 for (ui32 idx = 0; idx < DiffCount; ++idx) {
-                    const ui64 begin = Diffs[idx].Offset;
-                    const ui64 end = begin + Diffs[idx].Buffer.size();
-                    const ui64 prevEnd = idx ? Diffs[idx - 1].Offset + Diffs[idx - 1].Buffer.size() : 0;
+                    const NKikimrBlobStorage::TDiffBlock &diff = record.GetDiffs(idx);
+                    const ui64 begin = diff.GetOffset();
+                    const ui64 end = begin + diff.GetBuffer().size();
                     if (begin >= OriginalId.BlobSize() || end > OriginalId.BlobSize() || begin < prevEnd) {
                         ErrorReason = TStringBuilder() << "incorrect diff at index " << idx
                             << " DiffStart# " << begin << " DiffEnd# " << end << " BlobSize# " << OriginalId.BlobSize();
                         return false;
                     }
+                    prevEnd = end;
                 }
                 return true;
             }

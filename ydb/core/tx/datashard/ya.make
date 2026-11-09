@@ -531,6 +531,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    hnsw_index/ut
     build_index/ut
     ut_bloom_filter
     ut_borrowed_compaction

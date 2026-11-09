@@ -7,11 +7,12 @@
 #pragma clang diagnostic ignored "-Wsign-compare"
 #pragma clang diagnostic ignored "-Wunused-parameter"
 #pragma clang diagnostic ignored "-Wunused-but-set-variable"
-#include <knnquery.h>
-#include <knnqueue.h>
-#include <method/hnsw.h>
-#include <space/space_lp.h>
-#include <space/space_scalar.h>
+#include <ydb/library/nmslib/include/knnquery.h>
+#include <ydb/library/nmslib/include/knnqueue.h>
+#include <ydb/library/nmslib/include/logging.h>
+#include <ydb/library/nmslib/include/method/hnsw.h>
+#include <ydb/library/nmslib/include/space/space_lp.h>
+#include <ydb/library/nmslib/include/space/space_scalar.h>
 #pragma clang diagnostic pop
 
 #include <util/generic/hash.h>

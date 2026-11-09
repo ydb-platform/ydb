@@ -9,6 +9,7 @@ SRCS(
     hnsw_index.cpp
     hnsw_index_build_actor.h
     hnsw_memory_tracker.h
+    hnsw_memory_tracker.cpp
 )
 
 PEERDIR(

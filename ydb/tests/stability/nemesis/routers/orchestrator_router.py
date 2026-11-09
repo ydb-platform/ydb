@@ -9,6 +9,7 @@ from flask import Blueprint, request, jsonify
 from ydb.tests.stability.nemesis.internal.config import Settings
 from ydb.tests.stability.nemesis.internal.models import parse_warden_time_window
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.command_dispatcher import CommandDispatcher
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop import OrchestratorNemesisSchedule
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
@@ -49,6 +50,7 @@ host_endpoints: dict[str, str] = {}
 mon_port = 8765  # Default monitoring port
 orchestrator_warden_checker: OrchestratorWardenChecker | None = None
 nemesis_schedule: OrchestratorNemesisSchedule | None = None
+command_dispatcher: CommandDispatcher | None = None
 nemesis_scheduler: BoundaryNemesisScheduler | None = None
 chaos_store: ChaosOrchestratorStore | None = None
 failure_guard: FailureModelGuard | None = None
@@ -193,7 +195,7 @@ def create_host_process():
         return jsonify({"status": "error", "message": "Invalid host"}), 400
     host = chaos_target.host
 
-    if nemesis_schedule is None:
+    if nemesis_schedule is None or command_dispatcher is None:
         return jsonify({"status": "error", "message": "Schedule not initialized"}), 500
 
     if nemesis_schedule.is_schedule_enabled(process_type):
@@ -265,7 +267,7 @@ def create_host_process():
                             ),
                         }
                     ), 503
-            if not nemesis_schedule.dispatch_command(cmd, track_history=False):
+            if not command_dispatcher.dispatch(cmd, track_history=False):
                 return jsonify(
                     {"status": "error", "message": f"dispatch failed for {process_type}"},
                 ), 502
@@ -489,7 +491,7 @@ def get_schedule():
 @blueprint.route("/api/schedule/history", methods=["GET"])
 def get_schedule_history():
     """Return last scheduled executions"""
-    return jsonify(nemesis_schedule.recent_history(15))
+    return jsonify(command_dispatcher.recent_history(15) if command_dispatcher is not None else [])
 
 
 def _scheduler_state() -> dict:

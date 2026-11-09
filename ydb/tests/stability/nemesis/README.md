@@ -76,6 +76,22 @@ Each agent runs on a cluster host and:
 - Runs safety checks on local logs and system state
 - Reports execution results and health status back to the orchestrator
 
+### Command delivery boundaries
+
+The app constructs one `AgentExecutionService` for local actions and one
+`CommandDispatcher` for orchestrator delivery/history/metrics. The boundary
+scheduler, legacy schedule and manual API share that dispatcher; delivery no
+longer lives inside the legacy scheduler. `AgentCommandTransport` sends the same
+explicit target to the local service or the existing agent HTTP API. Agent
+selection does not change a node/slot/disk target into a whole-host action.
+
+The transport reports acceptance, not action completion or YDB recovery. A
+rejection or delivery error is reported as failed dispatch and is not retried;
+a timeout alone does not prove that the agent did not apply the action. Budget
+and recovery accounting remain with the callers during this first refactoring
+step. This change preserves the stability test API and does not yet implement
+the planned unified fault engine, process discovery or shutdown/restore lifecycle.
+
 ### Execution Flow
 
 1. The orchestrator invokes a planner on schedule or manually

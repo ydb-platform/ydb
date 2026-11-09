@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import yaml
 
@@ -61,8 +62,7 @@ def _schedule(guard, probe, dispatched, store) -> OrchestratorNemesisSchedule:
     sched = OrchestratorNemesisSchedule(
         chaos_store=store,
         get_hosts=lambda: ["h1", "h2", "h3", "h4"],
-        is_local_host=lambda h: False,
-        get_app_port=lambda: 0,
+        dispatcher=SimpleNamespace(),
         failure_guard=guard,
         recovery_probe=probe,
     )
@@ -71,7 +71,7 @@ def _schedule(guard, probe, dispatched, store) -> OrchestratorNemesisSchedule:
         dispatched.append(cmd)
         return True
 
-    sched.dispatch_command = _fake_dispatch
+    sched._dispatcher.dispatch = _fake_dispatch
     return sched
 
 

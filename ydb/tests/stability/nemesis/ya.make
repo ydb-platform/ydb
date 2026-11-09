@@ -27,6 +27,9 @@ PY_SRCS(
     internal/nemesis/runners/yaml_gates.py
     internal/nemesis/runners/target_payload.py
     internal/nemesis/chaos_dispatch.py
+    internal/nemesis/command_transport.py
+    internal/orchestrator/nemesis/command_dispatcher.py
+    internal/agent/nemesis/service.py
     internal/agent/agent_warden_checker.py
     internal/agent/nemesis/runner.py
     internal/orchestrator/install.py

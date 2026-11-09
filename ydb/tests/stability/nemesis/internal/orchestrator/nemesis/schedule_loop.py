@@ -8,12 +8,9 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
 from typing import Callable, Iterable, List
 
-import requests
-
-from ydb.tests.stability.nemesis.routers.agent_router import create_process_helper
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.command_dispatcher import CommandDispatcher
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
@@ -39,13 +36,10 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.hc_model import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-HISTORY_LIMIT = 50
-
 
 class OrchestratorNemesisSchedule:
     """
-    Orchestrator-side scheduler: enabled schedule threads, recent dispatch history,
-    and HTTP/local dispatch to agents. Initialized from app.py (see orchestrator_router.nemesis_schedule).
+    Legacy per-type schedule threads. Delivery and history belong to the shared dispatcher.
     """
 
     def __init__(
@@ -53,32 +47,25 @@ class OrchestratorNemesisSchedule:
         *,
         chaos_store: ChaosOrchestratorStore,
         get_hosts: Callable[[], List[str]],
-        is_local_host: Callable[[str], bool],
-        get_app_port: Callable[[], int],
-        history_limit: int = HISTORY_LIMIT,
+        dispatcher: CommandDispatcher,
         failure_guard: FailureModelGuard | None = None,
         recovery_probe=None,
         inventory=None,
         predicate_for: Callable = hc_predicate_for,
         stuck_timeout_for: Callable[[str], float] = stuck_timeout_for,
         metrics=None,
-        resolve_http_host: Callable[[str], str] | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self._tasks: dict[str, dict] = {}
-        self._executions_history: list[dict] = []
-        self._history_limit = history_limit
+        self._dispatcher = dispatcher
         self._chaos_store = chaos_store
         self._get_hosts = get_hosts
-        self._is_local_host = is_local_host
-        self._get_app_port = get_app_port
         self._failure_guard = failure_guard
         self._recovery_probe = recovery_probe
         self._inventory = inventory
         self._predicate_for = predicate_for
         self._stuck_timeout_for = stuck_timeout_for
         self._metrics = metrics
-        self._resolve_http_host = resolve_http_host or (lambda h: h)
 
     def set_metrics(self, metrics) -> None:
         self._metrics = metrics
@@ -155,16 +142,6 @@ class OrchestratorNemesisSchedule:
                     result[pt] = {"enabled": False, "interval": None}
             return result
 
-    def append_executions_history(self, entry: dict) -> None:
-        with self._lock:
-            self._executions_history.append(entry)
-            if len(self._executions_history) > self._history_limit:
-                self._executions_history.pop(0)
-
-    def recent_history(self, n: int = 15) -> list:
-        with self._lock:
-            return self._executions_history[-n:][::-1]
-
     def shutdown_disable_all(self) -> None:
         """App teardown: flush extract commands to agents, then disable all tasks."""
         with self._lock:
@@ -213,91 +190,6 @@ class OrchestratorNemesisSchedule:
             stopped.append(process_type)
         return stopped
 
-    def dispatch_command(self, cmd: DispatchCommand, *, track_history: bool) -> bool:
-        """POST (or local helper) to start one execution on cmd.host. Returns False on failure."""
-        metrics = self._metrics
-        mode = guard_mode_for(cmd.nemesis_type)
-        guard_mode_val = mode.value if mode is not None else None
-        try:
-            payload = dict(cmd.payload or {})
-            payload["host"] = cmd.host
-            payload["chaos_target"] = cmd.target.to_dict()
-            body = {
-                "type": cmd.nemesis_type,
-                "action": cmd.action,
-                "payload": payload,
-                "target": cmd.target.to_dict(),
-            }
-            if self._is_local_host(cmd.host):
-                create_process_helper(
-                    cmd.nemesis_type,
-                    cmd.action,
-                    payload=payload,
-                )
-                logger.debug(
-                    "Started %s on local host (%s) target=%s",
-                    cmd.nemesis_type,
-                    cmd.action,
-                    cmd.target.identity_key(),
-                )
-            else:
-                port = self._get_app_port()
-                http_host = self._resolve_http_host(cmd.host)
-                resp = requests.post(
-                    f"http://{http_host}:{port}/api/processes",
-                    json=body,
-                    timeout=5,
-                )
-                resp.raise_for_status()
-
-            if track_history:
-                self.append_executions_history(
-                    {
-                        "type": cmd.nemesis_type,
-                        "action": cmd.action,
-                        "host": cmd.host,
-                        "target": cmd.target.to_dict(),
-                        "execution_id": cmd.execution_id,
-                        "scenario_id": cmd.scenario_id,
-                        "timestamp": datetime.utcnow().isoformat() + "Z",
-                    }
-                )
-            if metrics is not None:
-                lease_id = cmd.lease_id or cmd.execution_id
-                if cmd.action == "inject" and mode is not GuardMode.BYPASS:
-                    metrics.fault_started(
-                        target=cmd.target,
-                        nemesis_type=cmd.nemesis_type,
-                        execution_id=cmd.execution_id,
-                        scenario_id=cmd.scenario_id,
-                        lease_id=lease_id,
-                        source="dispatch",
-                        guard_mode=guard_mode_val,
-                    )
-                elif cmd.action == "extract":
-                    metrics.fault_extract_dispatched(
-                        target=cmd.target,
-                        nemesis_type=cmd.nemesis_type,
-                        execution_id=cmd.execution_id,
-                        scenario_id=cmd.scenario_id,
-                        lease_id=lease_id,
-                        source="dispatch",
-                    )
-            return True
-        except Exception as e:
-            logger.error("Failed to dispatch %s to %s: %s", cmd.nemesis_type, cmd.host, e)
-            if metrics is not None:
-                metrics.fault_dispatch_failed(
-                    target=cmd.target,
-                    nemesis_type=cmd.nemesis_type,
-                    action=cmd.action,
-                    execution_id=cmd.execution_id,
-                    scenario_id=cmd.scenario_id,
-                    source="dispatch",
-                    error=str(e),
-                )
-            return False
-
     def flush_disable_extracts(self, process_type: str) -> None:
         """Extract still-held faults when schedule is turned off.
 
@@ -328,7 +220,7 @@ class OrchestratorNemesisSchedule:
 
         def _recover() -> None:
             for extract_cmd in self._chaos_store.plan_extract_target(nemesis_type, target):
-                if not self.dispatch_command(extract_cmd, track_history=True):
+                if not self._dispatcher.dispatch(extract_cmd, track_history=True):
                     raise RuntimeError(
                         f"extract dispatch failed for {nemesis_type} on {target.identity_key()}"
                     )
@@ -352,7 +244,7 @@ class OrchestratorNemesisSchedule:
                     cmd.nemesis_type, cmd.target.identity_key(),
                 )
                 return
-        if not self.dispatch_command(cmd, track_history=True):
+        if not self._dispatcher.dispatch(cmd, track_history=True):
             return
         if not full:
             return

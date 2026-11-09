@@ -23,6 +23,11 @@ from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_
 from ydb.tests.stability.nemesis.internal.orchestrator.agent_endpoints import resolve_agent_endpoints
 from ydb.tests.stability.nemesis.internal.config import AgentSettings
 from ydb.tests.stability.nemesis.internal.agent.agent_warden_checker import AgentWardenChecker
+from ydb.tests.stability.nemesis.internal.agent.nemesis.runner import NemesisManager
+from ydb.tests.stability.nemesis.internal.agent.nemesis.service import AgentExecutionService
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
+from ydb.tests.stability.nemesis.internal.nemesis.command_transport import AgentCommandTransport
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.command_dispatcher import CommandDispatcher
 from ydb.tests.stability.nemesis.internal import config
 from ydb.tests.library.stability.healthcheck.healthcheck_reporter import HealthCheckReporter
 from flask import Flask, current_app, jsonify
@@ -92,6 +97,8 @@ def initialize_app():
 def _initialize_app_body():
     settings = get_settings()
 
+    execution_service = AgentExecutionService(NemesisManager(), NEMESIS_TYPES)
+    agent_router.execution_service = execution_service
     agent_router.warden_checker = AgentWardenChecker(
         log_directory=AgentSettings().kikimr_logs_directory,
     )
@@ -160,12 +167,20 @@ def _initialize_app_body():
         orchestrator_router.recovery_probe = probe
         probe.start()
 
+        dispatcher = CommandDispatcher(
+            AgentCommandTransport(
+                is_local_host=orchestrator_router.is_local_host,
+                start_local=execution_service.start,
+                get_app_port=orchestrator_router.get_app_port,
+                resolve_http_host=orchestrator_router.agent_http_host,
+            ),
+            metrics=metrics,
+        )
+        orchestrator_router.command_dispatcher = dispatcher
         orchestrator_router.nemesis_schedule = OrchestratorNemesisSchedule(
             chaos_store=orchestrator_router.chaos_store,
             get_hosts=lambda: orchestrator_router.hosts,
-            is_local_host=orchestrator_router.is_local_host,
-            get_app_port=orchestrator_router.get_app_port,
-            resolve_http_host=orchestrator_router.agent_http_host,
+            dispatcher=dispatcher,
             failure_guard=failure_guard,
             recovery_probe=probe,
             inventory=inventory,
@@ -178,9 +193,7 @@ def _initialize_app_body():
             inventory=inventory,
             plan_inject=orchestrator_router.chaos_store.plan_inject_target,
             plan_extract=orchestrator_router.chaos_store.plan_extract_target,
-            dispatch=lambda cmd: orchestrator_router.nemesis_schedule.dispatch_command(
-                cmd, track_history=True
-            ),
+            dispatch=lambda cmd: dispatcher.dispatch(cmd, track_history=True),
             recovery_probe=probe,
         )
 

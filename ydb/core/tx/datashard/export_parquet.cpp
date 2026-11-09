@@ -89,7 +89,7 @@ bool FlushRowGroup(bool last) {
             return false;
         }
     }
-    
+
     if (!BatchBuilder) {
         ErrorString = "BatchBuilder not initialized";
         ArrowWriter.reset();
@@ -131,6 +131,7 @@ public:
 TDataFormatParquet(TParquetExportSettings&& settings)
     : Columns(std::move(settings.Columns))
     , RowGroupSize(settings.RowGroupSize)
+    , RowGroupBytes(settings.RowGroupBytes)
     , WriteProperties(CreateWriteProperties(settings))
     , OutStream(std::make_shared<TCheckpointOutputStream>())
 {
@@ -197,6 +198,20 @@ bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
         return false;
     }
 
+    // Cut the row group before the row that does not fit into it. A row wider than
+    // the limit forms a row group of its own: a reader has to hold a whole row anyway.
+    if (RowGroupBytes && BatchBuilder->Rows()) {
+        ui64 rowBytes = 0;
+        for (const auto& cell : *row) {
+            rowBytes += cell.Size();
+        }
+        if (BatchBuilder->Bytes() + rowBytes > RowGroupBytes) {
+            if (!FlushRowGroup(false)) {
+                return false;
+            }
+        }
+    }
+
     BatchBuilder->AddRow(*row);
     if (BatchBuilder->Rows() >= RowGroupSize) {
         if (!FlushRowGroup(false)) {
@@ -212,8 +227,10 @@ TMaybe<TBuffer> Flush(bool last) override {
         return Nothing();
     }
 
-    if (!FlushRowGroup(last)) {
-        return Nothing();
+    if (last || !OutStream->GetBufferSize()) {
+        if (!FlushRowGroup(last)) {
+            return Nothing();
+        }
     }
 
     return OutStream->Checkpoint();
@@ -239,6 +256,7 @@ TString GetError() const override {
 private:
     const TTagToColumn Columns;
     const ui64 RowGroupSize;
+    const ui64 RowGroupBytes;
 
     std::shared_ptr<parquet::WriterProperties> WriteProperties;
     std::shared_ptr<arrow::Schema> Schema;

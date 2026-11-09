@@ -1,4 +1,0 @@
-# https://st.yandex-team.ru/YDBBUGS-711
-# Stress workloads may exit via os._exit() before Python threads are joined.
-# Suppress CPython thread leaks; keep native thread leaks and data races visible.
-thread:PyThread_start_joinable_thread

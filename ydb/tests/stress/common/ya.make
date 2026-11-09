@@ -1,7 +1,7 @@
 PY3_LIBRARY()
 
     SUPPRESSIONS(
-        tsan.supp
+        ${ARCADIA_ROOT}/ydb/tests/tsan.supp
     )
 
     PY_SRCS (

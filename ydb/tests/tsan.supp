@@ -5,3 +5,8 @@ race:free_threadstate
 # Data race in grpcio PollerCompletionQueue: _poll (worker thread) vs shutdown (main thread during finalization).
 # The race is inside the grpcio Cython code, not in YDB.
 race:PollerCompletionQueue
+
+# https://st.yandex-team.ru/YDBBUGS-711
+# Stress workloads may exit via os._exit() before Python threads are joined.
+# Suppress CPython thread leaks; keep native thread leaks and data races visible.
+thread:PyThread_start_joinable_thread

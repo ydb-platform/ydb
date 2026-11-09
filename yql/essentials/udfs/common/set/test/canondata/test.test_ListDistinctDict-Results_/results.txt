@@ -12,10 +12,13 @@
                                 [
                                     "ListType";
                                     [
-                                        "ListType";
+                                        "DictType";
                                         [
                                             "DataType";
                                             "Int32"
+                                        ];
+                                        [
+                                            "VoidType"
                                         ]
                                     ]
                                 ]
@@ -27,19 +30,27 @@
                     [
                         [
                             [
-                                "1";
-                                "2";
-                                "3"
+                                [
+                                    "1";
+                                    "Void"
+                                ]
                             ];
                             [
-                                "1";
-                                "2"
+                                [
+                                    "2";
+                                    "Void"
+                                ];
+                                [
+                                    "1";
+                                    "Void"
+                                ]
                             ]
                         ]
                     ]
                 ]
             }
-        ]
+        ];
+        "Unordered" = %true
     };
     {
         "Write" = [
@@ -54,7 +65,11 @@
                                 [
                                     "ListType";
                                     [
-                                        "ListType";
+                                        "DictType";
+                                        [
+                                            "DataType";
+                                            "Int32"
+                                        ];
                                         [
                                             "DataType";
                                             "Int32"
@@ -69,17 +84,22 @@
                     [
                         [
                             [
-                                "1";
-                                "3"
+                                [
+                                    "1";
+                                    "3"
+                                ]
                             ];
                             [
-                                "1";
-                                "2"
+                                [
+                                    "1";
+                                    "2"
+                                ]
                             ]
                         ]
                     ]
                 ]
             }
-        ]
+        ];
+        "Unordered" = %true
     }
 ]

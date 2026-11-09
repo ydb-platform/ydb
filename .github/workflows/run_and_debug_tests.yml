@@ -3,7 +3,7 @@ run-name: >-
   ${{ inputs.executor == 'remote' && format('{0} · manual{1}{2}{3}{4}',
       inputs.caller_workflow_label != '' && inputs.caller_workflow_label || 'Run and debug tests',
       format(' · {0}', github.ref_name),
-      inputs.build_preset != '' && format(' · {0}', trim(split(inputs.build_preset, ',')[0])) || '',
+      inputs.build_preset != '' && format(' · {0}', inputs.build_preset) || '',
       inputs.pr_number != '' && format(' · #{0}', inputs.pr_number) || '',
       inputs.pr_title != '' && format(' · {0}', inputs.pr_title) || '')
     || 'Run and debug tests' }}

@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_test_peer.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/crypto/default.h>
@@ -473,6 +474,54 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 Put(runtime, sender, groupId, TLogoBlobID(1234, 1, 2, 0, payloads[1].size(), 0), payloads[1]);
             }
         }
+    }
+
+    CUSTOM_UNIT_TEST(VDiskChunkReadErrorKeepsNodeAlive) {
+        // TPDisk::Stop answers the chunk reads that are still in its queue with ERROR. Here the PDisk's answer to
+        // a VDisk chunk read is replaced with such an ERROR. The VDisk must switch to the PDisk error state instead
+        // of aborting the whole process.
+        const ui32 groupId = TGroupID(EGroupConfigurationType::Static, DOMAIN_ID, 0).GetRaw();
+        TTestBasicRuntime runtime(1, false);
+        const ui32 nodeId = runtime.GetNodeId(0);
+        bool inject = false;
+        ui32 readErrors = 0;
+        ui32 vdiskErrors = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NPDisk::TEvChunkReadResult::EventType:
+                    if (std::exchange(inject, false)) {
+                        auto *msg = ev->Get<NPDisk::TEvChunkReadResult>();
+                        msg->Status = NKikimrProto::ERROR;
+                        msg->ErrorReason = "PDisk is stopped";
+                        ++readErrors;
+                    }
+                    break;
+                case TEvStatusUpdate::EventType:
+                    if (ev->Get<TEvStatusUpdate>()->Status == NKikimrBlobStorage::EVDiskStatus::ERROR) {
+                        ++vdiskErrors;
+                    }
+                    break;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Setup(runtime, "", nullptr, {}, {}, false /* setupController: only the static group is needed */);
+
+        auto sender = runtime.AllocateEdgeActor();
+        // Huge parts go straight to chunks, so the get below needs chunk reads.
+        const TString data(4_MB, 'h');
+        const TLogoBlobID id(1234, 1, 1, 0, data.size(), 0);
+        Put(runtime, sender, groupId, id, data);
+
+        inject = true;
+        const auto nodeWarden = MakeBlobStorageNodeWardenID(nodeId);
+        runtime.Send(new IEventHandle(MakeBlobStorageProxyID(groupId), sender,
+            new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead),
+            IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden));
+        TDispatchOptions waitForError;
+        waitForError.CustomFinalCondition = [&] { return vdiskErrors > 0; };
+        runtime.DispatchEvents(waitForError, TDuration::Seconds(10));
+        UNIT_ASSERT_C(readErrors > 0, "no chunk read was answered");
+        UNIT_ASSERT_C(vdiskErrors > 0, "no VDisk switched to the error state");
     }
 
     void CreateStoragePool(TTestBasicRuntime& runtime, TString name, TString kind) {
@@ -2219,16 +2268,19 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     CUSTOM_UNIT_TEST(TestRealmFailureTransitionRestartsVDisk) {
         using TNodeWarden = NStorage::TNodeWarden;
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        for (const auto [before, after] : {std::pair{TFailRealm::N0, TFailRealm::F}, {TFailRealm::F, TFailRealm::R}, {TFailRealm::F, TFailRealm::F}, {TFailRealm::N0, TFailRealm::R}}) {
+        using TFailRealm = NKikimrBlobStorage::TDataCenterState;
+        for (const auto [before, after] : {std::pair{TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, {TFailRealm::EXCLUDED, TFailRealm::RECOVERING}, {TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}, {TFailRealm::INCLUDED, TFailRealm::RECOVERING}}) {
             TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
             const auto wardenId = SetupNodeWardenForSlayTest(runtime);
             const TNodeWarden::TVSlotId slot(1, 2095, 1);
             const TVDiskID vdiskId(100595, 1, 1, 0, 0);
             const auto actorId = runtime.AllocateEdgeActor(1);
-            auto makeInfo = [&](ui32 generation, TFailRealm::EState state) {
+            auto makeInfo = [&](ui32 generation, EMirror3dcFailRealmState state) {
                 TBlobStorageGroupInfo::TDynamicInfo dynamic(vdiskId.GroupID, generation);
-                dynamic.FailRealmStates = {TFailRealm::N0, state, TFailRealm::N0};
+                dynamic.Mirror3dcState = {
+                    state == TFailRealm::EXCLUDED ? NKikimrBlobStorage::TGroupState::DC_FAILURE
+                        : state == TFailRealm::RECOVERING ? NKikimrBlobStorage::TGroupState::DC_RECOVERY : NKikimrBlobStorage::TGroupState::NORMAL,
+                    {TFailRealm::INCLUDED, state, TFailRealm::INCLUDED}};
                 for (ui32 i = 0; i < 9; ++i) {
                     dynamic.PushBackActorId(slot.GetVDiskServiceId());
                 }
@@ -2255,7 +2307,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 group.VDisksOfGroup.PushBack(&record);
                 warden.VDiskIdByActor.emplace(actorId, slot);
                 warden.UpdateGroupInfoForDisk(record, group.Info);
-                const bool restart = (before == TFailRealm::F) != (after == TFailRealm::F);
+                const bool restart = (before == TFailRealm::EXCLUDED) != (after == TFailRealm::EXCLUDED);
                 UNIT_ASSERT_VALUES_EQUAL(record.RuntimeData.has_value(), !restart);
                 UNIT_ASSERT_VALUES_EQUAL(record.ShutdownPending, restart);
                 UNIT_ASSERT_VALUES_EQUAL(record.RestartAfterShutdown, restart);
@@ -2267,7 +2319,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                     UNIT_ASSERT_VALUES_EQUAL(record.RuntimeData->GroupInfo->GroupGeneration, 2);
                 }
             });
-            if ((before == TFailRealm::F) != (after == TFailRealm::F)) {
+            if ((before == TFailRealm::EXCLUDED) != (after == TFailRealm::EXCLUDED)) {
                 runtime.WaitForEdgeActorEvent<TEvents::TEvPoison>(actorId, false);
             }
         }
@@ -2292,7 +2344,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     CUSTOM_UNIT_TEST(TestFailedRealmVDiskStartsInErrorState) {
         using TNodeWarden = NStorage::TNodeWarden;
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        using TFailRealm = NKikimrBlobStorage::TDataCenterState;
         TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
         const auto wardenId = SetupNodeWardenForSlayTest(runtime);
         const ui32 pdiskId = 2095;
@@ -2307,7 +2359,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto& group = warden.Groups[vdiskId.GroupID.GetRawId()];
             group.Group.emplace();
             TBlobStorageGroupInfo::TDynamicInfo dynamic(vdiskId.GroupID, 1);
-            dynamic.FailRealmStates = {TFailRealm::N0, TFailRealm::F, TFailRealm::N0};
+            dynamic.Mirror3dcState = {NKikimrBlobStorage::TGroupState::DC_FAILURE,
+                {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::INCLUDED}};
             for (ui32 i = 0; i < 9; ++i) {
                 dynamic.PushBackActorId(slot.GetVDiskServiceId());
             }

@@ -353,7 +353,8 @@ class ExecutableTest(ExecutableCase):
     async def test_e18_staggered_failures_batch_at_same_generation(self):
         # B2: c fails while {b}@G is unresolved; the same-primary superset
         # {b, c}@G replaces the pending record instead of waiting behind it.
-        e = await self.make(names=("a", "b", "c"), timing={"mutation_operation_timeout_seconds": 10})
+        e = await self.make(names=("a", "b", "c"), timing={"mutation_operation_timeout_seconds": 10},
+                            mock_heartbeat_timeout=1.0)
         await e.healthy()
         generation = await e.generation()
         preferred = min(e.cluster.topo.pile("a").nodes, key=lambda node: "grpc://" + node.endpoint)

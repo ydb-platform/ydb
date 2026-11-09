@@ -676,10 +676,10 @@ namespace NActors {
         [[noreturn]] ~TEnsureFormattedRecordWriter() noexcept(false);
     };
 
-    [[noreturn]] void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+    [[noreturn]] void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui64 lineNum,
         const NActors::NStructuredLog::TStructuredMessage& addMessage);
 
-    [[noreturn]] void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+    [[noreturn]] void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui64 lineNum,
         const NActors::NStructuredLog::TStructuredMessage& addMessage);
 }
 
@@ -805,7 +805,7 @@ namespace NActors {
         NActors::LogEnsureFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
     }
 
-/// Assert that depend on NDEBUG macro and outputs message like printf
+/// Assert that depends on NDEBUG macro; the message is built from structured key/value pairs.
 #ifndef NDEBUG
 #define YDB_LOG_VERIFY_DEBUG YDB_LOG_VERIFY
 #else

@@ -56,9 +56,10 @@ TString TEvPrivate::TEvAssignStreamName::ToString() const {
     << " }";
 }
 
-TEvPrivate::TEvCreateDstResult::TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId)
+TEvPrivate::TEvCreateDstResult::TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId, bool waitingImport)
     : TBase(rid, tid, NKikimrScheme::StatusSuccess)
     , DstPathId(dstPathId)
+    , WaitingImport(waitingImport)
 {
 }
 
@@ -71,25 +72,6 @@ TString TEvPrivate::TEvCreateDstResult::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {" << ToStringBody()
         << " DstPathId: " << DstPathId
     << " }";
-}
-
-TEvPrivate::TEvPrepareAttachDst::TEvPrepareAttachDst(ui64 rid, ui64 tid, const TPathId& dstPathId)
-    : ReplicationId(rid)
-    , TargetId(tid)
-    , DstPathId(dstPathId)
-{
-}
-
-TString TEvPrivate::TEvPrepareAttachDst::ToString() const {
-    return TStringBuilder() << ToStringHeader() << " {"
-        << " ReplicationId: " << ReplicationId
-        << " TargetId: " << TargetId
-        << " DstPathId: " << DstPathId
-    << " }";
-}
-
-TString TEvPrivate::TEvPrepareAttachDstResult::ToString() const {
-    return TStringBuilder() << ToStringHeader() << " {}";
 }
 
 TEvPrivate::TEvDropDstResult::TEvDropDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error)

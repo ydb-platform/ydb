@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 
 #include <ydb/library/security/util.h>
@@ -56,6 +57,7 @@ public:
 
     TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
         const TTableServiceConfig& tableServiceConfig,
+        const std::shared_ptr<const NPathAliasing::TPathNormalizer>& pathNormalizer,
         const TQueryServiceConfig& queryServiceConfig,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
         const TGUCSettings::TPtr& gUCSettings,
@@ -83,6 +85,7 @@ public:
         , DbCounters(dbCounters)
         , KqpSettings(kqpSettings)
         , TableServiceConfig(tableServiceConfig)
+        , PathNormalizer(pathNormalizer)
         , QueryServiceConfig(queryServiceConfig)
         , CompilationTimeout(TDuration::MilliSeconds(tableServiceConfig.GetCompileTimeoutMs()))
         , SplitCtx(std::move(splitCtx))
@@ -112,6 +115,9 @@ public:
         }
 
         config->ApplyServiceConfig(tableServiceConfig);
+        if (PathNormalizer) {
+            config->NormalizePath = [normalizer = PathNormalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
+        }
 
         if (tableServiceConfig.GetSqlVersion() != 0) {
             EnforcedSqlVersion = false;
@@ -778,6 +784,7 @@ private:
     TKikimrConfiguration::TPtr Config;
     TKqpSettings::TConstPtr KqpSettings;
     TTableServiceConfig TableServiceConfig;
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
     TQueryServiceConfig QueryServiceConfig;
     TDuration CompilationTimeout;
     TInstant StartTime;
@@ -811,6 +818,7 @@ private:
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const TTableServiceConfig& tableServiceConfig,
+    const std::shared_ptr<const NPathAliasing::TPathNormalizer>& pathNormalizer,
     const TQueryServiceConfig& queryServiceConfig,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& clientAddress,
@@ -821,7 +829,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
     bool usePessimisticLocks)
 {
-    return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig,
+    return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, pathNormalizer, queryServiceConfig,
                                 moduleResolverState, counters, gUCSettings, applicationName,
                                 uid, query, userToken, clientAddress, dbCounters,
                                 federatedQuerySetup, userRequestContext,

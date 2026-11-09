@@ -1,5 +1,7 @@
 #include "import_actor.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/backup/async_jobs/import_downloader.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -39,22 +41,6 @@ public:
     }
 };
 
-TString TImportActor::StageToString(EStage stage) {
-    switch (stage) {
-        case EStage::Initialization:
-            return "Initialization";
-        case EStage::WaitData:
-            return "WaitData";
-        case EStage::WaitWriting:
-            return "WaitWriting";
-        case EStage::WaitSaveCursor:
-            return "WaitSaveCursor";
-        case EStage::Finished:
-            return "Finished";
-    }
-    return "Unknown";
-}
-
 void TImportActor::ScheduleTimeoutCheck() {
     Schedule(TimeoutCheckInterval, new NActors::TEvents::TEvWakeup());
 }
@@ -71,13 +57,14 @@ void TImportActor::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
         return;
     }
     const auto elapsed = TInstant::Now() - StageStartTime;
-    if (elapsed > OperationTimeout) {
+    const auto operationTimeout = TDuration::Seconds(AppDataVerified().ColumnShardConfig.GetBackupSettings().GetImportOperationTimeoutSeconds());
+    if (elapsed > operationTimeout) {
         const TString errorMessage = TStringBuilder() << "Import operation timed out after " << elapsed.Seconds() << "s"
-                                                      << " in stage " << StageToString(Stage) << ", tablet " << TabletId << ", importActorId "
+                                                      << " in stage " << ::ToString(Stage) << ", tablet " << TabletId << ", importActorId "
                                                       << (ImportActorId ? ImportActorId.ToString() : "none");
         YDB_LOG_ERROR("",
             {"event", "import_timeout"},
-            {"stage", StageToString(Stage)},
+            {"stage", ::ToString(Stage)},
             {"elapsedSec", elapsed.Seconds()},
             {"tabletId", TabletId},
             {"importActorId", ImportActorId ? ImportActorId.ToString() : "none"});
@@ -88,7 +75,7 @@ void TImportActor::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
     if (elapsed > WarningInterval) {
         YDB_LOG_WARN("",
             {"event", "import_slow_operation"},
-            {"stage", StageToString(Stage)},
+            {"stage", ::ToString(Stage)},
             {"elapsedSec", elapsed.Seconds()},
             {"tabletId", TabletId},
             {"importActorId", ImportActorId ? ImportActorId.ToString() : "none"});
@@ -115,11 +102,7 @@ void TImportActor::AbortImport(const TString& errorMessage) {
         Send(ImportActorId, new NActors::TEvents::TEvPoisonPill());
         ImportActorId = {};
     }
-    if (Stage == EStage::WaitData) {
-        Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
-    } else if (Stage == EStage::WaitWriting) {
-        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime, false);
-    }
+    Counters.OnOperationsCancelled();
     Stage = EStage::WaitSaveCursor;
     StageStartTime = TInstant::Now();
     Counters.OnSaveProgressStarted();
@@ -132,7 +115,6 @@ void TImportActor::PassAway() {
         Send(ImportActorId, new NActors::TEvents::TEvPoisonPill());
         ImportActorId = {};
     }
-    Counters.OnActorDead();
     TBase::PassAway();
 }
 
@@ -149,7 +131,7 @@ void TImportActor::OnSessionStateSaved() {
 
 void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::TPtr& ev) {
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "import_batch_after_terminal")("stage", StageToString(Stage))(
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "import_batch_after_terminal")("stage", ::ToString(Stage))(
             "is_finished", ImportSession->IsFinished())("is_aborted", ImportSession->IsReadyForRemoveOnFinished());
         return;
     }
@@ -228,7 +210,7 @@ void TImportActor::SendWriteRequest() {
 
 void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "import_write_result_after_terminal")("stage", StageToString(Stage))(
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "import_write_result_after_terminal")("stage", ::ToString(Stage))(
             "is_finished", ImportSession->IsFinished())("is_aborted", ImportSession->IsReadyForRemoveOnFinished());
         return;
     }
@@ -261,7 +243,7 @@ void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
 }
 
 void TImportActor::SwitchStage(const EStage from, const EStage to) {
-    AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
+    AFL_VERIFY(Stage == from)("from", from)("real", Stage)("to", to);
     Stage = to;
     StageStartTime = TInstant::Now();
 }
@@ -295,12 +277,12 @@ TImportActor::TImportActor(std::shared_ptr<NBackground::TSession> bgSession, con
 void TImportActor::OnSessionProgressSaved() {
     Counters.OnSaveProgressFinished(TInstant::Now() - SaveProgressStartTime);
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor)("real", (ui32)Stage);
+        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor)("real", Stage);
         Stage = EStage::Finished;
         StageStartTime = TInstant::Now();
         SaveSessionState();
     } else {
-        AFL_VERIFY(Stage == EStage::WaitData)("real", (ui32)Stage);
+        AFL_VERIFY(Stage == EStage::WaitData)("real", Stage);
         StageStartTime = TInstant::Now();
         AFL_VERIFY(ImportActorId);
         Counters.OnReadStarted();

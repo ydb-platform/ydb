@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import pytest
 import requests
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -18,6 +19,17 @@ class TestOther(object):
         host = self.cluster.nodes[1].host
         port = self.cluster.nodes[1].mon_port
         return requests.get("http://%s:%s%s" % (host, port, path), params=params)
+
+    @pytest.mark.parametrize("from_tablet_id,to_tablet_id", [(2, 1), (1, 2), (2, 2)])
+    def test_blob_range_mismatched_tablet_id(self, from_tablet_id, to_tablet_id):
+        r = self.http_get("/blob_range", {
+            "groupId": "0",
+            "tabletId": "1",
+            "from": "[%d:1:1:0:0:1024:0]" % from_tablet_id,
+            "to": "[%d:1:2:0:0:1024:0]" % to_tablet_id,
+        })
+        assert r.status_code == 400, r.text
+        assert "from and to must match tabletId" in r.text
 
     def test_nodata(self):
         fake_blob = "[123456:1:1:0:0:1024:0]"

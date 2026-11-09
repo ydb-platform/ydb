@@ -111,6 +111,7 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/random_provider
+    library/cpp/threading/atomic_shared_ptr
     library/cpp/time_provider
     ydb/core/audit/audit_config
     ydb/core/base/generated
@@ -126,6 +127,7 @@ PEERDIR(
     ydb/library/login
     ydb/library/pdisk_io
     ydb/library/pretty_types_print/protobuf
+    ydb/library/vector_distance
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql

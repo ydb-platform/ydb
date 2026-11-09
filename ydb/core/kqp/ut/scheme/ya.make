@@ -29,6 +29,8 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/library/yql/udfs/common/knn
+    ydb/core/tx/replication/service
+    ydb/public/lib/ydb_cli/dump/util
     ydb/services/workload_manager/ut/common
     ydb/core/tx/columnshard/hooks/testing
     ydb/public/sdk/cpp/src/client/arrow
@@ -36,6 +38,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+    yql/essentials/public/udf
 )
 
 YQL_LAST_ABI_VERSION()

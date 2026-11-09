@@ -1655,9 +1655,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false),
                     IEventHandle::FlagTrackDelivery);
             } else {
-                if (GetBridgePileName()) {
-                    Error = "Bridge pile specified while bridge mode is disabled";
-                }
+                // a pile name without bridge mode is refused when registering, unless the node has it already (the
+                // node then still runs with the bridge config the cluster was prepared for bridge mode with)
                 ResolveTenant(ctx);
             }
         }

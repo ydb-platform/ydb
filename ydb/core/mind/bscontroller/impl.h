@@ -27,6 +27,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/mind/table_adapter.h>
@@ -726,7 +727,8 @@ public:
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
         // Persisted with the group generation by CommitConfigUpdates.
-        std::optional<std::array<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState, 3>> FailRealmStates;
+        std::optional<std::array<NKikimrBlobStorage::TDataCenterState::EState, 3>> FailRealmStates;
+        std::optional<EMirror3dcGroupState> Mirror3dcState;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 
@@ -1705,8 +1707,7 @@ private:
     TActorId ResponsivenessActorID;
     TActorId CmsPipe;
     TTabletResponsivenessPinger* ResponsivenessPinger;
-    using TDataCenterStates = std::unordered_map<TString,
-        NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter::EDataCenterState>;
+    using TDataCenterStates = std::unordered_map<TString, NKikimrBlobStorage::TDataCenterState::EState>;
     TDataCenterStates DataCenterStates;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
@@ -2270,6 +2271,9 @@ private:
         ui64 BlobsDone = 0;
         ui64 BlobsTotal = 0;
         ui64 BlobsError = 0;
+        ui64 BytesToCopy = 0;
+        ui64 BytesCopied = 0;
+        bool ScanFinished = false;
     };
 
     struct TSyncersRequiringAction;
@@ -2289,6 +2293,16 @@ private:
         // the syncer finished with an error is started again after a while only, as it may fail again at once
         TBackoffTimer RetryBackoff{100, 30000};
         TMonotonic NotBefore;
+
+        // what is left to copy into the target, see GetBridgeSyncRemaining; it outlives the syncers of the stage, as
+        // each of them starts from zero
+        std::optional<NKikimrBridge::TGroupState::EStage> CopyStage; // the stage the two fields below belong to
+        std::optional<TSyncerProgress> LastProgress; // the latest report of a syncer in CopyStage
+        std::optional<ui64> KnownRemaining; // what was left at the latest report with a finished scan in CopyStage
+        // bytes copied into the target by all of its syncers, and its samples over BridgeSyncRateWindow for the rate
+        ui64 CopiedTotal = 0;
+        std::deque<std::tuple<TMonotonic, ui64>> CopiedSamples;
+        ui64 CopyRate = 0; // bytes per second
 
         TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
             : BridgeProxyGroupId(bridgeProxyGroupId)
@@ -2406,6 +2420,23 @@ private:
 
     void UpdateBridgeSyncCounters();
 
+    // bytes left to copy into the target group of a pile in the given sync stage; Complete is set when the number
+    // comes from a scan that has gone over all the blobs, otherwise it's a lower bound; nothing is known before any
+    // scan
+    struct TBridgeSyncRemaining {
+        ui64 Bytes = 0;
+        bool Complete = false;
+    };
+    std::optional<TBridgeSyncRemaining> GetBridgeSyncRemaining(TGroupId targetGroupId,
+        NKikimrBridge::TGroupState::EStage stage) const;
+    // the stage of the target group of a pile, if it is one
+    std::optional<NKikimrBridge::TGroupState::EStage> GetBridgeSyncStage(TGroupId targetGroupId);
+    // returns the bytes copied since the previous report
+    ui64 UpdateBridgeSyncCopyProgress(TSyncerState& syncerState, NKikimrBridge::TGroupState::EStage stage,
+        const TSyncerProgress& progress);
+    void UpdateBridgeSyncCopyRates();
+    static constexpr TDuration BridgeSyncRateWindow = TDuration::Minutes(1);
+
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);
 
@@ -2452,6 +2483,9 @@ private:
         TInstant LastErrorTimestamp;
         TInstant FirstErrorTimestamp;
         ui32 ErrorCount = 0;
+        // what the blob scan of the stage before Stage has found missing from the target, in blob bytes; there is a row
+        // with this field and no errors, so that BSC restarts don't lose it
+        std::optional<ui64> EstimatedBytesToCopy;
     };
     THashMap<TGroupId, TBridgeSyncState> BridgeSyncState;
 

@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 
 using namespace NBridgeTest;
 
@@ -20,7 +21,7 @@ namespace {
     }
 
     // piles of 9 nodes, each pile being a datacenter of its own; non-uniform storage is enabled
-    TEnvironmentSetup::TSettings MakePileSettings(ui32 numPiles) {
+    TEnvironmentSetup::TSettings MakePileSettings(ui32 numPiles, bool enableDeepScrubbing = false) {
         return {
             .NodeCount = 9 * numPiles,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
@@ -37,6 +38,7 @@ namespace {
                 return TNodeLocation(location);
             },
             .SelfManagementConfig = true,
+            .EnableDeepScrubbing = enableDeepScrubbing,
             .NumPiles = numPiles,
             .AutomaticBootstrap = true,
         };
@@ -126,6 +128,24 @@ namespace {
             }
         }
         return false;
+    }
+
+    // wait for a full scrub cycle of every VDisk
+    void WaitForScrubCycles(TEnvironmentSetup& env, const std::vector<TActorId>& vdiskActorIds) {
+        for (const TActorId& vdiskActorId : vdiskActorIds) {
+            const ui32 nodeId = vdiskActorId.NodeId();
+            const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            const TInstant deadline = env.Runtime->GetClock() + TDuration::Minutes(5);
+            for (;;) {
+                env.Runtime->Send(new IEventHandle(TEvBlobStorage::EvScrubAwait, 0, vdiskActorId, edge, nullptr,
+                    RandomNumber<ui64>()), nodeId);
+                auto ev = env.WaitForEdgeActorEvent<TEvScrubNotify>(edge, false, deadline);
+                UNIT_ASSERT_C(ev, "no successful scrub cycle of the VDisk with ActorId# " << vdiskActorId);
+                if (ev->Get()->Success) {
+                    break;
+                }
+            }
+        }
     }
 
     // the group has synced parts in both piles and relies on none of them in particular
@@ -431,6 +451,54 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
             env.Sim(TDuration::Seconds(30));
             checker.CheckAll(nodeId);
         }
+    }
+
+    // the VDisks of a group made bridged keep running as its inline pile; their deep scrubbing checks this part from
+    // then on, fenced with its generation, instead of checking every part of the group through its bridge proxy
+    Y_UNIT_TEST(DeepScrubbingAfterMakingBridged) {
+        TEnvironmentSetup env(MakePileSettings(2, true));
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 1, 1);
+        const auto groups = GetLogicalPoolGroups(env, 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+        TDataChecker checker(env);
+        for (ui32 i = 0; i < 10; ++i) {
+            checker.Write(groupId);
+        }
+        std::vector<TActorId> vdiskActorIds;
+        const auto info = env.GetGroupInfo(groupId);
+        for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+            vdiskActorIds.push_back(info->GetActorId(i));
+            env.CompactVDisk(info->GetActorId(i)); // the scrub checks the blobs it finds in SSTs
+        }
+
+        env.SetScrubPeriodicity(TDuration::Seconds(1));
+
+        MakeLocatedPoolBridged(env, 2, groups);
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, groupId).GetBridgeProxyGroupId(), groupId);
+        WaitForScrubCycles(env, vdiskActorIds); // the cycles that have started before the change finish
+
+        // checks of the blobs written to the group: the bridge proxy fences the checks it sends to the parts, so an
+        // unfenced one can come only from the scrub of the inline pile itself
+        const ui64 tabletId = std::get<1>(checker.GetWritten().front()).TabletID();
+        ui32 numFenced = 0;
+        ui32 numUnfenced = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCheckIntegrity) {
+                const auto *msg = ev->Get<TEvBlobStorage::TEvCheckIntegrity>();
+                if (msg->Id.TabletID() == tabletId) {
+                    ++(msg->ForceGroupGeneration ? numFenced : numUnfenced);
+                }
+            }
+            return true;
+        };
+        WaitForScrubCycles(env, vdiskActorIds);
+        env.Runtime->FilterFunction = {};
+
+        UNIT_ASSERT_VALUES_EQUAL(numUnfenced, 0);
+        UNIT_ASSERT_C(numFenced, "no blob checked by deep scrubbing");
+        checker.CheckAll();
     }
 
     // the group being made bridged one relies on its original part solely: when the pile of the part goes out, the
@@ -760,14 +828,17 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         std::optional<ui32> newGroupId;
         {
             const auto current = env.FetchBaseConfig();
-            for (const auto *group : GetPoolGroups(current, 1)) {
-                if (group->GetIsProxyGroup()) {
+            const auto poolGroups = GetPoolGroups(current, 1);
+            UNIT_ASSERT_VALUES_EQUAL(poolGroups.size(), 2); // new group is born inline pile, without separate parts
+            for (const auto *group : poolGroups) {
+                if (group->GetGroupId() != groupId) {
                     UNIT_ASSERT(!newGroupId);
                     newGroupId = group->GetGroupId();
                 }
             }
         }
         UNIT_ASSERT(newGroupId);
+        CheckInlinePileGroup(env, *newGroupId);
         checker.Write(*newGroupId);
 
         auto checkAll = [&](ui32 nodeId) {

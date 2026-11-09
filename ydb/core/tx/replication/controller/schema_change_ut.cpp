@@ -3105,6 +3105,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
                     tid,
                     std::make_shared<TTargetTable::TTableConfig>("/Root/table1", "/Root/replica1"),
                     "stream",
+                    "/Root/table1/stream",
                     "consumer",
                     TDuration::Hours(1)));
             } else {

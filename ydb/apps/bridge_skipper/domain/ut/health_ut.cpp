@@ -19,7 +19,7 @@ TClusterView View() {
 }
 
 Ydb::Monitoring::SelfCheckResult Fixture(const TString& name) {
-    TFileInput input(ArcadiaSourceRoot() + "/ydb/apps/bridge_skipper/domain/ut/fixtures/" + name + ".pbtxt");
+    TFileInput input(ArcadiaFromCurrentLocation(__SOURCE_FILE__, "fixtures/" + name + ".pbtxt"));
     Ydb::Monitoring::SelfCheckResult result;
     UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(input.ReadAll(), &result));
     return result;
@@ -90,6 +90,26 @@ void AssertVerdict(const THealthEvaluation& evaluation, const TString& pile, EPi
 } // namespace
 
 Y_UNIT_TEST_SUITE(BridgeSkipperHealth) {
+    Y_UNIT_TEST(FallbackEvidenceRedRequiresDecisiveVDiskReasons) {
+        for (unsigned mode = 0; mode != 5; ++mode) {
+            auto raw = Fixture("fallback_red");
+            if (mode == 0) {
+                raw.mutable_issue_log(2)->set_status(Ydb::Monitoring::StatusFlag::BLUE);
+                raw.mutable_issue_log(2)->set_message("Replication in progress");
+            } else if (mode == 1) {
+                raw.mutable_issue_log(1)->set_reason(0, "missing");
+            } else if (mode == 2) {
+                raw.mutable_issue_log(2)->set_status(Ydb::Monitoring::StatusFlag::GREY);
+            } else if (mode == 3) {
+                raw.mutable_issue_log(1)->clear_reason();
+            } else {
+                raw.mutable_issue_log(1)->set_type("BRIDGE_GROUP");
+            }
+            UNIT_ASSERT_C(ClassifySelfCheck(raw).Parts.at("b") == EPart::Incomplete, mode);
+        }
+        UNIT_ASSERT(Classify("fallback_red").Parts.at("b") == EPart::FallbackRed);
+    }
+
     Y_UNIT_TEST(ValidatedConnectivityKeepsQueriedEndpointForRouting) {
         for (const unsigned invalid : {0u, 1u, 2u, 3u}) {
             TScenario s;
@@ -259,6 +279,9 @@ Y_UNIT_TEST_SUITE(BridgeSkipperHealth) {
         UNIT_ASSERT(ClassifySelfCheck(raw).Parts.at("b") == EPart::RedPart);
         raw = Fixture("fallback_grey");
         *raw.add_issue_log() = Fixture("fallback_red").issue_log(1);
+        raw.mutable_issue_log(raw.issue_log_size() - 1)->set_reason(0, "red-disk");
+        *raw.add_issue_log() = Fixture("fallback_red").issue_log(2);
+        raw.mutable_issue_log(raw.issue_log_size() - 1)->set_id("red-disk");
         UNIT_ASSERT(ClassifySelfCheck(raw).Parts.at("b") == EPart::FallbackRed);
         raw = Fixture("blue_only");
         *raw.add_issue_log() = Fixture("blue_only").issue_log(1);

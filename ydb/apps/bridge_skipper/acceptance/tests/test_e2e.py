@@ -353,7 +353,8 @@ class ExecutableTest(ExecutableCase):
     async def test_e18_staggered_failures_batch_at_same_generation(self):
         # B2: c fails while {b}@G is unresolved; the same-primary superset
         # {b, c}@G replaces the pending record instead of waiting behind it.
-        e = await self.make(names=("a", "b", "c"), timing={"mutation_operation_timeout_seconds": 10})
+        e = await self.make(names=("a", "b", "c"), timing={"mutation_operation_timeout_seconds": 10},
+                            mock_heartbeat_timeout=1.0)
         await e.healthy()
         generation = await e.generation()
         preferred = min(e.cluster.topo.pile("a").nodes, key=lambda node: "grpc://" + node.endpoint)
@@ -376,6 +377,80 @@ class ExecutableTest(ExecutableCase):
                          {"a": "PRIMARY", "b": "DISCONNECTED", "c": "DISCONNECTED"})
         await e.quiet(3)
         self.assertEqual(len(e.mutations()), 2)
+
+    async def primary_quorum_loss_during_binding(self, names):
+        e = await self.make(names=names, mode="observe")
+        generation = await e.generation()
+        await e.all_control("/control", op="binding_flap", all=True, on=True, duty=1.0)
+        for node in e.cluster.topo.pile("a").nodes[:2]:
+            await e.control("a", "/control", op="down", label=node.label)
+        state = await e.controller.until(
+            lambda state: piles(state).get("a", {}).get("verdict") == "FAILED"
+            and state["decision"]["kind"] == "READY", "fallback primary failure confirmed")
+        self.assertTrue(all(endpoint["selfcheck_mode"] != "BSC" or endpoint["selfcheck_evidence"]["expired"]
+                            for endpoint in state["endpoints"]))
+        self.assertTrue(any("decisive RED static group" in reason for reason in piles(state)["a"]["reasons"]))
+        reports = piles(state)["a"]["connectivity"]
+        self.assertTrue(reports)
+        self.assertTrue(all(report["binding_in_progress"] for report in reports))
+        self.assertEqual(e.mutations(), [])
+        await e.controller.set_mode("auto")
+        events = await e.mutation(generation, {"a": "DISCONNECTED", "b": "PRIMARY"})
+        self.assertEqual(events[0]["pile"], "b")
+        await e.controller.until(lambda state: state["pending_mutation"] is None and state["last_mutation"]
+                                 and state["last_mutation"]["outcome"] == "SUCCESS", "fallback failover committed")
+        await e.quiet(3)
+        self.assertEqual(len(e.mutations()), 1)
+
+    async def test_fallback_policy_two_pile_primary_quorum_loss_during_binding(self):
+        await self.primary_quorum_loss_during_binding(("a", "b"))
+
+    async def test_fallback_policy_three_pile_primary_quorum_loss_during_binding(self):
+        await self.primary_quorum_loss_during_binding(("a", "b", "c"))
+
+    async def test_fallback_policy_candidate_needs_own_reply(self):
+        # c supplies outside evidence but is not a promotion candidate.
+        e = await self.make(names=("a", "b", "c"), mode="observe")
+        await e.all_control("/followups", hold=["suspend"])
+        await e.update({"c": "SUSPENDED"})
+        await e.controller.until(
+            lambda state: state["view"] and any(pile["name"] == "c" and pile["state"] == "SUSPENDED"
+                                                for pile in state["view"]["piles"]), "suspended observer")
+        generation = await e.generation()
+        marker = time.time()
+        before = e.mutations()
+        await e.control("b", "/rpc-override", all=True, method="SelfCheck",
+                        response={"operation": {"ready": True, "status": "UNAVAILABLE"}})
+        await e.all_control("/control", op="binding_flap", all=True, on=True, duty=1.0)
+        for node in e.cluster.topo.pile("a").nodes[:2]:
+            await e.control("a", "/control", op="down", label=node.label)
+        state = await e.controller.until(
+            lambda state: state["decision"].get("blocker") == "NO_CANDIDATE"
+            and piles(state).get("a", {}).get("confirmed"), "no own candidate fallback reply")
+        self.assertTrue(piles(state)["b"]["self_quorum"])
+        self.assertFalse(piles(state)["b"]["fallback_red"])
+        self.assertTrue(all(endpoint["selfcheck_mode"] != "BSC" or endpoint["selfcheck_evidence"]["expired"]
+                            for endpoint in state["endpoints"]))
+        await e.controller.set_mode("auto")
+        await e.quiet(3)
+        self.assertEqual(e.mutations(), before)
+        await e.control("b", "/rpc-override", all=True, method="SelfCheck", response=None)
+        await e.mutation(generation, {"a": "DISCONNECTED", "b": "PRIMARY"}, after=marker)
+
+    async def test_fallback_policy_grey_primary_is_not_failure_proof(self):
+        e = await self.make()
+        await e.all_control("/control", op="binding_flap", all=True, on=True, duty=1.0)
+        await e.partition()
+        await e.control("a", "/control", op="unavailable", all=True)
+        state = await e.controller.until(
+            lambda state: all(endpoint["selfcheck_mode"] != "BSC" or endpoint["selfcheck_evidence"]["expired"]
+                              for endpoint in state["endpoints"]) and piles(state).get("a", {}).get("fallback_red")
+            and piles(state)["a"]["verdict"] == "UNKNOWN" and not piles(state)["a"]["self_quorum"],
+            "primary fallback has no whiteboard data")
+        self.assertEqual(piles(state)["a"]["verdict"], "UNKNOWN")
+        self.assertFalse(piles(state)["a"]["self_quorum"])
+        await e.quiet(4)
+        self.assertEqual(e.mutations(), [])
 
     async def test_e17_black_holed_pile_with_slow_selfcheck(self):
         # SelfCheck answers 5 s after the call (operation timeout 6 s, client deadline 8 s, round 1 s,

@@ -768,10 +768,9 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        const ui32 failRealm = vdisk.GetVDiskId().FailRealm;
-        const auto failed = NKikimrBlobStorage::TGroupInfo::TFailRealm::F;
-        const bool wasFailed = currentInfo->GetFailRealmState(failRealm) == failed;
-        const bool isFailed = newInfo->GetFailRealmState(failRealm) == failed;
+        ui32 failRealm = vdisk.GetVDiskId().FailRealm;
+        bool wasFailed = currentInfo->IsFailRealmExcluded(failRealm);
+        bool isFailed = newInfo->IsFailRealmExcluded(failRealm);
         if (wasFailed != isFailed) {
             PoisonLocalVDisk(vdisk);
             // Keep receiving group updates while the previous incarnation is shutting down.

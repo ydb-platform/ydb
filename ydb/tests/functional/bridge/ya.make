@@ -4,6 +4,7 @@ TEST_SRCS(
     common.py
     state_storage_selfheal.py
     test_bridge.py
+    test_skipper.py
     test_conversion.py
     test_discovery.py
     test_pile_ops.py
@@ -35,6 +36,7 @@ ENV(IAM_TOKEN="")
 DEPENDS(
     ydb/apps/ydbd
     ydb/apps/ydb
+    ydb/apps/bridge_skipper
 )
 
 PEERDIR(

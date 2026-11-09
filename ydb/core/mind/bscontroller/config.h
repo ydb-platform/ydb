@@ -162,8 +162,7 @@ namespace NKikimr {
             // without touching group generation.
             THashSet<TBoxStoragePoolId> HeapAllocatorNumLeadingDisksChanged;
 
-            bool ResetDataCenterStates = false;
-            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking);
+            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking, bool suppressDegradedGroupsChecking);
 
             bool PushStaticGroupsToSelfHeal = false;
 
@@ -448,8 +447,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TMoveDDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd, TStatus& status);
-            void ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates& cmd, TStatus& status);
-            void ExecuteStep(const NKikimrBlobStorage::TDefineFailRealmStates& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDefineGroupState& cmd, TStatus& status);
 
             template<typename TCallback>
             void ForEachStoragePoolGroup(TBoxStoragePoolId storagePoolId, TCallback&& callback);

@@ -1,0 +1,4 @@
+interface:
+  display_name: "YDB Skipper Development"
+  short_description: "Develop and review the YDB bridge control plane (skipper)"
+  default_prompt: "Use $ydb-skipper-dev to develop or review the requested YDB bridge control plane (skipper) change."

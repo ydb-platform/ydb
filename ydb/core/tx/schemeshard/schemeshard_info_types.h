@@ -152,6 +152,8 @@ struct TBackupToS3Settings {
     // System Views
     TControlWrapper EnableSysViewPermissionsExport;
     TControlWrapper EnableSysViewPermissionsImport;
+    // Coordination Nodes
+    TControlWrapper EnableKesusExport;
 
     TBackupToS3Settings()
         : EnableAsyncReplicationExport(1, 0, 1)
@@ -164,6 +166,7 @@ struct TBackupToS3Settings {
         , EnableExternalTableImport(1, 0, 1)
         , EnableSysViewPermissionsExport(1, 0, 1)
         , EnableSysViewPermissionsImport(1, 0, 1)
+        , EnableKesusExport(0, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -181,6 +184,8 @@ struct TBackupToS3Settings {
 
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsExport, icb->BackupControls.S3Controls.EnableSysViewPermissionsExport);
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsImport, icb->BackupControls.S3Controls.EnableSysViewPermissionsImport);
+
+        TControlBoard::RegisterSharedControl(EnableKesusExport, icb->BackupControls.S3Controls.EnableKesusExport);
     }
 };
 
@@ -3382,6 +3387,13 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 Y_ENSURE(success, description);
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::THnswIndexDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -3488,6 +3500,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
                 break;
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+                alterData->SpecializedIndexDescription = config.GetHnswIndexDescription();
+                break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -3559,6 +3574,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::THnswIndexDescription,
         NKikimrSchemeOp::TFulltextIndexDescription,
         NKikimrSchemeOp::TBloomFilter,
         NKikimrSchemeOp::TBloomNGrammFilter> SpecializedIndexDescription;
@@ -3569,6 +3585,7 @@ struct TCdcStreamSettings {
     using EMode = NKikimrSchemeOp::ECdcStreamMode;
     using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
     using EState = NKikimrSchemeOp::ECdcStreamState;
+    using ECompression = NKikimrSchemeOp::ECdcStreamCompression;
 
     #define OPTION(type, name) \
         TSelf&& With##name(type value) && { \
@@ -3586,6 +3603,8 @@ struct TCdcStreamSettings {
     OPTION(EState, State);
     OPTION(bool, UserSIDs);
     OPTION(bool, TraceIds);
+    OPTION(ECompression, Compression);
+    OPTION(i32, CompressionLevel);
 
     #undef OPTION
 };
@@ -3635,6 +3654,10 @@ struct TCdcStreamInfo
             .WithAwsRegion(desc.GetAwsRegion())
             .WithUserSIDs(desc.GetUserSIDs())
             .WithTraceIds(desc.GetTraceIds())
+            .WithCompression(desc.GetCompression())
+            .WithCompressionLevel(desc.HasCompressionLevel()
+                ? desc.GetCompressionLevel()
+                : (desc.GetCompression() == NKikimrSchemeOp::ECdcStreamCompressionZstd ? 3 : 0))
         );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
@@ -3661,6 +3684,10 @@ struct TCdcStreamInfo
         }
         desc.SetUserSIDs(UserSIDs);
         desc.SetTraceIds(TraceIds);
+        desc.SetCompression(Compression);
+        if (CompressionLevel) {
+            desc.SetCompressionLevel(CompressionLevel);
+        }
     }
 
     void FinishAlter() {

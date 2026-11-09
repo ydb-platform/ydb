@@ -1,4 +1,10 @@
 name: Run and debug tests
+run-name: >-
+  ${{ inputs.executor == 'remote' && (
+    inputs.pr_title != '' && inputs.pr_number != '' && format('{0} (#{1})', inputs.pr_title, inputs.pr_number)
+    || inputs.caller_workflow_label != '' && format('Remote · {0}', inputs.caller_workflow_label)
+    || 'Remote · Run and debug tests'
+  ) || 'Run and debug tests' }}
 
 on:
   workflow_dispatch:
@@ -36,6 +42,21 @@ on:
         required: false
         type: boolean
         default: false
+      pr_number:
+        description: 'remote only: optional PR number for host run title (e2e / PR-check-style display)'
+        required: false
+        type: string
+        default: ''
+      pr_title:
+        description: 'remote only: optional PR title for host run title'
+        required: false
+        type: string
+        default: ''
+      caller_workflow_label:
+        description: 'remote only: override caller workflow label on platform run (default Run and debug tests)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   resolve_remote:
@@ -60,6 +81,9 @@ jobs:
           ANALYTICS_BRANCH: ${{ github.ref_name }}
           DEFAULT_BUILD_TARGET: ${{ inputs.test_targets }}
           DEFAULT_BUILD_PRESET: ${{ inputs.build_preset }}
+          CALLER_PR_NUMBER: ${{ inputs.pr_number }}
+          CALLER_PR_TITLE: ${{ inputs.pr_title }}
+          CALLER_WORKFLOW: ${{ inputs.caller_workflow_label != '' && inputs.caller_workflow_label || 'Run and debug tests' }}
         run: python3 .github/scripts/ci/dispatcher/resolve_remote_execution.py
 
   remote:

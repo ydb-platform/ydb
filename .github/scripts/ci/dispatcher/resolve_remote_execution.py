@@ -6,8 +6,10 @@ DEFAULT_REMOTE. A caller value that differs is rejected.
 
 Env:
   REMOTE_JSON — optional caller override (object or empty)
-  CODE_REF, GITHUB_WORKFLOW, DEFAULT_BUILD_TARGET, DEFAULT_BUILD_PRESET,
-  ANALYTICS_BRANCH (optional, ignored if remote.code_ref set)
+  CODE_REF, GITHUB_WORKFLOW (or CALLER_WORKFLOW), CALLER_PR_NUMBER, CALLER_PR_TITLE,
+    DEFAULT_BUILD_TARGET, DEFAULT_BUILD_PRESET,
+    ANALYTICS_BRANCH (optional, ignored if remote.code_ref set);
+  remote JSON may also set pr_number / pr_title (strings).
 """
 from __future__ import annotations
 
@@ -115,6 +117,27 @@ def _job_input_str(v: Any) -> str:
     return v
 
 
+def _caller_pr_context(remote: dict[str, Any]) -> tuple[str, str]:
+    """Optional display metadata for the host workflow run-name (not claim logic)."""
+    pr_number = remote.pop("pr_number", None)
+    pr_title = remote.pop("pr_title", None)
+    if pr_number is not None and not isinstance(pr_number, (str, int)):
+        die("remote JSON .pr_number must be string or int")
+    if pr_title is not None and not isinstance(pr_title, str):
+        die("remote JSON .pr_title must be string")
+    num = str(pr_number).strip() if pr_number is not None else ""
+    num = num or (os.environ.get("CALLER_PR_NUMBER") or "").strip()
+    title = (pr_title or "").strip() if pr_title is not None else ""
+    title = title or (os.environ.get("CALLER_PR_TITLE") or "").strip()
+    if num and not re.fullmatch(r"[0-9]+", num):
+        die("pr_number must be digits")
+    if "\n" in title or "\r" in title:
+        die("pr_title must be single-line")
+    if len(title) > 200:
+        title = title[:197] + "..."
+    return num, title
+
+
 def parse_remote_json(raw: str) -> dict[str, Any]:
     raw = (raw or "").strip()
     if not raw:
@@ -130,6 +153,7 @@ def parse_remote_json(raw: str) -> dict[str, Any]:
 
 def build_config() -> dict[str, Any]:
     remote = parse_remote_json(os.environ.get("REMOTE_JSON", ""))
+    pr_number, pr_title = _caller_pr_context(remote)
     remote_job = remote.pop("job", {})
     if remote_job is None:
         remote_job = {}
@@ -176,9 +200,11 @@ def build_config() -> dict[str, Any]:
     preset = _require_single_preset(job["build_preset"], where="build_preset")
     fetch_depth = "0" if job["increment"] else "2"
 
-    cfg["caller_workflow"] = (os.environ.get("GITHUB_WORKFLOW") or "").strip()
+    cfg["caller_workflow"] = (
+        (os.environ.get("CALLER_WORKFLOW") or os.environ.get("GITHUB_WORKFLOW") or "").strip()
+    )
     if not cfg["caller_workflow"]:
-        die("GITHUB_WORKFLOW is empty")
+        die("caller workflow name is empty (GITHUB_WORKFLOW / CALLER_WORKFLOW)")
 
     job_inputs = {k: _job_input_str(job[k]) for k in _DEFAULT_JOB}
     job_inputs["build_preset"] = preset
@@ -194,6 +220,9 @@ def build_config() -> dict[str, Any]:
         "code_ref": code_ref,
         "job_inputs": job_inputs,
         "runs_on": runs_on_str,
+        "caller_workflow": cfg["caller_workflow"],
+        "pr_number": pr_number,
+        "pr_title": pr_title,
     }
     return cfg
 

@@ -90,6 +90,8 @@ otherwise it skips those steps best-effort and still succeeds.
   - take `platform_run_id` / attempt from the webhook payload, not from ticket
     fields alone; pick the ticket matching that attempt (highest / newest);
   - serialize the `job_inputs` object → JSON string for `workflow_dispatch`;
+  - pass through optional display fields on `config.inputs` when present:
+    `caller_workflow`, `pr_number`, `pr_title` (host `run-name` only);
   - enforce a `runs_on` allowlist; reject fork `head_repository`.
 
 ## Residual risk (claim vs ticket)

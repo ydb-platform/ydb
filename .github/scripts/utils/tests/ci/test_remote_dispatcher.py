@@ -82,10 +82,34 @@ class ResolveSeedsTest(unittest.TestCase):
         self.assertEqual(cfg["inputs"]["job_inputs"]["collect_coredumps"], "true")
         self.assertEqual(cfg["host_s3_endpoint"], "https://s3.us-east-1.amazonaws.com")
         self.assertNotIn("platform_run_id", cfg["inputs"])
+        self.assertEqual(cfg["inputs"]["caller_workflow"], "Run and debug tests")
+        self.assertEqual(cfg["inputs"]["pr_number"], "")
+        self.assertEqual(cfg["inputs"]["pr_title"], "")
         self.assertNotIn("job", cfg)
         self.assertNotIn("analytics_job_name", cfg)
         forbidden = {"analytics_job_name", "source_run_id", "enable_ydb_qa"}
         self.assertFalse(forbidden & set(cfg["inputs"]["job_inputs"]))
+
+    def test_caller_pr_context_from_env_and_remote_json(self):
+        os.environ["CALLER_PR_NUMBER"] = "99"
+        os.environ["CALLER_PR_TITLE"] = "From env"
+        os.environ["CALLER_WORKFLOW"] = "PR-check"
+        cfg = build_config()
+        self.assertEqual(cfg["inputs"]["pr_number"], "99")
+        self.assertEqual(cfg["inputs"]["pr_title"], "From env")
+        self.assertEqual(cfg["inputs"]["caller_workflow"], "PR-check")
+
+    def test_remote_json_pr_fields_override_env(self):
+        os.environ["CALLER_PR_NUMBER"] = "1"
+        os.environ["REMOTE_JSON"] = json.dumps({"pr_number": "42", "pr_title": "Fix olap"})
+        cfg = build_config()
+        self.assertEqual(cfg["inputs"]["pr_number"], "42")
+        self.assertEqual(cfg["inputs"]["pr_title"], "Fix olap")
+
+    def test_invalid_pr_number_dies(self):
+        os.environ["REMOTE_JSON"] = json.dumps({"pr_number": "not-digits"})
+        with self.assertRaises(SystemExit):
+            build_config()
 
     def test_remote_json_job_keys_win_over_ui_seeds(self):
         os.environ["DEFAULT_BUILD_TARGET"] = "ydb/from-ui"

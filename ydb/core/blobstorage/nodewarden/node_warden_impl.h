@@ -281,6 +281,15 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxCommonLogChunksSSD;
         TControlWrapper MaxActiveCompactionsPerPDisk;
 
+        TControlWrapper ReplTotalRequestBytesPerSecond;
+        TControlWrapper ReplTotalResponseBytesPerSecond;
+        TControlWrapper ReplPDiskReadBytesPerSecondHDD;
+        TControlWrapper ReplPDiskWriteBytesPerSecondHDD;
+        TControlWrapper ReplPDiskReadBytesPerSecondSSD;
+        TControlWrapper ReplPDiskWriteBytesPerSecondSSD;
+        TControlWrapper ReplPDiskReadBytesPerSecondNVME;
+        TControlWrapper ReplPDiskWriteBytesPerSecondNVME;
+
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 

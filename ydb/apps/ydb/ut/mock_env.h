@@ -115,7 +115,7 @@ public:
     };
 
     grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) override {
-        CheckClientMetadata(context, "x-ydb-database", TEST_DATABASE);
+        CheckClientMetadata(context, "x-ydb-database", ExpectedDatabase);
         if (Token) {
             CheckClientMetadata(context, "x-ydb-auth-ticket", Token);
         } else {
@@ -149,6 +149,11 @@ public:
 
     TSchemeImpl& ExpectListDirectory(TString path, Ydb::Scheme::Entry::Type selfType = Ydb::Scheme::Entry::DIRECTORY) {
         Directories[std::move(path)].SelfType = selfType;
+        return *this;
+    }
+
+    TSchemeImpl& ExpectDatabase(TString database) {
+        ExpectedDatabase = std::move(database);
         return *this;
     }
 
@@ -205,6 +210,7 @@ public:
 
     void ClearExpectations() override {
         ExpectedClientCert = Token = {};
+        ExpectedDatabase = TEST_DATABASE;
         Directories.clear();
     }
 
@@ -214,6 +220,7 @@ public:
 
     TString Token;
     TString ExpectedClientCert;
+    TString ExpectedDatabase = TEST_DATABASE;
     THashMap<TString, TDirectory> Directories;
 };
 

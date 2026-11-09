@@ -644,7 +644,8 @@ Y_UNIT_TEST_SUITE(ExportTest) {
     }
 
     Y_UNIT_TEST_F(ExplicitExternalLeafAcceptsDatabaseRootWithoutTrailingSlash, TExportFixture) {
-        Service<TSchemeImpl>().ExpectListDirectory(GetDatabase() + "/source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE);
+        Service<TSchemeImpl>().ExpectDatabase(GetDatabase() + "/").ExpectListDirectory(GetDatabase() + "/source",
+            Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE);
         Service<TExportImpl>()
             .ExpectBucket(TEST_BUCKET)
             .ExpectS3Endpoint(TEST_S3_ENDPOINT)

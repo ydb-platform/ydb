@@ -415,6 +415,7 @@ jobs:
           GIT_TRACE: "1"
         with:
           ref: ${{ matrix.branch }}
+          fetch-depth: 2
       - name: Drop GitHub proxy
         if: vars.GH_PROXY_URL != ''
         shell: bash
@@ -496,13 +497,14 @@ jobs:
         uses: ./.github/actions/build_and_test_ya
         with:
           build_preset: ${{ inputs.build_preset }}
-          increment: false
+          increment: true
           build_target: ${{ inputs.test_targets }}
           run_tests: true
           test_retry_count: 3
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
           test_threads: ${{ env.threads_count }}
+          link_threads: 2
           custom_branch_name: ${{ steps.determine-branch.outputs.branch_name }}
           put_build_results_to_cache: true
           collect_coredumps: ${{ inputs.collect_coredumps != false }}

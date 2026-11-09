@@ -50,7 +50,10 @@ Leap status     : Normal
 
 {% endcut %}
 
-In `chronyc sources -v`, find the source marked `*` in column `S`: it is selected for synchronization. Verify that it is the expected time source: compare it with the source in the `chrony` configuration on that host.
+In `chronyc sources -v`:
+
+1. Find the source marked `*` in column `S`: it is selected for synchronization.
+2. Verify that it is the expected time source: compare it with the source in the `chrony` configuration on that host.
 
 {% cut "Example chronyc sources -v output" %}
 

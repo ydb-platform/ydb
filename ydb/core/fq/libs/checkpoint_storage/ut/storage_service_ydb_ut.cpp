@@ -999,13 +999,22 @@ public:
         // The local fixture explicitly sets ResultRowsLimit=5. An external
         // recipe server's limit is not controlled by this fixture.
         if constexpr (!UseYdbSdk) {
-            RegisterDefaultCoordinator();
-            for (ui64 seqNo = 1; seqNo <= 8; ++seqNo) {
-                CreateCompletedCheckpoint(GraphId, Generation, TCheckpointId(Generation, seqNo));
+            // GC is scoped to a graph and retains its completed upper bound.
+            // Distinct graphs keep all eight rows alive with successful GC.
+            for (ui64 graphIndex = 0; graphIndex < 8; ++graphIndex) {
+                const TString graphId = TStringBuilder() << "snapshot_truncation_" << graphIndex;
+                RegisterCoordinator(TCoordinatorId(graphId, Generation));
+                CreateCompletedCheckpoint(graphId, Generation, CheckpointId1);
             }
             NYdb::TDriver driver(NYdb::TDriverConfig{});
             NYdb::NTable::TTableClient client(driver);
             auto reader = NewSnapshotSession(client);
+            auto count = SnapshotQuery(reader, "SELECT COUNT(*) AS metadata_count FROM checkpoints_metadata;",
+                ISession::TTxControl::BeginAndCommitTx(true));
+            auto countParser = count.GetResultSetParser(0);
+            UNIT_ASSERT(countParser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(countParser.ColumnParser("metadata_count").GetUint64(), 8);
+            UNIT_ASSERT(!countParser.TryNextRow());
             auto result = reader->ExecuteDataQuery(TStringBuilder()
                 << "PRAGMA TablePathPrefix(\"" << SnapshotPrefix() << "\"); SELECT seq_no FROM checkpoints_metadata;",
                 ISession::TTxControl::BeginAndCommitTx(true), {}, NYdb::NTable::TExecDataQuerySettings()

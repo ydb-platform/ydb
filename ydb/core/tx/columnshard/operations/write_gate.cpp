@@ -217,7 +217,7 @@ void TWriteGate::ScheduleRetry(const TActorContext& ctx) {
     if (RetryScheduled) {
         return;
     }
-    ctx.Schedule(TDuration::MilliSeconds(300), new NActors::TEvents::TEvWakeup(1));
+    ctx.Schedule(RetryPeriod, new NActors::TEvents::TEvWakeup(1));
     RetryScheduled = true;
 }
 

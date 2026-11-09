@@ -44,6 +44,8 @@ public:
     };
 
 private:
+    static constexpr TDuration RetryPeriod = TDuration::MilliSeconds(300);
+
     const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor& Executor;
     const TTablesManager& TablesManager;
     const TOperationsManager& OperationsManager;

@@ -37,32 +37,32 @@ bool StartsAtOrAbove(const TPredicateContainer& rangeStart, const NArrow::NMerge
 }   // namespace
 
 bool TLoadedKeyRanges::Covers(const TPKRangesFilter& ranges) const {
-    switch (State) {
-        case EState::Nothing:
+    switch (Coverage) {
+        case ECoverage::None:
             return false;
-        case EState::Everything:
+        case ECoverage::All:
             return true;
-        case EState::From:
+        case ECoverage::FromKey:
             break;
     }
     if (ranges.IsEmpty()) {
         return false;
     }
     return std::all_of(ranges.begin(), ranges.end(), [&](const TPKRangeFilter& range) {
-        return StartsAtOrAbove(range.GetPredicateFrom(), *FromPosition);
+        return StartsAtOrAbove(range.GetPredicateFrom(), *FromKeyPosition);
     });
 }
 
 bool TLoadedKeyRanges::CoversFrom(const NArrow::TSimpleRow& key) const {
-    switch (State) {
-        case EState::Nothing:
+    switch (Coverage) {
+        case ECoverage::None:
             return false;
-        case EState::Everything:
+        case ECoverage::All:
             return true;
-        case EState::From:
+        case ECoverage::FromKey:
             break;
     }
-    return key >= *From;
+    return key >= *FromKey;
 }
 
 }   // namespace NKikimr::NOlap

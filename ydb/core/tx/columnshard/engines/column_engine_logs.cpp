@@ -822,10 +822,10 @@ bool TColumnEngineForLogs::ArePortionsLoadedFrom(const TInternalPathId pathId, c
 bool TColumnEngineForLogs::AreAllPortionsLoaded(const std::optional<TInternalPathId> pathId) const {
     if (pathId) {
         const auto granule = GetGranuleOptional(*pathId);
-        return !granule || granule->GetLoadedKeyRanges().IsEverythingLoaded();
+        return !granule || granule->GetLoadedKeyRanges().CoversAll();
     }
     return std::all_of(GetTables().begin(), GetTables().end(), [](const auto& table) {
-        return table.second->GetLoadedKeyRanges().IsEverythingLoaded();
+        return table.second->GetLoadedKeyRanges().CoversAll();
     });
 }
 

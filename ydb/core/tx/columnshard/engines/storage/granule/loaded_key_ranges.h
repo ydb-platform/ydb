@@ -10,33 +10,33 @@ class TPKRangesFilter;
 
 class TLoadedKeyRanges {
 private:
-    enum class EState {
-        Nothing,
-        From,
-        Everything,
+    enum class ECoverage {
+        None,
+        FromKey,
+        All,
     };
 
-    EState State;
-    // EState::From: every portion whose last key is >= this key is in memory
-    std::optional<NArrow::TSimpleRow> From;
-    // From, in the form the ranges of a scan compare with
-    std::optional<NArrow::NMerger::TSortableBatchPosition> FromPosition;
+    ECoverage Coverage;
+    // ECoverage::FromKey: every portion whose last key is >= this key is in memory
+    std::optional<NArrow::TSimpleRow> FromKey;
+    // FromKey, in the form the ranges of a scan compare with
+    std::optional<NArrow::NMerger::TSortableBatchPosition> FromKeyPosition;
 
-    explicit TLoadedKeyRanges(const EState state)
-        : State(state)
+    explicit TLoadedKeyRanges(const ECoverage coverage)
+        : Coverage(coverage)
     {
     }
 
     explicit TLoadedKeyRanges(const NArrow::TSimpleRow& from)
-        : State(EState::From)
-        , From(from)
-        , FromPosition(from.BuildSortablePosition())
+        : Coverage(ECoverage::FromKey)
+        , FromKey(from)
+        , FromKeyPosition(from.BuildSortablePosition())
     {
     }
 
 public:
     static TLoadedKeyRanges BuildNothing() {
-        return TLoadedKeyRanges(EState::Nothing);
+        return TLoadedKeyRanges(ECoverage::None);
     }
 
     static TLoadedKeyRanges BuildFrom(const NArrow::TSimpleRow& from) {
@@ -44,11 +44,11 @@ public:
     }
 
     static TLoadedKeyRanges BuildEverything() {
-        return TLoadedKeyRanges(EState::Everything);
+        return TLoadedKeyRanges(ECoverage::All);
     }
 
-    bool IsEverythingLoaded() const {
-        return State == EState::Everything;
+    bool CoversAll() const {
+        return Coverage == ECoverage::All;
     }
 
     // Whether every row the ranges select lies in a portion that is in memory.

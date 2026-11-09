@@ -12,6 +12,8 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
 namespace NKikimr::NDDisk {
@@ -197,18 +199,21 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
             dataChunksInUse += perTablet.size();
             tabletsWithChunks += !perTablet.empty();
         }
-        const ui64 reservedFree = ChunkReserve.size();
-        const ui64 commitsInFlight = ChunkMapIncrementsInFlight.size();
+        const ui64 reservedFree = ChunkManager.GetReservedChunkCount();
+        const ui64 commitsInFlight = std::count_if(DataChunkAllocationsInFlight.begin(),
+            DataChunkAllocationsInFlight.end(), [](const auto& entry) {
+                return entry.second.LogIssued;
+            });
         const ui64 chunkBytes = DiskFormat ? DiskFormat->ChunkSize : 0;
         str << "<h3>Chunks</h3>";
         TABLE_CLASS("table") {
             TABLEBODY() {
                 TABLER() { TABLED() { str << "Reserved (free pool)"; } TABLED() { str << reservedFree; } }
-                TABLER() { TABLED() { str << "Reserve refill in flight"; } TABLED() { str << (ReserveInFlight ? "true" : "false"); } }
+                TABLER() { TABLED() { str << "Reserve refill in flight"; } TABLED() { str << (ChunkManager.IsReservationInFlight() ? "true" : "false"); } }
                 TABLER() { TABLED() { str << "Committed (data)"; } TABLED() { str << dataChunksInUse; } }
                 TABLER() { TABLED() { str << "Commits in flight"; } TABLED() { str << commitsInFlight; } }
                 TABLER() { TABLED() { str << "Tablets using disk"; } TABLED() { str << tabletsWithChunks; } }
-                TABLER() { TABLED() { str << "Pending chunk allocations"; } TABLED() { str << ChunkAllocateQueue.size(); } }
+                TABLER() { TABLED() { str << "Pending chunk allocations"; } TABLED() { str << ChunkManager.GetPendingAllocationCount(); } }
                 TABLER() {
                     TABLED() { str << "Committed data bytes"; }
                     TABLED() {
@@ -259,7 +264,7 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
                 TABLER() { TABLED() { str << "WriteCallbacks"; } TABLED() { str << WriteCallbacks.size(); } }
                 TABLER() { TABLED() { str << "ReadCallbacks"; } TABLED() { str << ReadCallbacks.size(); } }
                 TABLER() { TABLED() { str << "SyncsInFlight"; } TABLED() { str << SyncsInFlight.size(); } }
-                TABLER() { TABLED() { str << "LogCallbacks"; } TABLED() { str << LogCallbacks.size(); } }
+                TABLER() { TABLED() { str << "LogWaiters"; } TABLED() { str << LogWaiters.size(); } }
                 TABLER() { TABLED() { str << "DirectIO RunningCount counter"; } TABLED() { str << CounterVal(Counters.DirectIO.RunningCount); } }
                 TABLER() { TABLED() { str << "ShortReads"; } TABLED() { str << CounterVal(Counters.DirectIO.ShortReads); } }
                 TABLER() { TABLED() { str << "ShortWrites"; } TABLED() { str << CounterVal(Counters.DirectIO.ShortWrites); } }

@@ -16,14 +16,17 @@ class TBlockingEQueue {
 public:
     explicit TBlockingEQueue(size_t maxSize)
         : MaxSize(maxSize)
-    {}
+    {
+    }
 
     void Push(TEvent&& e, size_t size = 0) {
         with_lock(Mutex) {
             // Wait until there is room. The predicate also returns true when the
             // queue is stopped so that a blocked Push is unblocked by Stop()
             // (which broadcasts CanPush) instead of waiting forever.
-            CanPush.WaitI(Mutex, [this]() { return CanAcceptPush(); });
+            CanPush.WaitI(Mutex, [this]() {
+                return CanAcceptPush();
+            });
             if (Stopped) {
                 return;
             }
@@ -65,14 +68,18 @@ public:
 
     void BlockUntilEvent() {
         with_lock(Mutex) {
-            CanPop.WaitI(Mutex, [this]() { return CanPopPredicate(); });
+            CanPop.WaitI(Mutex, [this]() {
+                return CanPopPredicate();
+            });
         }
     }
 
     std::optional<TEvent> Pop(bool block) {
         with_lock(Mutex) {
             if (block) {
-                CanPop.WaitI(Mutex, [this]() { return CanPopPredicate(); });
+                CanPop.WaitI(Mutex, [this]() {
+                    return CanPopPredicate();
+                });
             } else {
                 if (!CanPopPredicate()) {
                     return {};
@@ -130,4 +137,4 @@ private:
     TCondVar CanPush;
 };
 
-} // namespace NYql
+}   // namespace NYql

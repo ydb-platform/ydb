@@ -24,7 +24,7 @@ DEFAULT_DELTA = 30 * M
 
 @pytest.fixture
 def kikimr(request):
-    (initial, total, step, hard_limit) = request.param
+    initial, total, step, hard_limit = request.param
     kikimr_conf = StreamingOverKikimrConfig(cloud_mode=True)
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.mkql_initial_memory_limit = initial
@@ -370,9 +370,7 @@ class TestAlloc(TestYdsBase):
             query = client.describe_query(query_id).result.query
             issues = query.transient_issue
             if len(issues) >= 1:
-                assert issues[0].message.startswith(
-                    "Mkql memory limit exceeded"
-                ), "Incorrect message text"
+                assert issues[0].message.startswith("Mkql memory limit exceeded"), "Incorrect message text"
                 assert issues[0].issue_code == 0, "Incorrect issue code" + issues[0].message
                 break
         else:

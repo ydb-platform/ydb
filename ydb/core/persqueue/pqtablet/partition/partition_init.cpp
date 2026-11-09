@@ -330,6 +330,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
 
         Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
         Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
+        Partition()->BlobEncoder.MirroredOffset = meta.GetMirroredOffset();
         Partition()->BlobEncoder.FirstUncompactedOffset = meta.GetFirstUncompactedOffset();
 
         if (meta.HasStartOffset()) {
@@ -987,7 +988,10 @@ TInitMessageDeduplicatorStep::TInitMessageDeduplicatorStep(TInitializer* initial
 }
 
 void TInitMessageDeduplicatorStep::Execute(const TActorContext &ctx) {
-    if (MirroringEnabled(Partition()->Config) || Partition()->Partition.IsSupportivePartition()) {
+    // Replicated topics can accept client writes while destination replication is disabled.
+    if ((MirroringEnabled(Partition()->Config) && !ReplicationEnabled(Partition()->Config))
+        || Partition()->Partition.IsSupportivePartition())
+    {
         return Done(ctx);
     }
     auto firstKey = MakeDeduplicatorWALKey(Partition()->Partition.OriginalPartitionId, 0);

@@ -37,6 +37,7 @@ public:
         , TableSchema_(std::move(schema))
         , OmittedInaccessibleColumns_(omittedInaccessibleColumns)
         , TotalTimer_(totalTimer)
+        , InitialWaitTime_(totalTimer.GetElapsedTime())
     {
         ApplyStatistics(statistics);
     }
@@ -63,9 +64,25 @@ public:
 
     TTableReaderTimingStatistics GetTimingStatistics() const override
     {
-        return TTableReaderTimingStatistics{
-            .TotalTime = TotalTimer_.GetElapsedTime(),
+        // The wait for the meta block happened before this object existed, so it is added here.
+        auto waitTime = InitialWaitTime_ + GetWaitTime();
+        auto readTime = GetReadTime();
+        auto totalTime = TotalTimer_.GetElapsedTime();
+        auto busyTime = waitTime + readTime;
+
+        TTableReaderTimingStatistics statistics{
+            .DataReadTiming = NChunkClient::TTimingStatistics{
+                .WaitTime = waitTime,
+                .ReadTime = readTime,
+                .IdleTime = totalTime > busyTime ? totalTime - busyTime : TDuration::Zero(),
+            },
+            .TotalTime = totalTime,
+            .DecodeTime = GetDecodeTime(),
         };
+
+        auto guard = ReaderGuard(StatisticsLock_);
+        statistics.Remote = RemoteTimingStatistics_;
+        return statistics;
     }
 
     const TTableSchemaPtr& GetTableSchema() const override
@@ -83,17 +100,22 @@ private:
     const TTableSchemaPtr TableSchema_;
     const std::vector<std::string> OmittedInaccessibleColumns_;
     const NProfiling::TWallTimer TotalTimer_;
+    const TDuration InitialWaitTime_;
 
     // NB: Statistics are updated asynchronously.
     YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, StatisticsLock_);
     NChunkClient::NProto::TDataStatistics DataStatistics_;
     i64 TotalRowCount_ = 0;
+    std::optional<TRemoteTableReaderTimingStatistics> RemoteTimingStatistics_;
 
     void ApplyStatistics(const NProto::TRowsetStatistics& statistics) override
     {
         auto guard = WriterGuard(StatisticsLock_);
         TotalRowCount_ = statistics.total_row_count();
         DataStatistics_ = statistics.data_statistics();
+        if (statistics.has_timing_statistics()) {
+            RemoteTimingStatistics_ = FromProto<TRemoteTableReaderTimingStatistics>(statistics.timing_statistics());
+        }
     }
 };
 

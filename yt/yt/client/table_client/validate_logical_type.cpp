@@ -50,14 +50,14 @@ class TComplexLogicalTypeValidatorImpl
     class TFieldId;
 
 public:
-    TComplexLogicalTypeValidatorImpl(TYsonPullParser* parser, TComplexTypeFieldDescriptor descriptor)
+    TComplexLogicalTypeValidatorImpl(TYsonPullParser* parser, const TLogicalTypePtr& rootType)
         : Cursor_(parser)
-        , RootDescriptor_(descriptor)
+        , RootType_(rootType)
     { }
 
     void Validate()
     {
-        return ValidateLogicalType(RootDescriptor_.GetType(), TFieldId());
+        return ValidateLogicalType(RootType_, TFieldId());
     }
 
 private:
@@ -458,7 +458,8 @@ private:
 
     std::string GetDescription(const TFieldId& fieldId) const
     {
-        return fieldId.GetDescriptor(RootDescriptor_).GetDescription();
+        // Descriptor is built lazily since it is needed only for error messages.
+        return fieldId.GetDescriptor(TComplexTypeFieldDescriptor(RootType_)).GetDescription();
     }
 
 private:
@@ -582,7 +583,8 @@ private:
 
 private:
     TYsonPullParserCursor Cursor_;
-    const TComplexTypeFieldDescriptor RootDescriptor_;
+    // Not owned; the caller keeps the type alive for the duration of validation.
+    const TLogicalTypePtr& RootType_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -595,7 +597,7 @@ void ValidateComplexLogicalType(TStringBuf ysonData, const TLogicalTypePtr& type
 {
     TMemoryInput in(ysonData);
     TYsonPullParser parser(&in, EYsonType::Node);
-    TComplexLogicalTypeValidatorImpl validator(&parser, TComplexTypeFieldDescriptor(type));
+    TComplexLogicalTypeValidatorImpl validator(&parser, type);
     validator.Validate();
 }
 

@@ -1,17 +1,19 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/message_stream/partition.h>
-#include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/invoke.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <functional>
 #include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+#include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
+#include <ydb/library/yql/providers/common/message_stream/partition.h>
+
 #include <util/generic/scope.h>
 #include <util/system/hp_timer.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+
+#include <functional>
 
 namespace NFq::NMessageStream {
 
@@ -29,18 +31,32 @@ public:
     virtual TMessageStreamReadState& GetReadState() = 0;
     virtual void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) = 0;
     virtual void LoadState(const NYql::NDq::TSourceState&) = 0;
-    virtual void InitConsumerOffsets(NActors::TActorId, ui32,
-        std::shared_ptr<NFq::IMessageStreamClient>, ui32) {}
-    virtual bool ConsumerOffsetsInitialized() const { return true; }
-    virtual void HandleConsumerOffsets(NActors::TEvents::TEvInvokeResult::TPtr&) {}
-    virtual void StopConsumerOffsetInitialization() {}
+
+    virtual void InitConsumerOffsets(NActors::TActorId, ui32, std::shared_ptr<NFq::IMessageStreamClient>, ui32) {
+    }
+
+    virtual bool ConsumerOffsetsInitialized() const {
+        return true;
+    }
+
+    virtual void HandleConsumerOffsets(NActors::TEvents::TEvInvokeResult::TPtr&) {
+    }
+
+    virtual void StopConsumerOffsetInitialization() {
+    }
 };
 
-struct TEvExecuteMessageStreamCallback : NActors::TEventLocal<TEvExecuteMessageStreamCallback,
-    EventSpaceBegin(NActors::TEvents::ES_PRIVATE) + 20> {
+struct TEvExecuteMessageStreamCallback
+    : NActors::TEventLocal<TEvExecuteMessageStreamCallback, EventSpaceBegin(NActors::TEvents::ES_PRIVATE) + 20> {
     explicit TEvExecuteMessageStreamCallback(std::function<void()> function)
-        : Function(std::move(function)) {}
-    void Execute() { Function(); }
+        : Function(std::move(function))
+    {
+    }
+
+    void Execute() {
+        Function();
+    }
+
     std::function<void()> Function;
 };
 
@@ -51,8 +67,8 @@ struct TMessageStreamReadCluster {
     std::function<std::shared_ptr<NFq::IMessageStreamClient>(const NActors::TActorContext&)> CreateClient;
     // Factories may complete asynchronously; callbacks never call the actor directly.
     std::function<NThreading::TFuture<std::shared_ptr<NFq::IMessageStreamReadSession>>(
-        const NActors::TActorContext&, NFq::IMessageStreamClient&,
-        const NFq::TMessageStreamReadSessionSettings&)> CreateSession;
+        const NActors::TActorContext&, NFq::IMessageStreamClient&, const NFq::TMessageStreamReadSessionSettings&)>
+        CreateSession;
     std::function<void(ui64, TInstant)> AdvancePartitionTime;
 };
 
@@ -82,8 +98,7 @@ struct TMessageStreamReadActorSettings {
     ::NMonitoring::TDynamicCounterPtr Counters;
     const NKikimr::NMiniKQL::THolderFactory* HolderFactory = nullptr;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-    using TMetaExtractor = std::function<std::pair<NYql::NUdf::TUnboxedValuePod, i64>(
-        const NFq::TMessageStreamRecord&, const TString&)>;
+    using TMetaExtractor = std::function<std::pair<NYql::NUdf::TUnboxedValuePod, i64>(const NFq::TMessageStreamRecord&, const TString&)>;
     std::vector<TMetaExtractor> MetadataFields;
     std::function<void(const NFq::TMessageStreamRecord&)> TraceRecord;
     std::vector<TMessageStreamReadCluster> Clusters;
@@ -92,7 +107,7 @@ struct TMessageStreamReadActorSettings {
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateMessageStreamReadActor(
     TMessageStreamReadActorSettings settings, std::unique_ptr<IMessageStreamReadActorState> state);
 
-} // namespace NFq::NMessageStream
+}   // namespace NFq::NMessageStream
 
 namespace NFq::NMessageStream::NInternal {
 
@@ -102,7 +117,8 @@ class TMessageStreamCpuQuota {
 public:
     explicit TMessageStreamCpuQuota(NYql::NDq::IDqSchedulableWorkFactoryPtr factory)
         : Work(factory ? factory->CreateSchedulableWork() : nullptr)
-    {}
+    {
+    }
 
     ~TMessageStreamCpuQuota() {
         Cancel();
@@ -165,4 +181,4 @@ private:
     TDuration CpuTime;
 };
 
-} // namespace NFq::NMessageStream::NInternal
+}   // namespace NFq::NMessageStream::NInternal

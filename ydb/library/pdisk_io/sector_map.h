@@ -7,6 +7,7 @@
 #include <util/datetime/cputimer.h>
 #include <util/generic/guid.h>
 #include <util/generic/hash.h>
+#include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/stream/file.h>
 #include <util/stream/format.h>
@@ -28,10 +29,24 @@
 
 #include "device_type.h"
 
+namespace snappy {
+class CompressionContext;
+}
+
 namespace NKikimr {
 namespace NPDisk {
 
 namespace NSectorMap {
+
+enum class ECompression {
+    None,
+    Lz4,
+    Snappy,
+};
+
+// SectorMap:name[:size_GiB[:disk_mode[:lz4|snappy|none]]].
+// Ordinary filesystem paths and paths without a codec retain the LZ4 default.
+std::optional<ECompression> TryGetCompressionFromPath(const TString& path);
 
 struct TFailureProbabilities {
     std::atomic<double> WriteErrorProbability;
@@ -221,28 +236,21 @@ private:
     NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
     THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
     std::function<void()> ReadCallback = nullptr;
+    // Accessed under MapLock. Reuse the compression table, but never a sector's dictionary.
+    LZ4_stream_t CompressionState;
+
+    const NSectorMap::ECompression Compression;
+    THolder<snappy::CompressionContext> SnappyState;
+
+    TString CompressSector(const char* data);
+    void DecompressSector(const TString& value, char* data) const;
 
     std::mt19937_64 RandomGenerator{RandomNumber<ui64>()};
 
 public:
-    TSectorMap(ui64 deviceSize = 0, NSectorMap::EDiskMode diskMode = NSectorMap::DM_NONE)
-      : DeviceSize(deviceSize)
-      , IsLocked(false)
-      , IoErrorEveryNthRequests(0)
-      , ReadIoErrorEveryNthRequests(0)
-      , AllocatedBytes(0)
-      , DiskMode(diskMode)
-    {
-        FailureProbabilities.WriteErrorProbability = 0.0;
-        FailureProbabilities.ReadErrorProbability = 0.0;
-        FailureProbabilities.SilentWriteFailProbability = 0.0;
-        FailureProbabilities.ReadReplayProbability = 0.0;
-        EmulatedWriteErrors = 0;
-        EmulatedReadErrors = 0;
-        EmulatedSilentWriteFails = 0;
-        EmulatedReadReplays = 0;
-        InitSectorOperationThrottler();
-    }
+    TSectorMap(ui64 deviceSize = 0, NSectorMap::EDiskMode diskMode = NSectorMap::DM_NONE,
+        NSectorMap::ECompression compression = NSectorMap::ECompression::Lz4);
+    ~TSectorMap() override;
 
     bool Lock() {
         return !IsLocked.exchange(true);
@@ -308,10 +316,7 @@ public:
                         value = &pair.second;
                     }
                 }
-                char tmp[4 * NSectorMap::SECTOR_SIZE];
-                int processed = LZ4_decompress_safe(value->data(), tmp, value->size(), 4 * NSectorMap::SECTOR_SIZE);
-                Y_VERIFY_S(processed == NSectorMap::SECTOR_SIZE, "processed# " << processed);
-                memcpy(data, tmp, NSectorMap::SECTOR_SIZE);
+                DecompressSector(*value, reinterpret_cast<char*>(data));
             }
             offset += NSectorMap::SECTOR_SIZE;
             data += NSectorMap::SECTOR_SIZE;
@@ -345,11 +350,7 @@ public:
         {
             TGuard<TTicketLock> guard(MapLock);
             for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
-                char tmp[4 * NSectorMap::SECTOR_SIZE];
-                int written = LZ4_compress_default((const char*)data, tmp, NSectorMap::SECTOR_SIZE, 4 * NSectorMap::SECTOR_SIZE);
-                Y_VERIFY_S(written > 0, "written# " << written);
-                TString str = TString::Uninitialized(written);
-                memcpy(str.Detach(), tmp, written);
+                TString str = CompressSector(reinterpret_cast<const char*>(data));
 
                 bool replay = FailureProbabilities.ReadReplayProbability.load(std::memory_order_relaxed) > 0;
                 i64 allocatedBytesDelta = 0;
@@ -420,6 +421,8 @@ public:
         ReadCallback = callback;
     }
 
+    const char* GetCompressionName() const;
+
     TString ToString() const {
         TStringStream str;
         str << "Serial# " << Serial.Quote() << "\n";
@@ -433,6 +436,7 @@ public:
         str << "IoErrorEveryNthRequests# " << IoErrorEveryNthRequests.load() << "\n";
         str << "AllocatedBytes (approx.)# " << HumanReadableSize(AllocatedBytes.load(), SF_QUANTITY)  << "\n";
         str << "DataBytes# " << HumanReadableSize(DataBytes(), SF_QUANTITY)  << "\n";
+        str << "Compression# " << GetCompressionName() << "\n";
         str << "DiskMode# " << DiskModeToString(DiskMode) << "\n";
         return str.Str();
     }

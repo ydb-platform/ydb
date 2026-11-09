@@ -1,12 +1,12 @@
 #pragma once
 
-#include <util/generic/string.h>
-
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/protos/config.pb.h>
+
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/tests/tools/kqprun/runlib/settings.h>
 
+#include <util/generic/string.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
 namespace NFqRun {
@@ -21,7 +21,7 @@ struct TExternalDatabase {
     static TExternalDatabase Parse(const TString& optionValue, const TString& tokenVar);
 };
 
-struct TFqSetupSettings : public NKikimrRun::TServerSettings {
+struct TFqSetupSettings: public NKikimrRun::TServerSettings {
     enum class EVerbosity {
         None,
         Info,
@@ -95,4 +95,4 @@ NYql::TIssue GroupIssues(NYql::TIssue rootIssue, const NYql::TIssues& childrenIs
 
 bool IsFinalStatus(FederatedQuery::QueryMeta::ComputeStatus status);
 
-}  // namespace NFqRun
+}   // namespace NFqRun

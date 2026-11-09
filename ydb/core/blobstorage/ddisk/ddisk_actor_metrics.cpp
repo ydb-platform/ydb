@@ -37,7 +37,7 @@ void TDDiskActor::CollectMemoryMetrics() {
             TSpaceMetricsFrontend::Value<TSpaceMetrics::TData>(MonMappedDataChunks * chunkSize),
             TSpaceMetricsFrontend::Value<TSpaceMetrics::TChecksums>(checksumChunks * chunkSize),
             TSpaceMetricsFrontend::Value<TSpaceMetrics::TPersistentBuffer>(PersistentBufferChunks.size() * chunkSize),
-            TSpaceMetricsFrontend::Value<TSpaceMetrics::TReserve>(ChunkReserve.size() * chunkSize),
+            TSpaceMetricsFrontend::Value<TSpaceMetrics::TReserve>(ChunkManager.GetReservedChunkCount() * chunkSize),
         });
     }
     if (!IsPersistentBufferActor) {

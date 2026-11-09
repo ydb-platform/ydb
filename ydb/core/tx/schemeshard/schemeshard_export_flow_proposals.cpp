@@ -163,6 +163,12 @@ TString ComputeIndexItemPath(
     return itemPath;
 }
 
+TString ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx) {
+    Ydb::Export::ExportToS3Settings settings;
+    Y_ABORT_UNLESS(settings.ParseFromString(exportInfo.Settings));
+    return ComputeIndexItemPath(ss, exportInfo.Items.at(itemIdx), itemIdx, exportInfo, settings);
+}
+
 void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& description,
         const TPathId& exportItemPathId) {
     NKikimrSchemeOp::TDescribeOptions opts;

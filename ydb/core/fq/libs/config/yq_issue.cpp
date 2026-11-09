@@ -1,4 +1,5 @@
 #include "yq_issue.h"
+
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <yql/essentials/public/issue/yql_issue_id.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -33,4 +34,4 @@ NYql::TIssue MakeInfoIssue(ui32 id, const TString& message) {
     return issue;
 }
 
-}
+}   // namespace NFq

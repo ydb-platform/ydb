@@ -109,7 +109,6 @@ public:
         if (mode == ITableKeys::EBuildKeysMode::INPUT &&
             IsQueryMode(ctx.Settings.Mode) &&
             Service_ != KikimrProviderName &&
-            Service_ != RtmrProviderName &&
             Service_ != YdbProviderName) {
             key = Y("MrTableConcat", key);
         }
@@ -1404,14 +1403,14 @@ public:
             opts = L(opts, Q(Y(Q("columnsDefaultValues"), Q(columnsDefaultValueSettings))));
         }
 
-        if (Table_.Service == YtProviderName || Table_.Service == RtmrProviderName) {
+        if (Table_.Service == YtProviderName) {
             if (!Params_.PkColumns.empty() && !Params_.PartitionByColumns.empty()) {
                 ctx.Error() << "Only one of PRIMARY KEY or PARTITION BY constraints may be specified";
                 return false;
             }
         } else {
             if (!Params_.OrderByColumns.empty()) {
-                ctx.Error() << "ORDER BY is supported only for " << YtProviderName << " or " << RtmrProviderName << " provider.";
+                ctx.Error() << "ORDER BY is supported only for " << YtProviderName << " provider.";
                 return false;
             }
         }
@@ -2321,8 +2320,8 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 
 class TDropAsyncReplication final: public TAsyncReplication {
 public:
-    explicit TDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
-        : TAsyncReplication(pos, id, cascade ? "dropCascade" : "drop", context)
+    explicit TDropAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context)
+        : TAsyncReplication(pos, id, mode, context)
     {
     }
 
@@ -2333,8 +2332,8 @@ protected:
 
 }; // TDropAsyncReplication
 
-TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
-    return new TDropAsyncReplication(pos, id, cascade, context);
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context) {
+    return new TDropAsyncReplication(pos, id, mode, context);
 }
 
 class TAlterAsyncReplication final: public TAsyncReplication {
@@ -2374,157 +2373,6 @@ TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
                                     const TObjectOperatorContext& context)
 {
     return new TAlterAsyncReplication(pos, id, std::move(settings), context);
-}
-
-class TTransfer
-    : public TAstListNode,
-      protected TObjectOperatorContext {
-protected:
-    virtual INode::TPtr FillOptions(INode::TPtr options) const = 0;
-
-public:
-    explicit TTransfer(TPosition pos, TString id, TString mode, const TObjectOperatorContext& context)
-        : TAstListNode(pos)
-        , TObjectOperatorContext(context)
-        , Id_(std::move(id))
-        , Mode_(std::move(mode))
-    {
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        Scoped_->UseCluster(ServiceId, Cluster);
-
-        auto keys = Y("Key", Q(Y(Q("transfer"), Y("String", BuildQuotedAtom(Pos_, Id_)))));
-        auto options = FillOptions(Y(Q(Y(Q("mode"), Q(Mode_)))));
-
-        Add("block", Q(Y(
-                         Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos_, ServiceId), Scoped_->WrapCluster(Cluster, ctx))),
-                         Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(options))),
-                         Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")))));
-
-        return TAstListNode::DoInit(ctx, src);
-    }
-
-    TPtr DoClone() const final {
-        return {};
-    }
-
-private:
-    const TString Id_;
-    const TString Mode_;
-
-}; // TTransfer
-
-class TCreateTransfer final: public TTransfer {
-public:
-    explicit TCreateTransfer(TPosition pos, TString id, TString source, TString target,
-                             TString transformLambda,
-                             std::map<TString, TNodePtr>&& settings,
-                             const TObjectOperatorContext& context)
-        : TTransfer(std::move(pos), std::move(id), "create", context)
-        , Source_(std::move(source))
-        , Target_(std::move(target))
-        , TransformLambda_(std::move(transformLambda))
-        , Settings_(std::move(settings))
-    {
-    }
-
-protected:
-    INode::TPtr FillOptions(INode::TPtr options) const override {
-        options = L(options, Q(Y(Q("source"), Q(Source_))));
-        options = L(options, Q(Y(Q("target"), Q(Target_))));
-        options = L(options, Q(Y(Q("transformLambda"), Q(TransformLambda_))));
-
-        if (!Settings_.empty()) {
-            auto settings = Y();
-            for (auto&& [k, v] : Settings_) {
-                if (v) {
-                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos_, k), v)));
-                } else {
-                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos_, k))));
-                }
-            }
-            options = L(options, Q(Y(Q("settings"), Q(settings))));
-        }
-
-        return options;
-    }
-
-private:
-    const TString Source_;
-    const TString Target_;
-    const TString TransformLambda_;
-    std::map<TString, TNodePtr> Settings_;
-
-}; // TCreateTransfer
-
-TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString& source, const TString& target,
-                             const TString& transformLambda,
-                             std::map<TString, TNodePtr>&& settings,
-                             const TObjectOperatorContext& context)
-{
-    return new TCreateTransfer(pos, id, source, target, transformLambda, std::move(settings), context);
-}
-
-class TDropTransfer final: public TTransfer {
-public:
-    explicit TDropTransfer(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
-        : TTransfer(pos, id, cascade ? "dropCascade" : "drop", context)
-    {
-    }
-
-protected:
-    INode::TPtr FillOptions(INode::TPtr options) const override {
-        return options;
-    }
-
-}; // TDropTransfer
-
-TNodePtr BuildDropTransfer(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
-    return new TDropTransfer(pos, id, cascade, context);
-}
-
-class TAlterTransfer final: public TTransfer {
-public:
-    explicit TAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
-                            std::map<TString, TNodePtr>&& settings,
-                            const TObjectOperatorContext& context)
-        : TTransfer(pos, id, "alter", context)
-        , TransformLambda_(std::move(transformLambda))
-        , Settings_(std::move(settings))
-    {
-    }
-
-protected:
-    INode::TPtr FillOptions(INode::TPtr options) const override {
-        options = L(options, Q(Y(Q("transformLambda"), Q(TransformLambda_ ? TransformLambda_.value() : ""))));
-
-        if (!Settings_.empty()) {
-            auto settings = Y();
-            for (auto&& [k, v] : Settings_) {
-                if (v) {
-                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos_, k), v)));
-                } else {
-                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos_, k))));
-                }
-            }
-            options = L(options, Q(Y(Q("settings"), Q(settings))));
-        }
-
-        return options;
-    }
-
-private:
-    const std::optional<TString> TransformLambda_;
-    std::map<TString, TNodePtr> Settings_;
-
-}; // TAlterTransfer
-
-TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
-                            std::map<TString, TNodePtr>&& settings,
-                            const TObjectOperatorContext& context)
-{
-    return new TAlterTransfer(pos, id, std::move(transformLambda), std::move(settings), context);
 }
 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR{
@@ -2890,12 +2738,7 @@ public:
                 }
 
                 if (ctx.DqEngineEnable) {
-                    TString mode = "auto";
-                    if (ctx.PqReadByRtmrCluster && ctx.PqReadByRtmrCluster != "dq") {
-                        mode = "disable";
-                    } else if (ctx.DqEngineForce) {
-                        mode = "force";
-                    }
+                    const TString mode = ctx.DqEngineForce ? "force" : "auto";
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                                                            BuildQuotedAtom(Pos_, "DqEngine"), BuildQuotedAtom(Pos_, mode))));
                 }
@@ -2934,21 +2777,11 @@ public:
                                                            BuildQuotedAtom(Pos_, "DeriveColumnOrder"))));
                 }
 
-                if (ctx.PqReadByRtmrCluster) {
+                if (ctx.PqReadByDq) {
                     auto pqSourceAll = Y("DataSource", BuildQuotedAtom(Pos_, TString(PqProviderName)), BuildQuotedAtom(Pos_, "$all"));
+                    // Preserve the legacy PQ attribute used to select the DQ reader.
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", pqSourceAll,
-                                                           BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos_, ctx.PqReadByRtmrCluster))));
-
-                    auto rtmrSourceAll = Y("DataSource", BuildQuotedAtom(Pos_, TString(RtmrProviderName)), BuildQuotedAtom(Pos_, "$all"));
-                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", rtmrSourceAll,
-                                                           BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos_, ctx.PqReadByRtmrCluster))));
-
-                    if (ctx.PqReadByRtmrCluster != "dq") {
-                        // set any dynamic settings for particular RTMR cluster for CommitAll!
-                        auto rtmrSource = Y("DataSource", BuildQuotedAtom(Pos_, TString(RtmrProviderName)), BuildQuotedAtom(Pos_, ctx.PqReadByRtmrCluster));
-                        currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", rtmrSource,
-                                                               BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "Dummy_"), BuildQuotedAtom(Pos_, "1"))));
-                    }
+                                                           BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos_, "dq"))));
                 }
 
                 if (ctx.YsonCastToString.Defined()) {

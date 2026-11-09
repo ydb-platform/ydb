@@ -1,0 +1,65 @@
+YQL_LIBRARY()
+
+USE_LLVM_BC16()
+LLVM_BC(
+    yql/essentials/udfs/common/math/math_ir.cpp
+    yql/essentials/udfs/common/math/lib/erfinv.cpp
+    NAME
+    Math
+    SYMBOLS
+    PiIR
+    EIR
+    EpsIR
+    RoundDownwardIR
+    RoundToNearestIR
+    RoundTowardZeroIR
+    RoundUpwardIR
+    AbsIR
+    AcosIR
+    AsinIR
+    AsinhIR
+    AtanIR
+    CbrtIR
+    CeilIR
+    CosIR
+    CoshIR
+    ErfIR
+    ErfInvIR
+    ErfcInvIR
+    ExpIR
+    Exp2IR
+    FabsIR
+    FloorIR
+    LgammaIR
+    RintIR
+    SinIR
+    SinhIR
+    SqrtIR
+    TanIR
+    TanhIR
+    TgammaIR
+    TruncIR
+    IsFiniteIR
+    IsInfIR
+    IsNaNIR
+    Atan2IR
+    FmodIR
+    HypotIR
+    RemainderIR
+    PowIR
+    LdexpIR
+    LogIR
+    Log2IR
+    Log10IR
+    SigmoidIR
+    FuzzyEqualsIR
+    RoundIR
+    ModIR
+    RemIR
+)
+
+PEERDIR(
+    yql/essentials/public/udf
+)
+
+END()

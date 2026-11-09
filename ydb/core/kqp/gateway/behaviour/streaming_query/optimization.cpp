@@ -1,5 +1,5 @@
-#include "optimization.h"
 #include "object.h"
+#include "optimization.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 
@@ -43,30 +43,34 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
             return true;
         }
 
-        if (IsIn({NYql::S3ProviderName, NYql::GenericProviderName, NYql::KikimrProviderName}, dataSourceCategory)) {
+        if (IsIn({ NYql::S3ProviderName, NYql::GenericProviderName, NYql::KikimrProviderName }, dataSourceCategory)) {
             return true;
         }
 
-        res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), TStringBuilder() << "Reading from data source " << dataSourceCategory << " is not supported now for streaming queries"));
+        res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()),
+            TStringBuilder() << "Reading from data source " << dataSourceCategory << " is not supported now for streaming queries"));
         return false;
     }
 
     if (const auto maybeDataSink = TMaybeNode<TCoDataSink>(providerArg)) {
         const auto dataSinkCategory = maybeDataSink.Cast().Category().Value();
-        if (IsIn({NYql::PqProviderName, NYql::SolomonProviderName, NYql::S3ProviderName}, dataSinkCategory)) {
+        if (IsIn({ NYql::PqProviderName, NYql::SolomonProviderName, NYql::S3ProviderName }, dataSinkCategory)) {
             return true;
         }
 
         if (dataSinkCategory == NYql::KikimrProviderName) {
             const auto maybeYdbWrite = TMaybeNode<TKiWriteTable>(node);
             if (!maybeYdbWrite) {
-                res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), "Operations with YDB objects is not allowed inside streaming queries"));
+                res.Ctx.AddError(
+                    NYql::TIssue(res.Ctx.GetPosition(node->Pos()), "Operations with YDB objects is not allowed inside streaming queries"));
                 return false;
             }
 
             const auto ydbWrite = maybeYdbWrite.Cast();
             if (const TString mode(ydbWrite.Mode()); mode != "upsert") {
-                res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), TStringBuilder() << "Only UPSERT writing mode is supported for YDB writes inside streaming queries, got mode: " << to_upper(mode)));
+                res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()),
+                    TStringBuilder() << "Only UPSERT writing mode is supported for YDB writes inside streaming queries, got mode: "
+                                     << to_upper(mode)));
                 return false;
             }
 
@@ -74,9 +78,11 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
         }
 
         if (dataSinkCategory == NYql::ResultProviderName) {
-            res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), "Results is not allowed for streaming queries, please use INSERT to record the query result"));
+            res.Ctx.AddError(NYql::TIssue(
+                res.Ctx.GetPosition(node->Pos()), "Results is not allowed for streaming queries, please use INSERT to record the query result"));
         } else {
-            res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), TStringBuilder() << "Writing into data sink " << dataSinkCategory << " is not supported now for streaming queries"));
+            res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Writing into data sink " << dataSinkCategory << " is not supported now for streaming queries"));
         }
 
         return false;
@@ -87,7 +93,7 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
 
 bool CheckStreamingQueryAst(TExprNode::TPtr ast, TExprContext& ctx) {
     bool hasErrors = false;
-    TStreamingExploreCtx res = {.Ctx = ctx};
+    TStreamingExploreCtx res = { .Ctx = ctx };
     VisitExpr(ast, [&hasErrors, &res](const TExprNode::TPtr& node) {
         if (hasErrors) {
             return false;
@@ -121,19 +127,19 @@ bool CheckStreamingQueryFeatures(const TCoNameValueTupleList& features, TExprCon
         }
 
         TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-            return MakeIntrusive<TIssue>(ctx.GetPosition(feature.Pos()), TStringBuilder()
-                << "At streaming query setting " << to_upper(TString(feature.Name().Value())));
+            return MakeIntrusive<TIssue>(
+                ctx.GetPosition(feature.Pos()), TStringBuilder() << "At streaming query setting " << to_upper(TString(feature.Name().Value())));
         });
 
         if (const auto literal = value.Maybe<TCoJust>().Input().Maybe<TCoDataCtor>()) {
             value = literal.Cast();
         }
 
-        if (topLevel && (feature.Name() == TStreamingQueryConfig::TProperties::ReadFrom || feature.Name() == TStreamingQueryConfig::TProperties::OutputFrom)) {
+        if (topLevel && (feature.Name() == TStreamingQueryConfig::TProperties::ReadFrom ||
+                            feature.Name() == TStreamingQueryConfig::TProperties::OutputFrom)) {
             const bool readFrom = feature.Name() == TStreamingQueryConfig::TProperties::ReadFrom;
-            const TString message = readFrom
-                ? "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp"
-                : "OUTPUT_FROM must be an expression of type Timestamp";
+            const TString message = readFrom ? "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp"
+                                             : "OUTPUT_FROM must be an expression of type Timestamp";
             if (readFrom && (value.Maybe<TCoAtom>() || value.Maybe<TCoString>() || value.Maybe<TCoUtf8>())) {
                 const auto literal = value.Maybe<TCoAtom>() ? value.Cast<TCoAtom>() : value.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>();
                 const auto mode = to_lower(TString(literal.Value()));
@@ -145,8 +151,8 @@ bool CheckStreamingQueryFeatures(const TCoNameValueTupleList& features, TExprCon
                 ctx.AddError(TIssue(ctx.GetPosition(value.Cast().Pos()), message));
                 return false;
             }
-        } else if (topLevel && feature.Name() == TStreamingQueryConfig::TProperties::StreamingDisposition
-            && value.Maybe<TCoNameValueTupleList>() && value.Cast().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit)
+        } else if (topLevel && feature.Name() == TStreamingQueryConfig::TProperties::StreamingDisposition &&
+                   value.Maybe<TCoNameValueTupleList>() && value.Cast().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit)
         {
             if (!CheckStreamingQueryFeatures(value.Cast<TCoNameValueTupleList>(), ctx, /* topLevel */ false)) {
                 return false;
@@ -156,7 +162,7 @@ bool CheckStreamingQueryFeatures(const TCoNameValueTupleList& features, TExprCon
                 return false;
             }
             const auto slot = value.Cast().Ref().GetTypeAnn()->Cast<TDataExprType>()->GetSlot();
-            if (!IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8}, slot)) {
+            if (!IsIn({ EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8 }, slot)) {
                 ctx.AddError(TIssue(ctx.GetPosition(value.Cast().Pos()), "Streaming query setting must have type String, Utf8 or Bool"));
                 return false;
             }
@@ -166,7 +172,7 @@ bool CheckStreamingQueryFeatures(const TCoNameValueTupleList& features, TExprCon
     return true;
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 TExprNode::TPtr TStreamingQueryOptimizer::ExtractWorldFeatures(TCoNameValueTupleList& features, TExprContext& ctx) const {
     TExprNode::TPtr ast;
@@ -182,14 +188,10 @@ TExprNode::TPtr TStreamingQueryOptimizer::ExtractWorldFeatures(TCoNameValueTuple
         }
     }
 
-    features = Build<TCoNameValueTupleList>(ctx, features.Pos())
-        .Add(std::move(filteredFeatures))
-        .Done();
+    features = Build<TCoNameValueTupleList>(ctx, features.Pos()).Add(std::move(filteredFeatures)).Done();
 
     if (!ast) {
-        ast = Build<TCoVoid>(ctx, features.Pos())
-            .Done()
-            .Ptr();
+        ast = Build<TCoVoid>(ctx, features.Pos()).Done().Ptr();
     }
 
     return ast;
@@ -233,11 +235,9 @@ TStatus TStreamingQueryOptimizer::ValidateObjectNodeAnnotation(TExprNode::TPtr n
         return TStatus::Error;
     }
 
-    node->ChildRef(astIdx) = Build<TCoVoid>(ctx, ast->Pos())
-        .Done()
-        .Ptr();
+    node->ChildRef(astIdx) = Build<TCoVoid>(ctx, ast->Pos()).Done().Ptr();
 
     return TStatus::Repeat;
 }
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

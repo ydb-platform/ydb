@@ -3,6 +3,7 @@
 #include "yql_http_gateway.h"
 
 #include <curl/curl.h>
+
 #include <optional>
 #include <unordered_set>
 
@@ -11,15 +12,16 @@ namespace NYql {
 std::unordered_set<CURLcode> YqlRetriedCurlCodes();
 
 struct THttpRetryPolicyOptions {
-    std::optional<TDuration> MaxTime; // Not set means default maxTime
+    std::optional<TDuration> MaxTime;   // Not set means default maxTime
     size_t MaxRetries = std::numeric_limits<size_t>::max();
     std::unordered_set<CURLcode> RetriedCurlCodes = YqlRetriedCurlCodes();
 };
 
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions&& options = {});
 
-IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries = std::numeric_limits<size_t>::max()); // Zero means default maxTime
+IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(
+    TDuration maxTime, size_t maxRetries = std::numeric_limits<size_t>::max());   // Zero means default maxTime
 
 IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy();
 
-}
+}   // namespace NYql

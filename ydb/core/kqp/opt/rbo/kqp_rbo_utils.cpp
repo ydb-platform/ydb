@@ -30,6 +30,30 @@ TString GetValidJoinKind(const TString& joinKind) {
     return joinKind;
 }
 
+TOrderedIUs<> GetAggregateInputShuffle(const TOpAggregate& aggregate) {
+    if (!aggregate.IsDistinctAll()) {
+        return aggregate.GetKeyColumns();
+    }
+
+    TOrderedIUs<> result;
+    for (const auto& [output, trait] : aggregate.GetAggregationTraits().Items()) {
+        result.Append(trait.Input);
+    }
+    return result;
+}
+
+TOrderedIUs<> GetAggregateOutputShuffle(const TOpAggregate& aggregate) {
+    if (!aggregate.IsDistinctAll()) {
+        return aggregate.GetKeyColumns();
+    }
+
+    TOrderedIUs<> result;
+    for (const auto output : aggregate.GetAggregationTraits().Keys()) {
+        result.Append(output);
+    }
+    return result;
+}
+
 TOrderedIUs<> GetAggregatePreservedShuffling(const TOpAggregate& aggregate, const TRBOContext& ctx) {
     if (aggregate.GetKeyColumns().Items().empty()) {
         return {};
@@ -88,13 +112,17 @@ bool SortMatchesKeyOrder(const TVector<TString>& sortColumns, const TVector<TStr
     const THashSet<TString> pointKeys(keyColumns.begin(), keyColumns.begin() + pointPrefixLen);
     size_t next = pointPrefixLen;
     for (const auto& sortColumn : sortColumns) {
+        // The key is unique, so sort columns after the full key cannot change the order.
+        if (next == keyColumns.size()) {
+            return true;
+        }
         if (sortColumn.empty()) {
             return false;
         }
         if (pointKeys.contains(sortColumn)) {
             continue;
         }
-        if (next >= keyColumns.size() || keyColumns[next] != sortColumn) {
+        if (keyColumns[next] != sortColumn) {
             return false;
         }
         ++next;

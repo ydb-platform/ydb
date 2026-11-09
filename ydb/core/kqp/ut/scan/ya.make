@@ -3,12 +3,13 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 SIZE(MEDIUM)
 
 SRCS(
     kqp_flowcontrol_ut.cpp
     kqp_scan_ut.cpp
+    kqp_snapshot_ranges_ut.cpp
     kqp_split_ut.cpp
     kqp_point_consolidation_ut.cpp
 )

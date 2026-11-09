@@ -31,7 +31,7 @@ NNodes::TMaybeNode<NNodes::TExprBase> DqRewriteEquiJoin(const NNodes::TExprBase&
 
 NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage=true, bool useScalarHashJoinForMap = false);
 
-bool DqCanUseScalarHashJoinForMap(const NNodes::TDqJoin& join, TExprContext& ctx);
+bool DqCanUseScalarHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
 
 NNodes::TExprBase DqBuildJoin(
     const NNodes::TExprBase& node,
@@ -49,7 +49,7 @@ NNodes::TExprBase DqBuildJoin(
     bool shuffleEliminationWithMap = false,
     bool buildCollectStage=true,
     bool blockHashJoinBuildSideLeft = false,
-    bool enableBlockHashJoinEqualNulls = false,
+    bool useScalarHashJoin = false,
     bool useScalarHashJoinForMap = false
 );
 
@@ -63,16 +63,12 @@ NNodes::TExprBase DqBuildHashJoin(
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin = false,
     bool blockHashJoinBuildSideLeft = false,
-    bool enableBlockHashJoinEqualNulls = false);
+    bool useScalarHashJoin = false);
 
-// Settings on TDqPhyBlockHashJoin: optional BuildSide=Left; when enableEqualNulls,
-// one EqualNulls Uint32 per join-key position (IS NOT DISTINCT FROM).
 TVector<NNodes::TCoNameValueTuple> BuildBlockHashJoinSettings(
     TPositionHandle pos,
     EJoinAlgoType joinAlgo,
-    ui32 keyCount,
-    TExprContext& ctx,
-    bool enableEqualNulls = false);
+    TExprContext& ctx);
 
 NNodes::TExprBase DqBuildBlockHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
 

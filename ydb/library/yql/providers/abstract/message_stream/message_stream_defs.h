@@ -1,11 +1,10 @@
 #pragma once
 
-#include <yql/essentials/public/issue/yql_issue.h>
-
+#include <util/datetime/base.h>
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
-#include <util/datetime/base.h>
 #include <util/system/types.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <compare>
 #include <cstddef>
@@ -65,11 +64,12 @@ enum class EMessageStreamStatus {
 // operation failures use TMessageStreamResult or a session closure event.
 // YDB/QYT/Kafka: a common exception at this API boundary, not a native SDK
 // exception; GetStatus() returns the normalized category for portable handling.
-class TMessageStreamException : public yexception {
+class TMessageStreamException: public yexception {
 public:
     explicit TMessageStreamException(EMessageStreamStatus status)
         : Status(status)
-    {}
+    {
+    }
 
     EMessageStreamStatus GetStatus() const {
         return Status;
@@ -259,8 +259,7 @@ struct TMessageStreamReadSessionSettings {
         std::unordered_set<ui64> ids;
         for (const auto id : PartitionIds) {
             if (!ids.insert(id.Value).second) {
-                ythrow TMessageStreamException(EMessageStreamStatus::InvalidArgument)
-                    << "Duplicate partition ID: " << id.Value;
+                ythrow TMessageStreamException(EMessageStreamStatus::InvalidArgument) << "Duplicate partition ID: " << id.Value;
             }
         }
     }
@@ -294,14 +293,14 @@ struct TMessageStreamResult {
     TValue Value{};
 
     static TMessageStreamResult Success(TValue value, NYql::TIssues issues = {}) {
-        return {.Status = EMessageStreamStatus::Success, .Issues = std::move(issues), .Value = std::move(value)};
+        return { .Status = EMessageStreamStatus::Success, .Issues = std::move(issues), .Value = std::move(value) };
     }
 
     static TMessageStreamResult Failure(EMessageStreamStatus status, NYql::TIssues issues = {}) {
         if (status == EMessageStreamStatus::Success) {
             ythrow TMessageStreamException(EMessageStreamStatus::InvalidArgument) << "Failure requires a non-success status";
         }
-        return {.Status = status, .Issues = std::move(issues)};
+        return { .Status = status, .Issues = std::move(issues) };
     }
 
     // All backends: operation success, not a guarantee that all optional metadata is present.
@@ -401,4 +400,4 @@ struct TMessageStreamDescribeConsumerSettings {
     bool IncludeGeneration = false;
 };
 
-} // namespace NFq
+}   // namespace NFq

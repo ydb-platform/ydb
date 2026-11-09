@@ -14,8 +14,15 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
+// BlockJoin is not an LLVM toggle; register both twins under sanitizers.
+#undef Y_UNIT_TEST_TWIN
+#undef Y_UNIT_TEST_QUAD
+#include <ydb/library/testlib/helpers.h>
+
 #include <arrow/util/bit_util.h>
 
+#include <bit>
+#include <limits>
 #include <numeric>
 
 namespace NKikimr::NMiniKQL {
@@ -329,6 +336,40 @@ TJoinTestData EmptyRightInnerTestData() {
     constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
     td.JoinMemoryConstraint = joinMemory;
     td.Kind = EJoinKind::Left;
+    return td;
+}
+
+TJoinTestData SerializedListKeySpillingTestData() {
+    auto td = LeftJoinSpillingTestData();
+    auto& setup = *td.Setup;
+    auto& pb = *setup.PgmBuilder;
+    auto dummy = setup.BuildGraph(pb.NewDataLiteral<ui64>(0));
+    const auto& factory = dummy->GetContext().HolderFactory;
+    auto* type = pb.NewDataType(NUdf::EDataSlot::Uint64);
+    auto* rowType = pb.NewTupleType({pb.NewListType(type), type});
+    const auto wrapKey = [&](TypeAndValue& source) {
+        TUnboxedValueVector rows;
+        auto iter = source.Value.GetListIterator();
+        NUdf::TUnboxedValue row;
+        while (iter.Next(row)) {
+            NUdf::TUnboxedValue* keyItem = nullptr;
+            NUdf::TUnboxedValue key = factory.CreateDirectArrayHolder(1, keyItem);
+            keyItem[0] = row.GetElement(0);
+            NUdf::TUnboxedValue* items = nullptr;
+            NUdf::TUnboxedValue wrapped = factory.CreateDirectArrayHolder(2, items);
+            items[0] = std::move(key);
+            items[1] = row.GetElement(1);
+            rows.push_back(std::move(wrapped));
+        }
+        source.Type = pb.NewListType(rowType);
+        source.Value = factory.VectorAsArray(rows);
+    };
+    wrapKey(td.Left);
+    wrapKey(td.Right);
+    td.Renames = {{1, EJoinSide::kLeft}, {1, EJoinSide::kRight}};
+    td.Result = ConvertVectorsToTuples(setup, TVector<ui64>{13, 14, 15, 16, 17},
+        TVector<std::optional<ui64>>{std::nullopt, std::nullopt, 0, std::nullopt, 1});
+    td.ExpectsSpilling = true;
     return td;
 }
 
@@ -927,7 +968,48 @@ TJoinTestData InnerJoinEqualNullsTestData() {
     return td;
 }
 
-// EqualNulls still distinguishes NULL from a present value (including 0).
+TJoinTestData InnerJoinEqualNullsAfterTupleKeyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+    TType* ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    TType* tupleType = pb.NewTupleType({ui64Type, ui64Type});
+    TType* optionalType = pb.NewOptionalType(ui64Type);
+
+    const auto tuple = [&](ui64 first, ui64 second) {
+        return pb.NewTuple({pb.NewDataLiteral<ui64>(first), pb.NewDataLiteral<ui64>(second)});
+    };
+    const auto opt = [&](std::optional<ui64> key) {
+        return key ? pb.NewOptional(pb.NewDataLiteral<ui64>(*key)) : pb.NewEmptyOptional(optionalType);
+    };
+    const auto makeList = [&](TType* rowType, TRuntimeNode::TList items) {
+        const auto list = pb.NewList(rowType, items);
+        return TypeAndValue{list.GetStaticType(), setup.BuildGraph(list)->GetValue()};
+    };
+
+    const auto rowType = pb.NewTupleType({tupleType, optionalType});
+    td.Left = makeList(rowType, {
+        pb.NewTuple({tuple(1, 2), opt(std::nullopt)}),
+        pb.NewTuple({tuple(1, 2), opt(5)}),
+        pb.NewTuple({tuple(3, 4), opt(7)}),
+    });
+    td.Right = makeList(rowType, {
+        pb.NewTuple({tuple(1, 2), opt(std::nullopt)}),
+        pb.NewTuple({tuple(1, 3), opt(std::nullopt)}),
+        pb.NewTuple({tuple(3, 4), opt(7)}),
+    });
+    td.Result = makeList(pb.NewTupleType({tupleType, optionalType, tupleType, optionalType}), {
+        pb.NewTuple({tuple(1, 2), opt(std::nullopt), tuple(1, 2), opt(std::nullopt)}),
+        pb.NewTuple({tuple(3, 4), opt(7), tuple(3, 4), opt(7)}),
+    });
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {0, 1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.EqualNullsKeys = {1};
+    return td;
+}
 TJoinTestData InnerJoinEqualNullsNullVsZeroTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -1043,6 +1125,18 @@ TJoinTestData InnerJoinEqualNullsSecondKeyOnlyTestData() {
     return td;
 }
 
+TJoinTestData InnerJoinEqualNullsSecondKeyOnlyLeftIsBuildTestData() {
+    auto td = InnerJoinEqualNullsSecondKeyOnlyTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+TJoinTestData InnerJoinEqualNullsAfterTupleKeyLeftIsBuildTestData() {
+    auto td = InnerJoinEqualNullsAfterTupleKeyTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
 // Without EqualNullsKeys, NULL keys are allowed in the input but never match.
 TJoinTestData InnerJoinNullKeysDoNotMatchByDefaultTestData() {
     TJoinTestData td;
@@ -1065,6 +1159,71 @@ TJoinTestData InnerJoinNullKeysDoNotMatchByDefaultTestData() {
     td.LeftKeyColmns = {1};
     td.RightKeyColmns = {1};
     td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+// -0.0 matches +0.0 and any NaN matches any NaN, as EquateFloats does; -inf still differs from +inf.
+TJoinTestData InnerJoinDoubleKeysTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    const double nanWithPayload = std::bit_cast<double>(ui64{0x7ff8000000000001ull});
+    const double negativeNan = std::bit_cast<double>(ui64{0xfff8000000001234ull});
+    const double inf = std::numeric_limits<double>::infinity();
+
+    TVector<ui64> leftIds = {1, 2, 3, 4, 5};
+    TVector<double> leftKeys = {-0.0, nanWithPayload, 1.5, -inf, 2.5};
+    TVector<ui64> rightIds = {10, 20, 30, 40, 50};
+    TVector<double> rightKeys = {0.0, negativeNan, 1.5, inf, -2.5};
+
+    TVector<ui64> expLeftIds = {1, 2, 3};
+    TVector<double> expLeftKeys = {-0.0, nanWithPayload, 1.5};
+    TVector<ui64> expRightIds = {10, 20, 30};
+    TVector<double> expRightKeys = {0.0, negativeNan, 1.5};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+// Float key next to an integer key, so the key is compared by memcmp rather than as a single word
+TJoinTestData InnerJoinOptionalFloatAndIntKeysTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float negativeNan = std::bit_cast<float>(ui32{0xffc01234u});
+
+    TVector<ui64> leftIds = {1, 2, 3, 4};
+    TVector<std::optional<float>> leftFloatKeys = {-0.0f, nan, std::nullopt, 0.0f};
+    TVector<ui64> leftIntKeys = {7, 7, 7, 8};
+    TVector<ui64> rightIds = {1, 2, 3, 4};
+    TVector<std::optional<float>> rightFloatKeys = {0.0f, negativeNan, std::nullopt, -0.0f};
+    TVector<ui64> rightIntKeys = {7, 7, 7, 7};
+
+    TVector<ui64> expLeftIds = {1, 1, 2};
+    TVector<std::optional<float>> expLeftFloatKeys = {-0.0f, -0.0f, nan};
+    TVector<ui64> expLeftIntKeys = {7, 7, 7};
+    TVector<ui64> expRightIds = {1, 4, 2};
+    TVector<std::optional<float>> expRightFloatKeys = {0.0f, -0.0f, negativeNan};
+    TVector<ui64> expRightIntKeys = {7, 7, 7};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftFloatKeys, leftIntKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightFloatKeys, rightIntKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftFloatKeys, expLeftIntKeys,
+                                       expRightIds, expRightFloatKeys, expRightIntKeys);
+
+    td.LeftKeyColmns = {1, 2};
+    td.RightKeyColmns = {1, 2};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}, {2, EJoinSide::kRight}};
     td.Kind = EJoinKind::Inner;
     return td;
 }
@@ -2511,11 +2670,183 @@ void TestWithSlowSpiller(TJoinTestData testData, bool blockJoin) {
     }
 }
 
+struct TDispatchedPhysicalJoin {
+    virtual ~TDispatchedPhysicalJoin() = default;
+    virtual TPhysicalJoin GetPhysicalJoin() const = 0;
+};
+
+template <TPhysicalJoin Join>
+struct TDispatchedPhysicalJoinImpl : TDispatchedPhysicalJoin {
+    TPhysicalJoin GetPhysicalJoin() const override {
+        return Join;
+    }
+};
+
+TPhysicalJoin DispatchPhysicalJoin(EJoinKind kind, ESide preservedSide, bool isGrid) {
+    std::unique_ptr<TDispatchedPhysicalJoin> dispatched(
+        DispatchHashJoinByKind<TDispatchedPhysicalJoinImpl, TDispatchedPhysicalJoin>(
+            kind, preservedSide, isGrid, "unsupported test join kind"));
+    return dispatched->GetPhysicalJoin();
+}
+
+// Records the OutputRows counter the join registers with the task counters provider.
+class TJoinOutputRowsCounters: public NYql::NUdf::ICountersProvider {
+public:
+    NYql::NUdf::TCounter GetCounter(const NYql::NUdf::TStringRef& module, const NYql::NUdf::TStringRef& name, bool) override {
+        Module = TString(module);
+        Name = TString(name);
+        ++Requests;
+        return NYql::NUdf::TCounter(&Rows);
+    }
+
+    NYql::NUdf::TScopedProbe GetScopedProbe(const NYql::NUdf::TStringRef&, const NYql::NUdf::TStringRef&) override {
+        return NYql::NUdf::TScopedProbe();
+    }
+
+    i64 Rows = 0;
+    int Requests = 0;
+    TString Module;
+    TString Name;
+};
+
+void TestOutputRowsOperatorStat(TJoinTestData td, bool blockJoin) {
+    const i64 expectedRows = static_cast<i64>(td.Result.Value.GetListLength());
+    TJoinOutputRowsCounters counters;
+    td.Setup->CountersProvider = &counters;
+
+    // Keep td in place: its memory-limit callback captures this.
+    auto descr = MakeJoinDescription(td);
+    descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    THolder<IComputationGraph> got = ConstructJoinGraphStream(
+        td.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, true, td.JoinSettings);
+    if (blockJoin) {
+        CompareListAndBlockStreamIgnoringOrder(td.Result, *got);
+    } else {
+        CompareListAndStreamIgnoringOrder(td.Result, *got);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(counters.Requests, 1);
+    UNIT_ASSERT_VALUES_EQUAL(counters.Rows, expectedRows);
+    UNIT_ASSERT_VALUES_EQUAL(counters.Module, TString(Operator_Join) + "0");
+    UNIT_ASSERT_VALUES_EQUAL(counters.Name, TString(Counter_OutputRows));
+}
+
 } // namespace
 
+Y_UNIT_TEST_SUITE(TDqHashJoinPgTypesTest) {
+    Y_UNIT_TEST_TWIN(RejectPgType, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* pgType = pb.NewPgType(23); // int4
+        auto source = [&](TVector<TType*> columns) {
+            if constexpr (BlockJoin) {
+                for (auto*& type : columns) {
+                    type = pb.NewBlockType(type, TBlockType::EShape::Many);
+                }
+                columns.push_back(pb.LastScalarIndexBlock());
+            }
+            auto* multi = pb.NewMultiType(columns);
+            auto* inputType = BlockJoin ? pb.NewStreamType(multi) : pb.NewFlowType(multi);
+            TCallableBuilder builder(*setup.Env, "ExternalNode", inputType);
+            return TRuntimeNode(builder.Build(), false);
+        };
+        auto* returnType = BlockJoin
+            ? pb.NewStreamType(pb.NewMultiType({pb.NewBlockType(intType, TBlockType::EShape::Many),
+                                                pb.LastScalarIndexBlock()}))
+            : pb.NewFlowType(pb.NewMultiType({intType}));
+        const auto lhs = source({pgType, intType});
+        const auto rhs = source({intType, intType});
+        const auto join = BlockJoin
+            ? pb.DqBlockHashJoin(lhs, rhs, EJoinKind::Inner, {0}, {0}, {0, 0}, {}, returnType)
+            : pb.DqScalarHashJoin(lhs, rhs, EJoinKind::Inner, {0}, {0}, {0, 0}, {}, returnType);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(setup.BuildGraph(join), yexception,
+            "PG types are not supported in hash join");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDqHashJoinResourceKeyTest) {
+    template <bool BlockJoin>
+    TRuntimeNode MakeHashJoin(TDqSetup<false>& setup, TVector<TType*> leftColumns, TVector<TType*> rightColumns,
+                              const TVector<ui32>& leftKeys, const TVector<ui32>& rightKeys, TType* returnItemType) {
+        auto& pb = setup.GetDqProgramBuilder();
+        auto source = [&](TVector<TType*> columns) {
+            if constexpr (BlockJoin) {
+                for (auto*& type : columns) {
+                    type = pb.NewBlockType(type, TBlockType::EShape::Many);
+                }
+                columns.push_back(pb.LastScalarIndexBlock());
+            }
+            auto* multi = pb.NewMultiType(columns);
+            // ExternalNode is a stream node. Scalar hash join needs a wide flow, which ToFlow
+            // produces from a wide stream. A flow-typed ExternalNode is not IComputationWideFlowNode.
+            TCallableBuilder builder(*setup.Env, "ExternalNode", pb.NewStreamType(multi));
+            TRuntimeNode stream(builder.Build(), false);
+            if constexpr (BlockJoin) {
+                return stream;
+            }
+            return pb.ToFlow(stream, {});
+        };
+        auto* returnType = BlockJoin
+            ? pb.NewStreamType(pb.NewMultiType({pb.NewBlockType(returnItemType, TBlockType::EShape::Many),
+                                                pb.LastScalarIndexBlock()}))
+            : pb.NewFlowType(pb.NewMultiType({returnItemType}));
+        const auto lhs = source(std::move(leftColumns));
+        const auto rhs = source(std::move(rightColumns));
+        if constexpr (BlockJoin) {
+            return pb.DqBlockHashJoin(lhs, rhs, EJoinKind::Inner, leftKeys, rightKeys, {0, 0}, {}, returnType);
+        } else {
+            return pb.DqScalarHashJoin(lhs, rhs, EJoinKind::Inner, leftKeys, rightKeys, {0, 0}, {}, returnType);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RejectResourceKey, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* resourceType = pb.NewResourceType("Test.Resource");
+        const auto join = MakeHashJoin<BlockJoin>(setup, {resourceType, intType}, {resourceType, intType}, {0}, {0}, intType);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(setup.BuildGraph(join), yexception,
+            "Resource types are not supported as hash join keys");
+    }
+
+    Y_UNIT_TEST_TWIN(AllowResourcePayload, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* resourceType = pb.NewResourceType("Test.Resource");
+        const auto join = MakeHashJoin<BlockJoin>(setup, {intType, resourceType}, {intType, resourceType}, {0}, {0}, intType);
+        auto graph = setup.BuildGraph(join);
+        UNIT_ASSERT(graph.Get() != nullptr);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
+    Y_UNIT_TEST(InnerAndCrossKeepPreservedSide) {
+        const auto inner = DispatchPhysicalJoin(EJoinKind::Inner, ESide::Build, false);
+        UNIT_ASSERT(inner.Kind == EJoinKind::Inner);
+        UNIT_ASSERT(inner.Preserved == ESide::Build);
+        UNIT_ASSERT(!inner.IsGrid);
+
+        const auto cross = DispatchPhysicalJoin(EJoinKind::Cross, ESide::Build, true);
+        UNIT_ASSERT(cross.Kind == EJoinKind::Cross);
+        UNIT_ASSERT(cross.Preserved == ESide::Build);
+        UNIT_ASSERT(cross.IsGrid);
+    }
+}
+
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
+    Y_UNIT_TEST(TestSerializedListKeySpilling) {
+        Test(SerializedListKeySpillingTestData(), false);
+    }
+
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
         Test(BasicInnerJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestOutputRowsOperatorStat, BlockJoin) {
+        TestOutputRowsOperatorStat(BasicInnerJoinTestData(), BlockJoin);
+        TestOutputRowsOperatorStat(EmptyInnerJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestCrossPassthrough, BlockJoin) {
@@ -2530,8 +2861,16 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(InnerJoinIntAndOptionalIntKeyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestInnerJoinEqualNulls) {
-        Test(InnerJoinEqualNullsTestData(), /*blockJoin=*/true);
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNulls, BlockJoin) {
+        Test(InnerJoinEqualNullsTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKey, BlockJoin) {
+        Test(InnerJoinEqualNullsAfterTupleKeyTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKeyLeftIsBuild, BlockJoin) {
+        Test(InnerJoinEqualNullsAfterTupleKeyLeftIsBuildTestData(), BlockJoin);
     }
 
     // arrow builders zero null slotsPoison
@@ -2555,24 +2894,36 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         CompareListAndBlockStreamIgnoringOrder(td.Result, *got);
     }
 
-    Y_UNIT_TEST(TestInnerJoinEqualNullsNullVsZero) {
-        Test(InnerJoinEqualNullsNullVsZeroTestData(), /*blockJoin=*/true);
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsNullVsZero, BlockJoin) {
+        Test(InnerJoinEqualNullsNullVsZeroTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestInnerJoinEqualNullsCompositeKey) {
-        Test(InnerJoinEqualNullsCompositeKeyTestData(), /*blockJoin=*/true);
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsCompositeKey, BlockJoin) {
+        Test(InnerJoinEqualNullsCompositeKeyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftJoinEqualNulls) {
-        Test(LeftJoinEqualNullsTestData(), /*blockJoin=*/true);
+    Y_UNIT_TEST_TWIN(TestLeftJoinEqualNulls, BlockJoin) {
+        Test(LeftJoinEqualNullsTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestInnerJoinEqualNullsSecondKeyOnly) {
-        Test(InnerJoinEqualNullsSecondKeyOnlyTestData(), /*blockJoin=*/true);
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsSecondKeyOnly, BlockJoin) {
+        Test(InnerJoinEqualNullsSecondKeyOnlyTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsSecondKeyOnlyLeftIsBuild, BlockJoin) {
+        Test(InnerJoinEqualNullsSecondKeyOnlyLeftIsBuildTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinNullKeysDoNotMatchByDefault, BlockJoin) {
         Test(InnerJoinNullKeysDoNotMatchByDefaultTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinDoubleKeys, BlockJoin) {
+        Test(InnerJoinDoubleKeysTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinOptionalFloatAndIntKeys, BlockJoin) {
+        Test(InnerJoinOptionalFloatAndIntKeysTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {
@@ -2611,32 +2962,32 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(LeftJoinSpillingMultiKeyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftKindLeftIsBuild) {
-        Test(LeftJoinTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestLeftKindLeftIsBuild, BlockJoin) {
+        Test(LeftJoinTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftJoinWithMatchesLeftIsBuild) {
-        Test(LeftJoinWithMatchesTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestLeftJoinWithMatchesLeftIsBuild, BlockJoin) {
+        Test(LeftJoinWithMatchesTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftJoinInplaceBuildRowLeftIsBuild) {
-        Test(LeftJoinInplaceBuildRowLeftIsBuildTestData(), true);
+    Y_UNIT_TEST_TWIN(TestLeftJoinInplaceBuildRowLeftIsBuild, BlockJoin) {
+        Test(LeftJoinInplaceBuildRowLeftIsBuildTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftJoinSpillingLeftIsBuild) {
-        Test(LeftJoinSpillingTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingLeftIsBuild, BlockJoin) {
+        Test(LeftJoinSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftJoinSpillingTwoKeysLeftIsBuild) {
-        Test(LeftJoinSpillingTwoKeysTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingTwoKeysLeftIsBuild, BlockJoin) {
+        Test(LeftJoinSpillingTwoKeysTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftJoinSpillingMultiKeyLeftIsBuild) {
-        Test(LeftJoinSpillingMultiKeyTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingMultiKeyLeftIsBuild, BlockJoin) {
+        Test(LeftJoinSpillingMultiKeyTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLargeBothSidesLeftSpillingLeftIsBuild) {
-        Test(LargeBothSidesLeftSpillingTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestLargeBothSidesLeftSpillingLeftIsBuild, BlockJoin) {
+        Test(LargeBothSidesLeftSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestSlicedBlocksLeftSpillingLeftIsBuild) {
@@ -2691,32 +3042,32 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(LeftOnlyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftSemiKindLeftIsBuild) {
-        Test(LeftSemiTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestLeftSemiKindLeftIsBuild, BlockJoin) {
+        Test(LeftSemiTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftOnlyKindLeftIsBuild) {
-        Test(LeftOnlyTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestLeftOnlyKindLeftIsBuild, BlockJoin) {
+        Test(LeftOnlyTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftSemiDuplicateKeys) {
-        Test(LeftSemiDuplicateKeysTestData(), true);
+    Y_UNIT_TEST_TWIN(TestLeftSemiDuplicateKeys, BlockJoin) {
+        Test(LeftSemiDuplicateKeysTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftSemiDuplicateKeysLeftIsBuild) {
-        Test(LeftSemiDuplicateKeysTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestLeftSemiDuplicateKeysLeftIsBuild, BlockJoin) {
+        Test(LeftSemiDuplicateKeysTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestSwappedKeyColumnsLeftSemiLeftIsBuild) {
-        Test(SwappedKeyColumnsLeftSemiTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsLeftSemiLeftIsBuild, BlockJoin) {
+        Test(SwappedKeyColumnsLeftSemiTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftSemiSpillingLeftIsBuild) {
-        Test(LeftSemiSpillingTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestLeftSemiSpillingLeftIsBuild, BlockJoin) {
+        Test(LeftSemiSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftOnlySpillingLeftIsBuild) {
-        Test(LeftOnlySpillingTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestLeftOnlySpillingLeftIsBuild, BlockJoin) {
+        Test(LeftOnlySpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     // Y_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {
@@ -2782,36 +3133,36 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(LeftOnlyCommonFilterTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashLeftJoinLeftFilterLeftIsBuild) {
-        Test(LeftJoinLeftFilterTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashLeftJoinLeftFilterLeftIsBuild, BlockJoin) {
+        Test(LeftJoinLeftFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashLeftJoinCommonFilterLeftIsBuild) {
-        Test(LeftJoinCommonFilterTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashLeftJoinCommonFilterLeftIsBuild, BlockJoin) {
+        Test(LeftJoinCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashLeftSemiJoinLeftFilterLeftIsBuild) {
-        Test(LeftSemiLeftFilterTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinLeftFilterLeftIsBuild, BlockJoin) {
+        Test(LeftSemiLeftFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashLeftSemiJoinCommonFilterLeftIsBuild) {
-        Test(LeftSemiCommonFilterTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinCommonFilterLeftIsBuild, BlockJoin) {
+        Test(LeftSemiCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashLeftOnlyJoinLeftFilterLeftIsBuild) {
-        Test(LeftOnlyLeftFilterTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinLeftFilterLeftIsBuild, BlockJoin) {
+        Test(LeftOnlyLeftFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashLeftOnlyJoinCommonFilterLeftIsBuild) {
-        Test(LeftOnlyCommonFilterTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinCommonFilterLeftIsBuild, BlockJoin) {
+        Test(LeftOnlyCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinCommonFilter, BlockJoin) {
         Test(KeylessJoinCommonFilterTestData(EJoinKind::Left), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashKeylessLeftJoinCommonFilterLeftIsBuild) {
-        Test(KeylessLeftJoinCommonFilterTestDataLeftIsBuild(), /*blockJoin=*/true);
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinCommonFilterLeftIsBuild, BlockJoin) {
+        Test(KeylessLeftJoinCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinCommonFilter, BlockJoin) {
@@ -2842,8 +3193,8 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(KeylessPreservedProbeSpillingTestData(EJoinKind::LeftOnly), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashKeylessLeftJoinSpillingLeftIsBuild) {
-        Test(KeylessLeftJoinSpillingLeftIsBuildTestData(), /*blockJoin=*/true);
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingLeftIsBuild, BlockJoin) {
+        Test(KeylessLeftJoinSpillingLeftIsBuildTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessInnerJoin, BlockJoin) {
@@ -2886,8 +3237,8 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(CrossJoinAllFiltersTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashCrossJoinLeftIsBuild) {
-        Test(TrueCrossJoinTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinLeftIsBuild, BlockJoin) {
+        Test(TrueCrossJoinTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinSpilling, BlockJoin) {
@@ -2906,32 +3257,32 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(CrossJoinZeroWidthBothEmptyOutputTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashCrossJoinSpillingLeftIsBuild) {
-        Test(CrossJoinSpillingTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinSpillingLeftIsBuild, BlockJoin) {
+        Test(CrossJoinSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinManyBucketsSpilling, BlockJoin) {
         Test(CrossJoinManyBucketsSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashCrossJoinManyBucketsSpillingLeftIsBuild) {
-        Test(CrossJoinManyBucketsSpillingTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinManyBucketsSpillingLeftIsBuild, BlockJoin) {
+        Test(CrossJoinManyBucketsSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyProbeSpilling, BlockJoin) {
         Test(CrossJoinEmptyProbeSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashCrossJoinEmptyProbeSpillingLeftIsBuild) {
-        Test(CrossJoinEmptyProbeSpillingTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyProbeSpillingLeftIsBuild, BlockJoin) {
+        Test(CrossJoinEmptyProbeSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyBuildSpilling, BlockJoin) {
         Test(CrossJoinEmptyBuildSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashCrossJoinEmptyBuildSpillingLeftIsBuild) {
-        Test(CrossJoinEmptyBuildSpillingTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyBuildSpillingLeftIsBuild, BlockJoin) {
+        Test(CrossJoinEmptyBuildSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinCommonFilterSpilling, BlockJoin) {
@@ -2942,8 +3293,8 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(CrossJoinBothSidesSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestHashCrossJoinBothSidesSpillingLeftIsBuild) {
-        Test(CrossJoinBothSidesSpillingTestDataLeftIsBuild(), true);
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinBothSidesSpillingLeftIsBuild, BlockJoin) {
+        Test(CrossJoinBothSidesSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinLeftFilterSpilling, BlockJoin) {
@@ -2966,7 +3317,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         TestWithSlowSpiller(CrossJoinSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestBlockSpilling) { 
+    Y_UNIT_TEST(TestBlockSpilling) {
         Test(SpillingTestData(), true);
     }
     Y_UNIT_TEST(TestFinalDumpSpillingIsBatched) {
@@ -2976,10 +3327,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestBlockJoinWithoutSpilling) {
         Test(BasicInnerJoinTestData(), true, false);
     }
-    Y_UNIT_TEST(TestBigStrings) { 
+    Y_UNIT_TEST(TestBigStrings) {
         Test(BigStringsTestData(), true);
     }
-    Y_UNIT_TEST(TestSmallStrings) { 
+    Y_UNIT_TEST(TestSmallStrings) {
         Test(SmallStringsTestData(), true);
     }
     Y_UNIT_TEST(TestOutputBufferBounded) {

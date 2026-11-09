@@ -79,9 +79,7 @@ class TestS3Compressions:
                 description String NOT NULL,
                 info String NOT NULL
             ));
-            '''.format(
-            storage_connection_name, filename, compression
-        )
+            '''.format(storage_connection_name, filename, compression)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -111,9 +109,7 @@ class TestS3Compressions:
             SELECT *
             FROM `{}`.`{}`
             WITH (format=csv_with_names, compression="{}", with_infer="true");
-            '''.format(
-            storage_connection_name, filename, compression
-        )
+            '''.format(storage_connection_name, filename, compression)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -145,9 +141,7 @@ class TestS3Compressions:
             WITH (format=json_each_row, compression="{}", SCHEMA (
                 a String NOT NULL
             ));
-            '''.format(
-            storage_connection_name, filename, compression
-        )
+            '''.format(storage_connection_name, filename, compression)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -303,6 +297,4 @@ Pear,15,33'''
         describe_result = client.describe_query(query_id).result
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
-        assert (
-            "couldn\\'t decompress file, check compression params:" in describe_string
-        )
+        assert "couldn\\'t decompress file, check compression params:" in describe_string

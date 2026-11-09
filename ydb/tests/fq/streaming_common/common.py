@@ -62,7 +62,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
     enable_external_data_sources = param.get("enable_external_data_sources", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
-    enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
+    enable_kqp_constraints_transformer = param.get("enable_kqp_constraints_transformer", True)
     enable_dq_source_stream_lookup_join_local_lookups = param.get(
         "enable_dq_source_stream_lookup_join_local_lookups", True
     )
@@ -70,6 +70,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
         "enable_dq_source_stream_lookup_join_shuffle_mode", True
     )
+    enable_streaming_aggregation = param.get("enable_streaming_aggregation", True)
 
     extra_feature_flags = {
         "enable_streaming_queries_counters",
@@ -86,7 +87,6 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.update({"enable_exactly_once_topics_writing", "enable_topic_deferred_publish"})
 
     for flag in (
-        "enable_streaming_aggregation",
         "enable_streaming_aggregation_advanced",
         "enable_streaming_query_state_recompute",
     ):
@@ -118,13 +118,10 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
-    if not enable_kqp_constraints_transformer:
-        disabled_feature_flags.append("enable_kqp_constraints_transformer")
-
-    if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true":
-        extra_feature_flags.add("enable_access_service_v2_interface")
+    if enable_kqp_constraints_transformer:
+        extra_feature_flags.add("enable_kqp_constraints_transformer")
     else:
-        disabled_feature_flags.append("enable_access_service_v2_interface")
+        disabled_feature_flags.append("enable_kqp_constraints_transformer")
 
     iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
 
@@ -132,6 +129,11 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_external_data_sources")
     else:
         disabled_feature_flags.append("enable_external_data_sources")
+
+    if enable_streaming_aggregation:
+        extra_feature_flags.add("enable_streaming_aggregation")
+    else:
+        disabled_feature_flags.append("enable_streaming_aggregation")
 
     replication_config = {
         "iam_service_control": {
@@ -181,7 +183,6 @@ def get_ydb_config(request, enable_fq_connector=None):
             },
         }
 
-    config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
     config.yaml_config["auth_config"]["local_metadata_service"] = {

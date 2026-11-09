@@ -6,9 +6,9 @@
 using namespace NFq;
 
 namespace {
-    constexpr TStringBuf SECRET = "AAAA";
-    constexpr TStringBuf DATA = "BBBB";
-}
+constexpr TStringBuf SECRET = "AAAA";
+constexpr TStringBuf DATA = "BBBB";
+}   // namespace
 
 Y_UNIT_TEST_SUITE(HmacSha) {
     Y_UNIT_TEST(HmacSha1) {

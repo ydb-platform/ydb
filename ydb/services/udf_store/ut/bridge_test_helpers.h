@@ -7,15 +7,16 @@
 #include <ydb/services/udf_store/wasm/host.h>
 #include <ydb/services/udf_store/wasm/manifest.h>
 #include <ydb/services/udf_store/wasm/registry_helpers.h>
-#include <ydb/services/udf_store/wasm/udf_function.h>
 #include <ydb/services/udf_store/wasm/udf_configured_callable.h>
+#include <ydb/services/udf_store/wasm/udf_function.h>
+
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
-#include <library/cpp/json/json_writer.h>
-#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NUdfStore::NWasm::NTest {
 using namespace NYql::NUdf;
@@ -23,15 +24,15 @@ using namespace NKikimr::NMiniKQL;
 using namespace NYdb::NWasm;
 
 struct TBridgeEnv {
-    TScopedAlloc Alloc{__LOCATION__};
-    TTypeEnvironment Env{Alloc};
-    TMemoryUsageInfo MemInfo{"bridge_runtime_ut"};
-    THolderFactory HolderFactory{Alloc.Ref(), MemInfo};
-    TDefaultValueBuilder ValueBuilder{HolderFactory};
-    ITypeInfoHelper::TPtr TypeHelper{new TTypeInfoHelper()};
-    NYql::TRuntimeSettings::TConstPtr Settings{NYql::MakeRuntimeSettings()};
+    TScopedAlloc Alloc{ __LOCATION__ };
+    TTypeEnvironment Env{ Alloc };
+    TMemoryUsageInfo MemInfo{ "bridge_runtime_ut" };
+    THolderFactory HolderFactory{ Alloc.Ref(), MemInfo };
+    TDefaultValueBuilder ValueBuilder{ HolderFactory };
+    ITypeInfoHelper::TPtr TypeHelper{ new TTypeInfoHelper() };
+    NYql::TRuntimeSettings::TConstPtr Settings{ NYql::MakeRuntimeSettings() };
     TQueryCompartmentHandle Query;
-    TCurrentQueryCompartmentGuard Guard{&Query};
+    TCurrentQueryCompartmentGuard Guard{ &Query };
     TWasmCompartmentStatePtr State = std::make_shared<TWasmCompartmentState>();
 
     TBridgeEnv() {
@@ -43,8 +44,8 @@ struct TBridgeEnv {
     }
 
     std::unique_ptr<TFunctionTypeInfoBuilder> Builder() {
-        return std::make_unique<TFunctionTypeInfoBuilder>(NYql::UnknownLangVersion, *Settings,
-            Env, TypeHelper, "Test", nullptr, TSourcePosition());
+        return std::make_unique<TFunctionTypeInfoBuilder>(
+            NYql::UnknownLangVersion, *Settings, Env, TypeHelper, "Test", nullptr, TSourcePosition());
     }
 
     void AddModule(TStringBuf wat, std::initializer_list<TStringBuf> exports) {
@@ -57,7 +58,10 @@ struct TBridgeEnv {
 
     TWasmTypeNodePtr Type(TStringBuf text) {
         return ParseManifest(TStringBuilder() << R"({"module_name":"Test","module_type":"module","module_kind":"wasm",
-            "functions":[{"name":"f","result_type":)" << NJson::WriteJson(NJson::TJsonValue(text)) << "}]}").Functions[0].ResultType;
+            "functions":[{"name":"f","result_type":)"
+                                              << NJson::WriteJson(NJson::TJsonValue(text)) << "}]}")
+            .Functions[0]
+            .ResultType;
     }
 
     std::unique_ptr<TWasmBridgeFunction> Function(TStringBuf name, TVector<TWasmTypeNodePtr> args, TWasmTypeNodePtr result) {
@@ -69,4 +73,4 @@ struct TBridgeEnv {
         return TWasmBridgeFunction::Create(*builder, State, desc);
     }
 };
-}
+}   // namespace NKikimr::NUdfStore::NWasm::NTest

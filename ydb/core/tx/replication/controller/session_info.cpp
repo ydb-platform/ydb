@@ -1,7 +1,5 @@
 #include "session_info.h"
 
-#include <ydb/core/protos/replication.pb.h>
-
 namespace NKikimr::NReplication::NController {
 
 TSessionInfo::TSessionInfo()
@@ -31,30 +29,6 @@ const THashSet<TWorkerId>& TSessionInfo::GetWorkers() const {
 
 bool TSessionInfo::HasWorker(const TWorkerId& id) const {
     return Workers.contains(id);
-}
-
-TWorkerInfo::TWorkerInfo(NKikimrReplication::TRunWorkerCommand* cmd) {
-    SetCommand(cmd);
-}
-
-void TWorkerInfo::SetCommand(NKikimrReplication::TRunWorkerCommand* cmd) {
-    if (!cmd) {
-        return;
-    }
-
-    if (!Command) {
-        Command = MakeHolder<NKikimrReplication::TRunWorkerCommand>();
-    }
-
-    Command->Swap(cmd);
-}
-
-bool TWorkerInfo::HasCommand() const {
-    return bool(Command);
-}
-
-const NKikimrReplication::TRunWorkerCommand* TWorkerInfo::GetCommand() const {
-    return Command.Get();
 }
 
 void TWorkerInfo::AttachSession(ui32 nodeId) {

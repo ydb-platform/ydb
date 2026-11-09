@@ -2,8 +2,27 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_module_helpers.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NYql {
+
+TVector<const TItemExprType*> GetSqlStarItems(const TStructExprType& type, const TColumnOrder& order) {
+    TVector<const TItemExprType*> items;
+    items.reserve(type.GetSize());
+    THashSet<ui32> used;
+    for (const auto& column : order) {
+        if (const auto index = type.FindItem(column.PhysicalName); index && used.insert(*index).second) {
+            items.push_back(type.GetItems()[*index]);
+        }
+    }
+    // Preserve struct order for any members not listed in the source column order.
+    for (ui32 index = 0; index < type.GetSize(); ++index) {
+        if (!used.contains(index)) {
+            items.push_back(type.GetItems()[index]);
+        }
+    }
+    return items;
+}
 
 TExprNode::TPtr ExpandYqlTraitsFactory(
     const TExprNode::TPtr& factory,
@@ -138,15 +157,15 @@ TExprNode::TPtr ExpandSqlWindowCall(
     }
 
     if (name == "cumedist" && argsCount == 0) {
+        TExprNode::TListType options;
+        if (!isYql || HasSetting(*call->Child(2), "ansi")) {
+            options.push_back(ctxExpr.NewList(call->Pos(), {ctxExpr.NewAtom(call->Pos(), "ansi")}));
+        }
         // clang-format off
         return ctxExpr.Builder(call->Pos())
             .Callable("CumeDist")
                 .Add(0, std::move(listType))
-                .List(1)
-                    .List(0)
-                        .Atom(0, "ansi")
-                    .Seal()
-                .Seal()
+                .Add(1, ctxExpr.NewList(call->Pos(), std::move(options)))
             .Seal()
             .Build();
         // clang-format on
@@ -272,18 +291,27 @@ TExprNode::TPtr ExpandSqlWindowCall(
         // clang-format on
     }
 
-    if (((name == "firstvalue" || name == "lastvalue") && argsCount == 1) ||
-        (name == "nthvalue" && argsCount == 2))
+    const bool ignoreNulls = isYql && name.EndsWith("ignorenulls");
+    TStringBuf valueFunction(name);
+    if (ignoreNulls) {
+        valueFunction.ChopSuffix("ignorenulls");
+    }
+    if (((valueFunction == "firstvalue" || valueFunction == "lastvalue") && argsCount == 1) ||
+        (valueFunction == "nthvalue" && argsCount == 2))
     {
         TString traitName;
-        if (name == "firstvalue") {
+        if (valueFunction == "firstvalue") {
             traitName = "first_value";
-        } else if (name == "lastvalue") {
+        } else if (valueFunction == "lastvalue") {
             traitName = "last_value";
-        } else if (name == "nthvalue") {
+        } else if (valueFunction == "nthvalue") {
             traitName = "nth_value";
         } else {
             YQL_ENSURE(false, "unexpected " << name);
+        }
+
+        if (ignoreNulls) {
+            traitName += "_ignore_nulls";
         }
 
         TString path = "/lib/yql/window.yqls";

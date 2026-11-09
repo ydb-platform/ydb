@@ -1,95 +1,67 @@
 #include "udf_meta.h"
 
-#include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
+#include <util/generic/yexception.h>
+
+#include <utility>
 
 namespace NYql {
 
-namespace {
+TUdfMeta::TUdfMeta(TYqlUdfMeta abi, bool owns)
+    : Abi_(abi)
+    , Owns_(owns)
+{
+    Y_ENSURE(Abi_.Context && Abi_.Free && Abi_.HasModule && Abi_.HasFunction && Abi_.GetMetadata,
+             "Incomplete UDF metadata ABI cookie");
+}
 
-class TUdfMeta: public IUdfMeta {
-public:
-    explicit TUdfMeta(const NJson::TJsonValue& json)
-    {
-        for (auto& [module, v] : json.GetMapSafe()) {
-            auto& names = Modules_[to_lower(module)];
-            for (auto& item : v.GetArraySafe()) {
-                auto& map = item.GetMapSafe();
-                TMeta meta;
-                if (auto ptr = map.FindPtr("isTypeAwareness")) {
-                    meta.IsTypeAwareness = ptr->GetBooleanSafe();
-                    if (auto ptr = map.FindPtr("polyArgs")) {
-                        meta.PolyArgs = ptr->GetStringSafe();
-                    }
-
-                    if (auto ptr = map.FindPtr("resolvedCallableTypes")) {
-                        meta.ResolvedCallableTypes = ptr->GetStringSafe();
-                    }
-                }
-
-                if (!meta.IsTypeAwareness) {
-                    meta.CallableType = map.at("callableType").GetStringSafe();
-                    if (auto ptr = map.FindPtr("runConfigType")) {
-                        meta.RunConfigType = ptr->GetStringSafe();
-                    }
-
-                    meta.ArgCount = map.at("argCount").GetIntegerSafe();
-                    if (auto ptr = map.FindPtr("optionalArgCount")) {
-                        meta.OptionalArgCount = ptr->GetIntegerSafe();
-                    }
-
-                    if (auto ptr = map.FindPtr("isStrict")) {
-                        meta.IsStrict = ptr->GetBooleanSafe();
-                    }
-
-                    if (auto ptr = map.FindPtr("supportsBlocks")) {
-                        meta.SupportsBlocks = ptr->GetBooleanSafe();
-                    }
-
-                    if (auto ptr = map.FindPtr("minLangVer")) {
-                        Y_ENSURE(ParseLangVersion(ptr->GetStringSafe(), meta.MinLangVer));
-                    }
-
-                    if (auto ptr = map.FindPtr("maxLangVer")) {
-                        Y_ENSURE(ParseLangVersion(ptr->GetStringSafe(), meta.MaxLangVer));
-                    }
-                }
-
-                names.emplace(to_lower(map.at("name").GetStringSafe()), meta);
-            }
-        }
+TUdfMeta::~TUdfMeta() {
+    if (Owns_) {
+        Abi_.Free(Abi_.Context);
     }
+}
 
-    bool HasModule(TStringBuf module) const final {
-        return Modules_.contains(module);
+TUdfMeta::TUdfMeta(TUdfMeta&& other) noexcept
+    : Abi_(other.Abi_)
+    , Owns_(std::exchange(other.Owns_, false))
+{
+}
+
+bool TUdfMeta::HasModule(TStringBuf module) const {
+    const int result = Abi_.HasModule(Abi_.Context, {module.data(), module.size()});
+    Y_ENSURE(result >= 0, "UDF module lookup failed");
+    return result != 0;
+}
+
+bool TUdfMeta::HasFunction(TStringBuf module, TStringBuf function) const {
+    const int result = Abi_.HasFunction(Abi_.Context, {module.data(), module.size()}, {function.data(), function.size()});
+    Y_ENSURE(result >= 0, "UDF function lookup failed");
+    return result != 0;
+}
+
+TMaybe<TUdfMeta::TMeta> TUdfMeta::GetMetadata(TStringBuf module, TStringBuf function) const {
+    TYqlUdfMetaFunction value{};
+    const int result = Abi_.GetMetadata(Abi_.Context, {module.data(), module.size()}, {function.data(), function.size()}, &value);
+    Y_ENSURE(result >= 0, "UDF metadata lookup failed");
+    if (!result) {
+        return Nothing();
     }
+    return TMeta{
+        .IsTypeAwareness = value.IsTypeAwareness != 0,
+        .CallableType = {value.CallableType.Data, value.CallableType.Size},
+        .RunConfigType = {value.RunConfigType.Data, value.RunConfigType.Size},
+        .ArgCount = value.ArgCount,
+        .OptionalArgCount = value.OptionalArgCount,
+        .IsStrict = value.IsStrict != 0,
+        .SupportsBlocks = value.SupportsBlocks != 0,
+        .MinLangVer = value.MinLangVer,
+        .MaxLangVer = value.MaxLangVer,
+        .PolyArgs = {value.PolyArgs.Data, value.PolyArgs.Size},
+        .ResolvedCallableTypes = {value.ResolvedCallableTypes.Data, value.ResolvedCallableTypes.Size},
+    };
+}
 
-    bool HasFunction(TStringBuf module, TStringBuf function) const final {
-        auto ptr = Modules_.FindPtr(module);
-        if (!ptr) {
-            return false;
-        }
-
-        return ptr->contains(function);
-    }
-
-    const TMeta* GetMetadata(TStringBuf module, TStringBuf function) const final {
-        auto ptr = Modules_.FindPtr(module);
-        if (!ptr) {
-            return nullptr;
-        }
-
-        return ptr->FindPtr(function);
-    }
-
-private:
-    THashMap<TString, THashMap<TString, TMeta>> Modules_;
-};
-
-} // namespace
-
-std::unique_ptr<IUdfMeta> ParseUdfMeta(const NJson::TJsonValue& json) {
-    return std::make_unique<TUdfMeta>(json);
+const TYqlUdfMeta& TUdfMeta::GetAbi() const {
+    return Abi_;
 }
 
 } // namespace NYql

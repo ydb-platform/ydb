@@ -229,15 +229,12 @@ class TestS3(object):
         for file in bucket.objects.all():
             files_size += bucket.Object(file.key).content_length
 
-        sql = (
-            ("PRAGMA dq.MaxTasksPerStage=\"1\";" if yq_version == "v1" else "")
-            + fR'''
+        sql = ("PRAGMA dq.MaxTasksPerStage=\"1\";" if yq_version == "v1" else "") + fR'''
             select foo, bar from `{storage_connection_name}`.`file/*` with (format="csv_with_names", schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))
             '''
-        )
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)

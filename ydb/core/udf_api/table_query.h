@@ -39,11 +39,7 @@ struct TListFilter {
 //! Lists modules ordered by name so that the offset a page token carries keeps
 //! pointing at the same place between two calls.
 TString BuildListModulesQuery(const TString& modulesTablePath, const TListFilter& filter);
-void SetListModulesParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TListFilter& filter,
-    ui64 offset,
-    ui64 limit);
+void SetListModulesParams(Ydb::Table::ExecuteDataQueryRequest& request, const TListFilter& filter, ui64 offset, ui64 limit);
 bool ParseModuleRowsResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TModuleRow>& rows);
 
 //! What the `modules` row looked like before a conditional write, read in the
@@ -78,12 +74,8 @@ struct TWriteConditions {
 //! `created_at` survives a replace because it belongs to the module rather than
 //! to the upload.
 TString BuildFlipModuleQuery(const TString& modulesTablePath, bool withManifest);
-void SetFlipModuleParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TModuleRow& row,
-    const TWriteConditions& conditions,
-    bool versionGiven,
-    bool withManifest);
+void SetFlipModuleParams(Ydb::Table::ExecuteDataQueryRequest& request, const TModuleRow& row, const TWriteConditions& conditions,
+    bool versionGiven, bool withManifest);
 
 //! Removes a module and its chunks in one transaction, so no window exists in
 //! which the row is still listed while its body is already gone. The uid the
@@ -91,25 +83,16 @@ void SetFlipModuleParams(
 //! row deleted by a delete that was aimed at the upload before it.
 TString BuildDeleteModuleQuery(const TString& modulesTablePath, const TString& moduleChunksTablePath);
 void SetDeleteModuleParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& name,
-    const TString& expectedUid,
-    TMaybe<NUdfStore::EUdfType> requiredType);
+    Ydb::Table::ExecuteDataQueryRequest& request, const TString& name, const TString& expectedUid, TMaybe<NUdfStore::EUdfType> requiredType);
 
 //! Reads the pre-state result set that the conditional writes above return.
-bool ParseModulePreStateResponse(
-    const Ydb::Table::ExecuteDataQueryResponse& response,
-    TModulePreState& preState);
+bool ParseModulePreStateResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TModulePreState& preState);
 
 TString BuildDeleteSourceChunksQuery(const TString& moduleChunksTablePath);
 void SetDeleteSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey);
 
 TString BuildUpsertSourceChunkQuery(const TString& moduleChunksTablePath);
-void SetUpsertSourceChunkParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& ownerKey,
-    ui64 chunkIdx,
-    const TString& data);
+void SetUpsertSourceChunkParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey, ui64 chunkIdx, const TString& data);
 
 struct TArtifactCompileState {
     NUdfStore::ECompileStatus Status = NUdfStore::ECompileStatus::Pending;
@@ -121,25 +104,16 @@ struct TArtifactCompileState {
 //! Reads persisted compile state for this upload on one platform. Absence is
 //! reported as PENDING by the caller until reconciliation creates the row.
 TString BuildSelectArtifactStateQuery(const TString& artifactTablePath);
-void SetSelectArtifactStateParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid);
-bool ParseArtifactStateResponse(
-    const Ydb::Table::ExecuteDataQueryResponse& response,
-    TMaybe<TArtifactCompileState>& state);
+void SetSelectArtifactStateParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid);
+bool ParseArtifactStateResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TMaybe<TArtifactCompileState>& state);
 
 //! Drops every artifact of a module, whichever upload built it. Only used on
 //! delete, where no upload of that name is left to own them.
 TString BuildDeleteArtifactsByIdQuery(const TString& tablePath);
-void SetDeleteArtifactsByIdParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind);
+void SetDeleteArtifactsByIdParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind);
 
 //! Kind column of the artifact tables, which spells the module type
 //! differently from `modules.type`.
 TString ArtifactKindFor(NUdfStore::EUdfType type);
 
-} // namespace NKikimr::NUdfApi::NQuery
+}   // namespace NKikimr::NUdfApi::NQuery

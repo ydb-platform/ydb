@@ -239,21 +239,15 @@ const TStructExprType* PrepareSchemeType(const THashMap<TString, TString>& names
     return ctx.MakeType<TStructExprType>(newItemTypes);
 }
 
-struct TPointPrefix {
-    TExprNode::TPtr Points;
-    const TStructExprType* PointsItemType = nullptr;
-    TVector<TString> Columns;
-    TMaybe<size_t> ExpectedMaxPoints;
-};
-
-TPointPrefix ExtractPointPrefix(size_t pointPrefixLen, const TExprNode::TPtr& lambda, const TStructExprType* schemeType,
-                               const THashSet<TString>& possibleKeys, const TVector<TString>& exposedKeyColumns,
-                               const TVector<TString>& physicalKeyColumns, const TPredicateExtractorSettings& baseSettings,
-                               TRBOContext& rboCtx) {
+std::optional<TOpRead::TPointPrefix> ExtractPointPrefix(size_t pointPrefixLen, const TExprNode::TPtr& lambda,
+                                                        const TStructExprType* schemeType, const THashSet<TString>& possibleKeys,
+                                                        const TVector<TString>& exposedKeyColumns, const TKikimrTableMetadata& tableMeta,
+                                                        const TPredicateExtractorSettings& baseSettings, TRBOContext& rboCtx) {
+    const auto& physicalKeyColumns = tableMeta.KeyColumnNames;
     Y_ENSURE(exposedKeyColumns.size() == physicalKeyColumns.size());
-    pointPrefixLen = std::min(pointPrefixLen, exposedKeyColumns.size());
-    if (pointPrefixLen == 0) {
-        return {};
+    // A lookup join needs key columns after the prefix to look up by.
+    if (pointPrefixLen == 0 || pointPrefixLen >= exposedKeyColumns.size()) {
+        return std::nullopt;
     }
 
     auto& ctx = rboCtx.ExprCtx;
@@ -269,12 +263,12 @@ TPointPrefix ExtractPointPrefix(size_t pointPrefixLen, const TExprNode::TPtr& la
     THashSet<TString> keys = possibleKeys;
     auto extractor = MakePredicateRangeExtractor(settings);
     if (!extractor->Prepare(lambda, *schemeType, keys, ctx, rboCtx.TypeCtx)) {
-        return {};
+        return std::nullopt;
     }
 
     const auto result = extractor->BuildComputeNode(exposedPointColumns, ctx, rboCtx.TypeCtx);
     if (!result.ComputeNode || result.PointPrefixLen != pointPrefixLen) {
-        return {};
+        return std::nullopt;
     }
 
     TVector<const TItemExprType*> items;
@@ -282,18 +276,20 @@ TPointPrefix ExtractPointPrefix(size_t pointPrefixLen, const TExprNode::TPtr& la
     for (size_t i = 0; i < pointPrefixLen; ++i) {
         const auto* columnType = schemeType->FindItemType(exposedPointColumns[i]);
         if (!columnType) {
-            return {};
+            return std::nullopt;
         }
         items.push_back(ctx.MakeType<TItemExprType>(physicalPointColumns[i], columnType));
     }
 
-    TPointPrefix prefix;
+    TOpRead::TPointPrefix prefix;
+    prefix.Table = tableMeta.Name;
     prefix.Points = BuildPointsList(result, physicalPointColumns, ctx);
     prefix.PointsItemType = ctx.MakeType<TStructExprType>(items);
     prefix.Columns = std::move(physicalPointColumns);
     prefix.ExpectedMaxPoints = result.ExpectedMaxRanges ? TMaybe<size_t>(*result.ExpectedMaxRanges) : TMaybe<size_t>();
 
-    YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Extracted points: " << KqpExprToPrettyString(*prefix.Points, ctx);
+    YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Extracted points of " << prefix.Table << ": "
+                                 << KqpExprToPrettyString(*prefix.Points, ctx);
     return prefix;
 }
 
@@ -311,6 +307,12 @@ struct TIndexScore {
 
     bool operator<(const TIndexScore& other) const { return AsTuple() < other.AsTuple(); }
 };
+
+// Whether the ranges cover the whole filter predicate, so the extractor pruned it to `true`.
+bool IsPrunedToTrue(const TExprNode::TPtr& prunedLambda) {
+    const auto literal = TCoLambda(prunedLambda).Body().Maybe<TCoBool>();
+    return literal.IsValid() && literal.Cast().Literal().Value() == "true";
+}
 
 bool HasNoResidualPredicate(const TExprNode::TPtr& prunedLambda) {
     if (!prunedLambda) {
@@ -566,6 +568,25 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     TVector<TString> lookupKeyColumns;
     TVector<TString> lookupReadColumns;
 
+    // Point prefixes are computed for every table the read can be redirected to, so a lookup join can
+    // choose the one which fits its keys best. Otherwise only the table chosen for the read gets one.
+    // Point lookups are only applicable to row storage tables.
+    const bool allPointPrefixes = kqpCtx.Config->GetEnableLookupJoinPointPrefixes();
+    TVector<TOpRead::TPointPrefix> pointPrefixes;
+    auto addPointPrefix = [&](const TKikimrTableMetadata& tableMeta, const IPredicateRangeExtractor::TBuildResult& result,
+                              const TVector<TString>& exposedKeyColumns) {
+        if (read->GetTableStorageType() != NYql::EStorageType::RowStorage) {
+            return;
+        }
+        if (auto prefix = ExtractPointPrefix(result.PointPrefixLen, lambda.Ptr(), schemeType, possibleKeys, exposedKeyColumns,
+                                             tableMeta, settings, rboCtx)) {
+            pointPrefixes.push_back(std::move(*prefix));
+        }
+    };
+    if (allPointPrefixes) {
+        addPointPrefix(mainMeta, mainResult, mainKeyColumns);
+    }
+
     auto bestScore = ScoreKeyOrder(mainResult, mainKeyColumns.size(), sortColumns, mainKeyColumns, true);
     TString bestIndexName;
     bool bestCovering = false;
@@ -586,6 +607,18 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                 continue;
             }
 
+            auto indexKeyColumns = ResolveExposedKeyColumns(extractorNames, indexMeta->KeyColumnNames);
+            auto indexResult = extractor->BuildComputeNode(indexKeyColumns, ctx, typeCtx);
+            if (!indexResult.ComputeNode) {
+                continue;
+            }
+
+            // A lookup join fetches the rows it finds in a non-covering index from the main table and applies
+            // the whole predicate to them, so the index needs neither to cover the read nor the predicate.
+            if (allPointPrefixes) {
+                addPointPrefix(*indexMeta, indexResult, indexKeyColumns);
+            }
+
             const bool covering = IsCovering(*read, *indexMeta, props.InfoUnitRegistry);
             if (!covering) {
                 if (read->Limit) {
@@ -596,12 +629,6 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                 if (!evaluable) {
                     continue;
                 }
-            }
-
-            auto indexKeyColumns = ResolveExposedKeyColumns(extractorNames, indexMeta->KeyColumnNames);
-            auto indexResult = extractor->BuildComputeNode(indexKeyColumns, ctx, typeCtx);
-            if (!indexResult.ComputeNode) {
-                continue;
             }
 
             const auto score = ScoreKeyOrder(indexResult, indexKeyColumns.size(), sortColumns, indexKeyColumns, covering);
@@ -658,15 +685,28 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         for (const auto id : filter->GetFilterIUs(props)) {
             substitutions.Add(id, indexIds.at(props.InfoUnitRegistry.Get(id).GetColumnName()));
         }
-        auto indexPredicate = TExpression(lookupResult.PrunedLambda, &ctx, &props).ApplyRenames(substitutions);
-        auto indexFilter = MakeIntrusive<TOpFilter>(std::move(indexRead), filter->Pos, filter->Props, std::move(indexPredicate), true);
+        TIntrusivePtr<IOperator> indexFilter = std::move(indexRead);
+        if (!IsPrunedToTrue(lookupResult.PrunedLambda)) {
+            auto indexPredicate = TExpression(lookupResult.PrunedLambda, &ctx, &props).ApplyRenames(substitutions);
+            indexFilter = MakeIntrusive<TOpFilter>(std::move(indexFilter), filter->Pos, filter->Props, std::move(indexPredicate), true);
+        }
 
         TOpTableLookup::TLookupKeys lookupKeys;
         for (const auto& pk : mainMeta.KeyColumnNames) {
             lookupKeys.Append(indexIds.at(pk), pk);
         }
 
-        return MakeIntrusive<TOpTableLookup>(std::move(indexFilter), read->Pos, read->GetTable(), read->GetColumns(), std::move(lookupKeys));
+        auto lookup = MakeIntrusive<TOpTableLookup>(std::move(indexFilter), read->Pos, read->GetTable(), read->GetColumns(),
+                                                    std::move(lookupKeys));
+        // Keep the read predicate and the point prefixes, so a lookup join can still probe the main table
+        // or an index instead of this subtree.
+        if (allPointPrefixes && read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
+            lookup->SourceRead = TOpTableLookup::TSourceRead{
+                .Predicate = TExpression(originalLambda, &ctx, &props),
+                .PointPrefixes = std::move(pointPrefixes),
+            };
+        }
+        return lookup;
     }
 
     const auto& chosen = chosenIndexMeta ? winnerResult : mainResult;
@@ -681,12 +721,18 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Extracted ranges: " << KqpExprToPrettyString(*chosen.ComputeNode, ctx);
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Pruned lambda: " << KqpExprToPrettyString(*chosen.PrunedLambda, ctx);
 
+    if (!allPointPrefixes) {
+        addPointPrefix(chosenIndexMeta ? *chosenIndexMeta : mainMeta, chosen, chosenKeyColumns);
+    }
+
     TOpRead::TRangeInfo rangeInfo{
         .ComputeNode = chosen.ComputeNode,
         .KeyColumns = chosenIndexMeta ? chosenIndexMeta->KeyColumnNames : mainMeta.KeyColumnNames,
         .UsedPrefixLen = chosen.UsedPrefixLen,
         .PointPrefixLen = chosen.PointPrefixLen,
         .ExpectedMaxRanges = chosen.ExpectedMaxRanges ? TMaybe<size_t>(*chosen.ExpectedMaxRanges) : TMaybe<size_t>(),
+        .PointPrefixes = std::move(pointPrefixes),
+        .MainTable = mainMeta.Name,
     };
     const auto storageType = chosenIndexMeta ? GetStorageType(*chosenIndexMeta) : read->GetTableStorageType();
 
@@ -698,23 +744,14 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         }
     }
 
-    // Point lookup is only applicable to row storage tables.
-    if (storageType == NYql::EStorageType::RowStorage && chosen.PointPrefixLen > 0) {
-        const auto& chosenPhysicalKeyColumns = chosenIndexMeta ? chosenIndexMeta->KeyColumnNames : mainMeta.KeyColumnNames;
-        auto prefix = ExtractPointPrefix(chosen.PointPrefixLen, lambda.Ptr(), schemeType, possibleKeys, chosenKeyColumns,
-                                         chosenPhysicalKeyColumns, settings, rboCtx);
-        if (prefix.Points) {
-            rangeInfo.Points = std::move(prefix.Points);
-            rangeInfo.PointsItemType = prefix.PointsItemType;
-            rangeInfo.PointColumns = std::move(prefix.Columns);
-            rangeInfo.ExpectedMaxPoints = prefix.ExpectedMaxPoints;
-        }
-    }
-
     const auto tableCallable = chosenIndexMeta ? BuildTableCallable(*chosenIndexMeta, read->Pos, ctx) : read->TableCallable;
     const auto sortDir = chosenIndexMeta ? ESortDir::None : read->SortDir;
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), storageType, tableCallable, read->OlapFilterLambda,
                                           read->Limit, std::move(rangeInfo), TExpression(originalLambda, &ctx, &props), sortDir, read->Props, read->Pos);
+    // An always true filter would stand between the read and its consumers, e.g. an OLAP aggregate.
+    if (IsPrunedToTrue(chosen.PrunedLambda)) {
+        return newRead;
+    }
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(chosen.PrunedLambda, &ctx, &props), true);
 }
 } // namespace NKikimr::NKqp

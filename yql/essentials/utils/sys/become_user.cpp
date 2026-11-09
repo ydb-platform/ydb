@@ -135,16 +135,21 @@ void DoBecomeUser(const char* username, const char* groupname) {
     if (setuid(pw->pw_uid) == -1) {
         ythrow TSystemError() << "can't change process user";
     }
-
-    if (prctl(PR_SET_DUMPABLE, 1, 0, 0, 0) == -1) {
-        ythrow TSystemError() << "can't set dumpable flag for a process";
-    }
 }
 
 } // namespace
 
-void BecomeUser(const TString& username, const TString& groupname) {
+void BecomeUser(const TString& username, const TString& groupname, bool dumpable) {
     DoBecomeUser(username.data(), groupname.data());
+
+    if (dumpable && prctl(PR_SET_DUMPABLE, 1, 0, 0, 0) == -1) {
+        ythrow TSystemError() << "can't set dumpable flag for a process";
+    }
+}
+
+void EnsureNonRootUserAndGroup() {
+    Y_ENSURE(geteuid() != 0 && getegid() != 0,
+             "Process must run with a non-root user and group");
 }
 
 void TurnOnBecomeUserAmbientCaps() {

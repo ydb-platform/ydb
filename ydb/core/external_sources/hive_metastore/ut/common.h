@@ -6,4 +6,4 @@ TString GetExternalPort(const TString& service, const TString& port);
 
 void WaitHiveMetastore(const TString& host, int32_t port, const TString& database);
 
-}
+}   // namespace NKikimr::NExternalSource

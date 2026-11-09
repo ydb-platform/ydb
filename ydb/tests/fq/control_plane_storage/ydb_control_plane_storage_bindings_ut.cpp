@@ -1,5 +1,6 @@
-#include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include "ydb_test_bootstrap.h"
+
+#include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -13,7 +14,7 @@ using namespace NKikimr;
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
     Y_UNIT_TEST(ShouldSucceed)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -25,14 +26,15 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("test_binding_name_2").Build());
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("test_binding_name_2").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
     }
 
     Y_UNIT_TEST(ShouldCheckLowerCaseName)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -40,18 +42,23 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             connectionId = result.connection_id();
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("biNdiNG").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: Incorrect binding name: biNdiNG. Please use only lower case, code: 1003\n");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("biNdiNG").Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
+            UNIT_ASSERT_STRING_CONTAINS(
+                issues.ToString(), "<main>: Error: Incorrect binding name: biNdiNG. Please use only lower case, code: 1003\n");
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
     }
 
     Y_UNIT_TEST(ShouldCheckMaxLengthName)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -59,18 +66,26 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             connectionId = result.connection_id();
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(TString(256, '_')).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: Incorrect connection name: ________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________. Name length must not exceed 255 symbols. Current length is 256 symbol(s), code: 1003\n");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(TString(256, '_')).Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(),
+                "<main>: Error: Incorrect connection name: "
+                "_______________________________________________________________________________________________________________________________"
+                "_______________________________________________________________________________________________________________________________"
+                "__. Name length must not exceed 255 symbols. Current length is 256 symbol(s), code: 1003\n");
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(TString(255, '_')).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(TString(255, '_')).Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
     }
 
     Y_UNIT_TEST(ShouldCheckMultipleDotsName)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -78,18 +93,21 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             connectionId = result.connection_id();
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("..").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: Incorrect connection name: ... Name is not allowed path part contains only dots, code: 1003\n");
+            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("..").Build(),
+                TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(),
+                "<main>: Error: Incorrect connection name: ... Name is not allowed path part contains only dots, code: 1003\n");
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("..!").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("..!").Build(),
+                TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
     }
 
     Y_UNIT_TEST(ShouldCheckAllowedSymbolsName)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -97,11 +115,18 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             connectionId = result.connection_id();
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding`").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: Incorrect connection name: binding`. Please make sure that name consists of following symbols: ['a'-'z'], ['0'-'9'], '!', '\\', '#', '$', '%'. '&', '(', ')', '*', '+', ',', '-', '.', ':', ';', '<', '=', '>', '?', '@', '[', ']', '^', '_', '{', '|', '}', '~', code: 1003\n");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding`").Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(),
+                "<main>: Error: Incorrect connection name: binding`. Please make sure that name consists of following "
+                "symbols: ['a'-'z'], ['0'-'9'], '!', '\\', '#', '$', '%'. '&', '(', ')', '*', '+', ',', '-', '.', ':', ';', "
+                "'<', '=', '>', '?', '@', '[', ']', '^', '_', '{', '|', '}', '~', code: 1003\n");
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
     }
@@ -110,7 +135,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
     {
         NConfig::TControlPlaneStorageConfig config;
         config.AddAvailableBinding("NOT_EXIST");
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__, config};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__, config };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -121,12 +146,11 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).Build());
             UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: binding of the specified type is disabled, code: 1003\n");
         }
-
     }
 
     Y_UNIT_TEST(ShouldValidate)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         {
             const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.Build());
             UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: connection_id's length is not in [1; 1024], code: 1003\n");
@@ -175,7 +199,6 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "binding is not set");
         }
 
-
         {
             FederatedQuery::CreateBindingRequest req = successfulRequest;
             req.mutable_content()->mutable_setting()->mutable_data_streams()->clear_schema();
@@ -189,7 +212,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
         // Build successful binding request and then modify it
         TString connectionId;
         {
-            const auto[result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
+            const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             connectionId = result.connection_id();
         }
@@ -202,7 +225,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             os->set_path_pattern("/");
             (*os->mutable_format_setting())["data.interval.unit"] = "SECONDS";
             (*os->mutable_format_setting())["csv_delimiter"] = ";";
-            const auto[result, issues] = bootstrap.CreateBinding(successfulRequest);
+            const auto [result, issues] = bootstrap.CreateBinding(successfulRequest);
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -211,7 +234,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             auto os = req.mutable_content()->mutable_setting()->mutable_object_storage()->add_subset();
             os->set_path_pattern("/");
             (*os->mutable_format_setting())["data.interval.unit"] = "XYZ";
-            const auto[result, issues] = bootstrap.CreateBinding(req);
+            const auto [result, issues] = bootstrap.CreateBinding(req);
             UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: unknown value for data.interval.unit XYZ, code: 400010");
         }
 
@@ -220,7 +243,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             auto os = req.mutable_content()->mutable_setting()->mutable_object_storage()->add_subset();
             os->set_path_pattern("/");
             (*os->mutable_format_setting())["csv_delimiter"] = "AA";
-            const auto[result, issues] = bootstrap.CreateBinding(req);
+            const auto [result, issues] = bootstrap.CreateBinding(req);
             UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: csv_delimiter must be single character, code: 400010");
         }
 
@@ -230,8 +253,9 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             os->set_path_pattern("/");
             os->set_format("parquet");
             (*os->mutable_format_setting())["csv_delimiter"] = ";";
-            const auto[result, issues] = bootstrap.CreateBinding(req);
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: csv_delimiter can only be used with csv_with_names or csv format, code: 400010");
+            const auto [result, issues] = bootstrap.CreateBinding(req);
+            UNIT_ASSERT_STRING_CONTAINS(
+                issues.ToString(), "<main>: Error: csv_delimiter can only be used with csv_with_names or csv format, code: 400010");
         }
 
         {
@@ -239,17 +263,16 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             auto os = req.mutable_content()->mutable_setting()->mutable_object_storage()->add_subset();
             os->set_path_pattern("/");
             (*os->mutable_format_setting())["AAA"] = "YYY";
-            const auto[result, issues] = bootstrap.CreateBinding(req);
+            const auto [result, issues] = bootstrap.CreateBinding(req);
             UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: unknown format setting AAA, code: 400010");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckMaxCountBindings)
     {
-
         NConfig::TControlPlaneStorageConfig config;
         config.SetMaxCountBindings(1);
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__, config};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__, config };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -261,14 +284,16 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("test_binding_name_2").Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Too many bindings in folder: 1. Please remove unused bindings, code: 1003\n");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("test_binding_name_2").Build());
+            UNIT_ASSERT_VALUES_EQUAL(
+                issues.ToString(), "<main>: Error: Too many bindings in folder: 1. Please remove unused bindings, code: 1003\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckIdempotencyKey)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -298,7 +323,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
     Y_UNIT_TEST(ShouldSuccess)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -319,7 +344,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
     Y_UNIT_TEST(ShouldFilterByName)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -353,7 +378,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
     Y_UNIT_TEST(ShouldFilterByMe)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -372,7 +397,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
         }
 
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("c").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("c").Build(),
+                TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -387,7 +413,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
     Y_UNIT_TEST(ShouldPageToken)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -396,7 +422,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
         }
         for (size_t i = 0; i < 15; i++)
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i)).Build());
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i)).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -413,7 +440,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
     Y_UNIT_TEST(ShouldEmptyPageToken)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -422,7 +449,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
         }
         for (size_t i = 0; i < 20; i++)
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i)).Build());
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i)).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -440,7 +468,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
     Y_UNIT_TEST(ShouldCheckLimit)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -450,7 +478,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
         for (size_t i = 0; i < 15; i++)
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i)).Build());
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i)).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -463,7 +492,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
     Y_UNIT_TEST(ShouldCheckScopeVisibility)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString connectionId;
         {
@@ -474,12 +503,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
         for (size_t i = 0; i < 15; i++)
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i)).Build());
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i)).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
         {
-            const auto [result, issues] = bootstrap.ListBindings(TListBindingsBuilder{}.SetLimit(20).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] = bootstrap.ListBindings(
+                TListBindingsBuilder{}.SetLimit(20).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.binding_size(), 15);
         }
@@ -487,7 +518,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
     Y_UNIT_TEST(ShouldCheckPrivateVisibility)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -497,13 +528,19 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
         for (size_t i = 0; i < 3; i++)
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i)).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i)).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
         for (size_t i = 0; i < 5; i++)
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i + 3)).SetVisibility(FederatedQuery::Acl::PRIVATE).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}
+                                            .SetConnectionId(connectionId)
+                                            .SetName(ToString(i + 3))
+                                            .SetVisibility(FederatedQuery::Acl::PRIVATE)
+                                            .Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -514,7 +551,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ListBindings(TListBindingsBuilder{}.Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] =
+                bootstrap.ListBindings(TListBindingsBuilder{}.Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.binding_size(), 5);
         }
@@ -522,7 +560,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
     Y_UNIT_TEST(ShouldValidate)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -543,7 +581,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
     Y_UNIT_TEST(ShouldCheckSuperUser)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -552,18 +590,25 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
         }
         for (size_t i = 0; i < 3; i++)
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetName(ToString(i)).SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetName(ToString(i)).SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
         for (size_t i = 0; i < 5; i++)
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName(ToString(i + 3)).SetVisibility(FederatedQuery::Acl::PRIVATE).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}
+                                            .SetConnectionId(connectionId)
+                                            .SetName(ToString(i + 3))
+                                            .SetVisibility(FederatedQuery::Acl::PRIVATE)
+                                            .Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
         {
-            const auto [result, issues] = bootstrap.ListBindings(TListBindingsBuilder{}.Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "super_user@staff");
+            const auto [result, issues] =
+                bootstrap.ListBindings(TListBindingsBuilder{}.Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "super_user@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.binding_size(), 8);
         }
@@ -571,7 +616,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
     Y_UNIT_TEST(ShouldCheckFilterByConnectionId)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId1;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -589,7 +634,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId2).SetName("test_binding_name_2").Build());
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId2).SetName("test_binding_name_2").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -608,7 +654,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 
     Y_UNIT_TEST(ShouldCombineFilters)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -617,7 +663,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
         }
 
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("a").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("a").Build(),
+                TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -646,7 +693,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageListBindings) {
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDescribeBinding) {
     Y_UNIT_TEST(ShouldSuccess)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -670,7 +717,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDescribeBinding) {
 
     Y_UNIT_TEST(ShouldCheckPermission)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -680,20 +727,23 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDescribeBinding) {
 
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
 
         {
-            const auto [result, issues] = bootstrap.DescribeBinding(TDescribeBindingBuilder{}.SetBindingId(bindingId).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
+            const auto [result, issues] = bootstrap.DescribeBinding(
+                TDescribeBindingBuilder{}.SetBindingId(bindingId).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckExist)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -710,13 +760,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDescribeBinding) {
 
         {
             const auto [result, issues] = bootstrap.DescribeBinding(TDescribeBindingBuilder{}.SetBindingId("abra").Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
         }
     }
 
     Y_UNIT_TEST(ShouldValidate)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -739,7 +790,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDescribeBinding) {
 
     Y_UNIT_TEST(ShouldCheckSuperUser)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -749,13 +800,15 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDescribeBinding) {
 
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
 
         {
-            const auto [result, issues] = bootstrap.DescribeBinding(TDescribeBindingBuilder{}.SetBindingId(bindingId).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "super_user@staff");
+            const auto [result, issues] = bootstrap.DescribeBinding(
+                TDescribeBindingBuilder{}.SetBindingId(bindingId).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "super_user@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_EQUAL(result.binding().content().name(), "test_binding_name_1");
         }
@@ -765,7 +818,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDescribeBinding) {
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDeleteBinding) {
     Y_UNIT_TEST(ShouldSuccess)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -787,13 +840,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDeleteBinding) {
 
         {
             const auto [result, issues] = bootstrap.DescribeBinding(TDescribeBindingBuilder{}.SetBindingId(bindingId).Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckPermission)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -803,14 +857,17 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDeleteBinding) {
 
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
 
         {
-            const auto [result, issues] = bootstrap.DeleteBinding(TDeleteBindingBuilder{}.SetBindingId(bindingId).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
+            const auto [result, issues] = bootstrap.DeleteBinding(
+                TDeleteBindingBuilder{}.SetBindingId(bindingId).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
         }
 
         {
@@ -821,7 +878,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDeleteBinding) {
 
     Y_UNIT_TEST(ShouldCheckExist)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -838,13 +895,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDeleteBinding) {
 
         {
             const auto [result, issues] = bootstrap.DeleteBinding(TDeleteBindingBuilder{}.SetBindingId("aba").Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
         }
     }
 
     Y_UNIT_TEST(ShouldValidate)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -867,7 +925,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDeleteBinding) {
 
     Y_UNIT_TEST(ShouldCheckSuperUser)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -877,25 +935,28 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDeleteBinding) {
 
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
 
         {
-            const auto [result, issues] = bootstrap.DeleteBinding(TDeleteBindingBuilder{}.SetBindingId(bindingId).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "super_user@staff");
+            const auto [result, issues] = bootstrap.DeleteBinding(
+                TDeleteBindingBuilder{}.SetBindingId(bindingId).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "super_user@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
         {
             const auto [result, issues] = bootstrap.DescribeBinding(TDescribeBindingBuilder{}.SetBindingId(bindingId).Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckIdempotencyKey)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -910,19 +971,21 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDeleteBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.DeleteBinding(TDeleteBindingBuilder{}.SetBindingId(bindingId).SetIdempotencyKey("aba").Build());
+            const auto [result, issues] =
+                bootstrap.DeleteBinding(TDeleteBindingBuilder{}.SetBindingId(bindingId).SetIdempotencyKey("aba").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
         {
-            const auto [result, issues] = bootstrap.DeleteBinding(TDeleteBindingBuilder{}.SetBindingId(bindingId).SetIdempotencyKey("aba").Build());
+            const auto [result, issues] =
+                bootstrap.DeleteBinding(TDeleteBindingBuilder{}.SetBindingId(bindingId).SetIdempotencyKey("aba").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
     }
 
     Y_UNIT_TEST(ShouldCheckPreviousRevisionFailed)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -937,14 +1000,16 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDeleteBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.DeleteBinding(TDeleteBindingBuilder{}.SetBindingId(bindingId).SetPreviousRevision(100).Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Revision of the binding has been changed already. Please restart the request with a new revision, code: 1003\n");
+            const auto [result, issues] =
+                bootstrap.DeleteBinding(TDeleteBindingBuilder{}.SetBindingId(bindingId).SetPreviousRevision(100).Build());
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                "<main>: Error: Revision of the binding has been changed already. Please restart the request with a new revision, code: 1003\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckPreviousRevisionSuccess)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -960,7 +1025,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDeleteBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.DeleteBinding(TDeleteBindingBuilder{}.SetBindingId(bindingId).SetPreviousRevision(1).Build());
+            const auto [result, issues] =
+                bootstrap.DeleteBinding(TDeleteBindingBuilder{}.SetBindingId(bindingId).SetPreviousRevision(1).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
     }
@@ -969,7 +1035,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageDeleteBinding) {
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
     Y_UNIT_TEST(ShouldSuccess)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -985,7 +1051,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -998,7 +1065,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
     Y_UNIT_TEST(ShouldCheckLowerCaseName)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1007,19 +1074,24 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).SetName("biNdiNG").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: Incorrect binding name: biNdiNG. Please use only lower case, code: 1003\n");
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).SetName("biNdiNG").Build(),
+                    TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            UNIT_ASSERT_STRING_CONTAINS(
+                issues.ToString(), "<main>: Error: Incorrect binding name: biNdiNG. Please use only lower case, code: 1003\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckMaxLengthName)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1028,19 +1100,27 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetName(TString(256, '_')).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: Incorrect connection name: ________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________. Name length must not exceed 255 symbols. Current length is 256 symbol(s), code: 1003\n");
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetName(TString(256, '_')).Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(),
+                "<main>: Error: Incorrect connection name: "
+                "_______________________________________________________________________________________________________________________________"
+                "_______________________________________________________________________________________________________________________________"
+                "__. Name length must not exceed 255 symbols. Current length is 256 symbol(s), code: 1003\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckMultipleDotsName)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1049,19 +1129,23 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetName("..").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: Incorrect connection name: ... Name is not allowed path part contains only dots, code: 1003\n");
+            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetName("..").Build(),
+                TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(),
+                "<main>: Error: Incorrect connection name: ... Name is not allowed path part contains only dots, code: 1003\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckAllowedSymbolsName)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1070,19 +1154,26 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("binding").Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetName("binding`").Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: Incorrect connection name: binding`. Please make sure that name consists of following symbols: ['a'-'z'], ['0'-'9'], '!', '\\', '#', '$', '%'. '&', '(', ')', '*', '+', ',', '-', '.', ':', ';', '<', '=', '>', '?', '@', '[', ']', '^', '_', '{', '|', '}', '~', code: 1003\n");
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetName("binding`").Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(),
+                "<main>: Error: Incorrect connection name: binding`. Please make sure that name consists of following "
+                "symbols: ['a'-'z'], ['0'-'9'], '!', '\\', '#', '$', '%'. '&', '(', ')', '*', '+', ',', '-', '.', ':', ';', "
+                "'<', '=', '>', '?', '@', '[', ']', '^', '_', '{', '|', '}', '~', code: 1003\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckPermission)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1092,20 +1183,24 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "test_user2@staff");
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "test_user2@staff");
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckExist)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1121,14 +1216,16 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId("aba").Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId("aba").Build());
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                "<main>: Error: Binding does not exist or permission denied. Please check the id binding or your access rights, code: 1000\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckNotExistOldName)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1144,7 +1241,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1156,7 +1254,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
     Y_UNIT_TEST(ShouldCheckMoveToScope)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1171,20 +1269,23 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetName("test_binding_name_1").SetBindingId(bindingId).Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Binding with the same name already exists. Please choose another name, code: 1003\n");
+            const auto [result, issues] = bootstrap.ModifyBinding(
+                TModifyBindingBuilder{}.SetConnectionId(connectionId).SetName("test_binding_name_1").SetBindingId(bindingId).Build());
+            UNIT_ASSERT_VALUES_EQUAL(
+                issues.ToString(), "<main>: Error: Binding with the same name already exists. Please choose another name, code: 1003\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckModifyTheSame)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1200,7 +1301,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1213,7 +1315,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
     Y_UNIT_TEST(ShouldValidate)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1229,7 +1331,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId("").Build());
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId("").Build());
             UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: binding_id's length is not in [1; 1024], code: 1003\n");
         }
 
@@ -1268,7 +1371,6 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
             UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "binding is not set");
         }
 
-
         {
             FederatedQuery::ModifyBindingRequest req = successfulRequest;
             req.mutable_content()->mutable_setting()->mutable_data_streams()->clear_schema();
@@ -1279,7 +1381,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
     Y_UNIT_TEST(ShouldCheckSuperUser)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1289,13 +1391,16 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build(), TPermissions{}, "yandexcloud://test_folder_id_1", "super_user@staff");
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build(), TPermissions{},
+                    "yandexcloud://test_folder_id_1", "super_user@staff");
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1308,7 +1413,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
     Y_UNIT_TEST(ShouldCheckWithoutIdempotencyKey)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1324,7 +1429,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1336,7 +1442,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1350,7 +1457,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
     Y_UNIT_TEST(ShouldCheckIdempotencyKey)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1366,7 +1473,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).SetIdempotencyKey("aba").Build());
+            const auto [result, issues] = bootstrap.ModifyBinding(
+                TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).SetIdempotencyKey("aba").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1378,7 +1486,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).SetIdempotencyKey("aba").Build());
+            const auto [result, issues] = bootstrap.ModifyBinding(
+                TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).SetIdempotencyKey("aba").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1392,7 +1501,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
     Y_UNIT_TEST(ShouldCheckPreviousRevisionFailed)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1408,7 +1517,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1421,7 +1531,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
     Y_UNIT_TEST(ShouldCheckPreviousRevisionSuccess)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -1437,7 +1547,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1450,30 +1561,34 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
     Y_UNIT_TEST(ShouldCheckMoveToScopeWithPrivateConnection)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
-            const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] =
+                bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             connectionId = result.connection_id();
         }
 
         TString bindingId;
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetConnectionId(connectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             bindingId = result.binding_id();
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), "<main>: Error: Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility, code: 1003\n");
+            const auto [result, issues] =
+                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                "<main>: Error: Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility, code: 1003\n");
         }
     }
 
     Y_UNIT_TEST(ShouldNotCreateScopeeBindingWithUnavailableConnection)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString publicConnectionId;
         {
@@ -1484,20 +1599,24 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
         TString privateConnectionId;
         {
-            const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] =
+                bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             privateConnectionId = result.connection_id();
         }
 
         {
             const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(publicConnectionId).Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), TStringBuilder{} << "<main>: Error: The connection with id " << publicConnectionId << " is overridden by the private conection with id " << privateConnectionId << " (test_connection_name_1). Please rename the private connection or use another connection, code: 1003\n");
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                TStringBuilder{} << "<main>: Error: The connection with id " << publicConnectionId
+                                 << " is overridden by the private conection with id " << privateConnectionId
+                                 << " (test_connection_name_1). Please rename the private connection or use another connection, code: 1003\n");
         }
     }
 
     Y_UNIT_TEST(ShouldNotCreatePrivateBindingWithUnavailableConnection)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString publicConnectionId;
         {
@@ -1508,20 +1627,25 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
 
         TString privateConnectionId;
         {
-            const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] =
+                bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             privateConnectionId = result.connection_id();
         }
 
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).SetConnectionId(publicConnectionId).Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), TStringBuilder{} << "<main>: Error: The connection with id " << publicConnectionId << " is overridden by the private conection with id " << privateConnectionId << " (test_connection_name_1). Please rename the private connection or use another connection, code: 1003\n");
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).SetConnectionId(publicConnectionId).Build());
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(),
+                TStringBuilder{} << "<main>: Error: The connection with id " << publicConnectionId
+                                 << " is overridden by the private conection with id " << privateConnectionId
+                                 << " (test_connection_name_1). Please rename the private connection or use another connection, code: 1003\n");
         }
     }
 
     Y_UNIT_TEST(ShouldNotCreatePrivateConnectionWithDesctructionBinding)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString publicConnectionId;
         {
@@ -1531,20 +1655,23 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).SetConnectionId(publicConnectionId).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).SetConnectionId(publicConnectionId).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
-
         }
 
         {
-            const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), TStringBuilder{} << "<main>: Error: Connection named test_connection_name_1 overrides connection from binding test_binding_name_1. Please rename this connection, code: 1003\n");
+            const auto [result, issues] =
+                bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            UNIT_ASSERT_VALUES_EQUAL(
+                issues.ToString(), TStringBuilder{} << "<main>: Error: Connection named test_connection_name_1 overrides connection from "
+                                                       "binding test_binding_name_1. Please rename this connection, code: 1003\n");
         }
     }
 
     Y_UNIT_TEST(ShouleCheckObjectStorageProjectionByColumns)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString publicConnectionId;
         {
@@ -1558,14 +1685,19 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
             auto& subset = *os.add_subset();
             subset.set_path_pattern("/root/");
             subset.add_partitioned_by("a");
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.CreateObjectStorage(os).SetVisibility(FederatedQuery::Acl::PRIVATE).SetConnectionId(publicConnectionId).Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), TStringBuilder{} << "<main>: Error: Column a from partitioned_by does not exist in the scheme. Please add such a column to your scheme, code: 400010\n");
+            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}
+                                                                      .CreateObjectStorage(os)
+                                                                      .SetVisibility(FederatedQuery::Acl::PRIVATE)
+                                                                      .SetConnectionId(publicConnectionId)
+                                                                      .Build());
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), TStringBuilder{} << "<main>: Error: Column a from partitioned_by does not exist in the "
+                                                                            "scheme. Please add such a column to your scheme, code: 400010\n");
         }
     }
 
     Y_UNIT_TEST(ShouldCheckObjectStorageProjectionByTypes)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString publicConnectionId;
         {
@@ -1582,10 +1714,15 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
             column.mutable_type()->set_type_id(Ydb::Type::BOOL);
             subset.set_path_pattern("/root/");
             subset.add_partitioned_by("a");
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.CreateObjectStorage(os).SetVisibility(FederatedQuery::Acl::PRIVATE).SetConnectionId(publicConnectionId).Build());
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), TStringBuilder{} << "<main>: Error: Column \"a\" from projection does not support Bool type, code: 400010\n");
+            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}
+                                                                      .CreateObjectStorage(os)
+                                                                      .SetVisibility(FederatedQuery::Acl::PRIVATE)
+                                                                      .SetConnectionId(publicConnectionId)
+                                                                      .Build());
+            UNIT_ASSERT_VALUES_EQUAL(
+                issues.ToString(), TStringBuilder{} << "<main>: Error: Column \"a\" from projection does not support Bool type, code: 400010\n");
         }
     }
 }
 
-} // NFq
+}   // namespace NFq

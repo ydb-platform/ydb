@@ -407,12 +407,33 @@ message TRowsetDescriptor
     optional TTableSchema schema = 5;
 }
 
+message TTimingStatistics
+{
+    // All durations are in microseconds.
+    optional uint64 wait_time = 1;
+    optional uint64 read_time = 2;
+    optional uint64 idle_time = 3;
+}
+
+// Timing statistics of the table reader on the proxy side; mirrors NApi::TRemoteTableReaderTimingStatistics.
+message TRemoteTableReaderTimingStatistics
+{
+    // All durations are in microseconds.
+    optional uint64 master_fetch_time = 1;
+    optional TTimingStatistics data_read_timing = 2;
+    optional uint64 total_time = 3;
+    optional uint64 encode_time = 4;
+    optional uint64 write_stall_time = 5;
+    optional uint64 window_drained_time = 6;
+}
+
 // Could be embedded into response attachment block sequence along with the actual data
 // to indidate the progress of table reader/writer.
 message TRowsetStatistics
 {
     required int64 total_row_count = 1;
     required NYT.NChunkClient.NProto.TDataStatistics data_statistics = 2;
+    optional TRemoteTableReaderTimingStatistics timing_statistics = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -836,6 +857,7 @@ message TRspPullQueue
 {
     optional TRowsetDescriptor rowset_descriptor = 1;
     optional int64 start_offset = 2;
+    optional bool response_size_limit_reached = 3;
 }
 
 message TReqPullQueueConsumer
@@ -853,6 +875,7 @@ message TRspPullQueueConsumer
 {
     optional TRowsetDescriptor rowset_descriptor = 1;
     optional int64 start_offset = 2;
+    optional bool response_size_limit_reached = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1000,6 +1023,7 @@ message TRspPullRows
     repeated TReplicationRowIndex end_replication_row_indexes = 4;
     required TRowsetDescriptor rowset_descriptor = 5;
     optional bool versioned = 6 [default = true];
+    repeated NYT.NProto.TError subrequest_errors = 7;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2023,6 +2047,8 @@ message TReqReshardTable
 
     optional bool enable_slicing = 5;
     optional double slicing_accuracy = 6;
+
+    repeated int64 cumulative_data_weights = 7;
 
     optional TMutatingOptions mutating_options = 103;
     optional TTabletRangeOptions tablet_range_options = 104;
@@ -3655,6 +3681,8 @@ message TReqStartQuery
     optional string access_control_object = 8; // COMPAT(mpereskokova)
     optional TAccessControlObjects access_control_objects = 9;
     repeated TSecret secrets = 10;
+
+    optional TMutatingOptions mutating_options = 103;
 }
 
 message TRspStartQuery

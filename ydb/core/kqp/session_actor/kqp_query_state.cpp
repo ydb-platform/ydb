@@ -440,10 +440,18 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
         NextSplittedExpr = 1;
     }
 
+    // Split parts can share child nodes. Give the compiler its own graph and
+    // context so it cannot race with this session destroying the other parts.
+    auto splitExpr = std::move(SplittedExprs.at(NextSplittedExpr));
+    auto splitCtx = std::make_shared<NYql::TExprContext>();
+
+    NYql::TNodeOnNodeOwnedMap deepClones;
+    auto compileExpr = splitCtx->DeepCopy(*splitExpr, *SplittedCtx, deepClones, /* internStrings */ true, /* copyTypes */ false);
+
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
         false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, SplittedCtx, std::move(SplittedExprs.at(NextSplittedExpr)), false, settings.UsePessimisticLocks);
+        false, std::move(splitCtx), std::move(compileExpr), false, settings.UsePessimisticLocks);
 }
 
 bool TKqpQueryState::ProcessingLastStatementPart() {

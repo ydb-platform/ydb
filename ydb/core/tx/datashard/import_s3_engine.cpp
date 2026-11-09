@@ -320,13 +320,13 @@ public:
                 }
 
                 ReadyInputBytes += processedAfter - processedBefore;
-                if (block) {
-                    if (block->Size()) {
-                        Child->Feed(TString(block->Data(), block->Size()), Last);
-                        BytesFedToChild += block->Size();
-                    } else {
-                        lastEmptyBlock = Last;
-                    }
+                if (block && block->Size()) {
+                    Child->Feed(TString(block->Data(), block->Size()), Last);
+                    BytesFedToChild += block->Size();
+                } else {
+                    // A separately read end marker is authenticated and consumed,
+                    // but GetNextBlock() returns Nothing() for a nonempty file.
+                    lastEmptyBlock = Last && processedAfter > processedBefore;
                 }
             } catch (const std::exception& ex) {
                 return std::unexpected(TString(ex.what()));

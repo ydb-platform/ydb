@@ -129,7 +129,7 @@ message TYtGatewayConfig {
 
 message TYtOrmClusterConfig {
     optional string Name = 1; // Examples: grut_testing, grut_stable, grut_dev
-    optional string Cluster = 2; // Examples: sas, vla, etc
+    optional string Cluster = 2; // GrUT DCs in failover order, separated by semicolons. Example: klg;other-dc
     optional bool Enabled = 3 [default = true]; // Allow to handle YTORM queries
     optional string EndpointSetId = 4; // Examples: grut-stable.object_api, grut-testing.object_api, etc
 }

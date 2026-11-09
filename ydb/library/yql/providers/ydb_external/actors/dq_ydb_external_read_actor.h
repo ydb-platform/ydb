@@ -3,6 +3,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+
 #include <functional>
 
 namespace NYql::NDq {
@@ -10,10 +11,10 @@ namespace NYql::NDq {
 // The getter lazily supplies independently constructed TLS/plaintext drivers,
 // with MaxInboundMessageSize set to NYdbExternal::MaxInboundMessageBytes.
 using TYdbExternalDriverFactory = std::function<NYdb::TDriver(bool useTls)>;
-void RegisterYdbExternalReadActorFactory(TDqAsyncIoFactory& factory,
-    TYdbExternalDriverFactory driverFactory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
+void RegisterYdbExternalReadActorFactory(
+    TDqAsyncIoFactory& factory, TYdbExternalDriverFactory driverFactory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
 
-void RegisterYdbExternalReadActorFactory(TDqAsyncIoFactory& factory,
-    const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
+void RegisterYdbExternalReadActorFactory(TDqAsyncIoFactory& factory, const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

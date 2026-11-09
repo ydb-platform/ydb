@@ -262,6 +262,8 @@ class DiskService:
             try:
                 device = self._make_device(source)
                 info = await self.parted_info(device)
+                if info is None:
+                    raise ValueError(f"Failed to receive partition information for {source.partlabel}")
                 if info.error:
                     operations.append(
                         DiskOperationItemSchema(
@@ -275,10 +277,9 @@ class DiskService:
 
                 ok = True
                 messages = []
-                for part in info.parts:
-                    if part.id == "1" or not part.label:
-                        continue
-                    self._validate_partlabel(part.label)
+                labels = device_lib.get_data_partlabels(device, ((part.id, part.label) for part in info.parts))
+                for label in labels:
+                    self._validate_partlabel(label)
                     result = await self._run(
                         [
                             "sudo",
@@ -287,12 +288,12 @@ class DiskService:
                             "blobstorage",
                             "disk",
                             "obliterate",
-                            f"/dev/disk/by-partlabel/{part.label}",
+                            f"/dev/disk/by-partlabel/{label}",
                         ]
                     )
                     if result.returncode:
                         ok = False
-                        messages.append(f"{part.label}: {result.stderr.strip()}")
+                        messages.append(f"{label}: {result.stderr.strip()}")
                 operations.append(
                     DiskOperationItemSchema(
                         partlabel=source.partlabel,

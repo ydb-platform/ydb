@@ -9,7 +9,6 @@ PEERDIR(
 SRCS(
     blobstorage_ingress.cpp
     blobstorage_ingress.h
-    blobstorage_ingress_matrix.cpp
     blobstorage_ingress_matrix.h
     defs.h
 )

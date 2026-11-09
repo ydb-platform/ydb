@@ -97,7 +97,7 @@ bool AddEquiJoinLinkOptionHint(const std::string_view& side, std::unordered_set<
             ctx.AddError(TIssue(pos, TStringBuilder() << "Hints 'unique' and 'small' are not compatible"));
             return false;
         }
-    } else if (!hintNode.IsAtom("any")) {
+    } else if (!hintNode.IsAtom({"any", "unessential_any"})) {
         ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown hint: '" << hintNode.Content() << "' for " << side << " side"));
         return false;
     }
@@ -144,7 +144,7 @@ IGraphTransformer::TStatus ParseJoinScope(const TJoinLabels& labels,
         }
 
         if (const auto s = (*input)->Streaming) {
-            streaming = s;
+            streaming = s->RenameFields(ctx, rename);
         }
 
         return IGraphTransformer::TStatus::Ok;
@@ -2277,6 +2277,10 @@ bool ParentKeysSubsetOfChildKeys(TExprNode::TPtr parent, TExprNode::TPtr left, T
     return true;
 }
 
+bool HasAnyForPruneKeys(const TSet<TString>& hints) {
+    return hints.contains("any") || hints.contains("unessential_any");
+}
+
 TExprNode::TPtr PushAnyInEquiJoin(TExprContext& ctx, const TCoEquiJoinTuple& joinTree, const TExprNode::TPtr keyColumnsFromParent) {
     auto settings = GetEquiJoinLinkSettings(joinTree.Options().Ref());
     bool settingsChanged = false;
@@ -2284,8 +2288,8 @@ TExprNode::TPtr PushAnyInEquiJoin(TExprContext& ctx, const TCoEquiJoinTuple& joi
     auto result = joinTree.Ptr();
 
     auto updateHints = [&settingsChanged](TSet<TString>& hints) {
-        if (!hints.contains("any")) {
-            hints.insert("any");
+        if (!HasAnyForPruneKeys(hints)) {
+            hints.insert("unessential_any");
             settingsChanged = true;
         }
     };
@@ -2300,7 +2304,7 @@ TExprNode::TPtr PushAnyInEquiJoin(TExprContext& ctx, const TCoEquiJoinTuple& joi
         auto leftJoinTuple = left.Cast<TCoEquiJoinTuple>();
         auto leftResult = leftJoinTuple.Ptr();
 
-        if (joinKind == "RightSemi" || joinKind == "RightOnly" || settings.LeftHints.contains("any")) {
+        if (joinKind == "RightSemi" || joinKind == "RightOnly" || HasAnyForPruneKeys(settings.LeftHints)) {
             if (!settings.LeftHints.contains("unique")) {
                 leftResult = PushAnyInEquiJoin(ctx, leftJoinTuple, joinTree.LeftKeys().Ptr());
             }
@@ -2319,7 +2323,7 @@ TExprNode::TPtr PushAnyInEquiJoin(TExprContext& ctx, const TCoEquiJoinTuple& joi
         auto rightJoinTuple = right.Cast<TCoEquiJoinTuple>();
         auto rightResult = rightJoinTuple.Ptr();
 
-        if (joinKind == "LeftSemi" || joinKind == "LeftOnly" || settings.RightHints.contains("any")) {
+        if (joinKind == "LeftSemi" || joinKind == "LeftOnly" || HasAnyForPruneKeys(settings.RightHints)) {
             if (!settings.RightHints.contains("unique")) {
                 rightResult = PushAnyInEquiJoin(ctx, rightJoinTuple, joinTree.RightKeys().Ptr());
             }
@@ -2348,7 +2352,7 @@ void GetPruneKeysColumnsForJoinLeaves(const TCoEquiJoinTuple& joinTree, THashMap
     if (!left.Maybe<TCoAtom>()) {
         GetPruneKeysColumnsForJoinLeaves(left.Cast<TCoEquiJoinTuple>(), columnsForPruneKeysExtractor);
     } else {
-        if (joinKind == "RightSemi" || joinKind == "RightOnly" || settings.LeftHints.contains("any")) {
+        if (joinKind == "RightSemi" || joinKind == "RightOnly" || HasAnyForPruneKeys(settings.LeftHints)) {
             if (!settings.LeftHints.contains("unique")) {
                 CollectEquiJoinKeyColumnsFromLeaf(joinTree.LeftKeys().Ref(), columnsForPruneKeysExtractor);
             }
@@ -2359,7 +2363,7 @@ void GetPruneKeysColumnsForJoinLeaves(const TCoEquiJoinTuple& joinTree, THashMap
     if (!right.Maybe<TCoAtom>()) {
         GetPruneKeysColumnsForJoinLeaves(right.Cast<TCoEquiJoinTuple>(), columnsForPruneKeysExtractor);
     } else {
-        if (joinKind == "LeftSemi" || joinKind == "LeftOnly" || settings.RightHints.contains("any")) {
+        if (joinKind == "LeftSemi" || joinKind == "LeftOnly" || HasAnyForPruneKeys(settings.RightHints)) {
             if (!settings.RightHints.contains("unique")) {
                 CollectEquiJoinKeyColumnsFromLeaf(joinTree.RightKeys().Ref(), columnsForPruneKeysExtractor);
             }
@@ -2403,8 +2407,9 @@ TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabel
             joinTree = ctx.ChangeChild(*joinTree, TCoEquiJoinTuple::idx_LeftScope, std::move(newLeaf));
         }
     } else {
-        if (settings.LeftHints.contains("any") && canDropAny(left->Content(), joinType, true)) {
+        if (HasAnyForPruneKeys(settings.LeftHints) && canDropAny(left->Content(), joinType, true)) {
             settings.LeftHints.erase("any");
+            settings.LeftHints.erase("unessential_any");
             settingsChanged = true;
         }
     }
@@ -2416,8 +2421,9 @@ TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabel
             joinTree = ctx.ChangeChild(*joinTree, TCoEquiJoinTuple::idx_RightScope, std::move(newLeaf));
         }
     } else {
-        if (settings.RightHints.contains("any") && canDropAny(right->Content(), joinType, false)) {
+        if (HasAnyForPruneKeys(settings.RightHints) && canDropAny(right->Content(), joinType, false)) {
             settings.RightHints.erase("any");
+            settings.RightHints.erase("unessential_any");
             settingsChanged = true;
         }
     }

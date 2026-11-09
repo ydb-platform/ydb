@@ -3,8 +3,8 @@
 //! CountRow / CountPositive bump counters on the same ctx handle; Snapshot
 //! returns a human-readable dump for SELECT, e.g. "rows_seen=3;positives=2".
 
-#include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
 #include <ydb/services/udf_store/wasm/abi/bridge.h>
+#include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
 #include <ydb/services/udf_store/wasm/object_framework/object_framework.h>
 
 #include <string.h>
@@ -108,14 +108,11 @@ int FormatCtx(const TCtx* ctx, char* buf, int bufLen) {
     return n;
 }
 
-} // namespace
+}   // namespace
 
 extern "C" {
 
-__attribute__((visibility("default"))) void ctx_create(
-    TExpressionContext* /*context*/,
-    uint64_t* result,
-    uint64_t /*config*/)
+__attribute__((visibility("default"))) void ctx_create(TExpressionContext* /*context*/, uint64_t* result, uint64_t /*config*/)
 {
     const TObjectHandle handle = ObjectFrameworkCreate(&CtxType, nullptr, 0);
     if (handle == 0) {
@@ -124,21 +121,14 @@ __attribute__((visibility("default"))) void ctx_create(
     *result = MakeUint64(handle).Release();
 }
 
-__attribute__((visibility("default"))) void ctx_destroy(
-    TExpressionContext* /*context*/,
-    uint64_t* result,
-    uint64_t handleArg)
+__attribute__((visibility("default"))) void ctx_destroy(TExpressionContext* /*context*/, uint64_t* result, uint64_t handleArg)
 {
     ObjectFrameworkDestroy(BridgeGetUint64(handleArg));
     *result = MakeNull().Release();
 }
 
 //! Always increments rows_seen; returns |input| unchanged.
-__attribute__((visibility("default"))) void count_row(
-    TExpressionContext* /*context*/,
-    uint64_t* result,
-    uint64_t handleArg,
-    uint64_t inputArg)
+__attribute__((visibility("default"))) void count_row(TExpressionContext* /*context*/, uint64_t* result, uint64_t handleArg, uint64_t inputArg)
 {
     ++GetCtx(handleArg)->RowsSeen;
     *result = inputArg;
@@ -146,10 +136,7 @@ __attribute__((visibility("default"))) void count_row(
 
 //! Increments positives when |input| is a positive Int64; returns |input| unchanged.
 __attribute__((visibility("default"))) void count_positive(
-    TExpressionContext* /*context*/,
-    uint64_t* result,
-    uint64_t handleArg,
-    uint64_t inputArg)
+    TExpressionContext* /*context*/, uint64_t* result, uint64_t handleArg, uint64_t inputArg)
 {
     TCtx* ctx = GetCtx(handleArg);
     if (!BridgeIsNull(inputArg) && BridgeGetInt64(inputArg) > 0) {
@@ -158,10 +145,7 @@ __attribute__((visibility("default"))) void count_positive(
     *result = inputArg;
 }
 
-__attribute__((visibility("default"))) void ctx_snapshot(
-    TExpressionContext* /*context*/,
-    uint64_t* result,
-    uint64_t handleArg)
+__attribute__((visibility("default"))) void ctx_snapshot(TExpressionContext* /*context*/, uint64_t* result, uint64_t handleArg)
 {
     const TCtx* ctx = GetCtx(handleArg);
     char tmp[96];
@@ -172,4 +156,4 @@ __attribute__((visibility("default"))) void ctx_snapshot(
     *result = MakeString(tmp, n).Release();
 }
 
-} // extern "C"
+}   // extern "C"

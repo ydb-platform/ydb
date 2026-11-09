@@ -1,0 +1,19 @@
+{
+  "skill_name": "ydb-columnshard-bug-hunt-setup",
+  "evals": [
+    {
+      "id": 1,
+      "name": "setup-env",
+      "prompt": "Set up the ColumnShard bug hunt environment on this machine.",
+      "expected_output": "detect_env.py ran with --main set to the current harness and model; the env file lists the probed reviewers with ok or the failure reason; the current model is marked same_as_main.",
+      "files": [],
+      "expectations": [
+        "detect_env.py was run with --main HARNESS=MODEL of the current session",
+        "~/.config/ydb-columnshard-bug-hunt/env.json exists and lists reviewers with ok, same_as_main and error fields",
+        "subagent_models lists the models the subagent tool offers",
+        "The answer names the default reviewer, or says that subagents of the main harness will be used",
+        "Every failed reviewer is reported with the reason from its error text"
+      ]
+    }
+  ]
+}

@@ -2,14 +2,16 @@
 #include "common.h"
 #include "config.h"
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/aclib/aclib.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/actors/core/log.h>
+
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr::NMetadata::NRequest {
 
@@ -25,19 +27,22 @@ private:
     using TResponse = typename TDialogPolicy::TResponse;
     TRequest ProtoRequest;
     const NACLib::TUserToken UserToken;
+
 protected:
     class TEvRequestInternalResult: public NActors::TEventLocal<TEvRequestInternalResult, TDialogPolicy::EvResultInternal> {
     private:
         YDB_READONLY_DEF(NThreading::TFuture<typename TDialogPolicy::TResponse>, Future);
+
     public:
         TEvRequestInternalResult(const NThreading::TFuture<typename TDialogPolicy::TResponse>& f)
-            : Future(f) {
-
+            : Future(f)
+        {
         }
     };
 
     virtual void OnInternalResultError(Ydb::StatusIds::StatusCode status, const TString& errorMessage) = 0;
     virtual void OnInternalResultSuccess(TResponse&& response) = 0;
+
 public:
     void Bootstrap(const TActorContext& /*ctx*/) {
         TBase::Become(&TBase::TThis::StateMain);
@@ -52,6 +57,7 @@ public:
                 break;
         }
     }
+
     void Handle(typename TEvRequestInternalResult::TPtr& ev) {
         if (!ev->Get()->GetFuture().HasValue() || ev->Get()->GetFuture().HasException()) {
             YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_PROVIDER, "Cannot receive result on initialization");
@@ -79,7 +85,8 @@ public:
         using TRpcRequest = NGRpcService::TGrpcRequestOperationCall<TRequest, TResponse>;
         auto request = ProtoRequest;
         NACLib::TUserToken uToken("metadata@system", {});
-        auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), AppData()->TenantName, uToken.SerializeAsString(), aSystem, /*internalCall*/ true);
+        auto result = NRpcService::DoLocalRpc<TRpcRequest>(
+            std::move(request), AppData()->TenantName, uToken.SerializeAsString(), aSystem, /*internalCall*/ true);
         const NActors::TActorId selfId = TBase::SelfId();
         const auto replyCallback = [aSystem, selfId](const NThreading::TFuture<TResponse>& f) {
             aSystem->Send(selfId, new TEvRequestInternalResult(f));
@@ -89,8 +96,8 @@ public:
 
     TYDBOneRequest(const TRequest& request, const NACLib::TUserToken& uToken)
         : ProtoRequest(request)
-        , UserToken(uToken) {
-
+        , UserToken(uToken)
+    {
     }
 };
 
@@ -103,22 +110,25 @@ private:
     const NActors::TActorId CallbackActorId;
     const TConfig Config;
     ui32 Retry = 0;
+
 protected:
     virtual void OnInternalResultError(Ydb::StatusIds::StatusCode status, const TString& errorMessage) override {
         TBase::template Sender<TEvRequestFailed>(status, errorMessage).SendTo(CallbackActorId);
         TBase::PassAway();
     }
+
     virtual void OnInternalResultSuccess(TResponse&& response) override {
         TBase::template Sender<TEvRequestResult<TDialogPolicy>>(std::move(response)).SendTo(CallbackActorId);
         TBase::template Sender<TEvRequestFinished>().SendTo(CallbackActorId);
     }
-public:
 
-    TYDBCallbackRequest(const TRequest& request, const NACLib::TUserToken& uToken, const NActors::TActorId actorCallbackId, const TConfig& config = Default<TConfig>())
+public:
+    TYDBCallbackRequest(const TRequest& request, const NACLib::TUserToken& uToken, const NActors::TActorId actorCallbackId,
+        const TConfig& config = Default<TConfig>())
         : TBase(request, uToken)
         , CallbackActorId(actorCallbackId)
-        , Config(config) {
-
+        , Config(config)
+    {
     }
 };
 
@@ -129,6 +139,7 @@ private:
     using TBase = NActors::TActorBootstrapped<TSessionedActorImpl<TDialogPolicy>>;
 
     ui32 Retry = 0;
+
     void Handle(TEvRequestResult<TDialogCreateSession>::TPtr& ev) {
         Ydb::Table::CreateSessionResponse currentFullReply = ev->Get()->GetResult();
         Ydb::Table::CreateSessionResult session;
@@ -139,11 +150,13 @@ private:
         Y_ABORT_UNLESS(nextRequest);
         TBase::Register(new TYDBCallbackRequest<TDialogPolicy>(*nextRequest, UserToken, TBase::SelfId(), Config));
     }
+
 protected:
     const TConfig Config;
     const NACLib::TUserToken UserToken;
     virtual std::optional<typename TDialogPolicy::TRequest> OnSessionId(const TString& sessionId) = 0;
     virtual void OnResult(const typename TDialogPolicy::TResponse& response) = 0;
+
 public:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
@@ -160,7 +173,6 @@ public:
         : Config(config)
         , UserToken(uToken)
     {
-
     }
 
     void Handle(typename TEvRequestResult<TDialogPolicy>::TPtr& ev) {
@@ -188,4 +200,4 @@ public:
 
 using TSessionedActor = TSessionedActorImpl<TDialogYQLRequest>;
 
-}
+}   // namespace NKikimr::NMetadata::NRequest

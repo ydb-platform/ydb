@@ -3,6 +3,11 @@
 
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_keyvalue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/string/builder.h>
 #include <util/system/type_name.h>
@@ -89,6 +94,26 @@ TStatus RemoveStreamingQuery(NQuery::TQueryClient& client, const TString& path, 
     return DropSchemeObject("STREAMING QUERY", client, path, settings);
 }
 
+TStatus RemoveSecret(NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    return DropSchemeObject("SECRET", client, path, settings);
+}
+
+TStatus RemoveSolomonVolume(NKeyValue::TKeyValueClient& client, const TString& path, const NKeyValue::TDropVolumeSettings& settings) {
+    return RetryFunction([&]() -> TStatus {
+        return client.DropVolume(path, settings).ExtractValueSync();
+    });
+}
+
+TStatus RemoveResourcePool(NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    // Resource pool DDL accepts a pool name rather than its path in .metadata.
+    return DropSchemeObject("RESOURCE POOL", client, TString(TStringBuf(path).RNextTok('/')), settings);
+}
+
+TStatus RemoveBackupCollection(NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    // Backup collection DDL resolves the name under .backups/collections.
+    return DropSchemeObject("BACKUP COLLECTION", client, TString(TStringBuf(path).RNextTok('/')), settings);
+}
+
 NYdb::NIssue::TIssues MakeIssues(const TString& error) {
     NYdb::NIssue::TIssues issues;
     issues.AddIssue(NYdb::NIssue::TIssue(error));
@@ -147,6 +172,7 @@ TStatus Remove(
     TTopicClient& topicClient,
     NQuery::TQueryClient& queryClient,
     NCoordination::TClient& coordinationClient,
+    NKeyValue::TKeyValueClient& keyValueClient,
     const ESchemeEntryType type,
     const TString& path,
     ERecursiveRemovePrompt prompt,
@@ -163,6 +189,7 @@ TStatus Remove(
     case ESchemeEntryType::Table:
         return Remove(&RemoveTable, schemeClient, tableClient, type, path, prompt, settings);
 
+    case ESchemeEntryType::PqGroup:
     case ESchemeEntryType::Topic:
         return Remove(&RemoveTopic, schemeClient, topicClient, type, path, prompt, settings);
     case ESchemeEntryType::ExternalDataSource:
@@ -182,6 +209,14 @@ TStatus Remove(
         return Remove(&RemoveTransfer, schemeClient, queryClient, type, path, prompt, settings);
     case ESchemeEntryType::StreamingQuery:
         return Remove(&RemoveStreamingQuery, schemeClient, queryClient, type, path, prompt, settings);
+    case ESchemeEntryType::Secret:
+        return Remove(&RemoveSecret, schemeClient, queryClient, type, path, prompt, settings);
+    case ESchemeEntryType::SolomonVolume:
+        return Remove(&RemoveSolomonVolume, schemeClient, keyValueClient, type, path, prompt, settings);
+    case ESchemeEntryType::ResourcePool:
+        return Remove(&RemoveResourcePool, schemeClient, queryClient, type, path, prompt, settings);
+    case ESchemeEntryType::BackupCollection:
+        return Remove(&RemoveBackupCollection, schemeClient, queryClient, type, path, prompt, settings);
 
     default:
         return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()
@@ -190,15 +225,13 @@ TStatus Remove(
 }
 
 TStatus RemoveDirectoryRecursive(
-    TSchemeClient& schemeClient,
-    TTableClient& tableClient,
-    TTopicClient& topicClient,
-    NQuery::TQueryClient& queryClient,
-    NCoordination::TClient& coordinationClient,
+    const TDriver& driver,
     const TString& path,
     const TRemoveDirectoryRecursiveSettings& settings
 ) {
+    TSchemeClient schemeClient(driver);
     const auto listingSettings = TRecursiveListSettings()
+        .SkipMode(settings.SkipMode_)
         .Filter([](const TSchemeEntry& entry) {
             // explicitly skip subdomains
             return entry.Type != ESchemeEntryType::SubDomain;
@@ -216,29 +249,13 @@ TStatus RemoveDirectoryRecursive(
 
     // RecursiveList outputs elements in pre-order: root, recurse(children)...
     // We need to reverse it to delete scheme objects before directories.
+    auto remover = NInternal::CreateDefaultRemover(driver, settings);
     return RemovePathsRecursive(
-        schemeClient,
-        tableClient,
-        topicClient,
-        queryClient,
-        coordinationClient,
         recursiveListResult.Entries.rbegin(),
         recursiveListResult.Entries.rend(),
+        remover,
         settings
     );
-}
-
-TStatus RemoveDirectoryRecursive(
-    const TDriver& driver,
-    const TString& path,
-    const TRemoveDirectoryRecursiveSettings& settings
-) {
-    TSchemeClient schemeClient(driver);
-    TTableClient tableClient(driver);
-    TTopicClient topicClient(driver);
-    NQuery::TQueryClient queryClient(driver);
-    NCoordination::TClient coordinationClient(driver);
-    return RemoveDirectoryRecursive(schemeClient, tableClient, topicClient, queryClient, coordinationClient, path, settings);
 }
 
 TStatus RemovePathRecursive(
@@ -246,12 +263,7 @@ TStatus RemovePathRecursive(
     const TSchemeEntry& entry,
     const TRemoveDirectoryRecursiveSettings& settings
 ) {
-    TSchemeClient schemeClient(driver);
-    TTableClient tableClient(driver);
-    TTopicClient topicClient(driver);
-    NQuery::TQueryClient queryClient(driver);
-    NCoordination::TClient coordinationClient(driver);
-    auto remover = NInternal::CreateDefaultRemover(schemeClient, tableClient, topicClient, queryClient, coordinationClient, settings);
+    auto remover = NInternal::CreateDefaultRemover(driver, settings);
     return remover(entry);
 }
 
@@ -273,6 +285,7 @@ TStatus RemovePathRecursive(
     entry.Name = path;
     switch (entry.Type) {
         case NYdb::NScheme::ESchemeEntryType::ColumnStore:
+        case NYdb::NScheme::ESchemeEntryType::BackupCollection:
         case NYdb::NScheme::ESchemeEntryType::Directory:
             return RemoveDirectoryRecursive(driver, path, settings);
         default:
@@ -283,22 +296,27 @@ TStatus RemovePathRecursive(
 namespace NInternal {
 
     TRemover CreateDefaultRemover(
-        NScheme::TSchemeClient& schemeClient,
-        NTable::TTableClient& tableClient,
-        NTopic::TTopicClient& topicClient,
-        NQuery::TQueryClient& queryClient,
-        NCoordination::TClient& coordinationClient,
+        const TDriver& driver,
         const TRemoveDirectoryRecursiveSettings& settings
     ) {
-        return [&, settings](const TSchemeEntry& entry) {
-            return Remove(schemeClient, tableClient, topicClient, queryClient, coordinationClient, entry.Type, TString(entry.Name), settings.Prompt_, settings);
+        return [
+            schemeClient = TSchemeClient(driver),
+            tableClient = TTableClient(driver),
+            topicClient = TTopicClient(driver),
+            queryClient = NQuery::TQueryClient(driver),
+            coordinationClient = NCoordination::TClient(driver),
+            keyValueClient = NKeyValue::TKeyValueClient(driver),
+            settings
+        ](const TSchemeEntry& entry) mutable {
+            return Remove(schemeClient, tableClient, topicClient, queryClient, coordinationClient, keyValueClient, entry.Type, TString(entry.Name), settings.Prompt_, settings);
         };
     }
 
     bool MightHaveDependents(ESchemeEntryType type) {
         switch (type) {
-        // directories might contain external data sources, which might have dependent objects (i.e. external tables)
+        // Containers must outlive descendants deferred to the second pass.
         case ESchemeEntryType::Directory:
+        case ESchemeEntryType::BackupCollection:
         case ESchemeEntryType::ExternalDataSource:
             return true;
         default:

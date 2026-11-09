@@ -7,7 +7,7 @@
 #include <library/cpp/yt/backtrace/backtrace.h>
 #endif
 
-#include <library/cpp/yt/memory/immortal.h>
+#include <library/cpp/yt/misc/immortal.h>
 
 namespace NYT {
 

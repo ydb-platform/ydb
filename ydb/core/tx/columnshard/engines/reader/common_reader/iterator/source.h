@@ -161,6 +161,8 @@ private:
     std::shared_ptr<TPortionDataAccessor> Accessor;
 
 protected:
+    virtual TConclusionStatus DoApplyPendingFetcher(const NArrow::NSSA::TProcessorContext& context, const ui32 entityId) override;
+
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
     NLWTrace::TOrbit DataSourceOrbit;
     TMonotonic LastProbeTimestamp;

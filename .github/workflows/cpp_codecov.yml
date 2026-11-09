@@ -193,72 +193,9 @@ jobs:
           sparse-checkout: |
             .github/scripts/codecov/codecov_suites.py
             .github/scripts/codecov/detect_codecov_matrix.py
+            .github/scripts/codecov/check_patch_coverage.py
           sparse-checkout-cone-mode: false
           persist-credentials: false
-
-      - name: Classify PR base commit
-        id: base_change
-        if: >-
-          github.event_name == 'pull_request_target' &&
-          steps.authorization.outputs.allowed == 'true'
-        env:
-          PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
-        run: |
-          set -euo pipefail
-          changed_file=$(mktemp)
-          trap 'rm -f "$changed_file"' EXIT
-
-          if base_parent=$(git rev-parse --verify "${PR_BASE_SHA}^1" 2>/dev/null); then
-            git -c core.quotePath=false diff --name-only --no-renames \
-              "$base_parent" "$PR_BASE_SHA" -- \
-              > "$changed_file"
-          else
-            git ls-tree -r --name-only "$PR_BASE_SHA" > "$changed_file"
-          fi
-
-          python3 .github/scripts/codecov/detect_codecov_matrix.py \
-            --changed-files-file "$changed_file"
-
-      - name: Validate PR base coverage state
-        if: >-
-          github.event_name == 'pull_request_target' &&
-          steps.authorization.outputs.allowed == 'true'
-        uses: actions/github-script@v8
-        env:
-          PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
-          BASE_CHANGE_RELEVANT: ${{ steps.base_change.outputs.should_run }}
-        with:
-          github-token: ${{ github.token }}
-          script: |
-            const baseSha = process.env.PR_BASE_SHA;
-            const { data } = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'cpp_codecov.yml',
-              branch: 'main',
-              event: 'push',
-              head_sha: baseSha,
-              per_page: 100,
-            });
-            const runs = data.workflow_runs.filter((run) =>
-              run.head_sha === baseSha &&
-              run.head_branch === 'main' &&
-              run.event === 'push'
-            );
-            const successful = runs.some(
-              (run) => run.status === 'completed' && run.conclusion === 'success'
-            );
-            const baselineRequired = process.env.BASE_CHANGE_RELEVANT === 'true' || runs.length > 0;
-            if (baselineRequired && !successful) {
-              const observed = runs.length
-                ? runs.map((run) => `${run.status}/${run.conclusion || 'pending'}`).join(', ')
-                : 'no run registered';
-              core.setFailed(
-                `PR base ${baseSha} changes C++ coverage inputs but has no successful full ` +
-                `cpp_codecov push run (${observed}). Wait for or rerun the main coverage workflow, ` +
-                `then rerun this PR coverage workflow.`
-              );
-            }
 
       - name: Collect changed files
         id: inputs
@@ -287,6 +224,12 @@ jobs:
           echo "changed_files_file=$changed_file" >> "$GITHUB_OUTPUT"
           echo "Changed files:"
           head -100 "$changed_file"
+
+          # Preserve the real PR diff, not Codecov's adjusted project baseline.
+          # Only line ranges and pinned SHAs are transferred, never PR code.
+          python3 .github/scripts/codecov/check_patch_coverage.py collect \
+            --base-sha "$PR_BASE_SHA" --head-sha "$PR_HEAD_SHA" \
+            --output "$RUNNER_TEMP/codecov-patch.json"
 
       - name: Decide matrix
         id: decide
@@ -349,6 +292,19 @@ jobs:
             echo "storage_prefix=$storage_prefix"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Save pinned PR patch
+        if: >-
+          github.event_name == 'pull_request_target' &&
+          steps.decide.outputs.should_run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          # A failed-jobs-only rerun can reuse detect from an earlier attempt.
+          name: codecov-patch-${{ github.run_id }}
+          path: ${{ runner.temp }}/codecov-patch.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
   coverage:
     name: Coverage (${{ matrix.suite }})
     needs: detect
@@ -367,7 +323,9 @@ jobs:
         with:
           repository: ${{ needs.detect.outputs.checkout_repository }}
           ref: ${{ needs.detect.outputs.checkout_sha }}
-          fetch-depth: 0
+          # Build/upload needs only the pinned tree; merge-base history is used
+          # separately in detect. Avoid fetching every branch and tag per suite.
+          fetch-depth: 1
           allow-unsafe-pr-checkout: true
           persist-credentials: false
 
@@ -379,6 +337,7 @@ jobs:
           sparse-checkout: |
             .github/actions/run_clang_codecov
             .github/actions/setup_ci_ydb_service_account_key_file_credentials
+            .github/config
             .github/scripts/codecov
           path: _trusted_coverage_ci
           persist-credentials: false
@@ -397,6 +356,7 @@ jobs:
         uses: ./.github/actions/run_clang_codecov
         with:
           suite: ${{ matrix.suite }}
+          muted_tests_file: ${{ github.event_name == 'pull_request_target' && '_trusted_coverage_ci/.github/config/muted_ya.txt' || '.github/config/muted_ya.txt' }}
           codecov_token: ${{ secrets.CODECOV_TOKEN }}
           github_token: ${{ github.token }}
           aws_access_key_id: ${{ secrets.YDB_TECH_AWS_ACCESS_KEY_ID }}
@@ -412,6 +372,140 @@ jobs:
       - name: Remove YDB credentials
         if: always()
         run: rm -f -- /tmp/ydb_service_account.json
+
+  patch:
+    name: Check if patch coverage is sufficient
+    needs: [detect, coverage]
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      needs.detect.result == 'success' &&
+      needs.detect.outputs.should_run == 'true' &&
+      needs.coverage.result == 'success'
+    # Deliberately non-required: this workflow does not change merge rules or
+    # checks_integrated. The upload/HTML jobs remain successful below the target.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted patch checker
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: |
+            .github/scripts/codecov
+            .github/codecov.yml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Download pinned PR patch
+        uses: actions/download-artifact@v4
+        with:
+          name: codecov-patch-${{ github.run_id }}
+          path: ${{ runner.temp }}/codecov-patch
+
+      - name: Download Codecov uploads and receipts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: codecov-upload-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/codecov-uploads
+          merge-multiple: true
+
+      - name: Check every affected component
+        env:
+          MATRIX: ${{ needs.detect.outputs.matrix }}
+          PR_BASE_SHA: ${{ needs.detect.outputs.base_sha }}
+          PR_HEAD_SHA: ${{ needs.detect.outputs.report_sha }}
+        run: |
+          set -euo pipefail
+          # Read the same policy as Codecov from this workflow's trusted tree.
+          # Ruby/Psych is already available on this GitHub-hosted runner.
+          ruby -rjson -ryaml -e \
+            'puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: true))' \
+            .github/codecov.yml > "$RUNNER_TEMP/codecov-policy.json"
+          # The trusted LCOV and PR diff are sufficient for the verdict.
+          # Never wait for Codecov processing, notification statuses or main.
+          mapfile -t suites < <(python3 -c 'import json,os; print("\n".join(json.loads(os.environ["MATRIX"])))')
+          if [ "${#suites[@]}" -eq 0 ]; then
+            echo "Expected at least one coverage component" >&2
+            exit 1
+          fi
+          failed=0
+          for suite in "${suites[@]}"; do
+            case "$suite" in
+              cpp_sdk|cli|cli_workload) ;;
+              *) echo "Unexpected coverage component: $suite" >&2; exit 1 ;;
+            esac
+            if ! python3 .github/scripts/codecov/check_patch_coverage.py check \
+              --base-sha "$PR_BASE_SHA" --head-sha "$PR_HEAD_SHA" \
+              --flag "$suite" --run-id "$GITHUB_RUN_ID" \
+              --upload-receipt "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.json" \
+              --coverage-report "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.lcov" \
+              --changed-lines-file "$RUNNER_TEMP/codecov-patch/codecov-patch.json" \
+              --policy-file "$RUNNER_TEMP/codecov-policy.json"; then
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+      - name: Explain main baseline availability
+        # Project comparisons are informational context, not a prerequisite for
+        # measuring HEAD or applying the local patch threshold. Run even below target.
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/github-script@v8
+        env:
+          PR_BASE_SHA: ${{ needs.detect.outputs.base_sha }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const baseSha = process.env.PR_BASE_SHA;
+            let run;
+            let message;
+            try {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'cpp_codecov.yml',
+                branch: 'main',
+                event: 'push',
+                head_sha: baseSha,
+                per_page: 100,
+                request: { timeout: 10000 },
+              });
+              const runs = data.workflow_runs.filter((item) =>
+                item.head_sha === baseSha &&
+                item.head_branch === 'main' &&
+                item.event === 'push'
+              );
+              run = runs.find((item) =>
+                item.status === 'completed' && item.conclusion === 'success'
+              ) || runs[0];
+              if (!run) {
+                message = 'No main coverage run is recorded for this PR base.';
+              } else if (run.status !== 'completed') {
+                message = 'Main coverage for this PR base is still pending or running.';
+              } else if (run.conclusion !== 'success') {
+                message = 'Main coverage for this PR base did not complete successfully.';
+              } else {
+                message = 'The main coverage run for this PR base completed successfully.';
+              }
+            } catch (error) {
+              message = 'Main coverage availability could not be checked.';
+            }
+            core.info(message + ' Local patch coverage does not depend on it.');
+            core.summary
+              .addHeading('Main baseline (informational)', 3)
+              .addRaw(message + '\n\n')
+              .addRaw('The local patch verdict uses the configured policy, this PR diff and its exact LCOV. ' +
+                'No wait, retry or rebuild of the PR is needed for a main baseline. ' +
+                "Codecov's own project comparison and its choice of base are separate; " +
+                'availability here is not a guarantee of a processed Codecov baseline.\n\n');
+            if (run && Number.isSafeInteger(run.id) && run.id > 0) {
+              core.summary.addLink('Main coverage run',
+                `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${run.id}`);
+            }
+            await core.summary.write();
 
   landing:
     name: Publish HTML landing page

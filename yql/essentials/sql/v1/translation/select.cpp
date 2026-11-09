@@ -1881,6 +1881,10 @@ public:
         src->SetCompactGroupBy(CompactGroupBy_);
         src->SetGroupBySuffix(GroupBySuffix_);
 
+        if (ctx.GroupByExprAfterWhere && !Source_->InitFilters(ctx)) {
+            return false;
+        }
+
         for (auto& term : Terms_) {
             if (!term->CollectPreaggregateExprs(ctx, *src, DistinctAggrExpr_)) {
                 return false;
@@ -1935,8 +1939,7 @@ public:
             return false;
         }
 
-        /// grouped expressions are available in filters
-        if (!Source_->InitFilters(ctx)) {
+        if (!ctx.GroupByExprAfterWhere && !Source_->InitFilters(ctx)) {
             return false;
         }
 

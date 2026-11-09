@@ -3,12 +3,11 @@
 namespace NFq {
 
 TPendingCheckpoint::TPendingCheckpoint(
-    THashSet<NActors::TActorId> toBeAcknowledged,
-    NYql::NDqProto::ECheckpointType type,
-    TPendingCheckpointStats stats)
+    THashSet<NActors::TActorId> toBeAcknowledged, NYql::NDqProto::ECheckpointType type, TPendingCheckpointStats stats)
     : NotYetAcknowledged(std::move(toBeAcknowledged))
     , Type(type)
-    , Stats(std::move(stats)) {
+    , Stats(std::move(stats))
+{
 }
 
 void TPendingCheckpoint::Acknowledge(const NActors::TActorId& actorId) {
@@ -34,17 +33,19 @@ size_t TPendingCheckpoint::NotYetAcknowledgedCount() const {
 }
 
 NYql::NDqProto::ECheckpointType TPendingCheckpoint::GetType() const {
-    return Type;   
+    return Type;
 }
 
 const TPendingCheckpointStats& TPendingCheckpoint::GetStats() const {
     return Stats;
 }
 
-TPendingRestoreCheckpoint::TPendingRestoreCheckpoint(TCheckpointId checkpointId, bool commitAfterRestore, THashSet<NActors::TActorId> toBeAcknowledged)
+TPendingRestoreCheckpoint::TPendingRestoreCheckpoint(
+    TCheckpointId checkpointId, bool commitAfterRestore, THashSet<NActors::TActorId> toBeAcknowledged)
     : CheckpointId(checkpointId)
     , CommitAfterRestore(commitAfterRestore)
-    , NotYetAcknowledged(std::move(toBeAcknowledged)) {
+    , NotYetAcknowledged(std::move(toBeAcknowledged))
+{
 }
 
 void TPendingRestoreCheckpoint::Acknowledge(const NActors::TActorId& actorId) {
@@ -72,4 +73,4 @@ bool TPendingInitCoordinator::CanInjectCheckpoint() const {
     return AllNewCheckpointCoordinatorAcksProcessed() && CheckpointId;
 }
 
-} // namespace NFq
+}   // namespace NFq

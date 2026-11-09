@@ -13,22 +13,20 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <ydb/library/yql/providers/pq/common/events.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/common/pq_partitions.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
+#include <library/cpp/protobuf/interop/cast.h>
+#include <util/string/builder.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/utils/log/log.h>
-
-#include <library/cpp/protobuf/interop/cast.h>
-
-#include <util/string/builder.h>
 
 #include <string_view>
 
@@ -39,19 +37,16 @@ namespace {
 using namespace NNodes;
 using namespace std::literals::string_view_literals;
 
-class TPqDqIntegration : public TDqIntegrationBase {
+class TPqDqIntegration: public TDqIntegrationBase {
     static constexpr ui64 DefaultMaxPartitions = 10000;
 
 public:
     explicit TPqDqIntegration(const TPqState::TPtr& state)
         : State_(state.Get())
-    {}
+    {
+    }
 
-    ui64 PartitionTopicRead(
-        const TPqTopic& topic,
-        size_t maxPartitions,
-        TVector<TString>& partitions,
-        bool streamingTopicRead,
+    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions, bool streamingTopicRead,
         const std::unordered_set<ui64>& predicatePartitions) {
         size_t topicPartitionsCount = 0;
         for (auto kv : topic.Props()) {
@@ -63,15 +58,14 @@ public:
         YQL_ENSURE(topicPartitionsCount > 0);
         const bool groupPartitions = !maxPartitions;
         if (!streamingTopicRead && !maxPartitions) {
-            maxPartitions = 1;      // Reading in table mode - 1 task by default.
+            maxPartitions = 1;   // Reading in table mode - 1 task by default.
         }
         if (!maxPartitions) {
             maxPartitions = DefaultMaxPartitions;
         }
 
-        if (predicatePartitions.empty()) {      // read all partitions
-            const size_t tasks = NDq::GetExpectedTopicReadTasks(
-                topicPartitionsCount, maxPartitions, groupPartitions);
+        if (predicatePartitions.empty()) {   // read all partitions
+            const size_t tasks = NDq::GetExpectedTopicReadTasks(topicPartitionsCount, maxPartitions, groupPartitions);
             partitions.reserve(tasks);
             for (size_t i = 0; i < tasks; ++i) {
                 NPq::NProto::TDqReadTaskParams params;
@@ -85,9 +79,8 @@ public:
                 YQL_ENSURE(params.SerializeToString(&serializedParams));
                 partitions.emplace_back(std::move(serializedParams));
             }
-        } else {    // read only predicate partitions
-            const size_t tasks = NDq::GetExpectedTopicReadTasks(
-                predicatePartitions.size(), maxPartitions, groupPartitions);
+        } else {   // read only predicate partitions
+            const size_t tasks = NDq::GetExpectedTopicReadTasks(predicatePartitions.size(), maxPartitions, groupPartitions);
             auto predicatePartitionIt = predicatePartitions.begin();
             partitions.reserve(tasks);
             size_t allocatedPartitions = 0;
@@ -113,7 +106,7 @@ public:
         return 0;
     }
 
-    template<typename TContainer>
+    template <typename TContainer>
     bool GetPartitions(const TExprNode& node, TContainer& partitions) {
         partitions.clear();
         if (!node.IsCallable("AsList")) {
@@ -160,7 +153,7 @@ public:
 
     TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
         if (const auto& maybePqReadTopic = TMaybeNode<TPqReadTopic>(read)) {
-            if (wrSettings.WatermarksMode.Defined()) { // fq only
+            if (wrSettings.WatermarksMode.Defined()) {   // fq only
                 const auto& watermarksMode = *wrSettings.WatermarksMode;
                 State_->EnableWatermarks = watermarksMode == "default";
                 State_->EnableWatermarksAdvanced = watermarksMode == "advanced";
@@ -171,9 +164,14 @@ public:
 
             const auto pqTopic = pqReadTopic.Topic();
 
-            const auto rowType = pqReadTopic.Ref().GetTypeAnn()
-                ->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()
-                ->GetItemType()->Cast<TStructExprType>();
+            const auto rowType = pqReadTopic.Ref()
+                                     .GetTypeAnn()
+                                     ->Cast<TTupleExprType>()
+                                     ->GetItems()
+                                     .back()
+                                     ->Cast<TListExprType>()
+                                     ->GetItemType()
+                                     ->Cast<TStructExprType>();
             const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue();
             const auto token = "cluster:default_" + clusterName;
 
@@ -182,10 +180,9 @@ public:
 
             TExprNode::TListType colNames;
             colNames.reserve(typeItems.size());
-            std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colNames),
-                [&](const TItemExprType* item) {
-                    return ctx.NewAtom(pos, item->GetName());
-                });
+            std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colNames), [&](const TItemExprType* item) {
+                return ctx.NewAtom(pos, item->GetName());
+            });
             auto columnNames = ctx.NewList(pos, std::move(colNames));
 
             const auto maybeSettings = BuildTopicReadSettings(pqReadTopic, ctx, wrSettings);
@@ -197,11 +194,12 @@ public:
             const bool useSharedReading = AnyOf(settings, [](const TCoNameValueTuple& setting) {
                 return Name(setting) == SharedReading && FromString<bool>(Value(setting));
             });
+            const auto enableWatermarksAdvanced = State_->EnableWatermarksAdvanced && !useSharedReading;
 
             const auto maybeWatermark = pqReadTopic.Watermark().Maybe<TCoLambda>();
 
             TMaybeNode<TCoAtom> watermarkSerialized;
-            if (maybeWatermark) {
+            if (maybeWatermark && !enableWatermarksAdvanced) {
                 const auto watermark = maybeWatermark.Cast();
 
                 TStringBuilder err;
@@ -222,6 +220,7 @@ public:
 
             const auto expandedRowType = ExpandType(pqReadTopic.Pos(), *rowType, ctx);
 
+            // clang-format off
             TExprBase result = Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
@@ -236,15 +235,16 @@ public:
                     .Partitions<TCoVoid>().Build()
                     .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .WriteTimePredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
-                    .WatermarkExpr(maybeWatermark)
-                    .WatermarkSerialized(watermarkSerialized)
+                    .WatermarkExpr(enableWatermarksAdvanced ? TMaybeNode<TCoLambda>() : maybeWatermark)
+                    .WatermarkSerialized(enableWatermarksAdvanced ? TMaybeNode<TCoAtom>() : watermarkSerialized)
                     .Build()
                 .RowType(expandedRowType)
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
                 .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
                 .Done();
+            // clang-format on
 
-            if (maybeWatermark && State_->EnableWatermarksAdvanced && !useSharedReading) {
+            if (maybeWatermark && enableWatermarksAdvanced) {
                 const auto watermark = maybeWatermark.Cast();
 
                 const auto eventTimeAndDelay = SplitWatermarkExpr(watermark, *State_, ctx);
@@ -255,8 +255,7 @@ public:
 
                 auto watermarkSettingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
                 for (const auto& nameValue : settings) {
-                    if (const auto name = nameValue.Name().Value();
-                        WatermarksLateArrivalDelayUsSetting == name) {
+                    if (const auto name = nameValue.Name().Value(); WatermarksLateArrivalDelayUsSetting == name) {
                         watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
                     } else if (WatermarksGranularityUsSetting == name) {
                         watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
@@ -265,8 +264,7 @@ public:
                     }
                 }
                 for (const auto& nameValue : pqTopic.Props()) {
-                    if (const auto name = nameValue.Name().Value();
-                        FederatedClustersProp == name) {
+                    if (const auto name = nameValue.Name().Value(); FederatedClustersProp == name) {
                         auto federatedClusters = nameValue.Value().Cast<TDqPqFederatedClusterList>();
 
                         TVector<TCoAtom> newFederatedClusters;
@@ -276,53 +274,47 @@ public:
 
                             TString newFederatedCluster;
                             TStringOutput ss(newFederatedCluster);
-                            ss << NDq::TPartitionKey {
-                                .Cluster = TString{cluster.Value()},
+                            ss << NDq::TPartitionKey{
+                                .Cluster = TString{ cluster.Value() },
                                 .PartitionId = partitionsCount ? FromString<ui32>(partitionsCount.Cast().Value()) : 0,
                             };
                             newFederatedClusters.push_back(Build<TCoAtom>(ctx, federatedClusters.Pos()).Value(newFederatedCluster).Done());
                         }
+                        // clang-format off
                         watermarkSettingsBuilder.Add<TCoNameValueTuple>()
                             .Name<TCoAtom>().Build(name)
                             .Value<TCoAtomList>().Add(newFederatedClusters).Build()
                             .Build();
+                        // clang-format on
                     }
                 }
                 const TCoNameValueTupleList watermarkSettings = watermarkSettingsBuilder.Done();
 
                 // The partition id metadata column is exposed at the expr level under the user-facing
                 // __ydb_ name when system columns are forbidden, and under the legacy _yql_sys_ name otherwise.
-                const auto partitionIdDescriptor = GetPqMetaFieldDescriptorByKey(
-                    "partition_id",
-                    State_->AddTransparentPrefixToTransparentSystemColumns,
-                    State_->EnableUserAttributesInTopicQuery,
-                    State_->ForbidYqlSysColumnsAndSystemMetadata
-                );
+                const auto partitionIdDescriptor =
+                    GetPqMetaFieldDescriptorByKey("partition_id", State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
+                        State_->EnableUserAttributesInTopicQuery, State_->ForbidYqlSysColumnsAndSystemMetadata);
                 if (!partitionIdDescriptor) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Cannot bind partition_id metadata to column"));
                     return {};
                 }
-                const auto clusterDescriptor = GetPqMetaFieldDescriptorByKey(
-                    "cluster",
-                    State_->AddTransparentPrefixToTransparentSystemColumns,
-                    State_->EnableUserAttributesInTopicQuery,
-                    State_->ForbidYqlSysColumnsAndSystemMetadata
-                );
+                const auto clusterDescriptor =
+                    GetPqMetaFieldDescriptorByKey("cluster", State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
+                        State_->EnableUserAttributesInTopicQuery, State_->ForbidYqlSysColumnsAndSystemMetadata);
                 if (!clusterDescriptor) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Cannot bind cluster metadata to column"));
                     return {};
                 }
-                const auto writeTimeDescriptor = GetPqMetaFieldDescriptorByKey(
-                    "write_time",
-                    State_->AddTransparentPrefixToTransparentSystemColumns,
-                    State_->EnableUserAttributesInTopicQuery,
-                    State_->ForbidYqlSysColumnsAndSystemMetadata
-                );
+                const auto writeTimeDescriptor =
+                    GetPqMetaFieldDescriptorByKey("write_time", State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
+                        State_->EnableUserAttributesInTopicQuery, State_->ForbidYqlSysColumnsAndSystemMetadata);
                 if (!writeTimeDescriptor) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Cannot bind write_time metadata to column"));
                     return {};
                 }
 
+                // clang-format off
                 result = Build<TDqPhyWatermarkGenerator>(ctx, pos)
                     .Input(result)
                     .WatermarkExtractor(eventTimeExtractor)
@@ -355,6 +347,7 @@ public:
                     .WatermarkSettings(watermarkSettings.Ptr())
                     .PartitionKeys<TCoVoid>().Build()
                     .Done();
+                // clang-format on
             }
 
             return result.Ptr();
@@ -376,7 +369,8 @@ public:
             .Topic(write.Topic())
             .Input(write.Input())
             .Settings(write.Settings())
-            .Done().Ptr();
+            .Done()
+            .Ptr();
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
@@ -399,16 +393,17 @@ public:
 
     static NPq::NProto::EClusterType ToClusterType(NYql::TPqClusterConfig::EClusterType t) {
         switch (t) {
-        case NYql::TPqClusterConfig::CT_UNSPECIFIED:
-            return NPq::NProto::Unspecified;
-        case NYql::TPqClusterConfig::CT_PERS_QUEUE:
-            return NPq::NProto::PersQueue;
-        case NYql::TPqClusterConfig::CT_DATA_STREAMS:
-            return NPq::NProto::DataStreams;
+            case NYql::TPqClusterConfig::CT_UNSPECIFIED:
+                return NPq::NProto::Unspecified;
+            case NYql::TPqClusterConfig::CT_PERS_QUEUE:
+                return NPq::NProto::PersQueue;
+            case NYql::TPqClusterConfig::CT_DATA_STREAMS:
+                return NPq::NProto::DataStreams;
         }
     }
 
-    TMaybe<TSourceWatermarksSettings> ExtractSourceWatermarksSettings(const TExprNode& /*node*/, const ::google::protobuf::Any& protoSettings, const TString& sourceType) override {
+    TMaybe<TSourceWatermarksSettings> ExtractSourceWatermarksSettings(
+        const TExprNode& /*node*/, const ::google::protobuf::Any& protoSettings, const TString& sourceType) override {
         YQL_ENSURE(sourceType == PqSource);
         YQL_ENSURE(protoSettings.Is<NPq::NProto::TDqPqTopicSource>());
         NYql::NPq::NProto::TDqPqTopicSource srcDesc;
@@ -426,7 +421,8 @@ public:
         return watermarksSettings;
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext& ctx) override {
+    void FillSourceSettings(
+        const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext& ctx) override {
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto settings = maybeDqSource.Cast().Settings();
             if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
@@ -451,7 +447,8 @@ public:
                 }
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
-                const TStructExprType* fullRowType = topicSource.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                const TStructExprType* fullRowType =
+                    topicSource.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 srcDesc.SetRowType(NCommon::WriteTypeToYson(fullRowType, NYT::NYson::EYsonFormat::Text));
 
                 if (const auto& types = State_->Types) {
@@ -471,7 +468,9 @@ public:
                     NDqProto::TDqControlPlaneActorSettings aggregatorSettings;
                     aggregatorSettings.SetType("PqInfoAggregator");
                     commonSettings = NDqProto::TDqIntegrationCommonSettings();
-                    YQL_ENSURE(commonSettings->MutableStageControlPlaneActors()->emplace("ControlPlane/PqSourcePartitionBalancerAggregatorId", aggregatorSettings).second);
+                    YQL_ENSURE(commonSettings->MutableStageControlPlaneActors()
+                                   ->emplace("ControlPlane/PqSourcePartitionBalancerAggregatorId", aggregatorSettings)
+                                   .second);
                 }
 
                 bool sharedReading = false;
@@ -515,7 +514,8 @@ public:
                     } else if (name == StreamingTopicRead) {
                         streamingTopicRead = FromString<bool>(Value(setting));
                     } else if (name == PartitionsBalancingIdleTimeoutUsSetting) {
-                        *srcDesc.MutablePartitionsBalancingIdleTimeout() = NProtoInterop::CastToProto(TDuration::MicroSeconds(FromString<ui64>(Value(setting))));
+                        *srcDesc.MutablePartitionsBalancingIdleTimeout() =
+                            NProtoInterop::CastToProto(TDuration::MicroSeconds(FromString<ui64>(Value(setting))));
                     } else if (name == UserSchemaColumnsSetting) {
                         if (TMaybeNode<TExprBase> maybeList = setting.Value()) {
                             userSchemaColumnsSetting = maybeList.Cast().Raw();
@@ -618,8 +618,9 @@ public:
                     srcDesc.SetUsedPartitionPredicate(true);
                 }
 
-                const bool allowConsumerRewindForDisposition = State_->EnableConsumerRewindForDisposition
-                    && State_->Disposition.GetDispositionCase() != NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET;
+                const bool allowConsumerRewindForDisposition =
+                    State_->EnableConsumerRewindForDisposition &&
+                    State_->Disposition.GetDispositionCase() != NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET;
                 srcDesc.SetAllowConsumerRewindForDisposition(allowConsumerRewindForDisposition);
 
                 if (!streamingTopicRead && !allowConsumerRewindForDisposition) {
@@ -639,7 +640,8 @@ public:
 
                 TString watermarkExprSql;
                 if (const auto maybeWatermarkSerialized = topicSource.WatermarkSerialized()) {
-                    const auto serializedWatermarkExpr = maybeWatermarkSerialized.Cast().Ref().Content();
+                    const auto watermarkSerialized = maybeWatermarkSerialized.Cast();
+                    const auto serializedWatermarkExpr = watermarkSerialized.Ref().Content();
                     if (!serializedWatermarkExpr.empty()) {
                         NYql::NConnector::NApi::TExpression watermarkExprProto;
                         YQL_ENSURE(watermarkExprProto.ParseFromString(serializedWatermarkExpr));
@@ -654,7 +656,8 @@ public:
                     }
                     NDqProto::TDqControlPlaneActorSettings controlPlaneSettings;
                     controlPlaneSettings.SetType(NDq::PqControlPlaneActorType);
-                    YQL_ENSURE(commonSettings->MutableStageControlPlaneActors()->emplace(NDq::PqControlPlaneActorIdParam, controlPlaneSettings).second);
+                    YQL_ENSURE(
+                        commonSettings->MutableStageControlPlaneActors()->emplace(NDq::PqControlPlaneActorIdParam, controlPlaneSettings).second);
                 }
 
                 if (commonSettings) {
@@ -721,8 +724,10 @@ public:
                         sinkDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
                     } else if (name == NDeliveryGuaranteeSetting::Name) {
                         if (Value(setting) == NDeliveryGuaranteeSetting::ExactlyOnceValue) {
-                            YQL_ENSURE(State_->EnableExactlyOnceDeliveryGuaranty && State_->DeferredPublicationExtIdPrefix, "Deferred publication is not enabled");
-                            YQL_ENSURE(!maybeEnableDeduplication.GetOrElse(false), "Deferred publication cannot be used with enabled deduplication");
+                            YQL_ENSURE(State_->EnableExactlyOnceDeliveryGuaranty && State_->DeferredPublicationExtIdPrefix,
+                                "Deferred publication is not enabled");
+                            YQL_ENSURE(
+                                !maybeEnableDeduplication.GetOrElse(false), "Deferred publication cannot be used with enabled deduplication");
                             sinkDesc.SetDeferredPublicationExtIdPrefix(State_->DeferredPublicationExtIdPrefix);
                         }
                     }
@@ -742,19 +747,19 @@ public:
         return TPqReadTopic::Match(&read);
     }
 
-    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
-        if (AllOf(read, [](const auto val) { return TPqReadTopic::Match(val); })) {
-            return 0ul; // TODO: return real size
+    TMaybe<ui64> EstimateReadSize(
+        ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
+        if (AllOf(read, [](const auto val) {
+                return TPqReadTopic::Match(val);
+            })) {
+            return 0ul;   // TODO: return real size
         }
         return Nothing();
     }
 
 public:
     TMaybeNode<TCoNameValueTupleList> BuildTopicReadSettings(
-        const TPqReadTopic& pqReadTopic,
-        TExprContext& ctx,
-        const IDqIntegration::TWrapReadSettings& wrSettings
-    ) const {
+        const TPqReadTopic& pqReadTopic, TExprContext& ctx, const IDqIntegration::TWrapReadSettings& wrSettings) const {
         const auto pos = pqReadTopic.Pos();
         const auto& cluster = pqReadTopic.DataSource().Cluster().StringValue();
         const auto format = pqReadTopic.Format().Ref().Content();
@@ -842,8 +847,9 @@ public:
 
                 const i64 signedGranularity = out.Get<i64>();
                 if (signedGranularity < 0) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
-                        TStringBuilder() << "Invalid value " << settingValue->Content() << " for WATERMARK_GRANULARITY, expected non-negative value"));
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), TStringBuilder()
+                                                                                << "Invalid value " << settingValue->Content()
+                                                                                << " for WATERMARK_GRANULARITY, expected non-negative value"));
                     return {};
                 }
 
@@ -868,8 +874,9 @@ public:
 
                 const i64 signedIdleTimeout = out.Get<i64>();
                 if (signedIdleTimeout < 0) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
-                        TStringBuilder() << "Invalid value " << settingValue->Content() << " for WATERMARK_IDLE_TIMEOUT, expected non-negative value"));
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), TStringBuilder()
+                                                                                << "Invalid value " << settingValue->Content()
+                                                                                << " for WATERMARK_IDLE_TIMEOUT, expected non-negative value"));
                     return {};
                 }
 
@@ -878,11 +885,14 @@ public:
                 if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
                     bool withStreamingValue = *parseResult;
                     if (State_->StreamingTopicsReadByDefault && !withStreamingValue) {
-                        ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Table topic reading is not supported in streaming query now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
+                        ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                            "Table topic reading is not supported in streaming query now, please use WITH (STREAMING = \"TRUE\") after topic "
+                            "name to read from topics in streaming mode"));
                         return nullptr;
                     }
                     if (!State_->StreamingTopicsReadByDefault && withStreamingValue) {
-                        TIssue tableTopicReadWarning(ctx.GetPosition(pqReadTopic.Pos()), "Streaming topic reading (without checkpoints) use for debugging purposes only");
+                        TIssue tableTopicReadWarning(
+                            ctx.GetPosition(pqReadTopic.Pos()), "Streaming topic reading (without checkpoints) use for debugging purposes only");
                         tableTopicReadWarning.Severity = TSeverityIds::S_WARNING;
                         ctx.AddWarning(tableTopicReadWarning);
                     }
@@ -897,28 +907,38 @@ public:
         }
 
         if (State_->Configuration->MaxPartitionReadSkew.Get() && !State_->EnableStreamingPartitionBalancing) {
-            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Streaming partition balancing is disabled. Please contact your system administrator to enable it"));
+            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                "Streaming partition balancing is disabled. Please contact your system administrator to enable it"));
             return {};
         }
 
         if (State_->Configuration->MaxPartitionReadSkew.Get() && !streamingTopicReadEnabled) {
-            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Partitions balancing is not supported with table mode. Partitions balancing settings will be ignored"));
+            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                "Partitions balancing is not supported with table mode. Partitions balancing settings will be ignored"));
         }
 
         if (State_->Configuration->MaxPartitionReadSkew.Get()) {
-            Add(props, PartitionsBalancingIdleTimeoutUsSetting, ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::Minutes(1).MicroSeconds())), pos, ctx);
+            Add(props, PartitionsBalancingIdleTimeoutUsSetting,
+                ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::Minutes(1).MicroSeconds())), pos, ctx);
         }
 
         if ((State_->EnableWatermarks || State_->EnableWatermarksAdvanced) && maybeWatermark) {
-            Add(props, WatermarksEnableSetting, ToString((State_->EnableWatermarks && !State_->EnableWatermarksAdvanced) || useSharedReading), pos, ctx);
+            Add(props, WatermarksEnableSetting, ToString((State_->EnableWatermarks && !State_->EnableWatermarksAdvanced) || useSharedReading),
+                pos, ctx);
             Add(props, WatermarksGranularityUsSetting,
-                ToString(watermarksGranularityUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksGranularityMs.GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs)).MicroSeconds())), pos, ctx);
+                ToString(watermarksGranularityUs.GetOrElse(
+                    TDuration::MilliSeconds(wrSettings.WatermarksGranularityMs.GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs))
+                        .MicroSeconds())), pos, ctx);
             Add(props, WatermarksLateArrivalDelayUsSetting,
-                ToString(watermarksLateArrivalDelayUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksLateArrivalDelayMs.GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs)).MicroSeconds())), pos, ctx);
+                ToString(watermarksLateArrivalDelayUs.GetOrElse(TDuration::MilliSeconds(
+                    wrSettings.WatermarksLateArrivalDelayMs.GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs))
+                                                                    .MicroSeconds())), pos, ctx);
 
             if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(true)) {
                 if (wrSettings.WatermarksEnableIdlePartitions.Defined() && !watermarksIdleTimeoutUs) {
-                    watermarksIdleTimeoutUs = TDuration::MilliSeconds(wrSettings.WatermarksIdleTimeoutMs.GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs)).MicroSeconds();
+                    watermarksIdleTimeoutUs =
+                        TDuration::MilliSeconds(wrSettings.WatermarksIdleTimeoutMs.GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs))
+                            .MicroSeconds();
                 }
                 if (watermarksIdleTimeoutUs) {
                     Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
@@ -926,7 +946,8 @@ public:
                 }
             } else {
                 if (watermarksIdleTimeoutUs) {
-                    ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "WATERMARK_IDLE_TIMEOUT specified, but watermarks idle partitions explicitly disabled"));
+                    ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                        "WATERMARK_IDLE_TIMEOUT specified, but watermarks idle partitions explicitly disabled"));
                 }
             }
         } else {
@@ -948,43 +969,31 @@ public:
             TExprNode::TPtr usc = maybeUserSchema.Cast().Ptr();
             YQL_ENSURE(usc->ChildrenSize() > 0);
             YQL_ENSURE(EnsureTupleOfAtoms(*usc, ctx), "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
-            props.push_back(Build<TCoNameValueTuple>(ctx, pos)
-                .Name().Build(UserSchemaColumnsSetting)
-                .Value(std::move(usc))
-                .Done());
+            props.push_back(Build<TCoNameValueTuple>(ctx, pos).Name().Build(UserSchemaColumnsSetting) .Value(std::move(usc)).Done());
         }
 
-        return Build<TCoNameValueTupleList>(ctx, pos)
-            .Add(props)
-            .Done();
+        return Build<TCoNameValueTupleList>(ctx, pos).Add(props).Done();
     }
 
     NNodes::TCoNameValueTupleList BuildDqSourceWrapSettings(const TPqReadTopic& pqReadTopic, TPositionHandle pos, TExprContext& ctx) const {
         TVector<TCoNameValueTuple> settings;
-        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build("format")
-            .Value(pqReadTopic.Format())
-            .Done());
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos).Name().Build("format") .Value(pqReadTopic.Format()).Done());
 
         TExprNode::TListType metadataFieldsList;
         if (!State_->ForbidYqlSysColumnsAndSystemMetadata) {
             for (const auto& sysColumn : GetAllowedPqMetaSysColumns(
-                     State_->AddTransparentPrefixToTransparentSystemColumns,
-                     State_->EnableUserAttributesInTopicQuery))
-            {
+                     State_->ShouldAddTransparentPrefixToTransparentSystemColumns(), State_->EnableUserAttributesInTopicQuery)) {
                 metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
             }
         }
 
         // Also add __ydb_-prefixed system columns
-        for (const auto& ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery)) {
+        for (const auto& ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery, State_->AllowYdbSysColumns())) {
             metadataFieldsList.push_back(ctx.NewAtom(pos, ydbColumn));
         }
 
-        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build("metadataColumns")
-            .Value(ctx.NewList(pos, std::move(metadataFieldsList)))
-            .Done());
+        settings.push_back(
+            Build<TCoNameValueTuple>(ctx, pos).Name().Build("metadataColumns") .Value(ctx.NewList(pos, std::move(metadataFieldsList))).Done());
 
         // Like S3: UserSchemaColumns in formatSettings — immutable userschema/file column order for csv CH parser (not projection Columns).
         TExprNode::TPtr formatSettingsNode = pqReadTopic.Settings().Ptr();
@@ -997,40 +1006,33 @@ public:
             YQL_ENSURE(EnsureTupleOfAtoms(*usc, ctx), "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
             TExprNode::TListType merged = formatSettingsNode->ChildrenList();
             merged.push_back(ctx.NewList(pos, {
-                ctx.NewAtom(pos, UserSchemaColumnsSetting),
-                ctx.NewList(pos, usc->ChildrenList()),
-            }));
+                                                  ctx.NewAtom(pos, UserSchemaColumnsSetting), ctx.NewList(pos, usc->ChildrenList()),
+                                              }));
             formatSettingsNode = ctx.NewList(pos, std::move(merged));
         }
 
-        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build("formatSettings")
-            .Value(std::move(formatSettingsNode))
-            .Done());
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos).Name().Build("formatSettings") .Value(std::move(formatSettingsNode)).Done());
 
         TVector<TCoNameValueTuple> innerSettings;
         if (pqReadTopic.Compression() != "") {
-            innerSettings.push_back(Build<TCoNameValueTuple>(ctx, pos)
-                .Name().Build("compression")
-                .Value(pqReadTopic.Compression())
-                .Done());
+            innerSettings.push_back(Build<TCoNameValueTuple>(ctx, pos).Name().Build("compression") .Value(pqReadTopic.Compression()).Done());
         }
 
         const auto clusterConfiguration = GetClusterConfiguration(pqReadTopic.DataSource().Cluster().StringValue());
         Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, pqReadTopic, ctx)), pos, ctx);
 
         if (!innerSettings.empty()) {
+            // clang-format off
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build("settings")
                 .Value<TCoNameValueTupleList>()
                     .Add(innerSettings)
                     .Build()
                 .Done());
+            // clang-format on
         }
 
-        return Build<TCoNameValueTupleList>(ctx, pos)
-            .Add(settings)
-            .Done();
+        return Build<TCoNameValueTupleList>(ctx, pos).Add(settings).Done();
     }
 
     const TPqClusterConfigurationSettings* GetClusterConfiguration(const TString& cluster) const {
@@ -1041,7 +1043,8 @@ public:
         return clusterConfiguration;
     }
 
-    bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, const TPqReadTopic& pqReadTopic, TExprContext& ctx) const {
+    bool UseSharedReading(
+        const TPqClusterConfigurationSettings* clusterConfiguration, const TPqReadTopic& pqReadTopic, TExprContext& ctx) const {
         std::string_view format = pqReadTopic.Format().Ref().Content();
         const auto& settings = pqReadTopic.Settings();
         bool streamingTopicReadEnabled = State_->StreamingTopicsReadByDefault;
@@ -1057,7 +1060,8 @@ public:
         }
         bool useSharedReading = clusterConfiguration->SharedReading && (format == "json_each_row" || format == "raw");
         if (!streamingTopicReadEnabled && useSharedReading) {
-            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Table topic reading is not supported with sharing reading mode. Reading without shared reading will be used."));
+            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                "Table topic reading is not supported with sharing reading mode. Reading without shared reading will be used."));
             useSharedReading = false;
         }
         return useSharedReading;
@@ -1097,37 +1101,34 @@ public:
         }
         if (offsetPredicates.ItemSize() > 0) {
             const auto& item = offsetPredicates.GetItem(0);
-            properties["Offsets"] = TStringBuilder() << "["
-                << (item.HasBegin() ? ToString(item.GetBegin()) : "_") << ", "
-                << (item.HasEnd() ? ToString(item.GetEnd()) : "_") << ")";
+            properties["Offsets"] = TStringBuilder() << "[" << (item.HasBegin() ? ToString(item.GetBegin()) : "_") << ", "
+                                                     << (item.HasEnd() ? ToString(item.GetEnd()) : "_") << ")";
         }
         if (writeTimePredicate.ItemSize() > 0) {
             const auto& item = writeTimePredicate.GetItem(0);
-            properties["WriteTime"] = TStringBuilder() << "["
-                << (item.HasBegin() ? ToString(TInstant::MicroSeconds(item.GetBegin())) : "_") << ", "
-                << (item.HasEnd() ? ToString(TInstant::MicroSeconds(item.GetEnd())) : "_") << ")";
+            properties["WriteTime"] = TStringBuilder() << "[" << (item.HasBegin() ? ToString(TInstant::MicroSeconds(item.GetBegin())) : "_")
+                                                       << ", " << (item.HasEnd() ? ToString(TInstant::MicroSeconds(item.GetEnd())) : "_") << ")";
         }
         if (hasPredicatePartitions && !predicatePartitions.empty()) {
             if (predicatePartitions.size() == 1) {
                 properties["Partitions"] = TStringBuilder() << "[" << ToString(*predicatePartitions.begin()) << "]";
             } else {
-                properties["Partitions"] = TStringBuilder() << "["
-                    << ToString(*predicatePartitions.begin())
-                    << ((predicatePartitions.size() > 2) ? ", ..., " : ", ")
-                    << ToString(*predicatePartitions.rbegin()) << "]";
+                properties["Partitions"] = TStringBuilder() << "[" << ToString(*predicatePartitions.begin())
+                                                            << ((predicatePartitions.size() > 2) ? ", ..., " : ", ")
+                                                            << ToString(*predicatePartitions.rbegin()) << "]";
             }
         }
         return true;
     }
 
 private:
-    TPqState* State_; // State owns dq integration, so back reference must be not smart.
+    TPqState* State_;   // State owns dq integration, so back reference must be not smart.
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IDqIntegration> CreatePqDqIntegration(const TPqState::TPtr& state) {
     return MakeHolder<TPqDqIntegration>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

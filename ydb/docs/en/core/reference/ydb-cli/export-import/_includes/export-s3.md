@@ -129,6 +129,8 @@ To get the list of export operations, use the `operation list export/s3` command
 
 ## Examples {#examples}
 
+To initialize asynchronous replication, follow the [step-by-step guide to initial synchronization using backup and restore](../../../../devops/async-replication-initial-sync.md). In this scenario, changefeeds must be ready before the export starts.
+
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 ### Exporting a database {#example-full-db}

@@ -1,26 +1,24 @@
-#include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
+#include "yql_pq_provider_impl.h"
 #include "yql_pq_pushdown.h"
 
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/providers/common/pushdown/settings.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
+
+#include <util/generic/hash_set.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
-
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/pushdown/collection.h>
-#include <ydb/library/yql/providers/common/pushdown/settings.h>
-#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/common/yql_names.h>
-#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/core/yql_type_helpers.h>
-
 #include <yql/essentials/utils/log/log.h>
-
-#include <util/generic/hash_set.h>
 
 namespace NYql {
 
@@ -59,27 +57,25 @@ struct TWatermarkPushdownSettings: public NPq::TCommonPushdownSettings {
     TWatermarkPushdownSettings()
     {
         using EFlag = NPushdown::TSettings::EFeatureFlag;
-        Enable(
-            EFlag::NonDeterministic
-        );
+        Enable(EFlag::NonDeterministic);
     }
 };
 
-class TPqDataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
+class TPqDataSourceTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
     explicit TPqDataSourceTypeAnnotationTransformer(TPqState::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(state)
     {
         using TSelf = TPqDataSourceTypeAnnotationTransformer;
-        AddHandler({TCoConfigure::CallableName()}, Hndl(&TSelf::HandleConfigure));
-        AddHandler({TPqReadTopic::CallableName()}, Hndl(&TSelf::HandleReadTopic));
-        AddHandler({TPqTopic::CallableName()}, Hndl(&TSelf::HandleTopic));
-        AddHandler({TDqPqTopicSource::CallableName()}, Hndl(&TSelf::HandleDqTopicSource));
-        AddHandler({TCoSystemMetadata::CallableName()}, Hndl(&TSelf::HandleMetadata));
-        AddHandler({TDqPqFederatedCluster::CallableName()}, Hndl(&TSelf::HandleFederatedCluster));
-        AddHandler({TPqParsingWrap::CallableName()}, Hndl(&TSelf::HandlePqParsingWrap));
-        AddHandler({TDqPqPhyParsingWrap::CallableName()}, Hndl(&TSelf::HandleDqPqPhyParsingWrap));
+        AddHandler({ TCoConfigure::CallableName() }, Hndl(&TSelf::HandleConfigure));
+        AddHandler({ TPqReadTopic::CallableName() }, Hndl(&TSelf::HandleReadTopic));
+        AddHandler({ TPqTopic::CallableName() }, Hndl(&TSelf::HandleTopic));
+        AddHandler({ TDqPqTopicSource::CallableName() }, Hndl(&TSelf::HandleDqTopicSource));
+        AddHandler({ TCoSystemMetadata::CallableName() }, Hndl(&TSelf::HandleMetadata));
+        AddHandler({ TDqPqFederatedCluster::CallableName() }, Hndl(&TSelf::HandleFederatedCluster));
+        AddHandler({ TPqParsingWrap::CallableName() }, Hndl(&TSelf::HandlePqParsingWrap));
+        AddHandler({ TDqPqPhyParsingWrap::CallableName() }, Hndl(&TSelf::HandleDqPqPhyParsingWrap));
     }
 
     TStatus HandleFederatedCluster(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -109,8 +105,8 @@ public:
                 return TStatus::Error;
             }
             if (!TryFromString<ui32>(partitionsCount->Content())) {
-                ctx.AddError(TIssue(ctx.GetPosition(partitionsCount->Pos()), TStringBuilder()
-                    << "Expected integer, but got: " << partitionsCount->Content()));
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(partitionsCount->Pos()), TStringBuilder() << "Expected integer, but got: " << partitionsCount->Content()));
                 return TStatus::Error;
             }
         }
@@ -136,17 +132,16 @@ public:
         return TStatus::Ok;
     }
 
-    const TTypeAnnotationNode* GetReadTopicSchema(const TExprNode* topic, const TExprNode* columns, TExprContext& ctx, TColumnOrder& columnOrder) {
+    const TTypeAnnotationNode* GetReadTopicSchema(
+        const TExprNode* topic, const TExprNode* columns, TExprContext& ctx, TColumnOrder& columnOrder) {
         const auto metadata = topic->Child(TPqTopic::idx_Metadata);
         TVector<const TItemExprType*> items;
 
-        const auto* itemSchema = topic->GetTypeAnn()->Cast<TListExprType>()
-            ->GetItemType()->Cast<TStructExprType>();
+        const auto* itemSchema = topic->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
         std::unordered_set<TString> addedFields;
         if (columns && !TCoVoid::Match(columns)) {
-            YQL_ENSURE(columns->IsList(),
-                "PqReadTopic.Columns: expected list of column name atoms (userschema order)");
+            YQL_ENSURE(columns->IsList(), "PqReadTopic.Columns: expected list of column name atoms (userschema order)");
             items.reserve(columns->ChildrenSize() + metadata->ChildrenSize());
             columnOrder.Reserve(items.capacity());
 
@@ -158,8 +153,7 @@ public:
                 const auto columnName = c->Content();
                 const auto index = itemSchema->FindItem(columnName);
                 if (!index) {
-                    ctx.AddError(TIssue(ctx.GetPosition(topic->Pos()), TStringBuilder()
-                        << "Unable to find column: " << columnName));
+                    ctx.AddError(TIssue(ctx.GetPosition(topic->Pos()), TStringBuilder() << "Unable to find column: " << columnName));
                     return nullptr;
                 }
 
@@ -212,8 +206,7 @@ public:
         }
 
         if (!topic->IsCallable(TPqTopic::CallableName())) {
-            ctx.AddError(TIssue(ctx.GetPosition(topic->Pos()), TStringBuilder()
-                << "Expected PqTopic, but got: " << topic->Content()));
+            ctx.AddError(TIssue(ctx.GetPosition(topic->Pos()), TStringBuilder() << "Expected PqTopic, but got: " << topic->Content()));
             return TStatus::Error;
         }
 
@@ -231,16 +224,11 @@ public:
             return TStatus::Error;
         }
 
-        if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).
-            format->Content(),
-            schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
-            [this](TStringBuf fieldName) {
-                return GetPqMetaFieldDescriptorBySysColumn(
-                    TString(fieldName),
-                    State_->EnableUserAttributesInTopicQuery
-                ).has_value();
-            },
-            ctx)) {
+        if (!State_->IsRtmrMode() &&
+            !NCommon::ValidateFormatForInput(   // Rtmr has 3 field (key/subkey/value).
+                format->Content(), schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(), [this](TStringBuf fieldName) {
+                    return GetPqMetaFieldDescriptorBySysColumn(TString(fieldName), State_->EnableUserAttributesInTopicQuery).has_value();
+                }, ctx)) {
             return TStatus::Error;
         }
 
@@ -280,21 +268,18 @@ public:
         }
 
         if (userSchemaColumnsArg && !TCoVoid::Match(userSchemaColumnsArg)) {
-            YQL_ENSURE(userSchemaColumnsArg->IsList(),
-                "UserSchemaColumns must be a list of column name atoms (userschema order)");
+            YQL_ENSURE(userSchemaColumnsArg->IsList(), "UserSchemaColumns must be a list of column name atoms (userschema order)");
             for (const auto& atomNode : userSchemaColumnsArg->Children()) {
                 if (!EnsureAtom(*atomNode, ctx)) {
                     return TStatus::Error;
                 }
             }
-            const auto* rowSpecType = topic->GetTypeAnn()->Cast<TListExprType>()
-                ->GetItemType()->Cast<TStructExprType>();
+            const auto* rowSpecType = topic->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             // Internal invariant for TPqReadTopic before DQ-level rewrites:
             // UserSchemaColumns is built from source SCHEMA and must be a subset of Topic.RowSpec.
             for (const auto& atomNode : userSchemaColumnsArg->Children()) {
                 const TString columnName(atomNode->Content());
-                YQL_ENSURE(rowSpecType->FindItem(columnName),
-                    "userschemacolumns: unknown data column: " << columnName);
+                YQL_ENSURE(rowSpecType->FindItem(columnName), "userschemacolumns: unknown data column: " << columnName);
             }
         }
 
@@ -305,7 +290,7 @@ public:
                 if (status != TStatus::Ok) {
                     return status;
                 }
-                if (!UpdateLambdaAllArgumentsTypes(watermarkNode, {schema->Cast<TListExprType>()->GetItemType()}, ctx)) {
+                if (!UpdateLambdaAllArgumentsTypes(watermarkNode, { schema->Cast<TListExprType>()->GetItemType() }, ctx)) {
                     return TStatus::Error;
                 }
                 if (!watermarkNode->GetTypeAnn()) {
@@ -352,10 +337,7 @@ public:
             }
         }
 
-        input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-            world->GetTypeAnn(),
-            schema
-        }));
+        input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{ world->GetTypeAnn(), schema }));
 
         if (!columns || TCoVoid::Match(columns)) {
             return TStatus::Ok;
@@ -401,8 +383,8 @@ public:
         const TString topicPath(path->Content());
         const auto* meta = State_->FindTopicMeta(topicCluster, topicPath);
         if (!meta) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
-                << "Unknown topic `" << topicCluster << "`.`" << topicPath << "`"));
+            ctx.AddError(
+                TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unknown topic `" << topicCluster << "`.`" << topicPath << "`"));
             return TStatus::Error;
         }
 
@@ -412,7 +394,7 @@ public:
             if (status != TStatus::Ok) {
                 return status;
             }
-            if (!UpdateLambdaAllArgumentsTypes(watermarkExpr, {rowType->GetTypeAnn()->Cast<TTypeExprType>()->GetType()}, ctx)) {
+            if (!UpdateLambdaAllArgumentsTypes(watermarkExpr, { rowType->GetTypeAnn()->Cast<TTypeExprType>()->GetType() }, ctx)) {
                 return TStatus::Error;
             }
             if (!watermarkExpr->GetTypeAnn()) {
@@ -437,8 +419,7 @@ public:
             }
             bool skipJsonErrorsSetting;
             if (!TryFromString<bool>(value->Content(), skipJsonErrorsSetting)) {
-                ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder()
-                    << "Expected bool, but got: " << value->Content()));
+                ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder() << "Expected bool, but got: " << value->Content()));
                 return TStatus::Error;
             }
         }
@@ -450,8 +431,7 @@ public:
             }
             bool sharedReadingSetting;
             if (!TryFromString<bool>(value->Content(), sharedReadingSetting)) {
-                ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder()
-                    << "Expected bool, but got: " << value->Content()));
+                ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder() << "Expected bool, but got: " << value->Content()));
                 return TStatus::Error;
             }
             if (sharedReadingSetting) {
@@ -471,8 +451,7 @@ public:
         items.emplace_back(ctx.MakeType<TDataExprType>(EDataSlot::String));
         for (const auto& metadataField : metadata->Children()) {
             if (TCoNameValueTuple::idx_Value >= metadataField->ChildrenSize()) {
-                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
-                    << "index out of range"));
+                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder() << "index out of range"));
                 return TStatus::Error;
             }
             const auto metadataSysColumn = metadataField->Child(TCoNameValueTuple::idx_Value);
@@ -481,16 +460,13 @@ public:
             }
             const TString metadataSysColumnName(metadataSysColumn->Content());
             if (State_->ForbidYqlSysColumnsAndSystemMetadata && SkipPqSystemPrefix(metadataSysColumnName)) {
-                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
-                    << "_yql_sys_ columns are not allowed, use __ydb_-prefixed columns instead"));
+                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()),
+                    TStringBuilder() << "_yql_sys_ columns are not allowed, use __ydb_-prefixed columns instead"));
                 return TStatus::Error;
             }
-            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
-                metadataSysColumnName,
-                State_->EnableUserAttributesInTopicQuery);
+            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(metadataSysColumnName, State_->EnableUserAttributesInTopicQuery);
             if (!descriptor) {
-                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
-                    << "Pq Meta Field Descriptor was not found"));
+                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder() << "Pq Meta Field Descriptor was not found"));
                 return TStatus::Error;
             }
             items.emplace_back(BuildPqMetaFieldExprType(*descriptor, ctx));
@@ -528,9 +504,9 @@ public:
         for (const auto& rowSchemaItem : rowSchema->GetItems()) {
             const TString columnName(rowSchemaItem->GetName());
             if (SkipYdbSystemPrefix(columnName)) {
-                ctx.AddError(TIssue(ctx.GetPosition(rowSpec->Pos()), TStringBuilder()
-                    << "Schema column name '" << columnName
-                    << "' is not allowed: names starting with '__ydb_' are reserved for system columns"));
+                ctx.AddError(TIssue(ctx.GetPosition(rowSpec->Pos()),
+                    TStringBuilder() << "Schema column name '" << columnName
+                                     << "' is not allowed: names starting with '__ydb_' are reserved for system columns"));
                 return TStatus::Error;
             }
             items.push_back(rowSchemaItem);
@@ -538,8 +514,7 @@ public:
 
         for (const auto& metadataField : metadata->Children()) {
             if (TCoNameValueTuple::idx_Value >= metadataField->ChildrenSize()) {
-                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
-                    << "index out of range"));
+                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder() << "index out of range"));
                 return TStatus::Error;
             }
             const auto metadataSysColumn = metadataField->Child(TCoNameValueTuple::idx_Value);
@@ -548,16 +523,13 @@ public:
             }
             const TString metadataSysColumnName(metadataSysColumn->Content());
             if (State_->ForbidYqlSysColumnsAndSystemMetadata && SkipPqSystemPrefix(metadataSysColumnName)) {
-                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
-                    << "_yql_sys_ columns are not allowed, use __ydb_-prefixed columns instead"));
+                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()),
+                    TStringBuilder() << "_yql_sys_ columns are not allowed, use __ydb_-prefixed columns instead"));
                 return TStatus::Error;
             }
-            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
-                metadataSysColumnName,
-                State_->EnableUserAttributesInTopicQuery);
+            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(metadataSysColumnName, State_->EnableUserAttributesInTopicQuery);
             if (!descriptor) {
-                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
-                    << "Pq Meta Field Descriptor was not found"));
+                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder() << "Pq Meta Field Descriptor was not found"));
                 return TStatus::Error;
             }
             items.emplace_back(ctx.MakeType<TItemExprType>(descriptor->SysColumn, BuildPqMetaFieldExprType(*descriptor, ctx)));
@@ -569,8 +541,7 @@ public:
 
     TStatus HandleMetadata(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         if (State_->ForbidYqlSysColumnsAndSystemMetadata) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                "SystemMetadata is not allowed, use __ydb_-prefixed columns instead"));
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "SystemMetadata is not allowed, use __ydb_-prefixed columns instead"));
             return TStatus::Error;
         }
 
@@ -580,15 +551,10 @@ public:
         }
 
         const auto metadataKey = TString(key->TailPtr()->Content());
-        const auto descriptor = GetPqMetaFieldDescriptorByKey(
-            metadataKey,
-            State_->AddTransparentPrefixToTransparentSystemColumns,
-            State_->EnableUserAttributesInTopicQuery,
-            State_->ForbidYqlSysColumnsAndSystemMetadata
-        );
+        const auto descriptor = GetPqMetaFieldDescriptorByKey(metadataKey, State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
+            State_->EnableUserAttributesInTopicQuery, State_->ForbidYqlSysColumnsAndSystemMetadata);
         if (!descriptor) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
-                << "Metadata key " << metadataKey << " wasn't found"));
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Metadata key " << metadataKey << " wasn't found"));
             return TStatus::Error;
         }
 
@@ -612,8 +578,7 @@ public:
             }
 
             if (!pos) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
-                    << "Wrong place to use SystemMetadata"));
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Wrong place to use SystemMetadata"));
                 return TStatus::Error;
             }
 
@@ -660,12 +625,14 @@ public:
                 }
             }
 
+            // clang-format off
             output = ctx.Builder(input->Pos())
                 .Callable("Member")
                     .Add(0, row)
                     .Atom(1, structType->GetItems()[*pos]->GetName(), TNodeFlags::Default)
                 .Seal()
                 .Build();
+            // clang-format on
 
             return TStatus::Repeat;
         }
@@ -682,11 +649,7 @@ public:
         return HandleParsingWrap(input, /* allowOptionalInput */ false, /* requireMetadataColumns */ true, ctx);
     }
 
-    TStatus HandleParsingWrap(
-        const TExprNode::TPtr& input,
-        bool allowOptionalInput,
-        bool requireMetadataColumns,
-        TExprContext& ctx)
+    TStatus HandleParsingWrap(const TExprNode::TPtr& input, bool allowOptionalInput, bool requireMetadataColumns, TExprContext& ctx)
     {
         if (!EnsureArgsCount(*input, 3, ctx)) {
             return TStatus::Error;
@@ -706,9 +669,8 @@ public:
         const TTypeAnnotationNode* inputPayloadType = &inputItemType;
         if (inputPayloadType->GetKind() == ETypeAnnotationKind::Optional) {
             if (!allowOptionalInput) {
-                ctx.AddError(TIssue(ctx.GetPosition(source->Pos()), TStringBuilder()
-                    << "Expected struct input for " << input->Content()
-                    << ", but got: " << inputItemType));
+                ctx.AddError(TIssue(ctx.GetPosition(source->Pos()),
+                    TStringBuilder() << "Expected struct input for " << input->Content() << ", but got: " << inputItemType));
                 return TStatus::Error;
             }
 
@@ -717,9 +679,8 @@ public:
         }
 
         if (inputPayloadType->GetKind() != ETypeAnnotationKind::Struct) {
-            ctx.AddError(TIssue(ctx.GetPosition(source->Pos()), TStringBuilder()
-                << "Expected struct input for " << input->Content()
-                << ", but got: " << inputItemType));
+            ctx.AddError(TIssue(ctx.GetPosition(source->Pos()),
+                TStringBuilder() << "Expected struct input for " << input->Content() << ", but got: " << inputItemType));
             return TStatus::Error;
         }
         const auto* inputStructType = inputPayloadType->Cast<TStructExprType>();
@@ -734,22 +695,16 @@ public:
         metadataDescriptors.reserve(metadataColumns->ChildrenSize());
         for (const auto& metadataColumn : metadataColumns->Children()) {
             const TString metadataColumnName(metadataColumn->Content());
-            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
-                metadataColumnName,
-                State_->EnableUserAttributesInTopicQuery);
+            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(metadataColumnName, State_->EnableUserAttributesInTopicQuery);
             if (!descriptor) {
-                ctx.AddError(TIssue(ctx.GetPosition(metadataColumn->Pos()), TStringBuilder()
-                    << "Pq Meta Field Descriptor was not found"));
+                ctx.AddError(TIssue(ctx.GetPosition(metadataColumn->Pos()), TStringBuilder() << "Pq Meta Field Descriptor was not found"));
                 return TStatus::Error;
             }
             const auto watermarkColumnName = GetWatermarkColumnName(*descriptor);
-            if (requireMetadataColumns
-                && !inputStructType->FindItem(metadataColumnName)
-                && !inputStructType->FindItem(watermarkColumnName)) {
-                ctx.AddError(TIssue(ctx.GetPosition(metadataColumn->Pos()), TStringBuilder()
-                    << "Required PQ metadata column " << metadataColumnName
-                    << " or " << watermarkColumnName
-                    << " is missing from " << input->Content() << " input"));
+            if (requireMetadataColumns && !inputStructType->FindItem(metadataColumnName) && !inputStructType->FindItem(watermarkColumnName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(metadataColumn->Pos()),
+                    TStringBuilder() << "Required PQ metadata column " << metadataColumnName << " or " << watermarkColumnName
+                                     << " is missing from " << input->Content() << " input"));
                 return TStatus::Error;
             }
             if (metadataColumnNames.insert(metadataColumnName).second) {
@@ -777,7 +732,7 @@ public:
         if (status != TStatus::Ok) {
             return status;
         }
-        if (!UpdateLambdaAllArgumentsTypes(lambda, {lambdaInputType}, ctx)) {
+        if (!UpdateLambdaAllArgumentsTypes(lambda, { lambdaInputType }, ctx)) {
             return TStatus::Error;
         }
         if (!lambda->GetTypeAnn()) {
@@ -797,16 +752,15 @@ public:
         }
 
         if (lambdaPayloadType->GetKind() != ETypeAnnotationKind::Struct) {
-            ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
-                << "Expected struct output for " << input->Content()
-                << ", but got: " << lambdaItemType));
+            ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()),
+                TStringBuilder() << "Expected struct output for " << input->Content() << ", but got: " << lambdaItemType));
             return TStatus::Error;
         }
 
         const auto* outputStructType = lambdaPayloadType->Cast<TStructExprType>();
         if (HasWatermarkColumnPrefix(*outputStructType)) {
-            ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
-                << "Column prefix " << WatermarkColumnPrefix << " is reserved for internal WATERMARK columns"));
+            ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()),
+                TStringBuilder() << "Column prefix " << WatermarkColumnPrefix << " is reserved for internal WATERMARK columns"));
             return TStatus::Error;
         }
 
@@ -822,9 +776,7 @@ public:
                 continue;
             }
 
-            outputItems.push_back(ctx.MakeType<TItemExprType>(
-                watermarkColumnName,
-                BuildPqMetaFieldExprType(descriptor, ctx)));
+            outputItems.push_back(ctx.MakeType<TItemExprType>(watermarkColumnName, BuildPqMetaFieldExprType(descriptor, ctx)));
         }
         const auto* outputItemType = ctx.MakeType<TStructExprType>(outputItems);
         const TTypeAnnotationNode* outputPayloadType = outputItemType;
@@ -852,10 +804,10 @@ private:
     TPqState::TPtr State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreatePqDataSourceTypeAnnotationTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqDataSourceTypeAnnotationTransformer>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

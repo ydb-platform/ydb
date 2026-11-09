@@ -52,6 +52,8 @@ class TestYamlConfigTransformations(object):
         return yatest.common.canonical_file(str(result_path), diff_tool=json_diff_bin(), local=True, universal_lines=True)
 
     def cleanup_errors(self, errors):
+        # Keep canonical source paths identical in GitHub and Arcadia.
+        errors = errors.replace("contrib/ydb/", "ydb/")
         errors = re.sub(r'address -> 0x[a-zA-Z0-9]+', 'address -> REDACTED', errors)
         errors = re.sub(r'uncaught exception 0x[a-fA-F0-9]+', 'uncaught exception REDACTED', errors)
         # Redact source line numbers so the golden results don't break on every

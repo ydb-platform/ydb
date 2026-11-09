@@ -2,6 +2,7 @@
 
 #include "events.h"
 #include "table_query.h"
+
 #include "wasm/manifest.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -10,7 +11,7 @@
 
 namespace NKikimr::NUdfStore {
 
-class TWasmCompileActor : public NActors::TActorBootstrapped<TWasmCompileActor> {
+class TWasmCompileActor: public NActors::TActorBootstrapped<TWasmCompileActor> {
 private:
     using TBase = NActors::TActorBootstrapped<TWasmCompileActor>;
 
@@ -71,16 +72,9 @@ private:
     void FailAndPersist(const TString& message);
 
 public:
-    TWasmCompileActor(
-        const NActors::TActorId& replyTo,
-        const TString& name,
-        const TString& manifest,
-        const TString& cpuSpec,
-        const TString& modulesTablePath,
-        const TString& moduleChunksTablePath,
-        const TString& artifactTablePath,
-        const TString& artifactChunksTablePath,
-        THashMap<TString, TString> libraryUids)
+    TWasmCompileActor(const NActors::TActorId& replyTo, const TString& name, const TString& manifest, const TString& cpuSpec,
+        const TString& modulesTablePath, const TString& moduleChunksTablePath, const TString& artifactTablePath,
+        const TString& artifactChunksTablePath, THashMap<TString, TString> libraryUids)
         : ReplyTo_(replyTo)
         , Name_(name)
         , Manifest_(manifest)
@@ -90,7 +84,8 @@ public:
         , ArtifactTablePath_(artifactTablePath)
         , ArtifactChunksTablePath_(artifactChunksTablePath)
         , LibraryUids_(std::move(libraryUids))
-    {}
+    {
+    }
 
     void Bootstrap();
 
@@ -104,4 +99,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

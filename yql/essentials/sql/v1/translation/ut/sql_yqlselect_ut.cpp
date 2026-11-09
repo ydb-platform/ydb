@@ -119,7 +119,9 @@ Y_UNIT_TEST(AutoFallbackPreservesHints) {
             FROM plato.x
             GROUP /*+ COMPACT() */ BY k
         ) AS grouped
-        SELECT grouped.*;
+        SELECT
+            grouped.*,
+            ROW_NUMBER() OVER (ORDER BY random(TableRow())) AS row_number;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
@@ -128,6 +130,31 @@ Y_UNIT_TEST(AutoFallbackPreservesHints) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
     UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["compact"], 1);
+}
+
+Y_UNIT_TEST(WindowUnsupportedExpressions) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    for (const TString query : {
+             "SELECT ROW_NUMBER() OVER (ORDER BY random(TableRow())) FROM AS_TABLE([<|key: 1|>]);",
+             "SELECT ROW_NUMBER() OVER w FROM AS_TABLE([<|key: 1|>]) WINDOW w AS (PARTITION BY random(TableRow()));",
+             "SELECT ROW_NUMBER() OVER (ROWS CAST(1 IN COMPACT (1, 2) AS Int32) PRECEDING) FROM AS_TABLE([<|key: 1|>]);",
+         }) {
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Auto;
+        const auto res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TWordCountHive stat = {"YqlSelect", "CalcOverWindow"};
+        VerifyProgram(res, stat);
+        UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+        UNIT_ASSERT_GT(stat["CalcOverWindow"], 0);
+
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto forced = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(!forced.IsOk(), query);
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(forced), "YqlSelect unsupported");
+    }
 }
 
 Y_UNIT_TEST(Minimal) {
@@ -671,10 +698,11 @@ Y_UNIT_TEST(QualifiedAsteriskJoin) {
         USE plato;
         SELECT xx.* FROM xx JOIN yy ON xx.id = yy.id;
     )sql", settings);
-    UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(
-        Err2Str(res),
-        "YqlSelect unsupported: an_id DOT ASTERISK");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {{TString("YqlQualifiedStar"), 0}};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlQualifiedStar"], 1);
 }
 
 Y_UNIT_TEST(Join2Alias) {
@@ -2417,6 +2445,26 @@ Y_UNIT_TEST(AggregationFactoryIsCallable) {
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 0);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+}
+
+Y_UNIT_TEST(CumeDistPreservesAnsiCurrentRow) {
+    for (const bool ansi : {false, true}) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+        if (ansi) {
+            settings.Flags.insert("AnsiCurrentRow");
+        }
+        const auto res = SqlToYqlWithSettings(R"sql(
+            PRAGMA YqlSelect = 'force';
+            SELECT CUME_DIST() OVER (ORDER BY key)
+            FROM AS_TABLE([<|key: 1|>, <|key: 1|>, <|key: 2|>]);
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+        TWordCountHive stat = {"YqlWin", "ansi"};
+        VerifyProgram(res, stat);
+        UNIT_ASSERT_VALUES_EQUAL(stat["YqlWin"], 2);
+        UNIT_ASSERT_VALUES_EQUAL(stat["ansi"], ansi ? 1 : 0);
+    }
 }
 
 Y_UNIT_TEST(PragmaSupported) {

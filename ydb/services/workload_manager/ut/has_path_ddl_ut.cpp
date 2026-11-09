@@ -1,22 +1,22 @@
 #include <ydb/core/base/path.h>
+
 #include <ydb/services/workload_manager/ut/common/query_classifier_ut_common.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 
 namespace NKikimr::NWorkloadManager {
 
 using namespace NWorkloadManager;
 using namespace NYdb;
 
-
 namespace {
 
 // Creates a simple row-store `t(Id, Payload)` and grants the given user full access.
 void SetupRowStoreTable(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID) {
     ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
+        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                             << R"(` TO `)" << userSID << R"(`;
         CREATE TABLE t (
             Id Uint64 NOT NULL,
             Payload Utf8,
@@ -28,14 +28,14 @@ void SetupRowStoreTable(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID) {
     auto insertResult = ydb->ExecuteQuery(R"(
         UPSERT INTO t (Id, Payload) VALUES (1u, "a"), (2u, "b");
     )", insertSettings);
-    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS,
-        insertResult.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS, insertResult.GetIssues().ToOneLineString());
 }
 
 // Creates a column-store `olap_t(Id, Payload)` and grants full access.
 void SetupColumnStoreTable(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID) {
     ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
+        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                             << R"(` TO `)" << userSID << R"(`;
         CREATE TABLE olap_t (
             Id Uint64 NOT NULL,
             Payload Utf8,
@@ -49,14 +49,14 @@ void SetupColumnStoreTable(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID)
     auto insertResult = ydb->ExecuteQuery(R"(
         UPSERT INTO olap_t (Id, Payload) VALUES (1u, "a"), (2u, "b");
     )", insertSettings);
-    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS,
-        insertResult.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS, insertResult.GetIssues().ToOneLineString());
 }
 
 // Creates `orders(Id, Status)` with a global secondary index on Status.
 void SetupOrdersWithIndex(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID) {
     ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
+        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                             << R"(` TO `)" << userSID << R"(`;
         CREATE TABLE orders (
             Id Uint64 NOT NULL,
             Status Utf8,
@@ -69,8 +69,7 @@ void SetupOrdersWithIndex(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID) 
     auto insertResult = ydb->ExecuteQuery(R"(
         UPSERT INTO orders (Id, Status) VALUES (1u, "a"), (2u, "b");
     )", insertSettings);
-    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS,
-        insertResult.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS, insertResult.GetIssues().ToOneLineString());
 }
 
 // Creates `t(...)` and a view `v` over it, grants full access.
@@ -78,7 +77,8 @@ void SetupOrdersWithIndex(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID) 
 // session context doesn't resolve unqualified `t` when the view is expanded.
 void SetupTableAndView(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID) {
     ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
+        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                             << R"(` TO `)" << userSID << R"(`;
         CREATE TABLE t (
             Id Uint64 NOT NULL,
             Payload Utf8,
@@ -91,8 +91,7 @@ void SetupTableAndView(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID) {
     auto insertResult = ydb->ExecuteQuery(R"(
         UPSERT INTO t (Id, Payload) VALUES (1u, "a"), (2u, "b");
     )", insertSettings);
-    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS,
-        insertResult.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS, insertResult.GetIssues().ToOneLineString());
 }
 
 // EDS/ET/Topic/CDC DDL ITs live in `ydb/core/kqp/ut/federated_query/datastreams/`
@@ -103,22 +102,24 @@ void SetupTableAndView(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID) {
 
 TString RejectClassifierDdl(const TString& poolId, const TString& classifierName, const TString& hasPathPattern) {
     return TStringBuilder() << R"(
-        CREATE RESOURCE POOL )" << poolId << R"( WITH (
+        CREATE RESOURCE POOL )"
+                            << poolId << R"( WITH (
             CONCURRENT_QUERY_LIMIT=0
         );
-        CREATE RESOURCE POOL CLASSIFIER )" << classifierName << R"( WITH (
-            RESOURCE_POOL=")" << poolId << R"(",
-            HAS_PATH=")" << hasPathPattern << R"("
+        CREATE RESOURCE POOL CLASSIFIER )"
+                            << classifierName << R"( WITH (
+            RESOURCE_POOL=")"
+                            << poolId << R"(",
+            HAS_PATH=")" << hasPathPattern
+                            << R"("
         );
     )";
 }
 
-}  // anonymous namespace
-
+}   // anonymous namespace
 
 // Regular row-store table: SELECT * FROM t exercises the (A) walk via TableOps.Table.
 Y_UNIT_TEST_SUITE(HasPathTableOltp) {
-
     Y_UNIT_TEST(TestClassifierMatchesTablePath) {
         auto ydb = TYdbSetupSettings().Create();
         const TString& poolId = "reject_pool";
@@ -150,7 +151,6 @@ Y_UNIT_TEST_SUITE(HasPathTableOltp) {
 // the table path through the same (A) walk. HAS_PATH doesn't care about read shape,
 // so a point lookup fires equally.
 Y_UNIT_TEST_SUITE(HasPathColumnTableOlap) {
-
     Y_UNIT_TEST(TestClassifierMatchesOlapTablePath) {
         auto ydb = TYdbSetupSettings().Create();
         const TString& poolId = "reject_pool";
@@ -183,15 +183,13 @@ Y_UNIT_TEST_SUITE(HasPathColumnTableOlap) {
 // Secondary index sub-table: `.../indexImplTable` shows up in QueryTables when the
 // planner emits impl-table reads. Also fires on writes that fan out through indexes.
 Y_UNIT_TEST_SUITE(HasPathSecondaryIndex) {
-
     Y_UNIT_TEST(TestClassifierMatchesIndexImplPath) {
         auto ydb = TYdbSetupSettings().Create();
         const TString& poolId = "reject_pool";
         const TString& userSID = "test@user";
         SetupOrdersWithIndex(ydb, userSID);
 
-        ydb->ExecuteSchemeQuery(RejectClassifierDdl(
-            poolId, "index_impl_classifier", "/Root/orders/by_status/indexImplTable"));
+        ydb->ExecuteSchemeQuery(RejectClassifierDdl(poolId, "index_impl_classifier", "/Root/orders/by_status/indexImplTable"));
 
         // Covering scan on the index — planner emits a full read of indexImplTable.
         const TString query = "SELECT Status FROM orders VIEW by_status;";
@@ -207,8 +205,7 @@ Y_UNIT_TEST_SUITE(HasPathSecondaryIndex) {
         const TString& userSID = "test@user";
         SetupOrdersWithIndex(ydb, userSID);
 
-        ydb->ExecuteSchemeQuery(RejectClassifierDdl(
-            poolId, "index_write_classifier", "/Root/orders/by_status/indexImplTable"));
+        ydb->ExecuteSchemeQuery(RejectClassifierDdl(poolId, "index_write_classifier", "/Root/orders/by_status/indexImplTable"));
 
         const TString query = "UPSERT INTO orders (Id, Status) VALUES (3u, \"c\");";
         auto settings = TQueryRunnerSettings().PoolId("").UserSID(userSID);
@@ -219,15 +216,13 @@ Y_UNIT_TEST_SUITE(HasPathSecondaryIndex) {
 // System views: SELECT FROM `.sys/...` populates tx.Tables with a SysView-kind entry
 // (see kqp_query_compiler.cpp:1288 tablesMap loop).
 Y_UNIT_TEST_SUITE(HasPathSysView) {
-
     Y_UNIT_TEST(TestClassifierMatchesSysViewPath) {
         auto ydb = TYdbSetupSettings().Create();
         const TString& poolId = "reject_pool";
         const TString& userSID = "test@user";
         SetupRowStoreTable(ydb, userSID);
 
-        ydb->ExecuteSchemeQuery(RejectClassifierDdl(
-            poolId, "sysview_classifier", "/Root/.sys/partition_stats"));
+        ydb->ExecuteSchemeQuery(RejectClassifierDdl(poolId, "sysview_classifier", "/Root/.sys/partition_stats"));
 
         const TString query = "SELECT * FROM `.sys/partition_stats`;";
         auto settings = TQueryRunnerSettings().PoolId("").UserSID(userSID);
@@ -240,8 +235,7 @@ Y_UNIT_TEST_SUITE(HasPathSysView) {
         const TString& userSID = "test@user";
         SetupRowStoreTable(ydb, userSID);
 
-        ydb->ExecuteSchemeQuery(RejectClassifierDdl(
-            poolId, "sysview_classifier", "/Root/.sys/*"));
+        ydb->ExecuteSchemeQuery(RejectClassifierDdl(poolId, "sysview_classifier", "/Root/.sys/*"));
 
         const TString query = "SELECT * FROM t;";
         auto settings = TQueryRunnerSettings().PoolId("").UserSID(userSID);
@@ -252,7 +246,6 @@ Y_UNIT_TEST_SUITE(HasPathSysView) {
 // Views are inlined at compile time. The loader records them separately in
 // phyQuery.ViewInfos. HAS_PATH regex matches the view's own path via the (C) walk.
 Y_UNIT_TEST_SUITE(HasPathView) {
-
     // KindView is a documented blind spot for the view's own path — see has-path-wip.md.
     // Empirically confirmed: SELECT FROM v inlines the view fully. QueryTables and
     // tx.Tables carry only the underlying table paths; phyQuery.ViewInfos records
@@ -289,4 +282,4 @@ Y_UNIT_TEST_SUITE(HasPathView) {
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

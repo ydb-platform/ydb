@@ -1,9 +1,9 @@
 #include "yql_s3_path.h"
 
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
-#include <yql/essentials/utils/yql_panic.h>
 
 #include <contrib/libs/re2/re2/re2.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NS3 {
 
@@ -37,7 +37,6 @@ size_t GetFirstWildcardPos(const TString& path) {
 
 TString EscapeRegex(const std::string_view& str) {
     return RE2::QuoteMeta(re2::StringPiece(str));
-
 }
 
 TString EscapeRegex(const TString& str) {
@@ -71,15 +70,17 @@ TString RegexFromWildcards(const std::string_view& pattern) {
                 slash = false;
                 break;
             case ',':
-                if (group)
+                if (group) {
                     result << '|';
-                else
+                } else {
                     result << "\\,";
+                }
                 slash = false;
                 break;
             case '\\':
-                if (slash)
+                if (slash) {
                     result << "\\\\";
+                }
                 slash = !slash;
                 break;
             case '*':
@@ -91,8 +92,9 @@ TString RegexFromWildcards(const std::string_view& pattern) {
                 slash = false;
                 break;
             default:
-                if (slash)
+                if (slash) {
                     result << '\\';
+                }
                 result << c;
                 slash = false;
                 break;
@@ -104,11 +106,7 @@ TString RegexFromWildcards(const std::string_view& pattern) {
 }
 
 TMaybe<TString> BuildS3FilePattern(
-    const TString& path,
-    const TString& filePattern,
-    const TVector<TString>& partitionedBy,
-    NYql::NS3Lister::TListingRequest& req) {
-
+    const TString& path, const TString& filePattern, const TVector<TString>& partitionedBy, NYql::NS3Lister::TListingRequest& req) {
     TString effectiveFilePattern = filePattern ? filePattern : "*";
 
     if (partitionedBy.empty()) {
@@ -132,7 +130,7 @@ TMaybe<TString> BuildS3FilePattern(
         if (HasWildcards(path)) {
             return TStringBuilder() << "Path prefix: '" << path << "' contains wildcards";
         }
-                
+
         req.Prefix = path;
         if (!path.empty()) {
             req.Prefix = NS3::NormalizePath(TStringBuilder() << path << "/");
@@ -175,4 +173,4 @@ TString ValidateWildcards(const std::string_view& pattern) {
     return {};
 }
 
-}
+}   // namespace NYql::NS3

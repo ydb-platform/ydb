@@ -22,17 +22,20 @@ using duration_nano_t = std::chrono::duration<ui64, std::nano>;
 using duration_t = std::chrono::duration<double>;
 
 duration_t GetBasePerformance() {
-    duration_nano_t accm{};
-    for (int i = 0; i < 1000000; ++i) {
-        accm += duration_nano_t(NActors::MeasureTaskDurationNs());
-    }
-    return std::chrono::duration_cast<duration_t>(accm);
+    static const duration_t basePerformance = [] {
+        duration_nano_t accm{};
+        for (int i = 0; i < 1000000; ++i) {
+            accm += duration_nano_t(NActors::MeasureTaskDurationNs());
+        }
+        return std::chrono::duration_cast<duration_t>(accm);
+    }();
+    return basePerformance;
 }
-
-static double BASE_PERF = GetBasePerformance().count();
 
 Y_UNIT_TEST_SUITE(THiveImplTest) {
     Y_UNIT_TEST(BootQueueSpeed) {
+        [[maybe_unused]] const double basePerf = GetBasePerformance().count();
+
         TBootQueue bootQueue;
         static constexpr ui64 NUM_TABLETS = 1000000;
 
@@ -52,9 +55,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         Ctest << "Create = " << passed << Endl;
 #ifndef _san_enabled_
 #ifndef NDEBUG
-        UNIT_ASSERT(passed < 3 * BASE_PERF);
+        UNIT_ASSERT(passed < 3 * basePerf);
 #else
-        UNIT_ASSERT(passed < 1 * BASE_PERF);
+        UNIT_ASSERT(passed < 1 * basePerf);
 #endif
 #endif
         timer.Reset();
@@ -90,9 +93,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         Ctest << "Process = " << passed << Endl;
 #ifndef _san_enabled_
 #ifndef NDEBUG
-        UNIT_ASSERT(passed < 10 * BASE_PERF);
+        UNIT_ASSERT(passed < 10 * basePerf);
 #else
-        UNIT_ASSERT(passed < 2 * BASE_PERF);
+        UNIT_ASSERT(passed < 2 * basePerf);
 #endif
 #endif
 
@@ -108,18 +111,20 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         Ctest << "Move = " << passed << Endl;
 #ifndef _san_enabled_
 #ifndef NDEBUG
-        UNIT_ASSERT(passed < 2 * BASE_PERF);
+        UNIT_ASSERT(passed < 2 * basePerf);
 #else
-        UNIT_ASSERT(passed < 0.1 * BASE_PERF);
+        UNIT_ASSERT(passed < 0.1 * basePerf);
 #endif
 #endif
     }
 
     Y_UNIT_TEST(BalancerSpeedAndDistribution) {
+        [[maybe_unused]] const double basePerf = GetBasePerformance().count();
+
         static constexpr ui64 NUM_TABLETS = 1000000;
         static constexpr ui64 NUM_BUCKETS = 16;
 
-        auto CheckSpeedAndDistribution = [](
+        auto CheckSpeedAndDistribution = [=](
             std::unordered_map<ui64, TLeaderTabletInfo>& allTablets,
             std::function<void(std::vector<TTabletInfo*>::iterator, std::vector<TTabletInfo*>::iterator, EResourceToBalance)> func,
             EResourceToBalance resource) -> void {
@@ -138,9 +143,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             Ctest << "Time=" << passed << Endl;
 #ifndef _san_enabled_
 #ifndef NDEBUG
-            UNIT_ASSERT(passed < 1 * BASE_PERF);
+            UNIT_ASSERT(passed < 1 * basePerf);
 #else
-            UNIT_ASSERT(passed < 1 * BASE_PERF);
+            UNIT_ASSERT(passed < 1 * basePerf);
 #endif
 #endif
             std::vector<double> buckets(NUM_BUCKETS, 0);
@@ -353,7 +358,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             tablet.SetType(TTabletTypes::Dummy);
             tablet.State = ETabletState::ReadyToWork;
             tablet.AssignDomains({1, 2}, {});
-            tablet.BecomeStopped();
+            tablet.BecomeStopped(EHiveEventReason::StopRequest);
             return tablet;
         }
     };
@@ -374,7 +379,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(ownerNode.ResourceValues), 100);
 
         // A late InbootTablets report must detach the old node before registering the new one.
-        UNIT_ASSERT(tablet.BecomeStarting(reportingNode.Id));
+        UNIT_ASSERT(tablet.BecomeStarting(reportingNode.Id, EHiveEventReason::BootQueue));
         UNIT_ASSERT_EQUAL(tablet.GetVolatileState(), NKikimrHive::TABLET_VOLATILE_STATE_STARTING);
         UNIT_ASSERT(tablet.Node == &reportingNode);
         UNIT_ASSERT_VALUES_EQUAL(ownerNode.GetTabletsTotal(), 0);
@@ -383,7 +388,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         UNIT_ASSERT_VALUES_EQUAL(reportingNode.GetTabletsScheduled(), 1);
         UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(reportingNode.ResourceValues), 100);
 
-        UNIT_ASSERT(tablet.BecomeStopped());
+        UNIT_ASSERT(tablet.BecomeStopped(EHiveEventReason::StopRequest));
         UNIT_ASSERT_VALUES_EQUAL(ownerNode.GetTabletsTotal(), 0);
         UNIT_ASSERT_VALUES_EQUAL(reportingNode.GetTabletsTotal(), 0);
         UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(reportingNode.ResourceValues), 0);
@@ -403,7 +408,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         deletingTablet.State = ETabletState::Deleting;
         deletingTablet.SetLockedToActor(owner, TDuration::Seconds(60));
         deletingTablet.GetMutableResourceValues().CPU = 100;
-        deletingTablet.BecomeStopped();
+        deletingTablet.BecomeStopped(EHiveEventReason::StopRequest);
 
         TLeaderTabletInfo lockedTablet(2, hive);
         lockedTablet.SetType(TTabletTypes::Dummy);
@@ -411,7 +416,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         lockedTablet.SetLockedToActor(owner, TDuration::Seconds(60));
         lockedTablet.PendingUnlockSeqNo = 42;
         lockedTablet.GetMutableResourceValues().CPU = 200;
-        lockedTablet.BecomeStopped();
+        lockedTablet.BecomeStopped(EHiveEventReason::StopRequest);
 
         for (bool enabled : {true, false, true}) {
             hive.UpdateConfig([&](NKikimrConfig::THiveConfig& config) {
@@ -443,9 +448,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             auto& tablet = test.CreateStoppedTablet(1);
             node.SetFreeze(true, EHiveEventReason::MonitoringRequest);
             if (state == NKikimrHive::TABLET_VOLATILE_STATE_STARTING) {
-                tablet.BecomeStarting(node.Id);
+                tablet.BecomeStarting(node.Id, EHiveEventReason::BootQueue);
             } else if (state == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING) {
-                tablet.BecomeRunning(node.Id);
+                tablet.BecomeRunning(node.Id, EHiveEventReason::StatusOk);
             } else {
                 // UNKNOWN with a persisted NodeId is real placement recovered from storage.
                 tablet.NodeId = node.Id;
@@ -453,7 +458,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             }
             UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, node.Id);
             UNIT_ASSERT(!node.FrozenTablets.empty());
-            tablet.BecomeStopped();
+            tablet.BecomeStopped(EHiveEventReason::StopRequest);
             UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, node.Id);
             node.SetFreeze(false, EHiveEventReason::MonitoringRequest);
             UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, 0);
@@ -480,16 +485,16 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             }
         };
 
-        UNIT_ASSERT(tablet.BecomeStarting(1));
+        UNIT_ASSERT(tablet.BecomeStarting(1, EHiveEventReason::BootQueue));
         checkStartingNode(1);
-        UNIT_ASSERT(!tablet.BecomeStarting(1));
+        UNIT_ASSERT(!tablet.BecomeStarting(1, EHiveEventReason::BootQueue));
         checkStartingNode(1);
-        UNIT_ASSERT(tablet.BecomeStarting(2));
+        UNIT_ASSERT(tablet.BecomeStarting(2, EHiveEventReason::BootQueue));
         checkStartingNode(2);
-        UNIT_ASSERT(!tablet.BecomeStarting(2));
+        UNIT_ASSERT(!tablet.BecomeStarting(2, EHiveEventReason::BootQueue));
         checkStartingNode(2);
 
-        UNIT_ASSERT(tablet.BecomeStopped());
+        UNIT_ASSERT(tablet.BecomeStopped(EHiveEventReason::StopRequest));
         for (TNodeId id : {1, 2}) {
             UNIT_ASSERT_VALUES_EQUAL(hive.Node(id).GetTabletsTotal(), 0);
             UNIT_ASSERT_VALUES_EQUAL(hive.Node(id).GetTabletsScheduled(), 0);
@@ -506,9 +511,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             auto& node = hive.Node(1);
             auto& firstTablet = test.CreateStoppedTablet(1);
             if (state == NKikimrHive::TABLET_VOLATILE_STATE_STARTING) {
-                UNIT_ASSERT(firstTablet.BecomeStarting(node.Id));
+                UNIT_ASSERT(firstTablet.BecomeStarting(node.Id, EHiveEventReason::BootQueue));
             } else if (state == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING) {
-                UNIT_ASSERT(firstTablet.BecomeRunning(node.Id));
+                UNIT_ASSERT(firstTablet.BecomeRunning(node.Id, EHiveEventReason::StatusOk));
             } else {
                 // UNKNOWN with a persisted NodeId is recovered local placement.
                 firstTablet.NodeId = node.Id;
@@ -518,19 +523,19 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             UNIT_ASSERT(node.LastScheduledTablet->TabletId == firstTablet.GetFullTabletId());
 
             auto& secondTablet = test.CreateStoppedTablet(2);
-            UNIT_ASSERT(secondTablet.BecomeStarting(node.Id));
+            UNIT_ASSERT(secondTablet.BecomeStarting(node.Id, EHiveEventReason::BootQueue));
             UNIT_ASSERT(node.LastScheduledTablet);
             UNIT_ASSERT(node.LastScheduledTablet->TabletId == secondTablet.GetFullTabletId());
 
             // Stopping another local tablet changes the load being measured.
-            UNIT_ASSERT(firstTablet.BecomeStopped());
+            UNIT_ASSERT(firstTablet.BecomeStopped(EHiveEventReason::StopRequest));
             UNIT_ASSERT(!node.LastScheduledTablet);
-            UNIT_ASSERT(secondTablet.BecomeStopped());
+            UNIT_ASSERT(secondTablet.BecomeStopped(EHiveEventReason::StopRequest));
 
-            UNIT_ASSERT(secondTablet.BecomeStarting(node.Id));
+            UNIT_ASSERT(secondTablet.BecomeStarting(node.Id, EHiveEventReason::BootQueue));
             UNIT_ASSERT(node.LastScheduledTablet);
             UNIT_ASSERT(node.LastScheduledTablet->TabletId == secondTablet.GetFullTabletId());
-            UNIT_ASSERT(secondTablet.BecomeStopped());
+            UNIT_ASSERT(secondTablet.BecomeStopped(EHiveEventReason::StopRequest));
             UNIT_ASSERT(!node.LastScheduledTablet);
             UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsTotal(), 0);
         }

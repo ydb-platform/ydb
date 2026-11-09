@@ -1,19 +1,18 @@
 #include "common.h"
-#include <ydb/public/lib/udf/manifest/manifest.h>
-#include <ydb/services/udf_store/wasm/manifest.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/services/udf_store/metadata_subscription/storage_paths.h>
-#include <ydb/services/metadata/request/request_actor_cb.h>
 
 #include <ydb/library/aclib/aclib.h>
-
-#include <util/string/builder.h>
+#include <ydb/public/lib/udf/manifest/manifest.h>
+#include <ydb/services/metadata/request/request_actor_cb.h>
+#include <ydb/services/udf_store/metadata_subscription/storage_paths.h>
+#include <ydb/services/udf_store/wasm/manifest.h>
 
 #include <google/protobuf/timestamp.pb.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NUdfApi {
 
@@ -33,10 +32,7 @@ bool IsWasmUdfEnabled() {
     return config.GetEnabled() && config.GetEnableWasmUdf();
 }
 
-void ExecuteYqlAsSystem(
-    const NActors::TActorIdentity& replyTo,
-    const TString& yql,
-    bool readOnly,
+void ExecuteYqlAsSystem(const NActors::TActorIdentity& replyTo, const TString& yql, bool readOnly,
     const std::function<void(Ydb::Table::ExecuteDataQueryRequest&)>& fillParams)
 {
     auto request = NMetadata::NRequest::TDialogYQLRequest::TRequest();
@@ -50,12 +46,8 @@ void ExecuteYqlAsSystem(
     }
     fillParams(request);
 
-    auto controller =
-        std::make_shared<NMetadata::NRequest::TNaiveExternalController<NMetadata::NRequest::TDialogYQLRequest>>(replyTo);
-    NMetadata::NRequest::TYQLRequestExecutor::Execute(
-        std::move(request),
-        NACLib::TUserToken("metadata@system", {}),
-        controller);
+    auto controller = std::make_shared<NMetadata::NRequest::TNaiveExternalController<NMetadata::NRequest::TDialogYQLRequest>>(replyTo);
+    NMetadata::NRequest::TYQLRequestExecutor::Execute(std::move(request), NACLib::TUserToken("metadata@system", {}), controller);
 }
 
 bool IsDatabaseServedHere(const TString& databaseName, TString& error) {
@@ -68,9 +60,8 @@ bool IsDatabaseServedHere(const TString& databaseName, TString& error) {
     if (requested == served) {
         return true;
     }
-    error = TStringBuilder()
-        << "database '" << databaseName << "' is not served by this node, which serves '" << served
-        << "'; the UDF store of a database can only be reached through its own endpoint";
+    error = TStringBuilder() << "database '" << databaseName << "' is not served by this node, which serves '" << served
+                             << "'; the UDF store of a database can only be reached through its own endpoint";
     return false;
 }
 
@@ -115,9 +106,7 @@ TEvTxProxySchemeCache::TEvNavigateKeySet* MakeArtifactDirListingRequest(const TS
     return new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release());
 }
 
-bool ParseArtifactDirListing(
-    const NSchemeCache::TSchemeCacheNavigate& response,
-    TVector<TString>& cpuSpecs)
+bool ParseArtifactDirListing(const NSchemeCache::TSchemeCacheNavigate& response, TVector<TString>& cpuSpecs)
 {
     cpuSpecs.clear();
     if (response.ResultSet.size() != 1) {
@@ -226,4 +215,4 @@ void FillModuleInfo(const NQuery::TModuleRow& row, Ydb::Udf::ModuleInfo& info) {
     FillTimestamp(row.CreatedAt, *info.mutable_created_at());
 }
 
-} // namespace NKikimr::NUdfApi
+}   // namespace NKikimr::NUdfApi

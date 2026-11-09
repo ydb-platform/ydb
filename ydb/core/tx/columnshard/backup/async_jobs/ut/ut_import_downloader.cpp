@@ -253,6 +253,9 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
+        // The S3 recipe answers over real HTTP: keep the real waits so replies arrive before
+        // simulated timers exhaust the scheduled-event limit.
+        runtime->SetFastSimulatedTime(false);
         runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
         runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
 
@@ -298,7 +301,7 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
 
         auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
-            edge, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema());
+            edge, 1, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema());
         auto importActorId = runtime->Register(importActor.release());
         runtime->DispatchEvents({}, TDuration::Seconds(1));
 
@@ -327,6 +330,9 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
+        // The S3 recipe answers over real HTTP: keep the real waits so replies arrive before
+        // simulated timers exhaust the scheduled-event limit.
+        runtime->SetFastSimulatedTime(false);
         runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
         runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
 
@@ -360,7 +366,7 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
 
         auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
-            edge, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema3ColsReversed());
+            edge, 1, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema3ColsReversed());
         auto importActorId = runtime->Register(importActor.release());
         runtime->DispatchEvents({}, TDuration::Seconds(1));
 
@@ -398,6 +404,9 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
 
         TRuntimePtr runtime(new TTestBasicRuntime());
         SetupTabletServices(*runtime);
+        // The S3 recipe answers over real HTTP: keep the real waits so replies arrive before
+        // simulated timers exhaust the scheduled-event limit.
+        runtime->SetFastSimulatedTime(false);
         runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
         runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
 
@@ -419,7 +428,7 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         auto restoreTask = MakeRestoreTask(bucketName);
         auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
         auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
-            edge, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema());
+            edge, 1, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema());
         auto importActorId = runtime->Register(importActor.release());
         runtime->DispatchEvents({}, TDuration::Seconds(1));
 

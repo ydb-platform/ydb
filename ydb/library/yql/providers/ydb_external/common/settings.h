@@ -15,17 +15,15 @@ inline TString ValidateConnectionSettings(const TString& endpoint, const TString
         }
         return false;
     };
-    if (!database.StartsWith('/') || hasControlOrSpace(database) || database.Contains("//") ||
-        database.Contains("/../") || database.EndsWith("/..") ||
-        database.Contains("/./") || database.EndsWith("/.")) {
+    if (!database.StartsWith('/') || hasControlOrSpace(database) || database.Contains("//") || database.Contains("/../") ||
+        database.EndsWith("/..") || database.Contains("/./") || database.EndsWith("/.")) {
         return "YdbExternal requires an absolute DATABASE_NAME without empty, '.' or '..' path components";
     }
     const auto portSeparator = endpoint.rfind(':');
     ui32 port = 0;
-    if (!(portSeparator != TString::npos && portSeparator != 0 &&
-        !endpoint.Contains('/') && !endpoint.Contains('@') &&
-        !endpoint.Contains('?') && !endpoint.Contains('#') && !hasControlOrSpace(endpoint) &&
-        TryFromString(TStringBuf(endpoint).SubStr(portSeparator + 1), port) && port > 0 && port <= 65535)) {
+    if (!(portSeparator != TString::npos && portSeparator != 0 && !endpoint.Contains('/') && !endpoint.Contains('@') &&
+            !endpoint.Contains('?') && !endpoint.Contains('#') && !hasControlOrSpace(endpoint) &&
+            TryFromString(TStringBuf(endpoint).SubStr(portSeparator + 1), port) && port > 0 && port <= 65535)) {
         return "YdbExternal requires LOCATION in host:port format";
     }
     useTls.to_lower();
@@ -35,4 +33,4 @@ inline TString ValidateConnectionSettings(const TString& endpoint, const TString
     return {};
 }
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

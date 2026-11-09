@@ -88,6 +88,10 @@ NKikimr::NKqp::TOptimizerHints TKqpOptimizeContext::GetOptimizerHints() {
     return NKikimr::NKqp::TOptimizerHints();
 }
 
+NKikimr::NKqp::TCompileTrace* TKqpOptimizeContext::GetCompileTrace() const {
+    return QueryCtx ? QueryCtx->CompileTrace.Get() : nullptr;
+}
+
 bool TKqpOptimizeContext::IsDataQuery() const {
     return QueryCtx->Type == NYql::EKikimrQueryType::Dml;
 }
@@ -347,6 +351,11 @@ ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections) {
 };
 
 bool IsBuiltEffect(const TExprBase& effect) {
+    // BuildTxs will turn this effect into a stage with a truncate sink.
+    if (effect.Maybe<TKqlUnsafeTruncate>()) {
+        return true;
+    }
+
     // Stage with effect output
     if (effect.Maybe<TDqOutput>()) {
         return true;

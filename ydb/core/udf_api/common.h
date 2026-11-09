@@ -3,12 +3,13 @@
 #include "table_query.h"
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/library/aclib/aclib.h>
-#include <ydb/public/api/protos/ydb_udf.pb.h>
-#include <google/protobuf/timestamp.pb.h>
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/public/api/protos/ydb_udf.pb.h>
+
+#include <google/protobuf/timestamp.pb.h>
 
 #include <functional>
 
@@ -22,10 +23,7 @@ bool IsWasmUdfEnabled();
 //! `NMetadata::NRequest::TEvRequestResult<TDialogYQLRequest>` or
 //! `TEvRequestFailed`. Writes need the read-write transaction, so `readOnly`
 //! also decides whether the statement commits.
-void ExecuteYqlAsSystem(
-    const NActors::TActorIdentity& replyTo,
-    const TString& yql,
-    bool readOnly,
+void ExecuteYqlAsSystem(const NActors::TActorIdentity& replyTo, const TString& yql, bool readOnly,
     const std::function<void(Ydb::Table::ExecuteDataQueryRequest&)>& fillParams);
 
 //! Whether the UDF store this node can reach is the one the request names. The
@@ -61,9 +59,7 @@ TEvTxProxySchemeCache::TEvNavigateKeySet* MakeArtifactDirListingRequest(const TS
 //! Collects the `cpu_spec` of every artifact table in the listing, dropping the
 //! `_chunks` companions. A missing directory yields an empty list rather than
 //! an error: a cluster that has never compiled anything has no directory.
-bool ParseArtifactDirListing(
-    const NSchemeCache::TSchemeCacheNavigate& response,
-    TVector<TString>& cpuSpecs);
+bool ParseArtifactDirListing(const NSchemeCache::TSchemeCacheNavigate& response, TVector<TString>& cpuSpecs);
 
 inline constexpr TStringBuf NativeUnsupported = "Native UDF modules and libraries are not supported yet";
 Ydb::Udf::ModuleType ToProtoType(NUdfStore::EUdfType type);
@@ -75,4 +71,4 @@ void FillTimestamp(TInstant value, google::protobuf::Timestamp& proto);
 
 void FillModuleInfo(const NQuery::TModuleRow& row, Ydb::Udf::ModuleInfo& info);
 
-} // namespace NKikimr::NUdfApi
+}   // namespace NKikimr::NUdfApi

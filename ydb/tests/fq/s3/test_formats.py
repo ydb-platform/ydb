@@ -15,9 +15,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, YQ_STATS_FULL
 
 class TestS3Formats:
     def create_bucket_and_upload_file(self, filename, s3, kikimr):
-        s3_helpers.create_bucket_and_upload_file(
-            filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data"
-        )
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data")
         kikimr.control_plane.wait_bootstrap(1)
 
     def create_bucket_and_upload_file_body(
@@ -173,10 +171,7 @@ Pear,15,33'''
         describe_result = client.describe_query(query_id).result
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
-        assert (
-            "Unknown format: invalid_type_format. Use one of: "
-            in describe_string
-        )
+        assert "Unknown format: invalid_type_format. Use one of: " in describe_string
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

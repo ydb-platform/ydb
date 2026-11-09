@@ -1,20 +1,21 @@
 #include "entity_id.h"
-#include <util/stream/str.h>
-#include <util/system/yassert.h>
+
 #include <util/datetime/base.h>
-#include <util/system/unaligned_mem.h>
 #include <util/random/easy.h>
 #include <util/stream/format.h>
+#include <util/stream/str.h>
 #include <util/string/ascii.h>
+#include <util/system/unaligned_mem.h>
+#include <util/system/yassert.h>
 
 namespace NFq {
 
 // used ascii order: IntToChar[i] < IntToChar[i+1]
 constexpr char IntToChar[] = {
-    '0', '1', '2', '3', '4', '5', '6', '7', // 8
-    '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', // 16
-    'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', // 24
-    'o', 'p', 'q', 'r', 's', 't', 'u', 'v', // 32
+    '0', '1', '2', '3', '4', '5', '6', '7',   // 8
+    '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',   // 16
+    'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',   // 24
+    'o', 'p', 'q', 'r', 's', 't', 'u', 'v',   // 32
 };
 
 static bool IsValidSymbol(char symbol) {
@@ -23,7 +24,7 @@ static bool IsValidSymbol(char symbol) {
 
 // 30 bits = 6 symbols
 TString Conv(ui32 n) {
-    char buf[7] = {0};
+    char buf[7] = { 0 };
     for (int i = 0; i < 6; i++) {
         buf[5 - i] = IntToChar[n & 0x1f];
         n >>= 5;
@@ -33,7 +34,7 @@ TString Conv(ui32 n) {
 
 // 55 bits = 11 symbols
 TString ConvTime(ui64 time) {
-    char buf[12] = {0};
+    char buf[12] = { 0 };
     for (int i = 0; i < 11; i++) {
         buf[10 - i] = IntToChar[time & 0x1f];
         time >>= 5;
@@ -65,7 +66,7 @@ TString GetEntityIdAsString(const TString& prefix, EEntityType type, TInstant no
     return stream.Str();
 }
 
-struct TEntityIdGenerator : public IEntityIdGenerator {
+struct TEntityIdGenerator: public IEntityIdGenerator {
     TEntityIdGenerator(const TString& prefix)
         : Prefix(prefix)
     {
@@ -84,4 +85,4 @@ IEntityIdGenerator::TPtr CreateEntityIdGenerator(const TString& prefix) {
     return MakeIntrusive<TEntityIdGenerator>(prefix);
 }
 
-} // namespace NFq
+}   // namespace NFq

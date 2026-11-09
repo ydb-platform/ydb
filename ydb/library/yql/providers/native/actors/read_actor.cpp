@@ -1,15 +1,14 @@
-#include <ydb/library/yql/providers/native/read_stream.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/scheduler_cookie.h>
+#include <ydb/library/yql/providers/native/read_stream.h>
+
+#include <arrow/api.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
 #include <yql/essentials/utils/yql_panic.h>
-
-#include <arrow/api.h>
 
 #include <algorithm>
 #include <cstring>
@@ -45,8 +44,12 @@ std::shared_ptr<arrow::ArrayData> CopyToTaskAllocator(const std::shared_ptr<arro
     return copy;
 }
 
-struct TEvRead : TEventLocal<TEvRead, EventSpaceBegin(TEvents::ES_PRIVATE)> {
-    explicit TEvRead(TReadResult result) : Result(std::move(result)) {}
+struct TEvRead: TEventLocal<TEvRead, EventSpaceBegin(TEvents::ES_PRIVATE)> {
+    explicit TEvRead(TReadResult result)
+        : Result(std::move(result))
+    {
+    }
+
     TReadResult Result;
 };
 
@@ -56,7 +59,10 @@ struct TEvRead : TEventLocal<TEvRead, EventSpaceBegin(TEvents::ES_PRIVATE)> {
 class TReadCallback {
 public:
     TReadCallback(TActorSystem* system, TActorId actor)
-        : System_(system), Actor_(actor) {}
+        : System_(system)
+        , Actor_(actor)
+    {
+    }
 
     void Send(TReadResult result) {
         std::lock_guard lock(Mutex_);
@@ -78,7 +84,7 @@ private:
     const TActorId Actor_;
 };
 
-class TNativeReadActor final : public TActorBootstrapped<TNativeReadActor>, public IDqComputeActorAsyncInput {
+class TNativeReadActor final: public TActorBootstrapped<TNativeReadActor>, public IDqComputeActorAsyncInput {
 public:
     TNativeReadActor(TReadStreamFactory factory, TReadActorSettings settings, IDqAsyncIoFactory::TSourceArguments&& args)
         : Factory_(std::move(factory))
@@ -130,8 +136,7 @@ public:
         cFunc(TEvents::TEvPoison::EventType, PassAway);
     )
 
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>&,
-                         bool& finished, i64 freeSpace) override {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) override {
         finished = Finished_ && !Ready_;
         Demand_ = freeSpace > 0;
         // The CA may poll synchronously before our Bootstrap event.
@@ -152,11 +157,11 @@ public:
                 // Output buffers belong to the task allocator so operators retaining
                 // many batches remain subject to their memory quota. The
                 // buffered SDK part is size checked, but has no RM reservation.
-                items[ColumnPositions_[i]] = HolderFactory_.CreateArrowBlock(
-                    arrow::Datum(arrow::MakeArray(CopyToTaskAllocator(batch.column_data(i)))), ValidationMode_);
+                items[ColumnPositions_[i]] =
+                    HolderFactory_.CreateArrowBlock(arrow::Datum(arrow::MakeArray(CopyToTaskAllocator(batch.column_data(i)))), ValidationMode_);
             }
-            items[LengthPosition_] = HolderFactory_.CreateArrowBlock(
-                arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch.num_rows())), ValidationMode_);
+            items[LengthPosition_] =
+                HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch.num_rows())), ValidationMode_);
             buffer.emplace_back(std::move(value));
             bytes = Ready_->Bytes;
             Delivered_ = Delivered_ || batch.num_rows() != 0;
@@ -176,11 +181,22 @@ public:
         TActorBootstrapped::PassAway();
     }
 
-    void SaveState(const NDqProto::TCheckpoint&, TSourceState&) override {}
-    void LoadState(const TSourceState&) override {}
-    void CommitState(const NDqProto::TCheckpoint&) override {}
-    ui64 GetInputIndex() const override { return InputIndex_; }
-    const TDqAsyncStats& GetIngressStats() const override { return IngressStats_; }
+    void SaveState(const NDqProto::TCheckpoint&, TSourceState&) override {
+    }
+
+    void LoadState(const TSourceState&) override {
+    }
+
+    void CommitState(const NDqProto::TCheckpoint&) override {
+    }
+
+    ui64 GetInputIndex() const override {
+        return InputIndex_;
+    }
+
+    const TDqAsyncStats& GetIngressStats() const override {
+        return IngressStats_;
+    }
 
 private:
     void CloseStream() {
@@ -212,7 +228,7 @@ private:
         }
         Failed_ = true;
         CloseOperation();
-        Send(ComputeActorId_, new TEvAsyncInputError(InputIndex_, TIssues{TIssue(message)}, NDqProto::StatusIds::EXTERNAL_ERROR));
+        Send(ComputeActorId_, new TEvAsyncInputError(InputIndex_, TIssues{ TIssue(message) }, NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
     // At most one outstanding Next and one ready batch. SDK parsing and the
@@ -259,8 +275,7 @@ private:
             // A retry opens a new snapshot and is allowed only before any row was
             // delivered. Late SDK callbacks may still be releasing the old stream;
             // they cannot complete its Next twice or access this actor directly.
-            if (result.Retryable && !Delivered_ && Retries_ < Settings_.MaxRetries &&
-                TActivationContext::Now() < Context_.Deadline) {
+            if (result.Retryable && !Delivered_ && Retries_ < Settings_.MaxRetries && TActivationContext::Now() < Context_.Deadline) {
                 ++Retries_;
                 RetryPending_ = true;
                 RetryTimer_.Reset(ISchedulerCookie::Make2Way());
@@ -271,8 +286,8 @@ private:
             return;
         }
         if (result.Batch && result.Batch->num_rows()) {
-            const auto limit = result.Batch->num_rows() == 1
-                ? std::max(Settings_.MaxBatchBytes, Settings_.MaxRowBytes) : Settings_.MaxBatchBytes;
+            const auto limit =
+                result.Batch->num_rows() == 1 ? std::max(Settings_.MaxBatchBytes, Settings_.MaxRowBytes) : Settings_.MaxBatchBytes;
             if (result.Bytes > limit || result.Batch->num_columns() != static_cast<int>(Settings_.Columns.size())) {
                 Fail("Native source returned a batch exceeding its contract");
                 return;
@@ -331,12 +346,12 @@ private:
     bool Stopping_ = false;
 };
 
-} // namespace
+}   // namespace
 
 std::pair<NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateNativeReadActor(
     TReadStreamFactory factory, TReadActorSettings settings, NDq::IDqAsyncIoFactory::TSourceArguments&& args) {
     auto* actor = new TNativeReadActor(std::move(factory), std::move(settings), std::move(args));
-    return {actor, actor};
+    return { actor, actor };
 }
 
-} // namespace NYql::NNative
+}   // namespace NYql::NNative

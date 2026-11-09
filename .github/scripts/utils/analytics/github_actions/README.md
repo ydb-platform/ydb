@@ -19,7 +19,7 @@ GitHub API, сколько шли job и step.
 **Номер job в GitHub** (колонка `github_job_id`, например `456`). Это
 `${{ job.check_run_id }}` — GitHub отдаёт его в самом job. Нужен, чтобы
 сджойнить фазу со строкой job, которую выгрузка пишет как `span_id = job-456`.
-В `test_ya` это число копируется в `$GITHUB_NUMERIC_JOB_ID`. В своём workflow
+В `build_and_test_ya` это число копируется в `$GITHUB_NUMERIC_JOB_ID`. В своём workflow
 выставьте то же: `GITHUB_NUMERIC_JOB_ID: ${{ job.check_run_id }}`.
 
 **Номер попытки workflow** (колонка `run_attempt`). GitHub кладёт его сам в
@@ -29,7 +29,7 @@ GitHub API, сколько шли job и step.
 Нет любого из двух — строка не попадёт в таблицу, уйдёт в файл
 `$ANALYTICS_FILE.skipped` рядом с JSONL. Сборка не упадёт.
 
-JSONL не кладите в каталог, который `test_ya` выкладывает на публичный S3
+JSONL не кладите в каталог, который `build_and_test_ya` выкладывает на публичный S3
 (`PUBLIC_DIR`) — иначе файл с метриками уедет в интернет.
 
 ### Своё измерение в workflow
@@ -92,7 +92,7 @@ WHERE run_id = 123 AND name = "compile";
 | `github_job_id` | `$GITHUB_NUMERIC_JOB_ID` | `456` |
 | `run_attempt` | `$GITHUB_RUN_ATTEMPT` | `1` |
 | `workflow` | `$GITHUB_WORKFLOW` | `PR-check` |
-| `job_name` | `$GITHUB_JOB_NAME` (`job.name` из GitHub API в `test_ya`), иначе `$GITHUB_JOB` | `Build and test relwithdebinfo` |
+| `job_name` | `$GITHUB_JOB_NAME` (`job.name` из GitHub API в `build_and_test_ya`), иначе `$GITHUB_JOB` | `Build and test relwithdebinfo` |
 | `event_name` | `$GITHUB_EVENT_NAME` | `pull_request` |
 | `branch` | `$BRANCH_NAME` / `$GITHUB_BASE_REF` / event | `main` |
 | `commit` | `$ORIGINAL_HEAD` / `$GITHUB_SHA` | `abc…` |
@@ -107,7 +107,7 @@ WHERE run_id = 123 AND name = "compile";
 Строки живут год. У выгрузки из GitHub API `span_id` не случайный, а
 `job-{id}`, `queue-{id}`, `step-{id}-{N}` — по нему фазу джойнят с job.
 
-### Новая фаза в `test_ya`
+### Новая фаза в `build_and_test_ya`
 
 1. Имя в `YA_PHASE_NAMES` в [`taxonomy.py`](taxonomy.py).
 2. Строка в таблице фаз ниже (тот же `name`).
@@ -142,7 +142,7 @@ analytics end my_new_phase --rc "$RC"
 - Шаг завершается по любой причине, в том числе из‑за `set -e` — закрыть
   незакрытые `start` с тем exit code, с которым вышел скрипт, и залить.
 
-Это уже стоит в `test_ya`. В свой workflow скопируйте тот же каркас, если
+Это уже стоит в `build_and_test_ya`. В свой workflow скопируйте тот же каркас, если
 там тоже `set -e`.
 
 ```bash
@@ -160,7 +160,7 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 | `github_job` | `job` | выгрузка | сколько job выполнялся, от `started_at` до `completed_at` |
 | `github_job` | `queue` | выгрузка | сколько job ждал раннера; `labels.queued_ms` то же число |
 | `github_step` | имя шага | выгрузка | сколько шёл шаг GitHub Actions |
-| `ya_phase` | см. ниже | `test_ya` | фазы внутри job |
+| `ya_phase` | см. ниже | `build_and_test_ya` | фазы внутри job |
 
 | `name` | Что измеряет |
 | --- | --- |
@@ -182,6 +182,7 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 | `s3_sync_try` | залить `PUBLIC_DIR` на публичный S3, чтобы ссылки из комментария открывались |
 | `upload_tests_results` | залить результаты тестов в таблицу `test_results` (это не `ci_metrics`) |
 | `runner_info` | одна строка на весь job, **до** цикла `ya make`: сколько ядер, RAM и диска у машины. Не длительность (`kind = info`), потому что железо за job не меняется. На дашборде: отфильтровать «медленно на 8 ядрах» от «медленно на 64». Не путать с `--runner`/`--usage` на фазе сборки — те пишутся в labels той фазы (спека на старте, занятость в конце) |
+| `github_proxy` | проба checkout, пишется в Init, до `ya make`: `labels.use_proxy`, скорости за 15 с приёма pack в `labels.direct_mbps` и `labels.proxy_mbps`. `value` — скорость выбранного пути, МБ/с |
 
 `ya_build` / `ya_tests` / `ya_cache_*` считает
 [`ya_evlog_phases.py`](ya_evlog_phases.py) по `ya_evlog.jsonl` — те же узлы,
@@ -196,7 +197,10 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 export GITHUB_TOKEN=...
 python3 .github/scripts/utils/analytics/github_actions/provision_tables.py
 python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics.py --hours 2
+python3 .github/scripts/utils/analytics/github_actions/export_runner_capacity.py
 ```
+
+`export_github_job_metrics.py`:
 
 - По умолчанию все активные workflow; `--workflow` / `CI_METRICS_WORKFLOW`
   сужает список.
@@ -211,6 +215,18 @@ python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics
 
 В `analytics/ci_metrics_state` три поля: `export_watermark` (до какого
 момента выгрузили), `open_runs` (ещё идут), `failed_runs` (надо повторить).
+
+`export_runner_capacity.py` пишет снимок в `analytics/ci_capacity` (отдельная
+таблица, TTL 1 год, как у `ci_metrics`). В снимке квота Compute, сколько
+хостов relwithdebinfo / release-asan ещё влезает, каждый ghrun (busy / idle /
+queued) и очередь self-hosted / ghrun. `ubuntu-latest` и остальные GitHub-hosted
+в снимок не входят: они не едят квоту Compute. Список workflow runs не обрывается на короткой
+странице GitHub: иначе занятые VM попадают в idle. Если `in_progress` покрывает
+мало раннеров при длинной очереди, job не пишутся (state=`unknown`), квота
+остаётся. На раннере нужен `yc` с cloud-id, либо ключ
+`CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`, если профиля нет. Шаг в
+`collect_analytics_fast.yml` с `continue-on-error`, чтобы отсутствие `yc` не
+прятало выгрузку job.
 
 ## Тесты
 

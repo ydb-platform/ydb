@@ -107,15 +107,17 @@ namespace NBalancing {
             auto msg = ev->Get();
             auto vdiskId = VDiskIDFromVDiskID(msg->Record.GetVDiskID());
             auto status = msg->Record.GetStatus();
-            bool replicated = msg->Record.GetReplicated();
+            const bool replicated = msg->Record.GetReplicated();
+            const bool durabilityReplicated = !msg->Record.HasDurabilityReplicated() || msg->Record.GetDurabilityReplicated();
             bool isReadOnly = msg->Record.GetIsReadOnly();
 
-            if (status != NKikimrProto::EReplyStatus::OK || !replicated || isReadOnly) {
+            if (status != NKikimrProto::EReplyStatus::OK || !replicated || !durabilityReplicated || isReadOnly) {
                 YDB_LOG_INFO(VDISKP(Ctx->VCtx, "VDisk is not ready. Stop balancing"),
                     {"marker", "BSVB02"},
                     {"VDiskId", vdiskId},
                     {"status", NKikimrProto::EReplyStatus_Name(status)},
                     {"replicated", replicated},
+                    {"durabilityReplicated", durabilityReplicated},
                     {"readOnly", isReadOnly});
                 Stop(TDuration::Seconds(10));
                 return;
@@ -183,6 +185,7 @@ namespace NBalancing {
                     }
                 }
 
+                // TODO(kruall): Preserve canonical copies required by mirror-3-dc realm states when balancing.
                 // collect parts to delete
                 if (Ctx->Cfg.EnableDelete && TryDeleteParts.Size() < Ctx->Cfg.MaxToDeletePerEpoch) {
                     if (auto partsToDelete = merger.Ingress.LocalParts(top.GType) & delMask; !partsToDelete.Empty()) {

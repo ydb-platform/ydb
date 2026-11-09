@@ -11,15 +11,16 @@ struct TTopicSessionClientStatistic {
     NActors::TActorId ReadActorId;
     ui64 Generation = 0;
     ui32 PartitionId = 0;
-    i64 QueuedRows = 0;         // Current value
-    i64 QueuedBytes = 0;        // Current value
-    TMaybe<ui64> Offset;        // Current value
-    ui64 FilteredBytes = 0;     // Increment / filtered
-    ui64 FilteredRows = 0;      // Increment / filtered
-    ui64 ReadBytes = 0;         // Increment
-    bool IsWaiting = false;     // Current value
-    i64 ReadLagMessages = 0;    // Current value
+    i64 QueuedRows = 0;   // Current value
+    i64 QueuedBytes = 0;   // Current value
+    TMaybe<ui64> Offset;   // Current value
+    ui64 FilteredBytes = 0;   // Increment / filtered
+    ui64 FilteredRows = 0;   // Increment / filtered
+    ui64 ReadBytes = 0;   // Increment
+    bool IsWaiting = false;   // Current value
+    i64 ReadLagMessages = 0;   // Current value
     ui64 InitialOffset = 0;
+
     void Add(const TTopicSessionClientStatistic& stat) {
         QueuedRows = stat.QueuedRows;
         QueuedBytes = stat.QueuedBytes;
@@ -31,6 +32,7 @@ struct TTopicSessionClientStatistic {
         ReadLagMessages = stat.ReadLagMessages;
         InitialOffset = stat.InitialOffset;
     }
+
     void Clear() {
         FilteredBytes = 0;
         FilteredRows = 0;
@@ -71,8 +73,8 @@ struct TFormatHandlerStatistic {
 struct TTopicSessionCommonStatistic {
     ui64 QueuedBytes = 0;   // Current value
     ui64 RestartSessionByOffsets = 0;
-    ui64 ReadBytes = 0;     // Increment
-    ui64 ReadEvents = 0;    // Increment
+    ui64 ReadBytes = 0;   // Increment
+    ui64 ReadEvents = 0;   // Increment
     ui64 LastReadedOffset = 0;
 
     std::unordered_map<TString, TFormatHandlerStatistic> FormatHandlers;
@@ -104,9 +106,9 @@ struct TTopicSessionParams {
 };
 
 struct TTopicSessionStatistic {
-    TTopicSessionParams SessionKey; 
+    TTopicSessionParams SessionKey;
     std::vector<TTopicSessionClientStatistic> Clients;
     TTopicSessionCommonStatistic Common;
 };
 
-} // namespace NFq
+}   // namespace NFq

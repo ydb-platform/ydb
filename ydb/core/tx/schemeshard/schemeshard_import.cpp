@@ -15,14 +15,15 @@ namespace NSchemeShard {
 
 namespace {
 
-    void FillIssues(NKikimrImport::TImport& import, const TImportInfo& importInfo) {
+    void FillIssues(NKikimrImport::TImport& import, const TImportInfo& importInfo,
+        NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR) {
         if (importInfo.Issue) {
-            AddIssue(import, importInfo.Issue);
+            AddIssue(import, importInfo.Issue, severity);
         }
 
         for (const auto& item : importInfo.Items) {
             if (item.Issue) {
-                AddIssue(import, item.Issue);
+                AddIssue(import, item.Issue, severity);
             }
         }
     }
@@ -168,9 +169,11 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
         switch (GetMinState(importInfo)) {
         case TImportInfo::EState::GetScheme:
         case TImportInfo::EState::CreateSchemeObject:
+        case TImportInfo::EState::DropPlaceholder:
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
             break;
         case TImportInfo::EState::Transferring:
+        case TImportInfo::EState::FinalizeImport:
             for (ui32 itemIdx : xrange(importInfo.Items.size())) {
                 FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
             }
@@ -205,6 +208,7 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
             FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
         }
         import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_DONE);
+        FillIssues(import, importInfo, NYql::TSeverityIds::S_WARNING);
         break;
 
     case TImportInfo::EState::Cancellation:
@@ -314,6 +318,12 @@ void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& i
     ImportsByTime.erase(std::make_pair(importInfo.StartTime, importInfo.Id));
     Imports.erase(importInfo.Id);
 
+    for (const auto& item : importInfo.Items) {
+        if (item.WaitTxId != InvalidTxId) {
+            TxIdToImport.erase(item.WaitTxId);
+        }
+    }
+
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
     }
@@ -340,6 +350,11 @@ void TSchemeShard::PersistImportSettings(NIceDb::TNiceDb& db, const TImportInfo&
 void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     const auto& item = importInfo.Items.at(itemIdx);
+
+    if (item.ReplicationConfig) {
+        db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
+            NIceDb::TUpdate<Schema::ImportItems::ReplicationConfig>(item.ReplicationConfig->SerializeAsString()));
+    }
 
     db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),

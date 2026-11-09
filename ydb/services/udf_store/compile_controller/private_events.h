@@ -17,12 +17,9 @@ struct TEvControllerPrivate {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE),
-        "expected EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expected EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
-    struct TEvReconcileResult
-        : public NActors::TEventLocal<TEvReconcileResult, EvReconcileResult>
-    {
+    struct TEvReconcileResult: public NActors::TEventLocal<TEvReconcileResult, EvReconcileResult> {
         TString CpuSpec;
         bool Success = false;
         //! Joined `(id, kind, uid)` of every finished artifact on this
@@ -33,22 +30,16 @@ struct TEvControllerPrivate {
     };
 
     //! Periodic wakeup that expires assignments and drains the queue.
-    struct TEvScheduleTick
-        : public NActors::TEventLocal<TEvScheduleTick, EvScheduleTick>
-    {};
+    struct TEvScheduleTick: public NActors::TEventLocal<TEvScheduleTick, EvScheduleTick> {};
 
     //! Periodic wakeup that re-reads the artifact tables. Separate from the tick
     //! above because a full scan per platform is far more expensive than
     //! expiring assignments and has its own, longer, interval.
-    struct TEvReconcileTick
-        : public NActors::TEventLocal<TEvReconcileTick, EvReconcileTick>
-    {};
+    struct TEvReconcileTick: public NActors::TEventLocal<TEvReconcileTick, EvReconcileTick> {};
 
     //! Fires once after a burst of NeedArtifact hints, so that a snapshot
     //! refresh seen by every dinode costs one scheduling round, not one per hint.
-    struct TEvHintTick
-        : public NActors::TEventLocal<TEvHintTick, EvHintTick>
-    {};
+    struct TEvHintTick: public NActors::TEventLocal<TEvHintTick, EvHintTick> {};
 };
 
 //! Key used to compare a `modules` row against the artifact tables. The uid is
@@ -61,4 +52,4 @@ inline TString MakeArtifactKey(TStringBuf name, TStringBuf kind, TStringBuf uid)
     return result;
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

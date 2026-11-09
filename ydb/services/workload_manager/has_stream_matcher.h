@@ -4,11 +4,9 @@
 
 #include <optional>
 
-
 namespace NKikimr::NWorkloadManager {
 
 /// Returns true if the classifier should accept the query based on the HAS_STREAM filter.
-bool MatchesStream(const std::optional<bool>& hasStream,
-                   const NKqp::TUserRequestContext& userRequestContext);
+bool MatchesStream(const std::optional<bool>& hasStream, const NKqp::TUserRequestContext& userRequestContext);
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

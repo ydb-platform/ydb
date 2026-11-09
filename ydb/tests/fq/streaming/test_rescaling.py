@@ -9,11 +9,8 @@ from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, coun
 from ydb.tests.library.common.wait_for import wait_for
 
 
+@pytest.mark.usefixtures("wait_initial_resources")
 class TestRescaling(StreamingTestBase):
-
-    @pytest.fixture(autouse=True)
-    def _wait_initial_resources(self, kikimr: Kikimr):
-        kikimr.wait_kqp_node_count(len(counter_nodes(kikimr.cluster)), timeout_seconds=120)
 
     def _reader_count(self, kikimr: Kikimr) -> int:
         return sum(
@@ -428,7 +425,11 @@ class TestRescaling(StreamingTestBase):
         partitions_count = 8
         query_name = entity_name("pq_source_continuation_scale_up_and_down")
         inp, out, _ = self.get_io_names(
-            kikimr, query_name, local_topics, entity_name, partitions_count=partitions_count,
+            kikimr,
+            query_name,
+            local_topics,
+            entity_name,
+            partitions_count=partitions_count,
         )
         client = self.get_ydb_client(kikimr, local_topics)
 

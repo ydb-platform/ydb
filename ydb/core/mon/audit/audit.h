@@ -35,6 +35,8 @@ private:
     void AddAuditLogPart(TStringBuf name, const TString& value);
 
     TAuditParts Parts;
+    TString Subject;
+    TString SanitizedToken;
     bool Auditable = false;
     NACLibProto::ESubjectType SubjectType = NACLibProto::SUBJECT_TYPE_ANONYMOUS;
 };

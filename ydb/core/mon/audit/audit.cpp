@@ -152,8 +152,6 @@ void TAuditCtx::AddAuditLogParts(const TAuditParts& parts) {
     }
     // TODO: refactor so that all the parts are logged
     static const THashSet<TString> ALLOWED_PARTS = {
-        "subject",
-        "sanitized_token",
         // "start_time",
         // "end_time",
         // "database",
@@ -163,7 +161,11 @@ void TAuditCtx::AddAuditLogParts(const TAuditParts& parts) {
         "resource_id",
     };
     for (const auto& [k, v] : parts) {
-        if (IsIn(ALLOWED_PARTS, k)) {
+        if (k == "subject") {
+            Subject = v;
+        } else if (k == "sanitized_token") {
+            SanitizedToken = v;
+        } else if (IsIn(ALLOWED_PARTS, k)) {
             Parts.emplace_back(k, v);
         }
     }
@@ -183,6 +185,8 @@ void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrCo
             AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE));
         }
 
+        AUDIT_PART("subject", (!Subject.empty() ? Subject : EMPTY_VALUE));
+        AUDIT_PART("sanitized_token", (!SanitizedToken.empty() ? SanitizedToken : EMPTY_VALUE));
         AUDIT_PART("status", ToString(status));
         AUDIT_PART("reason", reason, !reason.empty());
     );

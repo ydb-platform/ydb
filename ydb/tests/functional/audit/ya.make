@@ -20,6 +20,7 @@ TEST_SRCS(
     test_auditlog.py
     test_canonical_records.py
     test_canonical_records_legacy_dstool.py
+    test_monitoring.py
 )
 
 DEPENDS(

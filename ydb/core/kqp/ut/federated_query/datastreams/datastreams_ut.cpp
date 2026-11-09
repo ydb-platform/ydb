@@ -1752,7 +1752,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(StreamingConstraintsValidation, TStreamingTestFixture) {
-        SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        {
+            auto& appConfig = SetupAppConfig();
+            auto& featureFlags = *appConfig.MutableFeatureFlags();
+            featureFlags.SetEnableKqpConstraintsTransformer(true);
+            featureFlags.SetEnableStreamingAggregation(true);
+            appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        }
 
         constexpr char input1[] = "streamingConstraintsValidationFirstInputTopic";
         constexpr char input2[] = "streamingConstraintsValidationSecondInputTopic";

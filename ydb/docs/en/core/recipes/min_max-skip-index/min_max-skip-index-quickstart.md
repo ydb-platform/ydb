@@ -1,5 +1,7 @@
 # Quick start with the min_max index
 
+{% include [min_max_index_unavailable_26_2.md](../../yql/reference/syntax/_includes/min_max_index_unavailable_26_2.md) %}
+
 ## Creating a table with the min_max index
 
 Below is a minimal example: a columnar table with a primary key and a local index of type `min_max` on columns that are often used in filters.

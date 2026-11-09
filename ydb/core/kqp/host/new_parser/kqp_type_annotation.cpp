@@ -2,6 +2,8 @@
 #include "kqp_new_parser.h"
 #include "kqp_ast_visit.h"
 
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
+#include <library/cpp/time_provider/monotonic.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -24,11 +26,65 @@ struct TAnnotationError {};
 // predicates must be Bool, sort keys comparable, and counts coercible to Uint64.
 enum class EUse { Value, Predicate, SortKey, Limit, Offset };
 
+// Aggregate fine-grained timings instead of emitting a span for every scalar
+// comparison. Expression and column timings include their YQL annotation calls.
+struct TAnnotationProfile {
+    struct TCounter {
+        ui64 Calls = 0;
+        TDuration Elapsed;
+    };
+    struct TScope {
+        TCounter* Counter;
+        TMonotonic Start;
+
+        TScope(TCounter& counter, bool enabled)
+            : Counter(enabled ? &counter : nullptr)
+            , Start(enabled ? TMonotonic::Now() : TMonotonic())
+        {}
+
+        ~TScope() {
+            if (Counter) {
+                ++Counter->Calls;
+                Counter->Elapsed += TMonotonic::Now() - Start;
+            }
+        }
+    };
+
+    NWilson::TSpan Span;
+    TCounter Expressions;
+    TCounter Annotations;
+    TCounter Comparisons;
+    TCounter Columns;
+    ui64 VisibleInputs = 0;
+    ui64 BoundInputs = 0;
+
+    explicit TAnnotationProfile(TCompileTrace* trace) {
+        if (trace && trace->IsEnabled(TCompileTraceLevels::Detail)) {
+            Span = trace->StartSpan(TCompileTraceLevels::Detail, "Native annotation profile");
+        }
+    }
+
+    ~TAnnotationProfile() {
+        if (!Span) { return; }
+        const auto record = [&](TStringBuf name, const TCounter& counter) {
+            Span.Attribute(TStringBuilder() << name << ".calls", static_cast<i64>(counter.Calls));
+            Span.Attribute(TStringBuilder() << name << ".us", static_cast<i64>(counter.Elapsed.MicroSeconds()));
+        };
+        record("scalar_expression", Expressions);
+        record("yql_annotation", Annotations);
+        record("group_comparison", Comparisons);
+        record("stored_column_type", Columns);
+        Span.Attribute("scalar_visible_inputs", static_cast<i64>(VisibleInputs));
+        Span.Attribute("scalar_bound_inputs", static_cast<i64>(BoundInputs));
+        Span.EndOk();
+    }
+};
+
 class TAnnotator {
 public:
     TAnnotator(const TScript& script, const TResolvedNames& names, TExprContext& ctx,
         TTypeAnnotationContext& types, const TAstTypeAnnotationSettings& settings)
-        : Script(script), Names(names), Ctx(ctx), Types(types), Settings(settings)
+        : Profile(settings.CompileTrace), Script(script), Names(names), Ctx(ctx), Types(types), Settings(settings)
     {
         Result.Columns.resize(names.Columns.size());
         for (TColumnId id = 0; id < names.Columns.size(); ++id) {
@@ -47,6 +103,11 @@ public:
                 if (const auto* query = Names.NamedQueries.FindPtr(&binding->Name)) { Query(**query); }
             } else {
                 const auto& pragma = std::get<TPragmaStatement>(statement.Value);
+                // This setting affects the optimizer only. Resolution decoded
+                // its syntax; the host uses the provider's value validation.
+                if (Names.CostBasedOptimizationPragmas.contains(&pragma)) {
+                    continue;
+                }
                 // Enabling comma joins affects syntax acceptance, not scalar
                 // types; their Cross nodes use the ordinary join typing below.
                 if (!pragma.Namespace && AsciiEqualsIgnoreCase(pragma.Name.Spelling, "AnsiImplicitCrossJoin")
@@ -103,13 +164,21 @@ private:
         if (column.Input) {
             type = Column(*column.Input);
         } else if (column.Table && column.MetadataColumnId) {
+            TAnnotationProfile::TScope profile(Profile.Columns, bool(Profile.Span));
             const auto it = std::find_if(column.Table->Columns.begin(), column.Table->Columns.end(),
                 [&](const auto& metadata) { return metadata.Id == *column.MetadataColumnId; });
             Y_ENSURE(it != column.Table->Columns.end());
-            const auto pos = Pos(column.Source->Range);
-            auto parsedType = Call(pos, "ParseType", {Ctx.NewAtom(pos, it->Type)});
-            Annotate(parsedType, column.Source->Range);
-            type = parsedType->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            if (const auto* cached = StoredTypes.FindPtr(it->Type)) {
+                type = *cached;
+            } else {
+                const auto pos = Pos(column.Source->Range);
+                auto parsedType = Call(pos, "ParseType", {Ctx.NewAtom(pos, it->Type)});
+                Annotate(parsedType, column.Source->Range);
+                type = parsedType->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                StoredTypes.emplace(it->Type, type);
+            }
+            // Nullability belongs to the column occurrence, not the cached
+            // type spelling. Outer-join null extension is applied later.
             if (!it->NotNull) { type = Optional(type); }
         } else {
             // Projection expression types must be established by Query before
@@ -124,6 +193,7 @@ private:
     // from the surrounding host compilation, but preserve the caller's completed
     // transform stages. The transformer may replace root as it inserts coercions.
     void Annotate(TNode& root, const TSourceRange& range) {
+        TAnnotationProfile::TScope profile(Profile.Annotations, bool(Profile.Span));
         const auto repeats = Ctx.RepeatTransformCounter;
         const auto steps = Ctx.Step;
         Y_DEFER { Ctx.RepeatTransformCounter = repeats; Ctx.Step = steps; };
@@ -152,45 +222,48 @@ private:
     }
 
     // Wrap the lowered body in a closed, typed lambda before calling the YQL
-    // annotator. Supplying all visible columns gives lowering a stable contract
-    // even when a particular expression uses only a subset of the scope.
-    TType Expression(const TExpression& expression, TColumnTypes scope, EUse use = EUse::Value) {
-        PrepareSubqueries(expression, scope);
-        VisitScalar(expression, [&](const auto& node) {
-            if (const auto* id = Names.ColumnReferences.FindPtr(&node); id && Outer.contains(*id)) {
-                Result.Captures[CurrentQuery][*id] = Outer.at(*id);
-            }
-            return !Result.Values.contains(&node);
-        });
+    // annotator. Bind inputs lazily so each lambda carries only the columns and
+    // relational values referenced by its body, including expanded definitions.
+    TType Expression(const TExpression& expression, const TColumnTypes& scope, EUse use = EUse::Value) {
+        TAnnotationProfile::TScope profile(Profile.Expressions, bool(Profile.Span));
+        TColumnTypes subqueryTypes;
+        PrepareSubqueries(expression, scope, subqueryTypes);
         const auto pos = Pos(expression.Range);
         TExpressionBindings bindings;
         bindings.Names = &Names;
         TAnnotatedExpression annotated;
-        // Stable argument order also makes the resulting lambdas convenient
-        // for relational lowering. Each lambda owns its argument nodes.
-        for (const auto& [id, type] : scope) { Y_UNUSED(type); annotated.Inputs.push_back(id); }
-        std::sort(annotated.Inputs.begin(), annotated.Inputs.end());
-        TExprNode::TListType arguments;
-        for (const auto id : annotated.Inputs) {
+        const auto bindColumn = [&](TColumnId id) -> TNode {
+            if (const auto* bound = bindings.Columns.FindPtr(id)) { return *bound; }
+            const auto* type = subqueryTypes.FindPtr(id);
+            if (!type) { type = scope.FindPtr(id); }
+            if (!type) { return {}; }
             auto argument = Ctx.NewArgument(pos, TStringBuilder() << "column" << id);
-            argument->SetTypeAnn(scope.at(id));
+            argument->SetTypeAnn(*type);
             bindings.Columns[id] = argument;
-            arguments.push_back(std::move(argument));
-        }
-        for (const auto& [node, id] : Result.Values) {
-            if (const auto* argument = bindings.Columns.FindPtr(id)) {
-                auto value = *argument;
-                if (const auto* in = std::get_if<TIn>(&node->Value); in && in->Negated) { value = Call(pos, "Not", {value}); }
-                bindings.Expressions[node] = std::move(value);
+            if (Outer.contains(id)) { Result.Captures[CurrentQuery][id] = *type; }
+            return argument;
+        };
+        bindings.ResolveColumn = bindColumn;
+        bindings.ResolveExpression = [&](const TExpression& node) -> TNode {
+            if (const auto* id = Result.Values.FindPtr(&node)) {
+                if (auto value = bindColumn(*id)) {
+                    if (const auto* in = std::get_if<TIn>(&node.Value); in && in->Negated) { value = Call(pos, "Not", {value}); }
+                    return value;
+                }
             }
-        }
+            return {};
+        };
         for (const auto& [name, type] : Settings.Parameters) {
             bindings.Parameters[name] = Call(pos, "Parameter", {Ctx.NewAtom(pos, name), ExpandType(pos, *type, Ctx)});
         }
         TNode body;
         if (const auto* star = Names.Stars.FindPtr(&expression)) {
             TExprNode::TListType items;
-            for (const auto id : *star) { items.push_back(bindings.Columns.at(id)); }
+            for (const auto id : *star) {
+                auto argument = bindColumn(id);
+                Y_ENSURE(argument, "Missing star column " << id);
+                items.push_back(std::move(argument));
+            }
             body = Ctx.NewList(pos, std::move(items));
         } else {
             body = LowerExpression(expression, Script, bindings, Ctx, Settings.Expressions);
@@ -205,9 +278,18 @@ private:
                 Ctx.NewAtom(pos, use == EUse::Limit ? "18446744073709551615" : "0")})});
             body = Call(pos, "Take", {Call(pos, "AsList", {Call(pos, "Bool", {Ctx.NewAtom(pos, "true")})}), body});
         }
-        annotated.Lambda = Ctx.NewLambda(pos, Ctx.NewArguments(pos, std::move(arguments)), std::move(body));
+        // Preserve deterministic argument order without sorting the full scope.
+        for (const auto& [id, argument] : bindings.Columns) { Y_UNUSED(argument); annotated.Inputs.push_back(id); }
+        std::sort(annotated.Inputs.begin(), annotated.Inputs.end());
+        Profile.VisibleInputs += scope.size() + subqueryTypes.size();
+        Profile.BoundInputs += annotated.Inputs.size();
+        TExprNode::TListType arguments;
         std::vector<TType> argumentTypes;
-        for (const auto id : annotated.Inputs) { argumentTypes.push_back(scope.at(id)); }
+        for (const auto id : annotated.Inputs) {
+            arguments.push_back(bindings.Columns.at(id));
+            argumentTypes.push_back(arguments.back()->GetTypeAnn());
+        }
+        annotated.Lambda = Ctx.NewLambda(pos, Ctx.NewArguments(pos, std::move(arguments)), std::move(body));
         // The YQL annotator requires the Arguments node to be initialized even
         // for a zero-argument lambda (constants and LIMIT/OFFSET expressions).
         UpdateLambdaAllArgumentsTypes(annotated.Lambda, argumentTypes, Ctx);
@@ -254,6 +336,23 @@ private:
         return {};
     }
 
+    // Comparison trees depend only on the immutable AST, resolved identities
+    // and lowering settings. Keep them separate from annotated scalar lambdas:
+    // annotation rewrites those trees and specializes their argument types.
+    TNode GroupExpression(const TExpression& expression) {
+        if (const auto* cached = GroupExpressions.FindPtr(&expression)) { return *cached; }
+        if (!GroupBindings.Names) {
+            GroupBindings.Names = &Names;
+            for (TColumnId id = 0; id < Names.Columns.size(); ++id) {
+                GroupBindings.Columns[id] = Ctx.NewAtom(Pos(expression.Range), ToString(id));
+            }
+        }
+        auto lowered = LowerExpression(expression, Script, GroupBindings, Ctx, Settings.Expressions);
+        if (!lowered) { throw TAnnotationError{}; }
+        GroupExpressions.emplace(&expression, lowered);
+        return lowered;
+    }
+
     // Compare group expressions after ordinary scalar lowering. Binding every
     // column to a stable atom makes aliases/qualification irrelevant, without
     // treating merely similar text (or differently bound names) as equal.
@@ -278,20 +377,19 @@ private:
             return true;
         });
         if (relational) { return false; }
-        TExpressionBindings bindings;
-        bindings.Names = &Names;
-        for (TColumnId id = 0; id < Names.Columns.size(); ++id) { bindings.Columns[id] = Ctx.NewAtom(Pos(a.Range), ToString(id)); }
-        auto left = LowerExpression(a, Script, bindings, Ctx, Settings.Expressions);
-        auto right = LowerExpression(b, Script, bindings, Ctx, Settings.Expressions);
-        if (!left || !right) { throw TAnnotationError{}; }
+        TAnnotationProfile::TScope profile(Profile.Comparisons, bool(Profile.Span));
+        auto left = GroupExpression(a);
+        auto right = GroupExpression(b);
         const auto* x = left.Get();
         const auto* y = right.Get();
         return CompareExprTrees(x, y);
     }
 
-    void PrepareSubqueries(const TExpression& expression, TColumnTypes& scope) {
+    // Subquery results are local scalar inputs, not part of the lexical scope
+    // captured by sibling subqueries. Keep them separate from the shared map.
+    void PrepareSubqueries(const TExpression& expression, const TColumnTypes& scope, TColumnTypes& subqueryTypes) {
         VisitScalar(expression, [&](const TExpression& node) {
-            if (const auto* id = Result.Values.FindPtr(&node); id && scope.contains(*id)) { return false; }
+            if (const auto* id = Result.Values.FindPtr(&node); id && (scope.contains(*id) || subqueryTypes.contains(*id))) { return false; }
             const TQuery* query = nullptr;
             EAstSubquery kind = EAstSubquery::Scalar;
             const TExpression* comparison = nullptr;
@@ -312,7 +410,7 @@ private:
             const auto id = Value(type);
             Result.Values[&node] = id;
             Result.Subqueries.emplace(id, TAnnotatedSubquery{query, kind, comparison});
-            scope[id] = type;
+            subqueryTypes[id] = type;
             // A grandparent dependency must be available to this query before
             // its nested subplan can capture it in turn.
             for (const auto& [captured, capturedType] : Result.Captures[query]) {
@@ -568,7 +666,16 @@ private:
             const auto& left = Result.QueryOutputs.at(set.Left.get());
             const auto& right = Result.QueryOutputs.at(set.Right.get());
             TVector<TType> outputs;
+            // Preserve positional indexing; matching columns need no conversion
+            // lambdas because RBO already forwards inputs of the target type.
+            auto& conversions = Result.SetConversions[&query];
+            conversions.resize(left.size());
             for (size_t i = 0; i < left.size(); ++i) {
+                if (IsSameAnnotation(*left[i], *right[i])) {
+                    outputs.push_back(left[i]);
+                    Result.Columns[Names.QueryOutputs.at(&query)[i]] = left[i];
+                    continue;
+                }
                 // AsList's existing coercion rule computes the common column
                 // type; branch maps will apply these same target types in RBO.
                 auto a = Ctx.NewArgument(Pos(query.Range), "left"); a->SetTypeAnn(left[i]);
@@ -585,7 +692,7 @@ private:
                     Annotate(expression.Lambda, query.Range);
                     return expression;
                 };
-                Result.SetConversions[&query].emplace_back(conversion(0), conversion(1));
+                conversions[i] = {conversion(0), conversion(1)};
             }
             TColumnTypes orderScope;
             for (const auto id : Names.QueryOutputs.at(&query)) { orderScope[id] = Result.Columns[id]; }
@@ -626,6 +733,10 @@ private:
         Result.QueryOutputs[&query] = std::move(outputs);
     }
 
+    TAnnotationProfile Profile;
+    TExpressionBindings GroupBindings;
+    THashMap<const TExpression*, TNode> GroupExpressions;
+    THashMap<TString, TType> StoredTypes;
     const TScript& Script;
     const TResolvedNames& Names;
     TExprContext& Ctx;

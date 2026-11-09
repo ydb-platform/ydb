@@ -1,7 +1,9 @@
 #include "kqp_name_resolver.h"
 #include "kqp_new_parser.h"
+#include "kqp_ast_visit.h"
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/core/sql_types/normalize_name.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
 #include <util/stream/str.h>
@@ -56,7 +58,114 @@ public:
         return std::make_unique<TResolvedNames>(std::move(Result));
     }
 
+    TVector<std::pair<TString, TString>> CollectTables() {
+        for (const auto& statement : Script.Statements) {
+            if (const auto* pragma = std::get_if<TPragmaStatement>(&statement.Value)) {
+                Pragma(*pragma);
+            } else if (const auto* binding = std::get_if<TNamedBinding>(&statement.Value)) {
+                CollectExpression(*binding->Value, {});
+            } else {
+                CollectQuery(*std::get<TQueryStatement>(statement.Value).Query, {});
+            }
+        }
+        return std::move(TableReferences);
+    }
+
 private:
+    std::pair<TString, TString> TablePath(const TTable& table) const {
+        const auto cluster = table.Cluster ? Name(*table.Cluster) : Settings.DefaultCluster;
+        TString path = Name(table.Name);
+        if (!path.StartsWith('/')) {
+            const auto prefix = Settings.ClusterPathPrefixes.FindPtr(cluster);
+            const TString& base = prefix ? *prefix : Settings.TablePathPrefix;
+            path = base.empty() ? path : base + (base.EndsWith('/') ? "" : "/") + path;
+        }
+        return {cluster, path};
+    }
+
+    void CollectExpression(const TExpression& expression, const THashSet<TString>& ctes) {
+        VisitScalar(expression, [&](const TExpression& node) {
+            if (const auto* subquery = std::get_if<TSubquery>(&node.Value)) { CollectQuery(*subquery->Query, ctes); }
+            if (const auto* exists = std::get_if<TExists>(&node.Value)) { CollectQuery(*exists->Query, ctes); }
+            // Scalar traversal omits callable targets and frame bounds. Lambdas
+            // cannot contain native relational queries and are checked by resolution.
+            if (const auto* call = std::get_if<TCall>(&node.Value)) {
+                CollectExpression(*call->Callable, ctes);
+                if (call->Over) {
+                    if (const auto* window = std::get_if<TWindowSpecification>(&call->Over->Value)) {
+                        CollectFrame(*window, ctes);
+                    }
+                }
+            }
+            return true;
+        });
+    }
+
+    void CollectFrame(const TWindowSpecification& window, const THashSet<TString>& ctes) {
+        if (!window.Frame) { return; }
+        if (window.Frame->Begin.Offset) { CollectExpression(*window.Frame->Begin.Offset, ctes); }
+        if (window.Frame->End && window.Frame->End->Offset) { CollectExpression(*window.Frame->End->Offset, ctes); }
+    }
+
+    void CollectSource(const TSource& source, const THashSet<TString>& ctes) {
+        if (!source.Hints.empty()) { Unsupported(source.Range, "table hints that may change the schema"); }
+        if (const auto* table = std::get_if<TTable>(&source.Value)) {
+            if (table->Anonymous || table->Provider || (table->Binding && table->Cluster)) {
+                Unsupported(source.Range, "anonymous, provider-qualified or cluster-qualified bound tables");
+            }
+            // Named queries were visited at their definition, before subsequent
+            // path pragmas. A qualified table name never denotes a local CTE.
+            if (!table->Binding && (table->Cluster || !ctes.contains(Name(table->Name)))) {
+                auto key = TablePath(*table);
+                if (SeenTables.insert(key).second) { TableReferences.push_back(std::move(key)); }
+            }
+        } else if (const auto* join = std::get_if<TJoin>(&source.Value)) {
+            if (join->Natural || !join->Using.empty()) { Unsupported(source.Range, "NATURAL and USING column merging"); }
+            CollectSource(*join->Left, ctes);
+            CollectSource(*join->Right, ctes);
+            if (join->On) { CollectExpression(*join->On, ctes); }
+        } else {
+            CollectQuery(*std::get<TDerivedTable>(source.Value).Query, ctes);
+        }
+        if (source.Sampling) {
+            CollectExpression(*source.Sampling->Rate, ctes);
+            if (source.Sampling->Seed) { CollectExpression(*source.Sampling->Seed, ctes); }
+        }
+    }
+
+    void CollectGroup(const TGroupingElement& group, const THashSet<TString>& ctes) {
+        if (group.Expression.Expression) { CollectExpression(*group.Expression.Expression, ctes); }
+        for (const auto& child : group.Elements) { CollectGroup(child, ctes); }
+    }
+
+    void CollectQuery(const TQuery& query, THashSet<TString> ctes) {
+        for (const auto& cte : query.With) {
+            if (cte.Recursive) { Unsupported(cte.Name.Range, "recursive CTEs"); }
+            CollectQuery(*cte.Query, ctes);
+            ctes.insert(Name(cte.Name));
+        }
+        if (const auto* select = std::get_if<TSelect>(&query.Body)) {
+            if (select->From) { CollectSource(*select->From, ctes); }
+            if (select->Where) { CollectExpression(*select->Where, ctes); }
+            for (const auto& group : select->GroupBy) { CollectGroup(group, ctes); }
+            for (const auto& window : select->Windows) {
+                for (const auto& key : window.Specification.PartitionBy) { CollectExpression(*key.Expression, ctes); }
+                for (const auto& key : window.Specification.OrderBy) { CollectExpression(*key.Expression, ctes); }
+                CollectFrame(window.Specification, ctes);
+            }
+            for (const auto& column : select->Columns) { CollectExpression(*column.Expression, ctes); }
+            if (select->Having) { CollectExpression(*select->Having, ctes); }
+            for (const auto& sort : select->OrderBy) { CollectExpression(*sort.Expression, ctes); }
+        } else {
+            const auto& set = std::get<TSetOperation>(query.Body);
+            CollectQuery(*set.Left, ctes);
+            CollectQuery(*set.Right, ctes);
+        }
+        for (const auto& sort : query.OrderBy) { CollectExpression(*sort.Expression, ctes); }
+        if (query.Limit) { CollectExpression(*query.Limit, ctes); }
+        if (query.Offset) { CollectExpression(*query.Offset, ctes); }
+    }
+
     TString ParameterName(const TParameter& parameter, const TSourceRange& range) const {
         return "$" + Decode(parameter.Spelling.substr(1), range);
     }
@@ -124,6 +233,36 @@ private:
     // An unknown setting could change table paths or name visibility, so ignoring
     // it would be less safe than falling back to the existing translator.
     void Pragma(const TPragmaStatement& pragma) {
+        if (pragma.Namespace && (AsciiEqualsIgnoreCase(Name(*pragma.Namespace), "ydb")
+            || AsciiEqualsIgnoreCase(Name(*pragma.Namespace), "kikimr"))) {
+            TString name = Name(pragma.Name);
+            if (const auto error = NYql::NormalizeName(
+                NYql::TPosition(pragma.Name.Range.Column + 1, pragma.Name.Range.Line, Script.File), name)) {
+                Error(pragma.Name.Range, error->GetMessage());
+            }
+            if (name == "costbasedoptimizationlevel") {
+                if (pragma.Values.size() > 1) {
+                    Error(pragma.Name.Range, "Expected at most one value in the pragma");
+                }
+                TMaybe<TString> value = TString(); // A bare pragma passes an empty string, not DEFAULT.
+                if (!pragma.Values.empty()) {
+                    const auto& argument = pragma.Values.front();
+                    if (std::holds_alternative<TParameter>(argument.Value)) {
+                        Unsupported(argument.Range, "dynamic CostBasedOptimizationLevel values");
+                    } else if (const auto* literal = std::get_if<TLiteral>(&argument.Value);
+                        literal && literal->Kind == ELiteralKind::String) {
+                        value = Decode(literal->Spelling, argument.Range);
+                    } else if (const auto* identifier = std::get_if<TIdentifier>(&argument.Value);
+                        identifier && AsciiEqualsIgnoreCase(identifier->Spelling, "default")) {
+                        value.Clear();
+                    } else {
+                        Error(argument.Range, "Expected string, named parameter or 'default' keyword as pragma value for pragma: " + Name(pragma.Name));
+                    }
+                }
+                Result.CostBasedOptimizationPragmas.emplace(&pragma, std::move(value));
+                return;
+            }
+        }
         if (!pragma.Namespace && AsciiEqualsIgnoreCase(Name(pragma.Name), "YqlSelect")) {
             const auto* value = pragma.Values.size() == 1 ? std::get_if<TLiteral>(&pragma.Values[0].Value) : nullptr;
             if (!value || value->Kind != ELiteralKind::String) {
@@ -419,13 +558,7 @@ private:
             } else if (!table->Cluster && cte != ctes.end()) {
                 inputs = cte->second;
             } else {
-                const auto cluster = table->Cluster ? Name(*table->Cluster) : Settings.DefaultCluster;
-                TString path = name;
-                if (!path.StartsWith('/')) {
-                    const auto prefix = Settings.ClusterPathPrefixes.FindPtr(cluster);
-                    const TString& base = prefix ? *prefix : Settings.TablePathPrefix;
-                    path = base.empty() ? path : base + (base.EndsWith('/') ? "" : "/") + path;
-                }
+                const auto [cluster, path] = TablePath(*table);
                 // Path aliases and normalization must be resolved by the catalog.
                 auto metadata = Lookup(cluster, path);
                 if (!metadata) {
@@ -636,9 +769,22 @@ private:
     TResolvedNames Result;
     THashMap<TString, const TParameter*> NamedValues;
     size_t LambdaDepth = 0;
+    THashSet<std::pair<TString, TString>> SeenTables;
+    TVector<std::pair<TString, TString>> TableReferences;
 };
 
 } // namespace
+
+TTableReferencesResult CollectTableReferences(const TScript& script, TNameResolutionSettings settings) {
+    TTableReferencesResult result;
+    const TTableLookup lookup;
+    try {
+        result.Tables = TResolver(script, std::move(settings), lookup).CollectTables();
+    } catch (const TResolutionError& error) {
+        result.Issues.AddIssue(error.Issue);
+    }
+    return result;
+}
 
 TNameResolutionResult ResolveNames(const TScript& script, TNameResolutionSettings settings, const TTableLookup& lookup) {
     TNameResolutionResult result;

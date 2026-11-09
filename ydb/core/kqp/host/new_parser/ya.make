@@ -13,6 +13,8 @@ SRCS(
 
 PEERDIR(
     contrib/libs/antlr4_cpp_runtime
+    library/cpp/time_provider
+    ydb/core/kqp/tracing
     yql/essentials/ast
     yql/essentials/core/sql_types
     yql/essentials/core/type_ann

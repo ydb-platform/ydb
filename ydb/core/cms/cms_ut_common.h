@@ -97,6 +97,7 @@ struct TTestEnvOpts {
     bool EnableDynamicGroups;
     bool IsBridgeMode;
     bool EnableSimpleStateStorageConfig;
+    bool CheckColocatedStateStorage = false;
     bool EnableCmsLocksPriority;
     bool EnableCmsSmartAvailabilityMode;
 
@@ -623,6 +624,7 @@ private:
 
     TActorId Sender;
     TActorId ClientId;
+    TEventObserverHolder ColocatedStateStorageObserver;
 };
 
 }

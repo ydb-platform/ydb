@@ -3751,7 +3751,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_C(restored.IsSuccess(), restored.GetIssues().ToString());
         auto tableSession = kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
         const auto described = tableSession.DescribeExternalDataSource("/Root/backup_source",
-            NTable::TDescribeExternalDataSourceSettings().IncludeInstallation(true)).GetValueSync();
+            NYdb::NTable::TDescribeExternalDataSourceSettings().IncludeInstallation(true)).GetValueSync();
         UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
         const auto installed = described.GetExternalDataSourceDescription().GetInstallation();
         UNIT_ASSERT(installed.has_value());

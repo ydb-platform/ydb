@@ -481,7 +481,12 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     if (CommonSourcePath) {
         auto sourcePath = CommonSourcePath;
         if (ObjectSelection == EExportObjectSelection::IncludeExternal) {
-            NConsoleClient::AdjustPath(sourcePath, config);
+            // The server validates the source root. Normalize its spelling here
+            // without imposing an additional raw database-prefix check.
+            if (!sourcePath.StartsWith('/')) {
+                sourcePath = (config.Path ? config.Path : config.Database) + '/' + sourcePath;
+            }
+            sourcePath = NormalizePath(sourcePath);
         }
         settings.SourcePath(sourcePath);
     }

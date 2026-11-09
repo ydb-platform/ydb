@@ -643,6 +643,24 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         }
     }
 
+    Y_UNIT_TEST_F(ExplicitExternalLeafAcceptsDatabaseRootWithoutTrailingSlash, TExportFixture) {
+        Service<TSchemeImpl>().ExpectListDirectory(GetDatabase() + "/source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE);
+        Service<TExportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectCommonSourcePrefix(GetDatabase())
+            .ExpectCommonDstPrefix("common")
+            .ExpectItem(GetDatabase() + "/source", "mapped");
+
+        RunCli({
+            "-e", GetEndpoint(), "-d", GetDatabase() + "/", "export", "s3", "--include-external", "--bucket", TEST_BUCKET, "--s3-endpoint",
+            TEST_S3_ENDPOINT, "--access-key", "test-key", "--secret-key", "test-access-key", "--root-path", GetDatabase(),
+            "--destination-prefix", "common", "--item", TString("src=") + GetDatabase() + "/source,dst=mapped",
+        });
+    }
+
     Y_UNIT_TEST_F(CommonPrefixPreservesMappingsEncryptionAndDuplicateSelections, TExportFixture) {
         const TString encryptionKey = "test-encryption-key";
         const TString encryptionKeyFile = EnvFile(encryptionKey, "external-encryption.key");

@@ -186,7 +186,7 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications() && !TopicHolder->IsAsyncReplication) {
         ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED));
         return;
     }
@@ -687,6 +687,7 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
     const auto& resp = result.GetCmdGetClientOffsetResult();
     AFL_ENSURE(resp.HasEndOffset());
     EndOffset = resp.GetEndOffset();
+    RetainedStartOffset = resp.HasStartOffset() ? MakeMaybe(resp.GetStartOffset()) : Nothing();
     SizeLag = resp.GetSizeLag();
     WriteTimestampEstimateMs = resp.GetWriteTimestampEstimateMS();
     ClientHasAnyCommits = resp.GetClientHasAnyCommits();
@@ -709,7 +710,7 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
 
 
     if (!StartReading) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset,
+        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, RetainedStartOffset, EndOffset,
             WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset));
     } else {
         InitStartReading(ctx);
@@ -1168,7 +1169,7 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const 
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContext& ctx) {
-    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset, false));
+    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, RetainedStartOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset, false));
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TActorContext& ctx) {

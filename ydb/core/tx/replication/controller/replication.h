@@ -9,6 +9,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -114,6 +115,7 @@ public:
         virtual void RemoveWorker(ui64 id) = 0;
         virtual TVector<ui64> GetWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
+        virtual void InvalidateLag(ui64 workerId) = 0;
         virtual const std::optional<TDuration> GetLag() const = 0;
 
         virtual bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
@@ -132,7 +134,7 @@ public:
     friend class TTargetBase;
     void AddPendingAlterTarget(ui64 id);
     void RemovePendingAlterTarget(ui64 id);
-    void UpdateLag(ui64 targetId, TDuration lag);
+    void UpdateLag(ui64 targetId, std::optional<TDuration> lag);
 
     struct TDropOp {
         TActorId Sender;
@@ -174,11 +176,13 @@ public:
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
     const std::optional<TDuration> GetLag() const;
+    void SetLagChangedCallback(std::function<void()> callback);
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;
 
+    bool IsCredentialsReady() const;
     void UpdateSecret(const TString& secretValue);
     bool IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const;
 

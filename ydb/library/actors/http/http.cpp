@@ -391,6 +391,7 @@ THttpIncomingRequest::THttpIncomingRequest(TStringBuf content, std::shared_ptr<T
 void THttpIncomingRequest::Clear() {
     THttpRequestParser::Clear();
     MTlsClientCertificate.clear();
+    Database.reset();
 }
 
 bool THttpIncomingRequest::IsConnectionClose() const {
@@ -568,6 +569,7 @@ THttpIncomingRequestPtr THttpOutgoingResponse::GetRequest() const {
 
 THttpIncomingRequestPtr THttpIncomingRequest::Duplicate(const THeaders& extraHeaders) const {
     THttpIncomingRequestPtr request = new THttpIncomingRequest(Endpoint, Address);
+    request->Database = Database;
     request->Append(Method.Data(), Method.Size());
     request->Append(' ');
     request->Append(URL.Data(), URL.Size());

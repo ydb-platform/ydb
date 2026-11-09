@@ -24,6 +24,7 @@ PEERDIR(
 )
 
 SRCS(
+    ut_base_statistics_counters.cpp
     ut_analyze_datashard.cpp
     ut_analyze_columnshard.cpp
     ut_analyze_op.cpp

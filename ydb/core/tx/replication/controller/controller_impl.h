@@ -8,6 +8,7 @@
 #include "schema.h"
 #include "session_info.h"
 #include "sys_params.h"
+#include "worker_lag_expiry_queue.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
@@ -107,6 +108,7 @@ private:
     void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvSourceOffsetReport::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
@@ -118,17 +120,27 @@ private:
     void ProcessBootQueue(const TActorContext& ctx);
     void ProcessStopQueue(const TActorContext& ctx);
     bool IsValidWorker(const TWorkerId& id) const;
-    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
+    bool HasWorkerSession(const TWorkerId& id, ui32 nodeId) const;
+    bool TracksSourceOffsets(const TWorkerId& id) const;
+    void SetReplicationError(TReplication& replication, const TReplication::ITarget& target) const;
+    void DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb&);
+    void StopWorkersForMismatch(ui64 replicationId, const TActorContext& ctx);
+    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     TReplication::ITarget* FindTarget(const TWorkerId& id) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void UpdateLagCounters();
+    void InvalidateLag(const TWorkerId& id);
+    void ScheduleLagExpiry(const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvExpireWorkerLag::TPtr& ev, const TActorContext& ctx);
     void UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats);
     void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
     void ProcessDropStreamQueue(const TActorContext& ctx);
+    void RemoveTarget(NIceDb::TNiceDb& db, TReplication& replication, ui64 targetId);
 
     // local transactions
     class TTxInitSchema;
@@ -149,6 +161,7 @@ private:
     class TTxResolveSecretResult;
     class TTxResolveResourceIdResult;
     class TTxWorkerError;
+    class TTxSourceOffsetReport;
     class TTxAssignTxId;
     class TTxHeartbeat;
     class TTxCommitChanges;
@@ -173,7 +186,7 @@ private:
     void RunTxResolveDatabaseResult(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveResourceIdResult(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx);
-    void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx);
+    void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch = false, TMaybe<ui64> sourceCommittedOffset = Nothing());
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
 
@@ -190,6 +203,8 @@ private:
             Y_VERIFY_S(res.second, "Duplication replication: " << pathId);
         }
 
+        replication->SetLagChangedCallback([this] { UpdateLagCounters(); });
+        UpdateLagCounters();
         return replication;
     }
 
@@ -213,6 +228,16 @@ private:
     TNodesManager NodesManager;
     THashMap<ui32, TSessionInfo> Sessions;
     THashMap<TWorkerId, TWorkerInfo> Workers;
+    struct TProcessedSourceOffset {
+        ui64 NextOffset = 0;
+        TMaybe<ui64> PersistedNextOffset;
+    };
+    THashMap<TWorkerId, TProcessedSourceOffset> ProcessedSourceOffsets;
+    THashSet<ui64> ReplicationsWithSourceOffsetMismatch;
+    TWorkerLagExpiryQueue LagExpiryQueue;
+    bool LagExpiryScheduled = false;
+    THashSet<TWorkerId> StoppingWorkers;
+    static constexpr TDuration WorkerLagTimeout = TDuration::Seconds(60);
     THashSet<TWorkerId> BootQueue;
     THashSet<std::pair<TWorkerId, ui32>> StopQueue;
     THashSet<TWorkerId> RemoveQueue;

@@ -4,6 +4,9 @@
             "status": "SUCCESS"
         },
         "describe_result": {
+            "availability_period": {
+                "unlimited": {}
+            },
             "connection_params": {
                 "connection_string": "text",
                 "database": "/Root/dedicated_db",

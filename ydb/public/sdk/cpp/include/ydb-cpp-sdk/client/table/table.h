@@ -339,6 +339,8 @@ public:
         Uint8,
         Int8,
         Bit,
+        Float8E4M3 = 7, // E4M3FN; preserve values from main.
+        Float8E5M2 = 8,
     };
 
     EMetric Metric = EMetric::Unspecified;
@@ -369,6 +371,8 @@ public:
         Uint8,
         Int8,
         Bit,
+        Float8E4M3 = 7, // E4M3FN; preserve values from main.
+        Float8E5M2 = 8,
     };
 
     TVectorIndexSettings Settings;

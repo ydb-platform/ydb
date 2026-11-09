@@ -304,6 +304,117 @@ TEST(TWasmLinking, GotAllocatedSlotsSurviveCurrentAndLaterModules)
     }
 }
 
+const TString GotProviderFunctions = R"(
+    (func $different_debug_name (export "f") (export "alias") (result i64) (i64.const 1))
+    (func $g (result i64) (i64.const 2))
+)";
+
+const TString GotConsumerBody = R"(
+    (type $signature (func (result i64)))
+    (import "GOT.func" "f" (global $address (mut i64)))
+    (import "GOT.func" "alias" (global $alias (mut i64)))
+    (func (export "invoke") (result i64)
+        (call_indirect (type $signature) (global.get $address)))
+    (func (export "invoke_alias") (result i64)
+        (call_indirect (type $signature) (global.get $alias)))
+)";
+
+const TString SharedTableImport = R"((import "env" "__indirect_function_table" (table i64 1 funcref)))";
+
+void CheckGotExports(IWebAssemblyCompartment* compartment)
+{
+    EXPECT_EQ(Call(compartment, "invoke"), 1u);
+    EXPECT_EQ(Call(compartment, "invoke_alias"), 1u);
+}
+
+TEST(TWasmLinking, PrivateTableDoesNotSupplySharedGotSlot)
+{
+    for (bool precompiled : { false, true }) {
+        SCOPED_TRACE(precompiled);
+        auto compartment = CreateEmptyImage();
+        Load(compartment.get(), "(module (table i64 8 funcref)" + GotProviderFunctions + "(elem (i64.const 7) func $different_debug_name))",
+            precompiled);
+        Load(compartment.get(), "(module " + SharedTableImport + GotConsumerBody + ")", precompiled);
+        EXPECT_NO_THROW(CheckGotExports(compartment.get()));
+    }
+}
+
+TEST(TWasmLinking, OverwrittenElementIsNotReusedForExport)
+{
+    for (bool precompiled : { false, true }) {
+        for (const auto* replacement : { "(elem (i64.const 7) func $g)", "(elem (i64.const 7) funcref (ref.null func))" }) {
+            SCOPED_TRACE(precompiled);
+            SCOPED_TRACE(replacement);
+            auto compartment = CreateEmptyImage();
+            Load(compartment.get(),
+                "(module " + SharedTableImport + GotProviderFunctions + "(elem (i64.const 7) func $different_debug_name)" + replacement + ")",
+                precompiled);
+            Load(compartment.get(), "(module " + SharedTableImport + GotConsumerBody + ")", precompiled);
+            EXPECT_NO_THROW(CheckGotExports(compartment.get()));
+        }
+    }
+}
+
+TEST(TWasmLinking, IncomingSegmentDoesNotOverwriteResolvedGotImport)
+{
+    for (bool precompiled : { false, true }) {
+        for (bool overwriteInConsumer : { false, true }) {
+            SCOPED_TRACE(precompiled);
+            SCOPED_TRACE(overwriteInConsumer);
+            auto compartment = CreateEmptyImage();
+            Load(compartment.get(), "(module " + SharedTableImport + GotProviderFunctions + "(elem (i64.const 7) func $different_debug_name))",
+                precompiled);
+            const TString overwrite = "(func $g (result i64) (i64.const 2)) (elem (i64.const 7) func $g)";
+            if (!overwriteInConsumer) {
+                Load(compartment.get(), "(module " + SharedTableImport + overwrite + ")", precompiled);
+            }
+            // The consumer may itself overwrite a slot whose old function it
+            // imports. Invalidation after instantiation would be too late.
+            Load(compartment.get(), "(module " + SharedTableImport + GotConsumerBody + (overwriteInConsumer ? overwrite : TString()) + ")",
+                precompiled);
+            EXPECT_NO_THROW(CheckGotExports(compartment.get()));
+        }
+    }
+}
+
+TEST(TWasmLinking, GotCacheChecksContentsAfterGuestTableMutation)
+{
+    for (bool precompiled : { false, true }) {
+        SCOPED_TRACE(precompiled);
+        auto compartment = CreateEmptyImage();
+        Load(compartment.get(), "(module " + SharedTableImport + GotProviderFunctions + R"(
+            (elem (i64.const 7) func $different_debug_name)
+            (func $start (table.set (i64.const 7) (ref.null func)))
+            (start $start)))", precompiled);
+        Load(compartment.get(), "(module " + SharedTableImport + GotConsumerBody + ")", precompiled);
+        EXPECT_NO_THROW(CheckGotExports(compartment.get()));
+    }
+}
+
+TEST(TWasmLinking, GotCacheSurvivesCloneAndProviderDestruction)
+{
+    for (bool precompiled : { false, true }) {
+        SCOPED_TRACE(precompiled);
+        auto original = CreateEmptyImage();
+        Load(original.get(), "(module " + SharedTableImport + GotProviderFunctions + "(elem (i64.const 7) func $different_debug_name))",
+            precompiled);
+        auto clone = original->Clone();
+        original.reset();
+        Load(clone.get(), "(module " + SharedTableImport + GotConsumerBody + ")", precompiled);
+        EXPECT_NO_THROW(CheckGotExports(clone.get()));
+    }
+}
+
+TEST(TWasmLinking, GotForwardExportsArePatchedBeforeUse)
+{
+    for (bool precompiled : { false, true }) {
+        SCOPED_TRACE(precompiled);
+        auto compartment = CreateEmptyImage();
+        Load(compartment.get(), "(module " + SharedTableImport + GotConsumerBody + GotProviderFunctions + ")", precompiled);
+        EXPECT_NO_THROW(CheckGotExports(compartment.get()));
+    }
+}
+
 TEST(TWasmLinking, RejectsOverflowingActiveSegment)
 {
     auto compartment = CreateEmptyImage();

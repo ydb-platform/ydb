@@ -267,7 +267,13 @@ IR::Module ParseWast(TStringBuf wast)
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TNamedGlobalOffsetTableElements {
-    THashMap<std::string, int> Functions;
+    struct TFunctionEntry {
+        Uptr Slot;
+        // Instance indices remain valid when the compartment is cloned.
+        Uptr InstanceIndex;
+    };
+
+    THashMap<std::string, TFunctionEntry> Functions;
     THashMap<std::string, int> DataEntries;
 };
 
@@ -376,7 +382,6 @@ public:
         auto wavmModule = LoadModuleFromBytecode(bytecode);
         CoerceImportIndexTypesToLayout(wavmModule->ir, MemoryLayoutData_);
         auto linkResult = LinkModule(wavmModule->ir);
-        AddExportsToGlobalOffsetTable(wavmModule->ir);
         InstantiateModule(wavmModule, linkResult, name);
     }
 
@@ -385,7 +390,6 @@ public:
         CoerceImportIndexTypesToLayout(irModule, MemoryLayoutData_);
         auto wavmModule = Runtime::compileModule(irModule);
         auto linkResult = LinkModule(wavmModule->ir);
-        AddExportsToGlobalOffsetTable(wavmModule->ir);
         InstantiateModule(wavmModule, linkResult, name);
     }
 
@@ -434,7 +438,6 @@ public:
             wavmModule = Runtime::loadPrecompiledModule(irModule, objectCode);
         }
         auto linkResult = LinkModule(wavmModule->ir);
-        AddExportsToGlobalOffsetTable(wavmModule->ir);
         InstantiateModule(wavmModule, linkResult, name);
     }
 
@@ -474,7 +477,6 @@ public:
 
                 auto sdkModule = Runtime::compileModule(irModule);
                 auto linkResult = LinkModule(sdkModule->ir);
-                AddExportsToGlobalOffsetTable(sdkModule->ir);
                 InstantiateModule(sdkModule, linkResult, "env");
                 RuntimeLibraryInstance_ = Instances_.back();
 
@@ -744,7 +746,7 @@ private:
     std::optional<TDuration> Timeout_;
     std::optional<struct timespec> Deadline_;
 
-    void AddExportsToGlobalOffsetTable(IR::Module& irModule);
+    void AddExportsToGlobalOffsetTable(const IR::Module& irModule, Runtime::Instance* instance, Uptr tableBase);
     void InstantiateModule(const Runtime::ModuleRef& wavmModule, const Runtime::LinkResult& linkResult, TStringBuf debugName);
     void ApplyDataRelocationsAndCallConstructors(Runtime::Instance* instance);
 
@@ -900,7 +902,19 @@ private:
             return std::nullopt;
         }
 
-        Uptr indexInGOT = it->second;
+        const auto entry = it->second;
+        // Pending weak exports are patched immediately after instantiation.
+        // For loaded exports, never reuse a slot replaced by another module or
+        // by guest table.set/table.init code.
+        if (entry.InstanceIndex < Compartment_->Instances_.size()) {
+            auto* expected = Runtime::getInstanceExport(Compartment_->Instances_[entry.InstanceIndex], objectName);
+            auto* table = Compartment_->GetGlobalOffsetTable();
+            if (!expected || entry.Slot >= Runtime::getTableNumElements(table) || Runtime::getTableElement(table, entry.Slot) != expected) {
+                Compartment_->GlobalOffsetTableElements_.Functions.erase(it);
+                return std::nullopt;
+            }
+        }
+        Uptr indexInGOT = entry.Slot;
         auto globalType = asGlobalType(type);
         globalType.isMutable = true;
         auto result = CreateCheckedGlobal(Compartment_->Compartment_, globalType, std::string(objectName));
@@ -917,7 +931,8 @@ private:
 
         YT_ASSERT(!ResolveFunctionFromGlobalOffsetTable(moduleName, objectName, type).has_value());
 
-        for (const auto& instance : Compartment_->Instances_) {
+        for (Uptr instanceIndex = 0; instanceIndex < Compartment_->Instances_.size(); ++instanceIndex) {
+            const auto& instance = Compartment_->Instances_[instanceIndex];
             auto* object = Runtime::getInstanceExport(instance, objectName);
             // |type| here is the GOT.func *global* import type, not the function
             // signature — only require a function export by name.
@@ -926,7 +941,7 @@ private:
                 auto growResult = Runtime::growTable(Compartment_->GetGlobalOffsetTable(), 1, &indexInGOT);
                 THROW_ERROR_EXCEPTION_IF(growResult != Runtime::GrowResult::success, "WebAssembly grow GOT error");
                 Runtime::setTableElement(Compartment_->GetGlobalOffsetTable(), indexInGOT, object);
-                Compartment_->GlobalOffsetTableElements_.Functions[objectName] = indexInGOT;
+                Compartment_->GlobalOffsetTableElements_.Functions[objectName] = { indexInGOT, instanceIndex };
                 return ResolveFunctionFromGlobalOffsetTable(moduleName, objectName, type);
             }
         }
@@ -1018,7 +1033,7 @@ private:
                 auto growResult = Runtime::growTable(Compartment_->GetGlobalOffsetTable(), 1, &indexInGOT);
                 THROW_ERROR_EXCEPTION_IF(growResult != Runtime::GrowResult::success, "WebAssembly grow GOT error");
                 Compartment_->LinkingData_.GlobalsToWeakFunctionsToPatch.emplace_back(objectName, indexInGOT);
-                Compartment_->GlobalOffsetTableElements_.Functions[objectName] = indexInGOT;
+                Compartment_->GlobalOffsetTableElements_.Functions[objectName] = { indexInGOT, Compartment_->Instances_.size() };
                 return ResolveFunctionFromGlobalOffsetTable(moduleName, objectName, type);
             }
         }
@@ -1103,6 +1118,32 @@ Runtime::LinkResult TWebAssemblyCompartment::LinkModule(const IR::Module& irModu
     EnsureGlobalOffsetTableCapacity(GetGlobalOffsetTable(), requiredSize);
 
     auto linker = TLinker(this, &irModule);
+    // Invalidate slots before resolving imports: this incoming module may both
+    // overwrite an old slot and import the function that used to occupy it.
+    // Fallback allocations are above the active segments reserved above.
+    for (Uptr tableIndex = 0; tableIndex < irModule.tables.imports.size(); ++tableIndex) {
+        const auto& tableImport = irModule.tables.imports[tableIndex];
+        Runtime::Object* table = nullptr;
+        if (!linker.resolve(tableImport.moduleName, tableImport.exportName, tableImport.type, table) ||
+            table != Runtime::asObject(GetGlobalOffsetTable())) {
+            continue;
+        }
+        for (const auto& segment : irModule.elemSegments) {
+            if (segment.type != IR::ElemSegment::Type::active || segment.tableIndex != tableIndex) {
+                continue;
+            }
+            const auto offset = GetActiveElemSegmentOffset(irModule, segment, MemoryLayoutData_.TableBases.back());
+            const auto size = GetActiveElemSegmentSize(segment);
+            for (auto it = GlobalOffsetTableElements_.Functions.begin(); it != GlobalOffsetTableElements_.Functions.end();) {
+                const auto slot = it->second.Slot;
+                if (slot >= offset && slot - offset < size) {
+                    GlobalOffsetTableElements_.Functions.erase(it++);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
     auto linkResult = Runtime::linkModule(irModule, linker);
 
     if (!linkResult.success) {
@@ -1115,10 +1156,8 @@ Runtime::LinkResult TWebAssemblyCompartment::LinkModule(const IR::Module& irModu
     return linkResult;
 }
 
-void TWebAssemblyCompartment::AddExportsToGlobalOffsetTable(IR::Module& irModule)
+void TWebAssemblyCompartment::AddExportsToGlobalOffsetTable(const IR::Module& irModule, Runtime::Instance* instance, Uptr tableBase)
 {
-    EnsureFunctionDebugNamesFromExports(irModule);
-
     THashMap<Uptr, std::vector<std::string>> exportedFunctions;
     for (const auto& item : irModule.exports) {
         if (item.kind == IR::ExternKind::function) {
@@ -1127,16 +1166,22 @@ void TWebAssemblyCompartment::AddExportsToGlobalOffsetTable(IR::Module& irModule
     }
 
     for (const auto& elementSegment : irModule.elemSegments) {
-        if (elementSegment.type != IR::ElemSegment::Type::active) {
+        if (elementSegment.type != IR::ElemSegment::Type::active || instance->tables[elementSegment.tableIndex] != GetGlobalOffsetTable()) {
             continue;
         }
-        const auto baseOffset = GetActiveElemSegmentOffset(irModule, elementSegment, MemoryLayoutData_.TableBases.back());
+        const auto baseOffset = GetActiveElemSegmentOffset(irModule, elementSegment, tableBase);
         const auto indexExportedFunction = [&](Uptr tableIndex, Uptr functionIndex) {
+            const auto slot = baseOffset + tableIndex;
+            // Inspect final contents: later active segments (including ref.null)
+            // may have overwritten this function while instantiating the module.
+            if (Runtime::getTableElement(GetGlobalOffsetTable(), slot) != Runtime::asObject(instance->functions[functionIndex])) {
+                return;
+            }
             // Export names are the linking ABI; debug names may be stripped,
             // demangled or unrelated, and one function may have several aliases.
             if (const auto it = exportedFunctions.find(functionIndex); it != exportedFunctions.end()) {
                 for (const auto& name : it->second) {
-                    GlobalOffsetTableElements_.Functions[name] = baseOffset + tableIndex;
+                    GlobalOffsetTableElements_.Functions[name] = { slot, Instances_.size() - 1 };
                 }
             }
         };
@@ -1210,6 +1255,7 @@ void TWebAssemblyCompartment::InstantiateModule(
         MemoryLayoutData_.MemoryBases.push_back(newMemoryBase);
     }
 
+    const auto tableBase = MemoryLayoutData_.TableBases.back();
     // LinkModule reserved active segments before resolving GOT.func. Include
     // slots allocated during linking so subsequent modules cannot reuse them.
     MemoryLayoutData_.TableBases.push_back(Runtime::getTableNumElements(GetGlobalOffsetTable()));
@@ -1225,6 +1271,7 @@ void TWebAssemblyCompartment::InstantiateModule(
         LinkingData_.GlobalsToWeakFunctionsToPatch.clear();
     }
 
+    AddExportsToGlobalOffsetTable(wavmModule->ir, instance, tableBase);
     ApplyDataRelocationsAndCallConstructors(instance);
 }
 
@@ -1245,7 +1292,7 @@ void TWebAssemblyCompartment::ApplyDataRelocationsAndCallConstructors(Runtime::I
     initializationDeadline.tv_sec += InitializationBudgetSeconds;
     const auto restrictDeadline = [&](const std::optional<struct timespec>& deadline) {
         if (deadline && (deadline->tv_sec < initializationDeadline.tv_sec ||
-            (deadline->tv_sec == initializationDeadline.tv_sec && deadline->tv_nsec < initializationDeadline.tv_nsec))) {
+                            (deadline->tv_sec == initializationDeadline.tv_sec && deadline->tv_nsec < initializationDeadline.tv_nsec))) {
             initializationDeadline = *deadline;
         }
     };
@@ -1437,7 +1484,6 @@ std::unique_ptr<TWebAssemblyCompartment> CreateImage(EKnownImage image)
 
     if (runtimeModule) {
         auto linkResult = compartment->LinkModule(runtimeModule->ir);
-        compartment->AddExportsToGlobalOffsetTable(runtimeModule->ir);
         compartment->InstantiateModule(runtimeModule, linkResult, "env");
         compartment->RuntimeLibraryInstance_ = compartment->Instances_.back();
     }
@@ -1445,7 +1491,6 @@ std::unique_ptr<TWebAssemblyCompartment> CreateImage(EKnownImage image)
     if (image == EKnownImage::QueryLanguage) {
         auto wasmModule = LoadBuiltinUdfs();
         auto linkResult = compartment->LinkModule(wasmModule->ir);
-        compartment->AddExportsToGlobalOffsetTable(wasmModule->ir);
         compartment->InstantiateModule(wasmModule, linkResult, "env");
     }
 

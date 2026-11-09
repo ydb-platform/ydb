@@ -2,10 +2,10 @@
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_checkpoint_storage.h>
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_state_storage.h>
+#include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/ydb/local_session.h>
 #include <ydb/core/fq/libs/ydb/sdk_session.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
@@ -53,7 +53,8 @@ class TSnapshotSessionActor: public TActorBootstrapped<TSnapshotSessionActor> {
 public:
     explicit TSnapshotSessionActor(NThreading::TPromise<ISession::TPtr> promise)
         : Promise(std::move(promise))
-    {}
+    {
+    }
 
     void Bootstrap() {
         Promise.SetValue(CreateLocalSession());
@@ -67,9 +68,12 @@ private:
 class TSnapshotStorageCallActor: public TActorBootstrapped<TSnapshotStorageCallActor> {
 public:
     using TFuture = NThreading::TFuture<NYql::TIssues>;
+
     TSnapshotStorageCallActor(NThreading::TPromise<TFuture> promise, std::function<TFuture()> operation)
-        : Promise(std::move(promise)), Operation(std::move(operation))
-    {}
+        : Promise(std::move(promise))
+        , Operation(std::move(operation))
+    {
+    }
 
     void Bootstrap() {
         Promise.SetValue(Operation());
@@ -236,8 +240,7 @@ public:
         TActorId sender = GetRuntime()->AllocateEdgeActor();
 
         TCoordinatorId coordinatorId(graphId, generation);
-        auto request = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointRequest>(
-            coordinatorId, checkpointId, 0, description);
+        auto request = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointRequest>(coordinatorId, checkpointId, 0, description);
         GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
 
         CheckCheckpointResponse<TEvCheckpointStorage::TEvCreateCheckpointResponse>(checkpointId, expectFailure);
@@ -680,17 +683,17 @@ public:
                          : GetRuntime()->GetAppData().TenantName + "/.metadata/streaming/checkpoints";
     }
 
-    NYdb::NTable::TDataQueryResult SnapshotQuery(ISession::TPtr session, const TString& sql,
-        ISession::TTxControl tx, std::shared_ptr<NYdb::TParamsBuilder> params = {})
+    NYdb::NTable::TDataQueryResult SnapshotQuery(
+        ISession::TPtr session, const TString& sql, ISession::TTxControl tx, std::shared_ptr<NYdb::TParamsBuilder> params = {})
     {
-        auto result = session->ExecuteDataQuery(
-            TStringBuilder() << "PRAGMA TablePathPrefix(\"" << SnapshotPrefix() << "\"); " << sql,
-            tx, std::move(params), NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TestTimeout)
-                .OperationTimeout(TestTimeout)).GetValueSync();
+        auto result = session
+                          ->ExecuteDataQuery(TStringBuilder() << "PRAGMA TablePathPrefix(\"" << SnapshotPrefix() << "\"); " << sql, tx,
+                              std::move(params), NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TestTimeout).OperationTimeout(TestTimeout))
+                          .GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         if (auto transaction = result.GetTransaction()) {
-            Cerr << "snapshot test mode=" << (UseYdbSdk ? "sdk" : "local")
-                 << " transaction=" << transaction->GetId() << " deadline=" << TestTimeout << Endl;
+            Cerr << "snapshot test mode=" << (UseYdbSdk ? "sdk" : "local") << " transaction=" << transaction->GetId()
+                 << " deadline=" << TestTimeout << Endl;
         }
         session->UpdateTransaction(result.GetTransaction());
         for (const auto& set : result.GetResultSets()) {
@@ -701,10 +704,14 @@ public:
 
     TString StatePredicate(ui64 taskId) {
         return TStringBuilder() << "graph_id = \"" << GraphId << "\" AND task_id = " << taskId
-            << "ul AND coordinator_generation = 17ul AND seq_no = 1ul";
+                                << "ul AND coordinator_generation = 17ul AND seq_no = 1ul";
     }
 
-    enum class ESnapshotInterleaving { Stable, GarbageCollection, Drop };
+    enum class ESnapshotInterleaving {
+        Stable,
+        GarbageCollection,
+        Drop
+    };
 
     void SnapshotConsistency(ESnapshotInterleaving interleaving) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
@@ -720,16 +727,16 @@ public:
         CompleteCheckpoint(GraphId, Generation, CheckpointId1);
 
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        NYdb::NTable::TTableClient client(driver, NYdb::NTable::TClientSettings()
-            .DiscoveryEndpoint(GetEnv("YDB_ENDPOINT")).Database(GetEnv("YDB_DATABASE")));
+        NYdb::NTable::TTableClient client(
+            driver, NYdb::NTable::TClientSettings().DiscoveryEndpoint(GetEnv("YDB_ENDPOINT")).Database(GetEnv("YDB_DATABASE")));
         auto writer = NewSnapshotSession(client);
         auto reader = NewSnapshotSession(client);
         TVector<TString> expected;
         // Split actual writer-produced serialized bytes into four real table rows
         // per task. Preserve the writer's compression/type columns on every row.
-        for (ui64 taskId : {1ul, 2ul}) {
-            auto original = SnapshotQuery(writer, "SELECT blob FROM states WHERE " + StatePredicate(taskId) + ";",
-                ISession::TTxControl::BeginAndCommitTx());
+        for (ui64 taskId : { 1ul, 2ul }) {
+            auto original =
+                SnapshotQuery(writer, "SELECT blob FROM states WHERE " + StatePredicate(taskId) + ";", ISession::TTxControl::BeginAndCommitTx());
             auto parser = original.GetResultSetParser(0);
             UNIT_ASSERT(parser.TryNextRow());
             TString bytes = *parser.ColumnParser("blob").GetOptionalString();
@@ -740,18 +747,20 @@ public:
                 chunks.push_back(bytes.substr(bytes.size() * i / 4, bytes.size() * (i + 1) / 4 - bytes.size() * i / 4));
                 expected.push_back(chunks.back());
             }
-            for (ui64 i : {1ul, 2ul, 3ul, 0ul}) {
+            for (ui64 i : { 1ul, 2ul, 3ul, 0ul }) {
                 auto params = std::make_shared<NYdb::TParamsBuilder>();
                 params->AddParam("$chunk").String(chunks[i]).Build();
-                SnapshotQuery(writer, TStringBuilder() << "DECLARE $chunk AS String; UPSERT INTO states "
-                    << "(graph_id, task_id, coordinator_generation, seq_no, blob_seq_num, blob, type, is_compressed) "
-                    << "SELECT graph_id, task_id, coordinator_generation, seq_no, " << i << "ul AS blob_seq_num, $chunk AS blob, type, is_compressed "
-                    << "FROM states WHERE " << StatePredicate(taskId) << " AND blob_seq_num = 0ul;",
+                SnapshotQuery(writer,
+                    TStringBuilder() << "DECLARE $chunk AS String; UPSERT INTO states "
+                                     << "(graph_id, task_id, coordinator_generation, seq_no, blob_seq_num, blob, type, is_compressed) "
+                                     << "SELECT graph_id, task_id, coordinator_generation, seq_no, " << i
+                                     << "ul AS blob_seq_num, $chunk AS blob, type, is_compressed "
+                                     << "FROM states WHERE " << StatePredicate(taskId) << " AND blob_seq_num = 0ul;",
                     ISession::TTxControl::BeginAndCommitTx(), params);
             }
         }
-        const TString metadataSql = TStringBuilder() << "SELECT status, graph_description_id FROM checkpoints_metadata WHERE graph_id = \"" << GraphId
-            << "\" AND coordinator_generation = 17ul AND seq_no = 1ul;";
+        const TString metadataSql = TStringBuilder() << "SELECT status, graph_description_id FROM checkpoints_metadata WHERE graph_id = \""
+                                                     << GraphId << "\" AND coordinator_generation = 17ul AND seq_no = 1ul;";
         const auto snapshotDeadline = TInstant::Now() + TestTimeout;
         auto metadata = SnapshotQuery(reader, metadataSql, ISession::TTxControl::BeginTx(true));
         UNIT_ASSERT(reader->HasActiveTransaction());
@@ -765,7 +774,8 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(*metadataParser.ColumnParser("status").GetOptionalUint8(), static_cast<ui8>(ECheckpointStatus::Completed));
         const TString graphDescriptionId = *metadataParser.ColumnParser("graph_description_id").GetOptionalString();
         UNIT_ASSERT(!metadataParser.TryNextRow());
-        const TString graphSql = TStringBuilder() << "SELECT graph_description, ref_count FROM checkpoints_graphs_description WHERE id = \"" << graphDescriptionId << "\";";
+        const TString graphSql = TStringBuilder() << "SELECT graph_description, ref_count FROM checkpoints_graphs_description WHERE id = \""
+                                                  << graphDescriptionId << "\";";
         auto graphBefore = SnapshotQuery(writer, graphSql, ISession::TTxControl::BeginAndCommitTx());
         auto beforeParser = graphBefore.GetResultSetParser(0);
         UNIT_ASSERT(beforeParser.TryNextRow());
@@ -804,11 +814,11 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(*graphParser.ColumnParser("ref_count").GetOptionalUint64(), 1);
         UNIT_ASSERT(!graphParser.TryNextRow());
         size_t row = 0;
-        for (ui64 taskId : {1ul, 2ul}) {
+        for (ui64 taskId : { 1ul, 2ul }) {
             for (ui64 chunk = 0; chunk < 4; ++chunk) {
                 const bool finalChunk = taskId == 2 && chunk == 3;
-                auto result = SnapshotQuery(reader, TStringBuilder() << "SELECT blob FROM states WHERE "
-                    << StatePredicate(taskId) << " AND blob_seq_num = " << chunk << "ul;",
+                auto result = SnapshotQuery(reader,
+                    TStringBuilder() << "SELECT blob FROM states WHERE " << StatePredicate(taskId) << " AND blob_seq_num = " << chunk << "ul;",
                     finalChunk ? ISession::TTxControl::ContinueAndCommitTx() : ISession::TTxControl::ContinueTx());
                 if constexpr (UseYdbSdk) {
                     // A successful commit may return an empty transaction ID.
@@ -835,34 +845,33 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(after.GetResultSet(0).RowsCount(), 0);
             auto graphAfter = SnapshotQuery(writer, graphSql, ISession::TTxControl::BeginAndCommitTx(true));
             UNIT_ASSERT_VALUES_EQUAL(graphAfter.GetResultSet(0).RowsCount(), 0);
-            for (ui64 taskId : {1ul, 2ul}) {
-                auto stateAfter = SnapshotQuery(writer, "SELECT blob FROM states WHERE " + StatePredicate(taskId) + ";",
-                    ISession::TTxControl::BeginAndCommitTx(true));
+            for (ui64 taskId : { 1ul, 2ul }) {
+                auto stateAfter = SnapshotQuery(
+                    writer, "SELECT blob FROM states WHERE " + StatePredicate(taskId) + ";", ISession::TTxControl::BeginAndCommitTx(true));
                 UNIT_ASSERT_VALUES_EQUAL(stateAfter.GetResultSet(0).RowsCount(), 0);
             }
             if (interleaving == ESnapshotInterleaving::GarbageCollection) {
-                auto upper = SnapshotQuery(writer, TStringBuilder()
-                    << "SELECT status, graph_description_id FROM checkpoints_metadata WHERE graph_id = \"" << GraphId
-                    << "\" AND coordinator_generation = 17ul AND seq_no = 2ul;",
-                    ISession::TTxControl::BeginAndCommitTx(true));
+                auto upper = SnapshotQuery(writer,
+                    TStringBuilder() << "SELECT status, graph_description_id FROM checkpoints_metadata WHERE graph_id = \"" << GraphId
+                                     << "\" AND coordinator_generation = 17ul AND seq_no = 2ul;", ISession::TTxControl::BeginAndCommitTx(true));
                 auto upperParser = upper.GetResultSetParser(0);
                 UNIT_ASSERT(upperParser.TryNextRow());
                 UNIT_ASSERT_VALUES_EQUAL(*upperParser.ColumnParser("status").GetOptionalUint8(), static_cast<ui8>(ECheckpointStatus::Completed));
                 const TString upperDescriptionId = *upperParser.ColumnParser("graph_description_id").GetOptionalString();
                 UNIT_ASSERT(!upperParser.TryNextRow());
                 UNIT_ASSERT_VALUES_UNEQUAL(upperDescriptionId, graphDescriptionId);
-                auto upperGraph = SnapshotQuery(writer, TStringBuilder()
-                    << "SELECT graph_description, ref_count FROM checkpoints_graphs_description WHERE id = \"" << upperDescriptionId << "\";",
-                    ISession::TTxControl::BeginAndCommitTx(true));
+                auto upperGraph = SnapshotQuery(writer,
+                    TStringBuilder() << "SELECT graph_description, ref_count FROM checkpoints_graphs_description WHERE id = \""
+                                     << upperDescriptionId << "\";", ISession::TTxControl::BeginAndCommitTx(true));
                 auto upperGraphParser = upperGraph.GetResultSetParser(0);
                 UNIT_ASSERT(upperGraphParser.TryNextRow());
                 UNIT_ASSERT_VALUES_EQUAL(*upperGraphParser.ColumnParser("graph_description").GetOptionalString(), expectedGraph);
                 UNIT_ASSERT_VALUES_EQUAL(*upperGraphParser.ColumnParser("ref_count").GetOptionalUint64(), 1);
                 UNIT_ASSERT(!upperGraphParser.TryNextRow());
-                for (ui64 taskId : {1ul, 2ul}) {
-                    auto upperState = SnapshotQuery(writer, TStringBuilder()
-                        << "SELECT blob FROM states WHERE graph_id = \"" << GraphId << "\" AND task_id = " << taskId
-                        << "ul AND coordinator_generation = 17ul AND seq_no = 2ul;",
+                for (ui64 taskId : { 1ul, 2ul }) {
+                    auto upperState = SnapshotQuery(writer,
+                        TStringBuilder() << "SELECT blob FROM states WHERE graph_id = \"" << GraphId << "\" AND task_id = " << taskId
+                                         << "ul AND coordinator_generation = 17ul AND seq_no = 2ul;",
                         ISession::TTxControl::BeginAndCommitTx(true));
                     UNIT_ASSERT_VALUES_EQUAL(upperState.GetResultSet(0).RowsCount(), 1);
                 }
@@ -872,18 +881,25 @@ public:
 
     void DeleteSnapshotGraph() {
         auto sender = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender,
-            new TEvCheckpointStorage::TEvDeleteGraphRequest(GraphId)));
+        GetRuntime()->Send(
+            new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, new TEvCheckpointStorage::TEvDeleteGraphRequest(GraphId)));
         TAutoPtr<IEventHandle> handle;
         auto* event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvDeleteGraphResponse>(handle, TestTimeout);
         UNIT_ASSERT(event);
         UNIT_ASSERT_C(event->Issues.Empty(), event->Issues.ToString());
     }
 
-    void SnapshotReadsMetadataGraphAndAllRowsStable() { SnapshotConsistency(ESnapshotInterleaving::Stable); }
-    void SnapshotReadsMetadataGraphAndAllRowsAcrossDelete() { SnapshotConsistency(ESnapshotInterleaving::GarbageCollection); }
+    void SnapshotReadsMetadataGraphAndAllRowsStable() {
+        SnapshotConsistency(ESnapshotInterleaving::Stable);
+    }
 
-    void SnapshotReadsMetadataGraphAndAllRowsAcrossDrop() { SnapshotConsistency(ESnapshotInterleaving::Drop); }
+    void SnapshotReadsMetadataGraphAndAllRowsAcrossDelete() {
+        SnapshotConsistency(ESnapshotInterleaving::GarbageCollection);
+    }
+
+    void SnapshotReadsMetadataGraphAndAllRowsAcrossDrop() {
+        SnapshotConsistency(ESnapshotInterleaving::Drop);
+    }
 
     void GarbageCollectSnapshotGraph(const NYdb::TDriver& driver) {
         IYdbConnection::TPtr connection;
@@ -896,7 +912,7 @@ public:
         } else {
             connection = CreateLocalYdbConnection(GetRuntime()->GetAppData().TenantName, ".metadata/streaming/checkpoints", 10);
         }
-        auto metadata = NewYdbCheckpointStorage(settings, CreateEntityIdGenerator("snapshot"), connection);
+        auto metadata = NewYdbCheckpointStorage(settings, CreateEntityIdGenerator("id"), connection);
         auto states = NewYdbStateStorage(TCheckpointStorageSettings{}, connection);
         const auto call = [&](std::function<NThreading::TFuture<NYql::TIssues>()> operation) {
             NThreading::TFuture<NYql::TIssues> future;
@@ -911,27 +927,33 @@ public:
             UNIT_ASSERT_C(issues.Empty(), issues.ToString());
         };
         // These are the existing normal-GC operations, in their actual order.
-        call([&] { return metadata->MarkCheckpointsGC(GraphId, CheckpointId2); });
-        call([&] { return states->DeleteCheckpoints(GraphId, CheckpointId2); });
-        call([&] { return metadata->DeleteMarkedCheckpoints(GraphId, CheckpointId2); });
+        call([&] {
+            return metadata->MarkCheckpointsGC(GraphId, CheckpointId2);
+        });
+        call([&] {
+            return states->DeleteCheckpoints(GraphId, CheckpointId2);
+        });
+        call([&] {
+            return metadata->DeleteMarkedCheckpoints(GraphId, CheckpointId2);
+        });
     }
 
     void SnapshotRejectsMissingMetadata() {
         RegisterDefaultCoordinator();
         CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        NYdb::NTable::TTableClient client(driver, NYdb::NTable::TClientSettings()
-            .DiscoveryEndpoint(GetEnv("YDB_ENDPOINT")).Database(GetEnv("YDB_DATABASE")));
+        NYdb::NTable::TTableClient client(
+            driver, NYdb::NTable::TClientSettings().DiscoveryEndpoint(GetEnv("YDB_ENDPOINT")).Database(GetEnv("YDB_DATABASE")));
         auto writer = NewSnapshotSession(client);
-        SnapshotQuery(writer, "DELETE FROM checkpoints_metadata WHERE graph_id = \"" + GraphId + "\";",
-            ISession::TTxControl::BeginAndCommitTx());
+        SnapshotQuery(
+            writer, "DELETE FROM checkpoints_metadata WHERE graph_id = \"" + GraphId + "\";", ISession::TTxControl::BeginAndCommitTx());
         auto reader = NewSnapshotSession(client);
         auto metadata = SnapshotQuery(reader, "SELECT graph_description_id FROM checkpoints_metadata WHERE graph_id = \"" + GraphId + "\";",
             ISession::TTxControl::BeginTx(true));
         UNIT_ASSERT_VALUES_EQUAL(metadata.GetResultSet(0).RowsCount(), 0);
         // A graph row still exists, but cannot authorize an attempt by itself.
-        auto graph = SnapshotQuery(writer, "SELECT graph_description FROM checkpoints_graphs_description;",
-            ISession::TTxControl::BeginAndCommitTx(true));
+        auto graph =
+            SnapshotQuery(writer, "SELECT graph_description FROM checkpoints_graphs_description;", ISession::TTxControl::BeginAndCommitTx(true));
         UNIT_ASSERT_VALUES_EQUAL(graph.GetResultSet(0).RowsCount(), 1);
         UNIT_ASSERT(reader->Rollback().GetValueSync().IsSuccess());
     }
@@ -940,8 +962,8 @@ public:
         RegisterDefaultCoordinator();
         CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        NYdb::NTable::TTableClient client(driver, NYdb::NTable::TClientSettings()
-            .DiscoveryEndpoint(GetEnv("YDB_ENDPOINT")).Database(GetEnv("YDB_DATABASE")));
+        NYdb::NTable::TTableClient client(
+            driver, NYdb::NTable::TClientSettings().DiscoveryEndpoint(GetEnv("YDB_ENDPOINT")).Database(GetEnv("YDB_DATABASE")));
         auto reader = NewSnapshotSession(client);
         SnapshotQuery(reader, "SELECT graph_description_id FROM checkpoints_metadata;", ISession::TTxControl::BeginTx(true));
         UNIT_ASSERT(reader->HasActiveTransaction());
@@ -957,16 +979,17 @@ public:
         RegisterDefaultCoordinator();
         CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        NYdb::NTable::TTableClient client(driver, NYdb::NTable::TClientSettings()
-            .DiscoveryEndpoint(GetEnv("YDB_ENDPOINT")).Database(GetEnv("YDB_DATABASE")));
+        NYdb::NTable::TTableClient client(
+            driver, NYdb::NTable::TClientSettings().DiscoveryEndpoint(GetEnv("YDB_ENDPOINT")).Database(GetEnv("YDB_DATABASE")));
         auto reader = NewSnapshotSession(client);
         SnapshotQuery(reader, "SELECT graph_description_id FROM checkpoints_metadata;", ISession::TTxControl::BeginTx(true));
         // Inject a real database failure after the first successful read.
-        auto failed = reader->ExecuteDataQuery("SELECT * FROM `missing_snapshot_table`;",
-            ISession::TTxControl::ContinueTx(), {}, NYdb::NTable::TExecDataQuerySettings()
-                .ClientTimeout(TestTimeout).OperationTimeout(TestTimeout)).GetValueSync();
+        auto failed = reader
+                          ->ExecuteDataQuery("SELECT * FROM `missing_snapshot_table`;", ISession::TTxControl::ContinueTx(), {},
+                              NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TestTimeout).OperationTimeout(TestTimeout))
+                          .GetValueSync();
         UNIT_ASSERT(!failed.IsSuccess());
-        reader.Reset(); // Whole attempt is discarded; do not retry its next page.
+        reader.Reset();   // Whole attempt is discarded; do not retry its next page.
         auto fresh = NewSnapshotSession(client);
         UNIT_ASSERT(!fresh->HasActiveTransaction());
     }
@@ -976,8 +999,8 @@ public:
             RegisterDefaultCoordinator();
             CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
             NYdb::TDriver driver(NYdb::TDriverConfig{});
-            NYdb::NTable::TTableClient client(driver, NYdb::NTable::TClientSettings()
-                .DiscoveryEndpoint(GetEnv("YDB_ENDPOINT")).Database(GetEnv("YDB_DATABASE")));
+            NYdb::NTable::TTableClient client(
+                driver, NYdb::NTable::TClientSettings().DiscoveryEndpoint(GetEnv("YDB_ENDPOINT")).Database(GetEnv("YDB_DATABASE")));
             auto created = client.CreateSession().GetValueSync();
             UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
             auto sdkSession = created.GetSession();
@@ -985,8 +1008,10 @@ public:
             SnapshotQuery(reader, "SELECT graph_description_id FROM checkpoints_metadata;", ISession::TTxControl::BeginTx(true));
             auto closed = sdkSession.Close().GetValueSync();
             UNIT_ASSERT_C(closed.IsSuccess(), closed.GetIssues().ToString());
-            auto failed = reader->ExecuteDataQuery("SELECT 1;", ISession::TTxControl::ContinueTx(), {},
-                NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TestTimeout).OperationTimeout(TestTimeout)).GetValueSync();
+            auto failed = reader
+                              ->ExecuteDataQuery("SELECT 1;", ISession::TTxControl::ContinueTx(), {},
+                                  NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TestTimeout).OperationTimeout(TestTimeout))
+                              .GetValueSync();
             UNIT_ASSERT(!failed.IsSuccess());
             UNIT_ASSERT(failed.GetStatus() == NYdb::EStatus::BAD_SESSION || failed.GetStatus() == NYdb::EStatus::SESSION_EXPIRED);
             reader.Reset();
@@ -1009,16 +1034,18 @@ public:
             NYdb::TDriver driver(NYdb::TDriverConfig{});
             NYdb::NTable::TTableClient client(driver);
             auto reader = NewSnapshotSession(client);
-            auto count = SnapshotQuery(reader, "SELECT COUNT(*) AS metadata_count FROM checkpoints_metadata;",
-                ISession::TTxControl::BeginAndCommitTx(true));
+            auto count = SnapshotQuery(
+                reader, "SELECT COUNT(*) AS metadata_count FROM checkpoints_metadata;", ISession::TTxControl::BeginAndCommitTx(true));
             auto countParser = count.GetResultSetParser(0);
             UNIT_ASSERT(countParser.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(countParser.ColumnParser("metadata_count").GetUint64(), 8);
             UNIT_ASSERT(!countParser.TryNextRow());
-            auto result = reader->ExecuteDataQuery(TStringBuilder()
-                << "PRAGMA TablePathPrefix(\"" << SnapshotPrefix() << "\"); SELECT seq_no FROM checkpoints_metadata;",
-                ISession::TTxControl::BeginAndCommitTx(true), {}, NYdb::NTable::TExecDataQuerySettings()
-                    .ClientTimeout(TestTimeout).OperationTimeout(TestTimeout)).GetValueSync();
+            auto result = reader
+                              ->ExecuteDataQuery(TStringBuilder() << "PRAGMA TablePathPrefix(\"" << SnapshotPrefix()
+                                                                  << "\"); SELECT seq_no FROM checkpoints_metadata;",
+                                  ISession::TTxControl::BeginAndCommitTx(true), {},
+                                  NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TestTimeout).OperationTimeout(TestTimeout))
+                              .GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT(result.GetResultSet(0).Truncated());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5);

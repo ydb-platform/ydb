@@ -1995,8 +1995,9 @@ void TestTransferSettingsArePreserved(
     } while (++attempt < config.BackupRestoreAttemptsCount);
 }
 
-Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TSession& session, const TString& path) {
-    auto result = session.DescribeExternalDataSource(path).ExtractValueSync();
+Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TSession& session, const TString& path,
+    const TDescribeExternalDataSourceSettings& settings = {}) {
+    auto result = session.DescribeExternalDataSource(path, settings).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     return TProtoAccessor::GetProto(result.GetExternalDataSourceDescription());;
 }
@@ -3489,6 +3490,52 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestSelectedExternalDataSourceBackupRestore("/Root/nested", EExternalSourceDumpRoot::Directory, EAuthType::AuthTypeToken);
     }
 
+    Y_UNIT_TEST_TWIN(DirectExternalDataSourceInstallationIsPreserved, NonEmpty) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("YdbExternal");
+        TKikimrWithGrpcAndRootSchema server(config);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        const auto settings = TDescribeExternalDataSourceSettings().IncludeInstallation(true);
+        for (const auto& provider : {"Ydb", "YdbExternal", "ObjectStorage"}) {
+            const TString source = TString("/Root/source") + provider;
+            const bool objectStorage = TStringBuf(provider) == "ObjectStorage";
+            const TString location = objectStorage ? "https://bucket.example.test/non-default/prefix/" : "remote.example.test:2135";
+            const TString installation = NonEmpty ? "cloud" : "";
+            ExecuteQuery(session, Sprintf(R"(
+                CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                    SOURCE_TYPE = "%s", LOCATION = "%s", AUTH_METHOD = "NONE", INSTALLATION = "%s"
+                    %s
+                );
+            )", source.c_str(), provider, location.c_str(), installation.c_str(),
+                objectStorage ? "" : ", DATABASE_NAME = '/Remote/database'"), true);
+            const auto original = DescribeExternalDataSource(tableSession, source, settings);
+            UNIT_ASSERT(original.has_installation());
+            UNIT_ASSERT_VALUES_EQUAL(original.installation(), installation);
+            TTempDir tempDir;
+            const auto archive = tempDir.Path().Child("dump");
+            CreateBackupLambda(driver, archive, source, "/Root", NDump::TDumpSettings().EnableDirectExternalDataSource(true))();
+            const auto sourceArchive = archive.Child(TString("source") + provider);
+            const auto sql = TFileInput(sourceArchive.Child(NDump::NFiles::CreateExternalDataSource().FileName)).ReadAll();
+            if (NonEmpty) {
+                UNIT_ASSERT_STRING_CONTAINS(sql, "INSTALLATION = 'cloud'");
+            } else {
+                UNIT_ASSERT(!sql.Contains("INSTALLATION"));
+            }
+            ExecuteQuery(session, Sprintf("DROP EXTERNAL DATA SOURCE `%s`;", source.c_str()), true);
+            CreateRestoreLambda(driver, archive)();
+            const auto restored = DescribeExternalDataSource(tableSession, source, settings);
+            UNIT_ASSERT(restored.has_installation());
+            UNIT_ASSERT_VALUES_EQUAL(restored.installation(), installation);
+            UNIT_ASSERT_VALUES_EQUAL(restored.location(), location);
+            UNIT_ASSERT_VALUES_EQUAL(restored, original);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(DirectObjectStorageExternalDataSourceBackupRestore, Nested) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
@@ -3512,13 +3559,16 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         ExecuteQuery(session, Sprintf(R"(
             CREATE EXTERNAL DATA SOURCE `%s` WITH (
                 SOURCE_TYPE = "ObjectStorage", LOCATION = "https://bucket.example.test/non-default/prefix/",
-                AUTH_METHOD = "NONE"
+                AUTH_METHOD = "NONE", INSTALLATION = "cloud"
             );
         )", source.c_str()), true);
         const auto grant = schemeClient.ModifyPermissions(source, TModifyPermissionsSettings()
             .AddGrantPermissions(TPermissions("root@builtin", {"ydb.generic.read"}))).GetValueSync();
         UNIT_ASSERT_C(grant.IsSuccess(), grant.GetIssues().ToString());
-        const auto original = DescribeExternalDataSource(tableSession, source);
+        const auto completeSettings = TDescribeExternalDataSourceSettings().IncludeInstallation(true);
+        const auto original = DescribeExternalDataSource(tableSession, source, completeSettings);
+        UNIT_ASSERT(original.has_installation());
+        UNIT_ASSERT_VALUES_EQUAL(original.installation(), "cloud");
         ExecuteQuery(session, Sprintf(R"(
             CREATE EXTERNAL TABLE `%s` (key Utf8 NOT NULL) WITH (
                 DATA_SOURCE = "%s", LOCATION = "folder", FORMAT = "csv_with_names"
@@ -3540,6 +3590,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         const auto sql = TFileInput(sourceArchive.Child(NDump::NFiles::CreateExternalDataSource().FileName)).ReadAll();
         UNIT_ASSERT_STRING_CONTAINS(sql, "SOURCE_TYPE = 'ObjectStorage'");
         UNIT_ASSERT_STRING_CONTAINS(sql, "AUTH_METHOD = 'NONE'");
+        UNIT_ASSERT_STRING_CONTAINS(sql, "INSTALLATION = 'cloud'");
         UNIT_ASSERT_STRING_CONTAINS(sql, "https://bucket.example.test/non-default/prefix/");
         UNIT_ASSERT(!sql.Contains("REFERENCES"));
         UNIT_ASSERT(!sql.Contains("DATABASE_NAME"));
@@ -3552,7 +3603,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         ExecuteQuery(session, Sprintf("DROP EXTERNAL TABLE `%s`; DROP EXTERNAL DATA SOURCE `%s`;", table.c_str(), source.c_str()), true);
         CreateRestoreLambda(driver, archive, parent)();
-        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, source), original);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, source, completeSettings), original);
         UNIT_ASSERT(!schemeClient.DescribePath(table).GetValueSync().IsSuccess());
     }
 

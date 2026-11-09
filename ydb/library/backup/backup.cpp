@@ -957,7 +957,9 @@ void BackupExternalDataSource(TDriver driver, const TString& db, const TString& 
 
     Ydb::Table::DescribeExternalDataSourceResult description;
     NTable::TTableClient client(driver);
-    const auto status = NDump::DescribeExternalDataSource(client, dbPath, description);
+    const auto settings = NTable::TDescribeExternalDataSourceSettings()
+        .IncludeInstallation(selection == EExternalSourceSelection::Direct);
+    const auto status = NDump::DescribeExternalDataSource(client, dbPath, description, settings);
     if (selection == EExternalSourceSelection::Direct) {
         // A selected source must fail visibly, including on servers without Describe support.
         VerifyStatus(status, "error describing selected external data source");
@@ -967,7 +969,9 @@ void BackupExternalDataSource(TDriver driver, const TString& db, const TString& 
     CanonizeForBackup(description);
     if (selection == EExternalSourceSelection::Direct) {
         NYql::TIssues issues;
-        Y_ENSURE(NDump::ValidateDirectExternalDataSource(description, issues), issues.ToString());
+        if (!NDump::ValidateDirectExternalDataSource(description, issues)) {
+            VerifyStatus(NDump::Result<TStatus>(EStatus::UNSUPPORTED, issues.ToString()), "unsupported selected external data source");
+        }
     }
     const auto creationQuery = NDump::BuildCreateExternalDataSourceQuery(description, db);
 

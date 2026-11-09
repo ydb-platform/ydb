@@ -7,6 +7,9 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
+#include <ydb/public/lib/ydb_cli/dump/dump.h>
+#include <util/folder/tempdir.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -3694,6 +3697,68 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             auto result = resultFuture.GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST_TWIN(DirectExternalDataSourceBackupPreservesObjectStorageDataPath, NonEmptyInstallation) {
+        using NKikimr::NWrappers::NTestHelpers::TS3Mock;
+        const auto port = NTesting::GetFreePort();
+        THashMap<TString, TString> data{{"/backup-bucket/prefix/data.json", TString(TEST_CONTENT)}};
+        TS3Mock s3Mock(std::move(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT_C(s3Mock.Start(), s3Mock.GetError());
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+        const TString location = TStringBuilder() << "http://localhost:" << port << "/backup-bucket/prefix/";
+        const TString installation = NonEmptyInstallation ? "cloud" : "";
+        auto result = db.ExecuteQuery(Sprintf(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/backup_source` WITH (
+                SOURCE_TYPE = "ObjectStorage", LOCATION = "%s", AUTH_METHOD = "NONE", INSTALLATION = "%s"
+            );
+        )", location.c_str(), installation.c_str()), TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const TString createTable = R"(
+            CREATE EXTERNAL TABLE `/Root/backup_table` (key Utf8 NOT NULL, value Utf8 NOT NULL) WITH (
+                DATA_SOURCE = "/Root/backup_source", LOCATION = "data.json", FORMAT = "json_each_row"
+            );
+        )";
+        result = db.ExecuteQuery(createTable, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto readRows = [&]() {
+            auto rows = db.ExecuteQuery("SELECT key, value FROM `/Root/backup_table` ORDER BY key;", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(rows.IsSuccess(), rows.GetIssues().ToString());
+            TVector<std::pair<TString, TString>> values;
+            TResultSetParser parser(rows.GetResultSet(0));
+            while (parser.TryNextRow()) {
+                values.emplace_back(TString(parser.ColumnParser(0).GetUtf8()), TString(parser.ColumnParser(1).GetUtf8()));
+            }
+            return values;
+        };
+        const auto originalRows = readRows();
+        UNIT_ASSERT_VALUES_EQUAL(originalRows.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(originalRows[0].first, "1");
+        UNIT_ASSERT_VALUES_EQUAL(originalRows[0].second, "trololo");
+        UNIT_ASSERT_VALUES_EQUAL(originalRows[1].first, "2");
+        UNIT_ASSERT_VALUES_EQUAL(originalRows[1].second, "hello world");
+        TTempDir tempDir;
+        const auto archive = tempDir.Path().Child("dump");
+        NDump::TClient backup(kikimr->GetDriver());
+        const auto dumped = backup.Dump("/Root/backup_source", archive,
+            NDump::TDumpSettings().Database("/Root").EnableDirectExternalDataSource(true));
+        UNIT_ASSERT_C(dumped.IsSuccess(), dumped.GetIssues().ToString());
+        result = db.ExecuteQuery("DROP EXTERNAL TABLE `/Root/backup_table`; DROP EXTERNAL DATA SOURCE `/Root/backup_source`;",
+            TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto restored = backup.Restore(archive, "/Root");
+        UNIT_ASSERT_C(restored.IsSuccess(), restored.GetIssues().ToString());
+        auto tableSession = kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto described = tableSession.DescribeExternalDataSource("/Root/backup_source",
+            NTable::TDescribeExternalDataSourceSettings().IncludeInstallation(true)).GetValueSync();
+        UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+        const auto installed = described.GetExternalDataSourceDescription().GetInstallation();
+        UNIT_ASSERT(installed.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*installed, installation);
+        result = db.ExecuteQuery(createTable, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(readRows() == originalRows, "Restored external source reads different object data");
     }
 
     Y_UNIT_TEST(TestSuccessfulReadAfterPartialFileError) {

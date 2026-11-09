@@ -13,6 +13,7 @@ Ydb::Table::DescribeExternalDataSourceResult Source(const TString& provider, con
     Ydb::Table::DescribeExternalDataSourceResult source;
     source.set_source_type(provider);
     source.set_location("remote.example.test:2135");
+    source.set_installation("");
     (*source.mutable_properties())["AUTH_METHOD"] = auth;
     (*source.mutable_properties())["DATABASE_NAME"] = "/Remote/database";
     return source;
@@ -81,6 +82,29 @@ Y_UNIT_TEST_SUITE(DirectExternalDataSourceDump) {
         UNIT_ASSERT(Supported(source));
         UNIT_ASSERT_STRING_CONTAINS(BuildCreateExternalDataSourceQuery(source, "/Root"),
             "LOCATION = 'https://bucket.example.test/prefix/?X-Amz-Credential=caller%2Fscope&X-Amz-Signature=caller-signature'");
+    }
+
+    Y_UNIT_TEST(InstallationPresenceAndSerializationForEverySupportedProvider) {
+        for (const auto& provider : {"Ydb", "YdbExternal", "ObjectStorage"}) {
+            auto source = Source(provider, "NONE");
+            if (source.source_type() == "ObjectStorage") {
+                source.mutable_properties()->erase("DATABASE_NAME");
+            }
+            source.mutable_self()->set_name("source");
+            source.clear_installation();
+            UNIT_ASSERT_C(!Supported(source), provider);
+            source.set_installation("");
+            UNIT_ASSERT_C(Supported(source), provider);
+            UNIT_ASSERT(!BuildCreateExternalDataSourceQuery(source, "/Root").Contains("INSTALLATION"));
+            source.set_installation("cloud");
+            UNIT_ASSERT_C(Supported(source), provider);
+            UNIT_ASSERT_STRING_CONTAINS(BuildCreateExternalDataSourceQuery(source, "/Root"), "INSTALLATION = 'cloud'");
+            auto propertyInsteadOfMetadata = source;
+            (*propertyInsteadOfMetadata.mutable_properties())["INSTALLATION"] = "cloud";
+            UNIT_ASSERT_C(!Supported(propertyInsteadOfMetadata), provider);
+            source.set_installation("cloud'unsafe");
+            UNIT_ASSERT_C(!Supported(source), provider);
+        }
     }
 
     Y_UNIT_TEST(AllNamedTokenCredentialsAreRejected) {

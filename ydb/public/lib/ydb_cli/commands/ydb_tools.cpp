@@ -91,6 +91,7 @@ void TCommandDump::Config(TConfig& config) {
         .DefaultValue(defaults.Ordered_).StoreTrue(&Ordered);
     config.Opts->AddLongOption("enable-direct-external-data-source",
             "Opt in to experimental direct dumps of Ydb, YdbExternal or ObjectStorage sources with AUTH_METHOD NONE."
+            " Requires server support for installation metadata."
             " Non-NONE authentication modes are unsupported. LOCATION is preserved verbatim and may contain user-supplied sensitive text."
             " Does not affect recursive directory dumps.")
         .DefaultValue(defaults.EnableDirectExternalDataSource_).StoreTrue(&EnableDirectExternalDataSource);

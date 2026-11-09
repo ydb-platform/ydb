@@ -40,6 +40,11 @@ bool ValidateDirectExternalDataSource(
     const Ydb::Table::DescribeExternalDataSourceResult& description,
     NYql::TIssues& issues)
 {
+    if (!description.has_installation()) {
+        issues.AddIssue("Direct external data source dump requires a server that supports IncludeInstallation; "
+            "the installation field is absent, so a complete definition cannot be backed up");
+        return false;
+    }
     const auto reject = [&issues]() {
         issues.AddIssue("Direct external data source dump supports only Ydb/YdbExternal/ObjectStorage sources with known properties "
             "and AUTH_METHOD NONE; non-NONE authentication modes, unknown formats "
@@ -65,7 +70,7 @@ bool ValidateDirectExternalDataSource(
     // The existing serializer embeds the source name in backticks without escaping.
     const auto& name = description.self().name();
     if (name.find_first_of("`\\\r\n") != TString::npos || name.find('\0') != TString::npos
-        || !isLiteral(description.location())) {
+        || !isLiteral(description.location()) || !isLiteral(description.installation())) {
         return reject();
     }
     // Old restore matches the archived identifier as a single non-whitespace token.
@@ -101,12 +106,16 @@ TString BuildCreateExternalDataSourceQuery(
         "WITH (\n"
         "{},\n"
         "{}"
+        "{}"
         "{}\n"
         ");",
         db.c_str(),
         description.self().name().c_str(),
         KeyValueToString("SOURCE_TYPE", description.source_type()),
         KeyValueToString("LOCATION", description.location()),
+        description.has_installation() && !description.installation().empty()
+            ? std::string(",\n") + KeyValueToString("INSTALLATION", description.installation())
+            : "",
         description.properties().empty()
             ? ""
             : std::string(",\n") +

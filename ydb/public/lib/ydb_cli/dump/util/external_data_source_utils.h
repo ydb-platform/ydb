@@ -14,7 +14,8 @@ namespace NYdb::NDump {
 
 bool ValidateDirectExternalDataSourcePath(const TString& path, NYql::TIssues& issues);
 
-// Direct credential-bearing archives cannot be safely restored by older clients in all supported cases.
+// Direct archives using non-NONE authentication cannot be safely restored by older clients in all cases.
+// A complete Describe response with explicit installation presence is required, even for an empty value.
 bool ValidateDirectExternalDataSource(
     const Ydb::Table::DescribeExternalDataSourceResult& description,
     NYql::TIssues& issues);

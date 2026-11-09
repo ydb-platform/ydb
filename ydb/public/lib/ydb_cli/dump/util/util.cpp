@@ -28,9 +28,10 @@ TStatus DescribeTable(TTableClient& tableClient, const TString& path, TMaybe<TTa
     return tableClient.RetryOperationSync(func, TRetryOperationSettings().Idempotent(true));
 }
 
-TStatus DescribeExternalDataSource(TTableClient& client, const TString& path, Ydb::Table::DescribeExternalDataSourceResult& out) {
+TStatus DescribeExternalDataSource(TTableClient& client, const TString& path, Ydb::Table::DescribeExternalDataSourceResult& out,
+    const NTable::TDescribeExternalDataSourceSettings& settings) {
     auto status = client.RetryOperationSync([&](NTable::TSession session) {
-        auto result = session.DescribeExternalDataSource(path).ExtractValueSync();
+        auto result = session.DescribeExternalDataSource(path, settings).ExtractValueSync();
         if (result.IsSuccess()) {
             out = TProtoAccessor::GetProto(result.GetExternalDataSourceDescription());
         }

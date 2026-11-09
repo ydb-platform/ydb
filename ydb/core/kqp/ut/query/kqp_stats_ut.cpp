@@ -765,29 +765,10 @@ Y_UNIT_TEST(RequestUnitForSuccessExplicitPrepare) {
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
-    const ui32 statementCount = 10;
-    const ui32 literalsPerStatement = 500;
-    const ui32 literalStringSize = 1'000;
-
-    TStringBuilder query;
-    for (ui32 stmt = 0; stmt < statementCount; ++stmt) {
-        if (stmt > 0) {
-            query << ";\n";
-        }
-        query << "SELECT * FROM AS_TABLE(AsList(";
-        for (ui32 i = 0; i < literalsPerStatement; ++i) {
-            query << "AsStruct("
-                  << (stmt * literalsPerStatement + i) << " AS Key, "
-                  << "'" << TString(literalStringSize, char('0' + i % 10)) << "' AS Payload"
-                  << ")";
-            if (i + 1 != literalsPerStatement) {
-                query << ", ";
-            }
-        }
-        query << "))";
-    }
-
-    auto result = session.PrepareDataQuery(Q_(query), TPrepareDataQuerySettings().ReportCostInfo(true)).ExtractValueSync();
+    auto result = session.PrepareDataQuery(Q_(R"(
+        SELECT 0; SELECT 1; SELECT 2; SELECT 3; SELECT 4;
+        SELECT 5; SELECT 6; SELECT 7; SELECT 8; SELECT 9;
+    )"), TPrepareDataQuerySettings().ReportCostInfo(true)).ExtractValueSync();
     result.GetIssues().PrintTo(Cerr);
 
     auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);

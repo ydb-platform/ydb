@@ -1458,10 +1458,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
     Y_UNIT_TEST(QSReplySize) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()
-            ->MutableWriteActorSettings()
-            ->SetInFlightMemoryLimitPerActorBytes(64_KB);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableStreamWrite(false);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 10'000, 100, 1'000, 1'000);

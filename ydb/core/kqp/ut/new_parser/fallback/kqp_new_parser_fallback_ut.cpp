@@ -186,6 +186,15 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             "SELECT id, id IN (1), id NOT IN (2), value IN ('one'), NULL IN (1), 1 IN (NULL), "
                 "(1, 2) IN ((1, 2)) FROM `/Root/t` ORDER BY id;",
             "SELECT DISTINCT value AS v FROM `/Root/t` ORDER BY v;",
+            "SELECT value, COUNT(DISTINCT id), SUM(id) FROM `/Root/t` GROUP BY value "
+                "HAVING SUM(id) > 0 ORDER BY COUNT(DISTINCT id), value;",
+            "SELECT id FROM `/Root/t` WHERE CAST(id AS Decimal(12, 2)) "
+                "BETWEEN Decimal('1.00', 12, 2) AND Decimal('2.00', 12, 2) ORDER BY id;",
+            // Chained DISTINCT set operations must preserve positional values
+            // and NULL equality when their internal output IDs are reordered.
+            "SELECT * FROM (SELECT value AS z, id AS a FROM `/Root/t` "
+                "INTERSECT SELECT value AS z, id AS a FROM `/Root/t` WHERE id < 4 "
+                "EXCEPT SELECT value AS z, id AS a FROM `/Root/t` WHERE id = 1) AS u ORDER BY a;",
             "SELECT d.k FROM (SELECT id + 2 AS k FROM `/Root/t`) AS d ORDER BY d.k;",
             "WITH c AS (SELECT id + 1 AS k FROM `/Root/t`) SELECT l.k AS a, r.k AS b "
                 "FROM c AS l LEFT JOIN c AS r ON l.k = r.k ORDER BY a;",

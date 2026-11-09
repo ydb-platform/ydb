@@ -312,7 +312,14 @@ private:
             if (!table.Table) { Unsupported(source.Range, "unavailable table metadata"); }
             TString alias = source.Alias ? Identifier(*source.Alias) : Identifier(std::get<TTable>(source.Value).Name);
             TUnorderedIUs ius;
-            for (const auto id : columns) {
+            // The legacy read schema is a struct, whose fields are name-sorted.
+            // Keep the same IU allocation order: join key pairs are ordered by
+            // IU identity, which also determines physical hash key sequences.
+            auto storedColumns = columns;
+            std::stable_sort(storedColumns.begin(), storedColumns.end(), [&](auto a, auto b) {
+                return Names.Columns[a].Name < Names.Columns[b].Name;
+            });
+            for (const auto id : storedColumns) {
                 const auto& column = Names.Columns[id];
                 if (column.MetadataColumnId) {
                     const auto iu = Props.InfoUnitRegistry.Add(TInfoUnit(alias, column.Name));
@@ -524,9 +531,23 @@ private:
                 set.Op == ESetOperation::Intersect ? "LeftSemi" : "LeftOnly", std::move(keys));
         }
         if (set.Quantifier != ESetQuantifier::All) {
+            // Set-operation DISTINCT exports fresh values in struct-field order,
+            // as the legacy importer does. Preserve SQL positional bindings while
+            // giving subsequent set operations the same physical key ordering.
+            auto distinctColumns = outputIds;
+            std::stable_sort(distinctColumns.begin(), distinctColumns.end(), [&](auto a, auto b) {
+                return Names.Columns[a].Name < Names.Columns[b].Name;
+            });
             TOrderedIUs<> keys;
-            for (const auto column : outputIds) { keys.Append(result.Bindings.at(column)); }
-            result.Op = MakeIntrusive<TOpAggregate>(result.Op, TAggregationIUs{}, std::move(keys), EOpPhase::Undefined, false, pos);
+            TAggregationIUs aggregates;
+            for (const auto column : distinctColumns) {
+                const auto input = result.Bindings.at(column);
+                keys.Append(input);
+                const auto output = Props.InfoUnitRegistry.Add(TInfoUnit("", Names.Columns[column].Name));
+                aggregates.Add(output, TOpAggregationTraits{input, "distinct"});
+                result.Bindings[column] = output;
+            }
+            result.Op = MakeIntrusive<TOpAggregate>(result.Op, std::move(aggregates), std::move(keys), EOpPhase::Undefined, true, pos);
         }
         Limit(query, result);
         return result;

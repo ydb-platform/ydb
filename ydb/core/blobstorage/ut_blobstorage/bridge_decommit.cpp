@@ -557,6 +557,38 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         RunDecommission(env, chain, checker, groupId, {}, {.InProgress = expectRefused, .Done = expectRefused});
     }
 
+    // the node that has no info of the inline pile being decommitted starts its DS proxy without configuration, and the
+    // requests queued there go to the BlobDepot agent, which is in front of the group then, not to the bridge proxy
+    // behind the agent: the blob written through the agent resides in the channels of the BlobDepot only
+    Y_UNIT_TEST(QueuedRequestOfInlinePileReachesAgent) {
+        TEnvironmentSetup env(MakeUnbridgedSettingsWithSpareNode(true));
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertCluster(env, checker, 2);
+        const ui32 nodeId = PickNodeWithoutGroupVDisks(env, groupId);
+
+        TFilterChain chain(env);
+        RunDecommission(env, chain, checker, groupId, {}, {.InProgress = [&] {
+            checker.Write(groupId); // through the agent, into the channels of the BlobDepot
+            const auto [writtenGroupId, id, data] = checker.GetWritten().back();
+
+            // the node is restarted, and the info of the group doesn't get there until the request is queued
+            TEventHold& infoHold = chain.AddHold([&](IEventHandle& ev) {
+                return IsGroupInfoForNode(ev, groupId, nodeId);
+            });
+            Cerr << "*** restarting node " << nodeId << " having no VDisks of the group" << Endl;
+            env.RestartNode(nodeId);
+            env.Sim(TDuration::Seconds(30));
+            const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+            infoHold.WaitForHeld();
+            infoHold.Release();
+            CheckGetResult(*env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false)->Get(), data);
+        }});
+    }
+
     // group converted into an inline pile keeps its id, so it stays in place as the virtual group, but loses its VDisks
     Y_UNIT_TEST(DecommitInlinePile) {
         TEnvironmentSetup env(MakeUnbridgedSettings(true));

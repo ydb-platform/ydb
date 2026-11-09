@@ -103,8 +103,9 @@ namespace NKikimr {
         ApplyGroupInfo(std::move(msg->Info), std::move(msg->NodeLayoutInfo), std::move(msg->StoragePoolCounters));
         if (InlinePileBridgeProxyId && !InitQueue.empty()) {
             // requests queued while we had no configuration (node warden had started us before the group info came) are
-            // sent to the bridge proxy right away rather than when sessions to the inline pile get established, which
-            // may never happen while the pile is out; the requests of the bridge proxy stay in the queue
+            // sent to the group's service id again right away rather than when sessions to the inline pile get
+            // established, which may never happen while the pile is out; the requests of the bridge proxy stay in the
+            // queue
             ProcessInitQueue();
         }
     }

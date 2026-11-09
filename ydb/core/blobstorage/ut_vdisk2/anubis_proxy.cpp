@@ -1,6 +1,7 @@
 #include "defs.h"
 
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisproxy.h>
+#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 
 #include <util/generic/scope.h>
 
@@ -10,7 +11,7 @@ namespace {
 
     // The proxy sends the query to the backpressure queue of its target VDisk and must hand the queue's answer
     // back to the requester; only an answer from another generation of the target is a RACE.
-    void CheckAnswer(bool otherGeneration, NKikimrProto::EReplyStatus expectedStatus) {
+    void CheckAnswer(bool otherGeneration, NKikimrProto::EReplyStatus expectedStatus, bool queueReportsState = false) {
         TTestActorSystem runtime(1);
         runtime.Start();
         Y_DEFER { runtime.Stop(); };
@@ -23,6 +24,11 @@ namespace {
             MakeIntrusive<::NMonitoring::TDynamicCounters>(), selfId, nullptr, NPDisk::DEVICE_TYPE_SSD);
 
         const TActorId proxy = runtime.Register(CreateAnubisProxy(vctx, info, TVDiskIdShort(targetId), 0), nodeId);
+        if (queueReportsState) {
+            // The queue reports its state to the proxy, its parent, as it does when it connects to the target.
+            runtime.Send(new IEventHandle(proxy, TActorId(), new TEvProxyQueueState(targetId,
+                NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead, true, false, false, nullptr)), nodeId);
+        }
         const TActorId edge = runtime.AllocateEdgeActor(nodeId);
         runtime.Send(new IEventHandle(proxy, edge, new TEvAnubisVGet({TLogoBlobID(1, 1, 1, 0, 100, 0)})), nodeId);
 
@@ -51,6 +57,10 @@ Y_UNIT_TEST_SUITE(AnubisProxy) {
 
     Y_UNIT_TEST(AnswerFromOtherGenerationIsRace) {
         CheckAnswer(true, NKikimrProto::RACE);
+    }
+
+    Y_UNIT_TEST(QueueStateReportIsAccepted) {
+        CheckAnswer(false, NKikimrProto::OK, true);
     }
 
 }

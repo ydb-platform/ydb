@@ -7369,9 +7369,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
                 "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
         }
-        UNIT_ASSERT(!graph->CanRead(TRowVersion::Max()));
+        UNIT_ASSERT_VALUES_EQUAL(graph->CanRead(TRowVersion::Max()), !Reboot);
         fixture.Warm();
-        UNIT_ASSERT(fixture.Index() != graph);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Index() == graph, !Reboot);
     }
 
     Y_UNIT_TEST(HnswExplicitMetadataDisableSurvivesRestart) {

@@ -1905,14 +1905,13 @@ public:
     }
 
     void SetUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
-        if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end() && (it->second->LocalTid != tableInfo->LocalTid
-                || it->second->GetSchema() != tableInfo->GetSchema())) {
-            InvalidateHnswTable(it->second->LocalTid);
-            HnswIndexCache.erase(it->second->LocalTid);
+        if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end()) {
+            ReconcileHnswIndexes(*it->second, *tableInfo);
         }
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
+        ScheduleHnswInitialBuilds();
     }
 
     void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
@@ -1966,6 +1965,7 @@ public:
 
     void InvalidateHnswIndex(ui32 localTid, TPathId indexId = {});
     void InvalidateHnswTable(ui32 localTid);
+    void ReconcileHnswIndexes(const TUserTable& before, const TUserTable& after);
     void InvalidateHnswIndexes();
     void PruneHnswIndexes();
     void ScheduleHnswRebuild(ui32 localTid, TPathId indexId = {});

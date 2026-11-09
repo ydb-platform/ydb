@@ -378,6 +378,43 @@ namespace NKikimr::NDataShard {
         }
     }
 
+    void TDataShard::ReconcileHnswIndexes(const TUserTable& before, const TUserTable& after) {
+        if (before.LocalTid != after.LocalTid || before.KeyColumnIds != after.KeyColumnIds
+                || before.KeyColumnTypes != after.KeyColumnTypes
+                || before.Range.From.GetBuffer() != after.Range.From.GetBuffer()
+                || before.Range.To.GetBuffer() != after.Range.To.GetBuffer()
+                || before.Range.FromInclusive != after.Range.FromInclusive
+                || before.Range.ToInclusive != after.Range.ToInclusive) {
+            InvalidateHnswTable(before.LocalTid);
+            HnswIndexCache.erase(before.LocalTid);
+            return;
+        }
+        auto table = HnswIndexCache.find(before.LocalTid);
+        if (table == HnswIndexCache.end()) { return; }
+        for (auto it = table->second.begin(); it != table->second.end();) {
+            const auto* oldIndex = before.HnswIndexes.FindPtr(it->first);
+            const auto* newIndex = after.HnswIndexes.FindPtr(it->first);
+            bool unchanged = oldIndex && newIndex
+                && oldIndex->VectorColumnTag == newIndex->VectorColumnTag
+                && oldIndex->SchemaVersion == newIndex->SchemaVersion
+                && AreHnswIndexSettingsCompatible(oldIndex->Settings, newIndex->Settings)
+                && GetHnswMinRows(oldIndex->Settings) == GetHnswMinRows(newIndex->Settings)
+                && GetHnswDeltaRows(oldIndex->Settings) == GetHnswDeltaRows(newIndex->Settings);
+            if (unchanged) {
+                const auto* oldColumn = before.Columns.FindPtr(oldIndex->VectorColumnTag);
+                const auto* newColumn = after.Columns.FindPtr(newIndex->VectorColumnTag);
+                unchanged = oldColumn && newColumn && oldColumn->Type == newColumn->Type
+                    && oldColumn->NotNull == newColumn->NotNull;
+            }
+            if (unchanged) {
+                ++it;
+            } else {
+                InvalidateHnswIndex(before.LocalTid, it->first);
+                it = table->second.erase(it);
+            }
+        }
+    }
+
     void TDataShard::InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry) {
         // Readers may still own a graph. They must stop using it if its journal
         // no longer receives every write (including eviction on memory pressure).
@@ -669,6 +706,7 @@ namespace NKikimr::NDataShard {
                 if (!metadata.VectorColumnTag) { continue; }
                 auto* entry = GetOrCreateHnswIndexEntry(table->LocalTid, indexId);
                 if (!entry) { continue; }
+                if (entry->Index || entry->Building || entry->RebuildScheduled || entry->InitialBuildAttemptsLeft) { continue; }
                 entry->InitialBuildAttemptsLeft = 30;
                 entry->RebuildScheduled = true;
                 Send(SelfId(), new TEvPrivate::TEvRebuildHnswIndex(table->LocalTid, true, indexId));

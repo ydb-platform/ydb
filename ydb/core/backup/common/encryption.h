@@ -38,6 +38,7 @@ enum class EBackupFileType : unsigned char {
     // Coordination node
     CoordinationNodeCreate = 10,
     CoordinationNodeCreateRateLimiter = 11,
+    CoordinationNodeCreateSemaphore = 12,
 
     // Incomplete
     Incomplete = 10,

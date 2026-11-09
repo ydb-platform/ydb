@@ -40,17 +40,42 @@ class TDataGeneratorWrapper final: public IBulkDataGenerator {
 private:
     const std::shared_ptr<IBulkDataGenerator> InnerDataGenerator;
     const TString EmbeddingColumnName;
+    const TString VectorType;
 
 private:
-    template <typename TProducer>
+    template <typename T, typename TProducer>
     TString SerializeEmbedding(TProducer&& produce) const {
-        // Preserve file-import compatibility: float lists use FloatVector for every
-        // requested vector type, including INT4/UINT4. Binary embeddings are passed through.
         TStringBuilder buffer;
-        NKnnVectorSerialization::TSerializer<float> serializer(&buffer.Out);
+        NKnnVectorSerialization::TSerializer<T> serializer(&buffer.Out);
         produce([&](float value) { serializer.HandleElement(value); });
         serializer.Finish();
         return TString(buffer);
+    }
+
+    template <typename TProducer>
+    TString SerializeEmbedding(TProducer&& produce) const {
+        if (VectorType == "float") {
+            return SerializeEmbedding<float>(produce);
+        } else if (VectorType == "float16") {
+            return SerializeEmbedding<TFloat16>(produce);
+        } else if (VectorType == "bfloat16") {
+            return SerializeEmbedding<TBFloat16>(produce);
+        } else if (VectorType == "float8_e4m3") {
+            return SerializeEmbedding<TFloat8E4M3>(produce);
+        } else if (VectorType == "float8_e5m2") {
+            return SerializeEmbedding<TFloat8E5M2>(produce);
+        } else if (VectorType == "uint4") {
+            return SerializeEmbedding<TUint4>(produce);
+        } else if (VectorType == "int4") {
+            return SerializeEmbedding<TInt4>(produce);
+        } else if (VectorType == "uint8") {
+            return SerializeEmbedding<uint8_t>(produce);
+        } else if (VectorType == "int8") {
+            return SerializeEmbedding<int8_t>(produce);
+        } else if (VectorType == "bit") {
+            return SerializeEmbedding<bool>(produce);
+        }
+        ythrow yexception() << "Unknown vector type: " << VectorType;
     }
 
     static std::pair<std::shared_ptr<arrow::Schema>, std::shared_ptr<arrow::RecordBatch>> DeserializeArrow(TDataPortion::TArrow* data) {
@@ -247,10 +272,11 @@ private:
     }
 
 public:
-    TDataGeneratorWrapper(const std::shared_ptr<IBulkDataGenerator> innerDataGenerator, const TString embeddingColumnName)
+    TDataGeneratorWrapper(const std::shared_ptr<IBulkDataGenerator> innerDataGenerator, const TString embeddingColumnName, const TString vectorType)
         : IBulkDataGenerator(innerDataGenerator->GetName(), innerDataGenerator->GetSize())
         , InnerDataGenerator(innerDataGenerator)
         , EmbeddingColumnName(embeddingColumnName)
+        , VectorType(vectorType)
     {}
 
     virtual TDataPortions GenerateDataPortion() override {
@@ -572,7 +598,7 @@ TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData
                     VectorParams.GetColumns(),
                     TDataGenerator::EPortionSizeUnit::Line
                 );
-                result.push_back(std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName));
+                result.push_back(std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName, VectorParams.VectorOpts.VectorType));
             }
         }
         return result;
@@ -594,13 +620,12 @@ TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData
     );
 
     return {
-        std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName)
+        std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName, VectorParams.VectorOpts.VectorType)
     };
 }
 
 TWorkloadVectorGenerateDataInitializer::TWorkloadVectorGenerateDataInitializer(const TVectorWorkloadParams& params)
     : TWorkloadVectorDataInitializerBase("generator", "Generate random vectors and build a vector index", params)
-    , VectorOpts(params.VectorOpts)
 { }
 
 void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
@@ -621,7 +646,7 @@ void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& o
 
 TBulkDataGeneratorList TWorkloadVectorGenerateDataInitializer::DoGetBulkInitialData() {
     Cout << "Using random seed: " << RandomSeed << Endl;
-    return {std::make_shared<TRandomDataGenerator>(VectorParams, VectorOpts, RowCount, PrefixCount, RandomSeed, StateProcessor.Get())};
+    return {std::make_shared<TRandomDataGenerator>(VectorParams, VectorParams.VectorOpts, RowCount, PrefixCount, RandomSeed, StateProcessor.Get())};
 }
 
 } // namespace NYdbWorkload

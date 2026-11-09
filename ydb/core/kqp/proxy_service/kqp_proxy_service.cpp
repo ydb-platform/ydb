@@ -281,6 +281,7 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         ListScriptExecutionOperations,
         CancelScriptExecutionOperation,
         GetScriptExecutionPhysicalGraph,
+        FetchScriptResults,
     };
 
 public:
@@ -1765,6 +1766,7 @@ public:
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvGetScriptExecutionPhysicalGraph, Handle);
+            hFunc(NKqp::TEvFetchScriptResultsRequest, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
@@ -2054,6 +2056,10 @@ private:
             case EDelayedRequestType::GetScriptExecutionPhysicalGraph:
                 HandleDelayedScriptRequestError<TEvGetScriptPhysicalGraphResponse>(std::move(requestEvent), status, std::move(issues));
                 break;
+
+            case EDelayedRequestType::FetchScriptResults:
+                HandleDelayedScriptRequestError<TEvFetchScriptResultsResponse>(std::move(requestEvent), status, std::move(issues));
+                break;
         }
     }
 
@@ -2158,6 +2164,14 @@ private:
     void Handle(TEvGetScriptExecutionPhysicalGraph::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::GetScriptExecutionPhysicalGraph)) {
             Register(CreateGetScriptExecutionPhysicalGraphActor(ev->Sender, ev->Get()->Database, ev->Get()->ExecutionId));
+        }
+    }
+
+    void Handle(TEvFetchScriptResultsRequest::TPtr& ev) {
+        if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::FetchScriptResults)) {
+            auto& request = *ev->Get();
+            Register(CreateGetScriptExecutionResultActor(ev->Sender, std::move(request.Database), std::move(request.ExecutionId),
+                std::move(request.UserSID), request.ResultSetIndex, request.Offset, request.RowsLimit, request.SizeLimit, request.Deadline));
         }
     }
 

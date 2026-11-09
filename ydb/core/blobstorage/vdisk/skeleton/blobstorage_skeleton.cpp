@@ -2238,7 +2238,7 @@ namespace NKikimr {
         void TryRepeatRecovery(const TActorContext& ctx) {
             if (CurrentStateFunc() != &TThis::StateNormal
                     || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !DurabilityReplDone
-                    || Config->BaseInfo.ReadOnly || GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)) {
+                    || Config->BaseInfo.ReadOnly || GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
                 return;
             }
             RepeatRecoveryPending = false;
@@ -3199,12 +3199,8 @@ namespace NKikimr {
             if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
                 return std::nullopt;
             }
-            const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(
-                info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2));
-            if (!state) {
-                return std::nullopt;
-            }
-            return GetMirror3dcGroupLayouts(*state)->Durability;
+            std::optional<TMirror3dcGroupLayouts> layouts = GetMirror3dcGroupLayouts(info.GetMirror3dcState().State);
+            return layouts ? std::optional(layouts->Durability) : std::nullopt;
         }
 
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
@@ -3266,11 +3262,20 @@ namespace NKikimr {
             if (ev->Sender != Db->ReplID || RepeatOsirisId) {
                 return;
             }
-            if (ev->Cookie) { // semi-finished replication, only phantom blobs
-                ReplOnlyPhantomsRemain = true;
-            } else {
-                ReplDone = true;
-                DurabilityReplDone = true;
+            switch (static_cast<EReplDone>(ev->Cookie)) {
+                case EReplDone::Finished:
+                    ReplDone = true;
+                    DurabilityReplDone = true;
+                    ReplOnlyPhantomsRemain = false;
+                    break;
+
+                case EReplDone::OnlyPhantomsRemain: // semi-finished replication, only phantom blobs
+                    ReplOnlyPhantomsRemain = true;
+                    break;
+
+                case EReplDone::NonPhantomsRemain:
+                    ReplOnlyPhantomsRemain = false;
+                    break;
             }
             TryRepeatRecovery(TActivationContext::AsActorContext());
             UpdateReplState();
@@ -3281,8 +3286,14 @@ namespace NKikimr {
 
         void UpdateVDiskStatus(NKikimrBlobStorage::EVDiskStatus status) {
             const auto& base = Db->Config->BaseInfo;
+            // unreadable blobs found by scrubbing are not phantoms, so they also keep the disk replicating
+            const bool onlyPhantomsRemain = status == NKikimrBlobStorage::REPLICATING && ReplOnlyPhantomsRemain &&
+                !HasUnreadableBlobs;
             Send(NodeWardenServiceId, new TEvStatusUpdate(SelfId().NodeId(), base.PDiskId, base.VDiskSlotId, status,
-                ReplOnlyPhantomsRemain));
+                onlyPhantomsRemain));
+            // Skeleton Front reports the same state to Whiteboard
+            Send(*SkeletonFrontIDPtr, new TEvStatusUpdate(SelfId().NodeId(), base.PDiskId, base.VDiskSlotId, status,
+                onlyPhantomsRemain));
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -3298,7 +3309,7 @@ namespace NKikimr {
                 {"marker", "BSVS37"});
             Become(&TThis::StateLocalRecovery);
             Db->SkeletonID.Set(ctx.SelfID);
-            if (GInfo->GetFailRealmState(SelfVDiskId.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+            if (GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
                 // An excluded realm must answer requests, but must not start recovery or background work.
                 SkeletonErrorState(ctx, TEvFrontRecoveryStatus::LocalRecoveryDone,
                     NKikimrWhiteboard::EVDiskState::LocalRecoveryError);

@@ -106,6 +106,8 @@ public:
                 Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
                 Self->DatabaseSpace.SetThresholds(state.GetValue<T::DatabaseSpaceBlockColor>(),
                     state.GetValue<T::DatabaseSpaceUnblockColor>());
+                Self->BridgeSyncTotalRate = state.GetValue<T::BridgeSyncTotalRate>();
+                Self->BridgeSyncMaxSyncers = state.GetValue<T::BridgeSyncMaxSyncers>();
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;
@@ -282,6 +284,9 @@ public:
                 }
                 if (groups.HaveValue<T::FailRealmStates>()) {
                     const NKikimrBlobStorage::TFailRealmStates states = groups.GetValue<T::FailRealmStates>();
+                    if (states.HasGroupState()) {
+                        group.Mirror3dcState = states.GetGroupState();
+                    }
                     if (states.StateSize()) {
                         Y_ABORT_UNLESS(states.StateSize() == 3);
                         group.FailRealmStates.emplace();
@@ -697,7 +702,7 @@ public:
         for (auto& [id, group] : Self->GroupMap) {
             group->CalculateGroupStatus();
 
-            group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+            group->CalculateLayoutStatus(Self, [&] {
                 const auto [it, inserted] = cache.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
                 if (inserted) {
                     if (const auto jt = Self->StoragePools.find(group->StoragePoolId); jt != Self->StoragePools.end()) {
@@ -809,7 +814,7 @@ public:
                         const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, groupId,
                             targetGroupId);
                         Y_ABORT_UNLESS(inserted);
-                        Self->SyncersRequiringAction.PushBack(&it->second);
+                        Self->EnqueueSyncer(it->second);
                     }
                 });
             }

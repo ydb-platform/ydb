@@ -222,6 +222,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             }
         }
 
+        if (item.ReplicationConfig) {
+            auto config = *item.ReplicationConfig;
+            config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
+            *tableDesc.MutableReplicationConfig() = config;
+            for (auto& index : *indexedTable.MutableIndexDescription()) {
+                // Match the index types with independent replication targets in
+                // replication/controller/target_discoverer.cpp.
+                if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobal
+                        || index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                    *index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig() = config;
+                }
+            }
+        }
+
         if (!FillDefaultValues(item, indexedTable, error)) {
             return nullptr;
         }
@@ -495,6 +509,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
+    modifyScheme.SetInternal(true);
     auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);

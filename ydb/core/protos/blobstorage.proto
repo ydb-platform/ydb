@@ -1203,6 +1203,15 @@ message TEvControllerNodeServiceSetUpdate {
     optional TYamlConfig YamlConfig = 10;
     repeated TSyncerInfo Syncers = 11; // start missing ones, terminate excessive ones; update group infos for changed ones
     optional bool UpdateSyncers = 12;
+    // the part of BridgeSyncTotalRateBytesPerSecond given to this node, 0 means no limit; when unset, it stays as it was,
+    // except for a Comprehensive reply without KeepBridgeSyncNodeRate, which comes from a BSC not supporting shares at all
+    optional uint64 BridgeSyncNodeRateBytesPerSecond = 13;
+    // BSC supports shares, but doesn't know this one yet, as nodes are still reporting their syncers
+    optional bool KeepBridgeSyncNodeRate = 14;
+    // the tablet generation of BSC, set in every message with syncers or a share; a message of a BSC that has moved to
+    // another node comes by another interconnect session, so it may arrive after those of the new instance, and then its
+    // syncers and share are ignored
+    optional uint32 ControllerGeneration = 15;
 }
 
 message TEvControllerConfigRequest {

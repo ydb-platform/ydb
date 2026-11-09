@@ -833,6 +833,86 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST_QUAD(FullJoinFilters, UseBlockHashJoin, InlineJoinFilters) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(UseBlockHashJoin);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(InlineJoinFilters);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/l` (id Int64 NOT NULL, k Int64, v Int64, PRIMARY KEY(id));
+            CREATE TABLE `/Root/r` (id Int64 NOT NULL, k Int64, v Int64, PRIMARY KEY(id));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+        auto upsert = tableSession.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/l` (id, k, v) VALUES
+                (1, 1, 10), (2, 2, 30), (3, 2, 50), (4, 3, 40), (5, 5, NULL), (6, NULL, 60), (7, 7, 70);
+            UPSERT INTO `/Root/r` (id, k, v) VALUES
+                (1, 1, 20), (2, 2, 20), (3, 2, 40), (4, 4, 30), (5, 5, 10), (6, NULL, 50), (8, 8, 80);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        const TVector<std::pair<TString, TString>> cases = {
+            // Rejected pairs must preserve both rows. Duplicate join keys can
+            // have both accepted and rejected pairs, and NULL is not a match.
+            {R"(
+                SELECT l.id, r.id FROM `/Root/l` AS l FULL JOIN `/Root/r` AS r
+                ON l.k = r.k AND l.v > r.v ORDER BY l.id, r.id;
+            )", R"([[#;[1]];[#;[4]];[#;[5]];[#;[6]];[#;[8]];[[1];#];[[2];[2]];[[3];[2]];[[3];[3]];[[4];#];[[5];#];[[6];#];[[7];#]])"},
+            {R"(
+                SELECT l.id, r.id FROM `/Root/l` AS l FULL JOIN `/Root/r` AS r
+                ON l.k = r.k AND l.v > 35 ORDER BY l.id, r.id;
+            )", R"([[#;[1]];[#;[4]];[#;[5]];[#;[6]];[#;[8]];[[1];#];[[2];#];[[3];[2]];[[3];[3]];[[4];#];[[5];#];[[6];#];[[7];#]])"},
+            {R"(
+                SELECT l.id, r.id FROM `/Root/l` AS l FULL JOIN `/Root/r` AS r
+                ON l.k = r.k AND r.v > 25 ORDER BY l.id, r.id;
+            )", R"([[#;[1]];[#;[2]];[#;[4]];[#;[5]];[#;[6]];[#;[8]];[[1];#];[[2];[3]];[[3];[3]];[[4];#];[[5];#];[[6];#];[[7];#]])"},
+            {R"(
+                SELECT l.id, r.id FROM `/Root/l` AS l FULL JOIN `/Root/r` AS r
+                ON l.k = r.k AND l.v + r.v < 0 ORDER BY l.id, r.id;
+            )", R"([[#;[1]];[#;[2]];[#;[3]];[#;[4]];[#;[5]];[#;[6]];[#;[8]];[[1];#];[[2];#];[[3];#];[[4];#];[[5];#];[[6];#];[[7];#]])"},
+            {R"(
+                SELECT l.id, r.id FROM (SELECT * FROM `/Root/l` WHERE id < 0) AS l
+                FULL JOIN `/Root/r` AS r ON l.k = r.k AND l.v > r.v ORDER BY l.id, r.id;
+            )", R"([[#;[1]];[#;[2]];[#;[3]];[#;[4]];[#;[5]];[#;[6]];[#;[8]]])"},
+            {R"(
+                SELECT l.id, r.id FROM `/Root/l` AS l
+                FULL JOIN (SELECT * FROM `/Root/r` WHERE id < 0) AS r
+                ON l.k = r.k AND l.v > r.v ORDER BY l.id, r.id;
+            )", R"([[[1];#];[[2];#];[[3];#];[[4];#];[[5];#];[[6];#];[[7];#]])"},
+            // The filter can also be the entire ON clause.
+            {R"(
+                SELECT l.id, r.id FROM (SELECT * FROM `/Root/l` WHERE id = 1) AS l
+                FULL JOIN (SELECT * FROM `/Root/r` WHERE id = 1) AS r
+                ON l.v > r.v ORDER BY l.id, r.id;
+            )", R"([[#;[1]];[[1];#]])"},
+            // Keys needed to restore unmatched rows must survive pruning even
+            // when the query does not return any input columns.
+            {R"(
+                SELECT COUNT(*) FROM `/Root/l` AS l FULL JOIN `/Root/r` AS r
+                ON l.k = r.k AND l.v > r.v;
+            )", R"([[13u]])"},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& [query, expected] : cases) {
+            const TString sql = "PRAGMA YqlSelect = 'force';\n" + query;
+            auto result = querySession.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, query);
+
+            // Data queries cannot share stage outputs through channel spilling.
+            auto dataResult = tableSession.ExecuteDataQuery(sql, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(dataResult.IsSuccess(), query << ": " << dataResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(dataResult.GetResultSet(0)), expected, query);
+        }
+    }
+
     Y_UNIT_TEST(LeftJoinInequalityOnClause) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

@@ -689,8 +689,36 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_C(explained.IsSuccess(), query << ": " << explained.GetIssues().ToString());
             const TString ast{*explained.GetStats()->GetAst()};
 
+            // The physical AST binds parameters to generated variables. Resolve their
+            // names instead of depending on the printer's variable numbering.
+            THashMap<TString, TString> parameterAliases;
+            TStringBuf rest = ast;
+            for (TStringBuf line; rest.NextTok('\n', line);) {
+                if (!line.StartsWith("(let $") || !line.EndsWith(")")) {
+                    continue;
+                }
+                const size_t nameEnd = line.find(' ', 5);
+                const TStringBuf value = line.substr(nameEnd + 1, line.size() - nameEnd - 2);
+                if (value.StartsWith("$") && value.find(' ') == TStringBuf::npos) {
+                    parameterAliases[TString(value)] = TString(line.substr(5, nameEnd - 5));
+                }
+            }
             for (const auto& bound : bounds) {
-                UNIT_ASSERT_C(ast.Contains(bound), query << ": expected the bound " << bound << ", ast:\n" << ast);
+                TString expectedBound;
+                TStringBuf remaining = bound;
+                for (TStringBuf token; remaining.NextTok(' ', token);) {
+                    if (!expectedBound.empty()) {
+                        expectedBound += ' ';
+                    }
+                    const bool closesBound = token.EndsWith(")");
+                    const TString parameter(closesBound ? token.substr(0, token.size() - 1) : token);
+                    const auto alias = parameterAliases.find(parameter);
+                    expectedBound += alias == parameterAliases.end() ? parameter : alias->second;
+                    if (closesBound) {
+                        expectedBound += ')';
+                    }
+                }
+                UNIT_ASSERT_C(ast.Contains(expectedBound), query << ": expected the bound " << expectedBound << ", ast:\n" << ast);
             }
             UNIT_ASSERT_C(!ast.Contains("RangeFinalize") && !ast.Contains("kqp_physical_tx_param_binding") && !ast.Contains("'\"compute\""),
                           query << ": expected no computed ranges, ast:\n" << ast);

@@ -620,7 +620,7 @@ namespace NKikimr::NStorage {
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
             throw TExError() << "Current config validation failed: " << *error;
         } else if (requireScepter && !Self->Scepter) {
-            throw TExError() << "No scepter";
+            throw TExRace() << "No scepter";
         }
 
         if (requireScepter) {

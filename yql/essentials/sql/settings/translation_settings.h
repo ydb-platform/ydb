@@ -133,7 +133,7 @@ struct TTranslationSettings {
     bool AssumeYdbOnClusterWithSlash;
     TString DynamicClusterProvider;
     TString FileAliasPrefix;
-    const NYql::IUdfMeta* UdfMeta = nullptr;
+    const NYql::TUdfMeta* UdfMeta = nullptr;
 
     TVector<ui32> PgParameterTypeOids;
     bool AutoParametrizeEnabled = false;

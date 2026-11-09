@@ -13,6 +13,9 @@
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
 
+#include <util/system/file.h>
+#include <util/system/fstat.h>
+
 #include <cstdlib>
 
 #ifdef _unix_
@@ -39,6 +42,45 @@ TEST(TFSDeathTest, TestGetHomePathEnvironment)
         },
         ::testing::ExitedWithCode(0),
         "");
+}
+
+TEST(TFSTest, SetPermissions)
+{
+    const TTempDir tempDir;
+    std::string path = tempDir.Path().Child("file").GetPath();
+    TFile file(TString(path), CreateAlways | WrOnly | CloseOnExec);
+
+    SetPermissions(path, /*permissions*/ 0600);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0600u);
+
+    SetPermissions(path, /*permissions*/ 0640);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0640u);
+
+    std::string directory = tempDir.Name();
+    SetPermissions(directory, /*permissions*/ 0750);
+    EXPECT_EQ(TFileStat(TString(directory)).Mode & 0777, 0750u);
+}
+
+TEST(TFSTest, SetPermissionsForFileDescriptor)
+{
+    const TTempDir tempDir;
+    std::string path = tempDir.Path().Child("file").GetPath();
+    TFile file(TString(path), CreateAlways | WrOnly | CloseOnExec);
+
+    SetPermissions(file.GetHandle(), /*permissions*/ 0640);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0640u);
+
+    Remove(path);
+    SetPermissions(file.GetHandle(), /*permissions*/ 0600);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0600u);
+}
+
+TEST(TFSTest, SetPermissionsReportsMissingPath)
+{
+    const TTempDir tempDir;
+    std::string path = tempDir.Path().Child("missing").GetPath();
+
+    EXPECT_THROW_WITH_ERROR_CODE(SetPermissions(path, /*permissions*/ 0600), ELinuxErrorCode::NOENT);
 }
 #endif
 

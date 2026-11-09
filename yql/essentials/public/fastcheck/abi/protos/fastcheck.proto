@@ -1,0 +1,61 @@
+syntax = "proto2";
+package NYql.NFastCheck.NAbi.NProto;
+
+import "yql/essentials/public/issue/protos/issue_message.proto";
+
+message TStringPair {
+    optional bytes Key = 1;
+    optional bytes Value = 2;
+}
+
+message TFilter {
+    optional bool Include = 1;
+    optional bytes CheckNameGlob = 2;
+}
+
+message TFastCheckRequest {
+    optional bool IsSql = 1;
+    optional bool ParseOnly = 2;
+    optional uint32 SyntaxVersion = 3;
+    optional uint32 LangVer = 4;
+    optional bool IsLibrary = 5;
+    optional bytes Program = 6;
+    repeated TStringPair ClusterMapping = 7;
+    repeated TStringPair SqlLibs = 8;
+}
+
+message TFastCheckResult {
+    optional bool Success = 1;
+    repeated NYql.NIssue.NProto.IssueMessage Issues = 2;
+}
+
+message TLinterRequest {
+    optional bytes Program = 1;
+    optional bytes File = 2;
+    optional int32 ClusterMode = 3;
+    optional bytes ClusterSystem = 4;
+    optional int32 Syntax = 5;
+    optional uint32 SyntaxVersion = 6;
+    optional uint32 LangVer = 7;
+    optional bool IsAnsiLexer = 8;
+    optional int32 Mode = 9;
+    optional bytes IssueReportTarget = 10;
+    optional bool SuppressPrerequisiteIssues = 11;
+    optional uint32 LimitStrictnessFactor = 12;
+    repeated TStringPair ClusterMapping = 13;
+    optional bool HasFilters = 14;
+    repeated TFilter Filters = 15;
+    optional bool ListOnly = 16;
+}
+
+message TCheckResult {
+    optional bytes CheckName = 1;
+    optional bool Success = 2;
+    repeated NYql.NIssue.NProto.IssueMessage Issues = 3;
+}
+
+message TLinterResult {
+    repeated TCheckResult Checks = 1;
+    repeated bytes CheckNames = 2;
+}
+

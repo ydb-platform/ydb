@@ -3387,6 +3387,13 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 Y_ENSURE(success, description);
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::THnswIndexDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -3493,6 +3500,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
                 break;
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+                alterData->SpecializedIndexDescription = config.GetHnswIndexDescription();
+                break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -3564,6 +3574,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::THnswIndexDescription,
         NKikimrSchemeOp::TFulltextIndexDescription,
         NKikimrSchemeOp::TBloomFilter,
         NKikimrSchemeOp::TBloomNGrammFilter> SpecializedIndexDescription;

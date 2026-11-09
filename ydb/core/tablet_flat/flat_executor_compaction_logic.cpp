@@ -700,7 +700,17 @@ TCompactionLogic::CancelledCompaction(
         ui64 compactionId,
         THolder<NTable::TCompactionParams> params)
 {
-    HandleCompaction(compactionId, params.Get(), nullptr);
+    auto* table = State->Tables.FindPtr(params->Table);
+    Y_ENSURE(table, "Cancelled compaction belongs to a dropped table");
+    if (table->InMem.CompactionTask.CompactionId == compactionId) {
+        // A cancelled memory scan has not consumed its steps or snapshot
+        // request. Retain forced ids and resubmit the original request.
+        table->Strategy->CompactionCancelled(compactionId, *params);
+        ResubmitCompactions(*table);
+        return;
+    }
+    table = HandleCompaction(compactionId, params.Get(), nullptr);
+    table->Strategy->CompactionCancelled(compactionId, *params);
 }
 
 void TCompactionLogic::BorrowedPart(ui32 tableId, NTable::TPartView partView) {

@@ -11,6 +11,7 @@
 #include "flat_scan_actor.h"
 #include "flat_ops_compact.h"
 #include "flat_compaction_config.h"
+#include "flat_compaction_prepare.h"
 #include "flat_part_loader.h"
 #include "flat_store_hotdog.h"
 #include "flat_store_solid.h"
@@ -3714,7 +3715,9 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
         }
 
         if (*subset) {
-            Y_ENSURE(subset->IsStickedToHead(),
+            // A tier-managed forced request may include disk parts even when
+            // no memory remains to flush. Their epoch can lag the log head.
+            Y_ENSURE(subset->IsStickedToHead() || (params->Tiering && subset->Frozen.empty()),
                 "Got table subset with unexpected head " << subset->Head
                 << " and epoch " << subset->Epoch());
         }
@@ -3948,15 +3951,19 @@ void TExecutor::Handle(NOps::TEvResult::TPtr &ev) {
 void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) {
     THPTimer partSwitchCpuTimer;
 
+    const ui32 tableId = msg->Params->Table;
+    const auto* currentTable = Scheme().GetTableInfo(tableId);
+    const bool stale = currentTable && msg->Params->Tiering
+        && !NTable::IsTieringCompactionCurrent(*msg->Params, *currentTable,
+            RowScheme(tableId), TableParts(tableId), TableColdParts(tableId), IsDataTieringEnabled());
+
     if (msg->Params->TaskId != 0) {
         // We have taken over this task, mark it as finished in the broker
-        auto status = cancelled ? EResourceStatus::Cancelled : EResourceStatus::Finished;
+        auto status = cancelled || stale ? EResourceStatus::Cancelled : EResourceStatus::Finished;
         Broker->FinishTask(msg->Params->TaskId, status);
     }
 
-    const ui32 tableId = msg->Params->Table;
-
-    const bool abandoned = cancelled || !Scheme().GetTableInfo(tableId);
+    const bool abandoned = cancelled || stale || !currentTable;
 
     TProdCompact::TResults results = std::move(msg->Results);
     TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> newTxStatus = std::move(msg->TxStatus);
@@ -3971,7 +3978,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             << " epoch " << ops->Subset->Head << "} ";
 
         if (abandoned) {
-            logl << "thrown";
+            logl << (stale ? "stale tiering context" : "thrown");
         } else if (!msg->Success) {
             logl << "failed";
         } else {
@@ -3980,7 +3987,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     }
 
     if (abandoned) {
-        if (cancelled && Scheme().GetTableInfo(tableId)) {
+        if ((cancelled || stale) && currentTable) {
             CompactionLogic->CancelledCompaction(ops->Serial, std::move(msg->Params));
         }
         return;
@@ -4143,11 +4150,18 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     if (results) {
         auto *snap = proto.MutableIntroducedParts();
+        const auto& levels = logicResult.Changes.NewPartLevels;
+        Y_ENSURE(levels.empty() || levels.size() == results.size(),
+            "Compaction levels do not cover all output parts");
 
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
-            TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
+            const ui32 level = levels.empty() ? logicResult.Changes.NewPartsLevel : levels.at(newPart->Label);
+            TPageCollectionProtoHelper::Snap(snap, newPart, tableId, level);
+            if (!levels.empty()) {
+                snap->MutableBundles(snap->BundlesSize() - 1)->SetCompactionLevel(level);
+            }
             TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }
@@ -5367,12 +5381,15 @@ void TExecutor::ReleaseWritePart(ui32 step)
     CheckCollectionBarrier(barrier);
 }
 
+bool TExecutor::IsDataTieringEnabled() const
+{
+    return AppData()->FeatureFlags.GetEnableDataTiering();
+}
+
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 {
-    // The strategy must supply protected inputs and per-output placement before
-    // tier-aware execution can be enabled here.
-    Y_ENSURE(params->Mode == NTable::TCompactionParams::EMode::Regular,
-        "Tier-aware compaction execution requires tier-aware routing");
+    Y_ENSURE(params->Tiering || params->Mode == NTable::TCompactionParams::EMode::Regular,
+        "Tier-aware compaction requires a managed strategy operation");
 
     if (auto logl = Logger->Log(ELnLev::Info))
         logl << NFmt::Do(*this) << " starting compaction";
@@ -5414,15 +5431,6 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         comp->RemovedRowVersions = ranges.Snapshot();
     }
 
-    TCompactionOutputSettings outputSettings;
-    outputSettings.WriteBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
-    outputSettings.WriteBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
-    outputSettings.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
-    outputSettings.MaxBlobSize = NBlockIO::BlockSize;
-    outputSettings.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
-    PrepareCompactionOutputs(*comp, *tableInfo, *rowScheme, *snapshot->Subset, outputSettings,
-        [&](ui8 channel) { return Owner->Info()->GroupFor(channel, Generation()); });
-
     bool compactTxStatus = false;
     for (const auto& memTableSnapshot : snapshot->Subset->Frozen) {
         if (!memTableSnapshot->GetCommittedTransactions().empty() || !memTableSnapshot->GetRemovedTransactions().empty()) {
@@ -5455,12 +5463,45 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         snapshot->Subset->TxStatus.clear();
     }
 
+    if (comp->Params->Tiering) {
+        Y_ENSURE(!comp->IsFulltextCompact, "Tier-aware fulltext compaction is not supported");
+        NTable::PrepareTieringCompaction(*comp->Params, *tableInfo, rowScheme,
+            *snapshot->Subset, TableParts(table), TableColdParts(table),
+            IsDataTieringEnabled(), Time->Now());
+        comp->Epoch = snapshot->Subset->Epoch();
+    }
+
+    TCompactionOutputSettings outputSettings;
+    outputSettings.WriteBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    outputSettings.WriteBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
+    outputSettings.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
+    outputSettings.MaxBlobSize = NBlockIO::BlockSize;
+    outputSettings.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
+    PrepareCompactionOutputs(*comp, *tableInfo, *rowScheme, *snapshot->Subset, outputSettings,
+        [&](ui8 channel) { return Owner->Info()->GroupFor(channel, Generation()); });
+
+    if (comp->Params->Tiering) {
+        for (const auto& output : comp->Outputs) {
+            Y_ENSURE(comp->Params->Tiering->OutputTiers.emplace(output.OutputId, output.TierId).second,
+                "Duplicate compaction output identity");
+        }
+    }
+
     comp->DataKind = DataKindByTabletType(Owner->TabletType());
 
     TLogoBlobID mask(Owner->TabletID(), Generation(),
                     snapshot->Barrier->Step, Max<ui8>(), 0, 0);
 
-    auto *scan = new TOpsCompact(SelfId(), mask, comp, MakeHolder<TDefaultCompactionRouter>());
+    THolder<ICompactionRouter> router;
+    if (comp->Params->Mode == NTable::TCompactionParams::EMode::TierAware) {
+        const auto& settings = *comp->Params->Tiering;
+        router = MakeHolder<TTierCompactionRouter>(*comp,
+            settings.AllowCooling ? settings.Schema->TieringPolicy : std::nullopt,
+            settings.Now, settings.TierOrder, settings.AllowCooling);
+    } else {
+        router = MakeHolder<TDefaultCompactionRouter>();
+    }
+    auto *scan = new TOpsCompact(SelfId(), mask, comp, std::move(router));
 
     NOps::TConf conf;
 

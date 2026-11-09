@@ -10,6 +10,7 @@ SRCS(
     flat_comp.cpp
     flat_compaction_context.cpp
     flat_compaction_keyspace.cpp
+    flat_compaction_prepare.cpp
     flat_compaction_router.cpp
     flat_comp_create.cpp
     flat_comp_gen.cpp

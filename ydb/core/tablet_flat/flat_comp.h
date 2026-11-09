@@ -9,8 +9,22 @@
 #include "flat_dbase_scheme.h"
 #include <ydb/core/base/memory_controller_iface.h>
 
+#include <memory>
+
 namespace NKikimr {
 namespace NTable {
+
+    struct TTieringCompaction {
+        // Placement before the operation, used to resolve every input and to
+        // validate the remaining sources before publication.
+        THashMap<TLogoBlobID, ui32> PartLevels;
+        std::shared_ptr<const TScheme::TTableInfo> Schema;
+        TIntrusiveConstPtr<TRowScheme> RowScheme;
+        TVector<ui32> TierOrder;
+        TInstant Now;
+        bool AllowCooling = false;
+        THashMap<ui32, ui32> OutputTiers;
+    };
 
     /**
      * Compaction params specify which parts of the table to compact
@@ -41,6 +55,10 @@ namespace NTable {
         // Prepared inputs and remaining sources. The strategy must protect and
         // revalidate this context before publishing the compaction.
         TIntrusiveConstPtr<TCompactionContext> Context;
+
+        // Non-null for the serialized, tier-managed strategy path. The backend
+        // closes the interval using the actual frozen-memory snapshot.
+        THolder<TTieringCompaction> Tiering;
 
         // Broker task id used for compaction. Once BeginCompaction is called
         // task ownership is moved to the backend, which will call FinishTask
@@ -135,6 +153,9 @@ namespace NTable {
 
         // Slice changes to apply to the database
         TVector<TChangeSlices> SliceChanges;
+
+        // When nonempty, covers every new part and overrides NewPartsLevel.
+        THashMap<TLogoBlobID, ui32> NewPartLevels;
     };
 
     /**
@@ -203,6 +224,10 @@ namespace NTable {
          */
         virtual const TRowVersionRanges& TableRemovedRowVersions(ui32 table) = 0;
 
+        virtual bool IsDataTieringEnabled() const {
+            return false;
+        }
+
         /**
          * Begins compaction with the specified params
          */
@@ -247,6 +272,9 @@ namespace NTable {
          * Called after the table schema may have changed
          */
         virtual void ReflectSchema() = 0;
+
+        virtual void CompactionCancelled(ui64, const TCompactionParams&) {
+        }
 
         /**
          * Called after the table changes its removed row versions

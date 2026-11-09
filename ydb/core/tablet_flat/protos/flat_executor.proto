@@ -49,6 +49,10 @@ message TBundle {
     // An optional epoch used for ordering bundles in logical time
 
     optional int64 Epoch = 5;
+
+    // Overrides TLogTableSnap.CompactionLevel for outputs placed in different
+    // generations by the same atomic part switch. Absent on legacy bundles.
+    optional uint32 CompactionLevel = 6;
 }
 
 message TBundleChange {

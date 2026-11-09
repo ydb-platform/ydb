@@ -16,6 +16,8 @@ namespace NCompGen {
 
     public:
         ui32 Generation = Max<ui32>();
+        bool TieringForced = false;
+        ui32 PreferredLevel = 255;
     };
 
     class TGenCompactionStrategy final
@@ -49,6 +51,7 @@ namespace NCompGen {
             ui64 compactionId,
             THolder<TCompactionParams> params,
             THolder<TCompactionResult> result) override;
+        void CompactionCancelled(ui64 compactionId, const TCompactionParams& params) override;
         void PartMerged(TPartView part, ui32 level) override;
         void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override;
         TCompactionChanges PartsRemoved(TArrayRef<const TLogoBlobID> parts) override;
@@ -239,6 +242,23 @@ namespace NCompGen {
             ui32 generation,
             TExtraState& extra);
 
+        ui32 TierForLevel(ui32 level) const;
+        bool IsLastTierGeneration(ui32 generation) const;
+        size_t UnloadedPartsAtLevel(ui32 level) const;
+        void ValidateTierEpochs() const;
+        void RebuildTierStats();
+        void CheckTierGenerations();
+        void CancelTierCompactions(bool cancelMemory, TTaskId keepTask = 0);
+        void BeginTierGenCompaction(TTaskId taskId, ui32 generation);
+        ui64 PrepareTierCompaction(TTaskId taskId, TSnapEdge edge, ui32 generation,
+            TExtraState& extra, bool forced, bool sweep);
+        TCompactionChanges FinishTierCompaction(ui64 compactionId,
+            TGenCompactionParams& params, TCompactionResult& result);
+        ui32 ChooseTierLevel(ui32 tierId, TEpoch epoch, ui32 preferredLevel) const;
+        ui32 UpliftTierLevel(ui32 tierId, TEpoch epoch, const TStats& outputStats,
+            ui32 preferredLevel) const;
+        void ScheduleTierSweep();
+
         void UpdateStats();
         void UpdateOverload();
 
@@ -259,6 +279,11 @@ namespace NCompGen {
         const TString TaskNameSuffix;
 
         TIntrusiveConstPtr<TCompactionPolicy> Policy;
+
+        bool TierManaged = false;
+        ui64 TierCompactionId = 0;
+        std::optional<ui32> TierSweepGeneration;
+        size_t NextTierSweep = 0;
 
         ui64 MemCompactionId = 0;
         ui64 FinalCompactionId = 0;

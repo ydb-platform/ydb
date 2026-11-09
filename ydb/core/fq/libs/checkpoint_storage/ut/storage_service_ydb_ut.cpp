@@ -373,8 +373,8 @@ public:
     UNIT_TEST(SnapshotReadsMetadataGraphAndAllRowsAcrossDelete);
     UNIT_TEST(SnapshotReadsMetadataGraphAndAllRowsAcrossDrop);
     UNIT_TEST(SnapshotRejectsMissingMetadata);
-    UNIT_TEST(SnapshotRejectsContinuationAfterRollback);
-    UNIT_TEST(SnapshotFailureAfterMetadataCannotMoveToFreshSession);
+    UNIT_TEST(SnapshotRollbackClearsTransaction);
+    UNIT_TEST(SnapshotQueryFailureLeavesFreshSessionWithoutTransaction);
     UNIT_TEST(SnapshotDetectsTruncatedResult);
     UNIT_TEST(SnapshotRejectsClosedSdkSession);
     UNIT_TEST_SUITE_END();
@@ -750,7 +750,8 @@ public:
                     ISession::TTxControl::BeginAndCommitTx(), params);
             }
         }
-        const TString metadataSql = TStringBuilder() << "SELECT status, graph_description_id FROM checkpoints_metadata WHERE graph_id = \"" << GraphId << "\";";
+        const TString metadataSql = TStringBuilder() << "SELECT status, graph_description_id FROM checkpoints_metadata WHERE graph_id = \"" << GraphId
+            << "\" AND coordinator_generation = 17ul AND seq_no = 1ul;";
         const auto snapshotDeadline = TInstant::Now() + TestTimeout;
         auto metadata = SnapshotQuery(reader, metadataSql, ISession::TTxControl::BeginTx(true));
         UNIT_ASSERT(reader->HasActiveTransaction());
@@ -764,12 +765,13 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(*metadataParser.ColumnParser("status").GetOptionalUint8(), static_cast<ui8>(ECheckpointStatus::Completed));
         const TString graphDescriptionId = *metadataParser.ColumnParser("graph_description_id").GetOptionalString();
         UNIT_ASSERT(!metadataParser.TryNextRow());
-        const TString graphSql = TStringBuilder() << "SELECT graph_description FROM checkpoints_graphs_description WHERE id = \"" << graphDescriptionId << "\";";
+        const TString graphSql = TStringBuilder() << "SELECT graph_description, ref_count FROM checkpoints_graphs_description WHERE id = \"" << graphDescriptionId << "\";";
         auto graphBefore = SnapshotQuery(writer, graphSql, ISession::TTxControl::BeginAndCommitTx());
         auto beforeParser = graphBefore.GetResultSetParser(0);
         UNIT_ASSERT(beforeParser.TryNextRow());
         const TString expectedGraph = description.SerializeAsString();
         UNIT_ASSERT_VALUES_EQUAL(*beforeParser.ColumnParser("graph_description").GetOptionalString(), expectedGraph);
+        UNIT_ASSERT_VALUES_EQUAL(*beforeParser.ColumnParser("ref_count").GetOptionalUint64(), 1);
         UNIT_ASSERT(!beforeParser.TryNextRow());
         if (interleaving != ESnapshotInterleaving::Stable) {
             // The deletion operations use a separate connection, and their
@@ -777,7 +779,18 @@ public:
             if (interleaving == ESnapshotInterleaving::Drop) {
                 DeleteSnapshotGraph();
             } else {
-                GarbageCollectSnapshotGraph(driver);
+                // Complete the upper bound only after the old snapshot opens:
+                // the local service enables automatic GC and its completion
+                // response fences that GC. SDK fixture GC is disabled, so run
+                // the same storage operations explicitly on its second connection.
+                CreateCheckpoint(GraphId, Generation, CheckpointId2, false, description);
+                SaveState(1, CheckpointId2, MakeState("newer first task state"));
+                SaveState(2, CheckpointId2, MakeState("newer second task state"));
+                PendingCommitCheckpoint(GraphId, Generation, CheckpointId2);
+                CompleteCheckpoint(GraphId, Generation, CheckpointId2);
+                if constexpr (UseYdbSdk) {
+                    GarbageCollectSnapshotGraph(driver);
+                }
             }
         }
         auto graph = SnapshotQuery(reader, graphSql, ISession::TTxControl::ContinueTx());
@@ -788,16 +801,25 @@ public:
         auto graphParser = graph.GetResultSetParser(0);
         UNIT_ASSERT(graphParser.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(*graphParser.ColumnParser("graph_description").GetOptionalString(), expectedGraph);
+        UNIT_ASSERT_VALUES_EQUAL(*graphParser.ColumnParser("ref_count").GetOptionalUint64(), 1);
         UNIT_ASSERT(!graphParser.TryNextRow());
         size_t row = 0;
         for (ui64 taskId : {1ul, 2ul}) {
             for (ui64 chunk = 0; chunk < 4; ++chunk) {
+                const bool finalChunk = taskId == 2 && chunk == 3;
                 auto result = SnapshotQuery(reader, TStringBuilder() << "SELECT blob FROM states WHERE "
                     << StatePredicate(taskId) << " AND blob_seq_num = " << chunk << "ul;",
-                    taskId == 2 && chunk == 3 ? ISession::TTxControl::ContinueAndCommitTx() : ISession::TTxControl::ContinueTx());
+                    finalChunk ? ISession::TTxControl::ContinueAndCommitTx() : ISession::TTxControl::ContinueTx());
                 if constexpr (UseYdbSdk) {
-                    UNIT_ASSERT(result.GetTransaction());
-                    UNIT_ASSERT_VALUES_EQUAL(result.GetTransaction()->GetId(), snapshotTransaction->GetId());
+                    // A successful commit may return an empty transaction ID.
+                    // SnapshotQuery already requires success and updates it.
+                    if (!finalChunk) {
+                        UNIT_ASSERT(result.GetTransaction());
+                        UNIT_ASSERT_VALUES_EQUAL(result.GetTransaction()->GetId(), snapshotTransaction->GetId());
+                    }
+                }
+                if (finalChunk) {
+                    UNIT_ASSERT(!reader->HasActiveTransaction());
                 }
                 auto parser = result.GetResultSetParser(0);
                 UNIT_ASSERT(parser.TryNextRow());
@@ -813,9 +835,38 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(after.GetResultSet(0).RowsCount(), 0);
             auto graphAfter = SnapshotQuery(writer, graphSql, ISession::TTxControl::BeginAndCommitTx(true));
             UNIT_ASSERT_VALUES_EQUAL(graphAfter.GetResultSet(0).RowsCount(), 0);
-            auto stateAfter = SnapshotQuery(writer, "SELECT blob FROM states WHERE " + StatePredicate(1) + ";",
-                ISession::TTxControl::BeginAndCommitTx(true));
-            UNIT_ASSERT_VALUES_EQUAL(stateAfter.GetResultSet(0).RowsCount(), 0);
+            for (ui64 taskId : {1ul, 2ul}) {
+                auto stateAfter = SnapshotQuery(writer, "SELECT blob FROM states WHERE " + StatePredicate(taskId) + ";",
+                    ISession::TTxControl::BeginAndCommitTx(true));
+                UNIT_ASSERT_VALUES_EQUAL(stateAfter.GetResultSet(0).RowsCount(), 0);
+            }
+            if (interleaving == ESnapshotInterleaving::GarbageCollection) {
+                auto upper = SnapshotQuery(writer, TStringBuilder()
+                    << "SELECT status, graph_description_id FROM checkpoints_metadata WHERE graph_id = \"" << GraphId
+                    << "\" AND coordinator_generation = 17ul AND seq_no = 2ul;",
+                    ISession::TTxControl::BeginAndCommitTx(true));
+                auto upperParser = upper.GetResultSetParser(0);
+                UNIT_ASSERT(upperParser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(*upperParser.ColumnParser("status").GetOptionalUint8(), static_cast<ui8>(ECheckpointStatus::Completed));
+                const TString upperDescriptionId = *upperParser.ColumnParser("graph_description_id").GetOptionalString();
+                UNIT_ASSERT(!upperParser.TryNextRow());
+                UNIT_ASSERT_VALUES_UNEQUAL(upperDescriptionId, graphDescriptionId);
+                auto upperGraph = SnapshotQuery(writer, TStringBuilder()
+                    << "SELECT graph_description, ref_count FROM checkpoints_graphs_description WHERE id = \"" << upperDescriptionId << "\";",
+                    ISession::TTxControl::BeginAndCommitTx(true));
+                auto upperGraphParser = upperGraph.GetResultSetParser(0);
+                UNIT_ASSERT(upperGraphParser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(*upperGraphParser.ColumnParser("graph_description").GetOptionalString(), expectedGraph);
+                UNIT_ASSERT_VALUES_EQUAL(*upperGraphParser.ColumnParser("ref_count").GetOptionalUint64(), 1);
+                UNIT_ASSERT(!upperGraphParser.TryNextRow());
+                for (ui64 taskId : {1ul, 2ul}) {
+                    auto upperState = SnapshotQuery(writer, TStringBuilder()
+                        << "SELECT blob FROM states WHERE graph_id = \"" << GraphId << "\" AND task_id = " << taskId
+                        << "ul AND coordinator_generation = 17ul AND seq_no = 2ul;",
+                        ISession::TTxControl::BeginAndCommitTx(true));
+                    UNIT_ASSERT_VALUES_EQUAL(upperState.GetResultSet(0).RowsCount(), 1);
+                }
+            }
         }
     }
 
@@ -885,7 +936,7 @@ public:
         UNIT_ASSERT(reader->Rollback().GetValueSync().IsSuccess());
     }
 
-    void SnapshotRejectsContinuationAfterRollback() {
+    void SnapshotRollbackClearsTransaction() {
         RegisterDefaultCoordinator();
         CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
         NYdb::TDriver driver(NYdb::TDriverConfig{});
@@ -902,7 +953,7 @@ public:
         // optional. An attempt must reject here, before dispatching a query.
     }
 
-    void SnapshotFailureAfterMetadataCannotMoveToFreshSession() {
+    void SnapshotQueryFailureLeavesFreshSessionWithoutTransaction() {
         RegisterDefaultCoordinator();
         CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
         NYdb::TDriver driver(NYdb::TDriverConfig{});

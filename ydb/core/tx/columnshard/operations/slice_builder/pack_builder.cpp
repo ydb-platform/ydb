@@ -157,6 +157,11 @@ public:
                     AFL_VERIFY(i.GetColumnIndexes().size() < indexes.size());
                     for (auto itAllIndexes = indexes.begin(); itAllIndexes != indexes.end(); ++itAllIndexes) {
                         if (itBatchIndexes == i.GetColumnIndexes().end() || *itAllIndexes < *itBatchIndexes) {
+                            const bool nullable = indexInfo.IsNullableVerifiedByIndex(*itAllIndexes);
+                            const bool hasDefault = !!indexInfo.GetColumnExternalDefaultValueByIndexVerified(*itAllIndexes);
+                            if (nullable || hasDefault) {
+                                continue;
+                            }
                             auto defaultColumn = indexInfo.BuildDefaultColumn(*itAllIndexes, i->num_rows(), false);
                             if (defaultColumn.IsFail()) {
                                 YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",

@@ -104,7 +104,7 @@ std::vector<TPortionToMerge> TReadPortionToMerge::DoBuildPortionsToMerge(const T
     auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
     std::shared_ptr<NArrow::TColumnFilter> filter =
         BuildPortionFilter(shardingActual, batch, ReadPortion.GetPortionInfo(), usedPortionIds, useDeletionFilter);
-    return { TPortionToMerge(batch, filter) };
+    return { TPortionToMerge(batch, filter, blobsSchema) };
 }
 
 std::vector<TPortionToMerge> TWritePortionsToMerge::DoBuildPortionsToMerge(const TConstructionContext& context,
@@ -116,7 +116,7 @@ std::vector<TPortionToMerge> TWritePortionsToMerge::DoBuildPortionsToMerge(const
         auto batch = i.RestoreBatch(*blobsSchema, *resultFiltered, seqDataColumnIds, false).DetachResult();
         std::shared_ptr<NArrow::TColumnFilter> filter =
             BuildPortionFilter(std::nullopt, batch, i.GetPortionResult().GetPortionInfo(), usedPortionIds, useDeletionFilter);
-        result.emplace_back(TPortionToMerge(batch, filter));
+        result.emplace_back(TPortionToMerge(batch, filter, blobsSchema));
     }
     return result;
 }

@@ -16,14 +16,18 @@ private:
     YDB_ACCESSOR(ui64, PortionExpectedSize, 1.5 * (1 << 20));
     std::vector<std::shared_ptr<NArrow::TGeneralContainer>> Batches;
     std::vector<std::shared_ptr<NArrow::TColumnFilter>> Filters;
+    std::vector<ISnapshotSchema::TPtr> PortionSchemas;
     const TConstructionContext& Context;
     const TSaverContext& SaverContext;
 
 public:
-    void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter) {
+    void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter,
+        const ISnapshotSchema::TPtr& portionSchema) {
         AFL_VERIFY(batch);
+        AFL_VERIFY(portionSchema);
         Batches.emplace_back(batch);
         Filters.emplace_back(filter);
+        PortionSchemas.emplace_back(portionSchema);
     }
 
     TMerger(const TConstructionContext& context, const TSaverContext& saverContext)

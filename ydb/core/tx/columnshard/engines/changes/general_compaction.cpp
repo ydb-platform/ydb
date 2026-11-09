@@ -24,7 +24,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TGeneralCompactColumnEngineChanges
     NCompaction::TMerger merger(context, SaverContext);
     merger.SetPortionExpectedSize(PortionExpectedSize);
     for (auto&& i : portions) {
-        merger.AddBatch(i.GetBatch(), i.GetFilter());
+        merger.AddBatch(i.GetBatch(), i.GetFilter(), i.GetSchema());
     }
 
     std::optional<ui64> shardingActualVersion;

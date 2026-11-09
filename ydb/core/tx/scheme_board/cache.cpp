@@ -20,6 +20,7 @@
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/resolver.h>
 #include <ydb/core/tx/locks/sys_tables.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -902,6 +903,16 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 nameToId[column.Name] = column.Id;
                 if (columnDesc.GetNotNull()) {
                     NotNullColumns.insert(columnDesc.GetName());
+                }
+                if (columnDesc.HasDefaultValue() && columnDesc.GetDefaultValue().HasScalar()) {
+                    NOlap::TColumnDefaultScalarValue scalar;
+                    if (scalar.DeserializeFromProto(columnDesc.GetDefaultValue()).IsSuccess()) {
+                        auto typed = scalar.SerializeToTypedValue();
+                        if (typed.IsSuccess()) {
+                            column.SetDefaultFromLiteral();
+                            column.DefaultFromLiteral = typed.GetResult();
+                        }
+                    }
                 }
             }
 

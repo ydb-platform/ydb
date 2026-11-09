@@ -297,6 +297,13 @@ bool TSchemaDiffView::IsCorrectToIgnorePreviouse(const TIndexInfo& indexInfo) co
         if (i.second->GetNotNull()) {
             return false;
         }
+        if (i.second->HasCreatedDefaultValue()) {
+            const bool same = i.second->HasDefaultValue() &&
+                              i.second->GetCreatedDefaultValue().SerializeAsString() == i.second->GetDefaultValue().SerializeAsString();
+            if (!same) {
+                return false;
+            }
+        }
     }
     if (SchemaOptions) {
         if (SchemaOptions->GetSchemeNeedActualization()) {

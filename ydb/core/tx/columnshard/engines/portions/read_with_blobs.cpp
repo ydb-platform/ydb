@@ -2,12 +2,15 @@
 #include "read_with_blobs.h"
 #include "write_with_blobs.h"
 
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -117,6 +120,18 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         if (it != columnChunks.end()) {
             newChunks = to->GetIndexInfo().ActualizeColumnData(it->second, from->GetIndexInfo(), i);
             AFL_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
+        } else {
+            const auto fromFill = ISnapshotSchema::GetAbsentColumnFill(*from, *to, i);
+            const auto toFill = ISnapshotSchema::GetAbsentColumnFill(*to, *to, i);
+            if (NArrow::ScalarCompareNullable(fromFill, toFill) != 0) {
+                const auto& features = to->GetIndexInfo().GetColumnFeaturesVerified(i);
+                const ui32 rows = source.PortionInfo.GetPortionInfo().GetRecordsCount();
+                auto array = NArrow::TThreadSimpleArraysCache::Get(features.GetArrowField()->type(), fromFill, rows);
+                auto chunked = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
+                const TString blob = to->GetColumnSaver(i).Apply(array, features.GetArrowField());
+                newChunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(blob, chunked, TChunkAddress(i, 0), features));
+                AFL_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
+            }
         }
     }
 

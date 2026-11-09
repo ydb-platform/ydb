@@ -20,6 +20,11 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
     if (columnInfo.HasDefaultValue()) {
         DefaultValue.DeserializeFromProto(columnInfo.GetDefaultValue()).Validate();
     }
+    if (columnInfo.HasCreatedDefaultValue()) {
+        TColumnDefaultScalarValue created;
+        created.DeserializeFromProto(columnInfo.GetCreatedDefaultValue()).Validate();
+        CreatedDefaultValue = std::move(created);
+    }
     if (columnInfo.HasDataAccessorConstructor()) {
         AFL_VERIFY(DataAccessorConstructor.DeserializeFromProto(columnInfo.GetDataAccessorConstructor()));
     }

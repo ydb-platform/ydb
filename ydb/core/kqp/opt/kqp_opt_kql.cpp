@@ -77,6 +77,9 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
             if (column.IsDefaultFromExpression() && !column.DefaultExpression->Stored) {
                 continue;
             }
+            if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && column.IsDefaultFromLiteral()) {
+                continue;
+            }
             maybeMissingColumnsToReplace.push_back(name);
         }
     }
@@ -440,7 +443,8 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
 
         for (const auto& colAtom : autoIncrement) {
             const auto* colMeta = table.Metadata->Columns.FindPtr(TString(colAtom.Value()));
-            if (colMeta && colMeta->IsDefaultFromLiteral() && !colMeta->DefaultFromLiteral.type().has_pg_type()) {
+            if (colMeta && colMeta->IsDefaultFromLiteral() && !colMeta->DefaultFromLiteral.type().has_pg_type()
+                && table.Metadata->Kind != EKikimrTableKind::Olap) {
                 literalDefaultColNodes.push_back(colAtom.Ptr());
             } else {
                 sequenceColNodes.push_back(colAtom.Ptr());

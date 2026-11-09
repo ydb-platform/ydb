@@ -178,14 +178,18 @@ private:
     ui32 RecordsCountByChunks = 0;
     const std::shared_ptr<TColumnLoader> DataLoader;
     const std::shared_ptr<TColumnLoader> ResultLoader;
+    const std::shared_ptr<arrow::Scalar> AbsentFill;
+    const bool HasAbsentFill = false;
 
 public:
-    TColumnAssemblingInfo(
-        const ui32 recordsCount, const std::shared_ptr<TColumnLoader>& dataLoader, const std::shared_ptr<TColumnLoader>& resultLoader)
+    TColumnAssemblingInfo(const ui32 recordsCount, const std::shared_ptr<TColumnLoader>& dataLoader,
+        const std::shared_ptr<TColumnLoader>& resultLoader, const std::shared_ptr<arrow::Scalar>& absentFill, const bool hasAbsentFill)
         : ColumnId(resultLoader->GetColumnId())
         , RecordsCount(recordsCount)
         , DataLoader(dataLoader)
         , ResultLoader(resultLoader)
+        , AbsentFill(absentFill)
+        , HasAbsentFill(hasAbsentFill)
     {
         AFL_VERIFY(ResultLoader);
         if (DataLoader) {
@@ -208,8 +212,15 @@ public:
 
     TPreparedColumn Compile() {
         if (BlobsInfo.empty()) {
-            BlobsInfo.emplace_back(
-                TAssembleBlobInfo(RecordsCount, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()));
+            std::shared_ptr<arrow::Scalar> fill;
+            if (DataLoader) {
+                fill = DataLoader->GetDefaultValue();
+            } else if (HasAbsentFill) {
+                fill = AbsentFill;
+            } else {
+                fill = ResultLoader->GetDefaultValue();
+            }
+            BlobsInfo.emplace_back(TAssembleBlobInfo(RecordsCount, fill));
             return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
         } else {
             AFL_VERIFY(RecordsCountByChunks == RecordsCount)("by_chunks", RecordsCountByChunks)("expected", RecordsCount);

@@ -138,6 +138,138 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromString(const TStr
     return result;
 }
 
+NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const Ydb::TypedValue& typed, const NScheme::TTypeInfo& type) {
+    if (!typed.has_type() || !typed.type().has_type_id()) {
+        return TConclusionStatus::Fail("Default value is not supported for type " + ::ToString(type.GetTypeId()) + " in column tables");
+    }
+    const auto& value = typed.value();
+    std::shared_ptr<arrow::Scalar> scalar;
+    switch (typed.type().type_id()) {
+        case Ydb::Type::BOOL:
+            scalar = std::make_shared<arrow::BooleanScalar>(value.bool_value());
+            break;
+        case Ydb::Type::UINT8:
+            scalar = std::make_shared<arrow::UInt8Scalar>(static_cast<ui8>(value.uint32_value()));
+            break;
+        case Ydb::Type::UINT16:
+            scalar = std::make_shared<arrow::UInt16Scalar>(static_cast<ui16>(value.uint32_value()));
+            break;
+        case Ydb::Type::UINT32:
+            scalar = std::make_shared<arrow::UInt32Scalar>(value.uint32_value());
+            break;
+        case Ydb::Type::UINT64:
+            scalar = std::make_shared<arrow::UInt64Scalar>(value.uint64_value());
+            break;
+        case Ydb::Type::INT8:
+            scalar = std::make_shared<arrow::Int8Scalar>(static_cast<i8>(value.int32_value()));
+            break;
+        case Ydb::Type::INT16:
+            scalar = std::make_shared<arrow::Int16Scalar>(static_cast<i16>(value.int32_value()));
+            break;
+        case Ydb::Type::INT32:
+            scalar = std::make_shared<arrow::Int32Scalar>(value.int32_value());
+            break;
+        case Ydb::Type::INT64:
+            scalar = std::make_shared<arrow::Int64Scalar>(value.int64_value());
+            break;
+        case Ydb::Type::FLOAT:
+            scalar = std::make_shared<arrow::FloatScalar>(value.float_value());
+            break;
+        case Ydb::Type::DOUBLE:
+            scalar = std::make_shared<arrow::DoubleScalar>(value.double_value());
+            break;
+        case Ydb::Type::UTF8:
+        case Ydb::Type::STRING:
+            scalar = std::make_shared<arrow::StringScalar>(value.text_value());
+            break;
+        case Ydb::Type::TIMESTAMP:
+            scalar = std::make_shared<arrow::TimestampScalar>(value.uint64_value(), arrow::timestamp(arrow::TimeUnit::MICRO));
+            break;
+        default:
+            return TConclusionStatus::Fail("Default value is not supported for type " + ::ToString(type.GetTypeId()) + " in column tables");
+    }
+    if (!IsCompatibleType(scalar->type) && Value) {
+        return TConclusionStatus::Fail("incompatible default literal");
+    }
+    const auto expected = NArrow::GetArrowType(type);
+    if (!expected.ok()) {
+        return TConclusionStatus::Fail(expected.status().ToString());
+    }
+    if (!(*expected)->Equals(scalar->type) && typed.type().type_id() != Ydb::Type::STRING && typed.type().type_id() != Ydb::Type::UTF8) {
+        if ((*expected)->id() != scalar->type->id()) {
+            return TConclusionStatus::Fail("Default value is not supported for type " + ::ToString(type.GetTypeId()) + " in column tables");
+        }
+    }
+    Value = scalar;
+    return TConclusionStatus::Success();
+}
+
+TConclusion<Ydb::TypedValue> TColumnDefaultScalarValue::SerializeToTypedValue() const {
+    Ydb::TypedValue result;
+    if (!Value) {
+        return TConclusionStatus::Fail("empty default");
+    }
+    auto* type = result.mutable_type();
+    auto* value = result.mutable_value();
+    switch (Value->type->id()) {
+        case arrow::Type::BOOL:
+            type->set_type_id(Ydb::Type::BOOL);
+            value->set_bool_value(static_cast<const arrow::BooleanScalar&>(*Value).value);
+            break;
+        case arrow::Type::UINT8:
+            type->set_type_id(Ydb::Type::UINT8);
+            value->set_uint32_value(static_cast<const arrow::UInt8Scalar&>(*Value).value);
+            break;
+        case arrow::Type::UINT16:
+            type->set_type_id(Ydb::Type::UINT16);
+            value->set_uint32_value(static_cast<const arrow::UInt16Scalar&>(*Value).value);
+            break;
+        case arrow::Type::UINT32:
+            type->set_type_id(Ydb::Type::UINT32);
+            value->set_uint32_value(static_cast<const arrow::UInt32Scalar&>(*Value).value);
+            break;
+        case arrow::Type::UINT64:
+            type->set_type_id(Ydb::Type::UINT64);
+            value->set_uint64_value(static_cast<const arrow::UInt64Scalar&>(*Value).value);
+            break;
+        case arrow::Type::INT8:
+            type->set_type_id(Ydb::Type::INT8);
+            value->set_int32_value(static_cast<const arrow::Int8Scalar&>(*Value).value);
+            break;
+        case arrow::Type::INT16:
+            type->set_type_id(Ydb::Type::INT16);
+            value->set_int32_value(static_cast<const arrow::Int16Scalar&>(*Value).value);
+            break;
+        case arrow::Type::INT32:
+            type->set_type_id(Ydb::Type::INT32);
+            value->set_int32_value(static_cast<const arrow::Int32Scalar&>(*Value).value);
+            break;
+        case arrow::Type::INT64:
+            type->set_type_id(Ydb::Type::INT64);
+            value->set_int64_value(static_cast<const arrow::Int64Scalar&>(*Value).value);
+            break;
+        case arrow::Type::FLOAT:
+            type->set_type_id(Ydb::Type::FLOAT);
+            value->set_float_value(static_cast<const arrow::FloatScalar&>(*Value).value);
+            break;
+        case arrow::Type::DOUBLE:
+            type->set_type_id(Ydb::Type::DOUBLE);
+            value->set_double_value(static_cast<const arrow::DoubleScalar&>(*Value).value);
+            break;
+        case arrow::Type::STRING:
+            type->set_type_id(Ydb::Type::UTF8);
+            value->set_text_value(static_cast<const arrow::StringScalar&>(*Value).value->ToString());
+            break;
+        case arrow::Type::TIMESTAMP:
+            type->set_type_id(Ydb::Type::TIMESTAMP);
+            value->set_uint64_value(static_cast<const arrow::TimestampScalar&>(*Value).value);
+            break;
+        default:
+            return TConclusionStatus::Fail("Default value is not supported for type " + Value->type->ToString() + " in column tables");
+    }
+    return result;
+}
+
 TString TColumnDefaultScalarValue::DebugString() const {
     if (!Value) {
         return "NO_DATA";

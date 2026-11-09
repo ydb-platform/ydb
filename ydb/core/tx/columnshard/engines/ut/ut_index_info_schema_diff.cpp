@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_diff.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/snapshot_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 
@@ -28,7 +29,9 @@ TString Describe(const TIndexInfo& info) {
            << " storage=" << features.GetOperator()->GetStorageId()
            << " serializer=" << features.GetSerializer().SerializeToProto().ShortDebugString()
            << " accessor=" << features.GetDataAccessorConstructor().SerializeToProto().ShortDebugString()
-           << " default=" << features.GetDefaultValue().SerializeToProto().ShortDebugString() << " " << features.DebugString() << "\n";
+           << " default=" << features.GetDefaultValue().SerializeToProto().ShortDebugString() << " created="
+           << (features.GetCreatedDefaultValue() ? features.GetCreatedDefaultValue()->SerializeToProto().ShortDebugString() : "none") << " "
+           << features.DebugString() << "\n";
     }
     for (const std::string& name : info.GetColumnSTLNames(true)) {
         sb << "by name " << name << " id=" << info.GetColumnIdOptional(name).value_or(0)
@@ -145,6 +148,11 @@ public:
 
     TSchemaHistory& SetDefault(const ui32 columnId, const ui64 value) {
         MutableColumn(columnId).MutableDefaultValue()->MutableScalar()->SetUint64(value);
+        return *this;
+    }
+
+    TSchemaHistory& SetCreatedDefault(const ui32 columnId, const ui64 value) {
+        MutableColumn(columnId).MutableCreatedDefaultValue()->MutableScalar()->SetUint64(value);
         return *this;
     }
 
@@ -308,6 +316,36 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         history.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64);
         history.NextVersion().SetDefault(4, 7);
         CheckDiffsBuildSchemas(history);
+    }
+
+    // CreatedDefaultValue is copied through schema diffs and is the fill for portions older than the column.
+    Y_UNIT_TEST(CreatedDefaultSurvivesSetDefault) {
+        TSchemaHistory history;
+        history.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64).SetDefault(4, 42).SetCreatedDefault(4, 42);
+        history.NextVersion().SetDefault(4, 7);
+        CheckDiffsBuildSchemas(history);
+
+        const auto& versions = history.GetVersions();
+        auto cache = std::make_shared<TSchemaObjectsCache>();
+        auto older = std::make_shared<TSnapshotSchema>(
+            cache->GetOrInsertIndexInfo(BuildFromSchema(versions.front())), TSnapshot(versions.front().GetVersion(), 1));
+        auto current = std::make_shared<TSnapshotSchema>(
+            cache->GetOrInsertIndexInfo(BuildFromSchema(versions.back())), TSnapshot(versions.back().GetVersion(), 1));
+
+        const auto absent = ISnapshotSchema::GetAbsentColumnFill(*older, *current, 4);
+        const auto* absentScalar = dynamic_cast<const arrow::UInt64Scalar*>(absent.get());
+        UNIT_ASSERT(absentScalar);
+        UNIT_ASSERT_VALUES_EQUAL(absentScalar->value, 42);
+
+        const auto present = ISnapshotSchema::GetAbsentColumnFill(*current, *current, 4);
+        const auto* presentScalar = dynamic_cast<const arrow::UInt64Scalar*>(present.get());
+        UNIT_ASSERT(presentScalar);
+        UNIT_ASSERT_VALUES_EQUAL(presentScalar->value, 7);
+
+        const auto& created = current->GetIndexInfo().GetColumnFeaturesVerified(4).GetCreatedDefaultValue();
+        UNIT_ASSERT(created);
+        UNIT_ASSERT(created->GetValue());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt64Scalar&>(*created->GetValue()).value, 42);
     }
 
     Y_UNIT_TEST(ChangeColumnToSparsed) {

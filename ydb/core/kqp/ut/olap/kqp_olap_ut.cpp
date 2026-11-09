@@ -5364,6 +5364,52 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(WithDefaultValueEnabled) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnTableDefaults(true);
+        auto kikimr = std::make_unique<TKikimrRunner>(settings);
+        auto queryClient = kikimr->GetQueryClient();
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/TestDef` (
+                    Id Uint32 NOT NULL,
+                    Value Utf8 DEFAULT 'aba',
+                    PRIMARY KEY (Id)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                INSERT INTO `/Root/TestDef` (Id) VALUES (1);
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT Value FROM `/Root/TestDef` WHERE Id = 1;
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([["aba"]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/PkDef` (
+                    Id Uint32 NOT NULL DEFAULT 7,
+                    Value Utf8,
+                    PRIMARY KEY (Id)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Default value is not supported for primary key columns in column tables");
+        }
+    }
+
     Y_UNIT_TEST(PredicateWithLimit) {
         auto runnerSettings =
             TKikimrSettings().SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true).SetColumnShardReaderClassName("SIMPLE");

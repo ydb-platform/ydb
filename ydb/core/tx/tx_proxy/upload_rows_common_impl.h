@@ -669,6 +669,22 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing columns under `SET NOT NULL` operation: %s. It is forbidden to insert NULL values.", JoinSeq(", ", setNotNullInProgressColumnsLeft).c_str()));
         }
 
+        if (isColumnTable && HasAppData() && AppDataVerified().FeatureFlags.GetEnableColumnTableDefaults() && entry.ColumnTableInfo) {
+            THashSet<TString> defaultedNotNull;
+            for (const auto& col : entry.ColumnTableInfo->Description.GetSchema().GetColumns()) {
+                if (col.HasDefaultValue()) {
+                    defaultColumnsLeft.erase(col.GetName());
+                    if (col.GetNotNull()) {
+                        defaultedNotNull.insert(col.GetName());
+                    }
+                }
+            }
+            for (const auto& name : defaultedNotNull) {
+                notNullColumnsLeft.erase(name);
+            }
+            defaultColumnsLeft.clear();
+        }
+
         if (!defaultColumnsLeft.empty() && UpsertIfExists) {
             // some default columns are not specified in the request, but upsert will only update existing rows
             // and only the columns specified in the request will be updated; unspecified default columns will not be changed.

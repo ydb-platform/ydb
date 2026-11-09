@@ -21,6 +21,7 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
@@ -1670,9 +1671,19 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
         }
 
         if (column.has_from_literal()) {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Default values are not supported in column tables";
-            return false;
+            if (!AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Default values are not supported in column tables";
+                return false;
+            }
+            NOlap::TColumnDefaultScalarValue scalar;
+            auto conclusion = scalar.ParseFromTypedValue(column.from_literal(), typeInfo);
+            if (conclusion.IsFail()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = conclusion.GetErrorMessage();
+                return false;
+            }
+            *columnDesc->MutableDefaultValue() = scalar.SerializeToProto();
         }
 
         if (column.has_from_sequence()) {
@@ -1843,11 +1854,39 @@ static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto
         }
     }
     using TColumn = NKikimrKqp::TKqpColumnMetadataProto;
+    const auto typeInfo = NScheme::TypeInfoModFromProtoColumnType(
+        column.GetTypeId(), column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr).TypeInfo;
     switch (column.GetDefaultKind()) {
-        case TColumn::DEFAULT_KIND_LITERAL:
-            status = Ydb::StatusIds::BAD_REQUEST;
-            error = "Default values are not supported in column tables";
-            return false;
+        case TColumn::DEFAULT_KIND_LITERAL: {
+            if (!AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "Default values are not supported in column tables";
+                return false;
+            }
+            NOlap::TColumnDefaultScalarValue scalar;
+            auto conclusion = scalar.ParseFromTypedValue(column.GetDefaultFromLiteral(), typeInfo);
+            if (conclusion.IsFail()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = conclusion.GetErrorMessage();
+                return false;
+            }
+            if constexpr (std::is_same_v<TColumnDesc, NKikimrSchemeOp::TOlapColumnDiff>) {
+                *description->MutableDefaultScalar() = scalar.SerializeToProto();
+            } else {
+                *description->MutableDefaultValue() = scalar.SerializeToProto();
+            }
+            break;
+        }
+        case TColumn::DEFAULT_KIND_NULL:
+            if constexpr (std::is_same_v<TColumnDesc, NKikimrSchemeOp::TOlapColumnDiff>) {
+                if (!AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Default values are not supported in column tables";
+                    return false;
+                }
+                description->SetDropDefault(true);
+            }
+            break;
         case TColumn::DEFAULT_KIND_SEQUENCE:
             status = Ydb::StatusIds::BAD_REQUEST;
             error = "Default sequences are not supported in column tables";
@@ -1857,7 +1896,6 @@ static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto
             error = "Generated columns are not supported in column tables";
             return false;
         case TColumn::DEFAULT_KIND_UNSPECIFIED:
-        case TColumn::DEFAULT_KIND_NULL:
             break;
     }
     if (column.EncodingSize()) {

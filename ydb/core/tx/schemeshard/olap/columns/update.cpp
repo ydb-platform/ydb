@@ -39,6 +39,18 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
     if (columnSchema.HasDefaultValue()) {
         DefaultValue = columnSchema.GetDefaultValue();
     }
+    if (columnSchema.HasDefaultScalar()) {
+        NOlap::TColumnDefaultScalarValue scalar;
+        auto conclusion = scalar.DeserializeFromProto(columnSchema.GetDefaultScalar());
+        if (conclusion.IsFail()) {
+            errors.AddError(conclusion.GetErrorMessage());
+            return false;
+        }
+        DefaultScalar = std::move(scalar);
+    }
+    if (columnSchema.HasDropDefault()) {
+        DropDefault = columnSchema.GetDropDefault();
+    }
     if (columnSchema.HasDataAccessorConstructor()) {
         const auto& dacProto = columnSchema.GetDataAccessorConstructor();
         if (dacProto.GetClassName() == NArrow::NAccessor::TGlobalConst::UndefinedAccessorName) {
@@ -155,10 +167,24 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         }
     }
 
+    if (columnSchema.HasCreatedDefaultValue()) {
+        errors.AddError("CreatedDefaultValue is set internally");
+        return false;
+    }
     if (columnSchema.HasDefaultValue()) {
+        if (!AppData()->FeatureFlags.GetEnableColumnTableDefaults() &&
+            !(columnSchema.HasDataAccessorConstructor() &&
+                columnSchema.GetDataAccessorConstructor().GetClassName() == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+            errors.AddError("column table defaults are disabled");
+            return false;
+        }
         auto conclusion = DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue());
         if (conclusion.IsFail()) {
             errors.AddError(conclusion.GetErrorMessage());
+            return false;
+        }
+        if (!DefaultValue.GetValue()) {
+            errors.AddError("Default value is not supported for type " + TypeName + " in column tables");
             return false;
         }
         if (!DefaultValue.IsCompatibleType(*arrowTypeResult)) {
@@ -166,6 +192,11 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
                 "incompatible types for default write: def" + DefaultValue.DebugString() + ", col:" + (*arrowTypeResult)->ToString());
             return false;
         }
+        if (IsKeyColumn()) {
+            errors.AddError("Default value is not supported for primary key columns in column tables");
+            return false;
+        }
+        CreatedDefaultValue = DefaultValue;
     }
     return true;
 }
@@ -183,7 +214,12 @@ void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescrip
     auto arrowType = NArrow::TStatusValidator::GetValid(NArrow::GetArrowType(Type));
     if (columnSchema.HasDefaultValue()) {
         DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue()).Validate();
-        AFL_VERIFY(DefaultValue.IsCompatibleType(arrowType));
+        AFL_VERIFY(DefaultValue.IsCompatibleType(arrowType) || DefaultValue.IsEmpty());
+    }
+    if (columnSchema.HasCreatedDefaultValue()) {
+        NOlap::TColumnDefaultScalarValue created;
+        created.DeserializeFromProto(columnSchema.GetCreatedDefaultValue()).Validate();
+        CreatedDefaultValue = std::move(created);
     }
     if (columnSchema.HasColumnFamilyId()) {
         // TODO: do something?
@@ -214,7 +250,16 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
     columnSchema.SetType(TypeName);
     columnSchema.SetNotNull(NotNullFlag);
     columnSchema.SetStorageId(StorageId);
-    *columnSchema.MutableDefaultValue() = DefaultValue.SerializeToProto();
+    if (DefaultValue.GetValue()) {
+        *columnSchema.MutableDefaultValue() = DefaultValue.SerializeToProto();
+    } else {
+        columnSchema.ClearDefaultValue();
+    }
+    if (CreatedDefaultValue) {
+        *columnSchema.MutableCreatedDefaultValue() = CreatedDefaultValue->SerializeToProto();
+    } else {
+        columnSchema.ClearCreatedDefaultValue();
+    }
 
     if (Serializer) {
         Serializer.SerializeToProto(*columnSchema.MutableSerializer());
@@ -234,6 +279,41 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
 
 bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
     Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
+    const bool sparsed = AccessorConstructor &&
+        AccessorConstructor.GetClassName() == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
+    if ((diffColumn.GetDefaultScalar() || diffColumn.GetDropDefault().value_or(false)) && sparsed) {
+        errors.AddError("Changing default value of a sparsed column is not supported");
+        return false;
+    }
+    if (diffColumn.GetDefaultScalar() || diffColumn.GetDefaultValue()) {
+        if (IsKeyColumn()) {
+            errors.AddError("Default value is not supported for primary key columns in column tables");
+            return false;
+        }
+        if (!AppData()->FeatureFlags.GetEnableColumnTableDefaults() && !sparsed) {
+            errors.AddError("column table defaults are disabled");
+            return false;
+        }
+    }
+    if (diffColumn.GetDropDefault().value_or(false)) {
+        if (!DefaultValue.GetValue()) {
+            errors.AddError("no default to drop");
+            return false;
+        }
+        DefaultValue = NOlap::TColumnDefaultScalarValue();
+    }
+    if (diffColumn.GetDefaultScalar()) {
+        auto conclusion = DefaultValue.DeserializeFromProto(diffColumn.GetDefaultScalar()->SerializeToProto());
+        if (conclusion.IsFail() || !DefaultValue.GetValue()) {
+            errors.AddError(conclusion.IsFail() ? conclusion.GetErrorMessage()
+                                                : "Default value is not supported for type " + TypeName + " in column tables");
+            return false;
+        }
+        if (!DefaultValue.IsCompatibleType(NArrow::TStatusValidator::GetValid(NArrow::GetArrowType(Type)))) {
+            errors.AddError("incompatible types for default write");
+            return false;
+        }
+    }
     if (diffColumn.GetDefaultValue()) {
         auto conclusion = DefaultValue.ParseFromString(*diffColumn.GetDefaultValue(), Type);
         if (conclusion.IsFail()) {

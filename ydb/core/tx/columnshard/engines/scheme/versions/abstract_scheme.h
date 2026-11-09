@@ -57,6 +57,8 @@ public:
 
     std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const std::string& columnName) const;
     std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const ui32 columnId) const;
+    static std::shared_ptr<arrow::Scalar> GetAbsentColumnFill(
+        const ISnapshotSchema& portionSchema, const ISnapshotSchema& resultSchema, const ui32 columnId);
 
     TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(
         const NArrow::TSchemaLiteView& schema, const ui32 rowsCount, const bool force) const;

@@ -3,7 +3,9 @@
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 
@@ -37,6 +39,8 @@ public:
     NKikimrColumnShardColumnDefaults::TColumnDefault SerializeToProto() const;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardColumnDefaults::TColumnDefault& proto);
     TConclusionStatus ParseFromString(const TString& value, const NScheme::TTypeInfo& type);
+    TConclusionStatus ParseFromTypedValue(const Ydb::TypedValue& value, const NScheme::TTypeInfo& type);
+    TConclusion<Ydb::TypedValue> SerializeToTypedValue() const;
 };
 
 }   // namespace NKikimr::NOlap

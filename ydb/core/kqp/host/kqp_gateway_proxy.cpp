@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/local_indexes/bloom/const.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -561,7 +562,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         auto columnIt = metadata.Columns.find(name);
         Y_ENSURE(columnIt != metadata.Columns.end());
 
-        if (columnIt->second.IsDefaultFromLiteral()) {
+        if (columnIt->second.IsDefaultFromLiteral() && !AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
             code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Default values are not supported in column tables";
             return false;
@@ -596,6 +597,16 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
 
         if (!FillAccessor(columnIt->second.Encoding, name, columnDesc, error, code)) {
             return false;
+        }
+        if (columnIt->second.IsDefaultFromLiteral()) {
+            NOlap::TColumnDefaultScalarValue scalar;
+            auto conclusion = scalar.ParseFromTypedValue(columnIt->second.DefaultFromLiteral, columnIt->second.TypeInfo);
+            if (conclusion.IsFail()) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = conclusion.GetErrorMessage();
+                return false;
+            }
+            *columnDesc.MutableDefaultValue() = scalar.SerializeToProto();
         }
     }
 

@@ -482,4 +482,5 @@ message TFeatureFlags {
     // Gate for HNSW creation and acceleration once the implementation is included.
     optional bool EnableHnswIndex = 384 [default = false];
     optional bool EnableColumnshardCutHistorySending = 385 [default = false];
+    optional bool EnableColumnTableDefaults = 386 [default = false];
 }

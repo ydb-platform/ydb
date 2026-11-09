@@ -3,6 +3,7 @@
 #include "yql_kikimr_settings.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/fulltext.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/base/kmeans_clusters.h>
@@ -2449,7 +2450,7 @@ private:
                             return TStatus::Error;
                         }
                     } else if (alterColumnAction == "setDefaultValue") {
-                        if (table->Metadata->Kind == EKikimrTableKind::Olap) {
+                        if (table->Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                 "Default values are not supported in column tables"));
                             return TStatus::Error;
@@ -2489,7 +2490,7 @@ private:
                         }
                     } else if (alterColumnAction == "dropDefault") {
                         auto* column = table->Metadata->Columns.FindPtr(name);
-                        if (table->Metadata->Kind == EKikimrTableKind::Olap) {
+                        if (table->Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                 "Default values are not supported in column tables"));
                             return TStatus::Error;

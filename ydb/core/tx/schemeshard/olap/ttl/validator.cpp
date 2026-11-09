@@ -42,6 +42,10 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         errors.AddError(Sprintf("Cannot enable TTL on dropped column: '%s'", colName.data()));
         return false;
     }
+    if (column->GetDefaultValue().GetValue()) {
+        errors.AddError("Default value is not supported for the TTL column");
+        return false;
+    }
 
     if (ttl.HasExpireAfterBytes()) {
         errors.AddError("TTL with eviction by size is not supported yet");

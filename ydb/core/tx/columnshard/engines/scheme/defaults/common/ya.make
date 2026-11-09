@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/library/actors/core
     ydb/library/formats/arrow
+    ydb/public/api/protos
 )
 
 END()

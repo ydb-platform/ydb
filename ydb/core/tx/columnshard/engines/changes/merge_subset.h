@@ -14,12 +14,16 @@ class TPortionToMerge {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
+    YDB_READONLY_DEF(ISnapshotSchema::TPtr, Schema);
 
 public:
-    TPortionToMerge(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter)
+    TPortionToMerge(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter,
+        const ISnapshotSchema::TPtr& schema)
         : Batch(batch)
         , Filter(filter)
+        , Schema(schema)
     {
+        AFL_VERIFY(Schema);
     }
 };
 

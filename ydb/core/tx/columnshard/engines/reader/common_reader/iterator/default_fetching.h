@@ -98,8 +98,9 @@ private:
         auto columnChunks = source.GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
         IsEmptyChunks.emplace(columnChunks.empty());
         if (columnChunks.empty()) {
-            ColumnChunks.emplace_back(source.GetRecordsCount(),
-                TPortionDataAccessor::TAssembleBlobInfo(source.GetRecordsCount(), GetColumnLoader(context.GetSource())->GetDefaultValue()));
+            const auto fill = ISnapshotSchema::GetAbsentColumnFill(
+                *source.GetSourceSchema(), *source.GetContext()->GetReadMetadata()->GetResultSchema(), GetEntityId());
+            ColumnChunks.emplace_back(source.GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(source.GetRecordsCount(), fill));
             return;
         }
         StorageId = source.GetColumnStorageId(GetEntityId());

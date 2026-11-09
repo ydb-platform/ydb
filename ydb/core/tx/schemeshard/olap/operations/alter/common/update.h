@@ -74,11 +74,13 @@ protected:
     }
 
     bool CheckTargetSchema(const TOlapSchema& targetSchema) {
-        if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
-            for (auto& [_, column] : targetSchema.GetColumns().GetColumns()) {
-                if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
-                    return false;
-                }
+        for (auto& [_, column] : targetSchema.GetColumns().GetColumns()) {
+            const bool sparsed = column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
+            if (sparsed && !AppData()->FeatureFlags.GetEnableSparsedColumns()) {
+                return false;
+            }
+            if (column.GetDefaultValue().GetValue() && !sparsed && !AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
+                return false;
             }
         }
         return true;

@@ -7377,6 +7377,16 @@
                 "ColumnId": 12,
                 "ColumnName": "TraceIds",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "Compression",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "CompressionLevel",
+                "ColumnType": "Int32"
             }
         ],
         "ColumnsDropped": [],
@@ -7394,7 +7404,9 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7482,6 +7494,16 @@
                 "ColumnId": 12,
                 "ColumnName": "TraceIds",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "Compression",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "CompressionLevel",
+                "ColumnType": "Int32"
             }
         ],
         "ColumnsDropped": [],
@@ -7499,7 +7521,9 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,

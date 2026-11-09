@@ -6,6 +6,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/sys.h>
 
 #include <util/generic/is_in.h>
 #include <util/generic/hash.h>
@@ -45,6 +46,34 @@ namespace {
     bool FilterExternalSchemeObjects(const NScheme::TSchemeEntry& entry) {
         return entry.Type == NScheme::ESchemeEntryType::ExternalDataSource
             || entry.Type == NScheme::ESchemeEntryType::ExternalTable;
+    }
+
+    TVector<TString> ListExternalExportPaths(
+        NScheme::TSchemeClient& client, const TString& path, const TString& databaseRoot)
+    {
+        auto listing = client.ListDirectory(path).ExtractValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(listing);
+        TVector<TString> result;
+        if (FilterExternalSchemeObjects(listing.GetEntry())) {
+            result.push_back(path);
+        }
+        for (const auto& child : listing.GetChildren()) {
+            // Match rpc_export: internal directory names are skipped only directly
+            // below the database root. Explicit roots and nested legacy names remain valid.
+            if (path == databaseRoot && child.Type == NScheme::ESchemeEntryType::Directory
+                    && IsInternalName(child.Name)) {
+                continue;
+            }
+            const TString childPath = path + "/" + child.Name;
+            if (FilterExternalSchemeObjects(child)) {
+                result.push_back(childPath);
+            } else if (child.Type == NScheme::ESchemeEntryType::Directory
+                    || child.Type == NScheme::ESchemeEntryType::SubDomain) {
+                auto descendants = ListExternalExportPaths(client, childPath, databaseRoot);
+                result.insert(result.end(), descendants.begin(), descendants.end());
+            }
+        }
+        return result;
     }
 
     TStatus FilterAsyncReplicaTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
@@ -512,13 +541,25 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
                 NConsoleClient::AdjustPath(source, config);
                 roots.push_back({source, {}});
             }
+            // The server preserves an explicitly selected nested directory's mapping
+            // when expanding its parent, regardless of the order of selected roots.
+            std::stable_sort(roots.begin(), roots.end(), [](const auto& lhs, const auto& rhs) {
+                return lhs.Src.size() > rhs.Src.size();
+            });
             THashSet<TString> selectedPaths;
             for (const auto& item : settings.Item_) {
                 selectedPaths.insert(item.Src);
             }
             for (const auto& root : roots) {
-                for (const auto& [src, dst] : ExpandItem(schemeClient, tableClient,
-                        root.Src, root.Dst, FilterExternalSchemeObjects, &externalPaths)) {
+                for (const auto& src : ListExternalExportPaths(schemeClient, root.Src, NormalizePath(config.Database))) {
+                    TString dst = root.Dst;
+                    if (!dst.empty() && dst.back() == '/') {
+                        dst.pop_back();
+                    }
+                    if (!dst.empty()) {
+                        dst += src.substr(root.Src.size());
+                    }
+                    externalPaths.insert(src);
                     if (settings.Item_.empty()) {
                         settings.Item_ = roots;
                         selectedPaths.insert(roots.front().Src);

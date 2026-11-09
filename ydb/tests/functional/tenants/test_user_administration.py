@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import copy
 import logging
+from contextlib import contextmanager
 
 import pytest
 
@@ -497,58 +498,64 @@ class TestTenantDatabaseAdmin:
                     YDB.drop_user(session, 'dbadmin3', if_exist=True)
                     YDB.drop_user(session, 'dbadmin4', if_exist=True)
 
+    @pytest.fixture
+    def tenant_user_driver(self, prepared_admin_tenant_db, ydb_client):
+        def connect(username, password='passwd1234'):
+            db = prepared_admin_tenant_db
+            driver = ydb_client(db.database_path, credentials=db.get_user_creds(username, password))
+            driver.wait()
+            return driver
+
+        return connect
+
+    @pytest.fixture
+    def tenant_user_session(self, tenant_user_driver):
+        @contextmanager
+        def connect(username, password='passwd1234'):
+            driver = tenant_user_driver(username, password)
+            with ydb.SessionPool(driver) as pool:
+                with pool.checkout() as session:
+                    yield session
+
+        return connect
+
+    @pytest.fixture
+    def db_admin_driver(self, tenant_user_driver):
+        return tenant_user_driver(LOCAL_DB_ADMIN)
+
+    @pytest.fixture
+    def db_admin_session(self, tenant_user_session):
+        with tenant_user_session(LOCAL_DB_ADMIN) as session:
+            yield session
+
     @pytest.mark.parametrize('subject_user', [
         'ordinaryuser',
         pytest.param('dbadmin4', id='dbadmin')
     ])
-    def test_user_can_change_password_for_himself(self, prepared_admin_tenant_db, subject_user):
-        db = prepared_admin_tenant_db
+    def test_user_can_change_password_for_himself(self, tenant_user_session, subject_user):
+        with tenant_user_session(subject_user) as session:
+            session.execute_scheme(f"alter user {subject_user} password '4321'")
 
-        user_auth_token = db.login_user(subject_user, 'passwd1234')
-        credentials = ydb.AuthTokenCredentials(user_auth_token)
+        with tenant_user_session(subject_user, password='4321') as session:
+            password_hash = """{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }"""
 
-        with ydb.Driver(db.create_driver_config(credentials)) as driver:
-            driver.wait()
+            try:
+                session.execute_scheme(f"alter user {subject_user} hash '{password_hash}'")
+                assert subject_user == 'dbadmin4'
+            except ydb.issues.Unauthorized as ex:
+                assert subject_user == 'ordinaryuser'
+                assert 'Access denied for' in ex.message
 
-            pool = ydb.SessionPool(driver)
-            with pool.checkout() as session:
-                session.execute_scheme(f"alter user {subject_user} password '4321'")
+    def test_database_admin_cant_change_database_owner(self, db_admin_driver):
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            YDB.change_db_owner(db_admin_driver, LOCAL_ORDINARY_USER)
 
-        user_auth_token = db.login_user(subject_user, '4321')
-        credentials = ydb.AuthTokenCredentials(user_auth_token)
-
-        with ydb.Driver(db.create_driver_config(credentials)) as driver:
-            driver.wait()
-
-            pool = ydb.SessionPool(driver)
-            with pool.checkout() as session:
-                password_hash = """{
-                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
-                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
-                    "type": "argon2id"
-                }"""
-
-                try:
-                    session.execute_scheme(f"alter user {subject_user} hash '{password_hash}'")
-                    assert subject_user == 'dbadmin4'
-                except ydb.issues.Unauthorized as ex:
-                    assert subject_user == 'ordinaryuser'
-                    assert 'Access denied for' in ex.message
-
-    def test_database_admin_cant_change_database_owner(self, prepared_admin_tenant_db):
-        db = prepared_admin_tenant_db
-
-        user_auth_token = db.login_user(LOCAL_DB_ADMIN, 'passwd1234')
-        credentials = ydb.AuthTokenCredentials(user_auth_token)
-
-        with ydb.Driver(db.create_driver_config(credentials)) as driver:
-            driver.wait()
-
-            with pytest.raises(ydb.issues.Error) as exc_info:
-                driver.scheme_client.modify_permissions(db.database_path, ydb.ModifyPermissionsSettings().change_owner('ordinaryuser'))
-
-            assert exc_info.type is ydb.issues.Unauthorized
-            assert 'Access denied for dbadmin' in exc_info.value.message
+        assert exc_info.type is ydb.issues.Unauthorized
+        assert 'Access denied for dbadmin' in exc_info.value.message
 
     @pytest.mark.parametrize('query', [
         pytest.param('alter group dbadmins add user ordinaryuser', id='add-user'),
@@ -559,55 +566,25 @@ class TestTenantDatabaseAdmin:
         pytest.param('drop group dbadmins', id='remove-admin-group'),
         pytest.param('alter group dbadmins rename to dbadminsdemoted', id='rename-admin-group'),
     ])
-    def test_database_admin_cant_change_database_admin_group(self, prepared_admin_tenant_db, query):
-        db = prepared_admin_tenant_db
+    def test_database_admin_cant_change_database_admin_group(self, db_admin_session, query):
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            db_admin_session.execute_scheme(query)
 
-        user_auth_token = db.login_user(LOCAL_DB_ADMIN, 'passwd1234')
-        credentials = ydb.AuthTokenCredentials(user_auth_token)
-
-        with ydb.Driver(db.create_driver_config(credentials)) as driver:
-            driver.wait()
-
-            pool = ydb.SessionPool(driver)
-            with pool.checkout() as session:
-                with pytest.raises(ydb.issues.Error) as exc_info:
-                    session.execute_scheme(query)
-
-                assert exc_info.type is ydb.issues.Unauthorized
-                assert 'Access denied.' in exc_info.value.message
+        assert exc_info.type is ydb.issues.Unauthorized
+        assert 'Access denied.' in exc_info.value.message
 
     @pytest.mark.parametrize('query', [
         pytest.param('alter user dbadmin2 password "4321"', id='change-password'),
         pytest.param('alter user dbadmin2 nologin', id='block'),
         pytest.param('alter user dbadmin3 login', id='unblock'),
     ])
-    def test_database_admin_cant_change_database_admin_user(self, prepared_admin_tenant_db, query):
-        db = prepared_admin_tenant_db
+    def test_database_admin_cant_change_database_admin_user(self, db_admin_session, query):
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            db_admin_session.execute_scheme(query)
 
-        user_auth_token = db.login_user(LOCAL_DB_ADMIN, 'passwd1234')
-        credentials = ydb.AuthTokenCredentials(user_auth_token)
+        assert exc_info.type is ydb.issues.Unauthorized
+        logger.debug(exc_info.value.message)
+        assert 'Access denied.' in exc_info.value.message
 
-        with ydb.Driver(db.create_driver_config(credentials)) as driver:
-            driver.wait()
-
-            pool = ydb.SessionPool(driver)
-            with pool.checkout() as session:
-                with pytest.raises(ydb.issues.Error) as exc_info:
-                    session.execute_scheme(query)
-
-            assert exc_info.type is ydb.issues.Unauthorized
-            logger.debug(exc_info.value.message)
-            assert 'Access denied.' in exc_info.value.message
-
-    def test_database_admin_can_create_user(self, prepared_admin_tenant_db):
-        db = prepared_admin_tenant_db
-
-        user_auth_token = db.login_user(LOCAL_DB_ADMIN, 'passwd1234')
-        credentials = ydb.AuthTokenCredentials(user_auth_token)
-
-        with ydb.Driver(db.create_driver_config(credentials)) as driver:
-            driver.wait()
-
-            pool = ydb.SessionPool(driver)
-            with pool.checkout() as session:
-                YDB.create_user(session, LOCAL_TEST_USER_2)
+    def test_database_admin_can_create_user(self, db_admin_session):
+        YDB.create_user(db_admin_session, LOCAL_TEST_USER_2)

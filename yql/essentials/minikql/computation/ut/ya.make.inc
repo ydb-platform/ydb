@@ -39,4 +39,4 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_CURRENT_ABI_VERSION()

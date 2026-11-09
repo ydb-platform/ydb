@@ -69,7 +69,7 @@ TViewSelection SelectView(
     std::vector<const TClusterView*> candidates;
     ui64 generation = 0;
     for (const auto& view : views) {
-        if (now - view.SentAt > ttl) {
+        if (now - view.SentAt >= ttl) {
             continue;
         }
         if (candidates.empty() || view.Generation > generation) {

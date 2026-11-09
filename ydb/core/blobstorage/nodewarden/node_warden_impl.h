@@ -161,18 +161,24 @@ namespace NKikimr::NStorage {
         struct TPDiskByPathInfo {
             TPDiskKey RunningPDiskId; // currently running PDiskId
             std::optional<NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk> Pending; // pending
+            bool Releasing = false; // RunningPDiskId is gone from LocalPDisks, but it is yet to free the device
+            std::vector<std::unique_ptr<IEventHandle>> DelayedMetadataRequests; // to be handled upon release
         };
         THashMap<TString, TPDiskByPathInfo> PDiskByPath;
         THashMap<TString, TActorId> MetadataReadsInFlight;
         THashSet<ui32> PDisksWaitingToStart;
         ui64 NextPDiskStopCookie = 0;
         THashMap<ui64, TPDiskKey> PDisksStopping;
+        THashMap<ui64, TString> PDiskPathsReleasing;
 
         ui64 LastScrubCookie = RandomNumber<ui64>();
 
         ui32 AvailDomainId;
         std::optional<TString> InstanceId; // instance ID of BS_CONTROLLER running this node
         TActorId PipeClientId;
+        ui64 ControllerServiceSetGeneration = 0;
+        ui64 LastConfirmedControllerServiceSetGeneration = 0;
+        bool ControllerServicesDropped = false; // BSC has to resend disk services this node had to ignore
 
         ui64 NextConfigCookie = 1;
         std::unordered_map<ui64, std::function<void(TEvBlobStorage::TEvControllerConfigResponse*)>> ConfigInFlight;
@@ -411,6 +417,10 @@ namespace NKikimr::NStorage {
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);
         void DestroyLocalPDisk(ui32 pdiskId);
         void FinishDestroyLocalPDisk(ui32 pdiskId);
+        bool FinishReleasePDiskPath(ui64 cookie);
+        template<typename TEventPtr>
+        bool DelayMetadataRequestOnReleasingPath(const TString& path, TEventPtr& ev);
+        void StartPendingPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pending);
         void Handle(TEvents::TEvPoisonTaken::TPtr ev);
 
         void DoRestartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
@@ -428,7 +438,12 @@ namespace NKikimr::NStorage {
         // VDisks
 
         void ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet,
-            bool isStatic, bool comprehensive, bool updateCache, const char *origin);
+            bool isStatic, bool comprehensive, const char *origin);
+        void ApplyControllerServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet, bool comprehensive);
+        void ApplyCachedServiceSet(NKikimrBlobStorage::TNodeWardenServiceSet serviceSet);
+        void RetireConflictingDynamicPDisks(bool isStatic);
+        bool CanConnectToController() const;
+        void PruneLocalVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet, bool isStatic);
 
         void ConfigureLocalProxy(TIntrusivePtr<TBlobStorageGroupInfo> bsInfo);
         TActorId StartEjectedProxy(ui32 groupId);
@@ -665,11 +680,13 @@ namespace NKikimr::NStorage {
         void Handle(TEvPrivate::TEvRestartDrainReminder::TPtr ev);
         TIntrusiveList<TVDiskRecord, TUnreportedMetricTag> VDisksWithUnreportedMetrics;
 
+        template<typename TPredicate>
+        void RetireLocalVDisksIf(TPredicate&& predicate);
         void DestroyLocalVDisk(TVDiskRecord& vdisk);
         void PoisonLocalVDisk(TVDiskRecord& vdisk);
         void StartLocalVDiskActor(TVDiskRecord& vdisk);
         void HandleGone(STATEFN_SIG);
-        void ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet);
+        void ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet, bool isStatic);
 
         // process VDisk configuration
         void ApplyLocalVDiskInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk);
@@ -710,7 +727,6 @@ namespace NKikimr::NStorage {
 
         struct TGroupRecord {
             TIntrusivePtr<TBlobStorageGroupInfo> Info; // current group info
-            std::optional<TBlobStorageGroupType> GType;
             ui32 MaxKnownGeneration = 0; // maximum seen generation
             std::optional<NKikimrBlobStorage::TGroupInfo> Group; // group info as a protobuf
             NKikimrBlobStorage::TGroupInfo EncryptionParams; // latest encryption parameters; set only when encryption enabled; overlay in respect to Group
@@ -758,7 +774,7 @@ namespace NKikimr::NStorage {
         void ApplyGroupInfoFromServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet, bool isStatic,
             bool comprehensive);
 
-        // stop the proxy of the group that has been destroyed and forget the group
+        // stop the proxy and local VDisks of the group that has been destroyed and forget the group
         void EjectGroup(ui32 groupId);
 
         // process group information obtained by one of managed entities
@@ -898,7 +914,11 @@ namespace NKikimr::NStorage {
         std::set<TWorkingSyncer> WorkingSyncers;
 
         TReplQuoter::TPtr SyncRateQuoter;
+        ui64 SyncRateConfigLimit = 0; // BridgeSyncRateBytesPerSecond, 0 means no limit
+        ui64 SyncRateControllerLimit = 0; // the share of the node in the limit for the cluster, 0 means no limit
+        ui32 ControllerGeneration = 0; // the newest tablet generation of BSC that has told the node its syncers and share
 
+        void UpdateSyncRateQuoter();
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
         void StartSyncerIfNeeded(TWorkingSyncer& syncer);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);

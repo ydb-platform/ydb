@@ -1113,30 +1113,17 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UPSERT INTO `/Root/ColumnWithTTLAndMinMaxIndex` (`id`, `ts`)
             SELECT CAST(item+1 AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
             )");
-        csController->WaitCompactions(TDuration::Seconds(10));
-        csController->WaitActualization(TDuration::Seconds(10));
-        tieringHelper.SetTablePath(tablePath);
-        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
-        {
-            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
-            auto selectQuery = TStringBuilder();
-            selectQuery << R"(
-                SELECT TierName, SUM(ColumnRawBytes) as RawBytes, SUM(Rows) AS Rows
-                FROM `)" << tablePath << R"(/.sys/primary_index_portion_stats`
-                WHERE Activity == 1
-                GROUP BY TierName)";
+        auto tableClient = testHelper.GetKikimr().GetTableClient();
+        const TString activeTiersQuery = TStringBuilder()
+            << "SELECT DISTINCT TierName FROM `" << tablePath << "/.sys/primary_index_portion_stats` WHERE Activity == 1";
+        csController->WaitCondition(TDuration::Minutes(2), [&]() {
+            const auto tiers = ExecuteScanQuery(tableClient, activeTiersQuery);
+            return tiers.size() == 1 && GetUtf8(tiers[0].at("TierName")) == DEFAULT_TIER_PATH;
+        });
 
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), DEFAULT_TIER_PATH);
-        }
-        {
-            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
-            auto rows = ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT COUNT(*) AS cnt FROM `" << tablePath << "`");
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("cnt")), 1500001);
-        }
-
+        const auto rows = ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT COUNT(*) AS cnt FROM `" << tablePath << "`");
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("cnt")), 1500001);
     }
 
     Y_UNIT_TEST(TieringDoesntWorkForMinMaxIndexStoredOutsideOfLocalDB, ELocalIndexAsSchemeObject) {

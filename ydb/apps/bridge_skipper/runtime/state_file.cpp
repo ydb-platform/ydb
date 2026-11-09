@@ -110,14 +110,32 @@ void ValidateState(const TPersistentState& state) {
 TPersistentState Decode(TStringBuf bytes) {
     NJson::TJsonValue json;
     Require(NJson::ReadJsonTree(bytes, &json), "invalid state.json JSON");
-    Fields(json, {"cluster_id", "generation_high_water", "pending_mutation"});
+    Require(json.Has("state_schema") && json["state_schema"].IsInteger() && json["state_schema"].GetInteger() == 3,
+        "unsupported state.json state_schema: expected 3; unversioned state is not supported");
+    Fields(json, {"state_schema", "mode", "cluster_id", "generation_high_water", "pending_mutation"});
     TPersistentState state;
     state.ClusterId = String(json["cluster_id"]);
+    const auto mode = String(json["mode"]);
+    Require(mode == "observe" || mode == "manual" || mode == "auto", "invalid state.json mode");
+    state.Mode = mode == "auto" ? EMode::Auto : mode == "manual" ? EMode::Manual : EMode::Observe;
     state.GenerationHighWater = Generation(json["generation_high_water"]);
     const auto& pending = json["pending_mutation"];
     if (!pending.IsNull()) {
-        Fields(pending, {"expected_generation", "update"});
+        Fields(pending, {"expected_generation", "update", "kind", "origin"});
         TPendingMutation record;
+        const auto kind = String(pending["kind"]);
+        bool knownKind = false;
+        for (const auto value : {EOperationKind::Failover, EOperationKind::Switchover, EOperationKind::TakeOffline, EOperationKind::Rejoin}) {
+            if (ToString(value) == kind) {
+                record.Kind = value;
+                knownKind = true;
+            }
+        }
+        Require(knownKind, "invalid state.json operation kind");
+        const auto origin = String(pending["origin"]);
+        Require(origin == "manual" || origin == "auto", "invalid state.json origin");
+        record.Origin = origin == "manual" ? EDispatchOrigin::Manual : EDispatchOrigin::Auto;
+        Require(record.Kind == EOperationKind::Failover || record.Origin == EDispatchOrigin::Manual, "invalid Auto lifecycle pending record");
         record.ExpectedGeneration = Generation(pending["expected_generation"]);
         const auto& update = pending["update"];
         Require(update.IsMap(), "invalid state.json update");
@@ -134,12 +152,16 @@ TPersistentState Decode(TStringBuf bytes) {
 TString Encode(const TPersistentState& state) {
     ValidateState(state);
     NJson::TJsonValue json(NJson::JSON_MAP);
+    json["state_schema"] = 3;
+    json["mode"] = ToString(state.Mode);
     json["cluster_id"] = state.ClusterId;
     json["generation_high_water"] = ::ToString(state.GenerationHighWater);
     json["pending_mutation"] = NJson::TJsonValue(NJson::JSON_NULL);
     if (const auto& pending = state.PendingMutation) {
         auto& record = json["pending_mutation"];
         record.SetType(NJson::JSON_MAP);
+        record["kind"] = ToString(pending->Kind);
+        record["origin"] = ToString(pending->Origin);
         record["expected_generation"] = ::ToString(pending->ExpectedGeneration);
         auto& update = record["update"];
         update.SetType(NJson::JSON_MAP);
@@ -218,6 +240,7 @@ std::unique_ptr<TStateFile> TStateFile::Open(const TString& directory, const TSt
 }
 
 TString TStateFile::Write(const TPersistentState& state) {
+    LastWriteRenamed = false;
     TString bytes;
     try {
         Require(state.ClusterId == State.ClusterId, "state.json cluster_id does not match configuration");
@@ -253,7 +276,8 @@ TString TStateFile::Write(const TPersistentState& state) {
     if (renameat(DirectoryFd, TemporaryName, DirectoryFd, "state.json") != 0) {
         return fail("cannot rename state.json temporary file");
     }
-    if (!Sync(DirectoryFd)) {
+    LastWriteRenamed = true;
+    if ((DirectorySyncFailure && DirectorySyncFailure()) || !Sync(DirectoryFd)) {
         // The rename happened, so the file holds the new state while its
         // durability is uncertain. Memory follows the file: the actor keeps the
         // pending record it just wrote and stays blocked on the error until a
@@ -268,6 +292,7 @@ TString TStateFile::Write(const TPersistentState& state) {
 TString TStateFile::ClearPending() {
     auto state = State;
     state.PendingMutation.reset();
+    state.Mode = EMode::Observe;
     return Write(state);
 }
 

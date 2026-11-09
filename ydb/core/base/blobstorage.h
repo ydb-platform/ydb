@@ -2612,6 +2612,7 @@ struct TEvBlobStorage {
         std::deque<TBlock> Blocks;
         std::deque<TBarrier> Barriers;
         std::deque<TBlob> Blobs;
+        ui64 ReplyBytes = 0; // total size of the VDisk replies the proxy has got for this result
 
         TEvAssimilateResult(NKikimrProto::EReplyStatus status, TString errorReason = {})
             : TEvResultCommon(status)

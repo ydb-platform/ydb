@@ -180,7 +180,7 @@ public:
         ui32 sent = 0;
         for (ui32 disk = 0; disk < 9; ++disk) {
             const auto physicalRealm = info.GetVDiskId(state.Disks[disk].OrderNumber).FailRealm;
-            if (info.GetFailRealmState(physicalRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+            if (info.IsFailRealmExcluded(physicalRealm)) {
                 continue;
             }
             const auto situation = state.Disks[disk].DiskParts[disk % 3].Situation;

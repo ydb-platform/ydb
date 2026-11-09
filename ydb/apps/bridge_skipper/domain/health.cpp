@@ -107,7 +107,7 @@ void AddNote(TSelfCheckClassification& result, const TIssue& issue) {
 }
 
 bool IsFresh(TMonotonic sentAt, TMonotonic now, const THealthParams& params) {
-    return now - sentAt <= params.EvidenceTtl;
+    return now - sentAt < params.EvidenceTtl;
 }
 
 bool IsEndpointValid(const TClusterView& view, const TEndpointState& endpoint) {
@@ -197,11 +197,21 @@ std::optional<bool> IsParticipating(
     for (const auto& reply : validReports) {
         const auto& report = reply.Report;
         const auto it = report.Piles.find(pile);
-        if (it != report.Piles.end()) {
+        if (it != report.Piles.end() && (it->second.InConfigQuorum || !report.BindingInProgress)) {
             participating = participating.value_or(false) || it->second.InConfigQuorum;
         }
     }
     return participating;
+}
+
+std::optional<bool> EvaluatedParticipation(
+    const TString& pile,
+    EPileState state,
+    const std::vector<TConnectivityReply>& validReports,
+    const TPileParticipation& evaluated)
+{
+    const auto found = evaluated.find(pile);
+    return found == evaluated.end() ? IsParticipating(pile, state, validReports) : found->second.Value;
 }
 
 THealthEvaluation EvaluatePiles(
@@ -271,13 +281,32 @@ THealthEvaluation EvaluatePiles(
     std::set<TString> keptPiles;
     for (const auto& [pile, pileState] : view.Piles) {
         auto participation = IsParticipating(pile, pileState, evaluation.Connectivity);
-        // B7: BSC assesses only stage-2 parts, so a part for a NOT_SYNCHRONIZED pile proves stage 2.
-        const bool bscPart = std::any_of(bsc.begin(), bsc.end(), [&](const auto* reply) {
-            return Part(*reply, pile).has_value();
-        });
-        if (pileState == EPileState::NotSynchronized && !participation.value_or(false) && bscPart) {
-            participation = true;
+        TMonotonic participationAt = pileState == EPileState::NotSynchronized ? TMonotonic{} : view.SentAt;
+        if (pileState == EPileState::NotSynchronized && participation) {
+            for (const auto& reply : evaluation.Connectivity) {
+                const auto& report = reply.Report;
+                const auto item = report.Piles.find(pile);
+                if (item != report.Piles.end() && item->second.InConfigQuorum == *participation
+                    && (*participation || !report.BindingInProgress))
+                {
+                    participationAt = std::max(participationAt, report.SentAt);
+                }
+            }
         }
+        // B7: BSC assesses only stage-2 parts, so a part for a NOT_SYNCHRONIZED pile proves stage 2.
+        if (pileState == EPileState::NotSynchronized) {
+            for (const auto* reply : bsc) {
+                if (Part(*reply, pile)) {
+                    if (!participation.value_or(false)) {
+                        participation = true;
+                        participationAt = reply->SentAt;
+                    } else {
+                        participationAt = std::max(participationAt, reply->SentAt);
+                    }
+                }
+            }
+        }
+        evaluation.Participation[pile] = {participation, participationAt};
         // Unknown stage-2 participation is participating with an Unknown verdict.
         const bool participating = participation.value_or(true);
         if (participating) {

@@ -44,6 +44,7 @@ bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& ite
     switch (item.SourcePathType) {
     case NKikimrSchemeOp::EPathTypeView:
     case NKikimrSchemeOp::EPathTypePersQueueGroup:
+    case NKikimrSchemeOp::EPathTypeKesus:
     case NKikimrSchemeOp::EPathTypeReplication:
     case NKikimrSchemeOp::EPathTypeTransfer:
     case NKikimrSchemeOp::EPathTypeExternalDataSource:
@@ -354,6 +355,13 @@ private:
                 }
             }
 
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToYtSettings>) {
+                if (path.Base()->IsKesus()) {
+                    explain = "Coordination node export to YT is not supported";
+                    return false;
+                }
+            }
+
             exportInfo.Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
             exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
 
@@ -567,7 +575,7 @@ private:
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
                 Self->SelfId(), exportInfo.Id, itemIdx, item.SourcePathId,
-                exportSettings, databaseRoot, metadata.Serialize(),
+                exportSettings, databaseRoot, std::move(metadata),
                 exportInfo.EnablePermissions, exportInfo.EnableChecksums,
                 iv
             ));

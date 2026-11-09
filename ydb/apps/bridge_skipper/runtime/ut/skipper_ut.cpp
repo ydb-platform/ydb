@@ -76,7 +76,7 @@ public:
         if (PrepareUpdate) {
             PrepareUpdate();
         }
-        if (Now() > authorization.ValidUntil) {
+        if (Now() >= authorization.ValidUntil) {
             return false;
         }
         for (const auto& call : Updates) {
@@ -148,6 +148,7 @@ struct THarness {
     std::map<TString, std::set<TString>> EndpointNoQuorum;
     std::set<TString> FallbackEndpoints;
     std::function<void(const TPersistentState&)> AfterWrite;
+    std::function<void()> AfterFailedWrite;
     bool Fallback = false;
     bool Truncated = false;
     // Endpoints of pile b report b as PROMOTED.
@@ -157,6 +158,8 @@ struct THarness {
     std::optional<ui64> ConnectivityGeneration;
     // SelfCheck replies arrive this long after they were sent.
     std::optional<TDuration> SelfCheckDelay;
+
+    std::shared_ptr<std::atomic<bool>> Shutdown = std::make_shared<std::atomic<bool>>(false);
 
     explicit THarness(
         EMode mode = EMode::Auto,
@@ -180,7 +183,9 @@ struct THarness {
             UNIT_ASSERT_VALUES_EQUAL(File->Write(*restored), "");
         }
         Config = ParseConfig(TString("cluster_id: test\nendpoints: {a: [grpc://a:1], b: [grpc://b:1]}\ntiming: ") + timing + "\n");
-        Config.Mode = mode;
+        auto state = File->GetState();
+        state.Mode = mode;
+        UNIT_ASSERT_VALUES_EQUAL(File->Write(state), "");
         for (const auto& extra : {A2, A3}) {
             if (Config.Endpoints["a"].size() < survivorEndpoints) {
                 Config.Endpoints["a"].push_back(ParseEndpoint(extra));
@@ -200,11 +205,50 @@ struct THarness {
             if (error.empty() && AfterWrite) {
                 AfterWrite(state);
             }
+            if (!error.empty() && AfterFailedWrite) {
+                AfterFailedWrite();
+            }
             return error;
         };
         options.ScheduleTicks = false;
+        options.ShutdownRequested = Shutdown;
         Actor = Runtime.Register(CreateSkipperActor(std::move(options)));
         Tick();
+    }
+
+    TCommandResult Command(TControllerCommand command) {
+        Runtime.SendAsync(new NActors::IEventHandle(Actor, Edge, new TEvSkipper::TEvCommand(std::move(command)), 0, 917));
+        auto reply = Runtime.GrabEdgeEvent<TEvSkipper::TEvCommandResult>(Edge);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, 917);
+        return reply->Get()->Result;
+    }
+
+    TCommandResult Mode(EMode mode, TString id = "mode-1") {
+        const auto snapshot = Store->Read();
+        TControllerCommand command;
+        command.Kind = ECommandKind::Mode;
+        command.Mode = mode;
+        command.RequestId = id;
+        command.ExpectedBootId = snapshot->ControllerBootId;
+        command.ExpectedModeRevision = snapshot->ModeRevision;
+        command.SnapshotRevision = snapshot->SnapshotRevision;
+        return Command(command);
+    }
+
+    TCommandResult Review(EOperationKind action = EOperationKind::Failover, std::optional<TString> target = {}) {
+        TControllerCommand command;
+        command.Action = action;
+        command.Target = target;
+        command.SnapshotRevision = Store->Read()->SnapshotRevision;
+        return Command(command);
+    }
+
+    TCommandResult Execute(const TString& plan, const TString& id) {
+        TControllerCommand command;
+        command.Kind = ECommandKind::Execute;
+        command.PlanId = plan;
+        command.RequestId = id;
+        return Command(command);
     }
 
     void Tick() {
@@ -434,6 +478,141 @@ void VerifyPileLessReplyRetainsCandidateVeto(bool fallback) {
         {"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));
 }
 
+TControllerCommand ModeCommand(const THarness& fixture, EMode mode) {
+    const auto snapshot = fixture.Store->Read();
+    TControllerCommand command;
+    command.Kind = ECommandKind::Mode;
+    command.Mode = mode;
+    command.RequestId = "transient-mode";
+    command.ExpectedBootId = snapshot->ControllerBootId;
+    command.ExpectedModeRevision = snapshot->ModeRevision;
+    command.SnapshotRevision = snapshot->SnapshotRevision;
+    return command;
+}
+
+void VerifyManualDispatchExpiry(EOperationKind action, bool slowPersistence) {
+    THarness fixture(EMode::Manual);
+    if (action != EOperationKind::Failover) {
+        fixture.Failed.clear();
+    }
+    fixture.Run(22);
+    const auto review = action == EOperationKind::Failover
+        ? fixture.Review() : fixture.Review(action, TString("b"));
+    UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+    bool prepared = false;
+    const auto expire = [&] {
+        prepared = true;
+        fixture.Runtime.AdvanceCurrentTime(TDuration::Seconds(31));
+    };
+    if (slowPersistence) {
+        fixture.AfterWrite = [&](const TPersistentState& state) {
+            if (!prepared && state.PendingMutation) {
+                expire();
+            }
+        };
+    } else {
+        fixture.Clients->PrepareUpdate = expire;
+    }
+    const auto refused = fixture.Execute(review.Body["plan_id"].GetString(), "expired-dispatch");
+    UNIT_ASSERT(prepared);
+    UNIT_ASSERT(fixture.Clients->Updates.empty());
+    const auto snapshot = fixture.Store->Read();
+    UNIT_ASSERT(snapshot->StateWriteError.empty());
+    UNIT_ASSERT(snapshot->PersistentState.PendingMutation);
+    UNIT_ASSERT(snapshot->PersistentState.PendingMutation->Kind == action);
+    UNIT_ASSERT(!snapshot->LastMutation);
+    UNIT_ASSERT(snapshot->Counters.MutationTotal.empty());
+    UNIT_ASSERT_VALUES_EQUAL(snapshot->PendingAttempts, 0);
+    UNIT_ASSERT(!snapshot->PendingFirstSendUtc);
+    UNIT_ASSERT(!snapshot->PendingLastSendUtc);
+    UNIT_ASSERT_VALUES_EQUAL(snapshot->Decision.Reason, "EVIDENCE_EXPIRED");
+    UNIT_ASSERT(fixture.Logs("mutation_sent").empty());
+    UNIT_ASSERT(fixture.Logs("mutation_outcome").empty());
+    UNIT_ASSERT_VALUES_EQUAL(refused.Status, 409);
+    UNIT_ASSERT_VALUES_EQUAL(refused.Body["error"].GetString(), "EVIDENCE_EXPIRED");
+}
+
+void VerifyDispatchAtTtlBoundary(EMode mode, bool slowPersistence) {
+    THarness fixture(EMode::Manual);
+    fixture.Run(22);
+    // Keep one admitted SelfCheck older than every view and connectivity
+    // report, so its send time determines the launch authorization.
+    fixture.Held.insert({A, EYdbMethod::SelfCheck});
+    fixture.Step();
+    const auto evidenceSentAt = fixture.Endpoint(A).SelfCheck->SentAt;
+    const auto validUntil = evidenceSentAt + fixture.Config.Timing.EvidenceTtl;
+    UNIT_ASSERT(fixture.Store->Read()->Decision.Kind == EDecisionKind::Ready);
+    UNIT_ASSERT(fixture.Store->Read()->Selection.ValidUntil > validUntil);
+    UNIT_ASSERT(fixture.Endpoint(B).SelfCheck->SentAt > evidenceSentAt);
+    for (const auto& [pile, snapshot] : fixture.Store->Read()->Piles) {
+        (void)pile;
+        for (const auto& report : snapshot.Connectivity) {
+            UNIT_ASSERT(report.SentAt > evidenceSentAt);
+        }
+    }
+    TString reviewedPlan;
+    if (mode == EMode::Manual) {
+        const auto review = fixture.Review();
+        UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+        reviewedPlan = review.Body["plan_id"].GetString();
+    }
+    bool prepared = false;
+    const auto expire = [&] {
+        UNIT_ASSERT(!prepared);
+        prepared = true;
+        const auto now = fixture.Runtime.GetCurrentMonotonicTime();
+        UNIT_ASSERT(now < validUntil);
+        fixture.Runtime.AdvanceCurrentTime(validUntil - now);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GetCurrentMonotonicTime(), validUntil);
+    };
+    if (slowPersistence) {
+        fixture.AfterWrite = [&](const TPersistentState& state) {
+            if (!prepared && state.PendingMutation) {
+                expire();
+            }
+        };
+    } else {
+        fixture.Clients->PrepareUpdate = expire;
+    }
+    if (mode == EMode::Manual) {
+        const auto refused = fixture.Execute(reviewedPlan, "ttl-boundary");
+        UNIT_ASSERT_VALUES_EQUAL(refused.Status, 409);
+        UNIT_ASSERT_VALUES_EQUAL(refused.Body["error"].GetString(), "EVIDENCE_EXPIRED");
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Mode(EMode::Auto, "ttl-boundary").Status, 200);
+    }
+    UNIT_ASSERT(prepared);
+    UNIT_ASSERT(fixture.Clients->Updates.empty());
+    const auto snapshot = fixture.Store->Read();
+    const auto pending = fixture.File->GetState().PendingMutation;
+    UNIT_ASSERT(pending);
+    UNIT_ASSERT(snapshot->PersistentState.PendingMutation == pending);
+    UNIT_ASSERT(snapshot->StateWriteError.empty());
+    UNIT_ASSERT(!snapshot->LastMutation);
+    UNIT_ASSERT(snapshot->Counters.MutationTotal.empty());
+    UNIT_ASSERT_VALUES_EQUAL(snapshot->PendingAttempts, 0);
+    UNIT_ASSERT(!snapshot->PendingFirstSendUtc);
+    UNIT_ASSERT(!snapshot->PendingLastSendUtc);
+    UNIT_ASSERT_VALUES_EQUAL(snapshot->Decision.Reason, "EVIDENCE_EXPIRED");
+    UNIT_ASSERT(fixture.Logs("mutation_sent").empty());
+    UNIT_ASSERT(fixture.Logs("mutation_outcome").empty());
+    // Fresh observations authorize the retained overlay and prove that local
+    // expiry did not leave an outstanding update slot behind.
+    fixture.AfterWrite = {};
+    fixture.Clients->PrepareUpdate = {};
+    fixture.Held.clear();
+    fixture.Run(3);
+    if (mode == EMode::Manual) {
+        const auto review = fixture.Review();
+        UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Execute(review.Body["plan_id"].GetString(), "fresh-evidence").Status, 202);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+    UNIT_ASSERT(fixture.Clients->Updates.front().Plan.Update == pending->Update);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.front().Plan.ExpectedGeneration, pending->ExpectedGeneration);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Logs("mutation_sent").size(), 1);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSkipperActor) {
@@ -522,6 +701,38 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Logs("mutation_sent").size(), 1);
     }
 
+    Y_UNIT_TEST(ManualFailoverPersistenceExpiryReturnsEvidenceExpiredWithoutInvocation) {
+        VerifyManualDispatchExpiry(EOperationKind::Failover, true);
+    }
+
+    Y_UNIT_TEST(ManualLifecyclePersistenceExpiryReturnsEvidenceExpiredWithoutInvocation) {
+        VerifyManualDispatchExpiry(EOperationKind::TakeOffline, true);
+    }
+
+    Y_UNIT_TEST(ManualFailoverClientPreparationExpiryReturnsEvidenceExpiredWithoutInvocation) {
+        VerifyManualDispatchExpiry(EOperationKind::Failover, false);
+    }
+
+    Y_UNIT_TEST(ManualLifecycleClientPreparationExpiryReturnsEvidenceExpiredWithoutInvocation) {
+        VerifyManualDispatchExpiry(EOperationKind::TakeOffline, false);
+    }
+
+    Y_UNIT_TEST(AutoPersistenceAtEvidenceTtlBoundaryDoesNotDispatch) {
+        VerifyDispatchAtTtlBoundary(EMode::Auto, true);
+    }
+
+    Y_UNIT_TEST(AutoClientPreparationAtEvidenceTtlBoundaryDoesNotDispatch) {
+        VerifyDispatchAtTtlBoundary(EMode::Auto, false);
+    }
+
+    Y_UNIT_TEST(ManualPersistenceAtEvidenceTtlBoundaryDoesNotDispatch) {
+        VerifyDispatchAtTtlBoundary(EMode::Manual, true);
+    }
+
+    Y_UNIT_TEST(ManualClientPreparationAtEvidenceTtlBoundaryDoesNotDispatch) {
+        VerifyDispatchAtTtlBoundary(EMode::Manual, false);
+    }
+
     Y_UNIT_TEST(MutationRoutingRequiresTheReceivingNodesOwnComponent) {
         for (const TString& isolated : {A, A2}) {
             THarness fixture(EMode::Auto, {}, 2);
@@ -536,6 +747,387 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
             UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.back().Plan.Endpoint, capable);
         }
+    }
+
+    Y_UNIT_TEST(ObserveManualReviewAndReceiptDoNotDoubleSend) {
+        THarness f(EMode::Observe);
+        f.Run(22);
+        UNIT_ASSERT(f.Clients->Updates.empty());
+        UNIT_ASSERT_VALUES_EQUAL(f.Review().Status, 409);
+        UNIT_ASSERT_VALUES_EQUAL(f.Mode(EMode::Manual).Status, 200);
+        const auto review = f.Review();
+        UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+        const auto plan = review.Body["plan_id"].GetString();
+        const auto accepted = f.Execute(plan, "execute-1");
+        UNIT_ASSERT_VALUES_EQUAL(accepted.Status, 202);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(plan, "execute-1").Body["operation_id"].GetString(), accepted.Body["operation_id"].GetString());
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(plan, "execute-2").Status, 409);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Mode(EMode::Observe, "off").Status, 200);
+        UNIT_ASSERT(f.Store->Read()->PersistentState.PendingMutation);
+    }
+
+    Y_UNIT_TEST(ReviewAlternatesExcludeTheEffectivePrimaryAfterTheAction) {
+        THarness f(EMode::Manual);
+        f.Failed.clear();
+        f.Run(22);
+        auto review = f.Review(EOperationKind::Switchover, TString("b"));
+        UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+        UNIT_ASSERT_VALUES_EQUAL(review.Body["alternate_synchronized_piles"].GetUInteger(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(review.Body["alternate_synchronized_pile_names"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(review.Body["alternate_synchronized_pile_names"][0].GetString(), "a");
+        review = f.Review(EOperationKind::TakeOffline, TString("b"));
+        UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+        UNIT_ASSERT_VALUES_EQUAL(review.Body["alternate_synchronized_piles"].GetUInteger(), 0);
+        UNIT_ASSERT(review.Body["alternate_synchronized_pile_names"].GetArray().empty());
+        f.Piles["c"] = EPileState::Promoted;
+        ++f.Generation;
+        f.Run(22);
+        review = f.Review(EOperationKind::Switchover, TString("b"));
+        UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+        UNIT_ASSERT_VALUES_EQUAL(review.Body["after"]["c"].GetString(), "SYNCHRONIZED");
+        UNIT_ASSERT_VALUES_EQUAL(review.Body["alternate_synchronized_piles"].GetUInteger(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(review.Body["alternate_synchronized_pile_names"][0].GetString(), "a");
+        UNIT_ASSERT_VALUES_EQUAL(review.Body["alternate_synchronized_pile_names"][1].GetString(), "c");
+        UNIT_ASSERT(f.Clients->Updates.empty());
+    }
+
+    Y_UNIT_TEST(ExecuteExpiresEvidenceWithoutAnInterveningTickAndConsumesPlan) {
+        THarness f(EMode::Manual);
+        f.Run(22);
+        const auto review = f.Review();
+        UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+        f.Runtime.AdvanceCurrentTime(TDuration::Seconds(31));
+        const auto plan = review.Body["plan_id"].GetString();
+        const auto refused = f.Execute(plan, "expired");
+        UNIT_ASSERT_VALUES_EQUAL(refused.Status, 409);
+        UNIT_ASSERT_VALUES_EQUAL(refused.Body["error"].GetString(), "PLAN_CHANGED");
+        UNIT_ASSERT(f.Clients->Updates.empty());
+        UNIT_ASSERT(!f.File->GetState().PendingMutation);
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(plan, "another").Status, 409);
+    }
+
+    Y_UNIT_TEST(ModeRevisionIsConsumedOnRefusalAndOffSaveFailureStopsDispatch) {
+        THarness f(EMode::Observe);
+        const auto before = f.Store->Read();
+        TControllerCommand command;
+        command.Kind = ECommandKind::Mode;
+        command.Mode = EMode::Auto;
+        command.RequestId = "auto";
+        command.ExpectedBootId = before->ControllerBootId;
+        command.ExpectedModeRevision = before->ModeRevision;
+        command.SnapshotRevision = "stale";
+        UNIT_ASSERT_VALUES_EQUAL(f.Command(command).Status, 409);
+        UNIT_ASSERT(f.Store->Read()->ModeRevision > before->ModeRevision);
+        UNIT_ASSERT_VALUES_EQUAL(f.Command(command).Status, 409);
+        UNIT_ASSERT_VALUES_EQUAL(f.Mode(EMode::Manual, "manual").Status, 200);
+        f.BreakWrites();
+        UNIT_ASSERT_VALUES_EQUAL(f.Mode(EMode::Observe, "off").Status, 503);
+        UNIT_ASSERT(f.Store->Read()->Mode == EMode::Observe);
+        UNIT_ASSERT(!f.Store->Read()->StateWriteError.empty());
+        f.Run(22);
+        UNIT_ASSERT(f.Clients->Updates.empty());
+        f.RestoreWrites();
+        f.Tick();
+        UNIT_ASSERT(f.File->GetState().Mode == EMode::Observe);
+    }
+
+    Y_UNIT_TEST(ModeRetryAcknowledgesRequestedDurableMode) {
+        for (const auto wanted : {EMode::Observe, EMode::Manual, EMode::Auto}) {
+            THarness fixture(wanted == EMode::Observe ? EMode::Manual : EMode::Observe);
+            fixture.Run(22);
+            UNIT_ASSERT(fixture.Store->Read()->Decision.Kind == EDecisionKind::Ready);
+            const auto command = ModeCommand(fixture, wanted);
+            bool failed = false;
+            fixture.File->SetDirectorySyncFailureForTests([&] {
+                if (!failed) {
+                    failed = true;
+                    return true;
+                }
+                return false;
+            });
+            const auto result = fixture.Command(command);
+            UNIT_ASSERT(failed);
+            UNIT_ASSERT(fixture.File->GetState().Mode == wanted);
+            UNIT_ASSERT(fixture.Store->Read()->Mode == wanted);
+            UNIT_ASSERT(fixture.Store->Read()->StateWriteError.empty());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->ModeRevision, command.ExpectedModeRevision + 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.Status, 200);
+            UNIT_ASSERT_VALUES_EQUAL(result.Body["mode"].GetString(), ToString(wanted));
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), wanted == EMode::Auto ? 1 : 0);
+            const auto replay = fixture.Command(command);
+            UNIT_ASSERT_VALUES_EQUAL(replay.Status, result.Status);
+            UNIT_ASSERT(replay.Body == result.Body);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->ModeRevision, command.ExpectedModeRevision + 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), wanted == EMode::Auto ? 1 : 0);
+        }
+    }
+
+    Y_UNIT_TEST(ObserveRetryAcknowledgesModeAfterPreRenameFailure) {
+        THarness fixture(EMode::Manual);
+        fixture.Run(22);
+        const auto command = ModeCommand(fixture, EMode::Observe);
+        fixture.BreakWrites();
+        bool restored = false;
+        fixture.AfterFailedWrite = [&] {
+            if (!restored) {
+                restored = true;
+                fixture.RestoreWrites();
+            }
+        };
+        const auto result = fixture.Command(command);
+        UNIT_ASSERT(restored);
+        UNIT_ASSERT(fixture.File->GetState().Mode == EMode::Observe);
+        UNIT_ASSERT(fixture.Store->Read()->Mode == EMode::Observe);
+        UNIT_ASSERT(fixture.Store->Read()->StateWriteError.empty());
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, 200);
+        UNIT_ASSERT_VALUES_EQUAL(result.Body["mode"].GetString(), "observe");
+        const auto replay = fixture.Command(command);
+        UNIT_ASSERT_VALUES_EQUAL(replay.Status, result.Status);
+        UNIT_ASSERT(replay.Body == result.Body);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->ModeRevision, command.ExpectedModeRevision + 1);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+    }
+
+    Y_UNIT_TEST(FailedActivationRetryDoesNotAcknowledgeRestoredMode) {
+        for (const auto wanted : {EMode::Manual, EMode::Auto}) {
+            THarness fixture(EMode::Observe);
+            fixture.Run(22);
+            const auto command = ModeCommand(fixture, wanted);
+            fixture.BreakWrites();
+            bool restored = false;
+            fixture.AfterFailedWrite = [&] {
+                if (!restored) {
+                    restored = true;
+                    fixture.RestoreWrites();
+                }
+            };
+            const auto result = fixture.Command(command);
+            UNIT_ASSERT(restored);
+            UNIT_ASSERT(fixture.File->GetState().Mode == EMode::Observe);
+            UNIT_ASSERT(fixture.Store->Read()->Mode == EMode::Observe);
+            UNIT_ASSERT(fixture.Store->Read()->StateWriteError.empty());
+            UNIT_ASSERT(fixture.Clients->Updates.empty());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->ModeRevision, command.ExpectedModeRevision + 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.Status, 503);
+            UNIT_ASSERT_VALUES_EQUAL(result.Body["error"].GetString(), "STATE_WRITE_FAILED");
+            const auto replay = fixture.Command(command);
+            UNIT_ASSERT_VALUES_EQUAL(replay.Status, result.Status);
+            UNIT_ASSERT(replay.Body == result.Body);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->ModeRevision, command.ExpectedModeRevision + 1);
+            UNIT_ASSERT(fixture.Clients->Updates.empty());
+        }
+    }
+
+    Y_UNIT_TEST(FailedModeSavePublishesTheWriteBlockerWithoutAnotherTick) {
+        for (const bool renamed : {false, true}) {
+            THarness f(EMode::Manual);
+            f.Run(22);
+            const auto before = f.Store->Read();
+            UNIT_ASSERT(before->Decision.Kind == EDecisionKind::Ready);
+            if (renamed) {
+                f.File->SetDirectorySyncFailureForTests([] {
+                    return true;
+                });
+            } else {
+                f.BreakWrites();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(f.Mode(EMode::Observe, "off-save-failed").Status, 503);
+            const auto failed = f.Store->Read();
+            UNIT_ASSERT(failed->Mode == EMode::Observe);
+            UNIT_ASSERT(!failed->StateWriteError.empty());
+            UNIT_ASSERT(failed->Decision.Kind == EDecisionKind::Blocked);
+            UNIT_ASSERT(failed->Decision.Blocker == EBlockerReason::StateWriteFailed);
+            UNIT_ASSERT(failed->SnapshotRevision != before->SnapshotRevision);
+            UNIT_ASSERT(f.Clients->Updates.empty());
+            if (renamed) {
+                f.File->SetDirectorySyncFailureForTests({});
+            } else {
+                f.RestoreWrites();
+            }
+            f.Tick();
+            UNIT_ASSERT(f.Store->Read()->Decision.Kind == EDecisionKind::Ready);
+            UNIT_ASSERT(f.File->GetState().Mode == EMode::Observe);
+            UNIT_ASSERT(f.Clients->Updates.empty());
+        }
+    }
+
+    Y_UNIT_TEST(FailedActivationCannotUndoAnUnsavedObserveMode) {
+        for (const auto activation : {EMode::Manual, EMode::Auto}) {
+            THarness f(EMode::Auto);
+            f.Failed.clear();
+            f.Run(22);
+            f.BreakWrites();
+            UNIT_ASSERT_VALUES_EQUAL(f.Mode(EMode::Observe, "off").Status, 503);
+            UNIT_ASSERT(f.Store->Read()->Mode == EMode::Observe);
+            f.Tick(); // Publish the write-failed decision before reviewing activation.
+            UNIT_ASSERT_VALUES_EQUAL(f.Mode(activation, "failed-activation").Status, 503);
+            UNIT_ASSERT(f.Store->Read()->Mode == EMode::Observe);
+            f.Failed.insert("b");
+            f.Run(3);
+            UNIT_ASSERT(f.Clients->Updates.empty());
+            f.RestoreWrites();
+            f.Run(3);
+            UNIT_ASSERT(f.File->GetState().Mode == EMode::Observe);
+            UNIT_ASSERT(f.Store->Read()->Mode == EMode::Observe);
+            UNIT_ASSERT(f.Clients->Updates.empty());
+        }
+    }
+
+    Y_UNIT_TEST(PostRenameFailedActivationRetainsTheVisibleRequestedMode) {
+        for (const auto activation : {EMode::Manual, EMode::Auto}) {
+            THarness f(EMode::Observe);
+            f.Failed.clear();
+            f.Run(22);
+            f.File->SetDirectorySyncFailureForTests([] { return true; });
+            UNIT_ASSERT_VALUES_EQUAL(f.Mode(activation, "activation").Status, 503);
+            UNIT_ASSERT(f.Store->Read()->Mode == activation);
+            UNIT_ASSERT(f.File->GetState().Mode == activation);
+            f.Failed.insert("b");
+            f.Run(3);
+            UNIT_ASSERT(f.Clients->Updates.empty());
+            f.File->SetDirectorySyncFailureForTests({});
+            f.Tick();
+            UNIT_ASSERT(f.File->GetState().Mode == activation);
+            UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), activation == EMode::Auto ? 1 : 0);
+        }
+    }
+
+    Y_UNIT_TEST(PostRenameFailedSupersetCannotBeClearedByOlderSuccess) {
+        THarness f(EMode::Auto, {}, 2);
+        f.Piles["c"] = EPileState::Synchronized;
+        f.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 1);
+        f.File->SetDirectorySyncFailureForTests([] { return true; });
+        f.Failed.insert("c");
+        f.Run(5);
+        const TExactUpdate superset{{"b", EPileState::Disconnected}, {"c", EPileState::Disconnected}};
+        UNIT_ASSERT(f.File->GetState().PendingMutation->Update == superset);
+        f.Outcome(0, NYdb::EStatus::SUCCESS);
+        UNIT_ASSERT(f.File->GetState().PendingMutation);
+        UNIT_ASSERT(f.File->GetState().PendingMutation->Update == superset);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 1);
+        f.File->SetDirectorySyncFailureForTests({});
+        f.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 2);
+        UNIT_ASSERT(f.Clients->Updates[1].Plan.Update == superset);
+    }
+
+    Y_UNIT_TEST(RejectedMaintenanceRetainsPendingAndBlocksIncompatibleFailover) {
+        for (const bool ambiguousFirst : {false, true}) {
+            THarness f(EMode::Manual, {}, 2);
+            f.Failed.clear();
+            f.Run(22);
+            auto review = f.Review(EOperationKind::TakeOffline, TString("b"));
+            UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+            UNIT_ASSERT_VALUES_EQUAL(f.Execute(review.Body["plan_id"].GetString(), "maintenance").Status, 202);
+            if (ambiguousFirst) {
+                f.Outcome(0, NYdb::EStatus::INTERNAL_ERROR);
+                review = f.Review(EOperationKind::TakeOffline, TString("b"));
+                UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+                UNIT_ASSERT_VALUES_EQUAL(f.Execute(review.Body["plan_id"].GetString(), "maintenance-again").Status, 202);
+            }
+            f.Outcome(ambiguousFirst ? 1 : 0, NYdb::EStatus::BAD_REQUEST);
+            UNIT_ASSERT(f.Store->Read()->PersistentState.PendingMutation);
+            f.Failed.insert("b");
+            f.Run(6);
+            const auto failover = f.Review();
+            UNIT_ASSERT_VALUES_EQUAL(failover.Status, 409);
+            UNIT_ASSERT_VALUES_EQUAL(failover.Body["error"].GetString(), "PENDING_MUTATION");
+            UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), ambiguousFirst ? 2 : 1);
+        }
+    }
+
+    Y_UNIT_TEST(ManualAmbiguityHasNoAutomaticResendAndRejectionRetainsUncertainty) {
+        THarness f(EMode::Manual, {}, 2);
+        f.Run(22);
+        auto review = f.Review();
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(review.Body["plan_id"].GetString(), "first").Status, 202);
+        f.Outcome(0, NYdb::EStatus::INTERNAL_ERROR);
+        f.Run(40);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 1);
+        UNIT_ASSERT(f.Store->Read()->MayApplyElsewhere);
+        review = f.Review();
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(review.Body["plan_id"].GetString(), "second").Status, 202);
+        f.Outcome(1, NYdb::EStatus::BAD_REQUEST);
+        UNIT_ASSERT(f.Store->Read()->PersistentState.PendingMutation);
+        UNIT_ASSERT(f.Store->Read()->MayApplyElsewhere);
+        UNIT_ASSERT_VALUES_EQUAL(f.Review().Body["error"].GetString(), "REJECTED_AT_GENERATION");
+    }
+
+    Y_UNIT_TEST(ReceiptEvictionCannotReviveConsumedPlanAndConflictingPayloadIsRejected) {
+        THarness f(EMode::Manual);
+        f.Run(22);
+        const auto review = f.Review();
+        const auto id = review.Body["plan_id"].GetString();
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(id, "original").Status, 202);
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute("other-plan", "original").Body["error"].GetString(), "REQUEST_ID_CONFLICT");
+        f.Outcome(0, NYdb::EStatus::INTERNAL_ERROR);
+        for (ui64 n = 0; n < 1025; ++n) {
+            TControllerCommand stale;
+            stale.Kind = ECommandKind::Mode;
+            stale.RequestId = "evict-" + ::ToString(n);
+            stale.ExpectedBootId = "old-boot";
+            UNIT_ASSERT_VALUES_EQUAL(f.Command(stale).Status, 409);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(id, "original").Body["error"].GetString(), "PLAN_CONSUMED");
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 1);
+    }
+
+    Y_UNIT_TEST(RefusedInFlightExecuteConsumesReviewAndShutdownClosesDispatch) {
+        THarness f(EMode::Manual);
+        f.Run(22);
+        const auto one = f.Review().Body["plan_id"].GetString();
+        const auto two = f.Review().Body["plan_id"].GetString();
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(one, "one").Status, 202);
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(two, "two").Body["error"].GetString(), "ATTEMPT_IN_FLIGHT");
+        f.Outcome(0, NYdb::EStatus::INTERNAL_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(two, "two-new").Body["error"].GetString(), "PLAN_CONSUMED");
+        const auto three = f.Review().Body["plan_id"].GetString();
+        f.Shutdown->store(true);
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(three, "three").Status, 503);
+        f.Run(3);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 1);
+    }
+
+    Y_UNIT_TEST(DuplicateOlderReplyCannotSettleANewEndpointSlot) {
+        THarness f;
+        f.Run(22);
+        f.Outcome(0, NYdb::EStatus::INTERNAL_ERROR);
+        f.Run(30);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 2);
+        const auto& first = f.Clients->Updates[0];
+        TUpdateResult old;
+        old.Rpc = f.Rpc(first.Request, EYdbMethod::Update, first.SentAt);
+        old.Plan = first.Plan;
+        old.Outcome = EMutationOutcome::Success;
+        first.Completed(std::move(old));
+        f.Tick();
+        UNIT_ASSERT(f.File->GetState().PendingMutation);
+        UNIT_ASSERT(!f.Store->Read()->LastMutation->Outcome);
+        f.Outcome(1, NYdb::EStatus::SUCCESS);
+        UNIT_ASSERT(!f.File->GetState().PendingMutation);
+    }
+
+    Y_UNIT_TEST(LastObservedStateRetainsTheLatestSampleRatherThanTheFirstAtGeneration) {
+        THarness f(EMode::Observe);
+        f.Run(10);
+        const auto fresh = f.Store->Read();
+        UNIT_ASSERT(fresh->Selection.View && fresh->LastObservedView);
+        UNIT_ASSERT(fresh->LastObservedView->SentAt == fresh->Selection.View->SentAt);
+        for (const auto& [pile, endpoints] : f.Config.Endpoints) {
+            (void)pile;
+            for (const auto& endpoint : endpoints) {
+                f.Held.insert({endpoint.Uri, EYdbMethod::PlainState});
+                f.Held.insert({endpoint.Uri, EYdbMethod::ConnectivityState});
+                f.Held.insert({endpoint.Uri, EYdbMethod::SelfCheck});
+            }
+        }
+        f.Run(32);
+        UNIT_ASSERT(!f.Store->Read()->Selection.View);
+        UNIT_ASSERT(f.Store->Read()->LastObservedView->SentAt == fresh->Selection.View->SentAt);
     }
 
     Y_UNIT_TEST(ManualAndAutoPublishTheSamePlan) {
@@ -852,12 +1444,77 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
             if (failWrite) {
                 UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->PersistentState.GenerationHighWater, 7);
                 UNIT_ASSERT(fixture.Store->Read()->PersistentState.PendingMutation);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->PendingAttempts, 1);
+                UNIT_ASSERT(fixture.Store->Read()->PendingFirstSendUtc);
+                UNIT_ASSERT(fixture.Store->Read()->PendingLastSendUtc);
                 fixture.RestoreWrites();
                 fixture.Tick();
             }
             UNIT_ASSERT_VALUES_EQUAL(fixture.File->GetState().GenerationHighWater, 8);
             UNIT_ASSERT(!fixture.File->GetState().PendingMutation);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->PendingAttempts, 0);
             UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::StaleHistory);
+        }
+    }
+
+    Y_UNIT_TEST(ManualResendRequiresAReviewCreatedAfterThePreviousAttempt) {
+        THarness f(EMode::Manual);
+        f.Run(22);
+        const auto first = f.Review().Body["plan_id"].GetString();
+        const auto preexisting = f.Review().Body["plan_id"].GetString();
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(first, "first-attempt").Status, 202);
+        f.Outcome(0, NYdb::EStatus::INTERNAL_ERROR);
+        const auto stale = f.Execute(preexisting, "preexisting-review");
+        UNIT_ASSERT_VALUES_EQUAL(stale.Status, 409);
+        UNIT_ASSERT_VALUES_EQUAL(stale.Body["error"].GetString(), "PLAN_CHANGED");
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 1);
+        const auto fresh = f.Review().Body["plan_id"].GetString();
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(fresh, "fresh-review").Status, 202);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 2);
+    }
+
+    Y_UNIT_TEST(ManualLifecycleCanBeReviewedAgainAfterNotAppliedHereAndFreshPoll) {
+        THarness f(EMode::Manual);
+        f.Failed.clear();
+        f.Run(22);
+        const auto first = f.Review(EOperationKind::TakeOffline, TString("b"));
+        UNIT_ASSERT_VALUES_EQUAL(first.Status, 200);
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(first.Body["plan_id"].GetString(), "maintenance-first").Status, 202);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates[0].Plan.Endpoint, A);
+        f.Outcome(0, NYdb::EStatus::UNAVAILABLE);
+        f.Run(3);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 1); // Manual never resends itself.
+        const auto second = f.Review(EOperationKind::TakeOffline, TString("b"));
+        UNIT_ASSERT_VALUES_EQUAL(second.Status, 200);
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(second.Body["plan_id"].GetString(), "maintenance-second").Status, 202);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 2);
+        UNIT_ASSERT(f.Clients->Updates[1].Plan.Update == (TExactUpdate{{"b", EPileState::Suspended}}));
+    }
+
+    Y_UNIT_TEST(ManualLifecycleKeepsNotAppliedHereExclusionsAcrossPollsUntilExhausted) {
+        THarness f(EMode::Manual, {}, 2);
+        f.Failed.clear();
+        f.Run(22);
+        auto review = f.Review(EOperationKind::TakeOffline, TString("b"));
+        UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(review.Body["plan_id"].GetString(), "first").Status, 202);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates[0].Plan.Endpoint, A);
+        f.Outcome(0, NYdb::EStatus::UNAVAILABLE);
+        f.Run(3);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 1);
+        review = f.Review(EOperationKind::TakeOffline, TString("b"));
+        UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(review.Body["plan_id"].GetString(), "alternative").Status, 202);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates[1].Plan.Endpoint, A2);
+        f.Outcome(1, NYdb::EStatus::PRECONDITION_FAILED);
+        f.Run(3);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates.size(), 2);
+        review = f.Review(EOperationKind::TakeOffline, TString("b"));
+        UNIT_ASSERT_VALUES_EQUAL(review.Status, 200);
+        UNIT_ASSERT_VALUES_EQUAL(f.Execute(review.Body["plan_id"].GetString(), "exhausted").Status, 202);
+        UNIT_ASSERT_VALUES_EQUAL(f.Clients->Updates[2].Plan.Endpoint, A);
+        for (const auto& call : f.Clients->Updates) {
+            UNIT_ASSERT(call.Plan.Update == (TExactUpdate{{"b", EPileState::Suspended}}));
         }
     }
 
@@ -870,6 +1527,26 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[1].Plan.Endpoint, A2);
         UNIT_ASSERT(fixture.Clients->Updates[0].Plan.Update == fixture.Clients->Updates[1].Plan.Update);
+    }
+
+    Y_UNIT_TEST(IdenticalRetryDoesNotRewriteDurablePendingRecord) {
+        THarness fixture(EMode::Auto, {}, 2);
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        const auto pending = fixture.File->GetState().PendingMutation;
+        UNIT_ASSERT(pending);
+        fixture.File->SetDirectorySyncFailureForTests([] {
+            return true;
+        });
+        fixture.Outcome(0, NYdb::EStatus::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[0].Plan.Endpoint, A);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[1].Plan.Endpoint, A2);
+        UNIT_ASSERT(fixture.Clients->Updates[1].Plan.Update == pending->Update);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[1].Plan.ExpectedGeneration, pending->ExpectedGeneration);
+        UNIT_ASSERT(fixture.File->GetState().PendingMutation == pending);
+        UNIT_ASSERT(fixture.Store->Read()->PersistentState.PendingMutation == pending);
+        UNIT_ASSERT(fixture.Store->Read()->StateWriteError.empty());
     }
 
     Y_UNIT_TEST(NotAppliedHereUsesAnotherEndpointAtStatePoll) {
@@ -928,6 +1605,38 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
         fixture.Tick();
         UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 3);
         UNIT_ASSERT(fixture.Clients->Updates[2].Plan.Update == fixture.Clients->Updates[0].Plan.Update);
+    }
+
+    Y_UNIT_TEST(RefusedCommandDoesNotDropUnavailableAutoRoute) {
+        THarness fixture;
+        fixture.Piles["c"] = EPileState::Synchronized;
+        fixture.Run(22);
+        fixture.Generation = 8;
+        fixture.Run(23);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoMutationEndpoint);
+        const auto decisions = fixture.Logs("decision").size();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Review().Status, 409);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoMutationEndpoint);
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Logs("decision").size(), decisions);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+    }
+
+    Y_UNIT_TEST(RefusedCommandAndModeChangesKeepRejectedDecision) {
+        THarness fixture;
+        fixture.Run(22);
+        fixture.Outcome(0, NYdb::EStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Decision.Reason, "REJECTED_BY_SERVER");
+        const auto decisions = fixture.Logs("decision").size();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Review().Status, 409);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Decision.Reason, "REJECTED_BY_SERVER");
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Logs("decision").size(), decisions);
+        for (const auto mode : {EMode::Manual, EMode::Observe, EMode::Auto}) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Mode(mode, "rejected-mode-" + ToString(mode)).Status, 200);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Decision.Reason, "REJECTED_BY_SERVER");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
     }
 
     Y_UNIT_TEST(AmbiguousBackoffAndRejectedRestartBehavior) {
@@ -1389,6 +2098,48 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
 }
 
 Y_UNIT_TEST_SUITE(TSkipperObservability) {
+    Y_UNIT_TEST(HistoryInternalEventsHaveExplicitOrigins) {
+        THarness fixture(EMode::Observe);
+        fixture.Failed.clear();
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Mode(EMode::Manual).Status, 200);
+        bool mode = false;
+        bool decision = false;
+        const auto history = fixture.Store->Read()->Diagnostics->ReadHistory();
+        for (const auto& row : history["rows"].GetArray()) {
+            if (row["type"].GetString() == "mode") {
+                mode = true;
+                UNIT_ASSERT_VALUES_EQUAL(row["origin"].GetString(), "operator");
+                UNIT_ASSERT_VALUES_EQUAL(row["origin_label"].GetString(), "Operator");
+            } else if (row["type"].GetString() == "decision") {
+                decision = true;
+                UNIT_ASSERT_VALUES_EQUAL(row["origin"].GetString(), "skipper");
+                UNIT_ASSERT_VALUES_EQUAL(row["origin_label"].GetString(), "Skipper");
+            }
+        }
+        UNIT_ASSERT(mode && decision);
+    }
+
+    Y_UNIT_TEST(HistoryNamesTheUnobservedGenerationRange) {
+        THarness fixture(EMode::Observe);
+        fixture.Generation = 42;
+        fixture.Failed.clear();
+        fixture.Run(22);
+        fixture.Generation = 45;
+        fixture.Run(1);
+        bool found = false;
+        const auto history = fixture.Store->Read()->Diagnostics->ReadHistory();
+        for (const auto& row : history["rows"].GetArray()) {
+            if (row["type"].GetString() == "view" && row["generation"].GetString() == "45") {
+                found = true;
+                UNIT_ASSERT(row["coverage_gap"].GetBoolean());
+                UNIT_ASSERT_VALUES_EQUAL(row["coverage_gap_text"].GetString(), "Generations 43–44 not observed.");
+                UNIT_ASSERT_STRING_CONTAINS(row["summary"].GetString(), "Generations 43–44 not observed.");
+            }
+        }
+        UNIT_ASSERT(found);
+    }
+
     Y_UNIT_TEST(DecisionChangesAreLogged) {
         THarness fixture(EMode::Manual);
         fixture.Run(22);

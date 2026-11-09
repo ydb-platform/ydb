@@ -4,6 +4,11 @@
 #include <ydb/apps/bridge_skipper/runtime/skipper.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/executor_pool_io.h>
+#include <library/cpp/logger/backend.h>
+#include <library/cpp/logger/record.h>
+#include <library/cpp/json/json_reader.h>
+#include <util/generic/guid.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/struct_log/create_message.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
@@ -19,6 +24,7 @@
 #include <chrono>
 #include <csignal>
 #include <thread>
+#include <limits>
 
 namespace NBridgeSkipper {
 
@@ -60,6 +66,48 @@ int StartupFailed(TStringBuf category, TStringBuf message) {
     return 1;
 }
 
+class TCaptureBackend final : public TLogBackend {
+public:
+    TCaptureBackend(std::shared_ptr<TDiagnosticStore> store, const TLoadedCredentials& credentials)
+        : Store(std::move(store))
+        , Redactor(credentials)
+        , Stderr(NActors::CreateStderrBackend()) {
+    }
+
+    void WriteData(const TLogRecord& record) override {
+        // SDK issue strings have already been redacted at decode. Redact again
+        // before retaining diagnostics, then tee exactly those bytes to stderr.
+        const auto text = Redactor.Redact(TStringBuf(record.Data, record.Len), std::numeric_limits<size_t>::max());
+        NJson::TJsonValue json;
+        TString level = "info";
+        if (NJson::ReadJsonTree(text, &json) && json["priority"].IsString()) {
+            level = json["priority"].GetString();
+            level.to_lower();
+            if (level == "warning") {
+                level = "warn";
+            }
+            if (level == "crit" || level == "alert" || level == "emerg") {
+                level = "fatal";
+            }
+        }
+        TInstant eventAt = TInstant::Now();
+        if (json["microseconds"].IsUInteger()) {
+            eventAt = TInstant::MicroSeconds(json["microseconds"].GetUInteger());
+        }
+        Store->Log(level, TString(text.substr(0, 4096)), eventAt);
+        Stderr->WriteData(TLogRecord(record.Priority, text.data(), text.size(), record.MetaFlags));
+    }
+
+    void ReopenLog() override {
+        Stderr->ReopenLog();
+    }
+
+private:
+    std::shared_ptr<TDiagnosticStore> Store;
+    TRedactor Redactor;
+    TAutoPtr<TLogBackend> Stderr;
+};
+
 int Run(
     const TConfig& config,
     const TLoadedCredentials& credentials,
@@ -67,9 +115,16 @@ int Run(
 {
     using namespace NActors;
     auto snapshots = std::make_shared<TSnapshotStore>();
+    auto shutdownRequested = std::make_shared<std::atomic<bool>>(false);
+    auto admission = std::make_shared<TCommandAdmission>();
+    const auto bootId = CreateGuidAsString();
+    auto diagnostics = std::make_shared<TDiagnosticStore>(bootId, config.Logging.Level);
     auto seed = std::make_shared<TSkipperSnapshot>();
     seed->ClusterId = config.ClusterId;
-    seed->Mode = config.Mode;
+    seed->Mode = stateFile->GetState().Mode;
+    seed->ControllerBootId = bootId;
+    seed->Diagnostics = diagnostics;
+    seed->BootUtc = TInstant::Now();
     seed->PersistentState = stateFile->GetState();
     seed->GenerationHighWater = seed->PersistentState.GenerationHighWater;
     seed->Selection.Blocker = EBlockerReason::NoView;
@@ -98,13 +153,14 @@ int Run(
     logging->SetEnableStructuredLogInJson(true);
     auto setup = MakeHolder<TActorSystemSetup>();
     setup->NodeId = 1;
-    setup->ExecutorsCount = 1;
-    setup->Executors.Reset(new TAutoPtr<IExecutorPool>[1]);
+    setup->ExecutorsCount = 2;
+    setup->Executors.Reset(new TAutoPtr<IExecutorPool>[2]);
     setup->Executors[0] = new TBasicExecutorPool(0, 2, 50, "skipper");
+    setup->Executors[1] = new TIOExecutorPool(1, 1, "skipper-controller-io");
     setup->Scheduler = new TBasicSchedulerThread(TSchedulerConfig(512, 0));
     setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::HTSwap, 0));
     setup->LocalServices.emplace_back(loggerId, TActorSetupCmd(
-        new TLoggerActor(logging, CreateStderrBackend(), MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        new TLoggerActor(logging, new TCaptureBackend(diagnostics, credentials), MakeIntrusive<NMonitoring::TDynamicCounters>()),
         TMailboxType::HTSwap, 0));
     auto system = MakeHolder<TActorSystem>(setup, nullptr, logging);
     std::shared_ptr<IYdbClients> clients;
@@ -113,6 +169,8 @@ int Run(
     const char* failureCategory = "startup";
     // Returns false when the actor did not acknowledge the stop.
     const auto shutdown = [&] {
+        admission->Close();
+        shutdownRequested->store(true);
         // Main may wait; no actor handler waits on a future. The actor stops
         // starting calls before the driver drains its callbacks. Processed drain
         // outcomes may be persisted; restart reconciles any remaining pending record.
@@ -147,7 +205,8 @@ int Run(
         });
         // A failed bind must exit before the controller makes any YDB call.
         const auto proxy = system->Register(NHttp::CreateHttpProxy(), TMailboxType::HTSwap, 0);
-        system->Register(CreateHttpActor(snapshots, proxy), TMailboxType::HTSwap, 0);
+        const auto http = system->Register(CreateHttpActor(snapshots, proxy, config.Http, admission), TMailboxType::HTSwap, 0);
+        system->Ask<TEvSkipper::TEvReadyAck>(http, MakeHolder<TEvSkipper::TEvReady>(), TDuration::Seconds(10)).GetValueSync();
         failureCategory = "listen";
         const auto listenEndpoint = ParseEndpoint("grpc://" + config.Http.Listen);
         auto listen = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(listenEndpoint.Port);
@@ -160,7 +219,12 @@ int Run(
         options.Clients = clients;
         options.StateFile = std::move(stateFile);
         options.Snapshots = snapshots;
-        skipper = system->Register(CreateSkipperActor(std::move(options)), TMailboxType::HTSwap, 0);
+        options.BootId = bootId;
+        options.ShutdownRequested = shutdownRequested;
+        options.Diagnostics = diagnostics;
+        skipper = system->Register(CreateSkipperActor(std::move(options)), TMailboxType::HTSwap, 1);
+        system->Ask<TEvSkipper::TEvReadyAck>(skipper, MakeHolder<TEvSkipper::TEvReady>(), TDuration::Seconds(10)).GetValueSync();
+        admission->Open(skipper);
         size_t endpointCount = 0;
         for (const auto& [pile, endpoints] : config.Endpoints) {
             (void)pile;
@@ -168,7 +232,7 @@ int Run(
         }
         YDB_LOG_INFO_CTX_COMP(*system, SkipperLogComponent, "Skipper started",
             {"event", "startup"}, {"cluster_id", config.ClusterId},
-            {"mode", config.Mode == EMode::Auto ? "auto" : "manual"}, {"build", GetProgramCommitId()},
+            {"mode", ToString(snapshots->Read()->Mode)}, {"build", GetProgramCommitId()},
             {"endpoints", endpointCount}, {"http_listen", config.Http.Listen});
         if (credentials.Token && config.Endpoints.begin()->second.front().Scheme == "grpc") {
             YDB_LOG_WARN_CTX_COMP(*system, SkipperLogComponent, "Token is sent over plaintext gRPC",
@@ -214,7 +278,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (arguments.Action == EEntrypointAction::Version) {
-            Cout << "bridge_skipper build=" << GetProgramCommitId() << " state_schema=2\n";
+            Cout << "bridge_skipper build=" << GetProgramCommitId() << " state_schema=3\n";
             return 0;
         }
         category = "config";

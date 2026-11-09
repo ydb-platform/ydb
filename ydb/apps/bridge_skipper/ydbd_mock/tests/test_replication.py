@@ -84,11 +84,10 @@ class Harness:
 
 async def wait_until(predicate, timeout=4.0, step=0.01, message="condition"):
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return
+    while not predicate():
+        if time.monotonic() >= deadline:
+            raise AssertionError("timed out waiting for %s" % message)
         await asyncio.sleep(step)
-    raise AssertionError("timed out waiting for %s" % message)
 
 
 class ReplicationCase(unittest.IsolatedAsyncioTestCase):
@@ -261,10 +260,8 @@ class StaleReplicaTest(ReplicationCase):
         started = inst2.events.query(kind="start")[0]
         self.assertTrue(started["loaded"])
         await wait_until(
-            lambda: any(e["kind"] == "pull.refused" for e in h.instances[0].events.query()) or
-            h.instances[0].reach.last_generation.get(1) == 1,
-            message="heartbeats exchanged")
-        await asyncio.sleep(0.3)
+            lambda: "pull.refused" in inst2.events.kinds(),
+            message="disconnected pile refusing the newer state")
         self.assertEqual(inst2.state.generation, 1, "a DISCONNECTED pile must not be pulled to")
         self.assertEqual(inst2.state.per_pile, [S, S])
         self.assertIn("pull.refused", inst2.events.kinds())
@@ -288,8 +285,9 @@ class StaleReplicaTest(ReplicationCase):
         self.assertCommitsAreConsistent(h)
 
     async def test_restart_reloads_and_catches_up_when_allowed(self):
-        timings = tiny_timings(connect_delay=30.0)
-        h = await self.make(3, persist=True, timings=timings)
+        h = await self.make(3, persist=True)
+        for instance in h.instances:
+            instance.control_followups({"hold": ["connect"]})
         self.assertTrue((await h.instances[0].admin_update([("pile3", DISC)])).ok)
         await wait_until(lambda: h.gens() == [2, 2, 2])
         self.assertTrue((await h.instances[0].admin_update([("pile3", NOTSYNC)])).ok)
@@ -304,8 +302,10 @@ class StaleReplicaTest(ReplicationCase):
         await h.wait_push_failed(5)
 
         inst3 = await h.restart(2)
+        inst3.control_followups({"hold": ["connect"]})
         self.assertEqual(inst3.events.query(kind="start")[0]["generation"], 3)
-        await wait_until(lambda: inst3.state.generation == 5, message="catch up through anti-entropy")
+        await inst3.heartbeat_once()
+        self.assertEqual(inst3.state.generation, 5)
         pulled = [e for e in inst3.events.query(kind="commit") if e["via"] == "pull"]
         self.assertEqual(len(pulled), 1)
         self.assertEqual(inst3.state.primary, 1)

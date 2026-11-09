@@ -29,12 +29,10 @@ namespace NKikimr::NBridge {
         // Preserve both flags observed by assimilation: the later data read may use VDisks that do not know them yet.
         THashMap<TLogoBlobID, TSourceBlobFlags> SourceBlobFlags;
         TReplQuoter::TPtr SyncRateQuoter;
-        const TBlobStorageGroupType SourceGroupType;
 
     public:
         TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter,
-            TBlobStorageGroupType sourceGroupType);
+            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter);
 
         void Bootstrap();
         void BeginNextStep();
@@ -65,8 +63,12 @@ namespace NKikimr::NBridge {
         const ui32 MaxQueriesInFlight = 16;
         ui32 QueriesInFlight = 0;
         THashMap<ui64, TQueryPayload> Payloads;
-        THashMap<ui64, std::unique_ptr<IEventHandle>> DelayedQueries;
-        std::deque<std::tuple<std::unique_ptr<IEventHandle>, TMonotonic>> PendingQueries;
+        std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> QuotaQueue; // queries with in-flight slots waiting for quota
+        bool WaitingForQuota = false; // the first query in QuotaQueue has its quota taken and waits for the time to come
+        std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> PendingQueries; // handle and bytes to charge
+        // The blobs read already go first, as a restart of the syncer loses them and reads for them are paid for. Reads don't
+        // starve, because every put comes from a read that has finished.
+        std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> PendingPuts;
         ui64 NextCookie = 1;
 
         bool Errors = false;
@@ -83,7 +85,8 @@ namespace NKikimr::NBridge {
             ui64 quoterBytes = 0);
         void IssueQuery(TGroupId groupId, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
             ui64 quoterBytes = 0);
-        void SendQuery(std::unique_ptr<IEventHandle> handle, TMonotonic notBefore);
+        void SendQuery(std::unique_ptr<IEventHandle> handle, ui64 quoterBytes);
+        void ProcessQuotaQueue();
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
@@ -110,6 +113,7 @@ namespace NKikimr::NBridge {
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBlock> Blocks;
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBarrier> Barriers;
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> Blobs;
+            ui64 UnchargedReplyBytes = 0; // the size of the last page from the source group, charged with the next request
             bool RequestInFlight = false;
             bool BlocksFinished = false;
             bool BarriersFinished = false;

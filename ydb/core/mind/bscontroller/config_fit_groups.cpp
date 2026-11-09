@@ -204,7 +204,7 @@ namespace NKikimr {
                                 const auto [it, inserted] = self.TargetGroupToSyncerState.try_emplace(groupId,
                                     mainGroupId, groupId);
                                 if (inserted) {
-                                    self.SyncersRequiringAction.PushBack(&it->second);
+                                    self.EnqueueSyncer(it->second);
                                 }
                             });
                         }
@@ -922,7 +922,7 @@ namespace NKikimr {
 
                 groupInfo->FinishVDisksInGroup();
                 groupInfo->CalculateGroupStatus();
-                groupInfo->CalculateLayoutStatus(&State.Self, groupInfo->Topology.get(), [&] {
+                groupInfo->CalculateLayoutStatus(&State.Self, [&] {
                     const auto& pools = State.StoragePools.Get();
                     if (const auto it = pools.find(groupInfo->StoragePoolId); it != pools.end()) {
                         return TGroupGeometryInfo::FromStoragePool(groupInfo->Topology->GType,

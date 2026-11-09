@@ -94,6 +94,9 @@ TString RenderMetrics(const TSkipperSnapshot& snapshot, TMonotonic now) {
         Gauge(*encoder, "skipper_blocked", snapshot.Decision.Kind == EDecisionKind::Blocked
             && snapshot.Decision.Blocker == reason, {{"reason", ToString(reason)}});
     }
+    for (const auto mode : {EMode::Observe, EMode::Manual, EMode::Auto}) {
+        Gauge(*encoder, "skipper_mode", snapshot.Mode == mode, {{"mode", ToString(mode)}});
+    }
     Gauge(*encoder, "skipper_pending_mutation", snapshot.PersistentState.PendingMutation.has_value());
     for (const auto outcome : Outcomes) {
         Counter(*encoder, "skipper_mutation_total", Count(snapshot.Counters.MutationTotal, outcome), {{"outcome", ToString(outcome)}});

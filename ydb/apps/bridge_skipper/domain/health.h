@@ -82,11 +82,14 @@ struct THealthState {
 
 struct THealthEvaluation {
     std::map<TString, TPileVerdict> Piles;
+    // Resolved connectivity plus fresh BSC stage-2 evidence, before the
+    // conservative inclusion of unknown participants in Participating.
+    TPileParticipation Participation;
     std::set<TString> Participating;
     bool BscAvailable = false;
     // Current reports, binding included, retaining the queried URI for routing.
     std::vector<TConnectivityReply> Connectivity;
-    // Earliest inclusive expiry of admitted health/connectivity observations.
+    // Exclusive end of freshness for admitted health/connectivity observations.
     TMonotonic ValidUntil = TMonotonic::Max();
 };
 
@@ -100,13 +103,18 @@ bool IsConnectivityValid(
     TMonotonic now,
     const THealthParams& params);
 
-// Base public-state/connectivity participation, shared by health and endpoint
-// ranking. Health assessment additionally uses BSC parts and treats unknown
-// stage conservatively. std::nullopt: a NOT_SYNCHRONIZED pile no valid report lists.
+// Connectivity-only participation. A fresh BSC part can additionally prove
+// stage 2; consumers use the resolved evaluation below when available.
 std::optional<bool> IsParticipating(
     const TString& pile,
     EPileState state,
     const std::vector<TConnectivityReply>& validReports);
+
+std::optional<bool> EvaluatedParticipation(
+    const TString& pile,
+    EPileState state,
+    const std::vector<TConnectivityReply>& validReports,
+    const TPileParticipation& evaluated);
 
 THealthEvaluation EvaluatePiles(
     const TClusterView& view,

@@ -1194,7 +1194,8 @@
             "Match" : {"Type": "Callable", "Name": "KqpInSublink"},
             "Children" : [
                 {"Index": 1, "Name": "OuterType", "Type": "TExprBase"},
-                {"Index": 2, "Name": "InLambda", "Type": "TExprBase"}
+                {"Index": 2, "Name": "InLambda", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Settings", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

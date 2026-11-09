@@ -2925,6 +2925,20 @@ TStatus AnnotateSublinkBase(const TExprNode::TPtr& node, TExprContext& ctx) {
         if (!lambda->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
         }
+
+        // Keep the type the frontend gave the YqlSubLink (SqlSubLinkWrapper): Bool? for a nullable lookup, and with
+        // ANSI IN also for nullable collection items.
+        const auto lookupType = lambda->Tail().Head().GetTypeAnn();
+        Y_ENSURE(lookupType, "Missing IN lookup type");
+        bool optionalResult = lookupType->HasOptionalOrNull();
+        const auto settings = TKqpInSublink(node).Settings();
+        if (settings.IsValid()) {
+            optionalResult |= HasSetting(settings.Cast().Ref(), "ansiIn") && IsSqlInCollectionItemsNullable(lookupType, valueType);
+        }
+        if (optionalResult) {
+            node->SetTypeAnn(ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Bool)));
+            return TStatus::Ok;
+        }
     }
 
     node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));

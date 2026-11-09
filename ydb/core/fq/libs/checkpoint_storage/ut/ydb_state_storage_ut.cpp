@@ -435,12 +435,14 @@ Y_UNIT_TEST_F(ShouldPreserveSnapshotRuntimeVersion, TFixture)
 Y_UNIT_TEST_F(ShouldMaterializeRuntimeVersionsAcrossGenerations, TFixture)
 {
     auto storage = GetStateStorage("ShouldMaterializeRuntimeVersionsAcrossGenerations");
+
     struct TCase {
         ui64 SnapshotRuntime;
         ui64 FirstIncrementRuntime;
         ui64 LastIncrementRuntime;
         ui64 ExpectedRuntime;
     };
+
     // A mismatch must stay unknown even if the latest two states agree.
     const TCase cases[] = {
         { 100000, 100000, 100000, 100000 },

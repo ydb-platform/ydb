@@ -22,7 +22,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 {% endnote %}
 
-Таблица сравнения описаний типов Liquibase с [типами {{ ydb-short-name }}](../../yql/reference/types/primitive.md):
+Таблица сопоставлений типов Liquibase по умолчанию с [типами {{ ydb-short-name }}](../../yql/reference/types/primitive.md):
 
 | Liquibase типы                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | {{ ydb-short-name }} тип   |
 |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
@@ -49,6 +49,59 @@ Changeset `createTable` отвечает за создание таблицы. �
 {% endnote %}
 
 `dropTable` - удаление таблицы. Пример: `<dropTable tableName="episodes"/>`
+
+### Расширенные типы дат и интервалов {#extended-datetime}
+
+Чтобы создать столбцы с расширенным диапазоном дат или интервалов, укажите нативные имена типов `Date32`, `Datetime64`, `Timestamp64` и `Interval64` в атрибуте `type`. Стандартные имена `date`, `datetime` и `timestamp` по-прежнему создают `Date`, `Datetime` и `Timestamp`; расширенные типы не выбираются автоматически.
+
+Например, добавьте следующий changeset в журнал миграций:
+
+```xml
+<changeSet id="extended-datetime" author="example">
+    <createTable tableName="events">
+        <column name="id" type="Int64">
+            <constraints primaryKey="true" nullable="false"/>
+        </column>
+        <column name="event_date" type="Date32"/>
+        <column name="event_datetime" type="Datetime64"/>
+        <column name="event_timestamp" type="Timestamp64"/>
+        <column name="event_interval" type="Interval64"/>
+    </createTable>
+</changeSet>
+```
+
+Те же имена типов можно использовать в `addColumn`, а также в журналах миграций в форматах YAML и JSON. Диапазоны значений и точность описаны в разделе [Дата и время](../../yql/reference/types/primitive.md#datetime).
+
+Используйте [JDBC-драйвер](../../reference/languages-and-apis/jdbc-driver/maven.md) версии 2.3.11 или новее: в этой версии добавлена поддержка расширенных типов. Указание типа столбца не добавляет автоматического преобразования строковых значений для `insert`, `loadData` и `loadUpdateData`. Для загрузки расширенных дат и интервалов используйте SQL-миграции с явно типизированными значениями.
+
+### Decimal с заданной точностью и масштабом {#decimal}
+
+В {{ ydb-short-name }} тип `Decimal(precision, scale)` позволяет задать общее число десятичных разрядов и число разрядов после запятой. Допустимы значения `1 ≤ precision ≤ 35` и `0 ≤ scale ≤ precision`; подробнее см. [Примитивные типы данных](../../yql/reference/types/primitive.md#numeric).
+
+{% note info %}
+
+Следующие примеры требуют `liquibase-ydb-dialect` версии [1.1.3](https://github.com/ydb-platform/ydb-java-dialects/blob/main/liquibase-dialect/CHANGELOG.md) или новее. В более ранних выпусках обработчик `decimal` использует фиксированный тип `Decimal(22,9)`, в том числе при явном указании других параметров.
+
+{% endnote %}
+
+Чтобы создать столбец с нужной точностью и масштабом, укажите оба параметра в атрибуте `type`:
+
+```xml
+<changeSet id="parameterized-decimal" author="example">
+    <createTable tableName="decimal_values">
+        <column name="id" type="Int64">
+            <constraints primaryKey="true" nullable="false"/>
+        </column>
+        <column name="amount" type="Decimal(35,10)"/>
+    </createTable>
+</changeSet>
+```
+
+Диалект сохраняет точность и масштаб в `createTable`, `addColumn`, при записи через `insert`, `loadData` и `loadUpdateData`, а также при генерации журнала миграций из существующей схемы. Для произвольного `Decimal(precision, scale)` SQL changeset не требуется. Те же параметры поддерживаются в журналах миграций YAML и JSON и для имён `java.sql.Types.DECIMAL` и `java.math.BigDecimal`.
+
+Если параметры не указаны, например `type="decimal"`, используется `Decimal(22,9)`. Один параметр задаёт точность с нулевым масштабом: `type="decimal(10)"` создаёт `Decimal(10,0)`. Более двух параметров, нецелочисленные значения или значения за пределами допустимого диапазона приводят к ошибке проверки типа.
+
+При совместном использовании с Hibernate укажите ту же точность и масштаб [в классе сущности](../orm/hibernate.md#decimal).
 
 ### Изменение структуры таблицы
 
@@ -277,7 +330,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 {% endlist %}
 
-Вы также можете указать любое значение в поле `value`. Данные из поля `value` в наборе изменений `insert` или `CSV` файлов будут автоматически преобразованы в требуемые типы с учетом строгой типизации в {{ ydb-short-name }}.
+Для типов из таблицы ниже значения в поле `value` набора изменений `insert` или в CSV-файлах автоматически преобразуются в соответствующие типы {{ ydb-short-name }}. Для [расширенных дат и интервалов](#extended-datetime) используйте SQL-миграции. Передача значений [параметризованного Decimal](#decimal) сохраняет точность и масштаб столбца.
 
 Таблица форматирования типов для загрузки в таблицу:
 
@@ -287,7 +340,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 | `Int8`, `Int16`, `Int32`, `Int64`       | Целочисленное число                                                                                                                                                                                                                                       |
 | `Uint8`, `Uint16`, `Uint32`, `Uint64`   | Целое число без знака                                                                                                                                                                                                                                     |
 | `Text`, `Bytes`, `Json`, `JsonDocument` | Строковое описание                                                                                                                                                                                                                                        |
-| `Float`, `Double`, `Decimal(22, 9)`     | Вещественное число                                                                                                                                                                                                                                        |
+| `Float`, `Double`, `Decimal(precision, scale)`     | Вещественное число                                                                                                                                                                                                                                        |
 | `Interval`                              | [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations), соответствует классу `java.time.Duration` в Java.                                                                                                                                           |
 | `Date`                                  | Шаблон `YYYY-MM-DD` календарной даты из стандарта [ISO-8601](https://ru.wikipedia.org/wiki/ISO_8601)                                                                                                                                                      |
 | `Datetime`                              | Шаблон `YYYY-MM-DDThh:mm:ss`, timezone будет установлена `UTC`                                                                                                                                                                                            |
@@ -324,7 +377,7 @@ id,bool,bigint,smallint,tinyint,float,double,decimal,uint8,uint16,uint32,uint64,
 
 - Liquibase CLI
 
-  Для начала нужно установить саму утилиту liquibase [любым из рекомендуемых способов](https://docs.liquibase.com/start/install/home.html). Затем нужно подложить актуальные .jar архивы [{{ ydb-short-name }} JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases) и Liquibase [диалекта {{ ydb-short-name }}](https://mvnrepository.com/artifact/tech.ydb.dialects/liquibase-ydb-dialect/1.0.0) в папку `internal/lib`.
+  Для начала нужно установить саму утилиту liquibase [любым из рекомендуемых способов](https://docs.liquibase.com/start/install/home.html). Затем нужно подложить актуальные .jar архивы [{{ ydb-short-name }} JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases) и Liquibase [диалекта {{ ydb-short-name }}](https://mvnrepository.com/artifact/tech.ydb.dialects/liquibase-ydb-dialect/1.1.3) в папку `internal/lib`.
 
   ```bash
   # $(which liquibase)
@@ -332,8 +385,8 @@ id,bool,bigint,smallint,tinyint,float,double,decimal,uint8,uint16,uint32,uint64,
 
   # you may need to sudo
   # set actual versions of .jar files
-  curl -L -o ydb-jdbc-driver.jar https://repo.maven.apache.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
-  curl -L -o liquibase-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
+  curl -L -o ydb-jdbc-driver.jar https://repo.maven.apache.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.4.1/ydb-jdbc-driver-shaded-2.4.1.jar
+  curl -L -o liquibase-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.1.3/liquibase-ydb-dialect-1.1.3.jar
   ```
 
   Более подробное описание в разделе [manual library management](https://docs.liquibase.com/start/install/home.html) в документации Liquibase.

@@ -23,6 +23,9 @@ namespace NKikimr {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TGroupId GroupId;
         TActorId InnerProxyId; // DS proxy of the inline pile, if this group is an inline pile one
+        // the group is an ordinary one now (the bridged cluster has been rolled back), its inline pile serves it as such
+        // until node warden builds a plain DS proxy at the next start: requests go to the inner proxy as they are
+        bool Passthrough = false;
 
         using TClusterState = NKikimrBridge::TClusterState;
 
@@ -1085,6 +1088,10 @@ namespace NKikimr {
 
         template<typename TEvent>
         void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev, std::optional<TDuration> routingBudget = {}) {
+            if (Passthrough) {
+                TActivationContext::Send(ev->Forward(InnerProxyId));
+                return;
+            }
             if (routingBudget == TDuration::Zero()) {
                 ReplyWithError(*ev, "bridge request timed out");
                 return;
@@ -1440,6 +1447,28 @@ namespace NKikimr {
                 // decommitted group has lost its piles, so there is nothing to route requests to; BlobDepot agent in front
                 // of us stops us right away, and the requests we hold are answered with error then
                 return;
+            }
+            if (InnerProxyId && msg->Info && !msg->Info->IsBridged()) {
+                // the bridged cluster has been rolled back, the group is an ordinary one with the VDisks of its inline
+                // pile; the inner proxy serves it as such, and so do the requests waiting here
+                if (!Passthrough) {
+                    STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB11, "group is not bridged anymore, passing requests through",
+                        (GroupId, GroupId), (GroupGeneration, msg->Info->GroupGeneration));
+                    Passthrough = true;
+                }
+                Send(InnerProxyId, new TEvBlobStorage::TEvConfigureProxy(std::move(msg->Info), msg->NodeLayoutInfo,
+                    msg->StoragePoolCounters));
+                for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
+                    for (auto& [deadline, ev] : std::exchange(*queue, {})) {
+                        TActivationContext::Send(IEventHandle::Forward(std::move(ev), InnerProxyId).release());
+                    }
+                }
+                return;
+            }
+            if (Passthrough && msg->Info) {
+                // the group is bridged again (the cluster is converted once more), its inline pile is routed as before
+                Y_ABORT_UNLESS(msg->Info->IsInlinePile());
+                Passthrough = false;
             }
             if (InnerProxyId && msg->Info && !msg->Info->IsInlinePile()) {
                 // the pile of the inline pile has been removed from the cluster along with its VDisks, the group serves

@@ -99,6 +99,10 @@ namespace NKikimr {
         if (const auto& info = msg->Info; info && info->IsInlinePileView()) {
             // this is the view of the inline pile and it comes from the bridge proxy put in front of us
             InlinePileBridgeProxyId = ev->Sender;
+        } else if (info && !info->IsBridged()) {
+            // the group is an ordinary one again (the bridged cluster has been rolled back), the bridge proxy in front of
+            // us passes the requests through, and the ones without forced generation are served here
+            InlinePileBridgeProxyId = {};
         }
         ApplyGroupInfo(std::move(msg->Info), std::move(msg->NodeLayoutInfo), std::move(msg->StoragePoolCounters));
         if (InlinePileBridgeProxyId && !InitQueue.empty()) {

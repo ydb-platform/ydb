@@ -199,11 +199,12 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
         UNIT_ASSERT_EXCEPTION(MakeContext({}, {}, {TEpoch::Max()}), yexception);
     }
 
-    Y_UNIT_TEST(ResolvesGenerationBindingsAndDefaultFinalParts) {
+    Y_UNIT_TEST(ResolvesLoadedBindingsAndKeepsUnloadedSourcesInTheDefaultTier) {
         TFixture f;
         auto defaultPart = f.Part(10);
         auto coldPart = f.Part(20);
-        auto archivePart = f.Cold(30);
+        auto unloadedArchive = f.Cold(30);
+        auto unloadedDefault = f.Cold(35);
         auto finalPart = f.Part(40);
         auto borrowed = f.Cold(50);
         auto policy = NLocalDb::CreateDefaultUserTablePolicy();
@@ -213,25 +214,27 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
         TCompactionState state;
         state.PartLevels[defaultPart->Label] = 1;
         state.PartLevels[coldPart->Label] = 2;
-        state.PartLevels[archivePart->Label] = 3;
+        state.PartLevels[unloadedArchive->Label] = 3;
+        state.PartLevels[unloadedDefault->Label] = 1;
         state.PartLevels[finalPart->Label] = 255;
         const TVector<TPartView> loaded{defaultPart, coldPart, finalPart};
-        const TVector<TIntrusiveConstPtr<TColdPart>> unloaded{archivePart, borrowed};
+        const TVector<TIntrusiveConstPtr<TColdPart>> unloaded{unloadedArchive, unloadedDefault, borrowed};
         const auto parts = DescribeCompactionParts(loaded, unloaded, state, *policy);
 
-        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 6);
         for (const auto& part : parts) {
             if (part.Label() == coldPart->Label) {
                 UNIT_ASSERT_VALUES_EQUAL(part.TierId, 42);
                 UNIT_ASSERT_VALUES_EQUAL(part.Level, 2);
-            } else if (part.Label() == archivePart->Label) {
-                UNIT_ASSERT_VALUES_EQUAL(part.TierId, 7);
-                UNIT_ASSERT_VALUES_EQUAL(part.Level, 3);
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(part.TierId, 0);
             }
-            if (part.Label() == borrowed->Label) {
+            if (part.Label() == unloadedArchive->Label || part.Label() == borrowed->Label) {
                 UNIT_ASSERT_VALUES_EQUAL(part.Level, 255);
+            }
+            if (part.Label() == unloadedDefault->Label) {
+                // Preserve its default-generation position for epoch placement.
+                UNIT_ASSERT_VALUES_EQUAL(part.Level, 1);
             }
         }
     }
@@ -246,6 +249,92 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
         UNIT_ASSERT_EXCEPTION(DescribeCompactionParts(loaded, {}, state, *policy), yexception);
         state.PartLevels[part->Label] = policy->Generations.size() + 1;
         UNIT_ASSERT_EXCEPTION(DescribeCompactionParts(loaded, {}, state, *policy), yexception);
+
+        const auto unloaded = f.Cold(20);
+        const TVector<TIntrusiveConstPtr<TColdPart>> coldParts{unloaded};
+        state.PartLevels[unloaded->Label] = 0;
+        UNIT_ASSERT_EXCEPTION(DescribeCompactionParts({}, coldParts, state, *policy), yexception);
+        state.PartLevels[unloaded->Label] = policy->Generations.size() + 1;
+        UNIT_ASSERT_EXCEPTION(DescribeCompactionParts({}, coldParts, state, *policy), yexception);
+    }
+
+    Y_UNIT_TEST(UnloadedColdBindingsDoNotHideDefaultInputsFromTheEpochClosure) {
+        TFixture f;
+        auto first = f.Part(10);
+        auto middle = f.Cold(20);
+        auto last = f.Part(30);
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        UNIT_ASSERT(policy->Generations.size() >= 3);
+        policy->Generations[1].TierId = 42;
+        policy->Generations[2].TierId = 7;
+        TCompactionState state;
+        state.PartLevels[first->Label] = 2;
+        state.PartLevels[middle->Label] = 3;
+        state.PartLevels[last->Label] = 2;
+        const TVector<TPartView> loaded{first, last};
+        const TVector<TIntrusiveConstPtr<TColdPart>> unloaded{middle};
+        const auto inventory = DescribeCompactionParts(loaded, unloaded, state, *policy);
+        auto context = MakeContext(inventory, {first->Label, last->Label});
+
+        UNIT_ASSERT_VALUES_EQUAL(context->Epochs->Min, first->Epoch);
+        UNIT_ASSERT_VALUES_EQUAL(context->Epochs->Max, last->Epoch);
+        UNIT_ASSERT_VALUES_EQUAL(context->Inputs.size(), 3);
+        UNIT_ASSERT(context->Remaining.empty());
+        UNIT_ASSERT(context->RequiresTierAware());
+        UNIT_ASSERT_VALUES_EQUAL(context->InputTiers.size(), 2);
+        UNIT_ASSERT(std::find(context->InputTiers.begin(), context->InputTiers.end(), 0) != context->InputTiers.end());
+        UNIT_ASSERT(std::find(context->InputTiers.begin(), context->InputTiers.end(), 42) != context->InputTiers.end());
+        for (const auto& input : context->Inputs) {
+            if (input.Label() == middle->Label) {
+                UNIT_ASSERT_VALUES_EQUAL(input.Level, 255);
+                UNIT_ASSERT_VALUES_EQUAL(input.TierId, 0);
+            }
+        }
+        TCompactionParams params;
+        context->CopyInputs(params);
+        UNIT_ASSERT_VALUES_EQUAL(params.Parts.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(params.ColdParts.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(params.ColdParts.front().Get(), middle.Get());
+        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
+        subset.Flatten = params.Parts;
+        subset.ColdParts = params.ColdParts;
+        context->ValidateSubset(subset);
+        UNIT_ASSERT(context->IsCurrent(inventory));
+    }
+
+    Y_UNIT_TEST(DefaultUnloadedRemainingSourcesKeepCapAndGarbageConservative) {
+        TFixture f;
+        const auto unloaded = f.Cold(10);
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        UNIT_ASSERT(policy->Generations.size() >= 3);
+        policy->Generations[1].TierId = 42;
+        policy->Generations[2].TierId = 7;
+        TCompactionState state;
+        state.PartLevels[unloaded->Label] = 2;
+        const TVector<TIntrusiveConstPtr<TColdPart>> coldParts{unloaded};
+        const auto inventory = DescribeCompactionParts({}, coldParts, state, *policy);
+        auto context = MakeContext(inventory, {});
+        UNIT_ASSERT_VALUES_EQUAL(context->Remaining.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(context->Remaining.front().TierId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(context->Remaining.front().Level, 255);
+
+        TCompactionTierCap exact(f.Layout.RowScheme()->Keys, context->Remaining, {0, 42, 7});
+        TCompactionTierCap parallel(f.Layout.RowScheme()->Keys, context->Remaining, {0, 42, 7}, true);
+        const auto key = TCell::Make(ui32(20));
+        // The default source is not an intermediate tier. A parallel scan must
+        // still account for another operation relocating any of its unknown keys.
+        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 0, 7), 7);
+        UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 0, 7), 42);
+        exact.Reset();
+        parallel.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 7, 0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 7, 0), 42);
+
+        auto garbage = MakeCompactionGarbageConf(f.Layout.RowScheme()->Keys, context->Remaining, false);
+        UNIT_ASSERT(!garbage.Final);
+        UNIT_ASSERT(garbage.UnderlayMask);
+        UNIT_ASSERT(Has(*garbage.UnderlayMask, 0));
+        UNIT_ASSERT(Has(*garbage.UnderlayMask, Max<ui32>()));
     }
 
     Y_UNIT_TEST(ExtraSourcesExtendBothIntervalBounds) {

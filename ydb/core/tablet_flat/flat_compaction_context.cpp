@@ -65,6 +65,15 @@ namespace {
             && ColdPart.Get() == other.ColdPart.Get();
     }
 
+    ui32 ResolveColdPartLevel(ui32 level, const NLocalDb::TCompactionPolicy& policy) {
+        if (level == 255) {
+            return level;
+        }
+        Y_ENSURE(level > 0 && level <= policy.Generations.size(),
+            "Unloaded compaction part refers to an unknown generation");
+        return policy.Generations[level - 1].TierId.value_or(0) == 0 ? level : 255;
+    }
+
     TVector<TCompactionPartInfo> DescribeCompactionParts(
             TConstArrayRef<TPartView> parts,
             TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts,
@@ -88,8 +97,8 @@ namespace {
         }
         for (const auto& part : coldParts) {
             Y_ENSURE(part, "Missing unloaded compaction part");
-            const ui32 level = state.PartLevels.Value(part->Label, 255);
-            result.emplace_back(part, level, tierForLevel(level));
+            const ui32 level = ResolveColdPartLevel(state.PartLevels.Value(part->Label, 255), policy);
+            result.emplace_back(part, level, 0);
         }
         return result;
     }

@@ -237,7 +237,13 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
     for (auto& part : Backend->TableColdParts(Table)) {
         auto label = part->Label;
         ui32 level = state.PartLevels.Value(part->Label, 255);
-        Y_ENSURE(level > 0 && level <= Generations.size() || level == 255);
+        if (TierManaged) {
+            // Borrowed unloaded sources belong to default, even when the log
+            // associates them with a generation now bound to another tier.
+            level = ResolveColdPartLevel(level, *Policy);
+        } else {
+            Y_ENSURE(level > 0 && level <= Generations.size() || level == 255);
+        }
         ColdParts.emplace_back(std::move(part));
         KnownParts[label] = level;
     }
@@ -1937,7 +1943,8 @@ ui32 TGenCompactionStrategy::ChooseTierLevel(ui32 tierId, TEpoch epoch, ui32 pre
     }
     for (const auto& part : ColdParts) {
         const ui32 level = KnownParts.Value(part->Label, 255);
-        remaining.emplace_back(part, level, TierForLevel(level));
+        Y_ENSURE(TierForLevel(level) == 0, "Unloaded compaction parts must belong to the default tier");
+        remaining.emplace_back(part, level, 0);
     }
     const auto level = FindTierCompactionLevel(*Policy, remaining, tierId, epoch, preferredLevel);
     Y_ENSURE(level, "No generation can accept the compaction epoch in tier " << tierId);

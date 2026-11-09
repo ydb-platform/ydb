@@ -640,6 +640,10 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
         subset.ColdParts = {cold};
         f.Prepare(*params, subset);
+        UNIT_ASSERT(params->Mode == TCompactionParams::EMode::Regular);
+        UNIT_ASSERT_VALUES_EQUAL(params->TierId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(params->Context->InputTiers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(params->Context->InputTiers.front(), 0);
         UNIT_ASSERT(f.Current(*params));
 
         f.ColdParts.front() = new TColdPart(cold->Label, cold->Epoch);
@@ -909,29 +913,101 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         f.Strategy->Start(f.State);
     }
 
-    Y_UNIT_TEST(UnloadedColdPartKeepsItsTierWhenRewrittenAndRestarted) {
-        TStrategyFixture f;
-        auto hot = f.AddPart(20, 1);
-        auto cold = f.AddColdPart(10, 3);
-        f.Start();
-        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->SnapshotState().PartLevels.at(cold->Label), 3);
-        const auto id = f.RunPending();
-        const auto& params = *f.Backend.Started.at(id);
-        UNIT_ASSERT(params.Mode == TCompactionParams::EMode::Regular);
-        UNIT_ASSERT_VALUES_EQUAL(params.TierId, ColdTier);
-        UNIT_ASSERT_VALUES_EQUAL(params.ColdParts.size(), 1);
-        UNIT_ASSERT(Contains(params.ColdParts, cold->Label));
-        const auto changes = f.Complete(id, {ColdTier});
+    Y_UNIT_TEST(UnloadedPartsRestoreAndRewriteIntoDefaultDespiteSavedColdGenerations) {
+        for (ui32 savedLevel : {3, 4, 5}) {
+            TStrategyFixture f;
+            const auto hot = f.AddPart(20, 1);
+            const auto loadedCold = f.AddPart(30, 3, 2);
+            const auto unloaded = f.AddColdPart(10, savedLevel);
+            f.Start();
 
-        UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.begin()->second, 4);
-        UNIT_ASSERT(!f.State.PartLevels.contains(cold->Label));
-        UNIT_ASSERT(f.ColdParts.empty());
-        UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(hot->Label), 1);
-        const auto before = f.State.PartLevels;
-        f.Strategy->Stop();
-        f.Strategy->Start(f.State);
-        UNIT_ASSERT(f.Strategy->SnapshotState().PartLevels == before);
+            // Loaded parts retain their tier. Only the unloaded source's stale
+            // non-default placement is normalized, before it can start work.
+            f.State = f.Strategy->SnapshotState();
+            UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(unloaded->Label), 255);
+            UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(hot->Label), 1);
+            UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(loadedCold->Label), 3);
+            const auto restored = f.State.PartLevels;
+            f.Strategy->Stop();
+            f.Strategy->Start(f.State);
+            UNIT_ASSERT(f.Strategy->SnapshotState().PartLevels == restored);
+
+            const auto id = f.RunPending();
+            const auto& params = *f.Backend.Started.at(id);
+            UNIT_ASSERT(params.Mode == TCompactionParams::EMode::Regular);
+            UNIT_ASSERT_VALUES_EQUAL(params.TierId, 0);
+            UNIT_ASSERT(!params.Tiering->AllowCooling);
+            UNIT_ASSERT_VALUES_EQUAL(
+                static_cast<const NCompGen::TGenCompactionParams&>(params).Generation, 255);
+            UNIT_ASSERT_VALUES_EQUAL(params.Context->Inputs.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(params.Context->Inputs.front().Level, 255);
+            UNIT_ASSERT_VALUES_EQUAL(params.Context->Inputs.front().TierId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(params.ColdParts.size(), 1);
+            UNIT_ASSERT(Contains(params.ColdParts, unloaded->Label));
+            UNIT_ASSERT(params.Parts.empty());
+            const auto changes = f.Complete(id, {0});
+
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.begin()->second, 255);
+            UNIT_ASSERT(!f.State.PartLevels.contains(unloaded->Label));
+            UNIT_ASSERT(f.ColdParts.empty());
+            UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(hot->Label), 1);
+            UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(loadedCold->Label), 3);
+            const auto before = f.State.PartLevels;
+            f.Strategy->Stop();
+            f.Strategy->Start(f.State);
+            UNIT_ASSERT(f.Strategy->SnapshotState().PartLevels == before);
+        }
+    }
+
+    Y_UNIT_TEST(UnloadedPartsKeepTheirDefaultGenerationThroughRestartAndRewrite) {
+        for (ui32 level : {1, 2}) {
+            TStrategyFixture f;
+            f.AddPart(20, 1);
+            const auto unloaded = f.AddColdPart(10, level);
+            f.Start();
+            f.State = f.Strategy->SnapshotState();
+            UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(unloaded->Label), level);
+            const auto restored = f.State.PartLevels;
+            f.Strategy->Stop();
+            f.Strategy->Start(f.State);
+            UNIT_ASSERT(f.Strategy->SnapshotState().PartLevels == restored);
+
+            const auto id = f.RunPending();
+            const auto& params = *f.Backend.Started.at(id);
+            UNIT_ASSERT(params.Mode == TCompactionParams::EMode::Regular);
+            UNIT_ASSERT_VALUES_EQUAL(params.TierId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                static_cast<const NCompGen::TGenCompactionParams&>(params).Generation, level);
+            UNIT_ASSERT(Contains(params.ColdParts, unloaded->Label));
+            const auto changes = f.Complete(id, {0});
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.begin()->second, level == 1 ? 2 : 255);
+            UNIT_ASSERT(!f.State.PartLevels.contains(unloaded->Label));
+            UNIT_ASSERT(f.ColdParts.empty());
+            const auto before = f.State.PartLevels;
+            f.Strategy->Stop();
+            f.Strategy->Start(f.State);
+            UNIT_ASSERT(f.Strategy->SnapshotState().PartLevels == before);
+        }
+    }
+
+    Y_UNIT_TEST(UnloadedDefaultGenerationCannotBeRetaggedAsAColdTier) {
+        TStrategyFixture f;
+        const auto unloaded = f.AddColdPart(10, 2);
+        f.Start();
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->SnapshotState().PartLevels.at(unloaded->Label), 2);
+
+        // ReflectSchema must compare distinct before/after policies; mutating
+        // the existing policy would also change the strategy's old settings.
+        NKikimrCompaction::TCompactionPolicy serialized;
+        f.Policy->Serialize(serialized);
+        NLocalDb::TCompactionPolicyPtr updated = new NLocalDb::TCompactionPolicy(serialized);
+        updated->Generations[1].TierId = ColdTier;
+        f.Table.CompactionPolicy = updated;
+        UNIT_ASSERT_EXCEPTION(f.Strategy->ReflectSchema(), yexception);
+        f.Table.CompactionPolicy = f.Policy;
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->SnapshotState().PartLevels.at(unloaded->Label), 2);
     }
 
     Y_UNIT_TEST(UnloadedFinalPartCompactsIntoTheDefaultTierDespiteColdLastGenerations) {

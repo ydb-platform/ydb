@@ -13,7 +13,7 @@ namespace NKikimr::NTable {
     struct TCompactionState;
 
     // Runtime placement of one table-owned part view. ColdPart means that its
-    // metadata has not been loaded, independently of its storage tier.
+    // metadata has not been loaded; table inventory assigns it to the default tier.
     struct TCompactionPartInfo {
         TCompactionPartInfo(TPartView part, ui32 level, ui32 tierId);
         TCompactionPartInfo(TIntrusiveConstPtr<TColdPart> part, ui32 level, ui32 tierId);
@@ -28,8 +28,12 @@ namespace NKikimr::NTable {
         ui32 TierId;
     };
 
+    // Preserve unloaded parts' existing default-generation placement, but move
+    // references to non-default generations to the final default level (255).
+    ui32 ResolveColdPartLevel(ui32 level, const NLocalDb::TCompactionPolicy& policy);
+
     // Resolve placement using the existing part -> level -> generation binding.
-    // Missing levels and FinalParts (level 255) belong to the default tier.
+    // Missing levels, FinalParts (level 255), and unloaded parts belong to default.
     TVector<TCompactionPartInfo> DescribeCompactionParts(
         TConstArrayRef<TPartView> parts,
         TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts,

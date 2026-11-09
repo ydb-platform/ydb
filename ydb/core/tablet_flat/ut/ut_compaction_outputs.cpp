@@ -113,7 +113,7 @@ namespace {
         {
         }
 
-        ui32 RouteKey(TArrayRef<const TCell> key) override {
+        ui32 RouteKey(TArrayRef<const TCell> key, const TRowState*, ui32) override {
             ++Calls;
             return key[0].AsValue<ui32>() % 2;
         }
@@ -432,6 +432,85 @@ namespace {
         table->Replace(empty, parts, {});
         return table;
     }
+
+    const NTest::TLayoutCook& TierScanLayout() {
+        static const auto layout = [] {
+            NTest::TLayoutCook result;
+            result.Col(0, 0, NScheme::NTypeIds::Uint32)
+                .Col(0, 1, NScheme::NTypeIds::Uint32)
+                .Col(0, 2, NScheme::NTypeIds::String)
+                .Key({0});
+            return result;
+        }();
+        return layout;
+    }
+
+    TIntrusivePtr<TMemTable> TierScanInput() {
+        return MakeIntrusive<TMemTable>(TierScanLayout().RowScheme(), TEpoch::FromIndex(7), ui64(0));
+    }
+
+    TTieringPolicy TierScanPolicy(bool archive = false) {
+        TTieringPolicy policy{
+            .ColumnTag = 1,
+            .Unit = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS,
+        };
+        if (archive) {
+            policy.Rules.push_back({.TierId = 7, .Ranges = {{
+                .To = TTierRelativeBound{TDuration::Seconds(200)}, .ToInclusive = true}}});
+        }
+        policy.Rules.push_back({.TierId = 42, .Ranges = {{
+            .To = TTierRelativeBound{TDuration::Seconds(100)}, .ToInclusive = true}}});
+        return policy;
+    }
+
+    THolder<TCompactCfg> TierScanConfig(const TIntrusivePtr<TMemTable>& input,
+            TVector<TCompactionPartInfo> remaining = {}, bool archive = false) {
+        auto conf = ScanConfig();
+        conf->Params->Mode = TCompactionParams::EMode::TierAware;
+        conf->Outputs[0].TierId = 0;
+        conf->Outputs[1].TierId = 42;
+        if (archive) {
+            AddOutput(*conf, 73);
+            conf->Outputs.back().TierId = 7;
+            conf->Outputs.back().Writer.Groups[0].MaxBlobSize = 4096;
+        }
+        conf->Epoch = input->Epoch;
+        TSubset subset(TEpoch::Zero(), input->Scheme,
+            TVector<TMemTableSnapshot>{{input, input->Immediate()}});
+        conf->Params->Context = TCompactionContext::Build(std::move(remaining), subset);
+        return conf;
+    }
+
+    THolder<ICompactionRouter> TierScanRouter(const TCompactCfg& conf, bool archive = false) {
+        return MakeHolder<TTierCompactionRouter>(conf,
+            std::optional<TTieringPolicy>(TierScanPolicy(archive)), TInstant::Seconds(1000),
+            archive ? TVector<ui32>{0, 42, 7} : TVector<ui32>{0, 42});
+    }
+
+    class TCountingTierRouter final : public ICompactionRouter {
+    public:
+        TCountingTierRouter(THolder<ICompactionRouter> delegate, ui32& calls)
+            : Delegate(std::move(delegate))
+            , Calls(calls)
+        { }
+
+        void Prepare(const TRowScheme& scheme) override {
+            Delegate->Prepare(scheme);
+        }
+
+        ui32 RouteKey(TCellsRef key, const TRowState* row, ui32 sourceTier) override {
+            ++Calls;
+            return Delegate->RouteKey(key, row, sourceTier);
+        }
+
+        TVector<ui32> GetUnrepresentableTierIds() const override {
+            return Delegate->GetUnrepresentableTierIds();
+        }
+
+    private:
+        THolder<ICompactionRouter> Delegate;
+        ui32& Calls;
+    };
 }
 
 Y_UNIT_TEST_SUITE(TCompactionOutputConfigTest) {
@@ -1012,6 +1091,243 @@ Y_UNIT_TEST_SUITE(TCompactionOutputsTest) {
 }
 
 Y_UNIT_TEST_SUITE(TCompactionScanOutputsTest) {
+    Y_UNIT_TEST(NewestCommittedValueSelectsTheTierForAllVersions) {
+        TCompactionScanEnv env;
+        auto input = TierScanInput();
+        AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+            ui32(1), ui32(100), TString("old-cold")), {10, 1});
+        AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+            ui32(1), ui32(950), TString("new-hot")), {20, 1});
+        AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+            ui32(2), ui32(950), TString("old-hot")), {10, 1});
+        AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+            ui32(2), ui32(100), TString("new-cold")), {20, 1});
+        auto conf = TierScanConfig(input);
+        ui32 calls = 0;
+        auto router = MakeHolder<TCountingTierRouter>(TierScanRouter(*conf), calls);
+        env.Start(std::move(conf), input, std::move(router));
+        env.Complete();
+
+        const auto& product = env.Product();
+        UNIT_ASSERT(product.Success);
+        const auto result = TProdCompact::MakeCompactionResult(product.Results);
+        TWrittenPages pages;
+        THashSet<ui32> keys;
+        for (const auto& part : result->Parts) {
+            pages.Add(part.Part.Get());
+            auto table = ReadTable(*input->Scheme, {&part, 1});
+            const TVector<ui32> tags{0, 1, 2};
+            auto iter = table->Iterate(TRawVals{}, tags, &pages, ESeek::Lower, TRowVersion::Max());
+            while (iter->Next(ENext::Data) == EReady::Data) {
+                const auto key = iter->GetKey().Cells()[0].AsValue<ui32>();
+                UNIT_ASSERT(keys.insert(key).second);
+                UNIT_ASSERT_VALUES_EQUAL(result->PartOutputIds.at(part->Label), key == 1 ? 17 : 31);
+                UNIT_ASSERT_VALUES_EQUAL(iter->GetRowVersion(), TRowVersion(20, 1));
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(1).AsValue<ui32>(), key == 1 ? 950 : 100);
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(2).AsBuf(), key == 1 ? "new-hot" : "new-cold");
+                UNIT_ASSERT_VALUES_EQUAL(iter->SkipToRowVersion({10, 1}), EReady::Data);
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(1).AsValue<ui32>(), key == 1 ? 100 : 950);
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(2).AsBuf(), key == 1 ? "old-cold" : "old-hot");
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(calls, 2);
+    }
+
+    Y_UNIT_TEST(LocksAndDeltasFollowTheFirstCommittedTierDecision) {
+        TCompactionScanEnv env;
+        auto input = TierScanInput();
+        constexpr ui32 keyCount = 8;
+        for (ui32 key = 0; key < keyCount; ++key) {
+            AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+                key, ui32(950), ScanValue("old", key)), {10, 1});
+            AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+                key, ui32(100), ScanValue("head", key)), {20, 1});
+            AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+                key, ui32(950), ScanValue("delta", key)), {Max<ui64>(), 200 + key});
+            const auto lockRow = *NTest::TSchemedCookRow(*TierScanLayout()).Col(key);
+            input->LockRow(ELockMode::Exclusive,
+                NTest::TRowTool(*TierScanLayout()).LookupKey(lockRow), 100 + key);
+        }
+        auto conf = TierScanConfig(input);
+        auto router = TierScanRouter(*conf);
+        env.Start(std::move(conf), input, std::move(router));
+        env.Complete();
+
+        const auto& product = env.Product();
+        UNIT_ASSERT(product.Success);
+        const auto result = TProdCompact::MakeCompactionResult(product.Results);
+        TWrittenPages pages;
+        THashSet<ui32> keys;
+        for (const auto& part : result->Parts) {
+            UNIT_ASSERT_VALUES_EQUAL(result->PartOutputIds.at(part->Label), 31);
+            pages.Add(part.Part.Get());
+            auto table = ReadTable(*input->Scheme, {&part, 1});
+            const TVector<ui32> tags{0, 1, 2};
+            auto iter = table->Iterate(TRawVals{}, tags, &pages, ESeek::Lower, TRowVersion::Max());
+            while (iter->Next(ENext::Uncommitted) == EReady::Data) {
+                const auto key = iter->GetKey().Cells()[0].AsValue<ui32>();
+                UNIT_ASSERT(keys.insert(key).second);
+                UNIT_ASSERT(iter->IsUncommitted());
+                UNIT_ASSERT_VALUES_EQUAL(iter->GetUncommittedTxId(), 200 + key);
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(1).AsValue<ui32>(), 950);
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(2).AsBuf(), ScanValue("delta", key));
+                const auto [mode, txId] = iter->GetLockInfo();
+                UNIT_ASSERT_VALUES_EQUAL(mode, ELockMode::Exclusive);
+                UNIT_ASSERT_VALUES_EQUAL(txId, 100 + key);
+                UNIT_ASSERT_VALUES_EQUAL(iter->SkipUncommitted(), EReady::Data);
+                UNIT_ASSERT_VALUES_EQUAL(iter->GetRowVersion(), TRowVersion(20, 1));
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(1).AsValue<ui32>(), 100);
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(2).AsBuf(), ScanValue("head", key));
+                UNIT_ASSERT_VALUES_EQUAL(iter->SkipToRowVersion({10, 1}), EReady::Data);
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(1).AsValue<ui32>(), 950);
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(2).AsBuf(), ScanValue("old", key));
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), keyCount);
+    }
+
+    Y_UNIT_TEST(DeltaOnlyAndLockOnlyKeysRetainTheirSourceTier) {
+        TCompactionScanEnv env;
+        auto input = TierScanInput();
+        AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+            ui32(1), ui32(100), TString("uncommitted-cold-value")), {Max<ui64>(), 201});
+        for (ui32 key : {1, 2}) {
+            const auto lockRow = *NTest::TSchemedCookRow(*TierScanLayout()).Col(key);
+            input->LockRow(ELockMode::Exclusive,
+                NTest::TRowTool(*TierScanLayout()).LookupKey(lockRow), 100 + key);
+        }
+        auto conf = TierScanConfig(input);
+        ui32 calls = 0;
+        auto router = MakeHolder<TCountingTierRouter>(TierScanRouter(*conf), calls);
+        env.Start(std::move(conf), input, std::move(router));
+        env.Complete();
+
+        const auto& product = env.Product();
+        UNIT_ASSERT(product.Success);
+        const auto result = TProdCompact::MakeCompactionResult(product.Results);
+        TWrittenPages pages;
+        THashSet<ui32> keys;
+        for (const auto& part : result->Parts) {
+            UNIT_ASSERT_VALUES_EQUAL(result->PartOutputIds.at(part->Label), 17);
+            pages.Add(part.Part.Get());
+            auto table = ReadTable(*input->Scheme, {&part, 1});
+            const TVector<ui32> tags{0, 1, 2};
+            auto iter = table->Iterate(TRawVals{}, tags, &pages, ESeek::Lower, TRowVersion::Max());
+            while (iter->Next(ENext::Uncommitted) == EReady::Data) {
+                const auto key = iter->GetKey().Cells()[0].AsValue<ui32>();
+                UNIT_ASSERT(keys.insert(key).second);
+                UNIT_ASSERT(iter->IsUncommitted());
+                const auto [mode, txId] = iter->GetLockInfo();
+                UNIT_ASSERT_VALUES_EQUAL(mode, ELockMode::Exclusive);
+                UNIT_ASSERT_VALUES_EQUAL(txId, 100 + key);
+                if (key == 1) {
+                    UNIT_ASSERT_VALUES_EQUAL(iter->GetUncommittedTxId(), 201);
+                    UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(2).AsBuf(), "uncommitted-cold-value");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(key, 2);
+                    UNIT_ASSERT(iter->Row() == ERowOp::Absent);
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(calls, 2);
+    }
+
+    Y_UNIT_TEST(NullAndEraseDoNotRouteUsingAnOlderColdValue) {
+        TCompactionScanEnv env;
+        auto input = TierScanInput();
+        AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+            ui32(1), ui32(100), TString("old-cold")), {10, 1});
+        AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+            ui32(1), nullptr, TString("new-null")), {20, 1});
+        AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+            ui32(2), ui32(100), TString("erased-cold")), {10, 1});
+        const auto erasedKey = *NTest::TSchemedCookRow(*TierScanLayout()).Col(ui32(2));
+        input->Update(ERowOp::Erase, NTest::TRowTool(*TierScanLayout()).LookupKey(erasedKey),
+            {}, {}, {20, 1}, nullptr);
+        auto conf = TierScanConfig(input);
+        auto router = TierScanRouter(*conf);
+        env.Start(std::move(conf), input, std::move(router));
+        env.Complete();
+
+        const auto& product = env.Product();
+        UNIT_ASSERT(product.Success);
+        const auto result = TProdCompact::MakeCompactionResult(product.Results);
+        TWrittenPages pages;
+        THashSet<ui32> keys;
+        for (const auto& part : result->Parts) {
+            UNIT_ASSERT_VALUES_EQUAL(result->PartOutputIds.at(part->Label), 17);
+            pages.Add(part.Part.Get());
+            auto table = ReadTable(*input->Scheme, {&part, 1});
+            const TVector<ui32> tags{0, 1, 2};
+            auto iter = table->Iterate(TRawVals{}, tags, &pages, ESeek::Lower, TRowVersion::Max());
+            while (iter->Next(ENext::All) == EReady::Data) {
+                const auto key = iter->GetKey().Cells()[0].AsValue<ui32>();
+                UNIT_ASSERT(keys.insert(key).second);
+                if (key == 1) {
+                    UNIT_ASSERT(iter->Row().Get(1).IsNull());
+                    UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(2).AsBuf(), "new-null");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(key, 2);
+                    UNIT_ASSERT(iter->Row() == ERowOp::Erase);
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+    }
+
+    Y_UNIT_TEST(TierAwareScanStopsAtTheFirstPossibleIntermediateTier) {
+        for (bool intermediate : {false, true}) {
+            TCompactionScanEnv env;
+            auto input = TierScanInput();
+            AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+                ui32(1), ui32(100), TString("archive-candidate")), {20, 1});
+            TVector<TCompactionPartInfo> remaining;
+            if (intermediate) {
+                const TIntrusiveConstPtr<TColdPart> unknown = new TColdPart(
+                    TLogoBlobID(2, 1, 1, 1, 0, 0), TEpoch::FromIndex(1));
+                remaining.emplace_back(unknown, 2, 42);
+            }
+            auto conf = TierScanConfig(input, std::move(remaining), true);
+            auto router = TierScanRouter(*conf, true);
+            env.Start(std::move(conf), input, std::move(router));
+            env.Complete();
+            const auto& product = env.Product();
+            UNIT_ASSERT(product.Success);
+            const auto result = TProdCompact::MakeCompactionResult(product.Results);
+            UNIT_ASSERT_VALUES_EQUAL(result->Parts.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->PartOutputIds.at(result->Parts.front()->Label),
+                intermediate ? 31 : 73);
+        }
+    }
+
+    Y_UNIT_TEST(TierAwareRoutingWritesBeforeAllInputKeysAreScanned) {
+        TCompactionScanEnv env;
+        auto input = TierScanInput();
+        constexpr ui32 keyCount = 64;
+        for (ui32 key = 0; key < keyCount; ++key) {
+            AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+                key, ui32(100), TString(512 * 1024, 'a')), {20, 1});
+        }
+        auto conf = TierScanConfig(input);
+        for (auto& output : conf->Outputs) {
+            output.Layout.Group(0).PageRows = 2;
+            output.Layout.MainPageCollectionEdge = 512 * 1024;
+            output.Writer.Groups[0].MaxBlobSize = 1024 * 1024;
+        }
+        ui32 calls = 0;
+        auto router = MakeHolder<TCountingTierRouter>(TierScanRouter(*conf), calls);
+        env.Start(std::move(conf), input, std::move(router));
+        UNIT_ASSERT(!env.PendingPuts.empty());
+        UNIT_ASSERT(!env.Result);
+        UNIT_ASSERT(calls > 0);
+        UNIT_ASSERT(calls < keyCount);
+        env.Complete();
+        UNIT_ASSERT(env.Product().Success);
+        UNIT_ASSERT_VALUES_EQUAL(calls, keyCount);
+    }
+
     Y_UNIT_TEST(RouteWholeKeysAndPreserveOutputIds) {
         TCompactionScanEnv env;
         auto conf = ScanConfig();

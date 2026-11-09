@@ -1,28 +1,13 @@
 #pragma once
 
 #include "flat_executor_misc.h"
+#include "flat_compaction_router.h"
 #include "flat_part_writer.h"
 #include "flat_writer_bundle.h"
 
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NTabletFlatExecutor {
-
-    class ICompactionRouter {
-    public:
-        virtual ~ICompactionRouter() = default;
-
-        // Called once per key. Returns an index into TCompactCfg::Outputs.
-        // The key cells are only valid for the duration of this call.
-        virtual ui32 RouteKey(TArrayRef<const TCell> key) = 0;
-    };
-
-    class TDefaultCompactionRouter final : public ICompactionRouter {
-    public:
-        ui32 RouteKey(TArrayRef<const TCell>) override {
-            return 0;
-        }
-    };
 
     // All outputs share cookie allocators, but retain independent writers and
     // bundles. BlobStorage scheduling and atomic publication belong to the caller.
@@ -69,8 +54,21 @@ namespace NKikimr::NTabletFlatExecutor {
             }
         }
 
+        void Prepare(const NTable::TRowScheme& scheme) {
+            Y_ENSURE(!RouterPrepared, "Compaction router prepared twice");
+            Router->Prepare(scheme);
+            RouterPrepared = true;
+        }
+
+        TVector<ui32> GetUnrepresentableTierIds() const {
+            return Router->GetUnrepresentableTierIds();
+        }
+
         void Start(const NTable::TRowScheme& scheme) {
             Y_ENSURE(!Started, "Compaction outputs started twice");
+            if (!RouterPrepared) {
+                Prepare(scheme);
+            }
             auto partScheme = MakeIntrusive<NTable::TPartScheme>(scheme.Cols);
             const auto tags = scheme.Tags();
             for (size_t i = 0; i < States.size(); ++i) {
@@ -87,9 +85,10 @@ namespace NKikimr::NTabletFlatExecutor {
             return States.at(index).Writer;
         }
 
-        TIntrusivePtr<NTable::TPartWriter> BeginKey(TArrayRef<const TCell> key) {
+        TIntrusivePtr<NTable::TPartWriter> BeginKey(TArrayRef<const TCell> key,
+                const NTable::TRowState* row = nullptr, ui32 sourceTier = 0) {
             Y_ENSURE(Started && !Finished && !KeyActive, "Unexpected compaction key start");
-            CurrentOutput = Router->RouteKey(key);
+            CurrentOutput = Router->RouteKey(key, row, sourceTier);
             Y_ENSURE(CurrentOutput < States.size(), "Compaction router returned an invalid output index");
             auto writer = GetWriter(CurrentOutput);
             writer->BeginKey(key);
@@ -181,6 +180,7 @@ namespace NKikimr::NTabletFlatExecutor {
         TVector<TState> States;
         THolder<ICompactionRouter> Router;
         ui32 CurrentOutput = 0;
+        bool RouterPrepared = false;
         bool Started = false;
         bool Finished = false;
         bool KeyActive = false;

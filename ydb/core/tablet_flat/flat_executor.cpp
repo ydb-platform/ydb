@@ -5369,7 +5369,8 @@ void TExecutor::ReleaseWritePart(ui32 step)
 
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 {
-    // Do not execute a TAC with the default router before routing and cap are available.
+    // The strategy must supply protected inputs and per-output placement before
+    // tier-aware execution can be enabled here.
     Y_ENSURE(params->Mode == NTable::TCompactionParams::EMode::Regular,
         "Tier-aware compaction execution requires tier-aware routing");
 

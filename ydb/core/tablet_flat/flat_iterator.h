@@ -356,6 +356,15 @@ public:
     TRowVersion GetRowVersion() const;
     EReady SkipToRowVersion(TRowVersion rowVersion);
 
+    struct TSource {
+        const TMemTable* MemTable = nullptr;
+        const TPart* Part = nullptr;
+    };
+
+    // Valid after a successful read. For a reconstructed row this is the
+    // newest contributing source, independent of the sources filling its base.
+    TSource GetSource() const;
+
 public:
     const TRowScheme* Scheme;
     const TRemap Remap;
@@ -789,6 +798,23 @@ inline std::tuple<ELockMode, ui64> TTableIterBase<TIteratorOps>::GetLockInfo() c
             auto& it = *RunIters[ai.Index];
             return it.GetLockInfo();
         }
+        default:
+            Y_TABLET_ERROR("Unexpected iterator type");
+    }
+}
+
+template<class TIteratorOps>
+inline typename TTableIterBase<TIteratorOps>::TSource TTableIterBase<TIteratorOps>::GetSource() const
+{
+    Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready == EReady::Data);
+    Y_DEBUG_ABORT_UNLESS(Active != Inactive);
+
+    const TIteratorId ai = TReverseIter(Inactive)->IteratorId;
+    switch (ai.Type) {
+        case EType::Mem:
+            return {MemIters[ai.Index]->MemTable, nullptr};
+        case EType::Run:
+            return {nullptr, RunIters[ai.Index]->Part()};
         default:
             Y_TABLET_ERROR("Unexpected iterator type");
     }

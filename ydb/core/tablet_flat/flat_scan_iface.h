@@ -10,6 +10,8 @@ namespace NKikimr {
 namespace NTable {
     class TRowState;
     class TSpent;
+    class TMemTable;
+    class TPart;
     struct TSubset;
 
     /*_ IScan, the generic scan interface. Scan life cycle starts with
@@ -164,6 +166,24 @@ namespace NTable {
     };
 
 
+    struct TVersionScanSource {
+        const TMemTable* MemTable = nullptr;
+        const TPart* Part = nullptr;
+    };
+
+    /**
+     * A versioned scan visits keys in scan order. All callbacks for a key are
+     * enclosed by BeginKey/EndKey; the first committed row is the newest row
+     * reconstructed from the fixed subset, followed by strictly older versions.
+     * Uncommitted deltas and locks may precede that first committed row, and a
+     * key may contain only such events. Feed receives reconstructed row states,
+     * not individual fragments from parts.
+     *
+     * The consumer may lower the version passed to Feed(TRow, TRowVersion&),
+     * asking the driver to continue below that version instead of the original
+     * one. A consumer never needs to wait for EOF to know that later callbacks
+     * for the current key cannot contain a newer committed row.
+     */
     class IVersionScan : public IScan {
     private:
         EScan Feed(TArrayRef<const TCell>, const TRow&) override final {
@@ -171,6 +191,14 @@ namespace NTable {
         }
 
     public:
+        // Called immediately before each Feed overload. Exactly one pointer
+        // identifies the newest source contributing to that event, including
+        // a reconstructed row with values filled from older sources. The
+        // pointers are borrowed from the scan and must not be retained beyond
+        // its lifetime. Existing consumers may ignore this metadata.
+        virtual void SetSource(const TVersionScanSource&) {
+        }
+
         virtual EScan BeginKey(TArrayRef<const TCell>) = 0;
         virtual EScan BeginDeltas() = 0;
         virtual EScan Feed(const TRow&, ui64) = 0;

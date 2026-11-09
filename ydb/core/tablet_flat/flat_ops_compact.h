@@ -516,6 +516,18 @@ namespace NTabletFlatExecutor {
             Scheme = std::move(scheme);
             Driver = driver;
 
+            if (Conf->Params->Context) {
+                for (const auto& part : Conf->Params->Context->Inputs) {
+                    SourceTiers.emplace(part.Label(), part.TierId);
+                }
+            }
+            Outputs.Prepare(*Scheme);
+            for (ui32 tierId : Outputs.GetUnrepresentableTierIds()) {
+                if (auto logl = Logger->Log(ELnLev::Warn)) {
+                    logl << NFmt::Do(*this) << " unrepresentable tier predicate bound for tier " << tierId;
+                }
+            }
+
             NTable::IScan::TConf conf;
 
             conf.NoErased = false; /* emit erase markers */
@@ -572,7 +584,12 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            Writer = Outputs.BeginKey(key);
+            Y_ENSURE(!PendingKeyActive && !Writer && BufferedDeltas.empty() && DeltasOrder.empty(),
+                "Previous compaction key is not finished");
+            PendingKey = TOwnedCellVec(key);
+            PendingKeyActive = true;
+            CurrentSourceTier.reset();
+            FallbackSourceTier.reset();
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl
@@ -583,6 +600,29 @@ namespace NTabletFlatExecutor {
 
             Y_DEBUG_ABORT_UNLESS(!IsLocked);
             return Flush(false /* intermediate, sleep or feed */);
+        }
+
+        void SetSource(const NTable::TVersionScanSource& source) override
+        {
+            if (Conf->IsFulltextCompact) {
+                return;
+            }
+            Y_ENSURE(PendingKeyActive, "Compaction source outside a key");
+            ui32 tier = Conf->Params->TierId;
+            if (Conf->Params->Context) {
+                Y_ENSURE(bool(source.Part) != bool(source.MemTable), "Unknown compaction row source");
+                if (source.Part) {
+                    const auto it = SourceTiers.find(source.Part->Label);
+                    Y_ENSURE(it != SourceTiers.end(), "Compaction row source is outside the prepared inputs");
+                    tier = it->second;
+                } else {
+                    tier = 0;
+                }
+            }
+            CurrentSourceTier = tier;
+            if (!FallbackSourceTier) {
+                FallbackSourceTier = tier;
+            }
         }
 
         EScan BeginDeltas() override
@@ -606,6 +646,20 @@ namespace NTabletFlatExecutor {
                 }
 
                 logl << " txId " << txId << " }";
+            }
+
+            if (!FtState) {
+                Y_ENSURE(!Writer, "Uncommitted delta after a committed compaction row");
+                auto [it, inserted] = BufferedDeltas.try_emplace(txId);
+                if (inserted) {
+                    it->second = MakeHolder<TBufferedRow>(row);
+                    DeltasOrder.emplace_back(txId);
+                } else if (!it->second->Row.IsFinalized()) {
+                    TRow merged = it->second->Row;
+                    merged.Merge(row);
+                    it->second = MakeHolder<TBufferedRow>(merged);
+                }
+                return Flush(false);
             }
 
             // Note: we assume the number of uncommitted transactions is limited
@@ -632,7 +686,12 @@ namespace NTabletFlatExecutor {
 
             // We write the first (latest) lock we observe
             if (!IsLocked) {
-                Writer->AddKeyLock(mode, txId);
+                if (Writer) {
+                    Writer->AddKeyLock(mode, txId);
+                } else {
+                    PendingLockMode = mode;
+                    PendingLockTxId = txId;
+                }
                 IsLocked = true;
             }
 
@@ -651,21 +710,8 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            if (!Deltas.empty()) {
-                if (auto logl = Logger->Log(ELnLev::Dbg03)) {
-                    logl << NFmt::Do(*this) << " flushing " << Deltas.size() << " deltas";
-                }
-
-                for (ui64 txId : DeltasOrder) {
-                    auto it = Deltas.find(txId);
-                    Y_ENSURE(it != Deltas.end(), "Unexpected failure to find txId " << txId);
-                    Writer->AddKeyDelta(it->second, txId);
-                }
-
-                Deltas.clear();
-                DeltasOrder.clear();
-            }
-
+            // Keep the owned prefix until the first committed row chooses its
+            // destination, or EndKey selects the delta/lock-only fallback.
             return Flush(false /* intermediate, sleep or feed */);
         }
 
@@ -693,6 +739,9 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
+            if (!Writer) {
+                SelectWriter(&row, CurrentSourceTier);
+            }
             Writer->AddKeyVersion(row, rowVersion);
 
             return Flush(false /* intermediate, sleep or feed */);
@@ -710,7 +759,13 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            ui32 written = Outputs.EndKey();
+            if (!Writer && (PendingLockMode != ELockMode::None || !BufferedDeltas.empty())) {
+                SelectWriter(nullptr, FallbackSourceTier);
+            }
+            const ui32 written = Writer ? Outputs.EndKey() : 0;
+            Writer.Reset();
+            PendingKey = TOwnedCellVec();
+            PendingKeyActive = false;
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " end key { written " << written << " row versions }";
@@ -719,6 +774,25 @@ namespace NTabletFlatExecutor {
             IsLocked = false;
 
             return Flush(false /* intermediate, sleep or feed */);
+        }
+
+        void SelectWriter(const TRow* row, std::optional<ui32> sourceTier)
+        {
+            Y_ENSURE(PendingKeyActive && !Writer, "Unexpected compaction writer selection");
+            Y_ENSURE(sourceTier || !Conf->Params->Context, "Missing compaction source placement");
+            Writer = Outputs.BeginKey({PendingKey.data(), PendingKey.size()}, row,
+                sourceTier.value_or(Conf->Params->TierId));
+            if (PendingLockMode != ELockMode::None) {
+                Writer->AddKeyLock(PendingLockMode, PendingLockTxId);
+                PendingLockMode = ELockMode::None;
+            }
+            for (ui64 txId : DeltasOrder) {
+                const auto it = BufferedDeltas.find(txId);
+                Y_ENSURE(it != BufferedDeltas.end(), "Missing buffered compaction delta");
+                Writer->AddKeyDelta(it->second->Row, txId);
+            }
+            BufferedDeltas.clear();
+            DeltasOrder.clear();
         }
 
         void WriteTxStatus()
@@ -1106,6 +1180,46 @@ namespace NTabletFlatExecutor {
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
         TDeque<NPageCollection::TGlob> WriteQueue;
+
+        // The scan may release source pages before routing the first committed
+        // row. Each pending delta owns its cells, preserving cell operations
+        // (including Empty/Reset/Null and external references).
+        struct TBufferedRow {
+            explicit TBufferedRow(const TRow& row)
+                : Row(row.Size())
+                , Cells(row.Size())
+            {
+                Row.Touch(row.GetRowState());
+                if (row.GetRowState() == NTable::ERowOp::Erase) {
+                    return;
+                }
+                for (ui32 pos = 0; pos < row.Size(); ++pos) {
+                    const auto op = row.GetCellOp(pos);
+                    if (op == NTable::ECellOp::Empty) {
+                        continue;
+                    }
+                    const auto& cell = row.Get(pos);
+                    TCell saved;
+                    if (!cell.IsNull()) {
+                        Cells[pos].assign(cell.Data(), cell.Size());
+                        saved = TCell(Cells[pos].data(), Cells[pos].size());
+                    }
+                    Row.Set(pos, op, saved);
+                }
+            }
+
+            TRow Row;
+            TVector<TString> Cells;
+        };
+
+        THashMap<TLogoBlobID, ui32> SourceTiers;
+        TOwnedCellVec PendingKey;
+        bool PendingKeyActive = false;
+        std::optional<ui32> CurrentSourceTier;
+        std::optional<ui32> FallbackSourceTier;
+        ELockMode PendingLockMode = ELockMode::None;
+        ui64 PendingLockTxId = 0;
+        THashMap<ui64, THolder<TBufferedRow>> BufferedDeltas;
 
         THashMap<ui64, TRow> Deltas;
         TSmallVec<ui64> DeltasOrder;

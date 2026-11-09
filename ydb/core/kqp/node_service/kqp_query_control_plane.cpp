@@ -787,7 +787,7 @@ public:
         auto reportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings);
 
         ::NMonitoring::TDynamicCounterPtr taskCountersRoot = nullptr;
-        switch (StatsMode) {
+        switch (runtimeSettings.GetStatsMode()) {
             case NYql::NDqProto::DQ_STATS_MODE_PROFILE:
                 if (!AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
                     break;
@@ -814,7 +814,7 @@ public:
                 if (auto it = dqTask.GetTaskParams().find("query_path"); it != dqTask.GetTaskParams().end()) {
                     taskCounters = taskCountersRoot->GetSubgroup("group", "dq_tasks");
                     taskCounters = taskCounters->GetSubgroup("query_path", it->second);
-                    if (StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+                    if (runtimeSettings.GetStatsMode() == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
                         taskCounters = taskCounters->GetSubgroup("task", ToString(dqTask.GetId()));
                     }
                 }

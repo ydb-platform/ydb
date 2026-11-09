@@ -171,6 +171,19 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             // frontend; the log assertion below requires every new path result.
             "SELECT value, SUM(id) AS s, COUNT(*), COUNT(DISTINCT id), AVG(id) FROM `/Root/t` GROUP BY value ORDER BY value;",
             "SELECT SUM(id), COUNT(*) FROM `/Root/t` WHERE id < 0;",
+            "SELECT STDDEV_SAMP(id), STDDEV_SAMPLE(id) FROM `/Root/t`;",
+            "SELECT STDDEV_SAMP(id) FROM `/Root/t` WHERE id = 1;",
+            "SELECT STDDEV_SAMP(id) FROM `/Root/t` WHERE id < 0;",
+            "SELECT id FROM `/Root/t` WHERE Re2::Match('a.*')(value) ORDER BY id;",
+            "SELECT id FROM `/Root/t` WHERE Re2::Grep('a', NULL)(value) ORDER BY id;",
+            "SELECT id AS n FROM `/Root/t` WHERE id > 2 UNION ALL SELECT id AS n FROM `/Root/t` WHERE id < 3 ORDER BY n DESC LIMIT 2 OFFSET 1;",
+            "SELECT id FROM `/Root/t` UNION SELECT id FROM `/Root/t` ORDER BY id DESC LIMIT 1;",
+            "SELECT id FROM `/Root/t` INTERSECT SELECT id FROM `/Root/t` WHERE id < 4 "
+                "EXCEPT SELECT id FROM `/Root/t` WHERE id = 1 ORDER BY id DESC LIMIT 1;",
+            "SELECT DISTINCT value AS z, id AS a FROM `/Root/t` UNION "
+                "SELECT value AS z, id AS a FROM `/Root/t` ORDER BY a DESC, z LIMIT 2;",
+            "SELECT value AS z, id AS a FROM `/Root/t` INTERSECT "
+                "SELECT value AS z, id AS a FROM `/Root/t` ORDER BY a + 1 DESC, z LIMIT 2;",
             "SELECT value, GROUPING(value), SUM(id) FROM `/Root/t` GROUP BY ROLLUP(value) ORDER BY GROUPING(value), value;",
             "SELECT id, SUM(id) OVER (), RANK() OVER (ORDER BY id) FROM `/Root/t` ORDER BY id;",
             "SELECT id FROM (SELECT id FROM `/Root/t` UNION ALL SELECT id FROM `/Root/t` WHERE id <= 2) AS u ORDER BY id;",
@@ -279,6 +292,34 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(capped.GetResultSet(0)), "[[2];[3]]");
             UNIT_ASSERT(capped.GetResultSet(0).Truncated());
             if (enable) {
+                // The legacy frontend currently duplicates an endpoint for
+                // these independently sorted named queries. Check SQL results
+                // directly instead of treating that behavior as the oracle.
+                const auto localLimits = session.ExecuteQuery(
+                    "$first = SELECT id FROM `/Root/t` ORDER BY id DESC LIMIT 1; "
+                    "$last = SELECT id FROM `/Root/t` ORDER BY id LIMIT 1; "
+                    "SELECT id FROM $first UNION ALL SELECT id FROM $last ORDER BY id;",
+                    NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(localLimits.IsSuccess(), localLimits.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(localLimits.GetResultSet(0)), "[[1];[4]]");
+                // Legacy RBO import does not consistently widen set operands.
+                // Verify values, NULLs and projection order on the native path.
+                const auto widened = session.ExecuteQuery(
+                    "SELECT DISTINCT value AS z, id AS a FROM `/Root/t` UNION "
+                    "SELECT value AS z, CAST(id AS Int32) AS a FROM `/Root/t` ORDER BY a DESC, z LIMIT 2;",
+                    NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(widened.IsSuccess(), widened.GetIssues().ToString());
+                const auto& widenedSet = widened.GetResultSet(0);
+                UNIT_ASSERT_VALUES_EQUAL(widenedSet.GetColumnsMeta()[0].Name, "z");
+                UNIT_ASSERT_VALUES_EQUAL(widenedSet.GetColumnsMeta()[1].Name, "a");
+                TResultSetParser parser(widenedSet);
+                UNIT_ASSERT(parser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser("z").GetOptionalString(), "b");
+                UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser("a").GetOptionalInt64(), 4);
+                UNIT_ASSERT(parser.TryNextRow());
+                UNIT_ASSERT(!parser.ColumnParser("z").GetOptionalString());
+                UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser("a").GetOptionalInt64(), 3);
+                UNIT_ASSERT(!parser.TryNextRow());
                 const auto successCount = [&] {
                     const auto text = logs.Snapshot();
                     constexpr TStringBuf marker = "New YQL RBO lowering succeeded";
@@ -287,8 +328,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
                     return count;
                 };
                 // One extra result in the multi-statement query, plus the
-                // parameterized query and the table-service capped result.
-                const auto expected = queries.size() + 3;
+                // parameterized query, table-service cap, local LIMITs and widening.
+                const auto expected = queries.size() + 5;
                 const auto deadline = TInstant::Now() + TDuration::Seconds(10);
                 while (successCount() < expected && TInstant::Now() < deadline) {
                     Sleep(TDuration::MilliSeconds(10));

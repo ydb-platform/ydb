@@ -474,6 +474,44 @@ private:
         relation.Op = MakeIntrusive<TOpLimit>(relation.Op, pos, TPhysicalOpProps{}, count, std::move(offset), EOpPhase::Undefined);
     }
 
+    void Distinct(const TVector<TColumnId>& outputIds, TPositionHandle pos, TRelation& result) {
+        TOrderedIUs<> keys;
+        TAggregationIUs aggregates;
+        for (const auto column : outputIds) {
+            const auto input = result.Bindings.at(column);
+            keys.Append(input);
+            const auto output = Props.InfoUnitRegistry.Add(TInfoUnit("", Names.Columns[column].Name));
+            aggregates.Add(output, TOpAggregationTraits{input, "distinct"});
+            result.Bindings[column] = output;
+        }
+        result.Op = MakeIntrusive<TOpAggregate>(result.Op, std::move(aggregates), std::move(keys), EOpPhase::Undefined, true, pos);
+    }
+
+    void Sort(const TVector<TSortSpecification>& orderBy, TPositionHandle pos, TRelation& relation) {
+        if (!orderBy.empty()) {
+            // Simple column keys reuse existing IUs; computed keys need hidden Map
+            // definitions. These generated columns participate in sorting but never
+            // appear in the query's externally visible output binding map.
+            TMapIUs sortDefinitions;
+            TSortIUs keys;
+            for (const auto& sort : orderBy) {
+                auto expression = Expression(*sort.Expression, relation.Bindings);
+                TInfoUnitId id;
+                if (expression.IsColumnAccess()) { id = *expression.GetRawInputIUs().begin(); }
+                else {
+                    id = Props.InfoUnitRegistry.AddGenerated("sort_key");
+                    sortDefinitions.Add(id, std::move(expression));
+                }
+                // SQL v1 YqlSort uses nulls-first for both directions.
+                keys.Append(id, TSortOrder{sort.Direction != ESortDirection::Descending, true});
+            }
+            if (!sortDefinitions.Keys().Empty()) {
+                relation.Op = MakeIntrusive<TOpMap>(std::move(relation.Op), pos, std::move(sortDefinitions));
+            }
+            relation.Op = MakeIntrusive<TOpSort>(std::move(relation.Op), pos, std::move(keys));
+        }
+    }
+
     TRelation SetOperation(const TQuery& query, const TSetOperation& set, const TBindings& outer) {
         if (set.Op != ESetOperation::Union && set.Quantifier == ESetQuantifier::All) {
             Unsupported(query.Range, "INTERSECT/EXCEPT ALL multiplicities");
@@ -531,24 +569,16 @@ private:
                 set.Op == ESetOperation::Intersect ? "LeftSemi" : "LeftOnly", std::move(keys));
         }
         if (set.Quantifier != ESetQuantifier::All) {
-            // Set-operation DISTINCT exports fresh values in struct-field order,
-            // as the legacy importer does. Preserve SQL positional bindings while
-            // giving subsequent set operations the same physical key ordering.
+            // Match the legacy set-operation aggregate's physical key order.
+            // SQL positions remain in outputIds and Bindings; struct type
+            // annotation does not preserve projection order.
             auto distinctColumns = outputIds;
             std::stable_sort(distinctColumns.begin(), distinctColumns.end(), [&](auto a, auto b) {
                 return Names.Columns[a].Name < Names.Columns[b].Name;
             });
-            TOrderedIUs<> keys;
-            TAggregationIUs aggregates;
-            for (const auto column : distinctColumns) {
-                const auto input = result.Bindings.at(column);
-                keys.Append(input);
-                const auto output = Props.InfoUnitRegistry.Add(TInfoUnit("", Names.Columns[column].Name));
-                aggregates.Add(output, TOpAggregationTraits{input, "distinct"});
-                result.Bindings[column] = output;
-            }
-            result.Op = MakeIntrusive<TOpAggregate>(result.Op, std::move(aggregates), std::move(keys), EOpPhase::Undefined, true, pos);
+            Distinct(distinctColumns, pos, result);
         }
+        Sort(query.OrderBy, pos, result);
         Limit(query, result);
         return result;
     }
@@ -603,38 +633,14 @@ private:
         if (select->Having) {
             relation.Op = MakeIntrusive<TOpFilter>(relation.Op, pos, Predicate(*select->Having, relation.Bindings));
         }
-        // DISTINCT is a key-only aggregate over projected values. Its output
-        // scope excludes hidden inputs, so sorting by a lost dependency must fail
-        // rather than generate a reference to an IU the aggregate no longer emits.
+        // DISTINCT exports fresh values just like the legacy importer, keeping
+        // its physical distribution and aggregation traits consistent.
         if (select->Quantifier == ESetQuantifier::Distinct) {
-            TOrderedIUs<> keys;
-            for (const auto id : outputIds) { keys.Append(outputs.at(id)); }
-            relation.Op = MakeIntrusive<TOpAggregate>(std::move(relation.Op), TAggregationIUs{}, std::move(keys),
-                EOpPhase::Undefined, false, pos);
-            relation.Bindings = outputs;
+            relation.Bindings = std::move(outputs);
+            Distinct(outputIds, pos, relation);
+            outputs = relation.Bindings;
         }
-        if (!select->OrderBy.empty()) {
-            // Simple column keys reuse existing IUs; computed keys need hidden Map
-            // definitions. These generated columns participate in sorting but never
-            // appear in the query's externally visible output binding map.
-            TMapIUs sortDefinitions;
-            TSortIUs keys;
-            for (const auto& sort : select->OrderBy) {
-                auto expression = Expression(*sort.Expression, relation.Bindings);
-                TInfoUnitId id;
-                if (expression.IsColumnAccess()) { id = *expression.GetRawInputIUs().begin(); }
-                else {
-                    id = Props.InfoUnitRegistry.AddGenerated("sort_key");
-                    sortDefinitions.Add(id, std::move(expression));
-                }
-                // SQL v1 YqlSort uses nulls-first for both directions.
-                keys.Append(id, TSortOrder{sort.Direction != ESortDirection::Descending, true});
-            }
-            if (!sortDefinitions.Keys().Empty()) {
-                relation.Op = MakeIntrusive<TOpMap>(std::move(relation.Op), pos, std::move(sortDefinitions));
-            }
-            relation.Op = MakeIntrusive<TOpSort>(std::move(relation.Op), pos, std::move(keys));
-        }
+        Sort(select->OrderBy, pos, relation);
         Limit(query, relation);
         relation.Bindings = std::move(outputs);
         return relation;

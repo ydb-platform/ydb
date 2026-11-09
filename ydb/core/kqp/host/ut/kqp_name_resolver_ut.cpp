@@ -65,6 +65,21 @@ struct TFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
+    Y_UNIT_TEST(SetOrderingUsesCompoundOutputScope) {
+        TFixture f;
+        f.Ok("SELECT value AS z, id AS a FROM t UNION ALL SELECT value AS z, id AS a FROM t ORDER BY a, z;");
+        const auto& outputs = f.Result.Names->QueryOutputs.at(&f.Query());
+        UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->Columns[outputs[0]].Name, "z");
+        UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->Columns[outputs[1]].Name, "a");
+        UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->ColumnReferences.at(f.Query().OrderBy[0].Expression.get()), outputs[1]);
+        UNIT_ASSERT_VALUES_EQUAL(f.Result.Names->ColumnReferences.at(f.Query().OrderBy[1].Expression.get()), outputs[0]);
+        for (const TString key : {"id", "t.id", "value"}) {
+            f.Resolve("SELECT id AS n FROM t UNION ALL SELECT id AS n FROM t ORDER BY " + key + ";");
+            UNIT_ASSERT_C(!f.Result.IsOk(), key);
+            UNIT_ASSERT_STRING_CONTAINS(f.Result.Issues.ToString(), "Unknown column");
+        }
+    }
+
     Y_UNIT_TEST(NativeResultColumnNames) {
         TFixture f;
         f.Ok("SELECT l.id, r.id, 1 AS column2, 2 FROM t AS l JOIN u AS r ON l.id = r.id;");

@@ -812,6 +812,10 @@ TQueryPtr TAstBuilder<P>::Query(TContext* context) {
             auto right = Query(child);
             if (result) {
                 Y_ENSURE(op);
+                const auto* leftSelect = std::get_if<TSelect>(&result->Body);
+                Require(result->Parenthesized || (!result->Limit && result->OrderBy.empty()
+                    && (!leftSelect || leftSelect->OrderBy.empty())), context,
+                    "ORDER BY/LIMIT before the last unparenthesized set operand");
                 TSetOperation operation;
                 operation.Op = Token(op, P::TOKEN_UNION) ? ESetOperation::Union
                     : Token(op, P::TOKEN_INTERSECT) ? ESetOperation::Intersect : ESetOperation::Except;
@@ -821,6 +825,18 @@ TQueryPtr TAstBuilder<P>::Query(TContext* context) {
                 result = std::make_unique<TQuery>();
                 result->Range = operation.Left->Range;
                 result->Range.End = operation.Right->Range.End;
+                // The grammar attaches trailing clauses to the final SELECT,
+                // but without parentheses they apply to the entire compound.
+                if (!operation.Right->Parenthesized) {
+                    if (auto* select = std::get_if<TSelect>(&operation.Right->Body)) {
+                        Require(!select->AssumeOrderBy, context, "ASSUME ORDER BY on set operations");
+                        result->OrderBy = std::move(select->OrderBy);
+                    } else {
+                        result->OrderBy = std::move(operation.Right->OrderBy);
+                    }
+                    result->Limit = std::move(operation.Right->Limit);
+                    result->Offset = std::move(operation.Right->Offset);
+                }
                 result->Body = std::move(operation);
                 op = nullptr;
             } else {
@@ -831,6 +847,7 @@ TQueryPtr TAstBuilder<P>::Query(TContext* context) {
         auto* kind = Child(context, P::RuleSelect_kind_partial);
         Require(kind, context, "scalar operands of set operations");
         result = Query(kind);
+        result->Parenthesized = Token(context, P::TOKEN_LPAREN);
     } else if (rule == P::RuleSelect_kind_partial) {
         auto* kind = Child(context, P::RuleSelect_kind);
         auto* core = Child(kind, P::RuleSelect_core);

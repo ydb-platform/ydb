@@ -62,6 +62,7 @@ struct TResolvedNames {
     THashMap<const TSource*, TTableMetadataPtr> Tables;
     THashMap<const TExpression*, TColumnId> ColumnReferences;
     THashMap<const TExpression*, TVector<TColumnId>> Stars;
+    // SQL projection order, independent of attribute order in YQL struct types.
     THashMap<const TQuery*, TVector<TColumnId>> QueryOutputs;
     // GROUP BY aliases are visible after the grouping expression is resolved.
     THashMap<const TExpression*, TColumnId> GroupAliases;

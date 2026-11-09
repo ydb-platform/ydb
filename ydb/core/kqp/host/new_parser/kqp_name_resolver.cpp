@@ -521,6 +521,9 @@ private:
             TVector<TColumnId> outputs;
             for (const auto id : left) { outputs.push_back(AddColumn({Result.Columns[id].Name, nullptr, {}, {}, nullptr, {}})); }
             Result.QueryOutputs[&query] = outputs;
+            TScope orderScope;
+            for (const auto id : outputs) { orderScope.Columns.push_back({id, {}}); }
+            for (const auto& sort : query.OrderBy) { Expression(*sort.Expression, orderScope, ctes, {}); }
             if (query.Limit) { Expression(*query.Limit, {}, ctes, {}); }
             if (query.Offset) { Expression(*query.Offset, {}, ctes, {}); }
             return outputs;

@@ -462,6 +462,17 @@ private:
         if (name->Module) {
             auto module = Identifier(*name->Module);
             if (AsciiEqualsIgnoreCase(module, "DateTime")) { module = "DateTime2"; }
+            if (AsciiEqualsIgnoreCase(module, "Re2")
+                && !AsciiEqualsIgnoreCase(spelling, "Options") && !AsciiEqualsIgnoreCase(spelling, "IsValidRegexp")) {
+                if (AsciiEqualsIgnoreCase(spelling, "Capture") || AsciiEqualsIgnoreCase(TStringBuf(spelling).SubStr(0, 5), "multi")) {
+                    Unsupported(range, "regular expression UDF type configuration");
+                }
+                if (args.size() != 1 && args.size() != 2) {
+                    Error(range, "Re2 callable expects a pattern and optional options");
+                }
+                if (args.size() == 1) { args.push_back(Call(pos, "Null", {})); }
+                return Call(pos, "Udf", {Atom(pos, "Re2." + spelling), Ctx.NewList(pos, std::move(args))});
+            }
             // SqlCall delegates overload selection, optional lifting and UDF
             // type configuration to the shared YQL annotation machinery.
             return Call(pos, "SqlCall", {Atom(pos, module + "." + spelling),

@@ -114,46 +114,28 @@ bool IsColumnTable(const TItem& item) {
     return item.Table && item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN;
 }
 
-bool IsCreateViewQuery(const TString& query) {
-    return query.Contains("CREATE VIEW");
-}
-
-bool IsCreateReplicationQuery(const TString& query) {
-    return query.Contains("CREATE ASYNC REPLICATION");
-}
-
-bool IsCreateTransferQuery(const TString& query) {
-    return query.Contains("CREATE TRANSFER");
-}
-
-bool IsCreateExternalDataSourceQuery(const TString& query) {
-    return query.Contains("CREATE EXTERNAL DATA SOURCE");
-}
-
-bool IsCreateExternalTableQuery(const TString& query) {
-    return query.Contains("CREATE EXTERNAL TABLE");
-}
-
 bool RewriteCreateQuery(
     TString& query,
     const TString& dbRestoreRoot,
     const TString& dbPath,
-    NYql::TIssues& issues)
+    NYql::TIssues& issues,
+    NKikimrSchemeOp::EPathType pathType)
 {
-    if (IsCreateViewQuery(query)) {
-        return NYdb::NDump::RewriteCreateViewQuery(query, dbRestoreRoot, true, dbPath, issues);
-    } else if (IsCreateReplicationQuery(query)) {
-        return NYdb::NDump::RewriteCreateAsyncReplicationQuery(query, dbRestoreRoot, dbPath, issues);
-    } else if (IsCreateTransferQuery(query)) {
-        return NYdb::NDump::RewriteCreateTransferQuery(query, dbRestoreRoot, dbPath, issues);
-    } else if (IsCreateExternalDataSourceQuery(query)) {
-        return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
-    } else if (IsCreateExternalTableQuery(query)) {
-        return NYdb::NDump::RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues);
+    switch (pathType) {
+        case NKikimrSchemeOp::EPathTypeView:
+            return NYdb::NDump::RewriteCreateViewQuery(query, dbRestoreRoot, true, dbPath, issues);
+        case NKikimrSchemeOp::EPathTypeReplication:
+            return NYdb::NDump::RewriteCreateAsyncReplicationQuery(query, dbRestoreRoot, dbPath, issues);
+        case NKikimrSchemeOp::EPathTypeTransfer:
+            return NYdb::NDump::RewriteCreateTransferQuery(query, dbRestoreRoot, dbPath, issues);
+        case NKikimrSchemeOp::EPathTypeExternalDataSource:
+            return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
+        case NKikimrSchemeOp::EPathTypeExternalTable:
+            return NYdb::NDump::RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues);
+        default:
+            issues.AddIssue(TStringBuilder() << "unsupported create query object type: " << pathType);
+            return false;
     }
-
-    issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);
-    return false;
 }
 
 TString GetDatabase(TSchemeShard& ss) {
@@ -1483,7 +1465,7 @@ private:
             const TString source = TStringBuilder() << item.SrcPath;
 
             NYql::TIssues issues;
-            if (!RewriteCreateQuery(item.CreationQuery, database, item.DstPathName, issues)) {
+            if (!RewriteCreateQuery(item.CreationQuery, database, item.DstPathName, issues, msg.PathType)) {
                 issues.AddIssue(TStringBuilder() << "path: " << source);
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid creation query");
             }

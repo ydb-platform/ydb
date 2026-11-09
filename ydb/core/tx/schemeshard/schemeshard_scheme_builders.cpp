@@ -192,7 +192,16 @@ bool BuildExternalDataSourceScheme(
         TStringStream escapedInstallation;
         NYql::EscapeArbitraryAtom(dataSourceDesc.GetInstallation(), '"', &escapedInstallation);
         TString option = ",\n  INSTALLATION = ";
-        option += escapedInstallation.Str();
+        // Older importers identify object types by searching the whole query for
+        // CREATE keywords. Escape spaces in this new literal so its contents
+        // cannot be mistaken for another object's CREATE statement.
+        for (const char c : escapedInstallation.Str()) {
+            if (c == ' ') {
+                option += "\\x20";
+            } else {
+                option += c;
+            }
+        }
         // BuildCreateExternalDataSourceQuery always ends in "\n);".
         scheme.insert(scheme.size() - 3, option);
     }

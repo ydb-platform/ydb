@@ -7045,6 +7045,35 @@ WITH (
         TestExport(Runtime(), ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
     }
 
+    Y_UNIT_TEST(ExternalDataSourceInstallationLegacyDispatcher) {
+        Env();
+        TControlBoard::SetValue(1, Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableExternalDataSourceExport);
+        const TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Installation: "CREATE VIEW CREATE ASYNC REPLICATION CREATE TRANSFER CREATE EXTERNAL DATA SOURCE CREATE EXTERNAL TABLE"
+            Auth { None {} }
+        )";
+        TestExternalDataSource(scheme, {
+            "SOURCE_TYPE = 'ObjectStorage'",
+            "LOCATION = 'https://s3.cloud.net/bucket'",
+            "AUTH_METHOD = 'NONE'",
+            R"(INSTALLATION = "CREATE\x20VIEW\x20CREATE\x20ASYNC\x20REPLICATION\x20CREATE\x20TRANSFER\x20CREATE\x20EXTERNAL\x20DATA\x20SOURCE\x20CREATE\x20EXTERNAL\x20TABLE")",
+        });
+
+        const auto content = GetS3FileContent("/DataSource/create_external_data_source.sql");
+        // Match the old importer's ordered substring dispatch, including its
+        // external-data-source check before its external-table check.
+        for (const TStringBuf keyword : {"CREATE VIEW", "CREATE ASYNC REPLICATION", "CREATE TRANSFER"}) {
+            UNIT_ASSERT_C(!content.Contains(keyword), keyword);
+        }
+        const auto dataSourcePos = content.find("CREATE EXTERNAL DATA SOURCE");
+        UNIT_ASSERT(dataSourcePos != TString::npos);
+        UNIT_ASSERT_EQUAL(content.find("CREATE EXTERNAL DATA SOURCE", dataSourcePos + 1), TString::npos);
+        UNIT_ASSERT(!content.Contains("CREATE EXTERNAL TABLE"));
+    }
+
     Y_UNIT_TEST(ExternalDataSourceAuthBasic) {
         TString scheme = R"(
             Name: "DataSource"

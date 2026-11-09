@@ -470,6 +470,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
             SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, properties.FileName);
             SchemeFileType = properties.FileType;
+            SchemePathType = properties.PathType;
             return HeadObject(SchemeKey);
         }
 
@@ -921,7 +922,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             {"error", error},
         );
 
-        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, success, error));
+        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, success, error, SchemePathType));
         PassAway();
     }
 
@@ -1152,6 +1153,7 @@ private:
     const TString MetadataKey;
     TString SchemeKey;
     NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
+    NKikimrSchemeOp::EPathType SchemePathType = NKikimrSchemeOp::EPathTypeInvalid;
     const TString PermissionsKey;
     ui32 SchemePropertiesIdx = 0;
 

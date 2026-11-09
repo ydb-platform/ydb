@@ -3,9 +3,9 @@
 
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
-#include <ydb/core/protos/node_broker.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/logger/stream.h>
@@ -127,8 +127,18 @@ public:
         return LogQueue->Pop();
     }
 
-    NActors::TActorId MakeHeartbeatActor(const TAuditConfig& auditConfig, const TString& nodeAddress) {
-        auto actor = CreateHeartbeatActor(auditConfig, nodeAddress);
+    NActors::TActorId MakeHeartbeatActor(const TAuditConfig& auditConfig, const TString& nodeAddress,
+            const TString& resolveHost = {}, bool nameserviceAvailable = true) {
+        if (nameserviceAvailable) {
+            auto setup = MakeIntrusive<NActors::TTableNameserverSetup>();
+            if (nodeAddress || resolveHost) {
+                setup->StaticNodeTable[Runtime.GetNodeId()] = NActors::TTableNameserverSetup::TNodeInfo(
+                    nodeAddress, resolveHost, resolveHost, 2135, NActors::TNodeLocation());
+            }
+            Runtime.RegisterService(NActors::GetNameserviceActorId(),
+                Runtime.Register(NActors::CreateNameserverTable(setup)));
+        }
+        auto actor = CreateHeartbeatActor(auditConfig);
         return Runtime.Register(actor.release());
     }
 
@@ -243,7 +253,8 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
 }
 
 Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
-    void CheckHeartbeat(const TString& nodeAddress, const TString& expectedAddress) {
+    void CheckHeartbeat(const TString& nodeAddress, const TString& expectedAddress,
+            const TString& resolveHost = {}, bool nameserviceAvailable = true) {
         NKikimrConfig::TAuditConfig protoCfg;
         protoCfg.MutableHeartbeat()->SetIntervalSeconds(1);
         auto* logClassSettings = protoCfg.AddLogClassConfig();
@@ -251,7 +262,7 @@ Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
         logClassSettings->SetEnableLogging(true);
         TAuditConfig cfg(protoCfg);
         TTestAuditLogService test(NKikimrConfig::TAuditConfig::TXT);
-        const auto heartbeatId = test.MakeHeartbeatActor(cfg, nodeAddress);
+        const auto heartbeatId = test.MakeHeartbeatActor(cfg, nodeAddress, resolveHost, nameserviceAvailable);
 
         auto waitAndCheckLog = [&]() {
             const TString log = test.WaitAuditLog();
@@ -281,55 +292,21 @@ Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
         CheckHeartbeat("2001:db8::10", "2001:db8::10");
     }
 
-    Y_UNIT_TEST(StaticNodeAddress) {
-        NKikimrConfig::TAppConfig config;
-        auto* otherNode = config.MutableNameserviceConfig()->AddNode();
-        otherNode->SetNodeId(1);
-        otherNode->SetAddress("192.0.2.1");
-        auto* selfNode = config.MutableNameserviceConfig()->AddNode();
-        selfNode->SetNodeId(2);
-        selfNode->SetAddress("192.0.2.2");
-
-        UNIT_ASSERT_VALUES_EQUAL(GetHeartbeatNodeAddress(config, 2), "192.0.2.2");
-        UNIT_ASSERT_VALUES_EQUAL(GetHeartbeatNodeAddress(config, 3), "");
+    Y_UNIT_TEST(LoggingHeartbeatWildcardIPv4) {
+        CheckHeartbeat("0.0.0.0", "{none}");
     }
 
-    Y_UNIT_TEST(DynamicNodeAddress) {
-        NKikimrConfig::TAppConfig config;
-        auto* staticNode = config.MutableNameserviceConfig()->AddNode();
-        staticNode->SetNodeId(1);
-        staticNode->SetAddress("192.0.2.1");
-        auto* selfNode = config.MutableDynamicNodeConfig()->MutableNodeInfo();
-        selfNode->SetNodeId(2);
-        selfNode->SetAddress("2001:db8::2");
-
-        UNIT_ASSERT_VALUES_EQUAL(GetHeartbeatNodeAddress(config, 2), "2001:db8::2");
-        selfNode->ClearAddress();
-        UNIT_ASSERT_VALUES_EQUAL(GetHeartbeatNodeAddress(config, 2), "");
+    Y_UNIT_TEST(LoggingHeartbeatWildcardIPv6) {
+        CheckHeartbeat("::", "{none}");
     }
 
-    Y_UNIT_TEST(MissingNodeAddress) {
-        NKikimrConfig::TAppConfig config;
-        UNIT_ASSERT_VALUES_EQUAL(GetHeartbeatNodeAddress(config, 1), "");
-
-        auto* selfNode = config.MutableNameserviceConfig()->AddNode();
-        selfNode->SetNodeId(1);
-        selfNode->SetHost("node.example");
-        selfNode->SetInterconnectHost("node.example");
-        UNIT_ASSERT_VALUES_EQUAL(GetHeartbeatNodeAddress(config, 1), "");
+    Y_UNIT_TEST(LoggingHeartbeatResolveError) {
+        // There is no DNS resolver in this runtime; nameservice reports an error.
+        CheckHeartbeat({}, "{none}", "unresolvable.invalid");
     }
 
-    Y_UNIT_TEST(InvalidNodeAddress) {
-        for (const TString address : {"localhost", "node.example", "192.0.2.1:2135", "0.0.0.0", "::", "0:0:0:0:0:0:0:0"}) {
-            NKikimrConfig::TAppConfig config;
-            auto* selfNode = config.MutableNameserviceConfig()->AddNode();
-            selfNode->SetNodeId(1);
-            selfNode->SetAddress(address);
-            UNIT_ASSERT_VALUES_EQUAL_C(GetHeartbeatNodeAddress(config, 1), "", address);
-
-            config.MutableDynamicNodeConfig()->MutableNodeInfo()->SetAddress(address);
-            UNIT_ASSERT_VALUES_EQUAL_C(GetHeartbeatNodeAddress(config, 1), "", address);
-        }
+    Y_UNIT_TEST(LoggingHeartbeatWithoutNameservice) {
+        CheckHeartbeat({}, "{none}", {}, false);
     }
 }
 

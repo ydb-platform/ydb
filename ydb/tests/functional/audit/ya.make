@@ -18,6 +18,7 @@ TEST_SRCS(
     helpers.py
     http_helpers.py
     test_auditlog.py
+    test_heartbeat.py
     test_canonical_records.py
     test_canonical_records_legacy_dstool.py
 )

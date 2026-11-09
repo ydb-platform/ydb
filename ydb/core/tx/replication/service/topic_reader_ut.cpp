@@ -11,6 +11,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/hash_set.h>
+#include <util/generic/scope.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NReplication::NService {
@@ -210,13 +212,14 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         TActorId Session;
         TActorId Reader;
 
-        TMockReader(bool failOnDataLoss) {
+        TMockReader(bool failOnDataLoss, bool checkStatusForDataLoss = false) {
             Runtime.Initialize(TAppPrepare().Unwrap());
             Worker = Runtime.AllocateEdgeActor();
             Proxy = Runtime.AllocateEdgeActor();
             Session = Runtime.AllocateEdgeActor();
             const auto settings = TEvYdbProxy::TTopicReaderSettings()
                                       .FailOnDataLoss(failOnDataLoss)
+                                      .CheckStatusForDataLoss(checkStatusForDataLoss)
                                       .ConsumerName("consumer")
                                       .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path("/Root/topic").AppendPartitionIds(0));
             Reader = Runtime.Register(CreateRemoteTopicReader(Proxy, settings));
@@ -416,16 +419,17 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             UNIT_ASSERT(Env.RunCall([&] { return WriteTopic(Env, TopicPath, "expired"); }));
         }
 
-        TEvYdbProxy::TTopicReaderSettings ReaderSettings() const {
+        TEvYdbProxy::TTopicReaderSettings ReaderSettings(bool checkStatusForDataLoss = false) const {
             return TEvYdbProxy::TTopicReaderSettings()
                 .AutoCommit(false)
                 .FailOnDataLoss(true)
+                .CheckStatusForDataLoss(checkStatusForDataLoss)
                 .ConsumerName(ConsumerName)
                 .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path(TopicPath).AppendPartitionIds(0));
         }
 
-        TActorId StartReader() {
-            const auto reader = CreateReader(Env, ReaderSettings());
+        TActorId StartReader(bool checkStatusForDataLoss = false) {
+            const auto reader = CreateReader(Env, ReaderSettings(checkStatusForDataLoss));
             const auto started = Env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvReaderStarted>(Env.GetSender(), TDuration::Seconds(30));
             UNIT_ASSERT(started);
             UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
@@ -588,7 +592,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
                 }
             });
 
-        const auto reader = s.StartReader();
+        const auto reader = s.StartReader(true);
         s.Env.SendAsync(reader, new TEvWorker::TEvPoll());
         TDispatchOptions options;
         options.CustomFinalCondition = [&] { return !heldReads.empty(); };
@@ -673,8 +677,68 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         UNIT_ASSERT(!heldReads.empty());
     }
 
-    Y_UNIT_TEST(StatusReadOffsetAheadOfNextExpectedReportsDataLoss) {
+    Y_UNIT_TEST_QUAD(PeriodicStatusPollingRequiresBothDataLossChecks, FailOnDataLoss, CheckStatusForDataLoss) {
+        TRetentionGapTest s;
+        auto& runtime = s.Env.GetRuntime();
+        TActorId sdkReader;
+        auto readerObserver = runtime.AddObserver<TEvYdbProxy::TEvCreateTopicReaderResponse>(
+            [&](TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
+                sdkReader = ev->Get()->Result;
+            });
+
+        // Observe timer registration rather than waiting for an absent SDK RPC.
+        // This also checks that disabling status detection stops background reads.
+        THashSet<TActorId> wakeupRecipients;
+        TTestActorRuntimeBase::TScheduledEventFilter previousFilter;
+        previousFilter = runtime.SetScheduledEventFilter(
+            [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev, TDuration delay, TInstant& deadline) {
+                if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+                    wakeupRecipients.insert(ev->GetRecipientRewrite());
+                }
+                return previousFilter(runtime, ev, delay, deadline);
+            });
+        Y_DEFER {
+            runtime.SetScheduledEventFilter(previousFilter);
+        };
+
+        const auto settings = s.ReaderSettings(CheckStatusForDataLoss).FailOnDataLoss(FailOnDataLoss);
+        const auto reader = CreateReader(s.Env, settings);
+        const auto started = runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Env.GetSender(), TDuration::Seconds(30));
+        UNIT_ASSERT(started);
+        UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
+        UNIT_ASSERT(sdkReader);
+        UNIT_ASSERT_VALUES_EQUAL(wakeupRecipients.contains(sdkReader), FailOnDataLoss && CheckStatusForDataLoss);
+
+        s.Env.SendAsync(reader, new TEvents::TEvPoison());
+        runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST_TWIN(StatusBeforeValidDataIsIgnoredByDefault, ReadPending) {
         TMockReader s(true);
+        s.Start("read-session", 7);
+        s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
+        if (ReadPending) {
+            s.Poll();
+        }
+
+        // An older source can report its advanced read offset before delivering
+        // the valid data, while both local data queues are still empty.
+        s.Runtime.Send(s.Reader, s.Session, new TEvYdbProxy::TEvTopicReaderStatus(
+            TEvYdbProxy::TTopicReaderStatusResult{"read-session", 8}));
+        UNIT_ASSERT(s.Runtime.CaptureMailboxEvents(s.Worker.Hint(), s.Worker.NodeId()).empty());
+
+        if (!ReadPending) {
+            s.Poll();
+        }
+        s.Read({7});
+        const auto data = s.Runtime.GrabEdgeEvent<TEvWorker::TEvData>(s.Worker);
+        UNIT_ASSERT_VALUES_EQUAL(data->Get()->Records.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(data->Get()->Records.front().GetOffset(), 7);
+        UNIT_ASSERT(s.Runtime.CaptureMailboxEvents(s.Worker.Hint(), s.Worker.NodeId()).empty());
+    }
+
+    Y_UNIT_TEST(StatusReadOffsetAheadOfNextExpectedReportsDataLoss) {
+        TMockReader s(true, true);
         s.Start("read-session", 0);
         s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
         s.Runtime.Send(s.Reader, s.Session, new TEvYdbProxy::TEvTopicReaderStatus(
@@ -685,7 +749,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
     }
 
     Y_UNIT_TEST(StatusAtNextExpectedOffsetDoesNotReportDataLoss) {
-        TMockReader s(true);
+        TMockReader s(true, true);
         s.Start("read-session", 7);
         s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
         s.Runtime.Send(s.Reader, s.Session, new TEvYdbProxy::TEvTopicReaderStatus(
@@ -700,7 +764,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
     }
 
     Y_UNIT_TEST(StatusFromAnotherReadSessionIsIgnored) {
-        TMockReader s(true);
+        TMockReader s(true, true);
         s.Start("read-session", 7);
         s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
         s.Runtime.Send(s.Reader, s.Session, new TEvYdbProxy::TEvTopicReaderStatus(
@@ -713,7 +777,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
     }
 
     Y_UNIT_TEST(StatusOffsetGapIsAllowedWhenDataLossCheckIsDisabled) {
-        TMockReader s(false);
+        TMockReader s(false, true);
         s.Start("read-session", 7);
         s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
         s.Runtime.Send(s.Reader, s.Session, new TEvYdbProxy::TEvTopicReaderStatus(
@@ -726,7 +790,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
     }
 
     Y_UNIT_TEST_QUAD(StatusWaitsForInternalDecompression, AfterDecompression, GapAfterData) {
-        TMockReader s(true);
+        TMockReader s(true, true);
         s.Runtime.GetAppData().FeatureFlags.SetTransferInternalDataDecompression(true);
         s.Start("read-session", 7);
         s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
@@ -764,7 +828,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
     Y_UNIT_TEST(BufferedDataBeforeStatusDoesNotReportDataLoss) {
         TRetentionGapTest s;
-        const auto reader = s.StartReader();
+        const auto reader = s.StartReader(true);
         s.WaitForFirstMessageReadStatus();
         s.AssertFirstMessageDelivered(reader);
     }
@@ -777,7 +841,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             [&](NGRpcProxy::V1::TEvPQProxy::TEvReadResponse::TPtr& ev) {
                 heldResponses.emplace_back(ev.Release());
             });
-        const auto reader = s.StartReader();
+        const auto reader = s.StartReader(true);
 
         TDispatchOptions readOptions;
         readOptions.CustomFinalCondition = [&] { return !heldResponses.empty(); };

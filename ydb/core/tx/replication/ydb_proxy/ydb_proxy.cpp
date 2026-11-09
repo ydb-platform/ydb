@@ -245,7 +245,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
     }
 
     void ScheduleStatusRequest() {
-        if (DetectDataLoss && PartitionSession && !StatusRequestScheduled) {
+        if (CheckStatusForDataLoss && PartitionSession && !StatusRequestScheduled) {
             StatusRequestScheduled = true;
             Schedule(StatusInterval, new TEvents::TEvWakeup());
         }
@@ -271,7 +271,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
         StatusRequestScheduled = false;
-        if (PartitionSession && !StatusRequestPending) {
+        if (CheckStatusForDataLoss && PartitionSession && !StatusRequestPending) {
             StatusRequestPending = true;
             PartitionSession->RequestStatus();
             if (!WaitingEvent) {
@@ -380,12 +380,12 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
     }
 
 public:
-    TTopicReader(const TActorId& client, const std::shared_ptr<IReadSession>& session, bool autoCommit, bool detectDataLoss)
+    TTopicReader(const TActorId& client, const std::shared_ptr<IReadSession>& session, bool autoCommit, bool checkStatusForDataLoss)
         : TBaseProxyActor(&TThis::StateWork)
         , Client(client)
         , Session(session)
         , AutoCommit(autoCommit)
-        , DetectDataLoss(detectDataLoss)
+        , CheckStatusForDataLoss(checkStatusForDataLoss)
         , PartitionEndWatcher(this)
     {
     }
@@ -407,7 +407,7 @@ private:
     const TActorId Client;
     std::shared_ptr<IReadSession> Session;
     const bool AutoCommit;
-    const bool DetectDataLoss;
+    const bool CheckStatusForDataLoss;
     const TDuration StatusInterval = TDuration::Seconds(10);
 
     TDeferredCommit DeferredCommit;
@@ -583,7 +583,8 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         auto args = std::move(ev->Get()->GetArgs());
         const auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
         auto session = std::invoke(&TTopicClient::CreateReadSession, client, settings.GetBase());
-        auto reader = RegisterWithSameMailbox(new TTopicReader(ev->Sender, session, settings.AutoCommit_, settings.FailOnDataLoss_));
+        auto reader = RegisterWithSameMailbox(new TTopicReader(ev->Sender, session, settings.AutoCommit_,
+            settings.FailOnDataLoss_ && settings.CheckStatusForDataLoss_));
         Send(reader, new TEvents::TEvBootstrap());
         Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader));
     }

@@ -163,6 +163,7 @@ struct TEvYdbProxy {
         FLUENT_SETTING_DEFAULT(bool, ReportStats, false);
         FLUENT_SETTING_DEFAULT(bool, RetryOnSchemeError, false);
         FLUENT_SETTING_DEFAULT(bool, FailOnDataLoss, false);
+        FLUENT_SETTING_DEFAULT(bool, CheckStatusForDataLoss, false);
 
         #define PROXY_METHOD(name) \
             template <typename... Args> \

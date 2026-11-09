@@ -13,6 +13,7 @@
 
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
+#include <util/stream/output.h>
 
 #include <optional>
 
@@ -185,7 +186,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvYdbProxy::TEvTopicReaderStatus::TPtr& ev) {
         const auto& result = ev->Get()->Result;
-        if (!Settings.FailOnDataLoss_ || result.ReadSessionId != ReadSessionId) {
+        if (!Settings.FailOnDataLoss_ || !Settings.CheckStatusForDataLoss_ || result.ReadSessionId != ReadSessionId) {
             return;
         }
 

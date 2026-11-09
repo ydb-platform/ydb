@@ -6,6 +6,7 @@ SIZE(MEDIUM)
 
 SRCS(
     phantom_blobs.cpp
+    phantom_flag_storage_full_sync.cpp
 )
 
 PEERDIR(

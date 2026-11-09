@@ -496,10 +496,16 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
 
     // YDB supported recursive directories handling along with --destination-prefix option.
     // So if we use it, then we can suppose that YDB already supports expanding of items.
+    constexpr bool isS3 = std::is_same_v<TSettings, NExport::TExportToS3Settings>;
+    const bool implicitItems = settings.Item_.empty();
     const bool expandItems = (!CommonDestinationPrefix || !ExclusionPatterns.empty());
     if (expandItems && settings.Item_.empty()) {
         constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
-        settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
+        TString source = CommonSourcePath ? CommonSourcePath : config.Database;
+        if constexpr (isS3) {
+            NConsoleClient::AdjustPath(source, config);
+        }
+        settings.AppendItem(typename TSettings::TItem{.Src = source, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
     }
 
     const auto driver = CreateDriver(config);
@@ -512,7 +518,6 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     TExportClient client(driver);
     TTableClient tableClient(driver);
 
-    constexpr bool isS3 = std::is_same_v<TSettings, NExport::TExportToS3Settings>;
     THashSet<TString> externalPaths;
     if constexpr (isS3) {
         DeduplicateExportItems(settings);
@@ -536,6 +541,14 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
             TString source = CommonSourcePath ? CommonSourcePath : config.Database;
             NConsoleClient::AdjustPath(source, config);
             roots.push_back({source, {}});
+        }
+        if (implicitItems && CommonDestinationPrefix) {
+            // The common prefix is joined by the server. Empty item destinations
+            // derive source-relative paths (or anonymous names when encrypted).
+            // Explicitly selected mappings keep their original semantics.
+            for (auto& root : roots) {
+                root.Dst.clear();
+            }
         }
         // The server preserves an explicitly selected nested directory's mapping
         // when expanding its parent, regardless of the order of selected roots.

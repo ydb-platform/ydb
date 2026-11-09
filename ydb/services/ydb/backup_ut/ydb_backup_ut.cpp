@@ -5428,6 +5428,56 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         UNIT_ASSERT_VALUES_EQUAL(items.front().Dst, "Dest/mapped/source");
     }
 
+    Y_UNIT_TEST(AbsoluteExternalLeavesUseCanonicalSourceBaseAndOneCommonPrefix) {
+        TS3TestEnv testEnv;
+        auto& appData = testEnv.GetServer().GetRuntime()->GetAppData();
+        appData.FeatureFlags.SetEnableExternalDataSources(true);
+        appData.FeatureFlags.SetEnableEncryptedExport(true);
+        appData.FeatureFlags.SetEnableRelativePaths(true);
+        TControlBoard::SetValue(1, appData.Icb->BackupControls.S3Controls.EnableExternalDataSourceExport);
+        TSchemeClient schemeClient(testEnv.GetDriver());
+        for (const auto& path : {"/Root/dir", "/Root/dir/dir"}) {
+            auto result = schemeClient.MakeDirectory(path).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        for (const auto& source : {"dir/source", "dir/dir/source"}) {
+            ExecuteQuery(testEnv.GetQuerySession(), Sprintf(R"(
+                CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                    SOURCE_TYPE="ObjectStorage", LOCATION="https://object_storage_domain/bucket/", AUTH_METHOD="NONE"
+                );
+            )", source), true);
+        }
+        NExport::TExportClient client(testEnv.GetDriver(), TCommonClientSettings().Database("/Root"));
+        NOperation::TOperationClient operationClient(testEnv.GetDriver());
+        for (const auto& sourceBase : {"dir", "/Root/dir/", "/Root/dir/."}) {
+            auto settings = NExport::TExportToS3Settings()
+                .Endpoint(Sprintf("localhost:%u", testEnv.GetS3Port()))
+                .Scheme(ES3Scheme::HTTP)
+                .Bucket("test_bucket")
+                .AccessKey("test_key")
+                .SecretKey("test_secret")
+                .DestinationPrefix("common")
+                .SourcePath(sourceBase)
+                .AppendItem({"/Root/dir/source", ""})
+                .AppendItem({"/Root/dir/dir/source", ""});
+            auto response = client.ExportToS3(settings).ExtractValueSync();
+            UNIT_ASSERT_C(response.Status().IsSuccess(), response.Status().GetIssues().ToString());
+            UNIT_ASSERT_C(WaitForOperation<NExport::TExportToS3Response>(operationClient, response.Id()),
+                "The export did not complete within the allocated time.");
+            auto result = operationClient.Get<NExport::TExportToS3Response>(response.Id()).ExtractValueSync();
+            const auto& items = result.Metadata().Settings.Item_;
+            UNIT_ASSERT_VALUES_EQUAL(items.size(), 2);
+            for (const auto& item : items) {
+                if (item.Src == "/Root/dir/source") {
+                    UNIT_ASSERT_VALUES_EQUAL(item.Dst, "common/source");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(item.Src, "/Root/dir/dir/source");
+                    UNIT_ASSERT_VALUES_EQUAL(item.Dst, "common/dir/source");
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(BackupRestoreTableWithMultiColumnStatistics) {
         TestTableWithMultiColumnStatisticsBackupRestore();
     }

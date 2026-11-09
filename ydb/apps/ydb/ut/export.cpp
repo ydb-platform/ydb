@@ -429,8 +429,8 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ExpectCommonSourcePrefix("/test_database/export-root")
             .ExpectCommonDstPrefix("dst")
             .ExpectItem("/test_database/export-root/data", "dst/data")
-            .ExpectItem("/test_database/export-root/nested/ext_table", "dst/nested/ext_table")
-            .ExpectItem("/test_database/export-root/source", "dst/source");
+            .ExpectItem("/test_database/export-root/nested/ext_table", "")
+            .ExpectItem("/test_database/export-root/source", "");
 
         RunCli({
             "-e", GetEndpoint(),
@@ -460,7 +460,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ExpectCommonSourcePrefix("/test_database/export-root")
             .ExpectCommonDstPrefix("dst")
             .ExpectItem("/test_database/export-root/data", "dst/data")
-            .ExpectItem("/test_database/export-root/source", "dst/source")
+            .ExpectItem("/test_database/export-root/source", "")
             .ReturnBadRequestOnce(1);
 
         ExpectFail();
@@ -712,13 +712,97 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ExpectS3SecretKey("test-access-key")
             .ExpectCommonDstPrefix("common")
             .ExpectItem(GetDatabase() + "/user/data", "common/user/data")
-            .ExpectItem(GetDatabase() + "/user/export-12345/source", "common/user/export-12345/source");
+            .ExpectItem(GetDatabase() + "/user/export-12345/source", "");
         RunCli({
             "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
             "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
             "--access-key", "test-key", "--secret-key", "test-access-key",
             "--destination-prefix", "common", "--exclude", "does-not-match",
         });
+    }
+
+    Y_UNIT_TEST_F(ImplicitRelativeRootUsesAbsoluteSourcesBeforeExclusions, TExportFixture) {
+        for (const bool canonicalExclusion : {false, true}) {
+            Service<TSchemeImpl>()
+                .ExpectListDirectory(GetDatabase() + "/dir")
+                .ExpectChild(GetDatabase() + "/dir", "source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE)
+                .ExpectChild(GetDatabase() + "/dir", "dir", Ydb::Scheme::Entry::DIRECTORY)
+                .ExpectListDirectory(GetDatabase() + "/dir/dir")
+                .ExpectChild(GetDatabase() + "/dir/dir", "source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE);
+            auto& service = Service<TExportImpl>();
+            service.ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonSourcePrefix("dir")
+                .ExpectCommonDstPrefix("common")
+                .ExpectItem(GetDatabase() + "/dir/source", "");
+            // Exclusions match the canonical absolute source paths. A relative
+            // anchored pattern cannot redirect an item through the source base.
+            if (!canonicalExclusion) {
+                service.ExpectItem(GetDatabase() + "/dir/dir/source", "");
+            }
+            RunCli({
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key", "--secret-key", "test-access-key",
+                "--root-path", "dir", "--destination-prefix", "common",
+                "--exclude", canonicalExclusion ? "^" + GetDatabase() + "/dir/dir/source$" : "^dir/dir/source$",
+            });
+        }
+    }
+
+    Y_UNIT_TEST_F(ImplicitExternalDestinationDoesNotRepeatCommonPrefix, TExportFixture) {
+        for (const bool expand : {false, true}) {
+            Service<TSchemeImpl>()
+                .ExpectListDirectory(GetDatabase())
+                .ExpectChild(GetDatabase(), "source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE);
+            auto& service = Service<TExportImpl>();
+            service.ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonDstPrefix("common");
+            if (!expand) {
+                service.ExpectItem(GetDatabase(), "");
+            }
+            // The server derives "source" and prepends "common" exactly once.
+            service.ExpectItem(GetDatabase() + "/source", "");
+            TList<TString> args = {
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key", "--secret-key", "test-access-key",
+                "--destination-prefix", "common",
+            };
+            if (expand) {
+                args.insert(args.end(), {"--exclude", "does-not-match"});
+            }
+            RunCli(args);
+        }
+    }
+
+    Y_UNIT_TEST_F(ImplicitDatabaseRootSpellingPreservesInternalDirectoryGuard, TExportFixture) {
+        for (const auto& suffix : {"/", "/."}) {
+            Service<TSchemeImpl>()
+                .ExpectListDirectory(GetDatabase())
+                .ExpectChild(GetDatabase(), "export-12345", Ydb::Scheme::Entry::DIRECTORY)
+                .ExpectChild(GetDatabase(), "source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE);
+            Service<TExportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonSourcePrefix(GetDatabase() + suffix)
+                .ExpectCommonDstPrefix("common")
+                .ExpectItem(GetDatabase() + "/source", "");
+            RunCli({
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+                "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key", "--secret-key", "test-access-key",
+                "--root-path", GetDatabase() + suffix, "--destination-prefix", "common",
+                "--exclude", "does-not-match",
+            });
+        }
     }
 
     Y_UNIT_TEST_F(ApplyExcludeClientFilter, TExportFixture) {

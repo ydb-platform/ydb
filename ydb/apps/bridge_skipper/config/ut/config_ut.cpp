@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TSkipperConfiguration) {
 
     Y_UNIT_TEST(ShippedExampleIsValid) {
         // The same loading and validation as --check-config.
-        const auto config = LoadConfig(ArcadiaSourceRoot() + "/ydb/apps/bridge_skipper/config/example.yaml");
+        const auto config = LoadConfig(ArcadiaFromCurrentLocation(__SOURCE_FILE__, "../example.yaml"));
         const auto credentials = LoadCredentials(config);
         UNIT_ASSERT(!credentials.Token);
         UNIT_ASSERT_VALUES_EQUAL(config.ClusterId, "production-bridge-01");

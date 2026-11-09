@@ -5,6 +5,7 @@
 #include "util.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/util/proto_duration.h>
@@ -77,17 +78,39 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     void CreateStream() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
-        case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::IndexTable: {
+            auto changefeed = Changefeed;
+            if (SendOmitBackupAttribute) {
+                changefeed.AddAttribute(std::string(NBackup::OMIT_BACKUP_ATTRIBUTE), std::string(NBackup::OMIT_BACKUP_VALUE));
+            }
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
-                .AppendAddChangefeeds(Changefeed)),
+                .AppendAddChangefeeds(changefeed)),
                 0,
                 ++RequestCookie);
             break;
+        }
         case TReplication::ETargetKind::Transfer:
             return CreateConsumer();
         }
 
         Become(&TThis::StateCreateStream);
+    }
+
+    static bool IsOmitBackupUnsupported(const NYdb::TStatus& status) {
+        if (status.GetStatus() != NYdb::EStatus::BAD_REQUEST) {
+            return false;
+        }
+
+        bool unsupported = false;
+        for (const auto& issue : status.GetIssues()) {
+            NYdb::NIssue::WalkThroughIssues(issue, false, [&](const NYdb::NIssue::TIssue& nested, ui16) {
+                // Older SchemeShards report this before creating the feed.
+                // Other validation and authorization errors must not trigger a fallback.
+                unsupported |= nested.GetMessage().find("UserAttributes: unsupported attribute '__omit_backup'")
+                    != std::string::npos;
+            });
+        }
+        return unsupported;
     }
 
     STATEFN(StateCreateStream) {
@@ -110,6 +133,11 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
+            if (SendOmitBackupAttribute && IsOmitBackupUnsupported(result)) {
+                SendOmitBackupAttribute = false;
+                YDB_LOG_INFO("Source does not support __omit_backup, retry with the legacy replication marker");
+                return CreateStream();
+            }
             if (IsRetryableError(result)) {
                 YDB_LOG_DEBUG("Retry CreateStream");
                 return Retry();
@@ -464,6 +492,7 @@ private:
     const TString SrcStreamPath;
     const TString SrcConsumerName;
     const NYdb::NTable::TChangefeedDescription Changefeed;
+    bool SendOmitBackupAttribute = true;
     const TDuration StreamRetentionPeriod;
     const TDuration ConsumerAvailabilityPeriod;
     const bool ConsumerImportant;

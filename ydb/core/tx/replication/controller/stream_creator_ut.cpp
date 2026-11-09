@@ -326,14 +326,14 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         UNIT_ASSERT_VALUES_EQUAL(stream.GetVirtualTimestamps(), resolvedTimestamps.has_value());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetResolvedTimestampsIntervalMs(), resolvedTimestamps.value_or(TDuration::Zero()).MilliSeconds());
 
-        // Keep creation compatible with older source clusters: the existing
-        // replication marker is sufficient for backup exclusion. Do not send
-        // new system attributes that an older SchemeShard would reject.
+        // Sources supporting the explicit exclusion receive both markers.
         {
             const auto streamDesc = env.GetDescription("/Root/Table/Stream");
             const auto& attributes = streamDesc.GetPathDescription().GetUserAttributes();
-            UNIT_ASSERT_VALUES_EQUAL_C(attributes.size(), 1, streamDesc.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(attributes.size(), 2, streamDesc.DebugString());
             UNIT_ASSERT_VALUES_EQUAL(attributes.Get(0).GetKey(), "__async_replication");
+            UNIT_ASSERT_VALUES_EQUAL(attributes.Get(1).GetKey(), "__omit_backup");
+            UNIT_ASSERT_VALUES_EQUAL(attributes.Get(1).GetValue(), "true");
         }
 
         const auto topic = env.GetDescription("/Root/Table/Stream/streamImpl");
@@ -350,6 +350,92 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(WithResolvedTimestamps) {
         Basic(TDuration::Seconds(10));
+    }
+
+    void SourceWithoutOmitBackupSupport(bool retryAfterFallback) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        ui32 rejectedRequests = 0;
+        ui32 acceptedRequests = 0;
+        // Model the old source's attribute validation at the proxy boundary.
+        // Requests using only the legacy marker still reach the real source.
+        auto observer = runtime.AddObserver<TEvYdbProxy::TEvAlterTableRequest>(
+            [&](TEvYdbProxy::TEvAlterTableRequest::TPtr& ev) {
+                if (ev->GetRecipientRewrite() != env.GetYdbProxy()) {
+                    return;
+                }
+                const auto& settings = std::get<NYdb::NTable::TAlterTableSettings>(ev->Get()->GetArgs());
+                for (const auto& feed : settings.AddChangefeeds_) {
+                    for (const auto& [name, value] : feed.GetAttributes()) {
+                        if (name.starts_with("__") && name != "__async_replication") {
+                            ++rejectedRequests;
+                            NYdb::NIssue::TIssues issues;
+                            NYdb::NIssue::TIssue issue("SchemeShard rejected changefeed creation");
+                            issue.AddSubIssue(new NYdb::NIssue::TIssue("UserAttributes: unsupported attribute '" + name + "'"));
+                            issues.AddIssue(std::move(issue));
+                            runtime.Send(new IEventHandle(ev->Sender, env.GetYdbProxy(),
+                                new TEvYdbProxy::TEvAlterTableResponse(
+                                    NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, std::move(issues))),
+                                0, ev->Cookie));
+                            ev.Reset();
+                            return;
+                        }
+                    }
+                }
+                ++acceptedRequests;
+                if (retryAfterFallback && acceptedRequests == 1) {
+                    runtime.Send(new IEventHandle(ev->Sender, env.GetYdbProxy(),
+                        new TEvYdbProxy::TEvAlterTableResponse(NYdb::TStatus(NYdb::EStatus::UNAVAILABLE, {})),
+                        0, ev->Cookie));
+                    ev.Reset();
+                }
+            });
+
+        // Check that this source really rejects the new attribute.
+        runtime.SendAsync(new IEventHandle(env.GetYdbProxy(), env.GetSender(),
+            new TEvYdbProxy::TEvAlterTableRequest("/Root/Table",
+            NYdb::NTable::TAlterTableSettings().AppendAddChangefeeds(
+                NYdb::NTable::TChangefeedDescription("Unsupported", NYdb::NTable::EChangefeedMode::Updates,
+                    NYdb::NTable::EChangefeedFormat::Json).AddAttribute("__omit_backup", "true")))), 0);
+        const auto rejected = runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTableResponse>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(rejected->Get()->Result.GetIssues().ToString(), "__omit_backup");
+
+        const auto creator = runtime.Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
+        runtime.EnableScheduleForActor(creator);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender()));
+        runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(rejectedRequests, 2); // probe and first controller request
+        UNIT_ASSERT_VALUES_EQUAL(acceptedRequests, retryAfterFallback ? 2 : 1);
+        const auto stream = env.GetDescription("/Root/Table/Stream");
+        const auto& attributes = stream.GetPathDescription().GetUserAttributes();
+        UNIT_ASSERT_VALUES_EQUAL(attributes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(attributes.Get(0).GetKey(), "__async_replication");
+
+        env.SendAsync(env.GetYdbProxy(), new TEvYdbProxy::TEvDescribeConsumerRequest(
+            "/Root/Table/Stream", "replicationConsumer", {}));
+        const auto consumer = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeConsumerResponse>(env.GetSender());
+        UNIT_ASSERT_C(consumer->Get()->Result.IsSuccess(), consumer->Get()->Result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(SourceWithoutOmitBackupSupport) {
+        SourceWithoutOmitBackupSupport(false);
+    }
+
+    Y_UNIT_TEST(SourceWithoutOmitBackupSupportAfterTransientFailure) {
+        SourceWithoutOmitBackupSupport(true);
     }
 
     Y_UNIT_TEST(WithoutInitialScan) {
@@ -651,6 +737,51 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(retention->Get()->GetArgs()), streamPath);
         setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(retention->Cookie);
         setup.Finish();
+    }
+
+    Y_UNIT_TEST(OtherCreateErrorsDoNotDisableOmitBackup) {
+        for (const auto& [status, message] : TVector<std::pair<NYdb::EStatus, TString>>{
+                {NYdb::EStatus::BAD_REQUEST, "UserAttributes: unsupported attribute '__another_attribute'"},
+                {NYdb::EStatus::BAD_REQUEST, "UserAttributes: attribute '__omit_backup' accepts only 'true', got 'false'"},
+                {NYdb::EStatus::UNAUTHORIZED, "UserAttributes: unsupported attribute '__omit_backup'"},
+                {NYdb::EStatus::BAD_REQUEST, "Invalid changefeed settings"}})
+        {
+            TStreamSetup setup;
+            setup.Allow();
+            const auto request = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTableRequest>(setup.Proxy);
+            const auto& settings = std::get<NYdb::NTable::TAlterTableSettings>(request->Get()->GetArgs());
+            UNIT_ASSERT_VALUES_EQUAL(settings.AddChangefeeds_.at(0).GetAttributes().at("__omit_backup"), "true");
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue(std::string(message));
+            setup.Runtime.Send(new IEventHandle(setup.Creator, setup.Proxy,
+                new TEvYdbProxy::TEvAlterTableResponse(NYdb::TStatus(status, std::move(issues))), 0, request->Cookie));
+            const auto result = setup.Runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(
+                setup.Parent, TDuration::Seconds(1));
+            UNIT_ASSERT_C(result, "Unrelated errors must be returned without retrying changefeed creation");
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status.GetStatus(), status);
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Status.GetIssues().ToString(), message);
+        }
+    }
+
+    Y_UNIT_TEST(OmitBackupFallbackIsAttemptedOnce) {
+        TStreamSetup setup;
+        setup.Allow();
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            const auto request = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTableRequest>(setup.Proxy);
+            const auto& settings = std::get<NYdb::NTable::TAlterTableSettings>(request->Get()->GetArgs());
+            const auto& attributes = settings.AddChangefeeds_.at(0).GetAttributes();
+            UNIT_ASSERT_VALUES_EQUAL(attributes.contains("__omit_backup"), attempt == 0);
+            UNIT_ASSERT(attributes.contains("__async_replication"));
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue("UserAttributes: unsupported attribute '__omit_backup'");
+            setup.Runtime.Send(new IEventHandle(setup.Creator, setup.Proxy,
+                new TEvYdbProxy::TEvAlterTableResponse(NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, std::move(issues))),
+                0, request->Cookie));
+        }
+        const auto result = setup.Runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(
+            setup.Parent, TDuration::Seconds(1));
+        UNIT_ASSERT_C(result, "The compatibility fallback must not loop");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status.GetStatus(), NYdb::EStatus::BAD_REQUEST);
     }
 
     Y_UNIT_TEST(FiniteAvailabilityBeforeShortRetention) {

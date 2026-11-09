@@ -7941,7 +7941,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         };
     }
 
-    // Both old and new controllers send only the existing replication marker.
+    // Older feeds, including new feeds created via the compatibility fallback.
     TAttrs LegacyReplicationFeedAttrs() {
         return {{"__async_replication", TString(AsyncReplicationAttrValue)}};
     }

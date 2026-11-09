@@ -789,10 +789,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             where t1.a = (select max(t2.a) from `/Root/t2` as t2);
         )");
         const auto simplifiedScalarSubplanPlan = GetSimplifiedPlan(scalarSubplanPlan);
-        // The subplan is reduced to a single row by an aggregate that counts its rows along the way, so
-        // that a subquery returning several rows fails the query instead of picking one of them.
+        // A global max already produces exactly one row, so scalar inlining
+        // does not need a count/min aggregate to validate the row count.
         UNIT_ASSERT_C(FindAggregation(simplifiedScalarSubplanPlan, "max"), scalarSubplanPlan);
-        UNIT_ASSERT_C(FindAggregation(simplifiedScalarSubplanPlan, "count"), scalarSubplanPlan);
+        UNIT_ASSERT_C(!FindAggregation(simplifiedScalarSubplanPlan, "count"), scalarSubplanPlan);
+        UNIT_ASSERT_C(!FindAggregation(simplifiedScalarSubplanPlan, "min"), scalarSubplanPlan);
         UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedScalarSubplanPlan, "Name", "Join"), scalarSubplanPlan);
     }
 

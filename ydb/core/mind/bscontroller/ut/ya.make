@@ -4,6 +4,7 @@ SRCS(
     database_space_ut.cpp
     grouper_ut.cpp
     group_mapper_ut.cpp
+    layout_helpers_ut.cpp
     mv_object_map_ut.cpp
 )
 

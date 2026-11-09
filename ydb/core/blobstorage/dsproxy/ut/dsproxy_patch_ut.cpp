@@ -10,6 +10,7 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/blobstorage_common.h>
 
+#include <algorithm>
 #include <cstring>
 
 namespace NKikimr {
@@ -715,12 +716,13 @@ class TMirror3dcVPatchActorTest {
     }
 
 public:
-    TMirror3dcVPatchActorTest(const TVector<EMirror3dcFailRealmState>& realms = {}) {
+    TMirror3dcVPatchActorTest(const TVector<EMirror3dcFailRealmState>& realms = {},
+            EMirror3dcGroupState groupState = NKikimrBlobStorage::TGroupState::NORMAL) {
         Args.MakeDefault(TErasureType::ErasureMirror3dc);
         SetLogPriorities(Runtime);
         SetupRuntime(Runtime);
         Env.Configure(Runtime, Args.GType, Args.CurrentGroupId, 0, TBlobStorageGroupInfo::EEM_NONE,
-            DormantTimeoutDefaultControl, false, realms);
+            DormantTimeoutDefaultControl, false, realms, groupState);
     }
 
     TDiffEvents Start(ui32 availableMask) {
@@ -768,27 +770,24 @@ public:
 
 Y_UNIT_TEST_SUITE(TVPatchMirror3dcActorTest) {
     Y_UNIT_TEST(NonNormalRealmsUseNaiveFallback) {
-        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        for (const auto first : {R::N0, R::N1, R::N2, R::R, R::F}) {
-            for (const auto second : {R::N0, R::N1, R::N2, R::R, R::F}) {
-                for (const auto third : {R::N0, R::N1, R::N2, R::R, R::F}) {
-                    const auto state = GetMirror3dcGroupState(first, second, third);
-                    if (!state || *state == EMirror3dcGroupState::NORMAL) {
-                        continue;
-                    }
-                    // Exercise both VPatch and VMovedPatch entry paths.
-                    for (const bool enableVPatchForTesting : {false, true}) {
-                        TMirror3dcVPatchActorTest test({first, second, third});
-                        test.CheckNaiveFallback(enableVPatchForTesting);
-                    }
-                }
+        for (int value = NKikimrBlobStorage::TGroupState::EState_MIN; value <= NKikimrBlobStorage::TGroupState::EState_MAX; ++value) {
+            const auto state = static_cast<EMirror3dcGroupState>(value);
+            if (state == NKikimrBlobStorage::TGroupState::NORMAL) {
+                continue;
             }
+            auto realms = *GetMirror3dcRealmStates(state);
+            do {
+                // Exercise both VPatch and VMovedPatch entry paths.
+                for (const bool enableVPatchForTesting : {false, true}) {
+                    TMirror3dcVPatchActorTest test({realms.begin(), realms.end()}, state);
+                    test.CheckNaiveFallback(enableVPatchForTesting);
+                }
+            } while (std::next_permutation(realms.begin(), realms.end()));
         }
     }
 
     Y_UNIT_TEST(MixedNormalRealmsKeepVPatch) {
-        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        TMirror3dcVPatchActorTest test({R::N0, R::N1, R::N2});
+        TMirror3dcVPatchActorTest test({NKikimrBlobStorage::TDataCenterState::INCLUDED, NKikimrBlobStorage::TDataCenterState::INCLUDED, NKikimrBlobStorage::TDataCenterState::INCLUDED});
         const auto events = test.Start(0b000000111);
         UNIT_ASSERT_VALUES_EQUAL(events.SelectedMask, 0b000000111);
         test.CompleteSuccessfully(events);

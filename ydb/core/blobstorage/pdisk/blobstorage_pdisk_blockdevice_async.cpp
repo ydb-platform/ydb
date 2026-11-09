@@ -443,6 +443,11 @@ class TRealBlockDevice : public IBlockDevice {
         ui64 MergedActualNs = 0;
 
         TCompletionAction* WaitingNoops[MaxWaitingNoops] = {nullptr};
+        // The first failed completion that its action cannot handle, that is one that moves the device to the error
+        // state (failed reads are handled per request and are not counted). Flush actions released after it fail too:
+        // a chunk or log write answers through the flush action of its last buffer only, so an earlier failed buffer
+        // of the same write has no other way to fail it.
+        TString FailedCompletionReason;
         TRealBlockDevice &Device;
         std::shared_ptr<TPDiskCtx> &PCtx;
 
@@ -494,6 +499,9 @@ class TRealBlockDevice : public IBlockDevice {
 
             TCompletionAction *completionAction = static_cast<TCompletionAction*>(op->GetCookie());
             FillCompletionAction(completionAction, op, event->Result);
+            if (event->Result != EIoResult::Ok && !completionAction->CanHandleResult() && !FailedCompletionReason) {
+                FailedCompletionReason = completionAction->ErrorReason;
+            }
             completionAction->GetTime = eventGotAtCycle;
             LWTRACK(PDiskDeviceGetFromDevice, completionAction->Orbit);
             if (completionAction->FlushAction) {
@@ -589,6 +597,11 @@ class TRealBlockDevice : public IBlockDevice {
                     LWTRACK(PDiskDeviceGetFromWaiting, WaitingNoops[i]->Orbit);
                     double durationMs = HPMilliSecondsFloat(HPNow() - WaitingNoops[i]->GetTime);
                     Device.Mon.DeviceFlushDuration.Increment(durationMs);
+                    if (FailedCompletionReason && WaitingNoops[i]->Result == EIoResult::Ok) {
+                        WaitingNoops[i]->SetResult(EIoResult::IOError);
+                        WaitingNoops[i]->SetErrorReason(TStringBuilder() << " an earlier device operation failed,"
+                                << FailedCompletionReason);
+                    }
                     Device.CompletionThreads->Schedule(WaitingNoops[i]);
                     WaitingNoops[i] = nullptr;
                 }

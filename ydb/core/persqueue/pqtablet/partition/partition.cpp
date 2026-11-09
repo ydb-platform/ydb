@@ -1000,7 +1000,8 @@ bool CheckDiskStatus(const TStorageStatusFlags status) {
 }
 
 void TPartition::InitComplete(const TActorContext& ctx) {
-    if (BlobEncoder.StartOffset == 0 && BlobEncoder.EndOffset == 0 && BlobEncoder.MirroredOffset != 0) {
+    if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
+        && BlobEncoder.IsEmpty() && CompactionBlobEncoder.IsEmpty()) {
         // Restore the position of an empty mirror before starting consumers and the mirrorer.
         BlobEncoder.StartOffset = BlobEncoder.EndOffset = BlobEncoder.MirroredOffset;
         BlobEncoder.Head.Offset = BlobEncoder.NewHead.Offset = BlobEncoder.MirroredOffset;
@@ -3285,7 +3286,7 @@ void TPartition::RunPersist() {
                 && encoder.NewHead.GetBatches().empty()
                 && !encoder.PartitionedBlob.IsInited();
         };
-        if (GetStartOffset() == 0 && GetEndOffset() == 0 && GetMirroredOffset() > 0
+        if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
             && PendingRequests.empty() && QuotaWaitingRequests.empty()
             && UserActionAndTransactionEvents.empty() && UserActionAndTxPendingWrite.empty()
             && WriteInflightSize == 0 && WriteInfosApplied.empty()

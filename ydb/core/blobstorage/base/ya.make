@@ -19,6 +19,7 @@ SRCS(
     blobstorage_checksum.h
     blobstorage_events.cpp
     blobstorage_events.h
+    blobstorage_space_color.h
     blobstorage_host_record.h
     pdisk_filter.h
     storage_pool_pile_override.cpp

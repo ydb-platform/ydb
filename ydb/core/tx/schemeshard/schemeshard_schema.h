@@ -1936,6 +1936,8 @@ struct Schema : NIceDb::Schema {
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
         struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
         struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
+        struct Compression: Column<13, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamCompression; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamCompressionNone; };
+        struct CompressionLevel: Column<14, NScheme::NTypeIds::Int32> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1950,7 +1952,9 @@ struct Schema : NIceDb::Schema {
             ResolvedTimestampsIntervalMs,
             SchemaChanges,
             UserSIDs,
-            TraceIds
+            TraceIds,
+            Compression,
+            CompressionLevel
         >;
     };
 
@@ -1967,6 +1971,8 @@ struct Schema : NIceDb::Schema {
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
         struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
         struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
+        struct Compression: Column<13, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamCompression; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamCompressionNone; };
+        struct CompressionLevel: Column<14, NScheme::NTypeIds::Int32> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1981,7 +1987,9 @@ struct Schema : NIceDb::Schema {
             ResolvedTimestampsIntervalMs,
             SchemaChanges,
             UserSIDs,
-            TraceIds
+            TraceIds,
+            Compression,
+            CompressionLevel
         >;
     };
 

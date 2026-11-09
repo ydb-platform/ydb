@@ -66,7 +66,7 @@ namespace {
 
     void SetupLogging(TTestActorRuntime& runtime) {
         NActors::NLog::EPriority priority = ENABLE_DETAILED_HIVE_LOG ? NLog::PRI_DEBUG : NLog::PRI_NOTICE;
-        NActors::NLog::EPriority otherPriority = NLog::PRI_DEBUG;
+        NActors::NLog::EPriority otherPriority = priority;
 
         if (ENABLE_DETAILED_HIVE_LOG) {
             runtime.SetLogPriority(NKikimrServices::HIVE, NLog::PRI_TRACE);
@@ -3959,6 +3959,62 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, tabletId, 1);
     }
     */
+
+    Y_UNIT_TEST(TestLocalIgnoresObsoleteTabletNotifications) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        TActorId oldTablet;
+        TActorId local;
+        auto readyObserver = runtime.AddObserver<TEvTablet::TEvReady>([&](auto& ev) {
+            if (ev->Get()->TabletID != hiveTablet) {
+                oldTablet = ev->Sender;
+                local = ev->GetRecipientRewrite();
+            }
+        });
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500, TTabletTypes::Dummy, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+        UNIT_ASSERT(oldTablet);
+        UNIT_ASSERT(local);
+        readyObserver.Remove();
+
+        TBlockEvents<TEvTablet::TEvReady> blockReady(runtime, [&](const auto& ev) {
+            return ev->Get()->TabletID == tabletId && ev->Sender != oldTablet;
+        });
+        runtime.Send(new IEventHandle(oldTablet, runtime.AllocateEdgeActor(), new TEvents::TEvPoisonPill()));
+        runtime.WaitFor("replacement tablet ready", [&] { return !blockReady.empty(); });
+        const ui32 generation = blockReady.front()->Get()->Generation;
+        UNIT_ASSERT(blockReady.front()->Sender != oldTablet);
+
+        size_t statuses = 0;
+        auto statusObserver = runtime.AddObserver<TEvLocal::TEvTabletStatus>([&](auto& ev) {
+            if (ev->Get()->Record.GetTabletID() == tabletId) {
+                ++statuses;
+            }
+        });
+        auto sendObsoleteNotifications = [&] {
+            // Use the current generation so only actor identity protects the
+            // replacement, both while booting and after it becomes online.
+            runtime.Send(new IEventHandle(local, oldTablet,
+                new TEvTablet::TEvReady(tabletId, generation, TActorId())));
+            runtime.Send(new IEventHandle(local, oldTablet,
+                new TEvTablet::TEvTabletDead(tabletId, TEvTablet::TEvTabletDead::ReasonPill, generation)));
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        };
+        sendObsoleteNotifications();
+        UNIT_ASSERT_VALUES_EQUAL(statuses, 0);
+
+        blockReady.Stop().Unblock();
+        runtime.WaitFor("replacement reported online", [&] { return statuses != 0; });
+        UNIT_ASSERT_VALUES_EQUAL(statuses, 1);
+        sendObsoleteNotifications();
+        UNIT_ASSERT_VALUES_EQUAL(statuses, 1);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+    }
 
     Y_UNIT_TEST(TestFollowers) {
         TTestBasicRuntime runtime(3, false);
@@ -8091,25 +8147,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         clientConfig.AllowFollower = true;
         clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         TActorId pipeClient = runtime.Register(NTabletPipe::CreateClient(edge, tabletId, clientConfig));
-        TAutoPtr<IEventHandle> handle;
-        TInstant deadline = TInstant::Now() + timeout;
-        bool res = false;
-
-        do {
-            TEvTabletPipe::TEvClientConnected* ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(handle, timeout);
-            if (!ev) {
-                continue;
-            }
-            if (ev->TabletId == tabletId) {
-                res = (ev->Status == NKikimrProto::OK);
-                if (res) {
-                    break;
-                }
-            }
-        } while (TInstant::Now() <= deadline);
+        auto connected = runtime.GrabEdgeEventIf<TEvTabletPipe::TEvClientConnected>(edge,
+            [tabletId](const auto& ev) {
+                return ev->Get()->TabletId == tabletId && ev->Get()->Status == NKikimrProto::OK;
+            }, timeout);
 
         runtime.Send(new IEventHandle(pipeClient, TActorId(), new TEvents::TEvPoisonPill()));
-        UNIT_ASSERT_C(!res, "Unexpected successful tablet connection");
+        UNIT_ASSERT_C(!connected, "Unexpected successful tablet connection");
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionReconnect) {
@@ -12525,6 +12569,10 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         }
 
         void PrintState() const {
+            if (!ENABLE_DETAILED_HIVE_LOG) {
+                return;
+            }
+
             Cerr << "\033c";
             for (const auto& [pool, groups] : GroupsByPool) {
                 Cerr << "[" << pool << "]" << Endl;
@@ -12543,7 +12591,6 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
                 }
                 Cerr << Endl;
             }
-            Sleep(TDuration::Seconds(.1));
         }
 
         auto GetObserver(TTestActorRuntime& runtime, TActorId edgeActor) {

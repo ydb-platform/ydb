@@ -1141,6 +1141,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     TMetadata metadata;
     metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
     metadata.SetEnablePermissions(Task.GetEnablePermissions());
+    metadata.SetSourceDatabase(Task.GetSourceDatabase());
 
     const bool enableChangefeedsExport = AppData()->FeatureFlags.GetEnableChangefeedsExport();
 

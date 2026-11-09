@@ -15,10 +15,33 @@
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/util/memory_track.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
+
+namespace {
+
+bool IsReadOnlyLock(const NKikimrDataEvents::TLock& lockProto, const TSysLocks& sysLocks, bool allowAncestorLocks) {
+    const ui64 tabletId = sysLocks.SelfShardId();
+    if (lockProto.GetHasWrites() || (lockProto.GetDataShard() != tabletId && !allowAncestorLocks)) {
+        return false;
+    }
+
+    const auto lock = sysLocks.GetRawLock(lockProto.GetLockId());
+    if (!lock || lock->IsBroken() || lock->IsWriteLock() ||
+        !lock->GetReadTables().contains(TPathId(lockProto.GetSchemeShard(), lockProto.GetPathId()))) {
+        return false;
+    }
+    if (lockProto.GetDataShard() != tabletId && !lock->GetAncestorLocks().contains(lockProto.GetDataShard())) {
+        return false;
+    }
+    return true;
+}
+
+}
 
 TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev,
         const NWilson::TTraceId& traceId, bool mvccSnapshotRead)
@@ -89,6 +112,31 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
 TValidatedWriteTx::~TValidatedWriteTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
+}
+
+bool TValidatedWriteTx::IsReadOnlyPrepareStepForShard(const TSysLocks& sysLocks) const {
+    if (!Ready() || IsImmediate || LockTxId || HasOperations() ||
+        !KqpLocks || KqpLocks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit ||
+        KqpLocks->LocksSize() == 0 || KqpLocks->ReceivingShardsSize() == 0) {
+        return false;
+    }
+
+    const auto& sendingShards = KqpLocks->GetSendingShards();
+    if (std::find(sendingShards.begin(), sendingShards.end(), sysLocks.SelfShardId()) == sendingShards.end()) {
+        return false;
+    }
+    const auto& receivingShards = KqpLocks->GetReceivingShards();
+    if (std::find(receivingShards.begin(), receivingShards.end(), sysLocks.SelfShardId()) != receivingShards.end()) {
+        return false;
+    }
+
+    const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+    for (const auto& lockProto : KqpLocks->GetLocks()) {
+        if (!IsReadOnlyLock(lockProto, sysLocks, allowAncestorLocks)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperation::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator, const NWilson::TTraceId& traceId) {

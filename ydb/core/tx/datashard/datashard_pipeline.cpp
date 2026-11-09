@@ -1884,6 +1884,10 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         }
     }
 
+    if (writeTx->IsReadOnlyPrepareStepForShard(Self->GetSysLocks())) {
+        writeOp->SetReadOnlyFlag();
+    }
+
     return writeOp;
 }
 

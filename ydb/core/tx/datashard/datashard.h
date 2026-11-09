@@ -152,14 +152,13 @@ namespace NDataShard {
             BlockFailPointUnblocked = 1ULL << 49,
             // Operation sent a TEvProposeTransactionRestart notification
             RestartNotificationSent = 1ULL << 50,
-            ReadOnlyLocksCommit = 1ULL << 51,
 
-            LastFlag = ReadOnlyLocksCommit,
+            LastFlag = RestartNotificationSent,
 
             PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
             PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader
                 | GlobalWriter | KqpDataTransaction | KqpScanTransaction
-                | BlockingImmediateOps | BlockingImmediateWrites | ReadOnlyLocksCommit,
+                | BlockingImmediateOps | BlockingImmediateWrites,
         };
     };
 

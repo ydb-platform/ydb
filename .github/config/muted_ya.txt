@@ -133,6 +133,7 @@ ydb/tests/functional/blobstorage test_other.py.TestOther.test_nodata
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_disabled_enabled
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_enabled
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_enabled_disabled
+ydb/tests/functional/blobstorage/replication_rate_control test_replication_rate_control.py.test_replication_rate_control_is_applied_at_runtime
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/bridge test_pile_ops.py.TestBridgePileOps.test_convert_add_switch_remove
 ydb/tests/functional/bridge test_three_piles.py.TestBridgeThreePiles.test_discovery

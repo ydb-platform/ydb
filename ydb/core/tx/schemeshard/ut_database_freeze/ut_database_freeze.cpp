@@ -2,13 +2,19 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/defs.h>
 #include <ydb/core/tablet_flat/flat_redo_player.h>
 #include <ydb/core/tablet_flat/flat_sausage_slicer.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/library/aws_init/aws.h>
 #include <ydb/public/lib/value/value.h>
+
+#include <library/cpp/testing/common/network.h>
+#include <library/cpp/testing/hook/hook.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -24,6 +30,14 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 namespace {
+
+Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+    NKikimr::InitAwsAPI();
+}
+
+Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+    NKikimr::ShutdownAwsAPI();
+}
 
 using TStage = NKikimrTxDataShard::TDatabaseFreezeState;
 
@@ -490,6 +504,265 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         env.Wait(2, false);
         env.AdvancePlanStep();
         env.Write("Table", true, 2);
+    }
+
+    Y_UNIT_TEST(AlreadyRunningExportFinishesBeforeFreeze) {
+        const auto port = NTesting::GetFreePort();
+        using NWrappers::NTestHelpers::TS3Mock;
+        TS3Mock s3(TS3Mock::TSettings{port});
+        UNIT_ASSERT_C(s3.Start(), s3.GetError());
+
+        TFreezeEnv env;
+        env.Runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+        env.CreateTable();
+        env.Write();
+        auto exportRequest = [&](const TString& prefix) {
+            return Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%u"
+                    scheme: HTTP
+                    items { source_path: "/MyRoot/Table" destination_prefix: "%s" }
+                }
+            )", ui32(port), prefix.c_str());
+        };
+        ui64 copyTxId = 0;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> copyTables(env.Runtime, [&](const auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetInternal() && tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables) {
+                    copyTxId = ev->Get()->Record.GetTxId();
+                    return true;
+                }
+            }
+            return false;
+        });
+        const auto exportId = ++env.TxId;
+        TestExport(env.Runtime, env.Owner, exportId, env.Root, exportRequest("before-freeze"));
+        env.Runtime.WaitFor("accepted export between directory creation and table copying", [&] {
+            return !copyTables.empty();
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT(copyTxId);
+        UNIT_ASSERT_VALUES_EQUAL(copyTables.size(), 1);
+        const auto exportDirectory = env.Path(Sprintf("export-%lu", exportId));
+        TestDescribeResult(DescribePath(env.Runtime, env.Owner, exportDirectory), {NLs::PathExist});
+        const auto running = TestGetExport(env.Runtime, env.Owner, exportId, env.Root);
+        UNIT_ASSERT_VALUES_EQUAL(running.GetResponse().GetEntry().GetProgress(),
+            Ydb::Export::ExportProgress::PROGRESS_PREPARING);
+        // The directory's schema transaction can finish while the next request
+        // stays in transit. The export itself must keep schema draining active.
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+
+        ui32 fenceRequests = 0;
+        auto fences = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreeze>([&](auto& ev) {
+            const auto& request = ev->Get()->Record;
+            if (request.GetEpoch() == 1 && request.GetStage() == TStage::FENCE_WRITES) {
+                ++fenceRequests;
+            }
+        });
+        const auto started = env.Request(1, true);
+        UNIT_ASSERT_VALUES_EQUAL_C(started.GetStatus(), ui32(Ydb::StatusIds::SUCCESS), started.ShortDebugString());
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        const auto pending = env.Request(1, true);
+        UNIT_ASSERT_VALUES_EQUAL_C(pending.GetStatus(), ui32(Ydb::StatusIds::SUCCESS), pending.ShortDebugString());
+        UNIT_ASSERT_C(!pending.GetReady(),
+            "Freeze completed while an accepted export was waiting to copy tables: " << pending.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(fenceRequests, 0,
+            "Freeze must wait for the accepted export before fixing DataShard participants");
+        env.CheckSchemaBlocked();
+        TestExport(env.Runtime, env.Owner, ++env.TxId, env.Root, exportRequest("rejected-during-drain"), "", "",
+            Ydb::StatusIds::PRECONDITION_FAILED);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> exportSteps(env.Runtime, [&](const auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetInternal() && tx.GetWorkingDir() == exportDirectory
+                    && (tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpBackup
+                        || tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable))
+                {
+                    return true;
+                }
+            }
+            return false;
+        });
+        TMaybe<NKikimrScheme::TEvModifySchemeTransactionResult> copyResult;
+        auto replies = env.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
+            if (ev->Get()->Record.GetTxId() == copyTxId) {
+                copyResult = ev->Get()->Record;
+            }
+        });
+        copyTables.Stop().Unblock();
+        env.Runtime.WaitFor("accepted export's table-copy proposal", [&] {
+            return bool(copyResult);
+        }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(copyResult->GetStatus(), NKikimrScheme::StatusAccepted, copyResult->ShortDebugString());
+        for (const auto step : {NKikimrSchemeOp::EOperationType::ESchemeOpBackup,
+            NKikimrSchemeOp::EOperationType::ESchemeOpDropTable})
+        {
+            env.Runtime.WaitFor("accepted export awaiting its next internal schema step", [&] {
+                return !exportSteps.empty();
+            }, TDuration::Seconds(30));
+            const auto& request = exportSteps.front()->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL_C(ui32(request.GetTransaction(0).GetOperationType()), ui32(step), request.ShortDebugString());
+            env.CheckPending();
+            UNIT_ASSERT_VALUES_EQUAL_C(fenceRequests, 0,
+                "Freeze must wait for export data transfer and auto cleanup");
+            exportSteps.Unblock(1);
+        }
+        exportSteps.Stop();
+        env.Env.TestWaitNotification(env.Runtime, exportId, env.Owner);
+        const auto exported = TestGetExport(env.Runtime, env.Owner, exportId, env.Root);
+        UNIT_ASSERT_VALUES_EQUAL(exported.GetResponse().GetEntry().GetProgress(),
+            Ydb::Export::ExportProgress::PROGRESS_DONE);
+        UNIT_ASSERT(s3.GetData().contains("/before-freeze/scheme.pb"));
+        UNIT_ASSERT(s3.GetData().contains("/before-freeze/data_00.csv"));
+        TestDescribeResult(DescribePath(env.Runtime, env.Owner, exportDirectory), {NLs::PathNotExist});
+
+        env.Wait(1, true);
+        UNIT_ASSERT(fenceRequests);
+        TestExport(env.Runtime, env.Owner, ++env.TxId, env.Root, exportRequest("rejected-while-frozen"), "", "",
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        env.Write("Table", false, 2);
+        env.Wait(2, false);
+        env.AdvancePlanStep();
+        env.Write("Table", true, 2);
+        const auto nextExportId = ++env.TxId;
+        TestExport(env.Runtime, env.Owner, nextExportId, env.Root, exportRequest("after-thaw"));
+        env.Env.TestWaitNotification(env.Runtime, nextExportId, env.Owner);
+        TestGetExport(env.Runtime, env.Owner, nextExportId, env.Root);
+        UNIT_ASSERT(s3.GetData().contains("/after-thaw/data_00.csv"));
+    }
+
+    Y_UNIT_TEST(AlreadyRunningImportBuildsIndexesBeforeFreeze) {
+        const auto port = NTesting::GetFreePort();
+        using NWrappers::NTestHelpers::TS3Mock;
+        const THashMap<TString, TString> backup = {
+            {"/metadata.json", R"({"version": 0})"},
+            {"/scheme.pb", R"(
+                columns {
+                    name: "key"
+                    type { optional_type { item { type_id: UINT32 } } }
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                primary_key: "key"
+                indexes {
+                    name: "ByValue"
+                    index_columns: "value"
+                    global_index {}
+                }
+            )"},
+            {"/data_00.csv", "1,\"value\"\n"},
+        };
+        TS3Mock s3(backup, TS3Mock::TSettings(port));
+        UNIT_ASSERT_C(s3.Start(), s3.GetError());
+
+        TFreezeEnv env;
+        env.Runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(false);
+        ui64 buildTxId = 0;
+        TBlockEvents<TEvIndexBuilder::TEvCreateRequest> buildIndex(env.Runtime, [&](const auto& ev) {
+            const auto& request = ev->Get()->Record;
+            if (request.GetInternal() && request.GetSettings().source_path() == env.Path("Imported")
+                && (!buildTxId || request.GetTxId() == buildTxId))
+            {
+                UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName(), env.Root);
+                UNIT_ASSERT_VALUES_EQUAL(request.GetSettings().index().name(), "ByValue");
+                buildTxId = request.GetTxId();
+                return true;
+            }
+            return false;
+        });
+        const auto importId = ++env.TxId;
+        TestImport(env.Runtime, env.Owner, importId, env.Root, Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%u"
+                scheme: HTTP
+                no_acl: true
+                items {
+                    source_prefix: ""
+                    destination_path: "/MyRoot/Imported"
+                }
+            }
+        )", ui32(port)));
+        env.Runtime.WaitFor("accepted import requesting its index build", [&] {
+            return !buildIndex.empty();
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT(buildTxId);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndex.size(), 1);
+        const auto pendingImport = TestGetImport(env.Runtime, env.Owner, importId, env.Root);
+        UNIT_ASSERT_VALUES_EQUAL(pendingImport.GetResponse().GetEntry().GetProgress(),
+            Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES);
+
+        ui32 fenceRequests = 0;
+        auto fences = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreeze>([&](auto& ev) {
+            const auto& request = ev->Get()->Record;
+            if (request.GetEpoch() == 1 && request.GetStage() == TStage::FENCE_WRITES) {
+                ++fenceRequests;
+            }
+        });
+        THashSet<ui64> participants;
+        auto freezeReplies = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreezeResult>([&](auto& ev) {
+            const auto& result = ev->Get()->Record;
+            if (result.GetEpoch() == 1 && result.GetStage() == TStage::FENCE_WRITES
+                && result.GetStatus() == Ydb::StatusIds::SUCCESS && result.GetReady())
+            {
+                participants.insert(result.GetTabletId());
+            }
+        });
+        env.CheckPending();
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        env.CheckPending();
+        env.CheckSchemaBlocked();
+        UNIT_ASSERT_VALUES_EQUAL_C(fenceRequests, 0, "Freeze must wait for the accepted import before fencing DataShards");
+        // New client builds stay forbidden while the accepted import drains.
+        TestBuildIndex(env.Runtime, ++env.TxId, env.Owner, env.Root, env.Path("Imported"), "NewIndex", {"value"},
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        const auto importBuildRequest = buildIndex.front()->Get()->Record;
+        auto checkUnrelatedInternalBuildBlocked = [&] {
+            auto request = MakeHolder<TEvIndexBuilder::TEvCreateRequest>();
+            request->Record.CopyFrom(importBuildRequest);
+            request->Record.SetTxId(++env.TxId);
+            request->Record.ClearOperationParams();
+            request->Record.MutableSettings()->mutable_index()->set_name("UnrelatedIndex");
+            const auto sender = env.Runtime.AllocateEdgeActor();
+            ForwardToTablet(env.Runtime, env.Owner, sender, request.Release());
+            const auto response = env.Runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED,
+                response->Get()->Record.ShortDebugString());
+        };
+        checkUnrelatedInternalBuildBlocked();
+
+        TMaybe<NKikimrIndexBuilder::TEvCreateResponse> buildResult;
+        auto replies = env.Runtime.AddObserver<TEvIndexBuilder::TEvCreateResponse>([&](auto& ev) {
+            if (ev->Get()->Record.GetTxId() == buildTxId) {
+                buildResult = ev->Get()->Record;
+            }
+        });
+        buildIndex.Stop().Unblock();
+        env.Runtime.WaitFor("index build response for the accepted import", [&] {
+            return bool(buildResult);
+        }, TDuration::Seconds(10));
+        env.Env.TestWaitNotification(env.Runtime, importId, env.Owner);
+        const auto imported = TestGetImport(env.Runtime, env.Owner, importId, env.Root,
+            TVector<Ydb::StatusIds::StatusCode>{Ydb::StatusIds::SUCCESS, Ydb::StatusIds::CANCELLED});
+        const auto& entry = imported.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL_C(ui32(buildResult->GetStatus()), ui32(Ydb::StatusIds::SUCCESS),
+            TStringBuilder() << "Index build continuing an accepted import was rejected during freeze: "
+                << buildResult->ShortDebugString() << "; import: " << entry.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(ui32(entry.GetStatus()), ui32(Ydb::StatusIds::SUCCESS), entry.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+
+        env.Wait(1, true);
+        checkUnrelatedInternalBuildBlocked();
+        for (const auto shard : env.Shards("Imported")) {
+            UNIT_ASSERT_C(participants.contains(shard), "Imported table was not fenced: " << shard);
+        }
+        for (const auto shard : env.Shards("Imported/ByValue/indexImplTable", true)) {
+            UNIT_ASSERT_C(participants.contains(shard), "Imported index was not fenced: " << shard);
+        }
+        env.Write("Imported", false, 2);
+        env.Wait(2, false);
+        env.AdvancePlanStep("Imported");
+        env.Write("Imported", true, 2);
     }
 
     Y_UNIT_TEST(AlreadyRunningIndexBuildFinishesBeforeFreeze) {

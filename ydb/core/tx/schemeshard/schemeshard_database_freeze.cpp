@@ -442,6 +442,11 @@ bool TSchemeShard::HasDatabaseFreezeSchemaWork(const TPathId& domainId) const {
             return true;
         }
     }
+    for (const auto& [_, exportInfo] : Exports) {
+        if (exportInfo->DomainPathId == domainId && exportInfo->IsInProgress()) {
+            return true;
+        }
+    }
     for (const auto& [_, operation] : SetColumnConstraintOperations) {
         if (operation->DomainPathId == domainId && !operation->IsFinished()) {
             return true;

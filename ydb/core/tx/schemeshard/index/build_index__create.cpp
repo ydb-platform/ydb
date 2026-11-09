@@ -65,7 +65,7 @@ public:
         }
 
         auto subDomainPathId = domainPath.GetPathIdForDomain();
-        if (Self->IsDatabaseFreezeBlocking(subDomainPathId)) {
+        if (Self->IsDatabaseFreezeBlocking(subDomainPathId) && !IsImportContinuation(request, subDomainPathId)) {
             return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for index builds");
         }
         auto subDomainInfo = domainPath.DomainInfo();
@@ -391,6 +391,35 @@ public:
     void DoComplete(const TActorContext&) override {}
 
 private:
+    bool IsImportContinuation(const NKikimrIndexBuilder::TEvCreateRequest& request, const TPathId& domainId) const {
+        if (!request.GetInternal() || !request.GetSettings().has_index()) {
+            return false;
+        }
+        const auto freeze = Self->DatabaseFreezes.find(domainId);
+        if (freeze == Self->DatabaseFreezes.end() || freeze->second.GetParticipantsFixed()) {
+            return false;
+        }
+        const auto importTx = Self->TxIdToImport.find(TTxId(request.GetTxId()));
+        if (importTx == Self->TxIdToImport.end()) {
+            return false;
+        }
+        const auto [importId, itemIdx] = importTx->second;
+        const auto import = Self->Imports.find(importId);
+        if (import == Self->Imports.end() || import->second->DomainPathId != domainId
+            || import->second->IsFinished() || itemIdx >= import->second->Items.size())
+        {
+            return false;
+        }
+        const auto& item = import->second->Items[itemIdx];
+        if (item.State != TImportInfo::EState::BuildIndexes || item.SubState != TImportInfo::TItem::ESubState::Proposed) {
+            return false;
+        }
+        // Freeze already waits for this import. Let its pending index build
+        // finish before fixing the participants, including the new index shards.
+        const auto tablePath = TPath::Resolve(request.GetSettings().source_path(), Self);
+        return tablePath.IsResolved() && tablePath.Base()->PathId == item.DstPathId;
+    }
+
     bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings,
                  TTableInfo::TPtr tableInfo, TString& explain) {
         Y_ASSERT(settings.has_index());

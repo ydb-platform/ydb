@@ -1,6 +1,7 @@
 UNITTEST()
 
 SRCS(
+    diagnostics_ut.cpp
     state_file_ut.cpp
     ydb_clients_ut.cpp
     skipper_ut.cpp

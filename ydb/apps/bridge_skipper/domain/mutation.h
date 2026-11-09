@@ -27,12 +27,14 @@ bool SeesSurvivors(
     const std::set<TString>& survivors);
 
 // Admits only Verified, Current endpoints in a pile that remains in the config
-// quorum after the update and that SeesSurvivors for every such pile.
+// quorum after the update and that SeesSurvivors for every such pile. The
+// evaluator's participation includes BSC-proven stage 2 when supplied.
 std::optional<TString> SelectMutationEndpoint(
     const TClusterView& view,
     const std::vector<TEndpointState>& endpoints,
     const TExactUpdate& update,
     const std::vector<TConnectivityReply>& validConnectivity,
-    const std::set<TString>& exclude = {});
+    const std::set<TString>& exclude = {},
+    const TPileParticipation& participation = {});
 
 } // namespace NBridgeSkipper

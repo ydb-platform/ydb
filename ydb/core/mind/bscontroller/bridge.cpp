@@ -64,7 +64,7 @@ public:
                         const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, groupId,
                             targetGroupId);
                         if (inserted) {
-                            Self->SyncersRequiringAction.PushBack(&it->second);
+                            Self->EnqueueSyncer(it->second);
                         }
                     }
                     if (pile->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
@@ -170,9 +170,7 @@ public:
             TSyncerState& syncerState = it->second;
             Y_ABORT_UNLESS(syncerState.InCommit);
             syncerState.InCommit = false;
-            if (!syncerState.NodeIds) {
-                Self->SyncersRequiringAction.PushBack(&syncerState);
-            }
+            Self->EnqueueSyncer(syncerState);
             if (TGroupInfo *group = Self->FindGroup(syncerState.BridgeProxyGroupId); group && group->BridgeGroupInfo) {
                 if (const auto *pile = NBridge::FindGroupPileByGroupId(group->BridgeGroupInfo->GetBridgeGroupState(),
                         TargetGroupId); pile && pile->GetStage() == NKikimrBridge::TGroupState::SYNCED) {
@@ -510,7 +508,7 @@ private:
             const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, bridgeProxyGroupId,
                 targetGroupId);
             if (inserted) {
-                Self->SyncersRequiringAction.PushBack(&it->second);
+                Self->EnqueueSyncer(it->second);
             }
         }
         Self->ProcessSyncers();
@@ -1090,9 +1088,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             Y_ABORT_UNLESS(numErased == 1);
             numErased = syncerState.NodeIds.erase(nodeId);
             Y_ABORT_UNLESS(numErased == 1);
-            if (!syncerState.NodeIds && !syncerState.InCommit) {
-                EnqueueSyncer(syncerState);
-            }
+            EnqueueSyncer(syncerState);
             updateNodeWarden = true;
 
             if (syncer.HasErrorReason()) {
@@ -1167,9 +1163,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
         numErased = NodeToSyncerState.erase({nodeId, syncerState});
         BridgeSyncNodeRatesDirty = true;
         Y_ABORT_UNLESS(numErased == 1);
-        if (!syncerState->NodeIds && !syncerState->InCommit) {
-            EnqueueSyncer(*syncerState);
-        }
+        EnqueueSyncer(*syncerState);
     }
 
     if (!updates.empty()) {
@@ -1208,9 +1202,7 @@ void TBlobStorageController::UpdateStaticGroupBridgeGroupInfo(TGroupId groupId, 
         TSyncerState& syncerState = it->second;
         Y_ABORT_UNLESS(syncerState.InCommit);
         syncerState.InCommit = false;
-        if (!syncerState.NodeIds) {
-            EnqueueSyncer(syncerState);
-        }
+        EnqueueSyncer(syncerState);
         if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
             ProcessSyncers();
         }
@@ -1236,9 +1228,7 @@ void TBlobStorageController::CheckSyncerDisconnectedNodes() {
                 const auto& [nodeId, syncerState] = *jt;
                 const size_t numErased = syncerState->NodeIds.erase(nodeId);
                 Y_ABORT_UNLESS(numErased == 1);
-                if (!syncerState->NodeIds && !syncerState->InCommit) {
-                    EnqueueSyncer(*syncerState);
-                }
+                EnqueueSyncer(*syncerState);
             }
             NodeToSyncerState.erase(beginIt, it);
             BridgeSyncNodeRatesDirty = true;
@@ -1252,6 +1242,10 @@ void TBlobStorageController::CheckSyncerDisconnectedNodes() {
 }
 
 void TBlobStorageController::EnqueueSyncer(TSyncerState& syncerState) {
+    if (syncerState.NodeIds || syncerState.InCommit) {
+        return; // it is running or being committed, and gets here again when that's over
+    }
+    // ProcessSyncers stops at the first syncer that has to wait, and syncers of static groups don't wait
     if (StaticGroups.contains(syncerState.BridgeProxyGroupId)) {
         SyncersRequiringAction.PushFront(&syncerState);
     } else {
@@ -1266,7 +1260,7 @@ void TBlobStorageController::HandleRetrySyncers() {
 
 void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
     const TMonotonic now = TActivationContext::Monotonic();
-    if (now < LoadedAt + TDuration::Seconds(10)) {
+    if (now < LoadedAt + SyncerReportingTime) {
         // give nodes some time to connect to BSC and report their syncers: until then BSC doesn't know how many of them
         // are running, so it could exceed the limit
         SendSyncersToNodes(nodesToUpdate);
@@ -1319,6 +1313,9 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
             const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
             // parts of the group being made fully bridged one get synced in synchronized piles too
             const bool upgrading = poolBridgeMode && state.GetAuthorityPileId();
+            if (upgradePass && !upgrading) {
+                continue; // the group isn't being made a fully bridged one, so this pass has nothing to do for it
+            }
             for (size_t pileIndex = 0; pileIndex < state.PileSize(); ++pileIndex) {
                 const auto bridgePileId = TBridgePileId::FromPileIndex(pileIndex);
                 const auto *bridgePile = BridgeInfo->FindPile(bridgePileId);
@@ -1487,7 +1484,7 @@ bool TBlobStorageController::IsNodeHostingSyncers(TNodeId nodeId) const {
 }
 
 void TBlobStorageController::UpdateBridgeSyncNodeRates(const THashSet<TNodeId>& nodesToUpdate) {
-    if (!BridgeSyncNodeRatesDirty || TActivationContext::Monotonic() < LoadedAt + TDuration::Seconds(10)) {
+    if (!BridgeSyncNodeRatesDirty || TActivationContext::Monotonic() < LoadedAt + SyncerReportingTime) {
         return; // while nodes are still reporting their syncers, any share would exceed the limit
     }
     BridgeSyncNodeRatesDirty = false;

@@ -254,11 +254,11 @@ TDecision Decide(
     Y_DEBUG_ABORT_UNLESS(IsFailoverShape(view, update));
     // The commit uses the receiving node's view of the quorum, so the endpoint
     // must itself see every pile that stays in the config quorum.
-    const auto endpoint = SelectMutationEndpoint(view, endpoints, update, health.Connectivity, excludedEndpoints);
+    const auto endpoint = SelectMutationEndpoint(view, endpoints, update, health.Connectivity, excludedEndpoints, health.Participation);
     if (!endpoint) {
         return Blocked(EBlockerReason::NoMutationEndpoint);
     }
-    if (pending && pending->ExpectedGeneration == view.Generation && !IsSupersetReplacement(pending->Update, update)) {
+    if (pending && pending->ExpectedGeneration == view.Generation && (pending->Kind != EOperationKind::Failover || !IsSupersetReplacement(pending->Update, update))) {
         return Blocked(EBlockerReason::PendingMutation);
     }
     TDecision decision;
@@ -267,6 +267,106 @@ TDecision Decide(
     decision.Plan = TPlan{view.Generation, update, *endpoint};
     decision.CliCommand = RenderCliCommand(*decision.Plan);
     return decision;
+}
+
+std::set<TString> LifecycleEndpointExclusions(
+    EOperationKind kind,
+    const TExactUpdate& update,
+    const std::vector<TEndpointState>& endpoints,
+    const std::set<TString>& excludedEndpoints)
+{
+    auto excluded = excludedEndpoints;
+    if (kind == EOperationKind::TakeOffline) {
+        for (const auto& endpoint : endpoints) {
+            const auto target = update.find(endpoint.Pile);
+            if (target != update.end() && target->second == EPileState::Suspended) {
+                excluded.insert(endpoint.Endpoint);
+            }
+        }
+    }
+    return excluded;
+}
+
+TDecision PlanLifecycle(
+    EOperationKind kind,
+    const TString& target,
+    const TViewSelection& selection,
+    const THealthEvaluation& health,
+    const TConfirmations& confirmations,
+    const TDecision& failover,
+    const std::optional<TPendingMutation>& pending,
+    const std::vector<TEndpointState>& endpoints,
+    const std::set<TString>& excludedEndpoints)
+{
+    const auto refuse = [](TString reason) {
+        TDecision result;
+        result.Kind = EDecisionKind::Blocked;
+        result.Reason = std::move(reason);
+        return result;
+    };
+    if (selection.Blocker || !selection.View) {
+        return refuse("Fresh coherent state required");
+    }
+    const auto& view = *selection.View;
+    const auto item = view.Piles.find(target);
+    if (item == view.Piles.end()) {
+        return refuse("Target pile is absent");
+    }
+    if (view.ConversionInProgress || (view.Pending && (!view.Pending->Pile || *view.Pending->Pile == target))) {
+        return refuse("Target has a pending pile operation or conversion");
+    }
+    if (failover.Kind == EDecisionKind::Ready || failover.Kind == EDecisionKind::Confirming || !confirmations.Piles.empty()) {
+        return refuse("Resolve the participating-pile incident first");
+    }
+    for (const auto& [name, state] : view.Piles) {
+        const auto participation = EvaluatedParticipation(name, state, health.Connectivity, health.Participation);
+        const auto verdict = PileVerdict(health, name).Verdict;
+        if (!participation || (*participation && verdict != EPileVerdict::Healthy && verdict != EPileVerdict::Replicating)
+            || (state == EPileState::Suspended && verdict == EPileVerdict::Lost))
+        {
+            return refuse("Participation and healthy or replicating participants required");
+        }
+    }
+    TExactUpdate update;
+    if (kind == EOperationKind::Switchover) {
+        if (item->second != EPileState::Synchronized || PileVerdict(health, target).Verdict != EPileVerdict::Healthy) {
+            return refuse("Switchover requires a healthy SYNCHRONIZED target");
+        }
+        update[target] = EPileState::Promoted;
+        for (const auto& [name, state] : view.Piles) {
+            if (state == EPileState::Promoted) {
+                update[name] = EPileState::Synchronized;
+            }
+        }
+    } else if (kind == EOperationKind::TakeOffline) {
+        if (item->second != EPileState::Synchronized) {
+            return refuse("Take offline requires a non-primary SYNCHRONIZED target");
+        }
+        update[target] = EPileState::Suspended;
+    } else if (kind == EOperationKind::Rejoin) {
+        if (item->second != EPileState::Disconnected) {
+            return refuse("Rejoin requires DISCONNECTED; repeating it resets synchronization");
+        }
+        update[target] = EPileState::NotSynchronized;
+    } else {
+        return refuse("Unsupported lifecycle action");
+    }
+    if (pending && (pending->ExpectedGeneration != view.Generation || pending->Kind != kind || pending->Update != update)) {
+        auto result = refuse("Incompatible pending mutation may still complete");
+        result.Blocker = EBlockerReason::PendingMutation;
+        return result;
+    }
+    const auto exclude = LifecycleEndpointExclusions(kind, update, endpoints, excludedEndpoints);
+    const auto endpoint = SelectMutationEndpoint(view, endpoints, update, health.Connectivity, exclude, health.Participation);
+    if (!endpoint) {
+        return refuse("No surviving mutation endpoint");
+    }
+    TDecision result;
+    result.Kind = EDecisionKind::Ready;
+    result.Reason = "Reviewed lifecycle operation; zero data loss";
+    result.Plan = TPlan{view.Generation, std::move(update), *endpoint};
+    result.CliCommand = RenderCliCommand(*result.Plan);
+    return result;
 }
 
 TString RenderCliCommand(const TPlan& plan) {

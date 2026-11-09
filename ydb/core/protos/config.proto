@@ -2589,6 +2589,12 @@ message TImmediateControlsConfig {
                 MaxValue: 1,
                 DefaultValue: 1 }];
 
+            optional uint64 EnableKesusExport = 11 [(ControlOptions) = {
+                Description: "Enable Kesus export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 0 }];
+
         }
 
         optional TBackupToS3Controls S3Controls = 1;

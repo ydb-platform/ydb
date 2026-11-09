@@ -125,12 +125,14 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const NKikimrKqp::TKqpAlter
 
 namespace {
 
-std::pair<TString, TString> SplitPathIntoWorkingDirAndName(const TString& path) {
+bool SplitPathIntoWorkingDirAndName(const TString& path, std::pair<TString, TString>& result, TString& error) {
     auto splitPos = path.find_last_of('/');
     if (splitPos == path.npos || splitPos + 1 == path.size()) {
-        ythrow yexception() << "wrong path format '" << path << "'" ;
+        error = TStringBuilder() << "wrong path format '" << path << "'";
+        return false;
     }
-    return {path.substr(0, splitPos), path.substr(splitPos + 1)};
+    result = {path.substr(0, splitPos), path.substr(splitPos + 1)};
+    return true;
 }
 
 bool ValidateRenameIndexRequest(
@@ -410,11 +412,8 @@ static bool BuildAlterTableBloomFilterModifySchemeImpl(const TString& path, cons
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
     std::pair<TString, TString> pathPair;
-    try {
-        pathPair = SplitPathIntoWorkingDirAndName(path);
-    } catch (const std::exception&) {
+    if (!SplitPathIntoWorkingDirAndName(path, pathPair, error)) {
         code = Ydb::StatusIds::BAD_REQUEST;
-        error = "Invalid table path";
         return false;
     }
 
@@ -757,9 +756,7 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
 
     const auto OpType = *ops.begin();
 
-    try {
-        pathPair = SplitPathIntoWorkingDirAndName(path);
-    } catch (const std::exception&) {
+    if (!SplitPathIntoWorkingDirAndName(path, pathPair, error)) {
         code = Ydb::StatusIds::BAD_REQUEST;
         return false;
     }
@@ -1941,9 +1938,7 @@ static bool BuildAlterColumnTableModifySchemeImpl(const TString& path, const TRe
     const auto OpType = *ops.begin();
 
     std::pair<TString, TString> pathPair;
-    try {
-        pathPair = SplitPathIntoWorkingDirAndName(path);
-    } catch (const std::exception&) {
+    if (!SplitPathIntoWorkingDirAndName(path, pathPair, error)) {
         status = Ydb::StatusIds::BAD_REQUEST;
         return false;
     }

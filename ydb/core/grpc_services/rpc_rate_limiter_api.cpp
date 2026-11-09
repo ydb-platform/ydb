@@ -103,9 +103,14 @@ public:
     }
 
     bool ValidateCoordinationNodePath(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        const auto databaseName = this->Request_->GetDatabaseName().GetOrElse("");
-
-        if (!GetCoordinationNodePath().StartsWith(databaseName)) {
+        const auto rawDatabaseName = this->Request_->GetDatabaseName().GetOrElse("");
+        const auto databaseName = CanonizePath(rawDatabaseName);
+        const auto coordinationNodePath = CanonizePath(GetCoordinationNodePath());
+        const bool insideDatabase = AppData()->FeatureFlags.GetEnableRelativePaths()
+            ? databaseName.empty() || coordinationNodePath == databaseName
+                || coordinationNodePath.StartsWith(databaseName + '/')
+            : GetCoordinationNodePath().StartsWith(rawDatabaseName);
+        if (!insideDatabase) {
             status = StatusIds::BAD_REQUEST;
             issues.AddIssue(TStringBuilder()
                 << "Coordination node path: " << GetCoordinationNodePath()

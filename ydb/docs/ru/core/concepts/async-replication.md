@@ -158,7 +158,14 @@ $$
 
 {% note warning %}
 
-На данный момент остановленный из-за критичной ошибки процесс асинхронной репликации не может быть перезапущен. Его нужно [удалить](../yql/reference/syntax/drop-async-replication.md) и [создать](../yql/reference/syntax/create-async-replication.md) заново.
+После устранения причины критичной ошибки асинхронную репликацию можно возобновить без удаления экземпляра. Сначала приостановите её, затем переведите в состояние `STANDBY`:
+
+```yql
+ALTER ASYNC REPLICATION my_replication SET (STATE = 'PAUSED');
+ALTER ASYNC REPLICATION my_replication SET (STATE = 'STANDBY');
+```
+
+Убедитесь, что приостановка и обработка накопленных изменений укладываются во [время хранения записей](cdc.md#retention-period). Подробнее см. [ALTER ASYNC REPLICATION](../yql/reference/syntax/alter-async-replication.md).
 
 {% endnote %}
 

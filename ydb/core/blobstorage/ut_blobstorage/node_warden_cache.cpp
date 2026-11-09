@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(NodeWardenCache) {
         auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
         config->MutableBlobStorageConfig()->MutableServiceSet()->CopyFrom(replacement);
         env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge,
-            new TEvNodeWardenStorageConfig(config, false, nullptr)), nodeId);
+            new TEvNodeWardenStorageConfig(config, true, nullptr)), nodeId);
         const auto confirm = env.Runtime->WaitForEdgeActorEvent({edge});
         UNIT_ASSERT_VALUES_EQUAL(confirm->GetTypeRewrite(), ui32(TEvBlobStorage::EvNodeWardenStorageConfigConfirm));
         if (delayedCacheResult) {
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(NodeWardenCache) {
             auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
             config->MutableBlobStorageConfig()->MutableServiceSet()->CopyFrom(services);
             env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge,
-                new TEvNodeWardenStorageConfig(config, false, nullptr)), nodeId);
+                new TEvNodeWardenStorageConfig(config, true, nullptr)), nodeId);
             const auto confirm = env.Runtime->WaitForEdgeActorEvent({edge});
             UNIT_ASSERT_VALUES_EQUAL(confirm->GetTypeRewrite(), ui32(TEvBlobStorage::EvNodeWardenStorageConfigConfirm));
             env.Sim(TDuration::Seconds(30));
@@ -492,7 +492,7 @@ Y_UNIT_TEST_SUITE(NodeWardenCache) {
         auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
         config->MutableBlobStorageConfig()->MutableServiceSet()->CopyFrom(replacement);
         env.Runtime->Send(new IEventHandle(warden, edge,
-            new TEvNodeWardenStorageConfig(config, false, nullptr)), nodeId);
+            new TEvNodeWardenStorageConfig(config, true, nullptr)), nodeId);
         const auto confirm = env.Runtime->WaitForEdgeActorEvent({edge});
         UNIT_ASSERT_VALUES_EQUAL(confirm->GetTypeRewrite(), ui32(TEvBlobStorage::EvNodeWardenStorageConfigConfirm));
         env.Runtime->FilterFunction = {};

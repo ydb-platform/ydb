@@ -146,7 +146,7 @@ void ValidateConfig(const TConfig& config) {
             Require(scheme.empty() || scheme == endpoint.Scheme, "mixed grpc/grpcs endpoint schemes are forbidden");
             TString key = endpoint.Host;
             key.to_lower();
-            key += ":" + ToString(endpoint.Port);
+            key += ":" + ::ToString(endpoint.Port);
             Require(seen.insert(key).second, "duplicate endpoint");
             scheme = endpoint.Scheme;
         }
@@ -176,6 +176,46 @@ TEndpoint ParseEndpoint(TStringBuf uri) {
     return {TString(uri), TString(scheme), parsed.Host, parsed.Port};
 }
 
+THttpAuthority ParseHttpAuthority(TStringBuf authority) {
+    bool explicitPort = false;
+    if (authority.StartsWith('[')) {
+        const auto close = authority.find(']');
+        explicitPort = close != TStringBuf::npos && close + 1 < authority.size();
+    } else {
+        explicitPort = authority.find(':') != TStringBuf::npos;
+    }
+    TString address(authority);
+    if (!explicitPort) {
+        address += ":80";
+    }
+    const auto parsed = HostPort(address);
+    THttpAuthority result;
+    result.Host = parsed.Host;
+    if (explicitPort) {
+        result.Port = parsed.Port;
+    }
+    if (result.Host.StartsWith('[')) {
+        in6_addr ip;
+        const TString text(TStringBuf(result.Host).substr(1, result.Host.size() - 2));
+        Require(inet_pton(AF_INET6, text.c_str(), &ip) == 1, "invalid IPv6 authority");
+        char buffer[INET6_ADDRSTRLEN] = {};
+        Require(inet_ntop(AF_INET6, &ip, buffer, sizeof(buffer)), "invalid IPv6 authority");
+        result.Host = TString("[") + buffer + "]";
+        result.Numeric = true;
+    } else {
+        in_addr ip;
+        if (inet_pton(AF_INET, result.Host.c_str(), &ip) == 1) {
+            char buffer[INET_ADDRSTRLEN] = {};
+            Require(inet_ntop(AF_INET, &ip, buffer, sizeof(buffer)), "invalid IPv4 authority");
+            result.Host = buffer;
+            result.Numeric = true;
+        } else {
+            result.Host.to_lower();
+        }
+    }
+    return result;
+}
+
 TConfig ParseConfig(TStringBuf yaml) {
     Require(yaml.size() <= MaxConfigBytes, "config exceeds size limit");
     TConfig result;
@@ -183,16 +223,11 @@ TConfig ParseConfig(TStringBuf yaml) {
         const auto documents = YAML::LoadAll(std::string(yaml.data(), yaml.size()));
         Require(documents.size() == 1, "config must contain exactly one YAML document");
         const auto root = documents.front();
-        Map(root, "config", {"cluster_id", "mode", "endpoints", "auth", "http", "timing", "health_endpoints_per_pile", "logging"});
+        Map(root, "config", {"cluster_id", "endpoints", "auth", "http", "timing", "health_endpoints_per_pile", "logging"});
         Require(root["cluster_id"].IsDefined(), "cluster_id is required");
         Require(root["endpoints"].IsDefined(), "endpoints is required");
         result.ClusterId = Scalar(root["cluster_id"], "cluster_id");
         Require(!result.ClusterId.empty() && result.ClusterId.find('\0') == TString::npos, "cluster_id must be nonempty and contain no NUL");
-        if (const auto node = root["mode"]) {
-            const auto mode = Scalar(node, "mode");
-            Require(mode == "manual" || mode == "auto", "mode must be manual or auto");
-            result.Mode = mode == "auto" ? EMode::Auto : EMode::Manual;
-        }
         const auto endpoints = root["endpoints"];
         Require(endpoints.IsMap(), "endpoints must be a mapping");
         for (const auto& entry : endpoints) {
@@ -215,10 +250,29 @@ TConfig ParseConfig(TStringBuf yaml) {
             result.Auth.TokenFile = OptionalPath(node["token_file"], "auth.token_file");
         }
         if (const auto node = root["http"]) {
-            Map(node, "http", {"listen"});
+            Map(node, "http", {"listen", "trusted_authorities"});
             if (node["listen"]) {
                 result.Http.Listen = Scalar(node["listen"], "http.listen");
                 HostPort(result.Http.Listen);
+            }
+            if (const auto authorities = node["trusted_authorities"]) {
+                Require(authorities.IsSequence(), "http.trusted_authorities must be a sequence");
+                THashSet<TString> seen;
+                for (const auto& item : authorities) {
+                    const auto authority = Scalar(item, "http.trusted_authorities[]");
+                    THttpAuthority parsed;
+                    try {
+                        parsed = ParseHttpAuthority(authority);
+                    } catch (const yexception&) {
+                        throw yexception() << "invalid http.trusted_authorities entry";
+                    }
+                    TString key = parsed.Host;
+                    if (parsed.Port) {
+                        key += ":" + ::ToString(*parsed.Port);
+                    }
+                    Require(seen.insert(key).second, "duplicate http.trusted_authorities entry");
+                    result.Http.TrustedAuthorities.push_back(authority);
+                }
             }
         }
         if (const auto node = root["timing"]) {

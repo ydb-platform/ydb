@@ -1,10 +1,11 @@
 # Operator runbook
 
-Skipper performs failover only. Start in manual mode, inspect the read-only
-snapshot and run reviewed commands with your own YDB administrator identity.
-Use exactly one active controller and one exclusive administrator at a time.
-Manual mode stops Skipper from sending mutations; it provides no server fencing
-and does not cancel a request that was already sent.
+Skipper observes one cluster and offers reviewed failover, switchover, take
+offline and rejoin through its web UI. A fresh state directory starts Observe;
+Manual enables one reviewed handoff per approval; Auto sends policy-approved
+failover and guarded retries. Use exactly one active controller and exclusive
+administration. Observe stops new dispatch, including retries, when acknowledged;
+it does not cancel remote work or provide a server lease.
 
 ## Prepare and launch
 
@@ -76,72 +77,127 @@ reported as [`startup_failed`](monitoring.md#structured-stderr-logs) records.
 Start under a service manager and capture stderr and `--version`. Skipper binds
 its HTTP listener before the controller starts, so a bind failure exits before
 any YDB call. The listener has no login; keep it on loopback or behind a
-network boundary.
+network boundary. HTTP Host checks and framing denial protect the browser path;
+they do not authenticate clients that can already reach the listener.
 
-## Manual failover
+Every route checks the Host authority before serving state or admitting commands.
+The configured concrete listen host and the loopback aliases `localhost`,
+`127.0.0.1` and `[::1]` are accepted on the listen port. A wildcard listen host
+(`0.0.0.0` or `[::]`) also accepts numeric IP authorities on that port; it does
+not trust arbitrary DNS names. The port may be omitted for listen ports 80 or
+443. Add exact additional browser authorities under `http.trusted_authorities`,
+for example `[skipper.example, 'skipper.example:8443']`. Names are case-insensitive,
+IPv6 literals require brackets and numeric addresses are normalized. Explicit
+ports are normalized as decimal integers; omitted ports remain distinct from
+explicit ports for configured additions. No DNS lookup is made for these checks.
 
-1. Read `GET /api/state`. Verify `mode: "manual"`, `cluster_id`, endpoint
-   `identity`, fresh view and evidence ages, pile verdicts, confirmations
-   and any pending mutation. Unknown or absent evidence is not health.
-   `confirm_seconds` is measured over the send times of the evidence that
-   supports the Down verdict, so `confirmed` can turn true (and Auto can send)
-   less than `confirm_seconds` after `down_since` when RED evidence sent
-   before that observation already spans part of the window.
-2. When `decision.kind` is `READY`, review `decision.plan`: exact generation,
-   endpoint and complete update. It disconnects all confirmed Down piles in
-   one request and includes explicit role changes. Do not split the batch.
-3. Copy `decision.cli_command`, add your own CLI authentication configuration
-   and run it promptly. Preserve its exact update and `--expected-generation`.
-   For example, a primary loss at generation 42 may produce:
+A reverse proxy must preserve an approved public Host, adding that authority to
+`trusted_authorities` when it differs from the defaults. HTTPS termination is
+supported: an Origin, when present, must use HTTP or HTTPS and match the request's
+approved host and effective port. Missing Origin is accepted for CLI clients;
+null, duplicate or malformed Origin and duplicate Host are rejected. Forwarded
+headers do not establish trust. Every response sends `X-Frame-Options: DENY` and
+`Content-Security-Policy: frame-ancestors 'none'`.
 
-   ```sh
-   ydb -e 'grpcs://ydb-b1.example:2135' admin cluster bridge update --set 'dc-a:DISCONNECTED' --set 'dc-b:PRIMARY' --expected-generation '42'
-   ```
+## Observe, Manual and Auto
 
-   This hidden `update` command is supported by the required CLI build.
-   Skipper does not include credential flags. If a pile name is empty or
-   contains a colon, the rendered command uses JSON through `--file` instead
-   of `--set`; preserve that command and exact name.
-4. On `ABORTED`, obtain a new view and review a new plan. Never remove the guard
-   to force an old plan. A timeout, transport error or `INTERNAL_ERROR` can mean
-   the request is still able to commit at G; retain its exact update and inspect
-   coherent state before issuing another command.
-5. Observe the newer generation and resulting pile states. Success or a matching
-   vector does not prove which invocation caused the change. Role completion
-   alone does not establish application readiness; check the application too.
+Open `/` or read `/api/state`. Confirm the cluster ID, acknowledged mode,
+controller readiness, state/evidence freshness and endpoint identity. A working
+HTTP connection does not prove healthy storage. The page retains last observed
+roles and unresolved incidents through expired evidence; requested roles appear
+only in a plan or pending summary until observed.
 
-CLI invocations are external to Skipper: they do not create Skipper's persistent
-pending record or change `last_mutation`. Keep an incident/change record of
-the command and outcome. Skipper may report the resulting transition as
-unexplained; investigate against that operator record.
+Enable Manual for reviewed commands. Every cluster mutation opens a concrete
+review showing expected generation, complete exact overlay, before/after states,
+actual endpoint, reasons, pending interaction and alternate synchronized-pile
+availability. All failed piles are disconnected in one failover request;
+abandoned PROMOTED roles are reset explicitly. Unlisted piles retain their exact
+internal state. Failover preserves zero data loss; verify application
+availability after the observed transition.
 
-## Auto, stopping and handover
+The plan response supplies `alternate_synchronized_pile_names` and the matching
+`alternate_synchronized_piles` count. These exclude the effective primary after
+the action. For switchover that is the proposed target, so the old primary can
+remain an alternate. Other actions exclude the PRIMARY in the after vector.
+A two-pile takedown leaves no alternate; rejoining a pile does not count it as
+synchronized before YDB observes that transition.
 
-After release validation and exclusive-control preparation, set `mode: auto`
-in the configuration and restart with the same state directory. Verify the
-published mode and current snapshot. Auto sends `READY` plans using the guarded
-pending-record protocol below; the plan computation is identical in both modes.
-No HTTP route changes mode.
+A review expires after 120 seconds. Execute freshly evaluates the inputs in the
+controller turn, consumes the plan even on refusal, persists pending and then
+hands off. `202` acknowledges handoff only. Supporting evidence must meet TTL
+rules at evaluation and immediately before SDK launch. The actor rechecks after
+persistence, and the SDK adapter rechecks after token reload. Local expiry
+returns `409 EVIDENCE_EXPIRED`, keeps pending and records no invocation. A pause
+after the final launch check or network delay can still outlast the evidence TTL.
+After `409`, read current state and review again. A timeout or
+`504 COMMAND_OUTCOME_UNKNOWN` never means cancelled and must never trigger an
+automatic repost.
 
-To stop new dispatch immediately, stop the process and inhibit automatic restart
-if needed. SIGINT/SIGTERM stops scheduling, drains the SDK driver while the actor
-system remains alive for callbacks, then stops the actors. Outcomes processed
-during the drain may be persisted; any remaining pending record is reconciled
-after restart. A normal stop exits
-with status 0. If the actor does not acknowledge the stop within 5 s, Skipper
-writes a raw `shutdown_failed` JSON line (`category` `stop_ack`), still drains
-and stops, and exits with status 1. Shutdown does not
-undo accepted YDB work or establish that a remote request cannot commit.
+Auto activation has a review showing current readiness and any plan that could
+send immediately. It performs failover only. Auto cannot activate over pending
+lifecycle work. Turning the active mode off is immediate and needs no review;
+both switches off means Observe. A changed mode is shared by all browsers.
 
-Before planned external changes, set `mode: manual` and restart, or stop Skipper.
-Inspect and reconcile any pending/in-flight mutation first. Keep exclusive
-operator control through the whole procedure; manual mode is not a lease.
-Afterwards inspect fresh state and restore Auto only by configuration/restart.
+Mode lives in `state.json`, not YAML. Restart restores it. Restored Auto may send
+one guarded identical failover or compatible superset when Ready. Before a
+restart that must not dispatch, acknowledge Observe and confirm its save. If
+saving Off fails, Observe still applies in memory and all dispatch is blocked;
+a restart before successful persistence resumes the file's mode, possibly the
+previous one. The UI displays this warning and persistence is retried.
+
+SIGINT/SIGTERM closes command admission and stops new sends before draining
+the SDK driver while the actor system remains alive for callbacks. Outcomes
+processed during the drain may be persisted; any remaining pending record is
+reconciled after restart. A normal stop exits with status 0. A stop acknowledgement
+failure emits `shutdown_failed` and exits with status 1. Shutdown cannot cancel
+work already handed off or establish that a remote request cannot commit.
+
+## Command API
+
+POST bodies are JSON, limited to 64 KiB. There is no login or browser auth setup;
+anyone reaching the configured host/port can administer it. No CORS headers are
+emitted. GET/HEAD are read-only and every response uses `Cache-Control: no-store`.
+Generations and revisions are decimal strings; do not convert them through a
+JavaScript floating-point number.
+
+| Route | Contract |
+| --- | --- |
+| `GET /api/state` | Schema 3 canonical controller, eligibility, evidence and pending projection. |
+| `POST /api/mode` | `{mode, expected_boot_id, expected_mode_revision, request_id}`; Auto also supplies `reviewed_snapshot_revision`. |
+| `POST /api/plans` | `{action, snapshot_revision, target_pile?}`; action is `failover`, `switchover`, `take_offline` or `rejoin`. |
+| `POST /api/operations` | `{plan_id, request_id}`; `202 {operation_id}` means one handoff. |
+| `GET /api/operations/{id}` | Current-boot attempt status. Missing/evicted records do not prove cancellation or that nothing was sent. |
+| `GET /api/history?after=…` | Typed bounded history with coverage-gap metadata. |
+| `GET /api/logs?after=…` | Retained redacted logs with filters and coverage metadata. |
+| `GET /api/logs/export` | Retained-log export with the same filters and UTC/cursor coverage metadata. |
+
+Use a fresh unique `request_id` for an intentional mode or execute command. A
+retained identical receipt replays the response; the same ID with a different
+body conflicts. After eviction, consumed plans and mode revisions still prevent
+reuse. Old boot tokens fail after restart. A POST reply triggers a fresh state
+read; it is not a replacement for canonical mode/pending state.
+
+`503 CONTROLLER_UNAVAILABLE` means local admission/nondelivery failed.
+`504 COMMAND_OUTCOME_UNKNOWN` means no reply arrived within 15 seconds; the
+controller may still process the command. Reconcile state and operation status.
+Unrecovered persistence failures return `503 STATE_WRITE_FAILED` with no SDK
+handoff. A mode request acknowledges success after an immediate retry only when
+the requested mode is durably saved; restoring the previous mode keeps the
+request failed.
 
 ## Planned lifecycle and membership operations
 
-Run these with Skipper manual or stopped, using a fresh coherent generation
-and an endpoint in a pile that stays in config quorum. The named `switchover`,
+Use the corresponding Manual UI review when available. Lifecycle requires
+fresh coherent observations, known participation and Healthy/Replicating
+participants; it is disabled during failure confirmation, unresolved participation,
+a Lost SUSPENDED blocker or a competing Ready failover. Switchover additionally
+requires a Healthy SYNCHRONIZED target. Take offline submits SUSPENDED for a
+non-primary SYNCHRONIZED target, excluding that pile's endpoints for dispatch.
+Rejoin submits NOT_SYNCHRONIZED only from DISCONNECTED. A pile named by a pending
+Add/Remove cannot be targeted.
+
+For external CLI administration switch Skipper to Observe or stop it, using a
+fresh coherent generation and an endpoint in a pile that stays in config quorum. The named `switchover`,
 `failover`, `takedown` and `rejoin` commands currently do **not** support
 `--expected-generation`; use hidden `update` for guarded overlays. Examples
 assume dc-a is PRIMARY, dc-b SYNCHRONIZED and there is no other PROMOTED pile.
@@ -164,7 +220,7 @@ so restore its quorum or follow a separate server recovery procedure.
 
 Membership and conversion use separate existing RPCs. Their CLI commands have
 no `expected_generation` guard. Keep exclusive operator control and Skipper
-manual/stopped; this limitation is not repaired by manual mode:
+Observe/stopped; the mode is not a server fence:
 
 ```text
 ydb -e grpcs://ydb-b1.example:2135 admin cluster bridge add-pile --pile dc-c
@@ -196,12 +252,12 @@ replaced: `state.json.tmp` is written and fsynced, renamed over it, and the
 directory is fsynced:
 
 ```json
-{"cluster_id":"production-bridge-01","generation_high_water":"42","pending_mutation":{"expected_generation":"42","update":{"dc-a":"DISCONNECTED","dc-b":"PRIMARY"}}}
+{"state_schema":3,"cluster_id":"production-bridge-01","mode":"observe","generation_high_water":"42","pending_mutation":{"expected_generation":"42","update":{"dc-a":"DISCONNECTED","dc-b":"PRIMARY"},"kind":"failover","origin":"manual"}}
 ```
 
-`--version` prints the format as `state_schema=2`. A `state.json` written by a
-build that printed `state_schema=1` is rejected at startup; the operator must
-remove it after confirming that no mutation is pending on the cluster.
+`--version` advertises `state_schema=3`; `/api/state` also uses schema 3.
+Unversioned and other state formats fail startup explicitly. No migration or
+automatic state deletion is provided; preserve incompatible files for diagnosis.
 
 Selecting a coherent view at G raises and persists `generation_high_water` to
 at least G, even when Skipper sends no mutation. Success or ABORTED at G raises
@@ -220,24 +276,25 @@ remove the generation guard to force an old plan; state overrides retain the
 recovery constraints described below.
 
 A pending record is persisted before sending and survives a crash even if the
-RPC was never sent. While its generation remains current, Auto can resend only
-the identical overlay; it never substitutes an opposite failover at G. A plan
-that keeps the pending primary and only adds DISCONNECTED piles replaces the
-record and is sent at G: both plans commit only in a component holding the
-primary's quorum, so the server's generation guard lets exactly one of them
-commit.
+RPC was never sent. A failover may be replaced only by a Ready failover superset
+preserving every pending entry and the common primary, adding only DISCONNECTED
+targets. Pending lifecycle admits only its identical overlay after new Manual
+review and settlement of previous local attempts. Auto never retries lifecycle.
+Manual performs no automatic retry/backoff; every resend needs another review.
+All updates remain guarded at their decision generation.
 
 | Outcome | Controller behavior |
 | --- | --- |
 | Local `EVIDENCE_EXPIRED` (no RPC) | Preparation outlasted the supporting evidence. Keep pending and wait for fresh evidence; no invocation or `mutation_sent` is recorded. No restart is required. |
 | `SUCCESS` / `SUCCESS` outcome | Raise high-water to at least G+1 and clear pending. Success does not establish unique invocation identity. |
 | `ABORTED` / `GENERATION_MOVED` | Raise high-water to at least G+1 and clear pending. Views still at G are stale. distconf also answers ABORTED from a root that lags behind G; the controller then reports `STALE_HISTORY` at G until a fresh view at G+1 or above arrives, which is fail-safe. |
-| Server `UNAVAILABLE` or `PRECONDITION_FAILED` / `NOT_APPLIED_HERE` | Keep pending; resend the identical update at once to another eligible endpoint. Every endpoint that answered this way stays excluded (exclusions accumulate) until the next state poll that follows an evaluation with no selectable endpoint (`NO_MUTATION_ENDPOINT`); then all are retried, so resends are bounded to about one per endpoint per state poll. Earlier invocations may remain in flight. |
-| `BAD_REQUEST` or `UNAUTHORIZED` / `REJECTED` | Keep pending: only this invocation was refused before distconf; earlier ambiguous or superseded invocations may still commit. Auto sends nothing more at this generation until a restart or a new generation; the decision stays READY with reason `REJECTED_BY_SERVER` and the `mutation_rejected` error is logged. Fix the cause before restarting. The persisted overlay still restricts the plan after restart. |
-| `INTERNAL_ERROR`, timeout, transport/client errors or other status / `AMBIGUOUS` | Keep pending; identical resend no earlier than the mutation client deadline (`mutation_operation_timeout_seconds` + 2 s) after the last send, doubling after each ambiguous outcome up to 5 minutes; `last_mutation.ambiguous_resends` counts them. |
+| Server `UNAVAILABLE` or `PRECONDITION_FAILED` / `NOT_APPLIED_HERE` | Keep pending. Auto may resend the identical failover update at once to another eligible endpoint; Manual needs a new review after local settlement and never resends automatically. Every endpoint that answered this way stays excluded (exclusions accumulate) until the next state poll that follows an evaluation with no selectable endpoint (`NO_MUTATION_ENDPOINT`); then all are eligible again, so Auto resends are bounded to about one per endpoint per state poll. Earlier invocations may remain in flight. |
+| `BAD_REQUEST` or `UNAUTHORIZED` / `REJECTED` | Keep pending: only this invocation was refused before distconf; earlier ambiguous or superseded attempts may still commit. Rejected failover latches all sends at G; rejected lifecycle latches lifecycle sends only, and the retained lifecycle record blocks incompatible failover work. The latch is process-local and resolves at a fresh coherent newer generation. |
+| `INTERNAL_ERROR`, timeout, transport/client errors or other status / `AMBIGUOUS` | Keep pending. Auto may resend an identical failover no earlier than the mutation client deadline (`mutation_operation_timeout_seconds` + 2 s) after the last send, doubling after each ambiguous outcome up to 5 minutes; `last_mutation.ambiguous_resends` counts them. Manual never retries automatically or applies this backoff; another handoff needs local settlement and a new review. |
 
-A coherent selected view above pending G clears it automatically. Restart allows
-one immediate identical resend, subject to a current valid Ready plan. A failed
+A coherent selected view above pending G clears it automatically. After restart,
+Auto permits one immediate identical failover resend, subject to a current valid
+Ready plan; restored Manual still needs a new review. A failed
 state write blocks mutations with `STATE_WRITE_FAILED`; observation continues.
 If the directory fsync after the rename fails, the renamed file and memory
 already hold the new record; the next successful write makes it durable.
@@ -245,16 +302,15 @@ already hold the new record; the next successful write makes it durable.
 If a pending plan can never commit because its intended survivors lack quorum,
 first stop the old process, prevent restart and reconcile every possible delayed
 request and both sides of the partition. Record why replacing that plan at G
-cannot create competing histories. Set `mode: manual` in the YAML file used by
-`--config`; `--clear-pending-mutation` does not change mode. Then start with:
+cannot create competing histories. Then start with:
 
 ```text
 bridge_skipper --config /etc/skipper/config.yaml --state-dir /var/lib/skipper/cluster-a --clear-pending-mutation
 ```
 
-Confirm `mode: "manual"` in `GET /api/state` before leaving the process running
-or reviewing another mutation. This logged startup override clears only the
-pending record and **preserves the high-water mark**. It does not cancel remote
+Confirm `mode: "observe"` in `GET /api/state` before reviewing another mutation.
+This logged startup override atomically stores Observe while clearing pending
+and **preserves the high-water mark**. It does not cancel remote
 work or fence an old controller.
 Do not use it merely because a request timed out or a different plan is desired.
 Inspect fresh coherent state before any further mutation.

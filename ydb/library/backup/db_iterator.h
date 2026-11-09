@@ -48,6 +48,7 @@ private:
             NScheme::ESchemeEntryType::Topic,
             NScheme::ESchemeEntryType::CoordinationNode,
             NScheme::ESchemeEntryType::Replication,
+            NScheme::ESchemeEntryType::ExternalDataSource,
             NScheme::ESchemeEntryType::SysView,
             NScheme::ESchemeEntryType::Transfer,
         };

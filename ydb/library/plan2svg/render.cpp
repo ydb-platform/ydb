@@ -2459,6 +2459,8 @@ TString ColumnShardWidgetStyles() {
         << INTERNAL_TEXT_HEIGHT << "px}"
         << R"CS(
       .cs-ui{color:var(--stage-text,#262626);line-height:1.375;box-sizing:border-box}
+      .cs-row-background{fill:var(--stage-main,#f2f2f2);stroke:#ffffff;stroke-width:2px}
+      .cs-column-separator{fill:#ffffff;pointer-events:none}
       .cs-ui *{box-sizing:border-box;min-width:0}.cs-ui .cs-label{color:var(--stage-text,#262626);font-weight:normal}
       .cs-ui .cs-value,.cs-ui b,.cs-ui strong{font-weight:normal}.cs-ui .cs-unit{margin-left:2px;font-weight:normal}
       .cs-number,.cs-stat>.cs-value{background:var(--stage-clone,#d9d9d9);color:var(--stage-text,#262626);padding:0 2px}
@@ -2486,17 +2488,16 @@ TString ColumnShardWidgetStyles() {
       .cs-count{display:inline-flex;gap:3px;align-items:baseline}.cs-count b,.cs-count small{font-size:inherit;font-weight:normal}
       .cs-count b{background:var(--stage-clone,#d9d9d9);color:var(--stage-text,#262626);padding:0 2px}
       .cs-count small{color:#7f7f7f}.cs-number{display:inline-block;white-space:nowrap}
-      .cs-details{padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:flex-start;align-items:stretch;gap:0}
-      .cs-field{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;column-gap:5px;padding:3px;order:3;background:#ffffff}
-      .cs-details>.cs-field:nth-child(4n+1),.cs-details>.cs-field:nth-child(4n+4){background:var(--stage-main,#f2f2f2)}
+      .cs-details{padding:2px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:flex-start;align-items:stretch;gap:2px;background:#ffffff}
+      .cs-field{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;column-gap:5px;padding:3px;order:3;background:var(--stage-main,#f2f2f2)}
+      .cs-field:is([data-cs-field='Columns'],[data-cs-field='Column'],[data-cs-field='Input columns'],[data-cs-field='Output columns'],[data-cs-field='Predicate'],[data-cs-field='Expression'],[data-cs-field='Grouping keys'],[data-cs-field='Aggregate functions'],[data-cs-field='Index']){background:#eee6f7}
       .cs-field>.cs-label{display:block}.cs-field-value{overflow-wrap:anywhere}
       .cs-field.cs-wide{grid-column:1/-1;display:block;order:1}.cs-field.cs-wide>.cs-label{margin-bottom:1px}
       .cs-field[data-cs-field='Predicate'],.cs-field[data-cs-field='Expression']{order:0}
       .cs-expression{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}
       .cs-expression+.cs-expression{margin-top:3px}
       .cs-chips{display:flex;flex-wrap:wrap;gap:1px 8px}.cs-chip{overflow-wrap:anywhere}
-      .cs-flow{display:grid;grid-template-columns:minmax(0,1fr) 10px minmax(0,1fr);align-items:stretch;gap:0;grid-column:1/-1;order:2}
-      .cs-flow .cs-field:first-child{background:var(--stage-main,#f2f2f2)}
+      .cs-flow{display:grid;grid-template-columns:minmax(0,1fr) 10px minmax(0,1fr);align-items:stretch;gap:2px;grid-column:1/-1;order:2}
       .cs-flow .cs-field{grid-template-columns:minmax(0,1fr) auto;align-items:baseline;order:0}
       .cs-flow svg{width:10px;height:10px;margin-top:1px}.cs-flow path{fill:none;stroke:var(--stage-grid,#b2b2b2);stroke-width:1.5}
       .cs-meter{height:2px;background:var(--stage-main,#f2f2f2);margin-top:1px}
@@ -2509,8 +2510,8 @@ TString ColumnShardWidgetStyles() {
       .cs-state.cs-warning i{background:var(--block-medium,#d9ae61)}
       .cs-availability{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px}
       .cs-names{fill:var(--stage-text,#262626)}.cs-metastep{font-weight:bold}.cs-heading{fill:#7f7f7f}
-      .cs-details>.cs-state,.cs-details>.cs-unknown{grid-column:1/-1;padding:3px}
-      .cs-storage-values{display:flex;flex-wrap:wrap;padding:2px;align-items:baseline;gap:3px 6px}.cs-storage-values .cs-shards{width:100%}
+      .cs-details>.cs-state,.cs-details>.cs-unknown{grid-column:1/-1;padding:3px;background:var(--stage-main,#f2f2f2)}
+      .cs-storage-values{display:flex;flex-wrap:wrap;padding:2px;align-items:baseline;gap:3px 6px;background:transparent}.cs-storage-values .cs-shards{width:100%}
     </style>)CS";
 }
 
@@ -2836,6 +2837,9 @@ void PrintColumnShardWidget(TStringBuilder& svg, ui32 x, ui32 y, ui32 width, ui3
     svg << "<foreignObject x='" << x << "' y='" << y << "' width='" << width << "' height='" << height
         << "' data-cs-cell='" << ColumnShardAttribute(css) << "'><div xmlns='http://www.w3.org/1999/xhtml' class='cs-ui " << css
         << "'>" << html << "</div></foreignObject>";
+    if (x > INTERNAL_WIDTH) {
+        svg << "<rect class='cs-column-separator' x='" << x - 1 << "' width='2' height='100%'/>";
+    }
 }
 
 std::vector<const TColumnShardNode*> ColumnShardOrderedChildren(const TColumnShardNode& node) {
@@ -2948,13 +2952,13 @@ void PrintColumnShardBoundaryMetrics(TStringBuilder& svg, const TColumnShardNode
 }
 
 ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TColumnShardRead& read,
-    const TColumnShardNode& node, ui32 top, ui32 depth, ui32 sibling = 0) {
+    const TColumnShardNode& node, ui32 top, ui32 depth) {
     constexpr ui32 rowHeight = 60;
     const auto children = ColumnShardOrderedChildren(node);
     TStringBuilder body;
     ui32 height = rowHeight;
     for (size_t index = 0; index < children.size(); ++index) {
-        height += PrintColumnShardNode(body, viz, read, *children[index], height - rowHeight, depth + 1, index);
+        height += PrintColumnShardNode(body, viz, read, *children[index], height - rowHeight, depth + 1);
     }
     const bool structural = node.Row == "step" && !node.Calls && !node.Skipped && !children.empty();
     const bool collapsed = node.Row == "meta" && !children.empty();
@@ -2965,7 +2969,7 @@ ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TCo
         << "' height='" << visibleHeight << "'><svg class='" << (collapsed ? "folded" : "")
         << "' data-cs-header='true' width='" << viz.Config.Width << "' height='" << rowHeight << "'><g>"
         << "<rect class='cs-row-background' width='" << viz.Config.Width << "' height='" << rowHeight
-        << "' fill='" << (sibling % 2 ? "var(--stage-main,#f2f2f2)" : "#ffffff") << "'/>";
+        << "' fill='var(--stage-main,#f2f2f2)'/>";
     if (!children.empty()) {
         svg << "<g class='plus button cs-row-toggle' data-cs-toggle='row' transform='translate(" << depth * INDENT_X + 4
             << ",3)'><rect width='12' height='12' fill='transparent'/>"
@@ -3214,6 +3218,9 @@ ui32 PrintColumnShardStorage(TStringBuilder& svg, const TVisualizer& viz, ui32 t
     StepCell(svg, sourceEnd, readEnd - sourceEnd, "Volume coverage");
     StepCell(svg, readEnd, bytesEnd - readEnd, "Read bytes");
     StepCell(svg, bytesEnd, viz.Config.Width - bytesEnd, "Reads");
+    for (ui32 x : {sourceEnd, readEnd, bytesEnd}) {
+        svg << "<rect class='cs-column-separator' x='" << x - 1 << "' width='2' height='100%'/>";
+    }
     svg << "</svg>" << rows << "</svg>" << Endl;
     return height;
 }
@@ -3408,9 +3415,8 @@ ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz
                 read.MaxPendingOperations = cohortContext.MaxPendingOperations;
                 TStringBuilder body;
                 ui32 readHeight = 2 * rowHeight;
-                ui32 blockIndex = 0;
                 for (TStringBuf block : {TStringBuf("Preparation"), TStringBuf("Execution"), TStringBuf("Output")}) {
-                    readHeight += PrintColumnShardNode(body, viz, read, read.Blocks.at(TString(block)), readHeight - rowHeight, 0, blockIndex++);
+                    readHeight += PrintColumnShardNode(body, viz, read, read.Blocks.at(TString(block)), readHeight - rowHeight, 0);
                 }
                 if (!HasColumnShardStorageStats(viz)) {
                     readHeight += PrintColumnShardCache(body, viz, read, readHeight - rowHeight);
@@ -3441,6 +3447,15 @@ ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz
                     << "</div></foreignObject>"
                     << "</g></svg><svg data-cs-read-body='true' x='0' y='" << rowHeight << "' width='" << viz.Config.Width << "' height='" << readHeight - rowHeight << "'>"
                     << "<svg data-cs-column-header='true' width='" << viz.Config.Width << "' height='" << rowHeight << "'>";
+                {
+                    ui32 left = 0;
+                    const ui32 end = std::min(std::max(viz.Config.TimelineLeft, viz.Config.SummaryLeft + 285), viz.Config.Width * 3 / 4);
+                    for (ui32 right : {viz.Config.OperatorLeft, viz.Config.TaskLeft, viz.Config.SummaryLeft, end, viz.Config.Width}) {
+                        svg << "<rect x='" << left + 1 << "' y='1' width='" << right - left - 2
+                            << "' height='" << rowHeight - 2 << "' fill='var(--stage-main,#f2f2f2)'/>";
+                        left = right;
+                    }
+                }
     const ui32 statisticsEnd = std::min(std::max(viz.Config.TimelineLeft, viz.Config.SummaryLeft + 285), viz.Config.Width * 3 / 4);
     const ui32 nameEnd = viz.Config.OperatorLeft;
     StepCell(svg, INTERNAL_WIDTH, nameEnd - INTERNAL_WIDTH, "Step");

@@ -390,7 +390,25 @@ namespace NKikimr::NDataShard {
         if (it == HnswIndexCache.end()) {
             return;
         }
-        auto& entry = it->second;
+        InvalidateHnswIndexEntry(it->second);
+    }
+
+    void TDataShard::InvalidateHnswIndex(ui32 localTid, const TPathId& indexId) {
+        if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
+            InvalidateHnswIndexEntry(*entry);
+        }
+    }
+
+    void TDataShard::InvalidateHnswTable(ui32 localTid) {
+        InvalidateHnswIndex(localTid);
+        if (auto table = HnswIndexesByTable.find(localTid); table != HnswIndexesByTable.end()) {
+            for (auto& [_, entry] : table->second) {
+                InvalidateHnswIndexEntry(entry);
+            }
+        }
+    }
+
+    void TDataShard::InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry) {
         // Readers may still own a graph. They must stop using it if its journal
         // no longer receives every write (including eviction on memory pressure).
         entry.Changes->Valid = false;

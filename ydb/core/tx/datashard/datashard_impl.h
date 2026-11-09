@@ -1966,6 +1966,8 @@ public:
     }
 
     void InvalidateHnswIndex(ui32 localTid);
+    void InvalidateHnswIndex(ui32 localTid, const TPathId& indexId);
+    void InvalidateHnswTable(ui32 localTid);
     void InvalidateHnswIndexes();
     void PruneHnswIndexes();
     void ScheduleHnswRebuild(ui32 localTid);
@@ -3238,6 +3240,20 @@ private:
     };
     ui64 NextHnswBuildToken = 0;
     THashMap<ui32, THnswIndexCacheEntry> HnswIndexCache;  // LocalTid -> cache entry
+    using THnswTableIndexes = THashMap<TPathId, THnswIndexCacheEntry>;
+    THashMap<ui32, THnswTableIndexes> HnswIndexesByTable;
+
+    THnswIndexCacheEntry* FindHnswIndexEntry(ui32 localTid, const TPathId& indexId) {
+        auto table = HnswIndexesByTable.find(localTid);
+        return table == HnswIndexesByTable.end() ? nullptr : table->second.FindPtr(indexId);
+    }
+
+    const THnswIndexCacheEntry* FindHnswIndexEntry(ui32 localTid, const TPathId& indexId) const {
+        auto table = HnswIndexesByTable.find(localTid);
+        return table == HnswIndexesByTable.end() ? nullptr : table->second.FindPtr(indexId);
+    }
+
+    static void InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry);
     std::shared_ptr<THnswCacheMemoryTracker> HnswCacheMemoryTracker;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;

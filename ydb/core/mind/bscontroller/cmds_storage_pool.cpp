@@ -817,6 +817,17 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(group);
             Y_ABORT_UNLESS(group->StoragePoolId == originId);
 
+            // the layout of the VDisks is checked by the geometry of the pool the group belongs to, which is laid over
+            // the topology of the group, so the target pool must have the same one for the pile of the group
+            if (group->VDisksInGroup) {
+                const auto geometry = TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                    GetStoragePoolForPile(targetId, group->BridgePileId));
+                if (!geometry.MatchesGroup(*group)) {
+                    throw TExError() << "GroupId# " << groupId << " doesn't match the geometry of target StoragePoolId# "
+                        << targetId;
+                }
+            }
+
             // update the pool id of the group; the group info sent to nodes carries the name of the pool, so it goes out
             // with a new generation, as nodes cache it by generation and don't expect other contents for the same one
             group->StoragePoolId = targetId;

@@ -926,7 +926,9 @@ namespace NKikimr::NBsController {
                 {"marker", "BSCVG15"},
                 {"groupId", group->ID.GetRawId()});
             Self->Execute(std::make_unique<TTxUpdateGroup>(this, [](TGroupInfo& group, TConfigState&) {
-                if (group.VDisksInGroup) {
+                // a group with data stays without its BlobDepot: an ordinary one keeps it on its VDisks, and a bridge
+                // proxy group, which has none, on its parts
+                if (group.VDisksInGroup || group.BridgeGroupInfo) {
                     group.VirtualGroupName = {};
                     group.VirtualGroupState = {};
                     group.HiveId = {};

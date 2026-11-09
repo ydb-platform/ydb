@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(ExternalTableRestore) {
         invalid.push_back("invalid");
         expectFailure(invalid, "not allowed");
 
-        // An in-root mapping reaches the server, which rejects the missing EDS.
+        // An in-root mapping proceeds past the outside-root validation.
         {
             TFileOutput out(archive / "create_external_table.sql");
             out << "-- database: \"/Source\"\n"

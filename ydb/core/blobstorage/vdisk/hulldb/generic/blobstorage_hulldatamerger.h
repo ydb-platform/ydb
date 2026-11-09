@@ -197,6 +197,10 @@ namespace NKikimr {
                             SlotsToAllocate.push_back(part.HugePartSize);
                         }
                     } else {
+                        if ((part.InMemData || !part.SmallBlobPart.Empty()) && !part.HugeBlob.Empty()) {
+                            // the part is inlined from its other copy, so nothing refers to the huge one any more
+                            DeletedHugeBlobs.push_back(part.HugeBlob);
+                        }
                         if (part.InMemData) { // prefer in-memory data if we have options
                             merger.Add(TDiskBlob(part.InMemData, partMask, GType, fullId));
                         } else if (!part.SmallBlobPart.Empty()) {
@@ -362,12 +366,12 @@ namespace NKikimr {
                     }
                 }
                 if (remove) {
-                    // Finish has already deleted the huge blob of a part that it reads back to inline it
-                    const bool deletedByFinish = !producingHugeBlob && !part.InMemData && part.SmallBlobPart.Empty();
-                    if (!part.HugeBlob.Empty() && !deletedByFinish) {
+                    // when inlining, Finish has already deleted the huge blob of every part
+                    if (!part.HugeBlob.Empty() && producingHugeBlob) {
                         DeletedHugeBlobs.push_back(part.HugeBlob);
                     }
-                    if (!producingHugeBlob && part.InMemData) { // in-memory parts are in the merger only when inlining
+                    // in-memory and metadata parts are in the merger at once, and only when inlining
+                    if (!producingHugeBlob && (part.InMemData || part.IsMetadataPart)) {
                         CollectTask.BlobMerger.ClearPart(partIdx);
                     }
                     part = {};

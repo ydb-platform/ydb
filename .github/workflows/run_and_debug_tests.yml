@@ -1,9 +1,16 @@
 name: Run and debug tests
 run-name: >-
   ${{ inputs.executor == 'remote' && (
-    inputs.pr_title != '' && inputs.pr_number != '' && format('{0} (#{1})', inputs.pr_title, inputs.pr_number)
-    || inputs.caller_workflow_label != '' && format('Remote · {0}', inputs.caller_workflow_label)
-    || 'Remote · Run and debug tests'
+    inputs.pr_number != '' && inputs.pr_title != '' &&
+      format('{0} · manual · #{1} · {2}',
+        inputs.caller_workflow_label != '' && inputs.caller_workflow_label || 'Run and debug tests',
+        inputs.pr_number, inputs.pr_title)
+    || inputs.pr_number != '' &&
+      format('{0} · manual · #{1}',
+        inputs.caller_workflow_label != '' && inputs.caller_workflow_label || 'Run and debug tests',
+        inputs.pr_number)
+    || format('{0} · manual',
+        inputs.caller_workflow_label != '' && inputs.caller_workflow_label || 'Run and debug tests')
   ) || 'Run and debug tests' }}
 
 on:
@@ -84,6 +91,7 @@ jobs:
           CALLER_PR_NUMBER: ${{ inputs.pr_number }}
           CALLER_PR_TITLE: ${{ inputs.pr_title }}
           CALLER_WORKFLOW: ${{ inputs.caller_workflow_label != '' && inputs.caller_workflow_label || 'Run and debug tests' }}
+          CALLER_EVENT: manual
         run: python3 .github/scripts/ci/dispatcher/resolve_remote_execution.py
 
   remote:

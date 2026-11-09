@@ -91,7 +91,11 @@ otherwise it skips those steps best-effort and still succeeds.
     fields alone; pick the ticket matching that attempt (highest / newest);
   - serialize the `job_inputs` object → JSON string for `workflow_dispatch`;
   - pass through optional display fields on `config.inputs` when present:
-    `caller_workflow`, `pr_number`, `pr_title` (host `run-name` only);
+    `caller_workflow`, `caller_event` (`pr` | `postcommit` | `manual`),
+    `pr_number`, `pr_title` (host `run-name` only);
+  - host/platform run titles use middle-dot segments, omitting empties:
+    `{workflow} · {event} · #{pr} · {title}` (workflow + event always; never
+    title-only).
   - enforce a `runs_on` allowlist; reject fork `head_repository`.
 
 ## Residual risk (claim vs ticket)

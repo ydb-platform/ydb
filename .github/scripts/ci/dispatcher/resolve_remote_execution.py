@@ -6,10 +6,13 @@ DEFAULT_REMOTE. A caller value that differs is rejected.
 
 Env:
   REMOTE_JSON — optional caller override (object or empty)
-  CODE_REF, GITHUB_WORKFLOW (or CALLER_WORKFLOW), CALLER_PR_NUMBER, CALLER_PR_TITLE,
-    DEFAULT_BUILD_TARGET, DEFAULT_BUILD_PRESET,
+  CODE_REF, GITHUB_WORKFLOW (or CALLER_WORKFLOW), CALLER_EVENT, CALLER_PR_NUMBER,
+    CALLER_PR_TITLE, DEFAULT_BUILD_TARGET, DEFAULT_BUILD_PRESET,
     ANALYTICS_BRANCH (optional, ignored if remote.code_ref set);
-  remote JSON may also set pr_number / pr_title (strings).
+  remote JSON may also set pr_number / pr_title / caller_event (strings).
+
+Display run names: ``{workflow} · {event} · #{pr} · {title}`` (omit empty trailing
+segments; workflow and event are always present when resolve succeeds).
 """
 from __future__ import annotations
 
@@ -26,6 +29,64 @@ from _common import (  # noqa: E402
     host_s3,
     set_outputs,
 )
+
+_CALLER_EVENTS = frozenset({"pr", "postcommit", "manual"})
+_GITHUB_EVENT_TO_CALLER: dict[str, str] = {
+    "pull_request": "pr",
+    "pull_request_target": "pr",
+    "push": "postcommit",
+    "workflow_dispatch": "manual",
+}
+
+
+def format_remote_run_name(
+    workflow: str,
+    event: str,
+    *,
+    pr_number: str = "",
+    pr_title: str = "",
+) -> str:
+    """Assemble host/platform remote run title (middle dot separators)."""
+    wf = workflow.strip()
+    ev = event.strip()
+    if not wf:
+        die("caller workflow name is empty (GITHUB_WORKFLOW / CALLER_WORKFLOW)")
+    if not ev:
+        die("caller_event is empty")
+    parts = [wf, ev]
+    num = pr_number.strip()
+    if num:
+        parts.append(f"#{num}")
+    title = pr_title.strip()
+    if title:
+        parts.append(title)
+    return " · ".join(parts)
+
+
+def _normalize_caller_event(raw: str, *, where: str) -> str:
+    event = raw.strip().lower()
+    if event not in _CALLER_EVENTS:
+        die(f"{where} must be one of {sorted(_CALLER_EVENTS)}, got {raw!r}")
+    return event
+
+
+def _caller_event(remote: dict[str, Any]) -> str:
+    """Short event token for run-name (pr | postcommit | manual)."""
+    from_remote = remote.pop("caller_event", None)
+    if from_remote is not None:
+        if not isinstance(from_remote, str):
+            die("remote JSON .caller_event must be string")
+        return _normalize_caller_event(from_remote, where="remote JSON .caller_event")
+    env = (os.environ.get("CALLER_EVENT") or "").strip()
+    if env:
+        return _normalize_caller_event(env, where="CALLER_EVENT")
+    gh = (os.environ.get("GITHUB_EVENT_NAME") or "").strip().lower()
+    if gh:
+        mapped = _GITHUB_EVENT_TO_CALLER.get(gh)
+        if not mapped:
+            die(f"unsupported GITHUB_EVENT_NAME for caller_event: {gh!r}")
+        return mapped
+    return "manual"
 
 
 def _reject_unknown(keys: set[str], allowed: set[str], where: str) -> None:
@@ -154,6 +215,7 @@ def parse_remote_json(raw: str) -> dict[str, Any]:
 def build_config() -> dict[str, Any]:
     remote = parse_remote_json(os.environ.get("REMOTE_JSON", ""))
     pr_number, pr_title = _caller_pr_context(remote)
+    caller_event = _caller_event(remote)
     remote_job = remote.pop("job", {})
     if remote_job is None:
         remote_job = {}
@@ -221,6 +283,7 @@ def build_config() -> dict[str, Any]:
         "job_inputs": job_inputs,
         "runs_on": runs_on_str,
         "caller_workflow": cfg["caller_workflow"],
+        "caller_event": caller_event,
         "pr_number": pr_number,
         "pr_title": pr_title,
     }

@@ -276,7 +276,7 @@ jobs:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
-    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
+    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}-xxl', inputs.build_preset) }}" ]
     strategy:
       fail-fast: false
       matrix:
@@ -504,7 +504,7 @@ jobs:
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
           test_threads: ${{ env.threads_count }}
-          link_threads: 2
+          link_threads: 4
           custom_branch_name: ${{ steps.determine-branch.outputs.branch_name }}
           put_build_results_to_cache: true
           collect_coredumps: ${{ inputs.collect_coredumps != false }}

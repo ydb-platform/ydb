@@ -1,3 +1,4 @@
+* Extended `ydb tools dump --enable-direct-external-data-source` to support `ObjectStorage` sources with `AUTH_METHOD=NONE` and no provider properties. Credentials and unknown properties remain unsupported for direct dumps.
 * Added the experimental `--enable-direct-external-data-source` option to `ydb tools dump` for selecting a single `Ydb` or `YdbExternal` source with `AUTH_METHOD=NONE`. It is disabled by default; credential-bearing sources and unsafe source paths are rejected. Recursive directory dumps are unchanged.
 * Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.
 * Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--target-database`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.

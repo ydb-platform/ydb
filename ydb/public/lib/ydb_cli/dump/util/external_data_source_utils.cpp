@@ -41,18 +41,21 @@ bool ValidateDirectExternalDataSource(
     NYql::TIssues& issues)
 {
     const auto reject = [&issues]() {
-        issues.AddIssue("Direct external data source dump supports only Ydb/YdbExternal sources with known properties "
+        issues.AddIssue("Direct external data source dump supports only Ydb/YdbExternal/ObjectStorage sources with known properties "
             "and AUTH_METHOD NONE; credential-bearing sources, unknown formats "
             "and values requiring SQL escaping are unsupported");
         return false;
     };
     const bool ydb = description.source_type() == "Ydb";
-    if ((!ydb && description.source_type() != "YdbExternal")
+    const bool objectStorage = description.source_type() == "ObjectStorage";
+    if ((!ydb && description.source_type() != "YdbExternal" && !objectStorage)
         || description.GetReflection()->GetUnknownFields(description).field_count()) {
         return reject();
     }
 
-    // Provider properties are defined in core/external_sources/external_source_factory.cpp.
+    // Ydb properties are defined in core/external_sources/external_source_factory.cpp.
+    // ObjectStorage rejects all provider properties in core/external_sources/object_storage.cpp;
+    // only the AUTH_METHOD synthesized by Describe is accepted after REFERENCES is removed.
     // Fail closed on additions: Describe flattens provider properties and auth into one map.
     static const THashSet<TString> commonProperties = {"AUTH_METHOD", "DATABASE_NAME", "USE_TLS"};
     static const THashSet<TString> ydbProperties = {"DATABASE_ID", "SHARED_READING", "SHARED_READING_GROUP"};
@@ -73,7 +76,9 @@ bool ValidateDirectExternalDataSource(
     }
     const auto& properties = description.properties();
     for (const auto& [key, value] : properties) {
-        if ((!commonProperties.contains(key) && !(ydb && ydbProperties.contains(key))) || !isLiteral(value)) {
+        const bool supportedProperty = key == "AUTH_METHOD" || (!objectStorage && commonProperties.contains(key))
+            || (ydb && ydbProperties.contains(key));
+        if (!supportedProperty || !isLiteral(value)) {
             return reject();
         }
     }

@@ -90,7 +90,7 @@ void TCommandDump::Config(TConfig& config) {
     config.Opts->AddLongOption("ordered", "Preserve order by primary key in backup files.")
         .DefaultValue(defaults.Ordered_).StoreTrue(&Ordered);
     config.Opts->AddLongOption("enable-direct-external-data-source",
-            "Opt in to experimental direct dumps of Ydb/YdbExternal sources with AUTH_METHOD NONE."
+            "Opt in to experimental direct dumps of Ydb, YdbExternal or ObjectStorage sources with AUTH_METHOD NONE."
             " Does not affect recursive directory dumps.")
         .DefaultValue(defaults.EnableDirectExternalDataSource_).StoreTrue(&EnableDirectExternalDataSource);
 }

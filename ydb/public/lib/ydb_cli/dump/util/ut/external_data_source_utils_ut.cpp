@@ -49,6 +49,26 @@ Y_UNIT_TEST_SUITE(DirectExternalDataSourceDump) {
         UNIT_ASSERT(Supported(Source("YdbExternal", "NONE")));
     }
 
+    Y_UNIT_TEST(ObjectStorageWithoutCredentialsOrProviderProperties) {
+        auto source = Source("ObjectStorage", "NONE");
+        source.set_location("https://bucket.example.test/non-default/prefix/");
+        source.mutable_properties()->erase("DATABASE_NAME");
+        UNIT_ASSERT(Supported(source));
+        for (const auto& property : {"DATABASE_NAME", "USE_TLS", "DATABASE_ID", "AWS_REGION", "PROVIDER_PRIVATE_CREDENTIAL",
+                "TOKEN_SECRET_NAME", "TOKEN_SECRET_PATH", "AWS_ACCESS_KEY_ID_SECRET_NAME", "AWS_SECRET_ACCESS_KEY_SECRET_PATH"}) {
+            auto unsupported = source;
+            (*unsupported.mutable_properties())[property] = "unexpected";
+            UNIT_ASSERT_C(!Supported(unsupported), property);
+        }
+        for (const auto& auth : {"AWS", "SERVICE_ACCOUNT", "TOKEN", "IAM", "UNKNOWN_AUTH"}) {
+            auto unsupported = source;
+            (*unsupported.mutable_properties())["AUTH_METHOD"] = auth;
+            UNIT_ASSERT_C(!Supported(unsupported), auth);
+        }
+        source.set_location("https://bucket.example.test/quote'");
+        UNIT_ASSERT(!Supported(source));
+    }
+
     Y_UNIT_TEST(AllNamedTokenCredentialsAreRejected) {
         // Even a simple name can be shared by a non-owner who cannot pass old restore's access preflight.
         for (const auto& name : {"eds_secret", "secret:colon", "secret`backtick", "/Root/schemaSecret", "", "secret with spaces"}) {
@@ -79,7 +99,7 @@ Y_UNIT_TEST_SUITE(DirectExternalDataSourceDump) {
         (*source.mutable_properties())["TOKEN_SECRET_NAME"] = "eds_secret";
         UNIT_ASSERT(!Supported(source));
         UNIT_ASSERT(!Supported(Source("FutureProvider", "NONE")));
-        UNIT_ASSERT(!Supported(Source("ObjectStorage", "NONE")));
+        UNIT_ASSERT(!Supported(Source("ObjectStorage", "NONE"))); // DATABASE_NAME remains forbidden.
         source = Source("Ydb", "TOKEN");
         UNIT_ASSERT(!Supported(source));
         source = Source("Ydb", "NONE");

@@ -3489,6 +3489,108 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestSelectedExternalDataSourceBackupRestore("/Root/nested", EExternalSourceDumpRoot::Directory, EAuthType::AuthTypeToken);
     }
 
+    Y_UNIT_TEST_TWIN(DirectObjectStorageExternalDataSourceBackupRestore, Nested) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort()))
+            .SetDatabase("/Root").SetAuthToken("root@builtin"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        TSchemeClient schemeClient(driver);
+        const TString parent = Nested ? "/Root/nested" : "/Root";
+        const auto rootGrant = schemeClient.ModifyPermissions("/Root", TModifyPermissionsSettings()
+            .AddGrantPermissions(TPermissions("root@builtin", {"ydb.generic.full"}))).GetValueSync();
+        UNIT_ASSERT_C(rootGrant.IsSuccess(), rootGrant.GetIssues().ToString());
+        if (Nested) {
+            const auto mkdir = schemeClient.MakeDirectory(parent).GetValueSync();
+            UNIT_ASSERT_C(mkdir.IsSuccess(), mkdir.GetIssues().ToString());
+        }
+        const TString source = parent + "/bucketSource";
+        const TString table = parent + "/externalTable";
+        ExecuteQuery(session, Sprintf(R"(
+            CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                SOURCE_TYPE = "ObjectStorage", LOCATION = "https://bucket.example.test/non-default/prefix/",
+                AUTH_METHOD = "NONE"
+            );
+        )", source.c_str()), true);
+        const auto grant = schemeClient.ModifyPermissions(source, TModifyPermissionsSettings()
+            .AddGrantPermissions(TPermissions("root@builtin", {"ydb.generic.read"}))).GetValueSync();
+        UNIT_ASSERT_C(grant.IsSuccess(), grant.GetIssues().ToString());
+        const auto original = DescribeExternalDataSource(tableSession, source);
+        ExecuteQuery(session, Sprintf(R"(
+            CREATE EXTERNAL TABLE `%s` (key Utf8 NOT NULL) WITH (
+                DATA_SOURCE = "%s", LOCATION = "folder", FORMAT = "csv_with_names"
+            );
+        )", table.c_str(), source.c_str()), true);
+        const auto referenced = DescribeExternalDataSource(tableSession, source);
+        UNIT_ASSERT_STRING_CONTAINS(referenced.properties().at("REFERENCES"), "externalTable");
+
+        TTempDir tempDir;
+        const auto archive = tempDir.Path().Child("dump");
+        NDump::TClient backupClient(driver);
+        // The same provider remains disabled by default, before creating any archive.
+        const auto disabled = backupClient.Dump(source, archive, NDump::TDumpSettings().Database("/Root"));
+        UNIT_ASSERT(!disabled.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(disabled.GetIssues().ToString(), "EnableDirectExternalDataSource");
+        UNIT_ASSERT(!archive.Exists());
+        CreateBackupLambda(driver, archive, source, "/Root", NDump::TDumpSettings().EnableDirectExternalDataSource(true))();
+        const auto sourceArchive = archive.Child("bucketSource");
+        const auto sql = TFileInput(sourceArchive.Child(NDump::NFiles::CreateExternalDataSource().FileName)).ReadAll();
+        UNIT_ASSERT_STRING_CONTAINS(sql, "SOURCE_TYPE = 'ObjectStorage'");
+        UNIT_ASSERT_STRING_CONTAINS(sql, "AUTH_METHOD = 'NONE'");
+        UNIT_ASSERT_STRING_CONTAINS(sql, "https://bucket.example.test/non-default/prefix/");
+        UNIT_ASSERT(!sql.Contains("REFERENCES"));
+        UNIT_ASSERT(!sql.Contains("DATABASE_NAME"));
+        UNIT_ASSERT(!sql.Contains("SECRET"));
+        UNIT_ASSERT_STRING_CONTAINS(TFileInput(sourceArchive.Child(NDump::NFiles::Permissions().FileName)).ReadAll(), "ydb.generic.read");
+        TVector<TFsPath> entries;
+        archive.List(entries);
+        UNIT_ASSERT_VALUES_EQUAL(entries.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(entries.front().GetName(), "bucketSource");
+
+        ExecuteQuery(session, Sprintf("DROP EXTERNAL TABLE `%s`; DROP EXTERNAL DATA SOURCE `%s`;", table.c_str(), source.c_str()), true);
+        CreateRestoreLambda(driver, archive, parent)();
+        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, source), original);
+        UNIT_ASSERT(!schemeClient.DescribePath(table).GetValueSync().IsSuccess());
+    }
+
+    Y_UNIT_TEST(DirectAuthenticatedObjectStorageExternalDataSourceIsRejected) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
+        TKikimrWithGrpcAndRootSchema server(config);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort()))
+            .SetDatabase("/Root").SetAuthToken("root@builtin"));
+        TSchemeClient schemeClient(driver);
+        const auto grant = schemeClient.ModifyPermissions("/Root", TModifyPermissionsSettings()
+            .AddGrantPermissions(TPermissions("root@builtin", {"ydb.generic.full"}))).GetValueSync();
+        UNIT_ASSERT_C(grant.IsSuccess(), grant.GetIssues().ToString());
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        ExecuteQuery(session, "CREATE OBJECT `aws_secret` (TYPE SECRET) WITH (value = 'private-object-storage-credential');", true);
+        ExecuteQuery(session, R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/privateBucket` WITH (
+                SOURCE_TYPE = "ObjectStorage", LOCATION = "https://bucket.example.test/private/",
+                AUTH_METHOD = "AWS", AWS_REGION = "ru-central-1",
+                AWS_ACCESS_KEY_ID_SECRET_NAME = "aws_secret", AWS_SECRET_ACCESS_KEY_SECRET_NAME = "aws_secret"
+            );
+        )", true);
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        const auto original = DescribeExternalDataSource(tableSession, "/Root/privateBucket");
+        TTempDir tempDir;
+        const auto archive = tempDir.Path().Child("dump");
+        NDump::TClient backupClient(driver);
+        const auto result = backupClient.Dump("/Root/privateBucket", archive,
+            NDump::TDumpSettings().Database("/Root").EnableDirectExternalDataSource(true));
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "AUTH_METHOD NONE");
+        UNIT_ASSERT(!archive.Exists());
+        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, "/Root/privateBucket"), original);
+    }
+
     Y_UNIT_TEST_TWIN(DirectExternalSourceDumpFeatureGate, EnableDirect) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);

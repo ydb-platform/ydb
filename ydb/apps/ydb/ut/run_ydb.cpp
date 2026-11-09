@@ -115,7 +115,7 @@ TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool ch
         *errorOutput = command.GetError();
     }
     if (exitCodeOutput) {
-        *exitCodeOutput = command.GetExitCode();
+        *exitCodeOutput = command.GetExitCode().GetRef();
     }
 
     if (checkExitCode && (command.GetExitCode() != expectedExitCode)) {

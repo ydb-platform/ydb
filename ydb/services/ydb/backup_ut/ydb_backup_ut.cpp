@@ -5387,6 +5387,47 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         UNIT_ASSERT_VALUES_EQUAL(items[1].Dst, "Dest/Table");
     }
 
+    Y_UNIT_TEST(ExplicitExternalLeafValidatesControlWithRecursiveRoot) {
+        TS3TestEnv testEnv;
+        auto& appData = testEnv.GetServer().GetRuntime()->GetAppData();
+        appData.FeatureFlags.SetEnableExternalDataSources(true);
+        appData.FeatureFlags.SetEnableEncryptedExport(true);
+        TControlBoard::SetValue(0, appData.Icb->BackupControls.S3Controls.EnableExternalDataSourceExport);
+        ExecuteQuery(testEnv.GetQuerySession(), R"(
+            CREATE EXTERNAL DATA SOURCE `DataSource` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="https://object_storage_domain/bucket/",
+                AUTH_METHOD="NONE"
+            );
+        )", true);
+        auto settings = NExport::TExportToS3Settings()
+            .Endpoint(Sprintf("localhost:%u", testEnv.GetS3Port()))
+            .Scheme(ES3Scheme::HTTP)
+            .Bucket("test_bucket")
+            .AccessKey("test_key")
+            .SecretKey("test_secret")
+            .DestinationPrefix("Dest")
+            .SourcePath("/Root")
+            .AppendItem({"/Root", ""})
+            .AppendItem({"/Root/DataSource", "mapped/source"});
+        NExport::TExportClient client(testEnv.GetDriver(), TCommonClientSettings().Database("/Root"));
+        auto rejected = client.ExportToS3(settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.Status().GetStatus(), EStatus::UNSUPPORTED,
+            rejected.Status().GetIssues().ToString());
+
+        TControlBoard::SetValue(1, appData.Icb->BackupControls.S3Controls.EnableExternalDataSourceExport);
+        auto accepted = client.ExportToS3(settings).ExtractValueSync();
+        UNIT_ASSERT_C(accepted.Status().IsSuccess(), accepted.Status().GetIssues().ToString());
+        NOperation::TOperationClient operationClient(testEnv.GetDriver());
+        UNIT_ASSERT_C(WaitForOperation<NExport::TExportToS3Response>(operationClient, accepted.Id()),
+            "The export did not complete within the allocated time.");
+        auto result = operationClient.Get<NExport::TExportToS3Response>(accepted.Id()).ExtractValueSync();
+        const auto& items = result.Metadata().Settings.Item_;
+        UNIT_ASSERT_VALUES_EQUAL(items.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(items.front().Src, "/Root/DataSource");
+        UNIT_ASSERT_VALUES_EQUAL(items.front().Dst, "Dest/mapped/source");
+    }
+
     Y_UNIT_TEST(BackupRestoreTableWithMultiColumnStatistics) {
         TestTableWithMultiColumnStatisticsBackupRestore();
     }

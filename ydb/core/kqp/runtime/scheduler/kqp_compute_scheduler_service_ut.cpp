@@ -1,5 +1,7 @@
 #include "kqp_compute_scheduler_service.h"
 #include "kqp_schedulable_memory.h"
+#include "kqp_schedulable_task.h"
+#include "tree/snapshot.h"
 
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/service/service.h>
@@ -9,6 +11,7 @@
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
 
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/cms/console/console.h>
@@ -23,6 +26,94 @@
 namespace NKikimr::NKqp {
 
 using namespace NWorkloadManager;
+
+namespace {
+
+class TCpuLimitPool final : public NActors::TBasicExecutorPool {
+public:
+    // UserPoolId is fixed to 0 by the stub test runtime; actor execution stays in the stub pool.
+    TCpuLimitPool() : TBasicExecutorPool(0, 1, 0, "User") {}
+
+    float GetThreadCount() const override {
+        return Cpu.load(std::memory_order_relaxed);
+    }
+
+    // The fake pool exposes only its thread count; it must not create real executor threads.
+    void Initialize() override {}
+    void Prepare(TActorSystem*, NSchedulerQueue::TReader**, ui32*) override {}
+    void Start() override {}
+    void PrepareStop() override {}
+    void Shutdown() override {}
+    bool Cleanup() override { return true; }
+
+    std::atomic<float> Cpu = 8;
+};
+
+struct TCpuLimitFixture {
+    TTestBasicRuntime Runtime;
+    TCpuLimitPool* UserPool = nullptr;
+    NScheduler::TComputeSchedulerPtr Scheduler;
+    TActorId Service;
+    TActorId Sender;
+    TVector<NScheduler::TSchedulableTaskPtr> Tasks;
+
+    TCpuLimitFixture() {
+        // Keep actor execution in the stub pool; expose a separate basic User pool to the service.
+        Runtime.SetupNodeSubSystems = [this](ui32, NActors::TActorSystemSetup* setup) {
+            auto* executors = new TAutoPtr<NActors::IExecutorPool>[2];
+            executors[0].Reset(setup->Executors[0].Release());
+            UserPool = new TCpuLimitPool;
+            executors[1].Reset(UserPool);
+            setup->Executors.Reset(executors);
+            setup->ExecutorsCount = 2;
+        };
+        Runtime.Initialize(TAppPrepare().Unwrap());
+        Scheduler = std::make_shared<NScheduler::TComputeScheduler>(
+            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            NScheduler::TOptions{
+                .DelayParams = NScheduler::TDelayParams{
+                    .MaxDelay = TDuration::MicroSeconds(3'000'000),
+                    .MinDelay = TDuration::MicroSeconds(10),
+                    .AttemptBonus = TDuration::MicroSeconds(5),
+                    .MaxRandomDelay = TDuration::MicroSeconds(100),
+                },
+            });
+        Scheduler->SetTotalMemoryLimit(1000_MB);
+        Runtime.GetAppData().KqpComputeScheduler = Scheduler;
+        const auto memoryController = Runtime.AllocateEdgeActor();
+        Runtime.RegisterService(NMemory::MakeMemoryControllerId(), memoryController);
+        Service = Runtime.Register(CreateKqpComputeSchedulerService(TDuration::Hours(1)));
+        Runtime.GrabEdgeEvent<NMemory::TEvConsumerRegister>(memoryController);
+        Sender = Runtime.AllocateEdgeActor();
+        UNIT_ASSERT_VALUES_EQUAL(Scheduler->GetTotalCpuLimit(), 8);
+    }
+
+    void AddPool(const TString& poolId, double limitPercent, double guaranteePercent) {
+        NResourcePool::TPoolSettings settings;
+        settings.TotalCpuLimitPercentPerNode = limitPercent;
+        settings.TotalCpuGuaranteePercentPerNode = guaranteePercent;
+        settings.TotalMemoryLimitPercentPerNode = 30;
+        Runtime.Send(new IEventHandle(Service, Sender, new NScheduler::TEvAddPool("db", poolId, settings)));
+        Runtime.SimulateSleep(TDuration::MilliSeconds(10));
+    }
+
+    void Tick(float cpu) {
+        UserPool->Cpu.store(cpu, std::memory_order_relaxed);
+        Runtime.Send(new IEventHandle(Service, Sender, new NActors::TEvents::TEvWakeup()));
+        Runtime.SimulateSleep(TDuration::MilliSeconds(10));
+    }
+
+    NScheduler::NHdrf::NDynamic::TQueryPtr AddDemand(const TString& poolId, ui64 queryId, ui64 demand, ui64 guarantee = 0) {
+        auto query = Scheduler->AddOrUpdateQuery("db", poolId, queryId, {.CpuGuarantee = guarantee});
+        for (ui64 i = 0; i < demand; ++i) {
+            Tasks.push_back(std::make_shared<NScheduler::TSchedulableTask>(query));
+            Tasks.back()->IncreaseThrottle();
+        }
+        return query;
+    }
+};
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
 
@@ -467,6 +558,8 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         NResourcePool::TPoolSettings poolSettings;
         poolSettings.TotalMemoryLimitPercentPerNode = 30;
         poolSettings.TotalCpuLimitPercentPerNode = 50;
+        poolSettings.TotalCpuGuaranteePercentPerNode = 25;
+        scheduler->SetTotalCpuLimit(8);
         const TActorId sender = runtime.AllocateEdgeActor();
         runtime.Send(new IEventHandle(service, sender, new NScheduler::TEvAddPool("db", "pool", poolSettings)));
         runtime.SimulateSleep(TDuration::MilliSeconds(10));

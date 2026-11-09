@@ -15,9 +15,9 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/core/subsystems/stats.h>
 
 #include <algorithm>
 #include <cmath>
@@ -226,9 +226,9 @@ public:
             NHdrf::TStaticAttributes attrs;
             attrs.Weight = Configuration->GetOrCreateDatabase(databaseId).GetOrCreatePool(poolId).Weight;
             PoolMemoryLimitPercents.erase(poolIt->first);
-            SetCpuAttributes(*ev->Get()->Config, attrs);
+            const auto cpuConfig = SetCpuAttributes(*ev->Get()->Config, attrs);
             SetMemoryAttributes(poolIt->first, *ev->Get()->Config, attrs);
-            ApplyPoolConfig(databaseId, poolId, attrs);
+            ApplyPoolConfig(databaseId, poolId, attrs, cpuConfig);
 
             YDB_LOG_DEBUG("Update",
                 {"pool", databaseId},
@@ -242,6 +242,7 @@ public:
             } else {
                 // The second removal - the pool was really removed.
                 PoolMemoryLimitPercents.erase(poolIt->first);
+                PoolCpuConfigs.erase(poolIt->first);
                 PoolSubscribtions.erase(poolIt);
                 Configuration->GetOrCreateDatabase(databaseId).RemovePool(poolId);
                 PublishConfiguration();
@@ -287,6 +288,7 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+        UpdateTotalCpuLimit(ReadUserPoolCpuLimit());
         Scheduler->UpdateFairShare();
         if (Scheduler->IsMemoryEnabled()) {
             ReportMemoryConsumption();
@@ -322,12 +324,51 @@ public:
     }
 
 private:
-    ui64 CalculateTotalCpuLimit() {
-        auto poolId = SelfId().PoolID();
-        NActors::TExecutorPoolStats poolStats;
-        TVector<NActors::TExecutorThreadStats> threadsStats;
-        NActors::GetActorSystemStats().GetPoolStats(poolId, poolStats, threadsStats);
-        return Max<ui64>(poolStats.MaxThreadCount, 1);
+    ui64 ReadUserPoolCpuLimit() const {
+        // The scheduler accounts CPU in whole cores; a shared-only pool still gets one core.
+        const float cpu = UserPool ? std::max(0.0f, UserPool->GetThreadCount()) : 1.0f;
+        return std::max<ui64>(1, static_cast<ui64>(std::ceil(cpu)));
+    }
+
+    void UpdateTotalCpuLimit(ui64 cpu) {
+        const ui64 previous = Scheduler->GetTotalCpuLimit();
+        if (cpu == previous) {
+            return;
+        }
+
+        // Grow the parents before increasing reservations. When shrinking, release reservations
+        // first, while the old parent guarantees still cover the not-yet-updated siblings.
+        if (cpu > previous) {
+            Scheduler->SetTotalCpuLimit(cpu);
+        }
+        for (const auto& [fullPoolId, config] : PoolCpuConfigs) {
+            NHdrf::TStaticAttributes attrs;
+            ApplyCpuConfig(config, cpu, attrs);
+            try {
+                Scheduler->AddOrUpdatePool(fullPoolId.DatabaseId, fullPoolId.PoolId, attrs);
+                continue;
+            } catch (const TCpuGuaranteeError& e) {
+                // A fixed parent/child reservation or rounding may prevent the new guarantee.
+                // Unlike a rejected new configuration, a capacity change must not erase it.
+                YDB_LOG_WARN("Preserving guarantee during CPU resize",
+                    {"database", fullPoolId.DatabaseId}, {"poolId", fullPoolId.PoolId},
+                    {"error", TString(e.what())});
+            }
+
+            attrs.CpuGuarantee.reset();
+            try {
+                Scheduler->AddOrUpdatePool(fullPoolId.DatabaseId, fullPoolId.PoolId, attrs);
+            } catch (const TCpuGuaranteeError& e) {
+                // Even the new limit may conflict with the retained reservation. Keep the old
+                // attributes; the snapshot still caps the fair-share by the available total CPU.
+                YDB_LOG_WARN("Preserving pool limits during CPU resize",
+                    {"database", fullPoolId.DatabaseId}, {"poolId", fullPoolId.PoolId},
+                    {"error", TString(e.what())});
+            }
+        }
+        if (cpu < previous) {
+            Scheduler->SetTotalCpuLimit(cpu);
+        }
     }
 
     // Check the raw settings before converting to integers or changing desired policy and subscriptions.
@@ -438,6 +479,7 @@ private:
     const TDuration UpdateFairSharePeriod;
     THashMap<NHdrf::TFullPoolId, bool /* IsFirstRemoval */> PoolSubscribtions;
     THashMap<NHdrf::TFullPoolId, double> PoolMemoryLimitPercents;
+    THashMap<NHdrf::TFullPoolId, TPoolCpuConfig> PoolCpuConfigs;
     ui64 PublishedMemoryLimit = 0;
     ui64 PublishedMemoryUsage = 0;
 };
@@ -659,7 +701,7 @@ bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId, const bool i
 THashMap<NHdrf::TFullPoolId, double> TComputeScheduler::GetLeafPoolFairShares() const {
     THashMap<NHdrf::TFullPoolId, double> result;
     auto snapshot = Root->GetSnapshot();
-    if (!snapshot) {
+    if (!snapshot || !snapshot->TotalCpuLimit) {
         return result;
     }
     const auto totalCpu = snapshot->TotalCpuLimit;

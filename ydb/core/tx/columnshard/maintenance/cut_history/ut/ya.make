@@ -9,10 +9,14 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/storage/indexes/max
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
+    ydb/public/lib/value
 )
 
 YQL_LAST_ABI_VERSION()
 
-SRCS(ut_cut_history.cpp)
+SRCS(
+    ut_cut_history.cpp
+    ut_portion_filter.cpp
+)
 
 END()

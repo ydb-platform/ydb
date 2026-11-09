@@ -14,6 +14,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
 #include <memory>
+#include <optional>
+#include <string>
 #include <variant>
 
 namespace Ydb {
@@ -2370,7 +2372,10 @@ struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableS
     FLUENT_SETTING_DEFAULT(bool, WithShardNodesInfo, false);
 };
 
-struct TDescribeExternalDataSourceSettings : public TOperationRequestSettings<TDescribeExternalDataSourceSettings> {};
+struct TDescribeExternalDataSourceSettings : public TOperationRequestSettings<TDescribeExternalDataSourceSettings> {
+    // Older servers may ignore this option; check GetInstallation() for presence.
+    FLUENT_SETTING_DEFAULT(bool, IncludeInstallation, false);
+};
 
 struct TDescribeExternalTableSettings : public TOperationRequestSettings<TDescribeExternalTableSettings> {};
 
@@ -2905,6 +2910,9 @@ class TReadRowsResult : public TStatus {
 class TExternalDataSourceDescription {
 public:
     TExternalDataSourceDescription(Ydb::Table::DescribeExternalDataSourceResult&& description);
+
+    // Present (possibly empty) only when requested and supported by the server.
+    std::optional<std::string> GetInstallation() const;
 
 private:
     class TImpl;

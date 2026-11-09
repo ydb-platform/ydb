@@ -78,16 +78,17 @@ namespace NKikimr::NTabletFlatExecutor {
             Started = true;
         }
 
-        TIntrusivePtr<NTable::TPartWriter> GetWriter(ui32 index) const {
+        // Borrowed writers remain owned by this object for its lifetime.
+        NTable::TPartWriter* GetWriter(ui32 index) const {
             Y_ENSURE(Started && !Finished, "Compaction writer is not active");
-            return States.at(index).Writer;
+            return States.at(index).Writer.Get();
         }
 
-        TIntrusivePtr<NTable::TPartWriter> BeginKey(TArrayRef<const TCell> key) {
+        NTable::TPartWriter* BeginKey(TArrayRef<const TCell> key) {
             Y_ENSURE(Started && !Finished && !KeyActive, "Unexpected compaction key start");
             CurrentOutput = Router->RouteKey(key);
             Y_ENSURE(CurrentOutput < States.size(), "Compaction router returned an invalid output index");
-            auto writer = GetWriter(CurrentOutput);
+            auto* writer = GetWriter(CurrentOutput);
             writer->BeginKey(key);
             KeyActive = true;
             return writer;

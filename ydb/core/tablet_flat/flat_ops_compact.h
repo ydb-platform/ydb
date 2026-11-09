@@ -1086,7 +1086,8 @@ namespace NTabletFlatExecutor {
         TIntrusiveConstPtr<TScheme> Scheme;
 
         TCompactionOutputs Outputs;
-        TIntrusivePtr<TPartWriter> Writer;
+        // Borrowed from Outputs, which owns every writer for this scan.
+        TPartWriter* Writer = nullptr;
 
         NTable::TWriteStats WriteStats;
         TVector<TCompactionOutputs::TResult> Results;

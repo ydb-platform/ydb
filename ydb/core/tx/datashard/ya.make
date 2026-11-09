@@ -1,10 +1,10 @@
 YQL_LIBRARY()
 
 SRCS(
-    datashard_hnsw.cpp
-    hnsw_index_build_actor.cpp
-    hnsw_index_build_actor.h
-    hnsw_memory_tracker.h
+    hnsw_index/datashard_hnsw.cpp
+    hnsw_index/hnsw_index_build_actor.cpp
+    hnsw_index/hnsw_index_build_actor.h
+    hnsw_index/hnsw_memory_tracker.h
     datashard.h
     datashard__engine_host.h
     datashard__lock_rows.h

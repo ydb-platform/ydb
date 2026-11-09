@@ -1,5 +1,5 @@
 #include <ydb/core/tx/datashard/hnsw_index/hnsw_index.h>
-#include <ydb/core/tx/datashard/hnsw_memory_tracker.h>
+#include <ydb/core/tx/datashard/hnsw_index/hnsw_memory_tracker.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <atomic>

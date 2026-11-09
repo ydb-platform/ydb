@@ -1,4 +1,4 @@
-#include "datashard_impl.h"
+#include "../datashard_impl.h"
 #include "hnsw_index_build_actor.h"
 
 #include <ydb/core/tablet_flat/flat_scan_iface.h>

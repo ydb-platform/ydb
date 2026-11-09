@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hnsw_index/hnsw_index.h"
+#include "hnsw_index.h"
 
 #include <ydb/library/actors/core/actor.h>
 

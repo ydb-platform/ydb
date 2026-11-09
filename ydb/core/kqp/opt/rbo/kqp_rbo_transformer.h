@@ -112,9 +112,6 @@ private:
     THashMap<TString, THashSet<TString>> RequestedSimpleColumns;
     THashMap<TString, THashSet<TString>> RequestedEqHeightTuples;
 
-    // Flag to reset the check of original type for multiple statement queries
-    bool ResetTypes = false;
-
     TVector<TIntrusivePtr<TOpRoot>> Roots;
     TRuleBasedOptimizer RBO;
 };
@@ -144,6 +141,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                               ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated,
                               bool generateRoot = false);
 
-TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
+TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, ui64& uniqueSourceIdCounter);
 
 } // namespace NKikimr::NKqp

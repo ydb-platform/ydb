@@ -24,7 +24,7 @@ PY3TEST()
     FORK_SUBTESTS()
     SPLIT_FACTOR(150)
 
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
     IF (SANITIZER_TYPE)
         SIZE(LARGE)
         INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -38,6 +38,7 @@ PY3TEST()
 
     PEERDIR(
         contrib/python/parameterized
+        library/python/retry
         ydb/tests/library
         ydb/tests/library/test_meta
         ydb/tests/olap/common

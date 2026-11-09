@@ -3013,26 +3013,26 @@ Y_UNIT_TEST(ProcessUserTypeAuth) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["YDB.PushData"]);
 }
 
-Y_UNIT_TEST(SelectStreamRtmr) {
+Y_UNIT_TEST(SelectStreamPq) {
     NYql::TAstParseResult res = SqlToYql(
         "USE plato; INSERT INTO Output SELECT STREAM key FROM Input;",
-        10, TString(NYql::RtmrProviderName));
+        10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     res = SqlToYql(
         "USE plato; INSERT INTO Output SELECT key FROM Input;",
-        10, TString(NYql::RtmrProviderName));
+        10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
-Y_UNIT_TEST(SelectStreamRtmrJoinWithYt) {
+Y_UNIT_TEST(SelectStreamPqJoinWithYt) {
     NYql::TAstParseResult res = SqlToYql(
         "USE plato; INSERT INTO Output SELECT STREAM key FROM Input LEFT JOIN hahn.ttt as t ON Input.key = t.Name;",
-        10, TString(NYql::RtmrProviderName));
+        10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
-Y_UNIT_TEST(SelectStreamNonRtmr) {
+Y_UNIT_TEST(SelectStreamNonStreamingSource) {
     NYql::TAstParseResult res = SqlToYql(
         "USE plato; INSERT INTO Output SELECT STREAM key FROM Input;",
         10);
@@ -3040,11 +3040,11 @@ Y_UNIT_TEST(SelectStreamNonRtmr) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:31: Error: SELECT STREAM is unsupported for non-streaming sources\n");
 }
 
-Y_UNIT_TEST(GroupByHopRtmr) {
+Y_UNIT_TEST(GroupByHopPq) {
     NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato; INSERT INTO Output SELECT key, SUM(value) AS value FROM Input
                 GROUP BY key, HOP(subkey, "PT10S", "PT30S", "PT20S");
-            )", 10, TString(NYql::RtmrProviderName));
+            )", 10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
@@ -3057,16 +3057,16 @@ Y_UNIT_TEST(DataWatermarksPragmaIsAccepted) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
-Y_UNIT_TEST(GroupByHopRtmrSubquery) {
+Y_UNIT_TEST(GroupByHopPqSubquery) {
     // 'use plato' intentially avoided
     NYql::TAstParseResult res = SqlToYql(R"(
                 SELECT COUNT(*) AS value FROM (SELECT * FROM plato.Input)
                 GROUP BY HOP(Data, "PT10S", "PT30S", "PT20S")
-            )", 10, TString(NYql::RtmrProviderName));
+            )", 10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
-Y_UNIT_TEST(GroupByHopRtmrSubqueryBinding) {
+Y_UNIT_TEST(GroupByHopPqSubqueryBinding) {
     NYql::TAstParseResult res = SqlToYql(R"(
         USE plato;
         $q = SELECT * FROM Input;
@@ -3074,15 +3074,15 @@ Y_UNIT_TEST(GroupByHopRtmrSubqueryBinding) {
             SELECT COUNT(*) AS value FROM $q
             GROUP BY HOP(Data, "PT10S", "PT30S", "PT20S")
         );
-    )", 10, TString(NYql::RtmrProviderName));
+    )", 10, TString(NYql::PqProviderName));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
-Y_UNIT_TEST(GroupByNoHopRtmr) {
+Y_UNIT_TEST(GroupByNoHopPq) {
     NYql::TAstParseResult res = SqlToYql(R"(
             USE plato; INSERT INTO Output SELECT STREAM key, SUM(value) AS value FROM Input
             GROUP BY key;
-        )", 10, TString(NYql::RtmrProviderName));
+        )", 10, TString(NYql::PqProviderName));
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:22: Error: Streaming group by query must have a hopping window specification.\n");
 }
@@ -4344,13 +4344,12 @@ Y_UNIT_TEST(WindowPartitionByOrderByWindowFunctionIsNotAllowed) {
         "<main>:1:50: Error: Failed to use window function RowNumber without window specification or in wrong place\n");
 }
 
-Y_UNIT_TEST(PqReadByAfterUse) {
+Y_UNIT_TEST(PqReadByDq) {
     ExpectFailWithError("use plato; pragma PqReadBy='plato2';",
-                        "<main>:1:28: Error: Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: plato2 != plato\n");
+                        "<main>:1:28: Error: Expected 'dq' or an empty string for: PqReadBy\n");
 
-    UNIT_ASSERT(SqlToYql("pragma PqReadBy='plato2';").IsOk());
-    UNIT_ASSERT(SqlToYql("pragma PqReadBy='plato2'; use plato;").IsOk());
-    UNIT_ASSERT(SqlToYql("$x='plato'; use rtmr:$x; pragma PqReadBy='plato2';").IsOk());
+    UNIT_ASSERT(SqlToYql("pragma PqReadBy='dq';").IsOk());
+    UNIT_ASSERT(SqlToYql("pragma PqReadBy=''; use plato;").IsOk());
     UNIT_ASSERT(SqlToYql("use plato; pragma PqReadBy='dq';").IsOk());
 }
 

@@ -197,6 +197,9 @@ public:
         if (tableIndexAlter.HasVectorIndexKmeansTreeDescription()) {
             newIndexData->SpecializedIndexDescription = tableIndexAlter.GetVectorIndexKmeansTreeDescription();
         }
+        if (tableIndexAlter.HasHnswIndexDescription()) {
+            newIndexData->SpecializedIndexDescription = tableIndexAlter.GetHnswIndexDescription();
+        }
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterTableIndex, indexPath->PathId);

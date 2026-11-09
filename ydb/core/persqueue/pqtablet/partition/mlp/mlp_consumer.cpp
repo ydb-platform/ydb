@@ -816,7 +816,23 @@ void TConsumerActor::ProcessEventQueue() {
     ChangeMessageDeadlineRequestsQueue.clear();
 
     for (auto& ev : PurgeRequestsQueue) {
-        Storage->Purge(PartitionEndOffset);
+        auto toOffset = PartitionEndOffset;
+        if (auto evToOffset = ev->Get()->GetToOffset()) {
+            const auto committedOffset = Storage->GetFirstUncommittedOffset();
+            toOffset = Max(committedOffset, *evToOffset);
+            if (toOffset == committedOffset) {
+                // Replayed replication offsets must preserve locks and individual commits.
+                // A preceding operation in this batch may still need to be persisted.
+                if (Storage->IsBatchEmpty()) {
+                    Send(ev->Sender, new TEvPQ::TEvMLPPurgeResponse(PartitionId), 0, ev->Cookie);
+                } else {
+                    PendingPurgeQueue.emplace_back(ev->Sender, ev->Cookie);
+                }
+                continue;
+            }
+        }
+
+        Storage->Purge(toOffset);
         PendingPurgeQueue.emplace_back(ev->Sender, ev->Cookie);
     }
     PurgeRequestsQueue.clear();
@@ -1031,6 +1047,12 @@ size_t TConsumerActor::FifoUnlockedGroupDeficit() const {
 }
 
 bool TConsumerActor::FetchMessagesIfNeeded() {
+    if (AppData()->FeatureFlags.GetEnableMLPConsumerInFlightMutateDisabled()) {
+        LOG_D("Fetch messages is disabled");
+        return false;
+    }
+
+
     if (Storage->GetMessageCount() > 0) {
         LastTimeWithMessages = TAppData::TimeProvider->Now();
         NotifyPQRB();

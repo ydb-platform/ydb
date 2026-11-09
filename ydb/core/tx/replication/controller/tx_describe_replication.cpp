@@ -6,6 +6,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <util/generic/algorithm.h>
@@ -226,6 +227,22 @@ public:
         } else if (!replication->GetConfig().HasTransferSpecific()) {
             Result->Record.MutableAvailabilityPeriod()->MutableDuration()->set_seconds(
                 AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds());
+        }
+        if (replication->GetConfig().GetConsistencySettings().HasGlobal() && Self->GetSingle() == replication) {
+            auto* transactions = Result->Record.MutableTransactions();
+            // CommittingTxId is already included in AssignedTxIds. Entries are
+            // removed by TTxCommitChanges and restored from Schema::TxIds on restart.
+            for (const auto& [version, txId] : Self->AssignedTxIds) {
+                auto* item = transactions->add_assigned();
+                item->mutable_upper_bound_barrier()->set_plan_step(version.Step);
+                item->mutable_upper_bound_barrier()->set_tx_id(version.TxId);
+                item->set_write_tx_id(txId);
+            }
+            for (const auto& [version, _] : Self->PendingTxId) {
+                auto* item = transactions->add_pending();
+                item->set_plan_step(version.Step);
+                item->set_tx_id(version.TxId);
+            }
         }
 
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;

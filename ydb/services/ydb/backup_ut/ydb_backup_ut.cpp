@@ -40,6 +40,9 @@
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 
+#include <util/string/subst.h>
+#include <util/system/env.h>
+
 #include <atomic>
 #include <cmath>
 #include <limits>
@@ -410,6 +413,7 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     }
                     break;
                 }
+                case EIndexType::GlobalHnsw: // API-only type; creation is not available yet.
                 case EIndexType::Unknown: {
                     UNIT_ASSERT(false);
                 }
@@ -3578,6 +3582,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeLocalMinMax:
             case EIndexTypeLocalCountMinSketch:
+            case EIndexTypeGlobalHnsw: // API-only type until the lifecycle is implemented.
             case EIndexTypeInvalid:
                 break; // not applicable
         }
@@ -3598,9 +3603,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
-        server.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
         server.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_DEBUG);
-        server.GetRuntime()->SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::EPriority::PRI_DEBUG);
+        if (GetEnv("YDB_TEST_BACKUP_VERBOSE") == "1") {
+            server.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
+            server.GetRuntime()->SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::EPriority::PRI_DEBUG);
+        }
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
@@ -4269,9 +4276,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             UNIT_ASSERT_C(S3Mock.Start(), S3Mock.GetError());
 
             auto& runtime = *Server.GetRuntime();
-            runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_DEBUG);
-            runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_DEBUG);
+            if (GetEnv("YDB_TEST_BACKUP_VERBOSE") == "1") {
+                runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
+                runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_DEBUG);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_DEBUG);
+            }
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
             runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
@@ -4720,7 +4729,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         CompareResults(GetTableContent(session, table, "pk"), originalContent);
     }
 
-    Y_UNIT_TEST(OlapTieringPreservedThroughExportImport) {
+    Y_UNIT_TEST_TWIN(OlapTieringPreservedThroughExportImport, DifferentDatabase) {
         std::atomic<ui64> s3Writes = 0;
         TPortManager portManager;
         const auto s3Port = portManager.GetPort();
@@ -4795,19 +4804,19 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         const auto originalTier1 = DescribeExternalDataSource(tableSession, "/Root/tier1");
         const auto originalTier2 = DescribeExternalDataSource(tableSession, "/Root/tier2");
 
-        const auto waitForEviction = [&](ui64 writesBefore, TStringBuf stage) {
+        const auto waitForEviction = [&](TTableClient& client, const TString& database, ui64 writesBefore, TStringBuf stage) {
             const auto deadline = TInstant::Now() + TDuration::Seconds(60);
             ui64 tierRows = 0;
             ui64 otherRows = 0;
             do {
                 tierRows = 0;
                 otherRows = 0;
-                auto stream = tableClient.StreamExecuteScanQuery(std::format(R"(
+                auto stream = client.StreamExecuteScanQuery(std::format(R"(
                     SELECT COALESCE(TierName, "") AS TierName, COALESCE(SUM(Rows), 0ul) AS Rows
-                    FROM `{}/.sys/primary_index_portion_stats`
+                    FROM `{}/olap_tiering_backup/.sys/primary_index_portion_stats`
                     WHERE Activity = 1
                     GROUP BY TierName;
-                )", table)).GetValueSync();
+                )", database.c_str())).GetValueSync();
                 UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
                 for (;;) {
                     auto part = stream.ReadNext().GetValueSync();
@@ -4821,7 +4830,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     TResultSetParser parser(part.GetResultSet());
                     while (parser.TryNextRow()) {
                         const auto rows = parser.ColumnParser("Rows").GetUint64();
-                        if (parser.ColumnParser("TierName").GetUtf8() == "/Root/tier2") {
+                        if (parser.ColumnParser("TierName").GetUtf8() == database + "/tier2") {
                             tierRows += rows;
                         } else {
                             otherRows += rows;
@@ -4838,7 +4847,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 << ", writes before=" << writesBefore);
         };
 
-        waitForEviction(0, "Before export");
+        waitForEviction(tableClient, "/Root", 0, "Before export");
         CompareResults(GetTableContent(session, table, "ts"), originalContent);
 
         CreateBackupLambda(driver, testEnv.GetS3Port())();
@@ -4847,14 +4856,54 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             DROP EXTERNAL DATA SOURCE `/Root/tier1`;
             DROP EXTERNAL DATA SOURCE `/Root/tier2`;
         )", true);
-        const auto writesBeforeImport = s3Writes.load();
-        CreateRestoreLambda(driver, testEnv.GetS3Port(), {"olap_tiering_backup", "tier1", "tier2"})();
+        const auto restoreAndCheck = [&](const TDriver& restoredDriver, const TString& database) {
+            TTableClient restoredTableClient(restoredDriver);
+            NQuery::TQueryClient restoredQueryClient(restoredDriver);
+            auto restoredSession = CreateSession(restoredQueryClient);
+            const TString restoredTable = database + "/olap_tiering_backup";
+            // Finish restoring the external data sources before importing the table that references them.
+            CreateRestoreLambda(restoredDriver, testEnv.GetS3Port(), {"tier1", "tier2"}, database)();
+            const auto writesBeforeImport = s3Writes.load();
+            CreateRestoreLambda(restoredDriver, testEnv.GetS3Port(),
+                {"olap_tiering_backup"}, database)();
 
-        waitForEviction(writesBeforeImport, "After import");
-        CompareResults(GetTableContent(session, table, "ts"), originalContent);
-        UNIT_ASSERT_STRINGS_EQUAL(FetchShowCreateTableDdl(session, table), originalDdl);
-        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, "/Root/tier1"), originalTier1);
-        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, "/Root/tier2"), originalTier2);
+            waitForEviction(restoredTableClient, database, writesBeforeImport, "After import");
+            CompareResults(GetTableContent(restoredSession, restoredTable.c_str(), "ts"), originalContent);
+            TString expectedDdl = originalDdl;
+            SubstGlobal(expectedDdl, "/Root/", database + "/");
+            UNIT_ASSERT_STRINGS_EQUAL(FetchShowCreateTableDdl(restoredSession, restoredTable.c_str()), expectedDdl);
+            auto restoredTableSession = restoredTableClient.CreateSession().ExtractValueSync().GetSession();
+            for (const auto& [tier, original] : {std::pair{"tier1", originalTier1}, std::pair{"tier2", originalTier2}}) {
+                auto expected = original;
+                for (auto& [key, value] : *expected.mutable_properties()) {
+                    // Secret paths and REFERENCES must point into the restored database as well.
+                    TString rewritten = value;
+                    SubstGlobal(rewritten, "/Root/", database + "/");
+                    value = rewritten;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(restoredTableSession, database + "/" + tier), expected);
+            }
+        };
+
+        if constexpr (DifferentDatabase) {
+            NKikimrConfig::TAppConfig restoredConfig;
+            restoredConfig.MutableFeatureFlags()->SetEnableTieringInColumnShard(true);
+            restoredConfig.MutableFeatureFlags()->SetEnableColumnTableImportDependencyRetry(true);
+            TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> restoredServer(restoredConfig);
+            CreateDatabase(*restoredServer.Tenants_, "/Root/restored", "ssd");
+            auto restoredDriver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", restoredServer.GetPort()))
+                .SetDatabase("/Root/restored").SetAuthToken("root@builtin").SetDiscoveryMode(EDiscoveryMode::Off));
+            NQuery::TQueryClient restoredQueryClient(restoredDriver);
+            auto restoredSession = CreateSession(restoredQueryClient);
+            // Secrets are provisioned separately; they are not exported by this backup.
+            ExecuteQuery(restoredSession, R"(
+                CREATE SECRET `/Root/restored/tiering_access_key` WITH (value = "test_key");
+                CREATE SECRET `/Root/restored/tiering_secret_key` WITH (value = "test_secret");
+            )", true);
+            restoreAndCheck(restoredDriver, "/Root/restored");
+        } else {
+            restoreAndCheck(driver, "/Root");
+        }
     }
 
     Y_UNIT_TEST(OlapColumnEncodingsPreservedThroughS3BackupRestore) {
@@ -5245,6 +5294,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeLocalMinMax:
             case EIndexTypeLocalCountMinSketch:
+            case EIndexTypeGlobalHnsw: // API-only type until the lifecycle is implemented.
             case EIndexTypeInvalid:
                 break; // not applicable
         }

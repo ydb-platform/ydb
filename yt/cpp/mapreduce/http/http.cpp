@@ -260,6 +260,11 @@ void THttpHeader::SetServiceTicket(const TString& ticket)
     ServiceTicket_ = ticket;
 }
 
+void THttpHeader::SetUserTicket(const TString& ticket)
+{
+    UserTicket_ = ticket;
+}
+
 void THttpHeader::SetTraceparent(const TString& traceparent)
 {
     Traceparent_ = traceparent;
@@ -362,6 +367,9 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     }
     if (!ServiceTicket_.empty()) {
         headers->Add("X-Ya-Service-Ticket", ServiceTicket_);
+    }
+    if (!UserTicket_.empty()) {
+        headers->Add("X-Ya-User-Ticket", UserTicket_);
     }
     if (!ImpersonationUser_.empty()) {
         headers->Add("X-Yt-User-Name", ImpersonationUser_);

@@ -42,6 +42,7 @@ YT_DEFINE_ERROR_ENUM(
     ((AbandonedJob)                    (3306))
     ((TimerStoreLimitExceeded)         (3307))
     ((PartitionKeyLimitExceeded)       (3308))
+    ((PersistedStateSnapshotOutdated)   (3309))
 );
 
 YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);

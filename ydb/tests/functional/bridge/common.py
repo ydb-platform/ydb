@@ -148,11 +148,13 @@ class BridgeKiKiMRTest(object):
         while True:
             response = client.update_cluster_state(updates, quorum_piles=quorum_piles)
             self.logger.debug("Update cluster state response: %s", response)
-            transient = response.operation.status == StatusIds.INTERNAL_ERROR and any(
-                issue in str(response.operation.issues) for issue in (
-                    "No quorum to start propose/commit configuration", "Hop node disconnected",
-                    # nodes are still rebinding after another pile has been disconnected
-                    "No quorum for bridge configuration collection",
+            transient = response.operation.status in (StatusIds.ABORTED, StatusIds.UNAVAILABLE) or (
+                response.operation.status == StatusIds.INTERNAL_ERROR and any(
+                    issue in str(response.operation.issues) for issue in (
+                        "No quorum to start propose/commit configuration", "Hop node disconnected",
+                        # nodes are still rebinding after another pile has been disconnected
+                        "No quorum for bridge configuration collection",
+                    )
                 )
             )
             if expected_status != StatusIds.SUCCESS or not transient or time.monotonic() >= deadline:

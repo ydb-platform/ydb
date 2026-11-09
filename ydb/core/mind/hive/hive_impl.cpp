@@ -2796,7 +2796,13 @@ void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
     ClusterConfig = record.GetConfig().GetHiveConfig();
     NodeBrokerEpoch = TDuration::MicroSeconds(record.GetConfig().GetNodeBrokerConfig().GetEpochDuration());
+    const NKikimrConfig::THiveConfig previousConfig = CurrentConfig;
     BuildCurrentConfig();
+    if (TString changes = GetHiveConfigDiffText(previousConfig, CurrentConfig)) {
+        YDB_LOG_INFO("Handle TEvConsole::TEvConfigNotificationRequest: effective config changed",
+            {"logPrefix", GetLogPrefix()},
+            {"changes", changes});
+    }
     YDB_LOG_DEBUG("Handle TEvConsole::TEvConfigNotificationRequest: merged config",
         {"logPrefix", GetLogPrefix()},
         {"config", CurrentConfig});
@@ -3802,6 +3808,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(TEvPrivate::TEvProcessBootQueue, Handle);
+        hFunc(TEvPrivate::TEvProcessPileDrains, Handle);
         hFunc(TEvPrivate::TEvPostponeProcessBootQueue, Handle);
         hFunc(TEvPrivate::TEvProcessPendingOperations, Handle);
         hFunc(TEvPrivate::TEvProcessDisconnectNode, Handle);
@@ -3923,6 +3930,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvInterconnect::TEvNodesInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvents::TEvUndelivered::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessBootQueue::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessPileDrains::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvPostponeProcessBootQueue::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessPendingOperations::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessDisconnectNode::EventType, EnqueueIncomingEvent);

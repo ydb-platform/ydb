@@ -128,6 +128,29 @@ namespace NKikimr::NDataShard {
             UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 0);
         }
 
+        Y_UNIT_TEST(IndexDemandSurvivesSiblingCompletionAndPartialRelease) {
+            THnswCacheMemoryTracker tracker;
+            auto consumer = MakeIntrusive<TTestMemoryConsumer>();
+            tracker.SetConsumer(consumer);
+            tracker.SetLimit(100);
+            UNIT_ASSERT(tracker.TryAcquire(30, 1));
+            UNIT_ASSERT(tracker.TryAcquire(40, 2));
+            UNIT_ASSERT(!tracker.TryAcquire(70, 1)); // Owner 1 needs 100 total.
+            UNIT_ASSERT(!tracker.TryAcquire(50, 2)); // Owner 2 needs 90 total.
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 190u);
+            tracker.Release(40, 2);
+            tracker.ResetDemand(2);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 100u);
+            tracker.Release(30, 1);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 100u);
+            UNIT_ASSERT_VALUES_EQUAL(tracker.GetUsed(1), 0u);
+            tracker.ResetDemand(1);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 0u);
+            UNIT_ASSERT(!tracker.TryAcquire(Max<ui64>(), 1));
+            UNIT_ASSERT(!tracker.TryAcquire(Max<ui64>(), 2));
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, Max<ui64>());
+        }
+
         Y_UNIT_TEST(CacheMemoryTrackersHaveIndependentLimits) {
             THnswCacheMemoryTracker first;
             THnswCacheMemoryTracker second;

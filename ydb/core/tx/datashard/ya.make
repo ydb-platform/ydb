@@ -10,6 +10,8 @@ SRCS(
     datashard_direct_transaction.h
     datashard_failpoints.h
     datashard_impl.h
+    hnsw_index/datashard_hnsw.cpp
+    hnsw_index/hnsw_index_build_actor.cpp
     datashard_kqp.h
     datashard_locks_db.h
     datashard_outreadset.h

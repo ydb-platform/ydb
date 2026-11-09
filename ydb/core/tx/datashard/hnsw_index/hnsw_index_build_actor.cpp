@@ -68,10 +68,10 @@ namespace NKikimr::NDataShard {
                               const Ydb::Table::VectorIndexSettings& settings,
                               std::vector<std::pair<TString, TString>> keysAndVectors,
                               std::shared_ptr<void> memoryReservation,
-                              ui64 maxMemoryBytes, TRowVersion baseVersion, ui64 buildToken, bool allowEmpty, TPathId indexId) {
+                              ui64 maxMemoryBytes, TRowVersion baseVersion, ui64 buildToken, bool allowEmpty, TPathId indexId, ui64 memoryOwner) {
             return CreateHnswIndexBuildWorker(settings, std::move(keysAndVectors),
                                               std::move(memoryReservation), maxMemoryBytes,
-                                              [replyTo, localTid, indexId, vectorColumnTag, rowCountAtBuild, settings, baseVersion, buildToken](THnswIndexBuildResult&& buildResult, const TActorContext& ctx) mutable {
+                                              [replyTo, localTid, indexId, memoryOwner, vectorColumnTag, rowCountAtBuild, settings, baseVersion, buildToken](THnswIndexBuildResult&& buildResult, const TActorContext& ctx) mutable {
                                                   auto result = MakeHolder<TDataShard::TEvPrivate::TEvHnswIndexBuildResult>();
                                                   result->LocalTid = localTid;
                                                   result->IndexId = indexId;
@@ -80,6 +80,7 @@ namespace NKikimr::NDataShard {
                                                   result->Settings = settings;
                                                   result->BaseVersion = baseVersion;
                                                   result->BuildToken = buildToken;
+                                                  result->MemoryOwner = memoryOwner;
                                                   result->Index = std::move(buildResult.Index);
                                                   result->MemoryReservation = std::move(buildResult.MemoryReservation);
                                                   result->Error = std::move(buildResult.Error);
@@ -93,10 +94,10 @@ namespace NKikimr::NDataShard {
                                       const Ydb::Table::VectorIndexSettings& settings,
                                       std::vector<std::pair<TString, TString>> keysAndVectors,
                                       std::shared_ptr<void> memoryReservation,
-                                      ui64 maxMemoryBytes, TRowVersion baseVersion, ui64 buildToken, bool allowEmpty, TPathId indexId) {
+                                      ui64 maxMemoryBytes, TRowVersion baseVersion, ui64 buildToken, bool allowEmpty, TPathId indexId, ui64 memoryOwner) {
         return THnswIndexBuildActor::Create(replyTo, localTid, vectorColumnTag,
                                             rowCountAtBuild, settings, std::move(keysAndVectors),
-                                            std::move(memoryReservation), maxMemoryBytes, baseVersion, buildToken, allowEmpty, indexId);
+                                            std::move(memoryReservation), maxMemoryBytes, baseVersion, buildToken, allowEmpty, indexId, memoryOwner);
     }
 
     void TDataShard::Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TActorContext& ctx) {
@@ -105,6 +106,9 @@ namespace NKikimr::NDataShard {
         HnswBuildsInFlight.erase(result->BuildToken);
         if (!IsHnswBuildCurrent(result->LocalTid, result->BuildToken, result->IndexId)) {
             auto* it = FindHnswIndexEntry(result->LocalTid, result->IndexId);
+            if (HnswCacheMemoryTracker && (!it || it->MemoryOwner != result->MemoryOwner || it->BuildToken == result->BuildToken)) {
+                HnswCacheMemoryTracker->ResetDemand(result->MemoryOwner);
+            }
             if (it && it->BuildToken == result->BuildToken) {
                 DeferHnswIndexBuild(result->LocalTid, TDuration::Seconds(1), result->IndexId);
                 ScheduleHnswRebuild(result->LocalTid, result->IndexId);

@@ -47,6 +47,6 @@ namespace NKikimr::NDataShard {
         std::vector<std::pair<TString, TString>> keysAndVectors,
         std::shared_ptr<void> memoryReservation,
         ui64 maxMemoryBytes,
-        TRowVersion baseVersion, ui64 buildToken, bool allowEmpty = false, TPathId indexId = {});
+        TRowVersion baseVersion, ui64 buildToken, bool allowEmpty = false, TPathId indexId = {}, ui64 memoryOwner = 0);
 
 } // namespace NKikimr::NDataShard

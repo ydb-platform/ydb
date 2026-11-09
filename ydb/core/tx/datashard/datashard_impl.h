@@ -461,6 +461,7 @@ class TDataShard
             ui32 VectorColumnTag = 0;
             ui64 RowCountAtBuild = 0;
             ui64 BuildToken = 0;
+            ui64 MemoryOwner = 0;
             TRowVersion BaseVersion = TRowVersion::Min();
             Ydb::Table::VectorIndexSettings Settings;
             std::shared_ptr<void> MemoryReservation;
@@ -1905,13 +1906,14 @@ public:
     }
 
     void SetUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
+        const bool replacing = TableInfos.contains(tableId.LocalPathId);
         if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end()) {
             ReconcileHnswIndexes(*it->second, *tableInfo);
         }
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
-        ScheduleHnswInitialBuilds();
+        if (replacing) { ScheduleHnswInitialBuilds(); }
     }
 
     void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
@@ -1973,6 +1975,7 @@ public:
         ui64 CacheHits = 0;
         ui64 CacheMisses = 0;
         ui64 Rebuilds = 0;
+        ui64 Builds = 0;
         ui64 UnsupportedReads = 0;
         ui64 RangeFallbacks = 0;
         ui64 CandidateFallbacks = 0;
@@ -3218,8 +3221,8 @@ private:
     // queued requests and requests that finish with an error.
     ui64 DatabaseFreezeLocalWrites = 0;
 
-    // In-memory HNSW index cache for accelerated vector top-K search, keyed by
-    // local table id (i.e. one entry per posting table hosted by this tablet).
+    // Independent graphs, journals and build state keyed by local table and
+    // logical index path id. Multiple indexes may use the same embedding column.
     //
     // Committed leader writes maintain versioned per-key deltas. Followers
     // retain the scan path until graph replication and readiness are implemented.
@@ -3247,6 +3250,7 @@ private:
         ui64 CacheHits = 0;
         ui64 CacheMisses = 0;
         ui64 Rebuilds = 0;
+        ui64 Builds = 0;
         ui64 UnsupportedReads = 0;
         ui64 RangeFallbacks = 0;
         ui64 CandidateFallbacks = 0;

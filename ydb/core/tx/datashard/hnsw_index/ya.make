@@ -5,11 +5,9 @@ ADDINCL(
 )
 
 SRCS(
-    datashard_hnsw.cpp
     hnsw_index.h
     hnsw_index.cpp
     hnsw_index_build_actor.h
-    hnsw_index_build_actor.cpp
     hnsw_memory_tracker.h
 )
 

@@ -1497,14 +1497,16 @@ private:
         // ANN replaces only reads covering the complete local partition.
         // Restricted ranges retain their exact table-scan semantics.
         if (State.VectorTopK && State.VectorTopK->HnswIndex
-                && CanUseHnsw(*Self, State, State.VectorTopK->HnswIndexId) && TableInfo.CoversFullShard(tableRange)
+                && CanUseHnsw(*Self, State, State.VectorTopK->HnswIndexId)
                 && State.VectorTopK->HnswIndex->CanRead(State.ReadVersion)) {
-            auto results = SearchHnswDistinct();
-            // Filtering may exhaust NMSLIB's bounded candidate set. Preserve
-            // the exact path when it cannot supply enough visible neighbors.
-            if (results.Covered && results.Results.size() >= State.VectorTopK->Limit) {
-                if (const auto status = MaterializeHnswResults(results, txc)) {
-                    return *status;
+            if (TableInfo.CoversFullShard(tableRange)) {
+                auto results = SearchHnswDistinct();
+                // Filtering may exhaust NMSLIB's bounded candidate set. Preserve
+                // the exact path when it cannot supply enough visible neighbors.
+                if (results.Covered && results.Results.size() >= State.VectorTopK->Limit) {
+                    if (const auto status = MaterializeHnswResults(results, txc)) {
+                        return *status;
+                    }
                 }
             }
             Self->RegisterHnswFallback(TableInfo.LocalTid, TableInfo.CoversFullShard(tableRange)

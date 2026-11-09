@@ -71,6 +71,9 @@ EExecutionStatus TTruncateUnit::Execute(
     DataShard.GetConflictsCache().GetTableCache(localTid).RemoveAllUncommittedWrites(txc.DB);
 
     txc.DB.Truncate(localTid);
+    if (!DataShard.GetUserTables().at(tableId)->HnswIndexes.empty()) {
+        txc.DB.OnCommit([self = &DataShard, localTid] { self->InvalidateHnswTable(localTid); });
+    }
 
     // Truncate drops every row version, so nothing below this operation can be read any more.
     // Advancing the low watermark keeps a stale snapshot read failing loudly instead of silently

@@ -84,7 +84,7 @@ namespace NKikimr::NDataShard {
             std::lock_guard guard(Mutex);
             for (auto it = Accounts.begin(); it != Accounts.end();) {
                 it->second.Demand = 0;
-                if (!it->second.Used) { it = Accounts.erase(it); } else { ++it; }
+                if (!it->second.Used) { Accounts.erase(it++); } else { ++it; }
             }
             Report();
         }

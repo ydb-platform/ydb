@@ -24,6 +24,10 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
+#include <util/system/env.h>
+#include <util/string/hex.h>
+#include <sys/resource.h>
+
 #include <algorithm>
 #include <map>
 
@@ -397,7 +401,8 @@ struct TTestHelper {
     }
 
     void CreateCustomTable(const TString & name, TVector<TShardedTableOptions::TColumn> columns, bool hnsw = false,
-                           const TVector<TShardedTableOptions::TFamily>& families = {}) {
+                           const TVector<TShardedTableOptions::TFamily>& families = {},
+                           std::function<void(NKikimrSchemeOp::TTableDescription&)> customize = {}) {
         auto &runtime = *Server->GetRuntime();
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (hnsw && ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
@@ -410,7 +415,7 @@ struct TTestHelper {
                         auto* index = table->AddTableIndexes();
                         index->SetName("hnsw");
                         index->SetPathOwnerId(table->GetPathId().GetOwnerId());
-                        index->SetLocalPathId(Max<ui64>());
+                        index->SetLocalPathId(Max<ui64>() - 1);
                         index->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
                         auto* description = index->MutableHnswIndexDescription();
                         description->SetEmbeddingColumnId(columns.size());
@@ -420,6 +425,7 @@ struct TTestHelper {
                         settings->set_vector_dimension(2);
                         settings->set_min_rows(1);
                         settings->set_delta_rows(1000);
+                        if (customize) { customize(*table); }
                         UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
                     }
                 }
@@ -6611,7 +6617,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TTestHelper helper(serverSettings, 1, Followers);
         helper.CreateCustomTable("table-vector-prefix", {{"parent", "Uint64", true, false},
                                                          {"key", "Uint64", true, false},
-                                                         {"emb", "String", false, false}}, true);
+                                                         {"emb", "String", false, false}}, true, {}, [](auto& table) {
+            table.MutableTableIndexes(0)->MutableHnswIndexDescription()->MutableSettings()->mutable_settings()
+                ->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
+        });
         ExecSQL(helper.Server, helper.Sender, R"(
             UPSERT INTO `/Root/table-vector-prefix` (parent, key, emb) VALUES
                 (9223372036854775809ul, 1ul, "\x00\x00\xC8\x42\x00\x00\x00\x00\x01"),
@@ -7245,21 +7254,42 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             TServerSettings settings(ports.GetPort(2134));
             settings.SetDomainName("Root").SetEnableHnswIndex(true).SetEnableForceImmediateEffectsExecution(true).SetUseRealThreads(false).SetNeedStatsCollectors(true);
             settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+            settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
             settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
             settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
             return settings;
         }
 
-        explicit THnswLifecycleFixture(bool follower = false)
+        explicit THnswLifecycleFixture(bool follower = false, ui32 indexCount = 1, bool sameColumn = true)
             : Helper(Configure(Ports), 1, follower)
         {
-            Helper.CreateCustomTable("hnsw-lifecycle", {{"key", "Uint32", true, false}, {"label", "Uint32", false, false},
-                                                        {"emb", "String", false, false}}, true);
+            TVector<TShardedTableOptions::TColumn> columns = {{"key", "Uint32", true, false}, {"label", "Uint32", false, false},
+                                                             {"emb", "String", false, false}};
+            if (indexCount > 1 && !sameColumn) { columns.push_back({"emb2", "String", false, false}); }
+            Helper.CreateCustomTable("hnsw-lifecycle", columns, true, {}, [&](auto& table) {
+                auto first = table.GetTableIndexes(0);
+                table.ClearTableIndexes();
+                for (ui32 i = 0; i < indexCount; ++i) {
+                    auto* index = table.AddTableIndexes();
+                    *index = first;
+                    index->SetName(TStringBuilder() << "hnsw" << i);
+                    index->SetLocalPathId(Max<ui64>() - 1 - i);
+                    index->MutableHnswIndexDescription()->SetEmbeddingColumnId(sameColumn ? 3 : 3 + i % 2);
+                    index->MutableHnswIndexDescription()->MutableSettings()->mutable_settings()->set_m(16 + i);
+                }
+            });
             ExecSQL(Helper.Server, Helper.Sender, R"(
                 UPSERT INTO `/Root/hnsw-lifecycle` (key, label, emb) VALUES
                     (1, 7, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
                     (2, 8, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
             )");
+            if (indexCount > 1 && !sameColumn) {
+                ExecSQL(Helper.Server, Helper.Sender, R"(
+                    UPSERT INTO `/Root/hnsw-lifecycle` (key, emb2) VALUES
+                        (1, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01"),
+                        (2, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+                )");
+            }
         }
 
         TDataShard* Shard() {
@@ -7325,6 +7355,461 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         }
     };
 
+    struct THnswMultiFixture : THnswLifecycleFixture {
+        ui32 Count;
+        bool SameColumn;
+        TVector<Ydb::Table::VectorIndexSettings::Metric> Metrics;
+        TVector<ui64> Thresholds;
+
+        explicit THnswMultiFixture(ui32 count = 2, bool sameColumn = true)
+            : THnswLifecycleFixture(false, count, sameColumn), Count(count), SameColumn(sameColumn)
+            , Metrics(count, Ydb::Table::VectorIndexSettings::DISTANCE_COSINE), Thresholds(count, 1000)
+        {}
+
+        TPathId Id(ui32 index) {
+            return {Helper.Tables.at("hnsw-lifecycle").TableId.PathId.OwnerId, Max<ui64>() - 1 - index};
+        }
+
+        ui32 Column(ui32 index) const { return SameColumn ? 3 : 3 + index % 2; }
+
+        auto SettingsAt(ui32 index) const {
+            auto settings = Settings();
+            settings.set_m(16 + index);
+            settings.set_metric(Metrics[index]);
+            settings.set_delta_rows(Thresholds[index]);
+            return settings;
+        }
+
+        auto Graph(ui32 index) {
+            return Shard()->GetHnswIndex(Shard()->GetUserTables().begin()->second->LocalTid,
+                Column(index), SettingsAt(index), false, TRowVersion::Max(), Id(index));
+        }
+
+        auto ReadAt(ui32 index, bool explicitId = true, TRowVersion version = TRowVersion::Max()) {
+            auto request = Request(version);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(Column(index) - 1);
+            top->MutableSettings()->set_metric(Metrics[index]);
+            top->MutableSettings()->set_delta_rows(Thresholds[index]);
+            // Missing M is inherited from an explicitly selected index. Without
+            // identity, same-column candidates are intentionally ambiguous.
+            if (explicitId) { Id(index).ToProto(top->MutableHnswIndexId()); }
+            return Helper.SendRead("hnsw-lifecycle", request.release());
+        }
+
+        void WarmAll() {
+            auto& runtime = *Helper.Server->GetRuntime();
+            for (ui32 attempt = 0; attempt < 60; ++attempt) {
+                bool ready = true;
+                for (ui32 i = 0; i < Count; ++i) { ReadAt(i); ready &= bool(Graph(i)); }
+                if (ready) { return; }
+                runtime.SimulateSleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_FAIL("Not all independent HNSW graphs became ready");
+        }
+
+        // Exercise the actual schema-transaction persistence/reconciliation path.
+        void Alter(ui32 index, bool enabled, ui64 version = 1) {
+            auto& runtime = *Helper.Server->GetRuntime();
+            auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                    if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                        NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                        UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                        if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
+                            auto* description = tx.MutableAlterTable()->AddTableIndexes();
+                            description->SetName(TStringBuilder() << "hnsw" << index);
+                            description->SetPathOwnerId(Id(index).OwnerId);
+                            description->SetLocalPathId(Id(index).LocalPathId);
+                            description->SetSchemaVersion(version);
+                            description->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+                            auto* hnsw = description->MutableHnswIndexDescription();
+                            if (enabled) {
+                                hnsw->SetEmbeddingColumnId(Column(index));
+                                *hnsw->MutableSettings()->mutable_settings() = SettingsAt(index);
+                            }
+                            UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                        }
+                    }
+                }
+            });
+            UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime, TStringBuilder()
+                << "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra_" << ++ReadId << " String;"), "SUCCESS");
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(HnswMultipleIndexesSelectAndUpdateIndependently, SameColumn) {
+        THnswMultiFixture fixture(2, SameColumn);
+        fixture.WarmAll();
+        auto first = fixture.Graph(0);
+        auto second = fixture.Graph(1);
+        UNIT_ASSERT(first && second && first != second);
+        for (ui32 i = 0; i < 2; ++i) {
+            auto result = fixture.ReadAt(i);
+            fixture.Check(*result, SameColumn || i == 0 ? 1 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1u);
+        }
+        auto ambiguous = fixture.ReadAt(0, false);
+        UNIT_ASSERT_VALUES_EQUAL(ambiguous->Record.GetStats().GetRows(), SameColumn ? 2u : 1u);
+        auto wrong = fixture.Request();
+        TPathId(999, 999).ToProto(wrong->Record.MutableVectorTopK()->MutableHnswIndexId());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Helper.SendRead("hnsw-lifecycle", wrong.release())->Record.GetStats().GetRows(), 2u);
+
+        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+        )");
+        fixture.Check(*fixture.ReadAt(0), 2);
+        fixture.Check(*fixture.ReadAt(1), 2);
+        UNIT_ASSERT(first->HasChanges());
+        UNIT_ASSERT_VALUES_EQUAL(second->HasChanges(), SameColumn);
+        UNIT_ASSERT(fixture.Graph(0) == first && fixture.Graph(1) == second);
+        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, "DELETE FROM `/Root/hnsw-lifecycle` WHERE key = 2;");
+        fixture.Check(*fixture.ReadAt(0), 1);
+        fixture.Check(*fixture.ReadAt(1), 1);
+        UNIT_ASSERT(second->HasChanges());
+    }
+
+    Y_UNIT_TEST_TWIN(HnswMultipleIndexesTrackCommitAndRollback, Commit) {
+        THnswMultiFixture fixture;
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        TString session, tx;
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleBegin(runtime, session, tx, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            SELECT key FROM `/Root/hnsw-lifecycle` WHERE key = 1;
+        )"), "{ items { uint32_value: 1 } }");
+        fixture.Check(*fixture.ReadAt(0), 1);
+        fixture.Check(*fixture.ReadAt(1), 1);
+        if (Commit) {
+            UNIT_ASSERT_VALUES_EQUAL(KqpSimpleCommit(runtime, session, tx, "SELECT 1;"), "{ items { int32_value: 1 } }");
+        } else {
+            Ydb::Table::DeleteSessionRequest request;
+            request.set_session_id(session);
+            auto future = NRpcService::DoLocalRpc<TEvDeleteSessionRequest>(std::move(request), "", "", runtime.GetActorSystem(0));
+            UNIT_ASSERT_VALUES_EQUAL(AwaitResponse(runtime, std::move(future)).operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+        for (ui32 i = 0; i < 2; ++i) {
+            fixture.Check(*fixture.ReadAt(i), Commit ? 2 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Graph(i)->HasChanges(), Commit);
+        }
+    }
+
+    Y_UNIT_TEST(HnswMultipleIndexesPreserveSiblingAcrossSchemaAndRestart) {
+        THnswMultiFixture fixture(4);
+        fixture.WarmAll();
+        auto sibling = fixture.Graph(1);
+        auto removed = fixture.Graph(0);
+        fixture.Alter(0, false);
+        UNIT_ASSERT(!fixture.Graph(0));
+        UNIT_ASSERT(!removed->CanRead(TRowVersion::Max()));
+        UNIT_ASSERT(fixture.Graph(1) == sibling);
+        fixture.Alter(0, true, 2);
+        fixture.WarmAll();
+        UNIT_ASSERT(fixture.Graph(0) != removed);
+        UNIT_ASSERT(fixture.Graph(1) == sibling);
+        fixture.Alter(0, true, 3);
+        fixture.WarmAll();
+        UNIT_ASSERT(fixture.Graph(1) == sibling);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        RebootTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId, fixture.Helper.Sender);
+        fixture.Helper.Tables.at("hnsw-lifecycle").ClientId = {};
+        fixture.WarmAll();
+        UNIT_ASSERT(fixture.Graph(1) != sibling);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetUserTables().begin()->second->HnswIndexes.size(), 4u);
+    }
+
+    Y_UNIT_TEST(HnswMultipleIndexesUseDifferentMetricsAndRebuildThresholds) {
+        THnswMultiFixture fixture;
+        fixture.WarmAll();
+        auto sibling = fixture.Graph(1);
+        fixture.Metrics[0] = Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+        fixture.Thresholds[0] = 0;
+        fixture.Alter(0, true, 1);
+        fixture.WarmAll();
+        auto first = fixture.Graph(0);
+        UNIT_ASSERT(fixture.Graph(1) == sibling);
+        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x00\x40\x00\x00\x00\x00\x01"),
+                (2, "\x00\x00\x80\x3F\x00\x00\x80\x3E\x01");
+        )");
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        for (ui32 attempt = 0; attempt < 30 && fixture.Graph(0) == first; ++attempt) {
+            fixture.ReadAt(0);
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT(fixture.Graph(0) && fixture.Graph(0) != first);
+        UNIT_ASSERT(fixture.Graph(1) == sibling);
+        fixture.Check(*fixture.ReadAt(0), 2);
+        fixture.Check(*fixture.ReadAt(1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.ReadAt(0, false)->Record.GetStats().GetRows(), 1u);
+        auto mismatch = fixture.Request(); // Cosine request explicitly selecting the L2 index.
+        fixture.Id(0).ToProto(mismatch->Record.MutableVectorTopK()->MutableHnswIndexId());
+        auto result = fixture.Helper.SendRead("hnsw-lifecycle", mismatch.release());
+        fixture.Check(*result, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2u);
+    }
+
+    Y_UNIT_TEST(HnswMultipleIndexesKeepHistoricalAndProjectedOnlyWrites) {
+        THnswMultiFixture fixture;
+        fixture.WarmAll();
+        auto first = fixture.Graph(0);
+        auto second = fixture.Graph(1);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        const auto snapshot = CreateVolatileSnapshot(fixture.Helper.Server,
+            {"/Root/hnsw-lifecycle"}, TDuration::Hours(1));
+        TString session, tx;
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleBegin(runtime, session, tx, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, label) VALUES (1, 99);
+            SELECT key FROM `/Root/hnsw-lifecycle` WHERE key = 1;
+        )"), "{ items { uint32_value: 1 } }");
+        fixture.ReadAt(0);
+        fixture.ReadAt(1);
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleCommit(runtime, session, tx, "SELECT 1;"), "{ items { int32_value: 1 } }");
+        for (ui32 i = 0; i < 2; ++i) {
+            auto result = fixture.ReadAt(i);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].AsValue<ui32>(), 99u);
+            UNIT_ASSERT(!fixture.Graph(i)->HasChanges());
+        }
+        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+        )");
+        for (ui32 i = 0; i < 2; ++i) {
+            fixture.Check(*fixture.ReadAt(i), 2);
+            fixture.Check(*fixture.ReadAt(i, true, snapshot), 1);
+        }
+        UNIT_ASSERT(fixture.Graph(0) == first && fixture.Graph(1) == second);
+    }
+
+    Y_UNIT_TEST(HnswMultipleIndexesRejectStaleRecreatedWorker) {
+        THnswMultiFixture fixture;
+        fixture.WarmAll();
+        auto sibling = fixture.Graph(1);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        TVector<TAutoPtr<IEventHandle>> delayed;
+        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == buildResult) {
+                delayed.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        fixture.Alter(0, true, 1);
+        runtime.WaitFor("old HNSW worker", [&] { return !delayed.empty(); });
+        const auto tid = fixture.Shard()->GetUserTables().begin()->second->LocalTid;
+        const auto token = fixture.Shard()->GetHnswBuildToken(tid, fixture.Id(0));
+        fixture.Alter(0, false, 2);
+        fixture.Alter(0, true, 3);
+        runtime.WaitFor("recreated HNSW worker", [&] { return delayed.size() >= 2; });
+        UNIT_ASSERT(fixture.Shard()->GetHnswBuildToken(tid, fixture.Id(0)) != token);
+        runtime.SetObserverFunc(observer);
+        runtime.Send(delayed.front().Release());
+        fixture.ReadAt(0);
+        UNIT_ASSERT(!fixture.Graph(0));
+        UNIT_ASSERT(fixture.Graph(1) == sibling);
+        for (size_t i = 1; i < delayed.size(); ++i) { runtime.Send(delayed[i].Release()); }
+        fixture.WarmAll();
+        UNIT_ASSERT(fixture.Graph(1) == sibling);
+    }
+
+    Y_UNIT_TEST(HnswMultipleIndexesBoundConcurrentBuildsAndDrainQueue) {
+        THnswMultiFixture fixture(4);
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        const auto tid = fixture.Shard()->GetUserTables().begin()->second->LocalTid;
+        fixture.Shard()->InvalidateHnswTable(tid);
+        TVector<TAutoPtr<IEventHandle>> delayed;
+        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == buildResult) {
+                delayed.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        for (ui32 i = 0; i < 4; ++i) { fixture.ReadAt(i); }
+        runtime.WaitFor("two admitted HNSW builds", [&] { return delayed.size() == 2; });
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ui32 building = 0;
+        for (ui32 i = 0; i < 4; ++i) {
+            const auto stats = fixture.Shard()->GetHnswIndexStats(tid, fixture.Id(i));
+            UNIT_ASSERT(stats);
+            building += stats->Building;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(building, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(delayed.size(), 2u);
+        runtime.SetObserverFunc(observer);
+        for (auto& result : delayed) { runtime.Send(result.Release()); }
+        fixture.WarmAll();
+    }
+
+    Y_UNIT_TEST(HnswMultipleIndexesSurviveSplitRecovery) {
+        THnswMultiFixture fixture;
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto& table = fixture.Helper.Tables.at("hnsw-lifecycle");
+        SetSplitMergePartCountLimit(&runtime, -1);
+        const auto tx = AsyncSplitTable(fixture.Helper.Server, fixture.Helper.Sender,
+            "/Root/hnsw-lifecycle", table.TabletId, 2);
+        WaitTxNotification(fixture.Helper.Server, fixture.Helper.Sender, tx);
+        const auto shards = GetTableShards(fixture.Helper.Server, fixture.Helper.Sender, "/Root/hnsw-lifecycle");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        for (const auto tablet : shards) {
+            table.TabletId = tablet;
+            table.ClientId = {};
+            auto [tables, owner] = GetTables(fixture.Helper.Server, tablet);
+            Y_UNUSED(owner);
+            table.UserTable = tables.at("hnsw-lifecycle");
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetUserTables().begin()->second->HnswIndexes.size(), 2u);
+            auto raw = fixture.Request();
+            raw->Record.ClearVectorTopK();
+            auto rows = fixture.Helper.SendRead("hnsw-lifecycle", raw.release());
+            UNIT_ASSERT_VALUES_EQUAL(rows->GetRowsCount(), 1u);
+            fixture.WarmAll();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Graph(0)->Size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Graph(1)->Size(), 1u);
+        }
+    }
+
+    Y_UNIT_TEST(HnswMultipleIndexesHonorFeatureFlagAndIndependentEviction) {
+        THnswMultiFixture fixture;
+        fixture.WarmAll();
+        auto sibling = fixture.Graph(1);
+        const auto tid = fixture.Shard()->GetUserTables().begin()->second->LocalTid;
+        fixture.Shard()->InvalidateHnswIndex(tid, fixture.Id(0));
+        UNIT_ASSERT(!fixture.Graph(0));
+        UNIT_ASSERT(fixture.Graph(1) == sibling);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.ReadAt(1)->Record.GetStats().GetRows(), 1u);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableHnswIndex(false);
+        }
+        for (ui32 i = 0; i < 2; ++i) {
+            auto result = fixture.ReadAt(i);
+            fixture.Check(*result, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2u);
+        }
+    }
+
+    // Opt-in measurements use the same tablet/read/write paths as the regression
+    // fixtures. They compare index-count scaling, not a network SQL service SLA.
+    Y_UNIT_TEST(HnswMultipleIndexScalingMeasurements) {
+        if (GetEnv("YDB_HNSW_MULTI_INDEX_BENCH").empty()) { return; }
+        for (ui32 count : {1u, 2u, 4u}) {
+            THnswMultiFixture fixture(count);
+            auto& runtime = *fixture.Helper.Server->GetRuntime();
+            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_ERROR);
+            runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_ERROR);
+            for (ui32 batch = 0; batch < 16; ++batch) {
+                TStringBuilder sql;
+                sql << "UPSERT INTO `/Root/hnsw-lifecycle` (key, label, emb) VALUES ";
+                for (ui32 row = 0; row < 256; ++row) {
+                    const ui32 key = 100 + batch * 256 + row;
+                    const float coordinates[] = {1.0f + float(key) / 8192, 1.0f + float(key % 31) / 32};
+                    TString vector(reinterpret_cast<const char*>(coordinates), sizeof(coordinates));
+                    vector.push_back(1); // Float vector format suffix.
+                    const auto hex = HexEncode(vector);
+                    if (row) { sql << ','; }
+                    sql << '(' << key << ",0,\"";
+                    for (size_t i = 0; i < hex.size(); i += 2) { sql << "\\x" << hex.substr(i, 2); }
+                    sql << "\")";
+                }
+                sql << ';';
+                ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, sql);
+            }
+            // Rebuild from the completed import, excluding loading and warmup.
+            for (ui32 i = 0; i < count; ++i) { fixture.Alter(i, true, 1); }
+            fixture.WarmAll();
+            auto write = [&] {
+                    ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+                        UPSERT INTO `/Root/hnsw-lifecycle` (key, label, emb) VALUES
+                            (100, 99, "\x00\x00\x80\x3F\x00\x00\x80\x3F\x01");
+                    )");
+            };
+            write(); // Warm the SQL write plan and the committed journal path.
+            for (ui32 i = 0; i < count; ++i) { fixture.ReadAt(i); }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            const auto tid = fixture.Shard()->GetUserTables().begin()->second->LocalTid;
+            auto totals = [&] {
+                std::pair<ui64, ui64> result;
+                for (ui32 i = 0; i < count; ++i) {
+                    const auto stats = fixture.Shard()->GetHnswIndexStats(tid, fixture.Id(i));
+                    UNIT_ASSERT(stats && stats->Ready);
+                    result.first += stats->MemoryBytes;
+                    result.second += stats->Builds;
+                }
+                return result;
+            };
+            const auto before = totals();
+            auto cpu = [] {
+                rusage usage{};
+                UNIT_ASSERT_VALUES_EQUAL(getrusage(RUSAGE_SELF, &usage), 0);
+                return double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec)
+                    + double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1e6;
+            };
+            TVector<ui64> latencies;
+            const double cpuBefore = cpu();
+            const auto start = TMonotonic::Now();
+            constexpr ui32 reads = 4096;
+            for (ui32 query = 0; query < reads; ++query) {
+                if (query % 64 == 0) {
+                    write();
+                }
+                const auto readStart = TMonotonic::Now();
+                auto result = fixture.ReadAt(query % count);
+                latencies.push_back((TMonotonic::Now() - readStart).MicroSeconds());
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1u);
+            }
+            const double elapsed = (TMonotonic::Now() - start).MicroSeconds() / 1e6;
+            const double cpuSeconds = cpu() - cpuBefore;
+            const auto after = totals();
+            Sort(latencies);
+            Cerr << "HNSW_MULTI_INDEX_MEASUREMENT indexes=" << count << " rows=4098 reads=" << reads
+                 << " writes=64 qps=" << reads / elapsed << " p50_us=" << latencies[reads / 2]
+                 << " p95_us=" << latencies[reads * 95 / 100] << " cpu_seconds=" << cpuSeconds
+                 << " memory_before=" << before.first << " memory_after=" << after.first
+                 << " builds=" << before.second << " additional_builds=" << after.second - before.second << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(after.second, before.second);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(HnswMultipleIndexesInvalidateOnTruncate, Unsafe) {
+        THnswMultiFixture fixture;
+        fixture.WarmAll();
+        auto first = fixture.Graph(0);
+        auto second = fixture.Graph(1);
+        if (Unsafe) {
+            ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+                PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
+                TRUNCATE TABLE `/Root/hnsw-lifecycle` WITH (unsafe = true);
+            )");
+        } else {
+            const auto tx = AsyncTruncateTable(fixture.Helper.Server, fixture.Helper.Sender,
+                "/Root", "hnsw-lifecycle");
+            WaitTxNotification(fixture.Helper.Server, fixture.Helper.Sender, tx);
+        }
+        UNIT_ASSERT(!first->CanRead(TRowVersion::Max()));
+        UNIT_ASSERT(!second->CanRead(TRowVersion::Max()));
+        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, label, emb) VALUES
+                (1, 7, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01"),
+                (2, 8, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+        )");
+        fixture.WarmAll();
+        fixture.Check(*fixture.ReadAt(0), 2);
+        fixture.Check(*fixture.ReadAt(1), 2);
+        UNIT_ASSERT(fixture.Graph(0) != first && fixture.Graph(1) != second);
+    }
+
     Y_UNIT_TEST_TWIN(HnswPendingWritesPublishOnlyOnCommit, Commit) {
         THnswLifecycleFixture fixture;
         fixture.Warm();
@@ -7356,7 +7841,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(graph->HasChanges(), Commit);
     }
 
-    Y_UNIT_TEST_TWIN(HnswInvalidatesOnSchemaChangeOrRestart, Reboot) {
+    Y_UNIT_TEST_TWIN(HnswPreservesUnrelatedSchemaAndRebuildsOnRestart, Reboot) {
         THnswLifecycleFixture fixture;
         fixture.Warm();
         auto graph = fixture.Index();
@@ -7390,7 +7875,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                         auto* index = tx.MutableAlterTable()->AddTableIndexes();
                         index->SetName("hnsw");
                         index->SetPathOwnerId(tx.GetAlterTable().GetPathId().GetOwnerId());
-                        index->SetLocalPathId(Max<ui64>());
+                        index->SetLocalPathId(Max<ui64>() - 1);
                         index->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
                         index->MutableHnswIndexDescription();
                         UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));

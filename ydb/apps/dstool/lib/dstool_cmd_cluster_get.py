@@ -32,6 +32,7 @@ def do(args):
         'EnableGroupLayoutSanitizer',
         'PDiskSpaceColorBorder',
         'BridgeSyncTotalRateBytesPerSecond',
+        'BridgeSyncMaxSyncers',
         'SerialManagementStage',
     ]
 

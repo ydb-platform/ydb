@@ -13,7 +13,8 @@ Exit Status: 0
     "MaxScrubbedDisksAtOnce": 4294967295,
     "EnableGroupLayoutSanitizer": true,
     "PDiskSpaceColorBorder": "GREEN",
-    "BridgeSyncTotalRateBytesPerSecond": 0
+    "BridgeSyncTotalRateBytesPerSecond": 0,
+    "BridgeSyncMaxSyncers": 64
   }
 ]
 ===== grpc_calls =====

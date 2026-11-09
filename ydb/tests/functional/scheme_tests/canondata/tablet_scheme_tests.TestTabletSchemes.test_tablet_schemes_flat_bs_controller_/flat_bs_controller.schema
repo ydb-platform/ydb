@@ -32,6 +32,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 34,
+                "ColumnName": "BridgeSyncMaxSyncers",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 5,
                 "ColumnName": "NextOperationLogIndex",
                 "ColumnType": "Uint64"
@@ -156,6 +161,7 @@
                     2,
                     33,
                     4,
+                    34,
                     5,
                     6,
                     7,

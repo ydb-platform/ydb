@@ -34,6 +34,7 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos
+    ydb/services/scheme_secret/export
     yql/essentials/public/types
     contrib/libs/openssl
 )

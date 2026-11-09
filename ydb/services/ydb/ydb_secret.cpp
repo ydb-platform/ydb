@@ -16,6 +16,7 @@ void TGRpcYdbSecretService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #define SETUP_SECRET_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
     SETUP_METHOD(methodName, methodCallback, rlMode, requestType, secret, auditMode, EEmptyDatabaseMode::EmptyDatabaseForbidden)
 
+    SETUP_SECRET_METHOD(ExportSecret, DoExportSecretRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_SECRET_METHOD(DescribeSecret, DoDescribeSecretRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
 
 #undef SETUP_SECRET_METHOD

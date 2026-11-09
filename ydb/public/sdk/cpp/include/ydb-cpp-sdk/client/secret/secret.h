@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NYdb::inline Dev {
 namespace NSecret {
@@ -9,11 +11,20 @@ class TDescribeSecretResult;
 
 using TAsyncDescribeSecretResult = NThreading::TFuture<TDescribeSecretResult>;
 
+struct TExportSecretSettings : public TOperationRequestSettings<TExportSecretSettings> {};
+
 class TSecretClient {
     class TImpl;
 
 public:
     TSecretClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
+
+    // Exports the secret to partition 0 of a single-partition topic in the same database.
+    // The topic must be administrator-owned with an important replicationConsumer.
+    // Creating a missing private topic also requires an administrator caller.
+    // Writes use a fixed sequence number for deduplication. Returns only the operation status.
+    TAsyncStatus ExportSecret(const std::string& secretPath, const std::string& topicPath,
+        const TExportSecretSettings& settings = TExportSecretSettings());
 
     TAsyncDescribeSecretResult DescribeSecret(const std::string& path,
         const NScheme::TDescribePathSettings& settings = NScheme::TDescribePathSettings());

@@ -2492,6 +2492,9 @@ struct TEvBlobStorage {
             TLogoBlobID Id;
             bool Keep = false;
             bool DoNotKeep = false;
+            // some disk has a part of the blob; a disk may have a record of the blob with flags only, e.g. a Keep flag
+            // that has come before the data
+            bool HasData = true;
 
             TString ToString() const {
                 TStringStream str;
@@ -2506,6 +2509,9 @@ struct TEvBlobStorage {
                 }
                 if (DoNotKeep) {
                     s << "d";
+                }
+                if (!HasData) {
+                    s << "n";
                 }
             }
 

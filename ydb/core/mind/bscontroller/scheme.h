@@ -464,9 +464,11 @@ struct Schema : NIceDb::Schema {
         struct LastErrorTimestamp : Column<4, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
         struct FirstErrorTimestamp : Column<5, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
         struct ErrorCount : Column<6, NScheme::NTypeIds::Uint32> {};
+        struct EstimatedBytesToCopy : Column<7, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<TargetGroupId>;
-        using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp, ErrorCount>;
+        using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp,
+            ErrorCount, EstimatedBytesToCopy>;
     };
 
     struct DirectBlockGroupClaims : Table<134> {

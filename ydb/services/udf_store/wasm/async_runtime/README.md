@@ -82,3 +82,10 @@ The harness covers ready/pending, sequential/nested and parallel operations,
 interleaved calls, completion-before-wait, callback threading, duplicate/stale
 handles, cancellation, deadlines, traps, CPU interruption, forced teardown,
 quotas and frame/buffer counters returning to baseline.
+
+Guest initialization (start, global/data relocation hooks and constructors) shares
+a one-second execution deadline per module. An already armed deadline of the
+compartment or its caller can only shorten it. This uses the existing WAVM
+timeout checks; it does not bound native compilation/linking. The host restores
+the previous deadline on success and on exceptions, and leaves the configured
+timeout for subsequent invocations unchanged.

@@ -1230,6 +1230,31 @@ void TWebAssemblyCompartment::InstantiateModule(
 
 void TWebAssemblyCompartment::ApplyDataRelocationsAndCallConstructors(Runtime::Instance* instance)
 {
+    // Initialization runs before the invocation runtime arms its deadline. Bound
+    // all guest starts/hooks together, without resetting an existing deadline or
+    // changing the timeout configured for subsequent UDF invocations.
+    const auto savedDeadline = Deadline_;
+    Y_DEFER {
+        Deadline_ = savedDeadline;
+        if (GetCurrentCompartment() == this) {
+            SetCurrentCompartment(this);
+        }
+    };
+    static constexpr time_t InitializationBudgetSeconds = 1;
+    auto initializationDeadline = Runtime::getInstant();
+    initializationDeadline.tv_sec += InitializationBudgetSeconds;
+    const auto restrictDeadline = [&](const std::optional<struct timespec>& deadline) {
+        if (deadline && (deadline->tv_sec < initializationDeadline.tv_sec ||
+            (deadline->tv_sec == initializationDeadline.tv_sec && deadline->tv_nsec < initializationDeadline.tv_nsec))) {
+            initializationDeadline = *deadline;
+        }
+    };
+    restrictDeadline(savedDeadline);
+    if (auto* caller = GetCurrentCompartment()) {
+        restrictDeadline(static_cast<TWebAssemblyCompartment*>(caller)->GetDeadline());
+    }
+    Deadline_ = initializationDeadline;
+
     TCompactVector<Runtime::Function*, 4> called;
     const auto call = [this, &called](Runtime::Function* function) {
         if (!function || std::find(called.begin(), called.end(), function) != called.end()) {

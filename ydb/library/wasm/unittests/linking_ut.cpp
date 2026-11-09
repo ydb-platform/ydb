@@ -2,10 +2,17 @@
 #include <ydb/library/wasm/api/function.h>
 #include <ydb/library/wasm/engine/wavm_private_imports.h>
 
+#include <contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h>
 #include <library/cpp/testing/gtest/gtest.h>
 #include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+
+#if defined(_unix_)
+#include <sys/wait.h>
+
+#include <unistd.h>
+#endif
 
 namespace NYdb::NWasm {
 namespace {
@@ -88,6 +95,142 @@ TEST(TWasmLinking, StartTrapIsReported)
         EXPECT_THROW(Load(compartment.get(), "(module (func $start unreachable) (start $start))", precompiled), std::exception);
     }
 }
+
+#if defined(_unix_)
+// An outer watchdog turns a missing guest deadline into a bounded test failure.
+// Construct WAVM state in the child so no compartment survives across fork.
+template <typename TBody>
+void CheckInitializationInChild(TBody body)
+{
+    const auto child = fork();
+    ASSERT_GE(child, 0);
+    if (child == 0) {
+        alarm(15);
+        try {
+            body();
+            _exit(::testing::Test::HasFailure() ? 1 : 0);
+        } catch (...) {
+            _exit(2);
+        }
+    }
+    int status = 0;
+    ASSERT_EQ(waitpid(child, &status, 0), child);
+    ASSERT_TRUE(WIFEXITED(status)) << "Initialization exceeded the watchdog: " << status;
+    EXPECT_EQ(WEXITSTATUS(status), 0);
+}
+
+void ExpectInitializationTimeout(IWebAssemblyCompartment* compartment, const TString& source, bool precompiled)
+{
+    try {
+        Load(compartment, source, precompiled);
+        FAIL() << "Expected initialization timeout";
+    } catch (const std::exception& ex) {
+        EXPECT_TRUE(TStringBuf(ex.what()).Contains("timeoutExpired")) << ex.what();
+    }
+}
+
+TEST(TWasmLinking, InitializationStartHasDefaultBudget)
+{
+    for (bool precompiled : { false, true }) {
+        SCOPED_TRACE(precompiled);
+        CheckInitializationInChild([&] {
+            auto compartment = CreateEmptyImage();
+            SetCurrentCompartment(compartment.get());
+            Y_DEFER {
+                SetCurrentCompartment(nullptr);
+            };
+            ExpectInitializationTimeout(compartment.get(), R"((module
+                (func $start (loop $forever (br $forever)))
+                (start $start)))", precompiled);
+            // The temporary expired budget must not leak into the caller's TLS.
+            EXPECT_EQ(GetCurrentCompartment(), compartment.get());
+            EXPECT_FALSE(WAVM::Runtime::isCurrentDeadlineReached());
+        });
+    }
+}
+
+TEST(TWasmLinking, InitializationHooksHaveDefaultBudget)
+{
+    for (bool precompiled : { false, true }) {
+        for (const auto* name : { "__wasm_apply_global_relocs", "__wasm_apply_data_relocs", "__wasm_call_ctors" }) {
+            SCOPED_TRACE(name);
+            SCOPED_TRACE(precompiled);
+            CheckInitializationInChild([&] {
+                auto compartment = CreateEmptyImage();
+                ExpectInitializationTimeout(compartment.get(),
+                    TStringBuilder() << "(module (func (export \"" << name << "\") (loop $forever (br $forever))))", precompiled);
+                EXPECT_EQ(GetCurrentCompartment(), nullptr);
+            });
+        }
+    }
+}
+
+const TString FiniteStart = R"((module
+    (func $start (local $i i32)
+        (loop $again
+            (local.set $i (i32.add (local.get $i) (i32.const 1)))
+            (br_if $again (i32.lt_u (local.get $i) (i32.const 1000000)))))
+    (start $start)))";
+
+TEST(TWasmLinking, InitializationDoesNotExtendArmedDeadline)
+{
+    for (bool precompiled : { false, true }) {
+        CheckInitializationInChild([&] {
+            auto compartment = CreateEmptyImage();
+            compartment->SetTimeout(TDuration::Zero());
+            compartment->StartDeadlineTimer();
+            SetCurrentCompartment(compartment.get());
+            Y_DEFER {
+                SetCurrentCompartment(nullptr);
+            };
+            ExpectInitializationTimeout(compartment.get(), FiniteStart, precompiled);
+            EXPECT_EQ(GetCurrentCompartment(), compartment.get());
+            EXPECT_TRUE(WAVM::Runtime::isCurrentDeadlineReached());
+        });
+    }
+}
+
+TEST(TWasmLinking, InitializationRespectsOuterCompartmentDeadline)
+{
+    for (bool precompiled : { false, true }) {
+        CheckInitializationInChild([&] {
+            auto outer = CreateEmptyImage();
+            auto inner = CreateEmptyImage();
+            outer->SetTimeout(TDuration::Zero());
+            outer->StartDeadlineTimer();
+            SetCurrentCompartment(outer.get());
+            Y_DEFER {
+                SetCurrentCompartment(nullptr);
+            };
+            ExpectInitializationTimeout(inner.get(), FiniteStart, precompiled);
+            EXPECT_EQ(GetCurrentCompartment(), outer.get());
+            EXPECT_TRUE(WAVM::Runtime::isCurrentDeadlineReached());
+            SetCurrentCompartment(inner.get());
+            EXPECT_FALSE(WAVM::Runtime::isCurrentDeadlineReached());
+        });
+    }
+}
+
+TEST(TWasmLinking, InitializationPreservesConfiguredInvocationTimeout)
+{
+    for (bool precompiled : { false, true }) {
+        CheckInitializationInChild([&] {
+            auto compartment = CreateEmptyImage();
+            // A configured, not-yet-started invocation timer must stay dormant.
+            compartment->SetTimeout(TDuration::Zero());
+            SetCurrentCompartment(compartment.get());
+            Y_DEFER {
+                SetCurrentCompartment(nullptr);
+            };
+            Load(compartment.get(), FiniteStart, precompiled);
+            EXPECT_FALSE(WAVM::Runtime::isCurrentDeadlineReached());
+            compartment->StartDeadlineTimer();
+            SetCurrentCompartment(compartment.get());
+            EXPECT_TRUE(WAVM::Runtime::isCurrentDeadlineReached());
+        });
+    }
+}
+#endif
 
 const TString Consumer = R"((module
     (type $fill (func (param i64 i32 i64) (result i64)))

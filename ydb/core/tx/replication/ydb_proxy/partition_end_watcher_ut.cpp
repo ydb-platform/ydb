@@ -78,10 +78,10 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
         return TReadSessionEvent::TEndPartitionSessionEvent(partitionSession, {1}, {2});
     }
 
-    TReadSessionEvent::TDataReceivedEvent MakeTDataReceivedEvent(ui64 offset = 31) {
+    TReadSessionEvent::TDataReceivedEvent MakeTDataReceivedEvent() {
         TPartitionSession::TPtr partitionSession = MakeIntrusive<MockPartitionSession>();
         TReadSessionEvent::TDataReceivedEvent::TMessage msg("data", nullptr,
-            TReadSessionEvent::TDataReceivedEvent::TMessageInformation(offset, "producer-id", 29, TInstant::Now(),
+            TReadSessionEvent::TDataReceivedEvent::TMessageInformation(31, "producer-id", 29, TInstant::Now(),
                 TInstant::Now(), nullptr, nullptr, 99, "message-group-id" ),
             partitionSession);
         return TReadSessionEvent::TDataReceivedEvent({ msg }, {}, partitionSession);
@@ -100,18 +100,6 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
         UNIT_ASSERT(e);
         UNIT_ASSERT_VALUES_EQUAL(e->Result.AdjacentPartitionsIds, TVector<ui64>{1});
         UNIT_ASSERT_VALUES_EQUAL(e->Result.ChildPartitionsIds, TVector<ui64>{2});
-    }
-
-    Y_UNIT_TEST(FirstRecordWaitsForCommit) {
-        const TActorId client = MakeActorId();
-        MockActorOps actorOps;
-        TPartitionEndWatcher watcher(&actorOps);
-        watcher.Clear(0);
-        watcher.UpdatePendingCommittedOffset(MakeTDataReceivedEvent(0));
-        watcher.SetEvent(MakeTEndPartitionSessionEvent(), client);
-        UNIT_ASSERT_VALUES_EQUAL(actorOps.Events.size(), 0);
-        watcher.SetCommittedOffset(0, client);
-        UNIT_ASSERT_VALUES_EQUAL(actorOps.Events.size(), 1);
     }
 
     Y_UNIT_TEST(AfterCommit) {

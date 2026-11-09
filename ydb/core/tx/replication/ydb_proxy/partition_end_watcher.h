@@ -44,10 +44,8 @@ public:
     }
 
     inline void Clear(ui64 committedOffset) {
-        // SDK committed offsets point to the next record; this watcher tracks
-        // the last record. Unsigned -1 represents no committed records yet.
-        PendingCommittedOffset = committedOffset - 1;
-        CommittedOffset = committedOffset - 1;
+        PendingCommittedOffset = committedOffset;
+        CommittedOffset = committedOffset;
         EndPartitionSessionEvent.Clear();
     }
 

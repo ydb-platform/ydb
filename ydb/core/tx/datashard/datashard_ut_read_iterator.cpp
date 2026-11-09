@@ -6434,7 +6434,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         const auto tid = shard->GetUserTables().begin()->second->LocalTid;
         TVector<TAutoPtr<IEventHandle>> pending;
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+            constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
             if (growthDuringScan && ev->GetTypeRewrite() == buildResult) {
                 pending.push_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -6565,7 +6565,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         }
         if (DisableDuringBuild) {
             TVector<TAutoPtr<IEventHandle>> pending;
-            constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+            constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
             auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 if (ev->GetTypeRewrite() == buildResult) {
                     pending.push_back(ev.Release());
@@ -6998,7 +6998,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         auto& runtime = *helper.Server->GetRuntime();
         TVector<TAutoPtr<IEventHandle>> delayedBuildResults;
         // Keep in sync with TDataShard::TEvPrivate::EvHnswIndexBuildResult.
-        constexpr ui32 hnswBuildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        constexpr ui32 hnswBuildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
         auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == hnswBuildResultEvent) {
                 delayedBuildResults.push_back(ev.Release());
@@ -7127,7 +7127,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             UNIT_ASSERT(shard->GetHnswIndex(tid, 3, indexSettings, false) == original);
             TVector<TAutoPtr<IEventHandle>> delayed;
             bool capture = true;
-            constexpr ui32 buildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+            constexpr ui32 buildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
             auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 if (capture && ev->GetTypeRewrite() == buildResultEvent) {
                     delayed.push_back(ev.Release());
@@ -7593,7 +7593,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         auto sibling = fixture.Graph(1);
         auto& runtime = *fixture.Helper.Server->GetRuntime();
         TVector<TAutoPtr<IEventHandle>> delayed;
-        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == buildResult) {
                 delayed.push_back(ev.Release());
@@ -7627,7 +7627,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         const auto tid = fixture.Shard()->GetUserTables().begin()->second->LocalTid;
         fixture.Shard()->InvalidateHnswTable(tid);
         TVector<TAutoPtr<IEventHandle>> delayed;
-        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == buildResult) {
                 delayed.push_back(ev.Release());
@@ -7954,7 +7954,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
     Y_UNIT_TEST(HnswCancelledSnapshotCannotStartGraphWorker) {
         THnswLifecycleFixture fixture;
         auto& runtime = *fixture.Helper.Server->GetRuntime();
-        constexpr ui32 snapshotFinished = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 37;
+        constexpr ui32 snapshotFinished = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 38;
         TVector<TAutoPtr<IEventHandle>> snapshots;
         auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == snapshotFinished) {

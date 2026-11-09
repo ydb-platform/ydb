@@ -35,9 +35,14 @@ class BridgeClient(object):
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.BridgeServiceStub(self._channel)
         self._auth_token = None
+        self._database = None
 
     def set_auth_token(self, token):
         self._auth_token = token
+
+    def set_database(self, database):
+        # dynamic nodes serve the requests of their databases (as the CLI does with -d)
+        self._database = database
 
     def _get_invoke_callee(self, method):
         return getattr(self._stub, method)
@@ -62,6 +67,8 @@ class BridgeClient(object):
                 metadata = []
                 if self._auth_token:
                     metadata.append(('x-ydb-auth-ticket', self._auth_token))
+                if self._database:
+                    metadata.append(('x-ydb-database', self._database))
 
                 response = callee(request, metadata=metadata, timeout=self._timeout)
 

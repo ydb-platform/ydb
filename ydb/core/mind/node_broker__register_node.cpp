@@ -23,7 +23,6 @@ public:
         , NodeId(0)
         , ExtendLease(false)
         , FixNodeId(false)
-        , SetLocation(false)
         , UpdateNodeAuthorizedByCertificate(false)
         , AllocateSlotIndex(false)
         , SlotIndexSubdomainChanged(false)
@@ -64,7 +63,7 @@ public:
 
     bool ShouldUpdateVersion() const
     {
-        return Node || ExtendLease || SetLocation || FixNodeId;
+        return Node || ExtendLease || NewLocation || FixNodeId;
     }
 
     void Reply(const TActorContext &ctx) const
@@ -168,8 +167,7 @@ public:
             } else if (node.Location != loc) {
                 Self->Dirty.UpdateLocation(node, loc);
                 Self->Dirty.DbAddNode(node, txc);
-                SetLocation = true;
-                Location = loc;
+                NewLocation = loc;
             }
 
             if (!node.IsFixed() && rec.GetFixedNodeId()) {
@@ -260,8 +258,8 @@ public:
         }
 
         auto &node = Self->Committed.Nodes.at(NodeId);
-        if (SetLocation) {
-            Self->Committed.UpdateLocation(node, Location);
+        if (NewLocation) {
+            Self->Committed.UpdateLocation(node, *NewLocation);
         }
 
         if (FixNodeId) {
@@ -302,13 +300,13 @@ private:
     const TSubDomainKey ServicedSubDomain;
     TString ResolveError;
     std::optional<TString> ImplicitPileName;
-    TNodeLocation Location; // the location stored when SetLocation is set; may differ from the requested one in pile
+    // the location stored when it changes; it may differ from the requested one in pile name
+    std::optional<TNodeLocation> NewLocation;
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
     THolder<TNodeInfo> Node;
     ui32 NodeId;
     bool ExtendLease;
     bool FixNodeId;
-    bool SetLocation;
     bool UpdateNodeAuthorizedByCertificate;
     bool AllocateSlotIndex;
     bool SlotIndexSubdomainChanged;

@@ -1163,6 +1163,32 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadState(TTransactionContex
         }
     }
 
+    if (!AppData()->BridgeModeEnabled) {
+        // piles are not used without bridge mode; the cluster prepared for bridge mode has been rolled back, and nodes
+        // registered then (or restarted with the pile name before this NodeBroker was) lose their pile names, so that
+        // they don't keep them through lease extensions and block the nodes when the cluster is prepared again
+        THashSet<ui32> updated(dbChanges.NewVersionUpdateNodes.begin(), dbChanges.NewVersionUpdateNodes.end());
+        for (auto *nodes : {&Nodes, &ExpiredNodes}) {
+            for (auto& [id, node] : *nodes) {
+                if (!node.Location.GetBridgePileName()) {
+                    continue;
+                }
+                NActorsInterconnect::TNodeLocation proto;
+                node.Location.Serialize(&proto, false);
+                proto.ClearBridgePileName();
+                YDB_LOG_NOTICE_CTX(ctx, "TNodeBroker::DbLoadState: dropping pile name of the node without bridge mode",
+                    {"dbLogPrefix", DbLogPrefix()},
+                    {"nodeId", id},
+                    {"location", node.Location});
+                node.Location = TNodeLocation(proto);
+                node.Version = Epoch.Version + 1;
+                if (updated.insert(id).second) {
+                    dbChanges.NewVersionUpdateNodes.push_back(id);
+                }
+            }
+        }
+    }
+
     if (!dbChanges.NewVersionUpdateNodes.empty()) {
         UpdateEpochVersion();
         dbChanges.UpdateEpoch = true;

@@ -345,50 +345,6 @@ namespace NKikimr::NStorage {
         });
     }
 
-    void TInvokeRequestHandlerActor::QueryBridgeRollbackStatus() {
-        RunCommonChecks();
-
-        // nodes report whether they run with BridgeConfig the same way they do for the conversion; static nodes not
-        // reporting may still run with it and come back later, dynamic nodes not connected can't be enumerated
-        TEvScatter task;
-        task.MutableCollectBridgeCapability();
-        IssueScatterTask(std::move(task), [this](TEvGather *res) {
-            if (!res->HasCollectBridgeCapability()) {
-                throw TExError() << "Incorrect CollectBridgeCapability response";
-            }
-            const auto& response = res->GetCollectBridgeCapability();
-            const std::set<ui32> bridgeConfigNodeIds(response.GetCapableNodeIds().begin(),
-                response.GetCapableNodeIds().end());
-            THashSet<ui32> reported(response.GetNotCapableNodeIds().begin(), response.GetNotCapableNodeIds().end());
-            reported.insert(bridgeConfigNodeIds.begin(), bridgeConfigNodeIds.end());
-            std::set<ui32> unreported;
-            for (const auto& node : Self->StorageConfig->GetAllNodes()) {
-                if (!reported.contains(node.GetNodeId())) {
-                    unreported.insert(node.GetNodeId());
-                }
-            }
-
-            Finish(TResult::OK, std::nullopt, [&](auto *record) {
-                auto *status = record->MutableBridgeRollbackStatus();
-                status->SetHasClusterState(Self->StorageConfig->HasClusterState());
-                const auto& details = Self->StorageConfig->GetClusterStateDetails();
-                if (const auto& op = details.GetPendingPileOperation(); details.HasPendingPileOperation() &&
-                        op.GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ROLLBACK) {
-                    status->SetRollbackInProgress(true);
-                    if (op.HasErrorReason()) {
-                        status->SetErrorReason(op.GetErrorReason());
-                    }
-                }
-                for (const ui32 nodeId : bridgeConfigNodeIds) {
-                    status->AddBridgeConfigNodeIds(nodeId);
-                }
-                for (const ui32 nodeId : unreported) {
-                    status->AddUnreportedStaticNodeIds(nodeId);
-                }
-            });
-        });
-    }
-
     void TInvokeRequestHandlerActor::RollbackBridge(const TQuery::TRollbackBridge& cmd) {
         RunCommonChecks();
         NeedBridgeMode();

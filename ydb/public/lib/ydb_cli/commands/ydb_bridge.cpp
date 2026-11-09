@@ -1,5 +1,7 @@
 #include "ydb_bridge.h"
 
+#include <util/string/join.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
@@ -308,8 +310,9 @@ int TCommandBridgeList::Run(TConfig& config) {
 
 TCommandBridgeRollbackStatus::TCommandBridgeRollbackStatus(bool allowEmptyDatabase)
     : TYdbReadOnlyCommand("rollback-status", {}, "Show how far the rollback of a cluster prepared for bridge mode has "
-        "gone. To roll back, remove bridge_config from the cluster configuration and restart every node without it. "
-        "Dynamic nodes not connected to the cluster are not reported.")
+        "gone. To roll back, remove bridge_config along with bridge_pile_name of hosts from the cluster configuration "
+        "in a single change, then restart every node without them (dynamic nodes without --bridge-pile-name). Dynamic "
+        "nodes not connected to the cluster are not reported.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {}
 
@@ -334,12 +337,6 @@ int TCommandBridgeRollbackStatus::Run(TConfig& config) {
 
     auto result = client.GetRollbackStatus().GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-
-    auto printNodeIds = [](IOutputStream& out, const std::vector<uint32_t>& nodeIds) {
-        for (size_t i = 0; i < nodeIds.size(); ++i) {
-            out << (i ? ", " : "") << nodeIds[i];
-        }
-    };
 
     switch (OutputFormat) {
         case EDataFormat::Json: {
@@ -372,14 +369,12 @@ int TCommandBridgeRollbackStatus::Run(TConfig& config) {
                 ss << "The cluster is a bridged one; run \"ydb admin cluster bridge rollback\" to roll it back" << Endl;
             }
             if (const auto& nodeIds = result.GetBridgeConfigNodeIds(); !nodeIds.empty()) {
-                ss << "Nodes still running with bridge config (restart them without it): ";
-                printNodeIds(ss, nodeIds);
-                ss << Endl;
+                ss << "Nodes still running with bridge config (restart them without it): "
+                    << MakeRangeJoiner(", ", nodeIds) << Endl;
             }
             if (const auto& nodeIds = result.GetUnreportedStaticNodeIds(); !nodeIds.empty()) {
-                ss << "Static nodes that have not reported their config (not running or not connected): ";
-                printNodeIds(ss, nodeIds);
-                ss << Endl;
+                ss << "Static nodes that have not reported their config (not running or not connected): "
+                    << MakeRangeJoiner(", ", nodeIds) << Endl;
             }
             if (result.IsComplete()) {
                 ss << "The cluster runs in ordinary mode, every node has reported running without bridge config" << Endl;
@@ -396,7 +391,8 @@ TCommandBridgeRollback::TCommandBridgeRollback(bool allowEmptyDatabase)
     : TYdbCommand("rollback", {}, "Roll a cluster converted from an ordinary one back to it. The cluster must have the "
         "only pile, the original one, and every storage group must be inline in it. Static storage groups become "
         "ordinary ones right away, the other ones and the cluster state follow; see rollback-status. Then remove "
-        "bridge_config from the cluster configuration and restart every node without it.")
+        "bridge_config along with bridge_pile_name of hosts from the cluster configuration in a single change, and "
+        "restart every node without them (dynamic nodes without --bridge-pile-name).")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
     CompletionDescription = "Roll a converted cluster back to ordinary mode";

@@ -790,6 +790,19 @@ namespace NKikimr::NStorage {
         void HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev);
         void ForwardInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev, ui32 hopNodeId);
         void FillPileConnectivity(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record);
+
+        // the rollback status is collected by the root outside the queue of invoke operations, as it is collected from
+        // every node and may take long; the requests coming while it is collected get the result of that collection
+        struct TBridgeRollbackStatusWaiter {
+            TActorId Sender;
+            ui64 Cookie;
+            TActorId SessionId;
+        };
+        std::optional<TActorId> BridgeRollbackStatusCollector;
+        std::vector<TBridgeRollbackStatusWaiter> BridgeRollbackStatusWaiters;
+        void QueryBridgeRollbackStatus(TEvNodeConfigInvokeOnRoot::TPtr ev);
+        void FinishBridgeRollbackStatus(const TEvGather& gather);
+
         void Invoke(TInvokeQuery&& query);
         void HandleQueryFinished(STFUNC_SIG);
 

@@ -181,8 +181,10 @@ message RemovePileResult {
 
 // Report how far the rollback of a cluster prepared for bridge mode has gone. Such cluster (its nodes run with a
 // single-pile bridge config, but it has not been converted into a bridged one) gets back to ordinary mode when the bridge
-// config is removed from the cluster configuration and every node is restarted without it; Hive and node registration
-// drop the piles of nodes by themselves then. Dynamic nodes not connected to the cluster are not reported.
+// config, along with the pile names of hosts, is removed from the cluster configuration in a single change, and every
+// node is restarted without them (dynamic nodes without their pile names too); Hive and NodeBroker drop the piles of
+// nodes by themselves then. Dynamic nodes not connected to the cluster are not reported. Administrator privileges are
+// required.
 message GetRollbackStatusRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 }
@@ -210,7 +212,7 @@ message GetRollbackStatusResult {
 // storage group is inline in that pile (has its own VDisks there and no parts elsewhere). Static storage groups become
 // ordinary ones by the call, the storage controller does the same to its groups afterwards, then the cluster state is
 // removed; see GetRollbackStatusResult. The cluster is prepared for bridge mode then, and gets back to ordinary mode
-// when bridge_config is removed from the cluster configuration and every node is restarted without it.
+// as GetRollbackStatusRequest describes.
 message RollbackRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // Don't ask the storage controller whether it can make its groups ordinary ones before static groups are made such.

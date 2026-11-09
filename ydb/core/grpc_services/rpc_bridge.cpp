@@ -547,8 +547,9 @@ private:
     }
 };
 
-// status of the rollback of the cluster prepared for bridge mode; it is served by distconf on the root node, as the
-// node serving the request may run without bridge config already
+// status of the rollback of the bridged cluster or the one prepared for bridge mode; it is served by distconf on the
+// root node (static nodes forward it there, dynamic ones send it to their static node), as the node serving the request
+// may run without bridge config already
 class TGetRollbackStatusRequest : public TBridgeRequestGrpc<TGetRollbackStatusRequest, TEvGetRollbackStatusRequest,
     Ydb::Bridge::GetRollbackStatusResult> {
     using TBase = TBridgeRequestGrpc<TGetRollbackStatusRequest, TEvGetRollbackStatusRequest,
@@ -557,8 +558,9 @@ class TGetRollbackStatusRequest : public TBridgeRequestGrpc<TGetRollbackStatusRe
 public:
     using TBase::TBase;
 
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) {
-        return true;
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
+        // it makes every node report, so it is for administrators running the rollback
+        return CheckAdministrator(status, issues);
     }
 
     void SendRequest(const TActorContext& ctx) {

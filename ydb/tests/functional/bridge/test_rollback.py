@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import logging
-import yaml
 
 from hamcrest import assert_that
 
@@ -13,9 +12,8 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
-import ydb.public.api.protos.ydb_config_pb2 as config
 
-from common import kv_readable, kv_works
+from common import kv_readable, kv_works, replace_main_config, try_replace_main_config
 
 logger = logging.getLogger(__name__)
 
@@ -56,34 +54,8 @@ class BridgeRollbackBase(object):
         cls.bridge_client.close()
         cls.cluster.stop()
 
-    def fetch_config(self):
-        response = self.cluster.config_client.fetch_all_configs()
-        assert_that(response.operation.status == StatusIds.SUCCESS)
-        result = config.FetchConfigResult()
-        response.operation.result.Unpack(result)
-        assert_that(len(result.config) == 1)
-        return yaml.safe_load(result.config[0].config)
-
     def replace_config(self, change):
-        cfg = self.fetch_config()
-        cfg["metadata"]["version"] += 1
-        change(cfg["config"])
-        expected_version = cfg["metadata"]["version"]
-        response = self.cluster.config_client.replace_config(yaml.dump(cfg))
-        logger.debug("replace_config response: %s", response)
-        assert_that(response.operation.status == StatusIds.SUCCESS)
-
-        # nodes pick the new config up only when restarted
-        def config_is_applied():
-            for node in self.cluster.nodes.values():
-                try:
-                    node_config = node.read_node_config()
-                    if node_config["metadata"]["version"] != expected_version:
-                        return False
-                except (KeyError, OSError, TypeError, yaml.YAMLError):
-                    return False
-            return True
-        assert_that(wait_for(config_is_applied, timeout_seconds=60))
+        replace_main_config(self.cluster, change, logger)
 
     def kv_works(self, table_path, tablet_ids, key):
         return kv_works(self.cluster.kv_client, table_path, tablet_ids, key, logger)
@@ -238,3 +210,71 @@ class TestBridgeConvertedRollback(BridgeRollbackBase):
         for key in ["initial", "converted", "rolled_back"]:
             assert_that(self.kv_readable(table_path, tablet_ids, key))
         assert_that(self.kv_works(table_path, tablet_ids, "after"))
+
+
+class TestBridgeNamedNodesRollback(BridgeRollbackBase):
+    """Static nodes of the cluster prepared for bridge mode got the name of the pile in their locations: the bridge config
+    and the pile names go away in a single change of the configuration, as the pile names are refused without bridge
+    config. The rollback status is queried through a dynamic node, which forwards it to a static one."""
+
+    def query_status_through(self, endpoint_node, database):
+        client = BridgeClient(endpoint_node.host, endpoint_node.port)
+        client.set_auth_token('root@builtin')
+        client.set_database(database)
+        try:
+            return client.get_rollback_status_result()
+        finally:
+            client.close()
+
+    def test_rollback_with_named_static_nodes(self):
+        table_path = '/Root/mydb/bridge_named_rollback'
+        tablet_ids = self.create_kv_tablets(table_path)
+        static_node_ids = {node.node_id for node in self.cluster.nodes.values()}
+
+        # the dynamic node runs without bridge config all the way
+        database = '/Root/dynamic'
+        self.cluster.create_database(database, storage_pool_units_count={'rot': 1})
+        slots = self.cluster.register_and_start_slots(database, count=1)
+        self.cluster.wait_tenant_up(database)
+        slot = slots[0]
+
+        # prepare the cluster with named static nodes
+        def add_bridge_config(cfg):
+            cfg["bridge_config"] = {"piles": [{"name": PILE_NAME}]}
+            for host in cfg["hosts"]:
+                host.setdefault("location", {})["bridge_pile_name"] = PILE_NAME
+        self.replace_config(add_bridge_config)
+        for node_id in sorted(self.cluster.nodes.keys()):
+            self.restart_node(node_id, table_path, tablet_ids, "prepare%d" % node_id)
+        self.wait_rollback_status(static_node_ids, complete=False)
+
+        def status_through_dynamic_node_lists(node_ids):
+            result = self.query_status_through(slot, database)
+            logger.debug("GetRollbackStatus through dynamic node result# %s", result)
+            return result is not None and set(result.bridge_config_node_ids) == set(node_ids)
+        assert_that(wait_for(lambda: status_through_dynamic_node_lists(static_node_ids), timeout_seconds=60))
+
+        # the bridge config alone can't go away while hosts have pile names
+        def drop_bridge_config_only(cfg):
+            del cfg["bridge_config"]
+        operation, _ = try_replace_main_config(self.cluster, drop_bridge_config_only)
+        assert_that(operation.status != StatusIds.SUCCESS, str(operation))
+        assert_that(any("pile name can't be specified" in issue.message for issue in operation.issues), str(operation))
+
+        # both go away in one change
+        def drop_bridge_config_and_pile_names(cfg):
+            del cfg["bridge_config"]
+            for host in cfg["hosts"]:
+                host.get("location", {}).pop("bridge_pile_name", None)
+        self.replace_config(drop_bridge_config_and_pile_names)
+        remaining = set(static_node_ids)
+        for node_id in sorted(self.cluster.nodes.keys()):
+            self.restart_node(node_id, table_path, tablet_ids, "rollback%d" % node_id)
+            remaining.discard(self.cluster.nodes[node_id].node_id)
+            self.wait_rollback_status(remaining, complete=not remaining)
+        assert_that(wait_for(lambda: status_through_dynamic_node_lists([]), timeout_seconds=60))
+        assert_that(self.query_status_through(slot, database).complete)
+        for key in ["initial"] + ["prepare%d" % node_id for node_id in self.cluster.nodes.keys()]:
+            assert_that(self.kv_readable(table_path, tablet_ids, key))
+        assert_that(self.kv_works(table_path, tablet_ids, "after"))
+        self.cluster.unregister_and_stop_slots(slots)

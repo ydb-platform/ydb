@@ -58,7 +58,8 @@ namespace {
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
         const TInstant deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
         for (;;) {
-            const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryBridgeRollbackStatus(); });
+            const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryBridgeRollbackStatus(); }, 1,
+                deadline);
             if (res.GetStatus() == TResult::OK) {
                 UNIT_ASSERT_C(res.HasBridgeRollbackStatus(), res.DebugString());
                 const auto& status = res.GetBridgeRollbackStatus();
@@ -321,6 +322,66 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
             res.DebugString());
         UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "no original pile");
         UNIT_ASSERT(QueryStorageConfig(env).HasClusterState());
+    }
+
+    // the rollback status is collected from every node, which may take long: it doesn't hold the queue of distconf
+    // operations meanwhile, and the requests coming while it is collected get the result of that collection
+    Y_UNIT_TEST(StatusCollectionOutsideOperationQueue) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        CreatePoolAndGetGroup(env);
+
+        // the reports of nodes don't get to the root until released
+        THashSet<ui64> collectionTaskIds;
+        bool hold = true;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> held;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigScatter::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigScatter>()->Record;
+                if (record.HasCollectBridgeCapability()) {
+                    collectionTaskIds.insert(record.GetTaskId());
+                }
+            } else if (hold && ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType &&
+                    ev->Get<NStorage::TEvNodeConfigGather>()->Record.HasCollectBridgeCapability()) {
+                held.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return true;
+        };
+
+        std::vector<TActorId> edges;
+        for (ui32 i = 0; i < 3; ++i) {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableQueryBridgeRollbackStatus();
+            env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), edge, request.release()), 1);
+            edges.push_back(edge);
+            env.Sim(TDuration::MilliSeconds(100));
+        }
+        WaitUntil(env, [&] { return !held.empty(); }, "reports of nodes", TDuration::MilliSeconds(100), 100);
+
+        // the queue of operations is not blocked by the collection
+        UNIT_ASSERT(!QueryStorageConfig(env).HasClusterState());
+        UNIT_ASSERT_VALUES_EQUAL(collectionTaskIds.size(), 1);
+
+        hold = false;
+        for (auto& [nodeId, ev] : std::exchange(held, {})) {
+            env.Runtime->Send(ev->HasEvent()
+                ? new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie)
+                : new IEventHandle(ev->Type, ev->Flags, ev->Recipient, ev->Sender, ev->ReleaseChainBuffer(),
+                    ev->Cookie), nodeId);
+        }
+        for (const TActorId& edge : edges) {
+            const auto res = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge, false,
+                env.Runtime->GetClock() + TDuration::Seconds(30));
+            UNIT_ASSERT(res);
+            const auto& record = res->Get()->Record;
+            UNIT_ASSERT_EQUAL_C(record.GetStatus(), TResult::OK, record.ShortDebugString());
+            UNIT_ASSERT_C(record.HasBridgeRollbackStatus(), record.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetBridgeRollbackStatus().BridgeConfigNodeIdsSize(), 0);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(collectionTaskIds.size(), 1);
+        env.Runtime->FilterFunction = {};
     }
 
     // the ordinary cluster has nothing to roll back

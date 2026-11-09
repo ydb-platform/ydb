@@ -525,6 +525,14 @@ namespace NKikimr::NDataShard {
     void TDataShard::UpdateHnswIndex(ui32 localTid, NTable::ERowOp rowOp,
                                      TConstArrayRef<TCell> keyCells, TArrayRef<const NIceDb::TUpdateOp> ops,
                                      NTable::TDatabase& db, TRowVersion version, ui64 writeTxId, TPathId indexId) {
+        if (!indexId) {
+            if (auto table = HnswIndexCache.find(localTid); table != HnswIndexCache.end()) {
+                for (const auto& [id, _] : table->second) {
+                    UpdateHnswIndex(localTid, rowOp, keyCells, ops, db, version, writeTxId, id);
+                }
+            }
+            return;
+        }
         indexId = ResolveHnswIndexId(localTid, indexId);
         auto* it = FindHnswIndexEntry(localTid, indexId);
         if (!it || !it->Changes->Valid || !it->VectorColumnTag) {
@@ -548,7 +556,11 @@ namespace NKikimr::NDataShard {
             }
         }
         if (unsupported) {
-            db.OnCommit([this, localTid, indexId] { InvalidateHnswIndex(localTid, indexId); });
+            db.OnCommit([this, localTid, indexId, changes] {
+                if (auto* cached = FindHnswIndexEntry(localTid, indexId); cached && cached->Changes == changes) {
+                    InvalidateHnswIndex(localTid, indexId);
+                }
+            });
             return;
         }
         TString key;
@@ -557,7 +569,11 @@ namespace NKikimr::NDataShard {
             key = TSerializedCellVec::Serialize(keyCells);
             reservation = TryReserveHnswCacheMemory(THnswIndexChanges::EstimateBytes(key, vector ? vector->size() : 0));
             if (!reservation) {
-                db.OnCommit([this, localTid, indexId] { InvalidateHnswIndex(localTid, indexId); });
+                db.OnCommit([this, localTid, indexId, changes] {
+                if (auto* cached = FindHnswIndexEntry(localTid, indexId); cached && cached->Changes == changes) {
+                    InvalidateHnswIndex(localTid, indexId);
+                }
+            });
                 return;
             }
         }
@@ -589,13 +605,22 @@ namespace NKikimr::NDataShard {
     }
 
     void TDataShard::CommitHnswIndexChanges(ui32 localTid, ui64 txId, TRowVersion version, NTable::TDatabase& db, TPathId indexId) {
-        indexId = ResolveHnswIndexId(localTid, indexId);
-        if (!FindHnswIndexEntry(localTid, indexId)) {
+        if (!indexId) {
+            if (auto table = HnswIndexCache.find(localTid); table != HnswIndexCache.end()) {
+                for (const auto& [id, _] : table->second) {
+                    CommitHnswIndexChanges(localTid, txId, version, db, id);
+                }
+            }
             return;
         }
-        db.OnCommit([this, localTid, indexId, txId, version] {
+        indexId = ResolveHnswIndexId(localTid, indexId);
+        const auto* cached = FindHnswIndexEntry(localTid, indexId);
+        if (!cached) {
+            return;
+        }
+        db.OnCommit([this, localTid, indexId, changes = cached->Changes, txId, version] {
             auto* it = FindHnswIndexEntry(localTid, indexId);
-            if (!it) {
+            if (!it || it->Changes != changes || !changes->Valid) {
                 return;
             }
             auto& entry = *it;
@@ -615,12 +640,21 @@ namespace NKikimr::NDataShard {
     }
 
     void TDataShard::AbortHnswIndexChanges(ui32 localTid, ui64 txId, NTable::TDatabase& db, TPathId indexId) {
-        indexId = ResolveHnswIndexId(localTid, indexId);
-        if (!FindHnswIndexEntry(localTid, indexId)) {
+        if (!indexId) {
+            if (auto table = HnswIndexCache.find(localTid); table != HnswIndexCache.end()) {
+                for (const auto& [id, _] : table->second) {
+                    AbortHnswIndexChanges(localTid, txId, db, id);
+                }
+            }
             return;
         }
-        db.OnCommit([this, localTid, indexId, txId] {
-            if (auto* it = FindHnswIndexEntry(localTid, indexId); it) {
+        indexId = ResolveHnswIndexId(localTid, indexId);
+        const auto* cached = FindHnswIndexEntry(localTid, indexId);
+        if (!cached) {
+            return;
+        }
+        db.OnCommit([this, localTid, indexId, changes = cached->Changes, txId] {
+            if (auto* it = FindHnswIndexEntry(localTid, indexId); it && it->Changes == changes) {
                 it->Pending.erase(txId);
                 it->PendingReservations.erase(txId);
                 it->UntrackedTransactions.erase(txId);

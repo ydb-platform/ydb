@@ -174,8 +174,9 @@ Y_UNIT_TEST_SUITE(ExportSecret) {
             }
         });
 
-        NYdb::NSecret::TSecretClient client(env.GetDriver(), NYdb::TCommonClientSettings().AuthToken("root@builtin"));
         const auto exported = env.RunCall([&] {
+            // Client-specific credentials start synchronous discovery, which also needs runtime dispatch.
+            NYdb::NSecret::TSecretClient client(env.GetDriver(), NYdb::TCommonClientSettings().AuthToken("root@builtin"));
             return client.ExportSecret("/Root/source", "/Root/export-topic").GetValueSync();
         });
         UNIT_ASSERT_C(exported.IsSuccess(), exported.GetIssues().ToString());

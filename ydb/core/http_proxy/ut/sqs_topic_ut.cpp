@@ -3182,6 +3182,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto consumerName = [](int i) { return std::format("ydb-sqs-consumer-{}", i); };
         auto queueUrlForConsumer = [&](int i) { return std::format("/v1/{}/{}/{}/{}/{}/{}", database.size(), database.c_str(), topicName.size(), topicName.c_str(), consumerName(i).size(), consumerName(i).c_str()); };
         const TDuration retentionPeriod = TDuration::Hours(10);
+        const TDuration expectedRetention = params.RetentionPeriod != TDuration::Zero() ? params.RetentionPeriod : retentionPeriod;
         if (params.Dlq) {
             UNIT_ASSERT(CreateDlqTopic(driver));
         }
@@ -3279,7 +3280,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["ReceiveMessageWaitTimeSeconds"], "10");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(expectedRetention.Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
             checkFifo(json);
             checkDlq(json);
@@ -3343,7 +3344,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 }}
             });
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(expectedRetention.Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
             checkFifo(json);
             checkDlq(json);

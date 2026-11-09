@@ -8,7 +8,6 @@
 #include <util/string/cast.h>
 #include <util/string/type.h>
 
-#include <algorithm>
 #include <format>
 
 namespace NKikimr::NSqsTopic::V1 {
@@ -192,9 +191,9 @@ namespace NKikimr::NSqsTopic::V1 {
 
         if (newConfig.MessageRetentionPeriod.Defined()) {
             ui64 newSeconds = newConfig.MessageRetentionPeriod->Seconds();
-            const ui64 topicSeconds = static_cast<ui64>(existingConfig.GetPartitionConfig().GetLifetimeSeconds());
-            const ui64 availabilitySeconds = existingConsumer.GetAvailabilityPeriodMs() / 1000;
-            const ui64 existingSeconds = std::max(topicSeconds, availabilitySeconds);
+            const ui64 existingSeconds = existingConsumer.HasAvailabilityPeriodMs()
+                ? existingConsumer.GetAvailabilityPeriodMs() / 1000
+                : static_cast<ui64>(existingConfig.GetPartitionConfig().GetLifetimeSeconds());
             if (existingSeconds != newSeconds) {
                 return std::unexpected(std::format(
                     "MessageRetentionPeriod mismatch: new value is {} seconds, existing value is {} seconds",

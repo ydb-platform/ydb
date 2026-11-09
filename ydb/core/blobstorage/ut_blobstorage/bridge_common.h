@@ -3,6 +3,10 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
+#include <deque>
+#include <map>
+#include <set>
+
 // helpers shared by bridge tests
 namespace NBridgeTest {
 
@@ -436,5 +440,87 @@ namespace NBridgeTest {
         UNIT_ASSERT_VALUES_EQUAL(details.GetNonUniformStorageEnabled(), skipStoragePoolConversion);
         return groupId;
     }
+
+    inline NKikimrBlobStorage::TUpdateSettings ReadSettings(TEnvironmentSetup& env) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableReadSettings();
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        return response.GetStatus(0).GetSettings();
+    }
+
+    inline void SetBridgeSyncMaxSyncers(TEnvironmentSetup& env, ui32 maxSyncers) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableUpdateSettings()->AddBridgeSyncMaxSyncers(maxSyncers);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    // Follows the syncers of dynamic groups as BSC assigns them to nodes, and holds their completions on demand, so that
+    // they stay running. Updates for different nodes may come in any order, so the numbers are exact when things settle.
+    struct TSyncerTracker {
+        bool Hold = false; // whether completions are put into Held
+        std::map<ui32, std::set<ui32>> NodeSyncers; // node -> target groups, as the last update from BSC says
+        std::vector<std::pair<ui32, ui32>> Started; // node and target group, in the order of starting
+        std::deque<std::pair<ui32, std::unique_ptr<IEventHandle>>> Held; // node and completion, in the order of arrival
+        std::set<const void*> Released; // completions on their way through the filter again, not to be held twice
+
+        // to be called from the filter function, whose result it returns
+        bool OnEvent(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                if (record.GetUpdateSyncers()) {
+                    std::set<ui32> targets;
+                    for (const auto& syncer : record.GetSyncers()) {
+                        if (IsDynamicGroup(TGroupId::FromValue(syncer.GetBridgeProxyGroupId()))) {
+                            targets.insert(syncer.GetTargetGroupId());
+                        }
+                    }
+                    auto& current = NodeSyncers[nodeId];
+                    for (ui32 target : targets) {
+                        if (!current.contains(target)) {
+                            Started.emplace_back(nodeId, target);
+                        }
+                    }
+                    current = std::move(targets);
+                }
+            } else if (Hold && ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                if (IsDynamicGroup(msg->BridgeProxyGroupId) && !Released.erase(msg)) {
+                    Held.emplace_back(nodeId, std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        size_t GetNumRunning() const {
+            size_t res = 0;
+            for (const auto& [nodeId, targets] : NodeSyncers) {
+                res += targets.size();
+            }
+            return res;
+        }
+
+        void ReleaseOne(TEnvironmentSetup& env) {
+            UNIT_ASSERT(!Held.empty());
+            auto [nodeId, ev] = std::move(Held.front());
+            Held.pop_front();
+            Released.insert(ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>());
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+
+        // lets held syncers finish one by one until the condition is met, checking the number of the running ones
+        void RunUntil(TEnvironmentSetup& env, size_t maxRunning, const TString& what, const std::function<bool()>& condition) {
+            for (ui32 i = 0; i < 1000 && !condition(); ++i) {
+                env.Sim(TDuration::Seconds(1));
+                UNIT_ASSERT_LE(GetNumRunning(), maxRunning);
+                if (!Held.empty()) {
+                    ReleaseOne(env);
+                }
+            }
+            UNIT_ASSERT_C(condition(), what);
+        }
+    };
 
 } // NBridgeTest

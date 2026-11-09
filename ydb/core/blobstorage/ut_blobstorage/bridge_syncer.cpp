@@ -438,7 +438,7 @@ struct THeldSyncersEnv {
         .AutomaticBootstrap = true,
     }};
     std::map<ui32, ui64> Rates;
-    std::map<ui32, bool> Hosting;
+    std::map<ui32, ui32> NumNodeSyncers; // of all groups, as the last update from BSC says
     std::function<void(ui32, const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate&)> OnUpdate;
     bool DropRates = false;
     bool HoldSyncers = false;
@@ -459,7 +459,7 @@ struct THeldSyncersEnv {
                     Rates[nodeId] = record.GetBridgeSyncNodeRateBytesPerSecond();
                 }
                 if (record.GetUpdateSyncers()) {
-                    Hosting[nodeId] = record.SyncersSize() != 0;
+                    NumNodeSyncers[nodeId] = record.SyncersSize();
                 }
             }
             if (HoldSyncers && ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
@@ -495,8 +495,8 @@ struct THeldSyncersEnv {
 
     ui64 GetNumHostingNodes() const {
         ui64 res = 0;
-        for (const auto& [nodeId, value] : Hosting) {
-            res += value;
+        for (const auto& [nodeId, numSyncers] : NumNodeSyncers) {
+            res += numSyncers != 0;
         }
         return res;
     }
@@ -504,8 +504,8 @@ struct THeldSyncersEnv {
     void CheckRates(ui64 total) {
         UNIT_ASSERT(GetNumHostingNodes());
         const ui64 share = total / GetNumHostingNodes();
-        for (const auto& [nodeId, value] : Hosting) {
-            UNIT_ASSERT_VALUES_EQUAL_C(Rates[nodeId], value ? share : 0, "nodeId# " << nodeId);
+        for (const auto& [nodeId, numSyncers] : NumNodeSyncers) {
+            UNIT_ASSERT_VALUES_EQUAL_C(Rates[nodeId], numSyncers ? share : 0, "nodeId# " << nodeId);
         }
     }
 };
@@ -916,8 +916,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         THeldSyncersEnv test;
         auto& env = test.Env;
         ui32 restarted = 0;
-        for (const auto& [nodeId, hosting] : test.Hosting) {
-            if (hosting) {
+        for (const auto& [nodeId, numSyncers] : test.NumNodeSyncers) {
+            if (numSyncers) {
                 restarted = nodeId;
                 break;
             }
@@ -954,11 +954,7 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
 
         env.RebootTablet(env.TabletId);
 
-        NKikimrBlobStorage::TConfigRequest request;
-        request.AddCommand()->MutableReadSettings();
-        const auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        const auto& settings = response.GetStatus(0).GetSettings();
+        const auto settings = NBridgeTest::ReadSettings(env);
         UNIT_ASSERT_VALUES_EQUAL(settings.BridgeSyncTotalRateBytesPerSecondSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(settings.GetBridgeSyncTotalRateBytesPerSecond(0), THeldSyncersEnv::TotalRate);
 
@@ -1014,8 +1010,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         THeldSyncersEnv test;
         auto& env = test.Env;
         ui32 registering = 0;
-        for (const auto& [nodeId, hosting] : test.Hosting) {
-            if (hosting) {
+        for (const auto& [nodeId, numSyncers] : test.NumNodeSyncers) {
+            if (numSyncers) {
                 registering = nodeId;
                 break;
             }
@@ -1160,6 +1156,293 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
     }
 }
 
+Y_UNIT_TEST_SUITE(BridgeSyncerPlacement) {
+    // Each group has VDisks on all 8 nodes of the pile, so 8 syncers of dynamic groups and the one of the static group
+    // fit 8 nodes with no more than 2 syncers on a node. Random placement would hardly ever do this.
+    Y_UNIT_TEST(SyncersSpreadOverNodes) {
+        THeldSyncersEnv test;
+        std::map<ui32, ui32> numSyncers;
+        for (const auto& [nodeId, syncers] : test.NumNodeSyncers) {
+            if (syncers) {
+                numSyncers.emplace(nodeId, syncers);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(numSyncers.size(), 8);
+        for (const auto& [nodeId, syncers] : numSyncers) {
+            UNIT_ASSERT_LE_C(syncers, 2, "nodeId# " << nodeId);
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(BridgeSyncerLimit) {
+    // Pile 1 gets back with the completions of the syncers of dynamic groups held.
+    struct TLimitedSyncersEnv {
+        static constexpr ui32 NumGroups = 8;
+
+        TEnvironmentSetup Env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = NBridgeTest::GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        NBridgeTest::TSyncerTracker Tracker;
+
+        // the number of syncers expected to run in the end is the limit, or all the groups if there is none
+        explicit TLimitedSyncersEnv(std::optional<ui32> maxSyncers) {
+            NBridgeTest::CreatePoolAndGetGroup(Env, NumGroups);
+            Env.Runtime->FilterFunction = [this](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                return Tracker.OnEvent(nodeId, ev);
+            };
+            if (maxSyncers) {
+                NBridgeTest::SetBridgeSyncMaxSyncers(Env, *maxSyncers);
+            }
+            Env.Sim(TDuration::Seconds(5));
+            NBridgeTest::SwitchBridgePileState(Env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+            NBridgeTest::WaitForPileState(Env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+            Tracker.Hold = true;
+            NBridgeTest::SwitchBridgePileState(Env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+            const size_t expected = maxSyncers && *maxSyncers ? Min<size_t>(*maxSyncers, NumGroups) : NumGroups;
+            NBridgeTest::WaitUntil(Env, [&] { return Tracker.GetNumRunning() >= expected; }, "syncers running");
+            Env.Sim(TDuration::Seconds(5)); // the static group gets synced by now, so it takes no slots
+            UNIT_ASSERT_VALUES_EQUAL(Tracker.GetNumRunning(), expected);
+        }
+
+        ~TLimitedSyncersEnv() {
+            Env.Runtime->FilterFunction = {};
+        }
+
+        ui32 ReadLimit() {
+            const auto settings = NBridgeTest::ReadSettings(Env);
+            UNIT_ASSERT_VALUES_EQUAL(settings.BridgeSyncMaxSyncersSize(), 1);
+            return settings.GetBridgeSyncMaxSyncers(0);
+        }
+    };
+
+    Y_UNIT_TEST(RejoiningPileIsLimited) {
+        TLimitedSyncersEnv test(2);
+        test.Tracker.RunUntil(test.Env, 2, "pile synchronized", [&] {
+            return NBridgeTest::GetPileState(test.Env, 1) == NKikimrBridge::TClusterState::SYNCHRONIZED;
+        });
+    }
+
+    // A group that has finished a stage goes behind the waiting ones, so all of them soon get writes up to the last stage.
+    Y_UNIT_TEST(GroupsTakeTurnsBetweenStages) {
+        TLimitedSyncersEnv test(1);
+        const ui32 numGroups = TLimitedSyncersEnv::NumGroups;
+        test.Tracker.RunUntil(test.Env, 1, "syncers of all groups started", [&] { return test.Tracker.Started.size() >= numGroups; });
+        std::set<ui32> targets;
+        for (ui32 i = 0; i < numGroups; ++i) {
+            targets.insert(test.Tracker.Started[i].second);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(targets.size(), numGroups);
+    }
+
+    Y_UNIT_TEST(RaisedLimitStartsWaitingSyncers) {
+        TLimitedSyncersEnv test(2);
+        NBridgeTest::SetBridgeSyncMaxSyncers(test.Env, 5);
+        test.Env.Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(test.Tracker.GetNumRunning(), 5);
+    }
+
+    // Stopping a syncer would throw away its progress, so the number of them just comes down to the new limit.
+    Y_UNIT_TEST(LoweredLimitKeepsRunningSyncers) {
+        TLimitedSyncersEnv test(4);
+        NBridgeTest::SetBridgeSyncMaxSyncers(test.Env, 1);
+        test.Env.Sim(TDuration::Seconds(5));
+        for (ui32 expected : {4, 3, 2, 1, 1}) {
+            UNIT_ASSERT_VALUES_EQUAL(test.Tracker.GetNumRunning(), expected);
+            test.Tracker.ReleaseOne(test.Env);
+            test.Env.Sim(TDuration::Seconds(5));
+        }
+    }
+
+    Y_UNIT_TEST(ZeroMeansNoLimit) {
+        TLimitedSyncersEnv test(0);
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadLimit(), 0);
+    }
+
+    Y_UNIT_TEST(DefaultLimit) {
+        TLimitedSyncersEnv test(std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadLimit(), 64);
+    }
+
+    Y_UNIT_TEST(LimitSurvivesControllerRestart) {
+        TLimitedSyncersEnv test(3);
+        test.Env.RebootTablet(test.Env.TabletId);
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadLimit(), 3);
+        test.Env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(test.Tracker.GetNumRunning(), 3);
+    }
+
+    // The groups need the static one, so its syncer doesn't wait for the slots. It comes to that when another pile gets
+    // back while the syncers of the first one take all the slots: alone, a pile gets its static part synced before them.
+    Y_UNIT_TEST(StaticGroupDoesNotWaitForSlot) {
+        constexpr ui32 pileIndex = 2;
+        constexpr ui32 firstNodeOfPile = 17;
+        NBridgeTest::TSyncerTracker tracker;
+        bool staticSyncerStarted = false;
+        TEnvironmentSetup env{{
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        NBridgeTest::CreatePoolAndGetGroup(env, 4);
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate && nodeId >= firstNodeOfPile) {
+                for (const auto& syncer : ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record.GetSyncers()) {
+                    staticSyncerStarted |= TGroupID(syncer.GetBridgeProxyGroupId()).ConfigurationType() ==
+                        EGroupConfigurationType::Static;
+                }
+            }
+            return tracker.OnEvent(nodeId, ev);
+        };
+        NBridgeTest::SetBridgeSyncMaxSyncers(env, 1);
+        env.Sim(TDuration::Seconds(5));
+        for (ui32 pile : {1, 2}) {
+            NBridgeTest::SwitchBridgePileState(env, pile, NKikimrBridge::TClusterState::DISCONNECTED);
+            NBridgeTest::WaitForPileState(env, pile, NKikimrBridge::TClusterState::DISCONNECTED);
+        }
+
+        tracker.Hold = true;
+        NBridgeTest::SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        NBridgeTest::WaitUntil(env, [&] { return tracker.GetNumRunning() >= 1; }, "syncer running");
+        env.Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 1);
+        const size_t numStarted = tracker.Started.size();
+        UNIT_ASSERT(!staticSyncerStarted);
+
+        NBridgeTest::SwitchBridgePileState(env, pileIndex, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        NBridgeTest::WaitUntil(env, [&] {
+            if (!staticSyncerStarted) {
+                return false;
+            }
+            const auto config = NBridgeTest::QueryStorageConfig(env);
+            for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                if (group.HasBridgeGroupState()) {
+                    const auto *pile = NBridge::GetGroupPile(group.GetBridgeGroupState(), TBridgePileId::FromPileIndex(pileIndex));
+                    if (!pile || pile->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }, "static group synced");
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.Started.size(), numStarted);
+        env.Runtime->FilterFunction = {};
+    }
+
+    // A finished syncer makes BSC go through the queue at once, while the running syncer of another node is not reported
+    // yet: starting new ones would exceed the limit when it gets reported.
+    Y_UNIT_TEST(NoSyncersStartWhileNodesReport) {
+        constexpr TDuration reportingTime = TDuration::Seconds(10);
+        TLimitedSyncersEnv test(2);
+        auto& env = test.Env;
+        UNIT_ASSERT_VALUES_EQUAL(test.Tracker.Held.size(), 2);
+        const ui32 finishingNode = test.Tracker.Held.front().first;
+        const ui32 silentNode = test.Tracker.Held.back().first;
+        UNIT_ASSERT_UNEQUAL(finishingNode, silentNode);
+
+        std::optional<TInstant> startedAt; // when the first node has heard from the new instance
+        std::unique_ptr<IEventHandle> registration;
+        ui32 registrationNodeId = 0;
+        bool holdRegistration = true;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate && !startedAt) {
+                startedAt = env.Runtime->GetClock();
+            }
+            if (holdRegistration && ev->GetTypeRewrite() == TEvBlobStorage::EvControllerRegisterNode &&
+                    ev->Get<TEvBlobStorage::TEvControllerRegisterNode>()->Record.GetNodeID() == silentNode) {
+                registration = std::move(ev);
+                registrationNodeId = nodeId;
+                return false;
+            }
+            return test.Tracker.OnEvent(nodeId, ev);
+        };
+        env.RebootTablet(env.TabletId);
+        NBridgeTest::WaitUntil(env, [&] { return startedAt.has_value(); }, "start of the new instance", TDuration::Seconds(1), 60);
+        UNIT_ASSERT(registration);
+
+        const size_t numStarted = test.Tracker.Started.size();
+        test.Tracker.ReleaseOne(env);
+        env.Sim(TDuration::Seconds(2));
+        UNIT_ASSERT_C(env.Runtime->GetClock() < *startedAt + reportingTime - TDuration::Seconds(1),
+            "the test has to finish its check while BSC is waiting for the reports");
+        UNIT_ASSERT_VALUES_EQUAL(test.Tracker.Started.size(), numStarted);
+
+        env.Sim(reportingTime);
+        holdRegistration = false;
+        env.Runtime->Send(registration.release(), registrationNodeId);
+        test.Tracker.Hold = false;
+        while (!test.Tracker.Held.empty()) {
+            test.Tracker.ReleaseOne(env);
+        }
+        NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+    }
+
+    // The parts of a pile going out and getting back during its sync get reset and their syncers get restarted. They keep
+    // their slots meanwhile, and no slot is left taken in the end.
+    Y_UNIT_TEST(PileGoingOutAndBackDuringSync) {
+        TLimitedSyncersEnv test(2);
+        auto& env = test.Env;
+        test.Tracker.RunUntil(env, 2, "sync going on", [&] { return test.Tracker.Started.size() >= 4; });
+
+        NBridgeTest::SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_LE(test.Tracker.GetNumRunning(), 2);
+
+        NBridgeTest::SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        test.Tracker.RunUntil(env, 2, "pile synchronized", [&] {
+            return NBridgeTest::GetPileState(env, 1) == NKikimrBridge::TClusterState::SYNCHRONIZED;
+        });
+        env.Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(test.Tracker.GetNumRunning(), 0);
+    }
+
+    // The syncers of a lost node give their slots up, so that the waiting ones start, and the sync goes on without the node.
+    Y_UNIT_TEST(LostNodeGivesSlotsUp) {
+        TLimitedSyncersEnv test(2);
+        auto& env = test.Env;
+        auto& tracker = test.Tracker;
+        const ui32 lostNode = tracker.Started.front().first;
+        const size_t numStarted = tracker.Started.size();
+
+        env.StopNode(lostNode);
+        tracker.NodeSyncers.erase(lostNode); // BSC can't tell it to the node
+        std::erase_if(tracker.Held, [&](const auto& held) { return held.first == lostNode; });
+
+        NBridgeTest::WaitUntil(env, [&] { return tracker.Started.size() > numStarted; }, "syncer started instead of the lost one",
+            TDuration::Seconds(1), 30);
+        UNIT_ASSERT_UNEQUAL(tracker.Started.back().first, lostNode);
+        UNIT_ASSERT_LE(tracker.GetNumRunning(), 2);
+
+        tracker.RunUntil(env, 2, "pile synchronized", [&] {
+            return NBridgeTest::GetPileState(env, 1) == NKikimrBridge::TClusterState::SYNCHRONIZED;
+        });
+    }
+
+    Y_UNIT_TEST(LimitFromBscSettings) {
+        constexpr ui32 limit = 5;
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .ConfigPreprocessor = [](ui32, TNodeWardenConfig& conf) {
+                conf.BlobStorageConfig->MutableBscSettings()->SetBridgeSyncMaxSyncers(limit);
+            },
+        }};
+        env.Sim(TDuration::Seconds(5));
+        const auto settings = NBridgeTest::ReadSettings(env);
+        UNIT_ASSERT_VALUES_EQUAL(settings.BridgeSyncMaxSyncersSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(settings.GetBridgeSyncMaxSyncers(0), limit);
+    }
+}
+
 Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
     Y_UNIT_TEST_TWIN(InvalidSourceAssignmentFails, missingSource) {
         using namespace NBridgeTest;
@@ -1287,8 +1570,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
         THeldSyncersEnv test;
         auto& env = test.Env;
         std::set<ui32> hostingNodes;
-        for (const auto& [nodeId, hosting] : test.Hosting) {
-            if (hosting) {
+        for (const auto& [nodeId, numSyncers] : test.NumNodeSyncers) {
+            if (numSyncers) {
                 hostingNodes.insert(nodeId);
             }
         }

@@ -96,6 +96,9 @@
         },
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.16"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.17"
         }
     ],
     "test_canonical_requests.Test.test_essential": [

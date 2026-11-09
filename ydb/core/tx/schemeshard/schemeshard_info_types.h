@@ -152,6 +152,8 @@ struct TBackupToS3Settings {
     // System Views
     TControlWrapper EnableSysViewPermissionsExport;
     TControlWrapper EnableSysViewPermissionsImport;
+    // Coordination Nodes
+    TControlWrapper EnableKesusExport;
 
     TBackupToS3Settings()
         : EnableAsyncReplicationExport(1, 0, 1)
@@ -164,6 +166,7 @@ struct TBackupToS3Settings {
         , EnableExternalTableImport(1, 0, 1)
         , EnableSysViewPermissionsExport(1, 0, 1)
         , EnableSysViewPermissionsImport(1, 0, 1)
+        , EnableKesusExport(0, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -181,6 +184,8 @@ struct TBackupToS3Settings {
 
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsExport, icb->BackupControls.S3Controls.EnableSysViewPermissionsExport);
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsImport, icb->BackupControls.S3Controls.EnableSysViewPermissionsImport);
+
+        TControlBoard::RegisterSharedControl(EnableKesusExport, icb->BackupControls.S3Controls.EnableKesusExport);
     }
 };
 
@@ -3382,6 +3387,13 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 Y_ENSURE(success, description);
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::THnswIndexDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -3488,6 +3500,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
                 break;
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+                alterData->SpecializedIndexDescription = config.GetHnswIndexDescription();
+                break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -3559,6 +3574,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::THnswIndexDescription,
         NKikimrSchemeOp::TFulltextIndexDescription,
         NKikimrSchemeOp::TBloomFilter,
         NKikimrSchemeOp::TBloomNGrammFilter> SpecializedIndexDescription;

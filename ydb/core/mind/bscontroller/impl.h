@@ -27,6 +27,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/mind/table_adapter.h>
@@ -726,7 +727,8 @@ public:
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
         // Persisted with the group generation by CommitConfigUpdates.
-        std::optional<std::array<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState, 3>> FailRealmStates;
+        std::optional<std::array<NKikimrBlobStorage::TDataCenterState::EState, 3>> FailRealmStates;
+        std::optional<EMirror3dcGroupState> Mirror3dcState;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 
@@ -1705,8 +1707,7 @@ private:
     TActorId ResponsivenessActorID;
     TActorId CmsPipe;
     TTabletResponsivenessPinger* ResponsivenessPinger;
-    using TDataCenterStates = std::unordered_map<TString,
-        NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter::EDataCenterState>;
+    using TDataCenterStates = std::unordered_map<TString, NKikimrBlobStorage::TDataCenterState::EState>;
     TDataCenterStates DataCenterStates;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
@@ -2260,6 +2261,8 @@ private:
     // Bridge operation
 
     static constexpr TDuration DisconnectedSyncerReactionTime = TDuration::Seconds(10);
+    // the time given to nodes to report their syncers to the new BSC instance, until then their number is not known
+    static constexpr TDuration SyncerReportingTime = TDuration::Seconds(10);
 
     struct TSyncerProgress {
         ui64 BytesDone = 0;
@@ -2297,8 +2300,11 @@ private:
     THashMap<TGroupId, TSyncerState> TargetGroupToSyncerState;
     ui64 NextStaticSyncerCommitCookie = 0;
     std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
-    TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
+    TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction; // filled by EnqueueSyncer only
     TMonotonic SyncersRetryAt = TMonotonic::Max(); // when ProcessSyncers is scheduled to start the syncers that failed
+    // syncers beyond this number wait for their turn, which comes after each stage; those of static groups only count, as
+    // there are few of them and they matter the most; 0 means no limit
+    Schema::State::BridgeSyncMaxSyncers::Type BridgeSyncMaxSyncers = Schema::State::BridgeSyncMaxSyncers::Default;
 
     // the limit for the whole cluster gets divided equally between the nodes hosting syncers; the nodes get a new share
     // only when one of them starts hosting or stops doing so, or when the limit changes
@@ -2386,13 +2392,6 @@ private:
     // its inline pile goes away
     void DropBridgeGroupPart(TConfigState& state, TGroupId proxyGroupId, TBridgePileId pileId);
 
-    // the parts of the groups being made fully bridged ones are synced in synchronized piles by this many syncers at
-    // most, so that the traffic between piles doesn't hamper them
-    static constexpr size_t MaxBridgeUpgradeSyncers = 16;
-
-    // syncer of the part in the synchronized pile of the group being made fully bridged one
-    bool IsBridgeUpgradeSyncer(const TSyncerState& syncerState);
-
     // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
     TBridgePileId GetPendingOperationPileId() const;
 
@@ -2416,6 +2415,7 @@ private:
 
     void CheckSyncerDisconnectedNodes();
 
+    void EnqueueSyncer(TSyncerState& syncerState);
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
     void SendSyncersToNodes(const THashSet<TNodeId>& nodeIds);
     bool IsNodeHostingSyncers(TNodeId nodeId) const;

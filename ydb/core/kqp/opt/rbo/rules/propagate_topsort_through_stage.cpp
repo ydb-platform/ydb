@@ -26,7 +26,7 @@ bool IsLastOpInStage(const TIntrusivePtr<TOpSort>& sort) {
     return parent->Props.StageId != sort->Props.StageId;
 }
 
-// We want to match pattern: stage(sort<-map<-read).
+// We want to match pattern: stage(sort<-map<-read). A row read can be in its own stage.
 bool CanPropagateSortOverMap(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input) {
     const auto kind = input->GetKind();
     if (kind != EOperator::Map || !IsLastOpInStage(sort)) {
@@ -38,12 +38,20 @@ bool CanPropagateSortOverMap(const TIntrusivePtr<TOpSort>& sort, const TIntrusiv
     const auto mapStageId = *map->Props.StageId;
 
     // Make sure we have only sort, map and source in the stage.
-    if ((sortStageId != mapStageId) || (mapInput->GetKind() != EOperator::Source) || (*mapInput->Props.StageId != mapStageId)) {
+    if ((sortStageId != mapStageId) || (mapInput->GetKind() != EOperator::Source)) {
+        return false;
+    }
+    if (*mapInput->Props.StageId != mapStageId && CastOperator<TOpRead>(mapInput)->GetTableStorageType() != NYql::EStorageType::RowStorage) {
         return false;
     }
 
-    const auto& mapElements = map->GetMapElements().Items();
-    return std::all_of(mapElements.begin(), mapElements.end(), [](const auto& entry) { return entry.second.IsColumnAccess(); });
+    // Only the sort keys must be copies of input columns. Other map elements are computed after the sort.
+    const auto& mapElements = map->GetMapElements();
+    const auto& sortElements = sort->GetSortElements().Items();
+    return std::all_of(sortElements.begin(), sortElements.end(), [&](const auto& entry) {
+        const auto* element = mapElements.Find(entry.first);
+        return !element || element->IsColumnAccess();
+    });
 }
 
 bool CanPushSortToStage(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input) {
@@ -159,12 +167,10 @@ bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusiveP
         return false;
     }
 
-    // Try to match pk prefix.
+    // Try to match pk prefix. The key is unique, so sort columns after the full key cannot change the order.
     const auto& keyColumns = metadataPtr->KeyColumnNames;
-    if (keyColumns.size() < sortElements.size()) {
-        return false;
-    }
-    for (ui32 i = 0, e = sortElements.size(); i < e; ++i) {
+    const auto keyPrefixLen = std::min(keyColumns.size(), sortElements.size());
+    for (size_t i = 0; i < keyPrefixLen; ++i) {
         if (keyColumns[i] != registry.Get(sortElements[i].first).GetColumnName()) {
             return false;
         }
@@ -249,8 +255,13 @@ TIntrusivePtr<IOperator> TPropagateTopSortThroughStageRule::SimpleMatchAndApply(
         const auto mapElements = map->GetMapElements();
         // Sort on the source of a direct copy while retaining the Map's output bindings.
         MaybeUpdateSortElements(sortElements, mapElements);
-        auto propagatedSort = MakeIntrusive<TOpSort>(map->GetInput(), sort->Pos, sort->Props, sortElements, sort->LimitCond, EOpPhase::Intermediate);
-        return MakeIntrusive<TOpMap>(propagatedSort, map->Pos, map->Props, mapElements);
+        // The sort takes over the map's input, together with its stage boundary to a row read.
+        auto sortProps = sort->Props;
+        sortProps.StageInputEdges = map->Props.StageInputEdges;
+        auto mapProps = map->Props;
+        mapProps.StageInputEdges.clear();
+        auto propagatedSort = MakeIntrusive<TOpSort>(map->GetInput(), sort->Pos, sortProps, sortElements, sort->LimitCond, EOpPhase::Intermediate);
+        return MakeIntrusive<TOpMap>(propagatedSort, map->Pos, mapProps, mapElements);
     } else if (CanPushSortToOlapRead(sort, sortInput, ctx, props.InfoUnitRegistry, sortDirecion)) {
         const auto read = CastOperator<TOpRead>(sortInput);
         const auto limitCond = sort->LimitCond->Node->ChildPtr(1);

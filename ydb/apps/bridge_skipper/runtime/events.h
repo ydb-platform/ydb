@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ydb_clients.h"
+#include "commands.h"
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
@@ -16,8 +17,32 @@ struct TEvSkipper {
         EvUpdateReply,
         EvStop,
         EvStopped,
+        EvCommand,
+        EvCommandResult,
+        EvReady,
+        EvReadyAck,
         EvEnd,
     };
+
+    struct TEvCommand : NActors::TEventLocal<TEvCommand, EvCommand> {
+        TControllerCommand Command;
+
+        explicit TEvCommand(TControllerCommand command)
+            : Command(std::move(command)) {
+        }
+    };
+
+    struct TEvCommandResult : NActors::TEventLocal<TEvCommandResult, EvCommandResult> {
+        TCommandResult Result;
+
+        explicit TEvCommandResult(TCommandResult result)
+            : Result(std::move(result)) {
+        }
+    };
+
+    // Private readiness protocol, never accepted over HTTP.
+    struct TEvReady : NActors::TEventLocal<TEvReady, EvReady> {};
+    struct TEvReadyAck : NActors::TEventLocal<TEvReadyAck, EvReadyAck> {};
 
     struct TEvTick : NActors::TEventLocal<TEvTick, EvTick> {};
     struct TEvTickComplete : NActors::TEventLocal<TEvTickComplete, EvTickComplete> {};

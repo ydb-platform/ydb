@@ -25,7 +25,6 @@ Y_UNIT_TEST_SUITE(TSkipperConfiguration) {
     Y_UNIT_TEST(DefaultsMatchDocumentedBudgets) {
         const auto config = ParseConfig(Minimal());
         UNIT_ASSERT_VALUES_EQUAL(config.ClusterId, "test-bridge");
-        UNIT_ASSERT(config.Mode == EMode::Manual);
         UNIT_ASSERT_VALUES_EQUAL(config.Http.Listen, "127.0.0.1:8080");
         UNIT_ASSERT_VALUES_EQUAL(config.HealthEndpointsPerPile, 2);
         const auto& t = config.Timing;
@@ -44,11 +43,10 @@ Y_UNIT_TEST_SUITE(TSkipperConfiguration) {
 
     Y_UNIT_TEST(ShippedExampleIsValid) {
         // The same loading and validation as --check-config.
-        const auto config = LoadConfig(ArcadiaSourceRoot() + "/ydb/apps/bridge_skipper/config/example.yaml");
+        const auto config = LoadConfig(ArcadiaFromCurrentLocation(__SOURCE_FILE__, "../example.yaml"));
         const auto credentials = LoadCredentials(config);
         UNIT_ASSERT(!credentials.Token);
         UNIT_ASSERT_VALUES_EQUAL(config.ClusterId, "production-bridge-01");
-        UNIT_ASSERT(config.Mode == EMode::Manual);
         UNIT_ASSERT_VALUES_EQUAL(config.Endpoints.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(config.Timing.Confirm, TDuration::Seconds(20));
     }
@@ -61,10 +59,9 @@ Y_UNIT_TEST_SUITE(TSkipperConfiguration) {
 
     Y_UNIT_TEST(PileEndpointsAndNestedOverrides) {
         const auto config = ParseConfig(
-            "cluster_id: test\nmode: auto\nendpoints: {dc-a: [grpcs://a:1, grpcs://a:2], '': [grpcs://b:1]}\n"
+            "cluster_id: test\nendpoints: {dc-a: [grpcs://a:1, grpcs://a:2], '': [grpcs://b:1]}\n"
             "auth: {ca_file: null, cert_file: cert.pem, key_file: key.pem, token_file: null}\n"
             "http: {listen: '[::1]:8081'}\nhealth_endpoints_per_pile: 3\nlogging: {level: debug}\n");
-        UNIT_ASSERT(config.Mode == EMode::Auto);
         UNIT_ASSERT_VALUES_EQUAL(config.Endpoints.at("dc-a").size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(config.Endpoints.at("").front().Uri, "grpcs://b:1");
         UNIT_ASSERT_VALUES_EQUAL(*config.Auth.ClientCertFile, "cert.pem");
@@ -79,7 +76,7 @@ Y_UNIT_TEST_SUITE(TSkipperConfiguration) {
         Reject("cluster_id: cluster\n", "endpoints is required");
         Reject("cluster_id: cluster\nendpoints: {}\n", "at least one pile");
         Reject("cluster_id: cluster\nendpoints: {a: []}\n", "must not be empty");
-        Reject(Minimal("mode: other\n"), "mode must be manual or auto");
+        Reject(Minimal("mode: other\n"), "unknown key");
     }
 
     Y_UNIT_TEST(StrictYamlShapeDuplicatesAndLimits) {
@@ -205,6 +202,35 @@ Y_UNIT_TEST_SUITE(TSkipperConfiguration) {
         }
         for (const auto listen : {"::1:8080", "127.0.0.1", "127.0.0.1:0", "http://localhost:8080", "[bad]:8080"}) {
             UNIT_ASSERT_EXCEPTION(ParseConfig(Minimal(TStringBuilder() << "http: {listen: '" << listen << "'}\n")), yexception);
+        }
+    }
+
+    Y_UNIT_TEST(HttpTrustedAuthoritiesPreserveListenerFormsAndExplicitProxyNames) {
+        const auto defaults = ParseConfig(Minimal());
+        UNIT_ASSERT(defaults.Http.TrustedAuthorities.empty());
+        for (const auto listen : {"127.0.0.1:8080", "localhost:8080", "[::1]:8080", "0.0.0.0:8080", "[::]:8080", "host.example:8080"}) {
+            const auto config = ParseConfig(Minimal(TStringBuilder()
+                << "http: {listen: '" << listen << "', trusted_authorities: ['proxy.example', 'proxy.example:8443', '[2001:db8::1]:443']}\n"));
+            UNIT_ASSERT_VALUES_EQUAL(config.Http.Listen, listen);
+            UNIT_ASSERT_VALUES_EQUAL(config.Http.TrustedAuthorities.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(config.Http.TrustedAuthorities[0], "proxy.example");
+        }
+        UNIT_ASSERT(ParseConfig(Minimal("http: {trusted_authorities: []}\n")).Http.TrustedAuthorities.empty());
+    }
+
+    Y_UNIT_TEST(HttpTrustedAuthoritiesRejectMalformedOrAmbiguousConfiguration) {
+        for (const auto value : {"null", "proxy.example", "{}"}) {
+            Reject(Minimal(TStringBuilder() << "http: {trusted_authorities: " << value << "}\n"), "must be a sequence");
+        }
+        Reject(Minimal("http: {trusted_authorities: [{}]}\n"), "must be a scalar");
+        for (const auto authority : {"", "*", "*.example", "http://proxy.example", "user@proxy.example", "proxy.example/path",
+                "proxy.example?query", "proxy.example#fragment", "proxy.example%2e", "proxy.example:0", "proxy.example:65536",
+                "proxy.example:", "proxy.example:abc", "proxy.example:80:90", "::1", "[bad]", "[::1]suffix", "proxy.example,evil.example", "proxy example"})
+        {
+            Reject(Minimal(TStringBuilder() << "http: {trusted_authorities: ['" << authority << "']}\n"), "invalid http.trusted_authorities entry");
+        }
+        for (const auto entries : {"'Proxy.Example:8080', 'proxy.example:08080'", "'[::1]:8080', '[0:0:0:0:0:0:0:1]:8080'"}) {
+            Reject(Minimal(TStringBuilder() << "http: {trusted_authorities: [" << entries << "]}\n"), "duplicate http.trusted_authorities entry");
         }
     }
 

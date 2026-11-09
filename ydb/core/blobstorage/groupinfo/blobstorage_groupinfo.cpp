@@ -624,7 +624,6 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 n
     Topology = std::make_shared<TTopology>(std::move(topology));
     Topology->FinalizeConstruction();
 
-    Dynamic.FailRealmStates.resize(numFailRealms, NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
     for (ui32 i = 0, num = Topology->GetTotalVDisksNum(); i < num; ++i) {
         Dynamic.PushBackActorId(vdiskIds ? vdiskIds->at(i) : MakeBlobStorageVDiskID(1, i + 1, 0));
     }
@@ -642,10 +641,6 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology
     , StoragePoolName(std::move(storagePoolName))
     , DeviceType(deviceType)
 {
-    if (Dynamic.FailRealmStates.empty()) {
-        Dynamic.FailRealmStates.resize(Topology->FailRealms.size(), NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
-    }
-    Y_ABORT_UNLESS(Dynamic.FailRealmStates.size() == Topology->FailRealms.size());
 }
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&& dyn, TString storagePoolName,
@@ -673,7 +668,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
 {
     Dynamic.ServiceIdForOrderNumber.resize(Topology->GetTotalVDisksNum(), TActorId());
     Dynamic.ServiceIdForOrderNumber[GetOrderNumber(vdiskId)] = actorId;
-    Dynamic.FailRealmStates = info->Dynamic.FailRealmStates;
+    Dynamic.Mirror3dcState = info->Dynamic.Mirror3dcState;
 }
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other, TInlinePileViewTag)
@@ -736,10 +731,15 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     TBlobStorageGroupInfo::TTopology topology(type);
     TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
         group.GetGroupGeneration());
+    if (group.HasMirror3dcState()) {
+        dyn.Mirror3dcState.State = group.GetMirror3dcState();
+    }
     topology.FailRealms.resize(group.RingsSize());
     for (ui32 ringIdx = 0; ringIdx < group.RingsSize(); ++ringIdx) {
         const auto& realm = group.GetRings(ringIdx);
-        dyn.FailRealmStates.push_back(realm.GetState());
+        if (type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc && ringIdx < dyn.Mirror3dcState.FailRealmStates.size()) {
+            dyn.Mirror3dcState.FailRealmStates[ringIdx] = realm.GetState();
+        }
         TBlobStorageGroupInfo::TFailRealm& bsFailRealm = topology.FailRealms[ringIdx];
         bsFailRealm.FailDomains.resize(realm.FailDomainsSize());
         for (ui32 domainIdx = 0; domainIdx < realm.FailDomainsSize(); ++domainIdx) {

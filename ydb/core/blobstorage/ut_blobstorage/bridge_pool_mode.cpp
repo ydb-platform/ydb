@@ -19,10 +19,10 @@ namespace {
         return env.Invoke(request);
     }
 
-    // two piles of 9 nodes, each pile being a datacenter of its own; non-uniform storage is enabled
-    TEnvironmentSetup::TSettings MakeTwoPileSettings() {
+    // piles of 9 nodes, each pile being a datacenter of its own; non-uniform storage is enabled
+    TEnvironmentSetup::TSettings MakePileSettings(ui32 numPiles) {
         return {
-            .NodeCount = 18,
+            .NodeCount = 9 * numPiles,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .PrepareRuntime = [](TTestActorSystem& runtime) {
                 runtime.GetAppDataBridgeConfig().SetEnableNonUniformStorage(true);
@@ -37,9 +37,13 @@ namespace {
                 return TNodeLocation(location);
             },
             .SelfManagementConfig = true,
-            .NumPiles = 2,
+            .NumPiles = numPiles,
             .AutomaticBootstrap = true,
         };
+    }
+
+    TEnvironmentSetup::TSettings MakeTwoPileSettings() {
+        return MakePileSettings(2);
     }
 
     constexpr ui32 FirstNodeOfPile[] = {1, 10};
@@ -310,6 +314,76 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
 
     // ordinary groups residing in single piles become inline piles, get their parts in the other pile, which are synced
     // while the groups are written to, and then the groups don't rely on their original parts anymore
+    Y_UNIT_TEST(SyncersAreLimited) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 4, 1);
+        const auto groups = GetLogicalPoolGroups(env, 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 4);
+        SetBridgeSyncMaxSyncers(env, 2);
+
+        TSyncerTracker tracker;
+        tracker.Hold = true;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            return tracker.OnEvent(nodeId, ev);
+        };
+        MakeLocatedPoolBridged(env, 2, groups);
+        WaitUntil(env, [&] { return tracker.GetNumRunning() >= 2; }, "syncers running");
+        env.Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 2);
+        tracker.RunUntil(env, 2, "groups fully bridged", [&] {
+            return std::ranges::all_of(groups, [&](ui32 groupId) {
+                return IsFullyBridged(GetGroupInfo(env, groupId));
+            });
+        });
+        env.Runtime->FilterFunction = {};
+    }
+
+    // the pool is being made bridged in synchronized pile 1, and its syncers wait for the only slot; when pile 2 gets back,
+    // the slot goes to it
+    Y_UNIT_TEST(RejoiningPileGoesAheadOfWaitingSyncers) {
+        TSyncerTracker tracker;
+        TEnvironmentSetup env(MakePileSettings(3));
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 4, 0);
+        const auto groups = GetLogicalPoolGroups(env, 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 4);
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
+        WaitForPileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
+        SetBridgeSyncMaxSyncers(env, 1);
+
+        tracker.Hold = true;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            return tracker.OnEvent(nodeId, ev);
+        };
+        MakeLocatedPoolBridged(env, 2, groups);
+        WaitUntil(env, [&] { return tracker.GetNumRunning() >= 1; }, "syncer running");
+        env.Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 1);
+        constexpr ui32 firstNodeOfPile2 = 19;
+        UNIT_ASSERT_LT(tracker.Started.back().first, firstNodeOfPile2);
+
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        env.Sim(TDuration::Seconds(10)); // parts of pile 2 are reset by now, and the static group is synced
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 1);
+
+        // the part of the group next in the queue may be the one of pile 2 anyway, so the check is that no syncer of pile 1
+        // starts while any part of pile 2 is left
+        const size_t numStarted = tracker.Started.size();
+        tracker.RunUntil(env, 1, "syncer of pile 1 started", [&] {
+            return std::any_of(tracker.Started.begin() + numStarted, tracker.Started.end(), [&](const auto& started) {
+                return started.first < firstNodeOfPile2;
+            });
+        });
+        for (ui32 groupId : groups) {
+            const auto info = GetGroupInfo(env, groupId);
+            const auto *pile = NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(2));
+            UNIT_ASSERT_C(pile && pile->GetStage() == NKikimrBridge::TGroupState::SYNCED, info.ShortDebugString());
+        }
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(MakeBridgedInTwoPileCluster) {
         TEnvironmentSetup env(MakeTwoPileSettings());
         env.CreatePool();

@@ -204,7 +204,7 @@ namespace NKikimr {
                                 const auto [it, inserted] = self.TargetGroupToSyncerState.try_emplace(groupId,
                                     mainGroupId, groupId);
                                 if (inserted) {
-                                    self.SyncersRequiringAction.PushBack(&it->second);
+                                    self.EnqueueSyncer(it->second);
                                 }
                             });
                         }

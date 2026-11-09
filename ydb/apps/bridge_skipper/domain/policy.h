@@ -42,6 +42,25 @@ TDecision Decide(
     TDuration confirmDuration,
     const std::set<TString>& excludedEndpoints = {});
 
+// Shared routing exclusions for lifecycle planning and pending-route exhaustion.
+std::set<TString> LifecycleEndpointExclusions(
+    EOperationKind kind,
+    const TExactUpdate& update,
+    const std::vector<TEndpointState>& endpoints,
+    const std::set<TString>& excludedEndpoints = {});
+
+// All inputs are freshly evaluated by the caller; lifecycle never infers participation.
+TDecision PlanLifecycle(
+    EOperationKind kind,
+    const TString& target,
+    const TViewSelection& selection,
+    const THealthEvaluation& health,
+    const TConfirmations& confirmations,
+    const TDecision& failover,
+    const std::optional<TPendingMutation>& pending,
+    const std::vector<TEndpointState>& endpoints,
+    const std::set<TString>& excludedEndpoints = {});
+
 TString RenderCliCommand(const TPlan& plan);
 
 } // namespace NBridgeSkipper

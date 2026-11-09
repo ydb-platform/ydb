@@ -1,3 +1,5 @@
+* Topic and PersQueue writers now schedule RAW and pre-encoded messages on the configured compression executor, reducing request construction on the caller thread.
+
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
 
 * Added `TGetClusterStateSettings::IncludePileConnectivity()` and `TGetClusterStateResult::GetPileConnectivity()` for optional bridge static-node connectivity reports.

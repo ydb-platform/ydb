@@ -36,6 +36,29 @@ void DoValidateWildcardMatchQuery(NQuery::TQueryClient& db, const TString& query
         CompareYson(expectedResult, NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    for (bool utf8Parameter : {false, true}) {
+        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        querySettings.ClientTimeout(TDuration::Minutes(1));
+        TString sql = Sprintf(R"sql(
+            DECLARE $target AS %s;
+            SELECT %s FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, $target, "Wildcard" as Mode)
+            ORDER BY `Key`;
+        )sql", utf8Parameter ? "Utf8" : "String", returnColumns.c_str());
+
+        NYdb::TParamsBuilder params;
+        if (utf8Parameter) {
+            params.AddParam("$target").Utf8(query).Build();
+        } else {
+            params.AddParam("$target").String(query).Build();
+        }
+
+        auto result = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(), params.Build(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, query << ": " << result.GetIssues().ToString());
+
+        CompareYson(expectedResult, NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     for(bool caseSensitive : {false, true})
     {
         NYdb::NQuery::TExecuteQuerySettings querySettings;

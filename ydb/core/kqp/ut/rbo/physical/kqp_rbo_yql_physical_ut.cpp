@@ -2993,6 +2993,162 @@ PRAGMA ydb.OptimizerHints = '
         UNIT_ASSERT_C(!result.GetPlan().empty(), result.GetPlan());
     }
 
+    Y_UNIT_TEST(PushTopSortWithColumnsAfterKey) {
+        // Column-shard schema caches are process-wide and keyed by path ID, which every new runner reuses,
+        // and earlier tests have these columns in a different primary key.
+        NOlap::TSchemaCachesManager::DropCaches();
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        const auto schemaResult = dbSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/olap` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64 NOT NULL,
+                primary key(a, b)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/row` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64 NOT NULL,
+                primary key(a, b)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        for (const TString table : {"/Root/olap", "/Root/row"}) {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [a, b, c] : std::vector<std::tuple<i64, i64, i64>>{{0, 9, 1}, {1, 1, 7}, {1, 2, 5}, {2, 1, 3}, {2, 2, 4}}) {
+                rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("b").Int64(b).AddMember("c").Int64(c).EndStruct();
+            }
+            rows.EndList();
+            const auto result = db.BulkUpsert(table, rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const auto run = [&](const TString& query, NYdb::NQuery::EExecMode execMode) {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(execMode)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << " Query: " << query);
+            return result;
+        };
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // How many reads get a limit.
+            ui32 ReadLimits;
+        };
+
+        const std::vector<TCase> cases = {
+            // The key is unique, so a column after the full key does not change the order.
+            {"select a, b from `/Root/olap` order by a, b, c limit 3", "[[0;9];[1;1];[1;2]]", 1},
+            {"select a, b from `/Root/olap` order by a desc, b desc, c desc limit 3", "[[2;2];[2;1];[1;2]]", 1},
+            {"select a, b from `/Root/olap` order by a, b, c limit 2 offset 2", "[[1;2];[2;1]]", 1},
+            {"select a, b from `/Root/row` order by a, b, c limit 3", "[[0;9];[1;1];[1;2]]", 1},
+            // As in the old optimizer, every sort column needs the same direction.
+            {"select a, b from `/Root/olap` order by a, b, c desc limit 3", "[[0;9];[1;1];[1;2]]", 0},
+            // A column before the end of the key changes the order.
+            {"select a, b from `/Root/olap` order by a, c limit 3", "[[0;9];[1;2];[1;1]]", 0},
+            {"select a, b from `/Root/row` order by a, c limit 3", "[[0;9];[1;2];[1;1]]", 0},
+        };
+
+        for (const auto& testCase : cases) {
+            const TString query = TStringBuilder() << "PRAGMA YqlSelect = \"force\"; " << testCase.Query << ";";
+            const auto ast = *run(query, NYdb::NQuery::EExecMode::Explain).GetStats()->GetAst();
+            UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "ItemsLimit"), testCase.ReadLimits, query << " AST: " << ast);
+            CompareYson(testCase.Expected, FormatResultSetYson(run(query, NYdb::NQuery::EExecMode::Execute).GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(PushTopSortBelowComputedColumns) {
+        // Column-shard schema caches are process-wide and keyed by path ID, which every new runner reuses,
+        // and earlier tests have these columns in a different primary key.
+        NOlap::TSchemaCachesManager::DropCaches();
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        const auto schemaResult = dbSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/olap` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64 NOT NULL,
+                primary key(a, b)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/row` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64 NOT NULL,
+                primary key(a, b)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        for (const TString table : {"/Root/olap", "/Root/row"}) {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [a, b, c] : std::vector<std::tuple<i64, i64, i64>>{{0, 9, 1}, {1, 1, 7}, {1, 2, 5}, {2, 1, 3}, {2, 2, 4}}) {
+                rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("b").Int64(b).AddMember("c").Int64(c).EndStruct();
+            }
+            rows.EndList();
+            const auto result = db.BulkUpsert(table, rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const auto run = [&](const TString& query, NYdb::NQuery::EExecMode execMode) {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(execMode)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << " Query: " << query);
+            return result;
+        };
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // How many reads get a limit.
+            ui32 ReadLimits;
+        };
+
+        const std::vector<TCase> cases = {
+            // A computed output that is not a sort key is computed after the sort, which reaches the read.
+            {"select a, b, c + 1 as d from `/Root/olap` order by a, b limit 3", "[[0;9;2];[1;1;8];[1;2;6]]", 1},
+            {"select a, c * 2 as d from `/Root/olap` order by a desc, b desc limit 2", "[[2;8];[2;6]]", 1},
+            {"select a as x, b, c + 1 as d from `/Root/olap` order by x, b limit 2", "[[0;9;2];[1;1;8]]", 1},
+            {"select a, b, c + 1 as d from `/Root/olap` where c > 3 order by a, b limit 2", "[[1;1;8];[1;2;6]]", 1},
+            {"select a, b, c + 1 as d from `/Root/row` order by a, b limit 3", "[[0;9;2];[1;1;8];[1;2;6]]", 1},
+            // A computed sort key keeps the sort above the map.
+            {"select a, c + 1 as d from `/Root/olap` order by d limit 2", "[[0;2];[2;4]]", 0},
+            {"select a, b, c + 1 as d from `/Root/olap` order by a, b, d limit 3", "[[0;9;2];[1;1;8];[1;2;6]]", 0},
+            {"select a, b, c + 1 as d from `/Root/row` order by a, b, d limit 3", "[[0;9;2];[1;1;8];[1;2;6]]", 0},
+        };
+
+        for (const auto& testCase : cases) {
+            const TString query = TStringBuilder() << "PRAGMA YqlSelect = \"force\"; " << testCase.Query << ";";
+            const auto ast = *run(query, NYdb::NQuery::EExecMode::Explain).GetStats()->GetAst();
+            UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "ItemsLimit"), testCase.ReadLimits, query << " AST: " << ast);
+            CompareYson(testCase.Expected, FormatResultSetYson(run(query, NYdb::NQuery::EExecMode::Execute).GetResultSet(0)));
+        }
+    }
+
 }
 
 } // namespace NKikimr::NKqp

@@ -66,6 +66,118 @@ class ExecutableTest(ExecutableCase):
         self.assertTrue(any(record.get("component") == "BRIDGE_SKIPPER"
                             and record.get("event") == "startup" for record in records), records)
 
+    async def test_observe_is_read_only_and_manual_execute_is_single_use(self):
+        e = await self.make(mode="observe")
+        state = await e.healthy()
+        self.assertEqual(state["mode"], "observe")
+        self.assertEqual(e.controller.persistent()["mode"], "observe")
+        self.assertEqual(e.controller.persistent()["state_schema"], 3)
+        self.assertNotIn("mode", e.controller.config)
+        generation = await e.generation()
+        await e.blame("b")
+        state = await e.controller.until(lambda state: state["decision"]["kind"] == "READY", "Observe Ready plan")
+        mode_revision = state["mode_revision"]
+        for method in ("GET", "HEAD"):
+            status, _, headers = await asyncio.to_thread(http_request, e.controller.url + "/?mode=auto", method)
+            self.assertEqual(status, 200)
+            self.assertEqual(headers.get("Cache-Control"), "no-store")
+            observed = await e.controller.state()
+            self.assertEqual((observed["mode"], observed["mode_revision"]), ("observe", mode_revision))
+        status, exported, headers = await asyncio.to_thread(
+            http_request, e.controller.url + "/api/logs/export?level=error&search=definitely-no-matching-record")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Cache-Control"), "no-store")
+        # The retained-log export starts with UTC/cursor coverage metadata and
+        # contains no records when the filter matches none.
+        self.assertIsInstance(exported, dict, exported)
+        self.assertIn("next_cursor", exported)
+        self.assertNotIn("rows", exported)
+        await e.quiet(1)
+        self.assertEqual(e.mutations(), [])
+        await e.controller.set_mode("manual")
+        plan = await e.controller.plan("failover")
+        self.assertEqual(plan["plan"]["update"], {"b": "DISCONNECTED"})
+        self.assertEqual(plan["plan"]["expected_generation"], str(generation))
+        execute = {"plan_id": plan["plan_id"], "request_id": uuid.uuid4().hex}
+        first = await e.controller.post("/api/operations", execute, expected=202)
+        replay = await e.controller.post("/api/operations", execute, expected=202)
+        self.assertEqual(first["operation_id"], replay["operation_id"])
+        await e.mutation(generation, {"b": "DISCONNECTED"})
+        refused = await e.controller.post("/api/operations", dict(execute, request_id=uuid.uuid4().hex), expected=409)
+        self.assertIn(refused["error"], ("PLAN_CONSUMED", "PLAN_UNKNOWN"))
+        await e.quiet(2)
+        self.assertEqual(len(e.mutations()), 1)
+
+    async def test_manual_lifecycle_take_offline_and_rejoin_exact_overlays(self):
+        e = await self.make(mode="manual")
+        await e.healthy()
+        generation = await e.generation()
+        plan = await e.controller.plan("take_offline", "b")
+        self.assertEqual(plan["plan"]["update"], {"b": "SUSPENDED"})
+        await e.controller.execute(plan)
+        await e.mutation(generation, {"b": "SUSPENDED"})
+        await e.controller.until(lambda state: state["view"] and
+                                 dict((pile["name"], pile["state"]) for pile in state["view"]["piles"])["b"] == "DISCONNECTED",
+                                 "takedown follow-up observed")
+        await e.healthy()
+        generation = await e.generation()
+        marker = max(event["ts"] for event in e.mutations()) + 0.000001
+        plan = await e.controller.plan("rejoin", "b")
+        self.assertEqual(plan["plan"]["update"], {"b": "NOT_SYNCHRONIZED"})
+        await e.controller.execute(plan)
+        await e.mutation(generation, {"b": "NOT_SYNCHRONIZED"}, after=marker)
+        await e.controller.until(lambda state: state["pending_mutation"] is None, "rejoin reconciled")
+        self.assertEqual(len(e.mutations()), 2)
+
+    async def test_mode_revision_race_restore_and_boot_fencing(self):
+        e = await self.make(mode="observe")
+        state = await e.healthy()
+        body = {"mode": "manual", "expected_boot_id": state["controller_boot_id"],
+                "expected_mode_revision": state["mode_revision"], "request_id": uuid.uuid4().hex}
+        results = await asyncio.gather(
+            e.controller.raw_post("/api/mode", body),
+            e.controller.raw_post("/api/mode", dict(body, request_id=uuid.uuid4().hex)))
+        self.assertEqual(sorted(status for status, _, _ in results), [200, 409])
+        await e.controller.stop()
+        await e.controller.start()
+        restored = await e.controller.until(lambda value: value["controller_ready"], "restored controller")
+        self.assertEqual(restored["mode"], "manual")
+        self.assertNotEqual(restored["controller_boot_id"], state["controller_boot_id"])
+        await e.controller.post("/api/mode", dict(body, request_id=uuid.uuid4().hex), expected=409)
+        self.assertEqual(e.mutations(), [])
+
+    async def test_restored_auto_resends_identical_pending_once_without_mode_activation(self):
+        e = await self.make()
+        state = await e.healthy()
+        generation = int(state["view"]["generation"])
+        await e.control("a", "/failpoints", all=True, method=BRIDGE_UPDATE,
+                        stage="after_acceptance", action="hold", once=True)
+        await e.blame("b")
+        await e.mutation(generation, {"b": "DISCONNECTED"})
+        before = await e.controller.until(
+            lambda value: value["pending_mutation"] is not None, "pending attempt before restart")
+        await e.controller.stop()
+        persisted = e.controller.persistent()
+        self.assertEqual(persisted["mode"], "auto")
+        self.assertEqual(persisted["pending_mutation"]["expected_generation"], str(generation))
+        self.assertEqual(persisted["pending_mutation"]["update"], {"b": "DISCONNECTED"})
+        marker = max(event["ts"] for event in e.mutations()) + 0.000001
+
+        await e.controller.start()
+        restored = await e.controller.until(lambda value: value["controller_ready"], "restored Auto ready")
+        self.assertEqual(restored["mode"], "auto")
+        self.assertNotEqual(restored["controller_boot_id"], before["controller_boot_id"])
+        # No mode POST after restart: durable Auto alone authorizes this resend.
+        await e.mutation(generation, {"b": "DISCONNECTED"}, after=marker)
+        await e.control("a", "/failpoints", all=True, method=BRIDGE_UPDATE,
+                        stage="after_acceptance", action="release")
+        await e.controller.until(
+            lambda value: value["pending_mutation"] is None and value["view"]
+            and int(value["view"]["generation"]) > generation, "restored Auto update reconciled")
+        await e.quiet(3)
+        self.assertEqual(len(e.mutations()), 2)
+        self.assertEqual(len([event for event in e.mutations() if event["ts"] >= marker]), 1)
+
     async def test_e1_dead_synchronized_confirmed_once(self):
         e = await self.make()
         await e.healthy()
@@ -180,7 +292,9 @@ class ExecutableTest(ExecutableCase):
         await e.cluster.kill("b")
         marker = max(event["ts"] for event in e.mutations()) + 0.000001
         await e.controller.start()
-        generation = await e.generation()
+        state = await e.controller.until(lambda state: state["decision"]["kind"] == "READY", "stage2 Ready activation review")
+        generation = int(state["view"]["generation"])
+        await e.controller.set_mode("auto")
         await e.mutation(generation, {"b": "DISCONNECTED"}, after=marker)
 
     async def test_e10_dead_suspended_is_blocked(self):
@@ -190,9 +304,10 @@ class ExecutableTest(ExecutableCase):
         await e.cluster.kill("b")
         await e.control("a", "/followups", release=["suspend"])
         await e.controller.start()
-        before = e.mutations()
         state = await e.controller.until(lambda state: state["decision"]["blocker"] == "SUSPENDED_PILE_LOST",
                                          "suspended maintenance dead end")
+        before = e.mutations()
+        await e.controller.set_mode("auto")
         self.assertEqual(state["view"]["piles"], [
             {"name": "a", "state": "PRIMARY"}, {"name": "b", "state": "SUSPENDED"}])
         await e.quiet(4)
@@ -238,7 +353,8 @@ class ExecutableTest(ExecutableCase):
     async def test_e18_staggered_failures_batch_at_same_generation(self):
         # B2: c fails while {b}@G is unresolved; the same-primary superset
         # {b, c}@G replaces the pending record instead of waiting behind it.
-        e = await self.make(names=("a", "b", "c"), timing={"mutation_operation_timeout_seconds": 10})
+        e = await self.make(names=("a", "b", "c"), timing={"mutation_operation_timeout_seconds": 10},
+                            mock_heartbeat_timeout=1.0)
         await e.healthy()
         generation = await e.generation()
         preferred = min(e.cluster.topo.pile("a").nodes, key=lambda node: "grpc://" + node.endpoint)
@@ -249,7 +365,9 @@ class ExecutableTest(ExecutableCase):
         state = await e.controller.until(
             lambda state: state["last_mutation"] and state["last_mutation"]["outcome"] == "AMBIGUOUS",
             "ambiguous first outcome")
+        self.assertEqual(state["last_mutation"]["status"], "INTERNAL_ERROR")
         self.assertEqual(state["pending_mutation"]["update"], {"b": "DISCONNECTED"})
+        self.assertTrue(state["pending_mutation"]["may_apply_elsewhere"])
         await e.control("c", "/control", op="down", all=True)
         await e.mutation(generation, {"b": "DISCONNECTED", "c": "DISCONNECTED"}, after=first[0]["ts"] + 0.000001)
         state = await e.controller.until(

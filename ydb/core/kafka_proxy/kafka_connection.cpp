@@ -615,11 +615,12 @@ protected:
             return;
         }
 
-        if (!event->UserToken) {
+        if (!event->UserToken && Context->RequireAuthentication && Context->SaslMechanism != "PLAIN") {
             const auto kafkaError = EKafkaErrors::SASL_AUTHENTICATION_FAILED;
             auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
             responseToClient->ErrorCode = kafkaError;
             responseToClient->ErrorMessage = "Authentication failure.";
+            responseToClient->AuthBytes = TKafkaRawBytes();
 
             YDB_LOG_ERROR("Successful authentication result has no user token",
                 {LogPrefix()});

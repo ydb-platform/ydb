@@ -130,25 +130,47 @@ class ResolveSeedsTest(unittest.TestCase):
             build_config()
 
     def test_format_remote_run_name_examples(self):
-        title = "Slim remote CI dispatcher without new action inputs"
+        title = "Slim remote CI…"
         self.assertEqual(
-            format_remote_run_name("PR-check", "pr", pr_number="58630", pr_title=title),
-            f"PR-check · pr · #58630 · {title}",
-        )
-        self.assertEqual(
-            format_remote_run_name("PR-check", "postcommit"),
-            "PR-check · postcommit",
-        )
-        self.assertEqual(
-            format_remote_run_name("Run and debug tests", "manual"),
-            "Run and debug tests · manual",
+            format_remote_run_name(
+                "PR-check",
+                "pr",
+                target_branch="main",
+                build_preset="relwithdebinfo",
+                pr_number="58630",
+                pr_title=title,
+            ),
+            f"PR-check · pr · main · relwithdebinfo · #58630 · {title}",
         )
         self.assertEqual(
             format_remote_run_name(
-                "Run and debug tests", "manual", pr_number="58630", pr_title="Slim remote CI…"
+                "Run and debug tests", "manual", target_branch="main", build_preset="relwithdebinfo"
             ),
-            "Run and debug tests · manual · #58630 · Slim remote CI…",
+            "Run and debug tests · manual · main · relwithdebinfo",
         )
+        self.assertEqual(
+            format_remote_run_name(
+                "Postcommit", "postcommit", target_branch="main", build_preset="relwithdebinfo"
+            ),
+            "Postcommit · postcommit · main · relwithdebinfo",
+        )
+        self.assertEqual(
+            format_remote_run_name(
+                "Regression-run", "manual", target_branch="main", build_preset="release-asan"
+            ),
+            "Regression-run · manual · main · release-asan",
+        )
+
+    def test_build_config_run_name_display_inputs(self):
+        os.environ["CALLER_WORKFLOW"] = "PR-check"
+        os.environ["CALLER_EVENT"] = "pr"
+        os.environ["ANALYTICS_BRANCH"] = "main"
+        os.environ["REMOTE_JSON"] = json.dumps(
+            {"pr_number": "1", "job": {"build_preset": "relwithdebinfo"}}
+        )
+        cfg = build_config()
+        self.assertEqual(cfg["inputs"]["target_branch"], "main")
+        self.assertEqual(cfg["inputs"]["build_preset"], "relwithdebinfo")
 
     def test_remote_json_pr_fields_override_env(self):
         os.environ["CALLER_PR_NUMBER"] = "1"
@@ -711,7 +733,8 @@ class WorkflowContractTest(unittest.TestCase):
 
     def test_run_and_debug_remote_run_name_is_structured(self):
         text = (_GITHUB / "workflows/run_and_debug_tests.yml").read_text(encoding="utf-8")
-        self.assertIn("· manual ·", text)
+        self.assertIn("format('{0} · manual{1}{2}{3}{4}'", text)
+        self.assertIn("inputs.build_preset", text)
         self.assertNotIn("inputs.pr_title != '' && format('{0} (#{1})'", text)
 
     def test_host_run_name_is_structured(self):
@@ -720,7 +743,9 @@ class WorkflowContractTest(unittest.TestCase):
             self.skipTest("nebius-ydb host workflow not present")
         text = host.read_text(encoding="utf-8")
         self.assertIn("caller_event", text)
-        self.assertIn("· #{2} · {3}", text)
+        self.assertIn("inputs.target_branch", text)
+        self.assertIn("inputs.build_preset", text)
+        self.assertIn("format(' · #{0}'", text)
         self.assertNotIn("inputs.pr_title != '' && inputs.pr_title", text)
 
     def test_wait_job_covers_host_day(self):

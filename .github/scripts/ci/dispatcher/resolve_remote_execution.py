@@ -11,8 +11,9 @@ Env:
     ANALYTICS_BRANCH (optional, ignored if remote.code_ref set);
   remote JSON may also set pr_number / pr_title / caller_event (strings).
 
-Display run names: ``{workflow} · {event} · #{pr} · {title}`` (omit empty trailing
-segments; workflow and event are always present when resolve succeeds).
+Display run names:
+``{workflow} · {event} · {target_branch} · {build_preset} · #{pr} · {title}``
+(omit empty segments; workflow and event are always present when resolve succeeds).
 """
 from __future__ import annotations
 
@@ -43,6 +44,8 @@ def format_remote_run_name(
     workflow: str,
     event: str,
     *,
+    target_branch: str = "",
+    build_preset: str = "",
     pr_number: str = "",
     pr_title: str = "",
 ) -> str:
@@ -53,7 +56,13 @@ def format_remote_run_name(
         die("caller workflow name is empty (GITHUB_WORKFLOW / CALLER_WORKFLOW)")
     if not ev:
         die("caller_event is empty")
-    parts = [wf, ev]
+    parts: list[str] = [wf, ev]
+    branch = target_branch.strip()
+    if branch:
+        parts.append(branch)
+    preset = build_preset.strip()
+    if preset:
+        parts.append(preset)
     num = pr_number.strip()
     if num:
         parts.append(f"#{num}")
@@ -284,6 +293,8 @@ def build_config() -> dict[str, Any]:
         "runs_on": runs_on_str,
         "caller_workflow": cfg["caller_workflow"],
         "caller_event": caller_event,
+        "target_branch": analytics,
+        "build_preset": preset,
         "pr_number": pr_number,
         "pr_title": pr_title,
     }

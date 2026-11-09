@@ -92,10 +92,11 @@ otherwise it skips those steps best-effort and still succeeds.
   - serialize the `job_inputs` object → JSON string for `workflow_dispatch`;
   - pass through optional display fields on `config.inputs` when present:
     `caller_workflow`, `caller_event` (`pr` | `postcommit` | `manual`),
-    `pr_number`, `pr_title` (host `run-name` only);
+    `target_branch`, `build_preset`, `pr_number`, `pr_title` (host `run-name`
+    only);
   - host/platform run titles use middle-dot segments, omitting empties:
-    `{workflow} · {event} · #{pr} · {title}` (workflow + event always; never
-    title-only).
+    `{workflow} · {event} · {target_branch} · {build_preset} · #{pr} · {title}`
+    (workflow + event always; never title-only).
   - enforce a `runs_on` allowlist; reject fork `head_repository`.
 
 ## Residual risk (claim vs ticket)
@@ -110,3 +111,7 @@ the ticket has no signed fields. A principal who can dispatch
 platform waiter will follow that executor run. The VM webhook checks
 (signature, source repo, workflow allowlist) remain the gate. This repo does
 not add crypto.
+
+## Tests
+
+`python3 .github/scripts/utils/tests/ci/test_remote_dispatcher.py`

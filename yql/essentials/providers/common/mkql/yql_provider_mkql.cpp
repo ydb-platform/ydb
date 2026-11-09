@@ -1,6 +1,8 @@
 #include "yql_provider_mkql.h"
 #include "yql_type_mkql.h"
 
+#include <yql/essentials/minikql/async/compute/compute.h>
+
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
@@ -148,6 +150,11 @@ TMkqlBuildContext* GetContextForMemoizeInUnknowScope(const TExprNode& node, TMkq
 }
 
 TMkqlBuildContext* GetContextForMemoize(const TExprNode& node, TMkqlBuildContext& ctx) {
+    // A constant-input async call still belongs to this invocation, not the
+    // outer scalar graph. Keep effectful subexpressions inside the async region.
+    if (ctx.AsyncRegistry && GetAsyncExpressionEffects(node).MaySuspend) {
+        return &ctx;
+    }
     if (const auto scope = node.GetDependencyScope()) {
         if (const auto lambda = scope->second) {
             return GetNodeContextByLambda(*lambda, ctx);
@@ -606,6 +613,25 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"CurrentUtcDate", &TProgramBuilder::CurrentUtcDate},
         {"CurrentUtcDatetime", &TProgramBuilder::CurrentUtcDatetime},
         {"CurrentUtcTimestamp", &TProgramBuilder::CurrentUtcTimestamp},
+    });
+
+    AddCallable("AsyncInvoke", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        YQL_ENSURE(ctx.AsyncRegistry, "AsyncInvoke requires explicit AsyncMap lowering; scalar and unsupported higher-order contexts cannot suspend");
+        return ctx.AsyncRegistry->Call(ctx.ProgramBuilder, node.Head().Content(), MkqlBuildExpr(node.Tail(), ctx));
+    });
+    AddCallable("AsyncMap", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        YQL_ENSURE(ctx.AsyncTypes, "AsyncMap requires the host async callable catalogue");
+        const auto input = MkqlBuildExpr(node.Head(), ctx);
+        NKikimr::NMiniKQL::NAsync::TCallableRegistry registry;
+        for (const auto& [name, desc] : ctx.AsyncTypes->AsyncFunctions) {
+            YQL_ENSURE(desc.InputType && desc.ResultType, "Incomplete async callable signature: " << name);
+            registry.Register({name, ctx.BuildType(node, *desc.InputType), ctx.BuildType(node, *desc.ResultType), desc.Provider, desc.Operation, desc.MaxResponseBytes});
+        }
+        auto row = ctx.ProgramBuilder.Arg(ctx.BuildType(node.Head(), GetSeqItemType(*node.Head().GetTypeAnn())));
+        TMkqlBuildContext nested(ctx, {}, node.UniqueId());
+        nested.AsyncRegistry = &registry;
+        const auto body = MkqlBuildLambda(node.Tail(), nested, {row});
+        return NKikimr::NMiniKQL::NAsync::BuildAsyncMap(ctx.ProgramBuilder, input, row, body, registry);
     });
 
     AddCallable("HostRuntimeSetting", [](const TExprNode& node, TMkqlBuildContext& ctx) {

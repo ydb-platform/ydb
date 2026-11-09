@@ -750,6 +750,7 @@ public:
     }
 
     TString SaveGraphState() override {
+        MKQL_ENSURE(!PatternNodes_->GetMutables().HasAsyncComputation, "Async computation checkpoint is not supported until D4");
         Prepare();
 
         TString result;
@@ -803,6 +804,7 @@ public:
     }
 
     void LoadGraphState(TStringBuf state) override {
+        MKQL_ENSURE(!PatternNodes_->GetMutables().HasAsyncComputation, "Async computation checkpoint is not supported until D4");
         Prepare();
 
         for (ui32 i : PatternNodes_->GetMutables().SerializableValues) {
@@ -858,6 +860,7 @@ public:
         MKQL_ADD_STAT(opts.Stats, Mkql_TotalNodes, nodes.size());
         PatternNodes_ = builder->GetPatternNodes();
 
+        MKQL_ENSURE(!PatternNodes_->GetMutables().HasAsyncComputation || !IsCodegenEnabled(opts.OptLLVM), "Async computation requires interpreted execution in D2 (OptLLVM=OFF)");
         if (IsCodegenEnabled(opts.OptLLVM)) {
             Compile(opts.OptLLVM, opts.Stats);
         }

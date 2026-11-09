@@ -2490,16 +2490,16 @@ TString ColumnShardWidgetStyles() {
       .cs-count small{color:#7f7f7f}.cs-number{display:inline-block;white-space:nowrap}
       .cs-details{padding:2px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:flex-start;align-items:stretch;gap:2px;background:#ffffff}
       .cs-field{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;column-gap:5px;padding:3px;order:3;background:var(--stage-main,#f2f2f2)}
-      .cs-field:is([data-cs-field='Columns'],[data-cs-field='Column'],[data-cs-field='Input columns'],[data-cs-field='Output columns'],[data-cs-field='Predicate'],[data-cs-field='Expression'],[data-cs-field='Grouping keys'],[data-cs-field='Aggregate functions'],[data-cs-field='Index']){background:#eee6f7}
+      .cs-field:is([data-cs-field='Columns'],[data-cs-field='Column'],[data-cs-field='Input columns'],[data-cs-field='Output columns'],[data-cs-field='Grouping keys'],[data-cs-field='Aggregate functions'],[data-cs-field='Index']) .cs-chip,.cs-index>.cs-field-value>.cs-value{background:#eee6f7;padding:0 2px}
+      .cs-field:is([data-cs-field='Predicate'],[data-cs-field='Expression']) .cs-expression{background:#eee6f7;width:fit-content;max-width:100%;padding:0 2px}
       .cs-field>.cs-label{display:block}.cs-field-value{overflow-wrap:anywhere}
       .cs-field.cs-wide{grid-column:1/-1;display:block;order:1}.cs-field.cs-wide>.cs-label{margin-bottom:1px}
       .cs-field[data-cs-field='Predicate'],.cs-field[data-cs-field='Expression']{order:0}
       .cs-expression{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}
       .cs-expression+.cs-expression{margin-top:3px}
       .cs-chips{display:flex;flex-wrap:wrap;gap:1px 8px}.cs-chip{overflow-wrap:anywhere}
-      .cs-flow{display:grid;grid-template-columns:minmax(0,1fr) 10px minmax(0,1fr);align-items:stretch;gap:2px;grid-column:1/-1;order:2}
+      .cs-flow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:2px;grid-column:1/-1;order:2}
       .cs-flow .cs-field{grid-template-columns:minmax(0,1fr) auto;align-items:baseline;order:0}
-      .cs-flow svg{width:10px;height:10px;margin-top:1px}.cs-flow path{fill:none;stroke:var(--stage-grid,#b2b2b2);stroke-width:1.5}
       .cs-meter{height:2px;background:var(--stage-main,#f2f2f2);margin-top:1px}
       .cs-meter i{display:block;height:100%;background:var(--stage-grid,#b2b2b2)}
       .cs-index,.cs-provider{grid-column:1/-1;order:0;grid-template-columns:46px minmax(0,1fr)}
@@ -2591,7 +2591,6 @@ TString ColumnShardWidgetFlow(const TStepGroup& group, TStringBuf input, TString
     };
     return TStringBuilder() << "<div class='cs-flow' data-cs-flow='" << ColumnShardAttribute(title) << "'>"
         << ColumnShardWidgetField(TStringBuilder() << title << " input", value(left))
-        << "<svg viewBox='0 0 22 12'><path d='M1 6H20M15 1L20 6L15 11'/></svg>"
         << ColumnShardWidgetField(TStringBuilder() << title << " output", value(right)) << "</div>";
 }
 

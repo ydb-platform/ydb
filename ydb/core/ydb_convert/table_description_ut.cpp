@@ -635,6 +635,8 @@ column_families {
             {EIndexTypeGlobalUnique, 1},
             {EIndexTypeGlobalVectorKmeansTree, 2},
             {EIndexTypeGlobalVectorKmeansTree, 3},
+            {EIndexTypeGlobalHnsw, 2},
+            {EIndexTypeGlobalHnsw, 3},
             {EIndexTypeGlobalFulltextPlain, 1},
             {EIndexTypeGlobalFulltextCompact, 1},
             {EIndexTypeGlobalFulltextRelevance, 4},
@@ -647,7 +649,7 @@ column_families {
             auto& index = *table.AddTableIndexes();
             index.SetName("index_under_rebuild");
             index.SetType(type);
-            if (type == EIndexTypeGlobalVectorKmeansTree && implTables == 3) {
+            if ((type == EIndexTypeGlobalVectorKmeansTree || type == EIndexTypeGlobalHnsw) && implTables == 3) {
                 index.AddKeyColumnNames("prefix");
             }
             index.AddKeyColumnNames("value");

@@ -11287,6 +11287,9 @@ enum class EIndexBackupScenario {
     ChangefeedDuringExport,
     RebootBeforeBackupPropose,
     DataShardWithoutIndexPrefixes,
+    ChangefeedBeforeBackup,
+    LegacyDataShardWithChangefeedBeforeBackup,
+    LegacyDataShardWithChangefeedBeforeBackupAndReboot,
 };
 
 enum class EIncompleteIndexStage {
@@ -11542,6 +11545,18 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
         isFs ? "" : "destination_prefix: \"export\"", isFs ? "destination_path" : "destination_prefix",
         isFs ? "destination_path" : "destination_prefix");
     const bool changefeedDuringExport = scenario == EIndexBackupScenario::ChangefeedDuringExport;
+    const bool changefeedBeforeBackup = scenario == EIndexBackupScenario::ChangefeedBeforeBackup
+        || scenario == EIndexBackupScenario::LegacyDataShardWithChangefeedBeforeBackup
+        || scenario == EIndexBackupScenario::LegacyDataShardWithChangefeedBeforeBackupAndReboot;
+    const bool legacyDataShard = scenario == EIndexBackupScenario::DataShardWithoutIndexPrefixes
+        || scenario == EIndexBackupScenario::LegacyDataShardWithChangefeedBeforeBackup
+        || scenario == EIndexBackupScenario::LegacyDataShardWithChangefeedBeforeBackupAndReboot;
+    // Prefixes and the schema mapping have been persisted, but no table backup
+    // has been proposed yet. An older DataShard will derive its own numbering.
+    TBlockEvents<NSchemeShard::TEvPrivate::TEvExportUploadMetadataResult> metadataUploaded(runtime, [&](const auto& ev) {
+        return changefeedBeforeBackup
+            && dynamic_cast<NSchemeShard::TEvPrivate::TEvExportUploadMetadataResult*>(ev->GetBase());
+    });
     // Delay the backups of index impl tables: anonymized index prefixes must not
     // depend on the table scheme changes made in the meantime
     TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexBackups(runtime, [&](const auto& ev) {
@@ -11569,8 +11584,7 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
     ui32 proposalsWithoutIndexPrefixes = 0;
     auto legacyProposalObserver = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
         auto& record = ev->Get()->Record;
-        if (scenario != EIndexBackupScenario::DataShardWithoutIndexPrefixes
-            || record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
+        if (!legacyDataShard || record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
             return;
         }
         NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
@@ -11584,6 +11598,24 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
     });
     const ui64 exportTxId = ++txId;
     TestExport(runtime, exportTxId, "/MyRoot", exportRequest);
+    if (changefeedBeforeBackup) {
+        runtime.WaitFor("schema mapping uploaded before table backup", [&] { return !metadataUploaded.empty(); });
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+                Name: "LateStream"
+                Mode: ECdcStreamModeKeysOnly
+                Format: ECdcStreamFormatJson
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        if (scenario == EIndexBackupScenario::LegacyDataShardWithChangefeedBeforeBackupAndReboot) {
+            metadataUploaded.Stop().clear();
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        } else {
+            metadataUploaded.Stop().Unblock();
+        }
+    }
     if (rebootBeforeBackupPropose) {
         runtime.WaitFor("table backup proposal", [&] { return !tableBackups.empty(); });
         tableBackups.Stop().clear();
@@ -11606,7 +11638,7 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
     indexBackups.Stop().Unblock();
     env.TestWaitNotification(runtime, exportTxId);
     TestGetExport(runtime, exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-    if (scenario == EIndexBackupScenario::DataShardWithoutIndexPrefixes) {
+    if (legacyDataShard) {
         UNIT_ASSERT(proposalsWithoutIndexPrefixes > 0);
     }
 
@@ -11640,6 +11672,12 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
     const auto metadata = readMetadata(backupPrefix);
     UNIT_ASSERT(metadata.GetIndexes());
     UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->size(), indexNames.size());
+    if (changefeedBeforeBackup) {
+        UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table")
+            .GetPathDescription().GetTable().CdcStreamsSize(), 2);
+        UNIT_ASSERT(metadata.GetChangefeeds());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetChangefeeds()->size(), 1);
+    }
     const auto checkSchema = [&](const TString& prefix) {
         const auto content = readBackupFile(prefix + "/scheme.pb");
         Ydb::Table::CreateTableRequest scheme;
@@ -12036,9 +12074,21 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         ExportImportComplexIndex(false, type);
     }
 
-    Y_UNIT_TEST_FLAG(DataShardWithoutIndexPrefixes, IsFs) {
+    Y_UNIT_TEST_QUAD(DataShardWithoutIndexPrefixes, IsFs, ChangefeedBeforeBackup) {
         ExportImportMaterializedIndexes(IsFs, true, Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
-            "AES-128-GCM", EIndexBackupScenario::DataShardWithoutIndexPrefixes, true);
+            "AES-128-GCM", ChangefeedBeforeBackup
+                ? EIndexBackupScenario::LegacyDataShardWithChangefeedBeforeBackup
+                : EIndexBackupScenario::DataShardWithoutIndexPrefixes, true);
+    }
+
+    Y_UNIT_TEST_FLAG(DataShardWithoutIndexPrefixesWithChangefeedAndReboot, IsFs) {
+        ExportImportMaterializedIndexes(IsFs, true, Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
+            "AES-128-GCM", EIndexBackupScenario::LegacyDataShardWithChangefeedBeforeBackupAndReboot, true);
+    }
+
+    Y_UNIT_TEST_FLAG(ChangefeedBeforeParentBackup, IsFs) {
+        ExportImportMaterializedIndexes(IsFs, true, Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
+            "AES-128-GCM", EIndexBackupScenario::ChangefeedBeforeBackup, true);
     }
 
     Y_UNIT_TEST(YtBackupDuringVectorIndexRebuild) {

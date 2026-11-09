@@ -114,9 +114,36 @@ static TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetada
         featureFlags.GetEnableCompactFulltextIndex());
 }
 
-TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId, bool encrypted) {
-    // The same description that FillTableDescription passes to DataShard
-    return GetTableIndexesExportMetadata(GetDescription(ss, tablePathId).GetTable(), encrypted);
+static void FillChangefeedTopics(TSchemeShard* ss, const NKikimrSchemeOp::TTableDescription& table,
+    NKikimrSchemeOp::TBackupTask& task)
+{
+    for (const auto& cdcStream : table.GetCdcStreams()) {
+        const auto cdcPathDesc = GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
+        for (const auto& child : cdcPathDesc.GetChildren()) {
+            if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
+                *task.AddChangefeedUnderlyingTopics() =
+                    GetDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
+            }
+        }
+    }
+}
+
+TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId,
+    bool encrypted, NKikimrSchemeOp::TBackupTask* snapshot)
+{
+    const auto description = GetDescription(ss, tablePathId);
+    const auto& table = description.GetTable();
+    auto indexes = GetTableIndexesExportMetadata(table, encrypted);
+    if (indexes && snapshot) {
+        snapshot->Clear();
+        auto& savedTable = *snapshot->MutableTable()->MutableTable();
+        *savedTable.MutableTableIndexes() = table.GetTableIndexes();
+        if (AppData()->FeatureFlags.GetEnableChangefeedsExport()) {
+            *savedTable.MutableCdcStreams() = table.GetCdcStreams();
+            FillChangefeedTopics(ss, table, *snapshot);
+        }
+    }
+    return indexes;
 }
 
 static TConclusion<TString> ComputeIndexItemSuffix(
@@ -241,15 +268,7 @@ void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, 
         FillSetValForSequences(
             ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
         FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-        for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
-            auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
-            for (const auto& child : cdcPathDesc.GetChildren()) {
-                if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-                    *task.AddChangefeedUnderlyingTopics() =
-                        GetDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
-                }
-            }
-        }
+        FillChangefeedTopics(ss, sourceDescription.GetTable(), task);
     }
 
     task.MutableTable()->CopyFrom(sourceDescription);
@@ -303,6 +322,16 @@ void FillEncryptionSettings(
             const auto& mapping = exportInfo.ExportMetadata.GetSchemaMapping(itemIdx);
             if (mapping.HasIndexExportPrefixes()) {
                 *task.MutableIndexExportPrefixes() = mapping.GetIndexExportPrefixes();
+            }
+            if (mapping.HasIndexExportSnapshot()) {
+                // Older receivers derive prefixes from these existing fields.
+                // Keep their inputs consistent with the frozen index prefixes,
+                // even if changefeeds or indexes were added in the meantime.
+                const auto& snapshot = mapping.GetIndexExportSnapshot();
+                auto& table = *task.MutableTable()->MutableTable();
+                table.MutableTableIndexes()->CopyFrom(snapshot.GetTable().GetTable().GetTableIndexes());
+                table.MutableCdcStreams()->CopyFrom(snapshot.GetTable().GetTable().GetCdcStreams());
+                task.MutableChangefeedUnderlyingTopics()->CopyFrom(snapshot.GetChangefeedUnderlyingTopics());
             }
         }
     }

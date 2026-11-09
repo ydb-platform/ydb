@@ -2657,6 +2657,10 @@ message TExportMetadata {
         optional TExportIndexIVs IndexIVs = 4;
         // Fixed once per export, the same list is sent to DataShard
         optional TIndexExportPrefixes IndexExportPrefixes = 5;
+        // Inputs used to number index prefixes, also for older DataShards that
+        // ignore IndexExportPrefixes. Contains only Table.TableIndexes,
+        // Table.CdcStreams and ChangefeedUnderlyingTopics, without credentials.
+        optional TBackupTask IndexExportSnapshot = 6;
     }
 
     repeated TSchemaMappingItem SchemaMapping = 1;

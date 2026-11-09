@@ -721,9 +721,11 @@ private:
             // scheme, which can be changed during the export. Fix them once here and use
             // the same list for index items and for the table metadata written by DataShard.
             for (const auto& [parentIdx, implTables] : indexItemsByParent) {
-                auto& prefixes = *exportInfo.ExportMetadata.MutableSchemaMapping(parentIdx)->MutableIndexExportPrefixes();
+                auto& mapping = *exportInfo.ExportMetadata.MutableSchemaMapping(parentIdx);
+                auto& prefixes = *mapping.MutableIndexExportPrefixes();
                 const auto& parentItem = exportInfo.Items.at(parentIdx);
-                const auto indexes = GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true);
+                const auto indexes = GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true,
+                    mapping.MutableIndexExportSnapshot());
                 if (!indexes) {
                     issues = indexes.GetErrorMessage();
                     return false;

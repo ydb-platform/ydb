@@ -11,8 +11,8 @@
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/kesus/tablet/limits.h>
 #include <ydb/core/kesus/tablet/quoter_resource_tree.h>
+#include <ydb/core/kesus/tablet/semaphore_limits.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>

@@ -1,12 +1,11 @@
 #pragma once
 
-#include "limits.h"
-
 #include "defs.h"
 
 #include "events.h"
 #include "quoter_resource_tree.h"
 #include "schema.h"
+#include "semaphore_limits.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>

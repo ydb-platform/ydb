@@ -2536,11 +2536,11 @@ void SendWorkerHeartbeat(
     DescribeReplication(env, info);
 }
 
-TEvTxUserProxy::TEvProposeTransaction::TPtr GrabCommit(TTestEnv& env) {
+TEvTxUserProxy::TEvProposeTransaction::TPtr GrabCommit(TTestEnv& env, const char* phase) {
     const auto proposal = env.GetRuntime().GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransaction>(
         env.GetSender(),
         TDuration::Seconds(30));
-    UNIT_ASSERT_C(proposal, "GLOBAL commit was not proposed within the bound");
+    UNIT_ASSERT_C(proposal, "GLOBAL commit was not proposed " << phase << " within the bound");
     UNIT_ASSERT(proposal->Get()->Record.GetTransaction().HasCommitWrites());
     return proposal;
 }
@@ -2587,7 +2587,7 @@ Y_UNIT_TEST_SUITE(WorkerHeartbeatLifecycle) {
 
         const auto firstTxId = AssignGlobalTx(env, info, 1);
         SendWorkerHeartbeat(env, info, worker, TRowVersion(10000, 0));
-        const auto firstCommit = GrabCommit(env);
+        const auto firstCommit = GrabCommit(env, "before PAUSE");
         UNIT_ASSERT_VALUES_EQUAL(firstCommit->Get()->Record.GetTransaction().GetCommitWrites().GetWriteTxId(), firstTxId);
         CompleteCommit(env, info, firstTxId);
 
@@ -2603,7 +2603,7 @@ Y_UNIT_TEST_SUITE(WorkerHeartbeatLifecycle) {
         const auto secondTxId = AssignGlobalTx(env, info, 10001);
         UNIT_ASSERT_VALUES_UNEQUAL(secondTxId, firstTxId);
         SendWorkerHeartbeat(env, info, worker, TRowVersion(20000, 0));
-        const auto secondCommit = GrabCommit(env);
+        const auto secondCommit = GrabCommit(env, "after PAUSE/STANDBY");
         UNIT_ASSERT_VALUES_EQUAL(secondCommit->Get()->Record.GetTransaction().GetCommitWrites().GetWriteTxId(), secondTxId);
         CompleteCommit(env, info, secondTxId);
     }

@@ -555,6 +555,28 @@ runs:
             --interval 3 &
           MONITOR_RESOURCES_PID=$!
 
+          KERNEL_PROFILE_PID=""
+          if [ "$RETRY" = 1 ]; then
+            KERNEL_PROFILE_DIR="$CURRENT_PUBLIC_DIR/kernel-profile"
+            mkdir -p "$KERNEL_PROFILE_DIR"
+            # Diagnostic PR only: sample remaining kernel CPU without a utilization threshold.
+            (
+              if ! perf --version; then
+                sudo -n timeout 180 apt-get update
+                sudo -n timeout 180 apt-get install -y "linux-tools-$(uname -r)" || \
+                  sudo -n timeout 180 apt-get install -y linux-tools-generic
+              fi
+              perf_bin=$(command -v perf)
+              if ! "$perf_bin" --version; then
+                perf_bin=$(find /usr/lib/linux-tools -type f -name perf | sort -V | tail -1)
+              fi
+              "$perf_bin" --version
+              exec python3 -u .github/scripts/utils/metrics/profile_kernel_cpu.py \
+                "$KERNEL_PROFILE_DIR" "$RESOURCES_JSONL" "$perf_bin"
+            ) > "$KERNEL_PROFILE_DIR/collector.log" 2>&1 &
+            KERNEL_PROFILE_PID=$!
+          fi
+
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
             GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
           else
@@ -615,6 +637,10 @@ runs:
             analytics end "$YA_MAKE_NAME" --rc "$RC" --error "ya make rc=${RC}"
           fi
           analytics start postprocess_try
+          if [ -n "$KERNEL_PROFILE_PID" ]; then
+            touch "$KERNEL_PROFILE_DIR/stop"
+            wait "$KERNEL_PROFILE_PID" || true
+          fi
           # Optional sub-steps use || true so they don't abort the step.
           # Remember if any failed so we don't write conclusion=success.
           POSTPROCESS_RC=0

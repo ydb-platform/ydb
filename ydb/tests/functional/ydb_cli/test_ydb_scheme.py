@@ -3,7 +3,7 @@ import pytest
 
 import yatest
 
-from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin, set_ydb_cli_test_canondata_root
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import execute_ydb_cli_command, set_ydb_cli_test_canondata_root
 
 CLUSTER_CONFIG = dict(
     extra_feature_flags=["enable_views", "enable_external_data_sources"],
@@ -17,13 +17,6 @@ def canonical_result(output_result, tmp_path):
     with output_path.open("w") as f:
         f.write(output_result)
     return yatest.common.canonical_file(output_path, local=True, universal_lines=True)
-
-
-def execute_ydb_cli_command(node, database, args, stdin=None):
-    execution = yatest.common.execute(
-        [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", database] + args, stdin=stdin
-    )
-    return execution.std_out.decode("utf-8")
 
 
 def create_view(session, view, query="SELECT 42"):

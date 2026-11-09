@@ -3,6 +3,8 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 
@@ -37,6 +39,104 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
+    Y_UNIT_TEST(CancelledExportAfterRepeatedDirectoryProposalAndReboots) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        TTempDir tempDir;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportCancelledAutoDropping(true);
+        TestCreateTable(runtime, 100, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, 100);
+
+        THashSet<ui64> mkdirTxIds;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir) {
+                mkdirTxIds.insert(record.GetTxId());
+            }
+        });
+        NActors::TBlockEvents<TEvSchemeShard::TEvModifySchemeTransactionResult> results(runtime, [&](auto& ev) {
+            return mkdirTxIds.contains(ev->Get()->Record.GetTxId());
+        });
+        TestExport(runtime, 101, "/MyRoot", Sprintf(R"(
+            ExportToFsSettings {
+                base_path: "%s"
+                items { source_path: "/MyRoot/Table" destination_path: "backup/Table" }
+            }
+        )", tempDir.Path().c_str()));
+        runtime.WaitFor("initial directory proposal", [&] { return results.size() == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(results.back()->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, results.back()->Get()->Record.GetTxId());
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        runtime.WaitFor("repeated directory proposal", [&] { return results.size() == 2; });
+        UNIT_ASSERT_VALUES_EQUAL(results.back()->Get()->Record.GetStatus(), NKikimrScheme::StatusAlreadyExists);
+
+        TestCancelExport(runtime, 102, "/MyRoot", 101);
+        results.Stop();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, 101);
+        TestGetExport(runtime, 101, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/export-101"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist});
+        results.Unblock();
+        TestGetExport(runtime, 101, "/MyRoot", Ydb::StatusIds::CANCELLED);
+    }
+
+    Y_UNIT_TEST(CancelledExportCleansUpAllTables) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        TTempDir tempDir;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportCancelledAutoDropping(true);
+        ui64 txId = 100;
+        for (const auto* name : {"Table1", "Table2"}) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "%s"
+                Columns { Name: "key" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+            )", name));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        NActors::TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> backups(runtime, [](auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
+        });
+        const ui64 exportId = ++txId;
+        TestExport(runtime, exportId, "/MyRoot", Sprintf(R"(
+            ExportToFsSettings {
+                base_path: "%s"
+                items { source_path: "/MyRoot/Table1" destination_path: "backup/Table1" }
+                items { source_path: "/MyRoot/Table2" destination_path: "backup/Table2" }
+            }
+        )", tempDir.Path().c_str()));
+        runtime.WaitFor("both backup proposals", [&] { return backups.size() == 2; });
+        TestCancelExport(runtime, ++txId, "/MyRoot", exportId);
+
+        NActors::TBlockEvents<TEvSchemeShard::TEvCancelTxResult> acknowledgements(runtime);
+        backups.Unblock(1);
+        runtime.WaitFor("first backup cancellation", [&] { return !acknowledgements.empty(); });
+        acknowledgements.Stop().Unblock();
+        auto cancelling = TestGetExport(runtime, exportId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(cancelling.GetResponse().GetEntry().GetProgress(),
+            Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
+
+        backups.Stop().Unblock();
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/export-" + ToString(exportId)), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2"), {NLs::PathExist});
+        TestForgetExport(runtime, ++txId, "/MyRoot", exportId);
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
     Y_UNIT_TEST(ShouldSucceedCreateExportToFs) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

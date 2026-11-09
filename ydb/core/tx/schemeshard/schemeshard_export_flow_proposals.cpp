@@ -465,8 +465,10 @@ void PrepareDropping(
         TExportInfo::EState droppingState,
         std::function<void(ui64)> func)
 {
-    Y_ABORT_UNLESS(IsIn({TExportInfo::EState::AutoDropping, TExportInfo::EState::Dropping}, droppingState));
+    Y_ABORT_UNLESS(IsIn({TExportInfo::EState::AutoDropping, TExportInfo::EState::AutoDroppingCancelled,
+        TExportInfo::EState::Dropping}, droppingState));
 
+    ss->TxIdToExport.erase(exportInfo.WaitTxId);
     exportInfo.WaitTxId = InvalidTxId;
     exportInfo.State = droppingState;
     ss->PersistExportState(db, exportInfo);
@@ -474,12 +476,13 @@ void PrepareDropping(
     for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
         auto& item = exportInfo.Items.at(itemIdx);
 
+        ss->TxIdToExport.erase(item.WaitTxId);
         item.WaitTxId = InvalidTxId;
         item.State = TExportInfo::EState::Dropped;
         const TPath itemPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
         if (IsPathTypeTable(item) && itemPath.IsResolved() && !itemPath.IsDeleted()) {
             item.State = TExportInfo::EState::Dropping;
-            if (exportInfo.State == TExportInfo::EState::AutoDropping) {
+            if (exportInfo.IsAutoDropping()) {
                 func(itemIdx);
             }
         }
@@ -490,6 +493,23 @@ void PrepareDropping(
 
 void PrepareDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb& db) {
     PrepareDropping(ss, exportInfo, db, TExportInfo::EState::Dropping, [](ui64){});
+}
+
+bool PrepareCancelledExportDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb& db) {
+    if (!exportInfo.IsCancelled()
+        || !AppData()->FeatureFlags.GetEnableExportAutoDropping()
+        || !AppData()->FeatureFlags.GetEnableExportCancelledAutoDropping()) {
+        return false;
+    }
+
+    const auto exportPath = TPath::Init(exportInfo.ExportPathId, ss);
+    if (!exportPath.IsResolved() || exportPath.IsDeleted()) {
+        return false;
+    }
+
+    exportInfo.EndTime = TInstant::Zero();
+    PrepareDropping(ss, exportInfo, db, TExportInfo::EState::AutoDroppingCancelled, [](ui64) {});
+    return true;
 }
 
 } // NSchemeShard

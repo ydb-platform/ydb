@@ -50,6 +50,7 @@ TString ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportI
 void PrepareDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb& db,
     TExportInfo::EState droppingState, std::function<void(ui64)> func);
 void PrepareDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb& db);
+bool PrepareCancelledExportDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb& db);
 
 } // NSchemeShard
 } // NKikimr

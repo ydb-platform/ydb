@@ -113,6 +113,7 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
         break;
 
     case TExportInfo::EState::Cancellation:
+    case TExportInfo::EState::AutoDroppingCancelled:
         FillIssues(exprt, exportInfo);
         exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
         break;

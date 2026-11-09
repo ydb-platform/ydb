@@ -1012,10 +1012,13 @@ void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
 void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info) {
     StateStorageInfoReceived = true;
     Y_ABORT_UNLESS(info->RingGroups.size() > 0);
-    const ui64 rGroupSize = IsBridgeMode ? info->RingGroups.size() : 1;
-    StateStorageRings.resize(rGroupSize);
+    StateStorageInfo = info;
+    StateStorageReplicas.clear();
+    StateStorageNodeToRingLocations.clear();
+    StateStorageRings.clear();
+    StateStorageRings.resize(info->RingGroups.size());
 
-    for (ui64 rGroupId = 0; rGroupId < rGroupSize; ++rGroupId) {
+    for (ui64 rGroupId = 0; rGroupId < info->RingGroups.size(); ++rGroupId) {
         auto& groupInfo = info->RingGroups[rGroupId];
         for (ui32 ringId = 0; ringId < groupInfo.Rings.size(); ++ringId) {
             auto &ring = groupInfo.Rings[ringId];
@@ -1039,12 +1042,58 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
                 }
                 ringInfo->AddNode(Nodes[nodeId]);
                 StateStorageReplicas.insert(nodeId);
-                StateStorageNodeToRingId[nodeId] = ringId;
+                StateStorageNodeToRingLocations[nodeId].push_back({
+                    .RingGroupId = static_cast<ui32>(rGroupId),
+                    .RingId = ringId,
+                });
             }
 
             StateStorageRings[rGroupId].push_back(ringInfo);
         }
     }
+}
+
+TVector<TClusterInfo::TStateStorageRingLocation>
+TClusterInfo::GetStateStorageRingLocations(const TNodeInfo& node) const {
+    TVector<TStateStorageRingLocation> result;
+    const auto it = StateStorageNodeToRingLocations.find(node.NodeId);
+    if (it == StateStorageNodeToRingLocations.end()) {
+        return result;
+    }
+
+    const TBridgePileId bridgePileId = IsBridgeMode && node.PileId
+        ? TBridgePileId::FromPileIndex(*node.PileId)
+        : TBridgePileId();
+    for (const auto& location : it->second) {
+        if (location.RingGroupId >= StateStorageInfo->RingGroups.size()) {
+            continue;
+        }
+        const auto& group = StateStorageInfo->RingGroups[location.RingGroupId];
+        if (group.WriteOnly || group.State == DISCONNECTED || group.State == NOT_SYNCHRONIZED) {
+            continue;
+        }
+        if (IsBridgeMode && group.BridgePileId != bridgePileId) {
+            continue;
+        }
+        result.push_back(location);
+    }
+    return result;
+}
+
+bool TClusterInfo::IsActiveStateStorageReplicaNode(ui32 nodeId) const {
+    const auto it = StateStorageNodeToRingLocations.find(nodeId);
+    if (it == StateStorageNodeToRingLocations.end()) {
+        return false;
+    }
+    for (const auto& location : it->second) {
+        if (location.RingGroupId < StateStorageInfo->RingGroups.size()) {
+            const auto& group = StateStorageInfo->RingGroups[location.RingGroupId];
+            if (!group.WriteOnly && group.State != DISCONNECTED && group.State != NOT_SYNCHRONIZED) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void TClusterInfo::FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out) const {

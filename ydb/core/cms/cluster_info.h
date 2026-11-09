@@ -749,13 +749,17 @@ public:
         return StateStorageReplicas.contains(nodeId);
     }
 
+    struct TStateStorageRingLocation {
+        ui32 RingGroupId;
+        ui32 RingId;
+    };
+
+    TVector<TStateStorageRingLocation> GetStateStorageRingLocations(const TNodeInfo& node) const;
+
+    bool IsActiveStateStorageReplicaNode(ui32 nodeId) const;
+
     bool IsStateStorageinfoReceived() {
         return StateStorageInfoReceived;
-    }
-
-    ui32 GetRingId(ui32 nodeId) {
-        Y_ABORT_UNLESS(IsStateStorageReplicaNode(nodeId));
-        return StateStorageNodeToRingId[nodeId];
     }
 
     void CheckNodeExistenceWithVerify(ui32 nodeId) const {
@@ -1150,7 +1154,7 @@ private:
     TMultiMap<TString, ui32> TenantToNodeId;
     THashMap<TString, TLockableItemPtr> LockableItems;
     THashSet<ui32> StateStorageReplicas;
-    THashMap<ui32, ui32> StateStorageNodeToRingId;
+    THashMap<ui32, TVector<TStateStorageRingLocation>> StateStorageNodeToRingLocations;
 
 public:
     using TSysNodesCheckers = THashMap<NKikimrConfig::TBootstrap::ETabletType, TSimpleSharedPtr<TSysTabletsNodesCounter>>;

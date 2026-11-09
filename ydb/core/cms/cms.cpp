@@ -855,63 +855,95 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         return false;
     }
 
-    const ui32 ringGroupId = node.PileId.GetOrElse(0);
-    Y_ABORT_UNLESS(ringGroupId < ClusterInfo->StateStorageInfo->RingGroups.size());
-    const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].NToSelect;
-    const ui32 currentRing = ClusterInfo->GetRingId(node.NodeId);
-    ui8 currentRingState = TStateStorageRingInfo::Unknown;
-    bool hasRestartRingsByThisRequest = false;
-    ui32 restartRings = 0;
-    ui32 lockedRings = 0;
-    ui32 disabledRings = 0;
-    auto now = AppData(ctx)->TimeProvider->Now();
-    TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
-    for (auto ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
-        auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
-        YDB_LOG_DEBUG("Dump ring",
-            {"ring", ringInfo->RingId},
-            {"state", TStateStorageRingInfo::RingStateToString(state)});
+    const auto locations = ClusterInfo->GetStateStorageRingLocations(node);
+    if (locations.empty()) {
+        if (!ClusterInfo->IsActiveStateStorageReplicaNode(node.NodeId)) {
+            return true;
+        }
+        error.Code = TStatus::ERROR;
+        error.Reason = "No matching state storage ring group found for node";
+        error.Deadline = defaultDeadline;
+        return false;
+    }
 
-        if (state == TStateStorageRingInfo::RestartByThisRequest) {
-            hasRestartRingsByThisRequest = true;
-            state = TStateStorageRingInfo::Restart;
+    const auto now = AppData(ctx)->TimeProvider->Now();
+    const TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
+    for (const auto& location : locations) {
+        const ui32 ringGroupId = location.RingGroupId;
+        if (ringGroupId >= ClusterInfo->StateStorageInfo->RingGroups.size()
+                || ringGroupId >= ClusterInfo->StateStorageRings.size()) {
+            error.Code = TStatus::ERROR;
+            error.Reason = "State storage ring group is missing from CMS cluster info";
+            error.Deadline = defaultDeadline;
+            return false;
         }
 
-        if (ringInfo->RingId == currentRing) {
-            if (state == TStateStorageRingInfo::Disabled) {
-                return true;
+        const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].NToSelect;
+        if (!nToSelect) {
+            error.Code = TStatus::ERROR;
+            error.Reason = "State storage ring group has zero NToSelect";
+            error.Deadline = defaultDeadline;
+            return false;
+        }
+
+        const ui32 currentRing = location.RingId;
+        ui8 currentRingState = TStateStorageRingInfo::Unknown;
+        bool hasRestartRingsByThisRequest = false;
+        ui32 restartRings = 0;
+        ui32 lockedRings = 0;
+        ui32 disabledRings = 0;
+        for (const auto& ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
+            auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
+            YDB_LOG_DEBUG("Dump ring",
+                {"ringGroup", ringGroupId},
+                {"ring", ringInfo->RingId},
+                {"state", TStateStorageRingInfo::RingStateToString(state)});
+
+            if (state == TStateStorageRingInfo::RestartByThisRequest) {
+                hasRestartRingsByThisRequest = true;
+                state = TStateStorageRingInfo::Restart;
             }
-            currentRingState = state;
+
+            if (ringInfo->RingId == currentRing) {
+                currentRingState = state;
+                continue;
+            }
+            switch (state) {
+                case TStateStorageRingInfo::Ok:
+                    break;
+                case TStateStorageRingInfo::Locked:
+                    ++lockedRings;
+                    break;
+                case TStateStorageRingInfo::Restart:
+                    ++restartRings;
+                    break;
+                case TStateStorageRingInfo::Disabled:
+                    ++disabledRings;
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (currentRingState == TStateStorageRingInfo::Unknown) {
+            error.Code = TStatus::ERROR;
+            error.Reason = "State storage ring for node is missing from CMS cluster info";
+            error.Deadline = defaultDeadline;
+            return false;
+        }
+        if (currentRingState == TStateStorageRingInfo::Disabled) {
             continue;
         }
-        switch (state) {
-            case TStateStorageRingInfo::Ok:
-                break;
-            case TStateStorageRingInfo::Locked:
-                ++lockedRings;
-                break;
-            case TStateStorageRingInfo::Restart:
-                ++restartRings;
-                break;
-            case TStateStorageRingInfo::Disabled:
-                ++disabledRings;
-                break;
-            default:
-                break;
-        }
-    }
-    Y_ABORT_UNLESS(currentRingState != TStateStorageRingInfo::Unknown);
 
-    // Add current ring to restart rings
-    ++restartRings;
+        // Add current ring to restart rings.
+        ++restartRings;
 
-    const ui32 maxAvailabilityLimit = 1;
-    const ui32 keepAvailableLimit = (nToSelect - 1) / 2;
+        const ui32 maxAvailabilityLimit = 1;
+        const ui32 keepAvailableLimit = (nToSelect - 1) / 2;
 
-    const bool maxAvailabilityOk = restartRings + lockedRings <= maxAvailabilityLimit;
-    const bool keepAvailableOk = restartRings + lockedRings + disabledRings <= keepAvailableLimit;
+        const bool maxAvailabilityOk = restartRings + lockedRings <= maxAvailabilityLimit;
+        const bool keepAvailableOk = restartRings + lockedRings + disabledRings <= keepAvailableLimit;
 
-    switch (opts.AvailabilityMode) {
+        switch (opts.AvailabilityMode) {
         case MODE_MAX_AVAILABILITY:
             if (!maxAvailabilityOk) {
                 error.Code = TStatus::DISALLOW_TEMP;
@@ -980,6 +1012,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
                                    static_cast<ui32>(opts.AvailabilityMode));
             error.Deadline = defaultDeadline;
             return false;
+        }
     }
 
     return true;

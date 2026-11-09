@@ -539,9 +539,77 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT(!cluster->HasNode(42));
         UNIT_ASSERT(!cluster->HasNode(99));
 
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(1), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(2), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(3), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->GetStateStorageRingLocations(cluster->Node(1))[0].RingId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->GetStateStorageRingLocations(cluster->Node(2))[0].RingId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->GetStateStorageRingLocations(cluster->Node(3))[0].RingId, 1);
+    }
+
+    Y_UNIT_TEST(ApplyStateStorageInfoTracksRingGroupsByNodeAndPile) {
+        TActorSystemStub stub;
+
+        TClusterInfoPtr cluster(new TClusterInfo);
+        cluster->IsBridgeMode = true;
+        cluster->NodeIdToPileId[1] = 1;
+        cluster->AddNode({1, "::1", "host1", "host1", 1, TNodeLocation()}, nullptr);
+        cluster->SetNodeState(1, NKikimrCms::UP, MakeSystemStateInfo("1"));
+
+        auto info = MakeIntrusive<TStateStorageInfo>();
+        auto addGroup = [&](ui32 pileIndex, bool writeOnly, ui32 ringId) -> auto& {
+            auto& group = info->RingGroups.emplace_back();
+            group.State = SYNCHRONIZED;
+            group.WriteOnly = writeOnly;
+            group.NToSelect = 3;
+            group.BridgePileId = TBridgePileId::FromPileIndex(pileIndex);
+            group.Rings.resize(3);
+            group.Rings[ringId].Replicas.push_back(TActorId(1, 0, 0, 0));
+            return group;
+        };
+
+        // The node belongs to pile index 1, but its groups are deliberately not
+        // at index 1. It is also present in a write-only group and in a malformed
+        // group assigned to another pile; neither must affect availability.
+        addGroup(1, false, 2);
+        addGroup(1, false, 0);
+        addGroup(1, true, 1);
+        addGroup(0, false, 1);
+
+        cluster->ApplyStateStorageInfo(info);
+
+        const auto locations = cluster->GetStateStorageRingLocations(cluster->Node(1));
+        UNIT_ASSERT_VALUES_EQUAL(locations.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(locations[0].RingGroupId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(locations[0].RingId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(locations[1].RingGroupId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(locations[1].RingId, 0);
+        UNIT_ASSERT(cluster->IsActiveStateStorageReplicaNode(1));
+        UNIT_ASSERT_VALUES_EQUAL(cluster->StateStorageRings.size(), 4);
+    }
+
+    Y_UNIT_TEST(ApplyStateStorageInfoTracksAllGroupsOutsideBridgeMode) {
+        TActorSystemStub stub;
+
+        TClusterInfoPtr cluster(new TClusterInfo);
+        cluster->AddNode({1, "::1", "host1", "host1", 1, TNodeLocation()}, nullptr);
+        cluster->SetNodeState(1, NKikimrCms::UP, MakeSystemStateInfo("1"));
+
+        auto info = MakeIntrusive<TStateStorageInfo>();
+        for (ui32 ringId : {2, 0}) {
+            auto& group = info->RingGroups.emplace_back();
+            group.State = SYNCHRONIZED;
+            group.NToSelect = 3;
+            group.Rings.resize(3);
+            group.Rings[ringId].Replicas.push_back(TActorId(1, 0, 0, 0));
+        }
+
+        cluster->ApplyStateStorageInfo(info);
+
+        const auto locations = cluster->GetStateStorageRingLocations(cluster->Node(1));
+        UNIT_ASSERT_VALUES_EQUAL(locations.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(locations[0].RingGroupId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(locations[0].RingId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(locations[1].RingGroupId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(locations[1].RingId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->StateStorageRings.size(), 2);
     }
 
     Y_UNIT_TEST(SysTabletNonActiveStateIgnored) {

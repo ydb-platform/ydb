@@ -107,18 +107,19 @@ private:
     // Convert the annotation lambda's column arguments to Member(row, IU)
     // accesses in one RBO row lambda. Substitution uses node identity and retains
     // all rewrites/coercions produced by the existing type annotator.
-    TRboExpression Expression(const TExpression& expression, TBindings bindings) {
-        return AnnotatedExpression(Annotations.Expressions.at(&expression), expression.Range, std::move(bindings));
+    TRboExpression Expression(const TExpression& expression, const TBindings& bindings) {
+        return AnnotatedExpression(Annotations.Expressions.at(&expression), expression.Range, bindings);
     }
 
-    TRboExpression AnnotatedExpression(const TAnnotatedExpression& annotated, const TSourceRange& range, TBindings bindings) {
+    TRboExpression AnnotatedExpression(const TAnnotatedExpression& annotated, const TSourceRange& range, const TBindings& bindings) {
         const auto pos = annotated.Lambda->Pos();
+        // Only newly imported subplan results belong to this expression. Reuse
+        // the relational scope without copying all of its column bindings.
+        TBindings subqueryBindings;
         // Subplan bindings are scalar inputs but have their own relational
         // producer. Captures are allocated by Query with local IU identities.
-        // Annotation supplies the whole visible scope. A sibling subquery can
-        // therefore appear among the arguments without being used by this body.
-        // Import only referenced subplans: unused siblings may capture columns
-        // that are not available in the current query's local scope.
+        // Lambda expansion and type rewrites can eliminate an input after its
+        // initial binding. Import only subplans still referenced by the body.
         TNodeSet used;
         VisitExpr(annotated.Lambda->TailPtr(), [&](const TExprNode::TPtr& node) {
             if (node->IsArgument()) { used.insert(node.Get()); }
@@ -143,14 +144,15 @@ private:
                 tuple.Append(*comparison.GetRawInputIUs().begin());
             }
             Props.Subplans.Add(id, producer.Op, kind, std::move(tuple), result);
-            bindings[column] = id;
+            subqueryBindings[column] = id;
         }
         auto row = Ctx.NewArgument(pos, "row");
         TNodeOnNodeOwnedMap replacements;
         for (size_t i = 0; i < annotated.Inputs.size(); ++i) {
-            // Annotation includes all columns in scope, including unused ones.
-            // DISTINCT may have removed some; reject only actual references.
-            const auto* id = bindings.FindPtr(annotated.Inputs[i]);
+            // Do not allocate row accesses for inputs eliminated by annotation.
+            if (!used.contains(annotated.Lambda->Head().Child(i))) { continue; }
+            const auto* id = subqueryBindings.FindPtr(annotated.Inputs[i]);
+            if (!id) { id = bindings.FindPtr(annotated.Inputs[i]); }
             if (id) {
                 replacements[annotated.Lambda->Head().Child(i)] = Ctx.NewCallable(pos, "Member",
                     {row, Ctx.NewAtom(pos, *id)});

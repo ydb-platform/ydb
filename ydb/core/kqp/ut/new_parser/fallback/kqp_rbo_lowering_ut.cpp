@@ -108,8 +108,14 @@ Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
             "SELECT a, GROUPING(a), SUM(id) FROM t GROUP BY ROLLUP(a);",
             "SELECT a, SUM(SUM(id)) OVER (), RANK() OVER (ORDER BY SUM(id)) FROM t GROUP BY a;",
             "SELECT id FROM t UNION ALL SELECT a FROM t;",
+            "SELECT id, id AS widened, value FROM t UNION ALL SELECT id, a, value FROM t;",
+            "SELECT id, value FROM t UNION ALL SELECT id, value FROM t UNION ALL SELECT id, value FROM t;",
             "SELECT value FROM t INTERSECT SELECT value FROM t;",
             "SELECT l.id, (SELECT MAX(r.id) FROM t AS r WHERE r.id = l.id) FROM t AS l;",
+            "SELECT l.id + (SELECT MAX(r.id) FROM t AS r WHERE r.id = l.id) "
+                "+ (SELECT MAX(s.id) FROM t AS s WHERE s.a = l.a), l.id FROM t AS l;",
+            "SELECT l.id, (SELECT (SELECT MAX(z.id) FROM t AS z WHERE z.id = l.id) "
+                "FROM t AS r LIMIT 1) FROM t AS l;",
             "SELECT l.id FROM t AS l WHERE EXISTS (SELECT r.id FROM t AS r WHERE r.id = l.id);",
             "SELECT COUNT(*) FROM t AS l WHERE EXISTS (SELECT * FROM t AS r WHERE r.id = l.id AND r.a != l.a) "
                 "AND NOT EXISTS (SELECT * FROM t AS r WHERE r.id = l.id);",

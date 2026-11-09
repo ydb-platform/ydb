@@ -38,15 +38,19 @@ public:
     TNode Expression(const TExpression& expression) {
         const auto pos = Pos(expression.Range);
         if (const auto* replacement = Bindings.Expressions.FindPtr(&expression)) { return *replacement; }
+        if (Bindings.ResolveExpression) {
+            if (auto replacement = Bindings.ResolveExpression(expression)) { return replacement; }
+        }
         // Resolved identity takes precedence over the syntax variant, including
         // ANSI quoted identifiers represented as literals and qualified members.
         if (Bindings.Names) {
             if (const auto* id = Bindings.Names->ColumnReferences.FindPtr(&expression)) {
                 const auto* binding = Bindings.Columns.FindPtr(*id);
-                if (!binding || !*binding) {
-                    Error(expression.Range, TStringBuilder() << "Missing expression binding for column " << *id);
+                if (binding && *binding) { return *binding; }
+                if (Bindings.ResolveColumn) {
+                    if (auto value = Bindings.ResolveColumn(*id)) { return value; }
                 }
-                return *binding;
+                Error(expression.Range, TStringBuilder() << "Missing expression binding for column " << *id);
             }
         }
         return std::visit([&](const auto& value) -> TNode {

@@ -1,6 +1,7 @@
 #include "kqp_new_parser.h"
 #include "kqp_ast_builder.h"
 
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/host/new_parser/grammar/default/SQLv1Antlr4Lexer.h>
 #include <ydb/core/kqp/host/new_parser/grammar/default/SQLv1Antlr4Parser.h>
 #include <ydb/core/kqp/host/new_parser/grammar/ansi/SQLv1Antlr4Lexer.h>
@@ -10,6 +11,8 @@
 #include <yql/essentials/parser/common/issue.h>
 
 #include <util/generic/scope.h>
+
+#include <optional>
 
 namespace NKikimr::NKqp {
 
@@ -73,20 +76,37 @@ private:
 
 template <typename TLexer, typename TParser, bool AnsiLexer>
 std::unique_ptr<NNewYql::TScript> ParseQuery(const TString& queryText,
-    const NSQLTranslation::TTranslationSettings& settings, bool isAmbiguityError, NYql::TIssues& issues)
+    const NSQLTranslation::TTranslationSettings& settings, bool isAmbiguityError, NYql::TIssues& issues,
+    TCompileTrace* trace)
 {
-    TParseTree<TLexer, TParser, AnsiLexer> tree(queryText);
-    if (!tree.Parse(settings, isAmbiguityError, issues)) {
-        return nullptr;
+    std::optional<TParseTree<TLexer, TParser, AnsiLexer>> tree;
+    {
+        TCompileTraceScope phase(trace, TCompileTraceLevels::Detail, "Initialize native parser");
+        tree.emplace(queryText);
+    }
+    {
+        TCompileTraceScope phase(trace, TCompileTraceLevels::Detail, "Parse native ANTLR CST");
+        const bool success = tree->Parse(settings, isAmbiguityError, issues);
+        phase.SetSuccess(success);
+        if (!success) { return nullptr; }
     }
     // Build while the CST and token text are valid; only the owning AST escapes.
-    return BuildNewYqlAst(*tree.GetRoot(), AnsiLexer, settings.File);
+    std::unique_ptr<NNewYql::TScript> ast;
+    {
+        TCompileTraceScope phase(trace, TCompileTraceLevels::Detail, "Build native syntax AST");
+        ast = BuildNewYqlAst(*tree->GetRoot(), AnsiLexer, settings.File);
+    }
+    {
+        TCompileTraceScope phase(trace, TCompileTraceLevels::Detail, "Release native CST");
+        tree.reset();
+    }
+    return ast;
 }
 
 } // namespace
 
 TNewYqlParseResult ParseQueryWithNewParser(const TString& queryText,
-    NSQLTranslation::TTranslationSettings settings, bool isAmbiguityError)
+    NSQLTranslation::TTranslationSettings settings, bool isAmbiguityError, TCompileTrace* trace)
 {
     TNewYqlParseResult result;
     // Honor SQL comment directives before choosing a lexer. A directive error
@@ -101,10 +121,10 @@ TNewYqlParseResult ParseQueryWithNewParser(const TString& queryText,
 
     if (settings.AnsiLexer) {
         result.Ast = ParseQuery<NKqpAnsiAntlr4::SQLv1Antlr4Lexer, NKqpAnsiAntlr4::SQLv1Antlr4Parser, true>(
-            queryText, settings, isAmbiguityError, result.Issues);
+            queryText, settings, isAmbiguityError, result.Issues, trace);
     } else {
         result.Ast = ParseQuery<NKqpDefaultAntlr4::SQLv1Antlr4Lexer, NKqpDefaultAntlr4::SQLv1Antlr4Parser, false>(
-            queryText, settings, isAmbiguityError, result.Issues);
+            queryText, settings, isAmbiguityError, result.Issues, trace);
     }
     return result;
 }

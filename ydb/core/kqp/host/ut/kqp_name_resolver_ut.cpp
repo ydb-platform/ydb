@@ -3,6 +3,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <algorithm>
+
 namespace NKikimr::NKqp {
 namespace {
 
@@ -65,6 +67,53 @@ struct TFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
+    Y_UNIT_TEST(CollectsPhysicalTablesBeforeColumnResolution) {
+        TFixture f;
+        f.Ok("$q = (SELECT id FROM t); "
+            "WITH c AS (SELECT id FROM u), d AS (SELECT id FROM c) "
+            "SELECT q.id FROM $q AS q JOIN d ON q.id = d.id "
+            "WHERE EXISTS (SELECT id FROM t WHERE id IN (SELECT id FROM u)); "
+            "SELECT id FROM (SELECT id FROM t UNION ALL SELECT id FROM u) AS s;");
+        const auto tables = CollectTableReferences(*f.Ast, {"local", "/Root", {}});
+        UNIT_ASSERT_C(tables.IsOk(), tables.Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(tables.Tables.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(tables.Tables[0].second, "/Root/t");
+        UNIT_ASSERT_VALUES_EQUAL(tables.Tables[1].second, "/Root/u");
+        for (const auto& key : f.Lookups) {
+            UNIT_ASSERT(std::find(tables.Tables.begin(), tables.Tables.end(), key) != tables.Tables.end());
+        }
+    }
+
+    Y_UNIT_TEST(TableCollectionKeepsCteScopeAndPathPragmaOrder) {
+        auto parsed = ParseQueryWithNewParser(
+            "PRAGMA TablePathPrefix = '/first'; $q = (SELECT * FROM t); "
+            "PRAGMA TablePathPrefix = '/second'; "
+            "WITH t AS (SELECT * FROM t), u AS (SELECT * FROM t) "
+            "SELECT * FROM u UNION ALL SELECT * FROM $q; "
+            "SELECT * FROM u; SELECT * FROM other.t; SELECT * FROM `/absolute`;", {}, false);
+        UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
+        const auto tables = CollectTableReferences(*parsed.Ast, {"local", "/Root", {{"other", "/remote"}}});
+        UNIT_ASSERT_C(tables.IsOk(), tables.Issues.ToString());
+        const TVector<std::pair<TString, TString>> expected = {
+            {"local", "/first/t"}, {"local", "/second/t"}, {"local", "/second/u"},
+            {"other", "/remote/t"}, {"local", "/absolute"},
+        };
+        UNIT_ASSERT(tables.Tables == expected);
+    }
+
+    Y_UNIT_TEST(TableCollectionPreservesQuotedNamesAndFallback) {
+        auto parsed = ParseQueryWithNewParser(
+            "--!ansi_lexer\nWITH \"c\" AS (SELECT * FROM \"t\") SELECT * FROM \"c\";", {}, false);
+        UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
+        const auto tables = CollectTableReferences(*parsed.Ast, {"local", "/Root", {}});
+        UNIT_ASSERT_C(tables.IsOk(), tables.Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(tables.Tables.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tables.Tables.front().second, "/Root/t");
+        parsed = ParseQueryWithNewParser("PRAGMA TablePathPrefix = $prefix; SELECT * FROM t;", {}, false);
+        UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
+        UNIT_ASSERT_EXCEPTION(CollectTableReferences(*parsed.Ast, {"local", "/Root", {}}), TNewYqlParserFallback);
+    }
+
     Y_UNIT_TEST(SetOrderingUsesCompoundOutputScope) {
         TFixture f;
         f.Ok("SELECT value AS z, id AS a FROM t UNION ALL SELECT value AS z, id AS a FROM t ORDER BY a, z;");
@@ -266,6 +315,26 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         UNIT_ASSERT_VALUES_EQUAL(f.Lookups[0].second, "/Root/t");
         UNIT_ASSERT_VALUES_EQUAL(f.Lookups[1].second, "/Other/t");
         UNIT_ASSERT_VALUES_EQUAL(f.Lookups[2].second, "/Root/t");
+    }
+
+    Y_UNIT_TEST(CostBasedOptimizationLevelPragmas) {
+        TFixture f;
+        f.Ok("PRAGMA ydb.Cost_Based_Optimization_Level('\\x30'); "
+            "PRAGMA kikimr.CostBasedOptimizationLevel = '4'; SELECT id FROM t;");
+        const auto& settings = f.Result.Names->CostBasedOptimizationPragmas;
+        UNIT_ASSERT_VALUES_EQUAL(settings.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(*settings.at(&std::get<TPragmaStatement>(f.Ast->Statements[0].Value)), "0");
+        UNIT_ASSERT_VALUES_EQUAL(*settings.at(&std::get<TPragmaStatement>(f.Ast->Statements[1].Value)), "4");
+        for (const TString sql : {"PRAGMA ydb.CostBasedOptimizationLevel = 0; SELECT id FROM t;",
+            "PRAGMA ydb.CostBasedOptimizationLevel('0', '4'); SELECT id FROM t;"}) {
+            f.Resolve(sql);
+            UNIT_ASSERT(!f.Result.IsOk());
+            UNIT_ASSERT(!f.Result.Issues.Empty());
+        }
+        UNIT_ASSERT_EXCEPTION(f.Resolve("$level = '0'; PRAGMA ydb.CostBasedOptimizationLevel = $level; SELECT id FROM t;"),
+            TNewYqlParserFallback);
+        UNIT_ASSERT_EXCEPTION(f.Resolve("PRAGMA yt.CostBasedOptimizationLevel = '0'; SELECT id FROM t;"),
+            TNewYqlParserFallback);
     }
 
     // Diagnostics should retain SQL file/line/column information after CST release.

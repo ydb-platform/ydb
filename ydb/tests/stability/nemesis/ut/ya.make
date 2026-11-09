@@ -11,6 +11,7 @@ TEST_SRCS(
     test_chaos_problems.py
     test_catalog_annotations.py
     test_guard_invariants.py
+    test_pile_budget.py
     test_orchestrator_api.py
     test_metrics.py
     test_local_kikimr.py

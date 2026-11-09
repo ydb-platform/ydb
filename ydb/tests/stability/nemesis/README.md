@@ -166,7 +166,21 @@ While healthcheck data is stale or no endpoint answers, the probe is *blind*: re
 **Two independent budgets**, both from `cluster.yaml` (the erasure mode, `location.rack` / `data_center`). The erasure mode is read as `static_erasure` or `erasure` — `ydb/tools/cfg` accepts both spellings — at the top level or under `config:`, the same two places `hosts` is looked up:
 
 - *Fail domains* — `block-4-2` ≤ 2 domains, `mirror-3-dc` = 1 full realm + 1 domain elsewhere, `none` = 0. A domain is keyed `"<data_center>/<rack>"`: rack labels are only unique inside a DC (`rack: '1'` in every DC is normal), so the realm is part of the key. Only static-node / disk / DC faults spend this budget.
-- *Slots* — killing a dynamic node does not reduce storage redundancy, so it draws from its own budget: ≤ 30% of the cluster's slots down at once (`total_slots × slot_fraction`, ≥1 on small clusters). Charged by `reserve` (boundary scheduler) and by `record_inject` (legacy loop, manual inject). The one place that ignores it is the `filter_safe` pre-check: a slot candidate carries no fail domain, so it is always admitted there — `reserve` is what actually refuses.
+- *Slots* — killing a dynamic node does not reduce storage redundancy, so it draws from its own budget: ≤ 30% of the cluster's slots down at once (`total_slots × slot_fraction`, ≥1 on small clusters). Charged by `reserve` (boundary scheduler) and by `record_inject` (legacy loop, manual inject). `filter_safe` checks both budgets; `reserve` repeats the check atomically.
+
+**Bridge budgets are independent per pile.** Storage fail domains are keyed by pile/DC/rack,
+so repeating rack or DC labels in different piles do not merge their budgets. Each pile has
+its own erasure allowance and its own slot limit (`max(1, floor(pile_slots * 0.3))` when
+slots exist). An unused allowance in one pile cannot be borrowed by another. A footprint
+spanning piles must fit all affected budgets atomically. `/api/scheduler` and `/api/problems`
+keep the existing aggregate fields and additionally expose `failure_budget.piles`.
+
+`TargetTopology` resolves node/slot placement from inventory, separately from the agent's
+address. This also supports several processes belonging to different piles on one physical
+host. Whole-host and DC/pile impacts include their affected storage domains and slots.
+Bridge hosts must name a configured `location.bridge_pile_name`; unresolved resource
+placement is rejected instead of using a shared fallback budget. Whole-pile loss is not
+made safe merely by having another pile: it still requires a separate bridge-aware policy.
 
 **The failure model is mandatory.** An unusable `cluster.yaml` — missing, unparsable, no recognizable erasure mode, a host without `location.rack`, or (for `mirror-3-dc`) without `location.data_center` — raises `FailureModelConfigError` and the orchestrator refuses to start. There is no unguarded mode: chaos that ignores fault tolerance is worse than no chaos.
 
@@ -419,3 +433,50 @@ class MyClusterSafetyWarden:
 ```
 
 All safety wardens must implement `list_of_safety_violations() -> list[str]`.
+
+
+### Planned CMS admission (not enabled yet)
+
+CMS admission belongs in the shared FaultEngine, before dispatch by either the
+boundary scheduler or manual operations. It must not be implemented as a separate
+check in each scheduler. The proposed scheduler setting is `admission_policy`:
+
+- `local` (default): current Nemesis failure model.
+- `local_and_cms`: both per-pile budgets and a CMS permission are required.
+- `cms` (subsequent stage): CMS supplies availability policy; Nemesis still owns
+  operation conflicts, execution tracking and recovery. Fixed local erasure limits
+  must not silently prevent exercising the cluster's own failure model in this mode.
+
+These are design options, not currently accepted configuration values.
+
+The protocol is defined in `ydb/core/protos/cms.proto`; the HTTP handlers in
+`ydb/core/cms/http.cpp` expose `/cms/api/permissionrequest` and
+`/cms/api/managepermissionrequest` on the monitoring endpoint. Use real permissions,
+not `DryRun`: a preflight without a retained permission cannot protect concurrent
+operations. Request the complete action set with partial permission disabled and
+scheduling disabled. Keep permission IDs with the operation, renew their duration
+while necessary, and complete them only after recovery. Reject unused permissions
+when an operation is cancelled before dispatch. Permission expiry is not evidence
+that the fault has recovered.
+
+Planning must resolve the actual resources before requesting admission: a physical
+host action includes all its affected processes, whereas a node/slot action uses
+its concrete YDB node identity. Disk actions require a CMS device identity before
+execution; choosing a random disk on the agent afterwards is incompatible with
+this contract. DC/pile actions expand to the complete set of affected resources.
+The action mapping and availability mode need explicit validation against the
+supported YDB versions. `FORCE_RESTART`, which bypasses checks, is not an admission
+safety policy. Actions without a faithful CMS mapping are rejected when CMS is
+required, including actions otherwise marked as bypassing local budgets.
+
+Denial, partial approval, unavailable CMS or a request timeout prevent injection;
+there is no automatic fallback to local policy. Restore must remain possible
+without requesting another permission. Integrate this lifecycle with atomic local
+reservations and shutdown, including cleanup of permissions acquired before a
+failed dispatch. Do not infer absence of an effect from a dispatch timeout.
+
+The next FaultEngine stage must also scope slot recovery to the affected pile and
+resource set: the existing global alive-compute baseline can otherwise hide a
+missing slot behind recovery or growth in another pile. The current changes split
+admission budgets; they do not yet replace that recovery predicate, provide local
+process discovery/control, or change the existing test-facing start/stop API.

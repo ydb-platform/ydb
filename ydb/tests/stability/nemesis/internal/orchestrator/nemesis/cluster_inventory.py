@@ -76,7 +76,8 @@ class ClusterInventory:
                     ic_port=int(node.ic_port) if getattr(node, "ic_port", None) else None,
                     rack=getattr(node, "rack", None) or self._topology.rack_of(host),
                     datacenter=getattr(node, "datacenter", None) or self._topology.dc_of(host),
-                    bridge_pile_id=getattr(node, "bridge_pile_id", None),
+                    bridge_pile_id=(getattr(node, "bridge_pile_id", None)
+                                    if getattr(node, "bridge_pile_id", None) is not None else self._topology.pile_of(host)),
                 )
             for slot_idx, slot in cluster.slots.items():
                 host = str(slot.host)
@@ -87,7 +88,8 @@ class ClusterInventory:
                     node_id=int(slot.node_id) if getattr(slot, "node_id", None) is not None else None,
                     rack=getattr(slot, "rack", None) or self._topology.rack_of(host),
                     datacenter=getattr(slot, "datacenter", None) or self._topology.dc_of(host),
-                    bridge_pile_id=getattr(slot, "bridge_pile_id", None),
+                    bridge_pile_id=(getattr(slot, "bridge_pile_id", None)
+                                    if getattr(slot, "bridge_pile_id", None) is not None else self._topology.pile_of(host)),
                 )
         except Exception as e:  # noqa: BLE001
             logger.warning("ClusterInventory: failed to read nodes/slots (%s); host-only", e)
@@ -118,6 +120,7 @@ class ClusterInventory:
                 ic_port=19001,
                 rack=self._topology.rack_of(host),
                 datacenter=self._topology.dc_of(host),
+                bridge_pile_id=self._topology.pile_of(host),
             )
 
     # -- lookups ------------------------------------------------------------

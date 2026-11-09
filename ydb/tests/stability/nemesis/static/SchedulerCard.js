@@ -35,6 +35,7 @@ export default {
 
     const enabledTypes = computed(() => props.scheduler?.enabled_types || [])
     const budget = computed(() => props.scheduler?.failure_budget || {})
+    const pileBudgets = computed(() => props.scheduler?.failure_budget?.piles || {})
     const probe = computed(() => props.scheduler?.recovery_probe || null)
     const probeFaults = computed(() => probe.value?.faults || [])
 
@@ -86,6 +87,7 @@ export default {
       stateBadgeClass,
       enabledTypes,
       budget,
+      pileBudgets,
       probe,
       probeFaults,
       intervalText,
@@ -184,6 +186,19 @@ export default {
                   {{ probe ? probe.tracked : '-' }} / {{ probe ? (probe.confirming ?? 0) : '-' }} / {{ probe ? probe.stuck : '-' }}
                 </div>
               </div>
+            </div>
+            <div v-if="Object.keys(pileBudgets).length" class="overflow-x-auto pt-2">
+              <table class="table table-xs">
+                <thead><tr><th>Pile</th><th>Storage domains down</th><th>Slots down / budget</th><th>Total slots</th></tr></thead>
+                <tbody>
+                  <tr v-for="(p, id) in pileBudgets" :key="id">
+                    <td>{{ p.name }} ({{ id }})</td>
+                    <td>{{ p.impaired_racks.length }}</td>
+                    <td>{{ p.impaired_slots }} / {{ p.max_slots }}</td>
+                    <td>{{ p.total_slots }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
             <div v-if="impairedDomains.length > 0" class="flex flex-wrap gap-1 pt-1">
               <span v-for="d in impairedDomains" :key="d" class="badge badge-warning badge-xs font-mono">{{ d }}</span>

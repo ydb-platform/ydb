@@ -9,7 +9,7 @@ Budget per erasure mode from ``cluster.yaml`` (``static_erasure`` or ``erasure``
 
 A fail domain is ``"<dc>/<rack>"`` (:func:`fail_domain_key`): rack labels repeat across DCs, so the
 realm must be part of the key. Slot (dynamic node) kills cost no redundancy and draw from a separate
-budget instead: ≤30% of the cluster's slots at once.
+budget instead: ≤30% of slots in each pile at once (cluster-wide without bridge).
 
 An unusable config raises :class:`FailureModelConfigError` and the orchestrator refuses to start
 (``app.require_failure_model_or_die``) — there is no unguarded mode.
@@ -32,6 +32,11 @@ import yaml
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import (
     ChaosTarget,
     TargetKind,
+)
+
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.target_topology import (
+    TargetTopology,
+    fail_domain_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,21 +99,26 @@ def _slots_within_budget(active_slots: int, add_slots: int, max_slots: int) -> b
     return active_slots + add_slots <= max_slots
 
 
-def fail_domain_key(datacenter: str | None, rack: str) -> str:
-    """``"<dc>/<rack>"`` — rack labels are only unique inside a datacenter."""
-    return f"{datacenter or _UNKNOWN_DC}/{rack}"
-
-
 @dataclass(frozen=True)
 class Footprint:
     """What one fault consumes: fail-domain keys and/or slots. A tablet fault consumes neither."""
 
     racks: frozenset[str] = frozenset()
     slots: int = 0
+    slots_by_pile: tuple[tuple[int, int], ...] = ()
 
     def __bool__(self) -> bool:
         """True if this represents a real impairment (used to decide fact-based recovery)."""
         return bool(self.racks) or self.slots > 0
+
+
+def _footprint_slots_fit(footprint, active, limit, pile_active, pile_limits) -> bool:
+    if pile_limits is None:
+        return _slots_within_budget(active, footprint.slots, limit)
+    counts = dict(footprint.slots_by_pile)
+    if sum(counts.values()) != footprint.slots or any(n < 0 for n in counts.values()):
+        return False
+    return all(p in pile_limits and pile_active.get(p, 0) + n <= pile_limits[p] for p, n in counts.items())
 
 
 @dataclass(frozen=True)
@@ -147,6 +157,7 @@ class HostTopology:
     host: str
     rack: str | None
     datacenter: str | None
+    bridge_pile_id: int | None = None
 
 
 class ClusterTopologyModel:
@@ -159,6 +170,7 @@ class ClusterTopologyModel:
     def __init__(self, yaml_path: str | None) -> None:
         self.yaml_path = yaml_path or ""
         self.hosts: dict[str, HostTopology] = {}
+        self.pile_names: dict[int, str] = {}
         # fail-domain key ("<dc>/<rack>") -> datacenter
         self._domain_to_dc: dict[str, str | None] = {}
         self.tolerance = FailureTolerance.from_erasure("")
@@ -188,6 +200,16 @@ class ClusterTopologyModel:
         if not isinstance(hosts, list) or not hosts:
             raise FailureModelConfigError(f"{self.yaml_path}: no 'hosts' list to build a topology from")
 
+        bridge = doc.get("bridge_config", (doc.get("config") or {}).get("bridge_config"))
+        if bridge is not None:
+            piles = bridge.get("piles") if isinstance(bridge, dict) else None
+            if not isinstance(piles, list) or not piles:
+                raise FailureModelConfigError("bridge_config must declare piles")
+            names = [p.get("name") if isinstance(p, dict) else None for p in piles]
+            if any(not isinstance(n, str) or not n for n in names) or len(set(names)) != len(names):
+                raise FailureModelConfigError("bridge pile names must be non-empty and unique")
+            self.pile_names = dict(enumerate(names))
+        pile_ids = {name: idx for idx, name in self.pile_names.items()}
         needs_realm = self.tolerance.kind == "realm_plus_domain"
         for h in hosts:
             if not isinstance(h, dict):
@@ -212,8 +234,14 @@ class ClusterTopologyModel:
                 )
             rack = str(rack)
             dc = str(dc) if dc is not None else None
-            self.hosts[name] = HostTopology(host=name, rack=rack, datacenter=dc)
-            self._domain_to_dc[fail_domain_key(dc, rack)] = dc
+            pile_id = None
+            if self.pile_names:
+                pile_name = loc.get("bridge_pile_name")
+                if pile_name not in pile_ids:
+                    raise FailureModelConfigError(f"host {name} has unknown location.bridge_pile_name: {pile_name!r}")
+                pile_id = pile_ids[pile_name]
+            self.hosts[name] = HostTopology(host=name, rack=rack, datacenter=dc, bridge_pile_id=pile_id)
+            self._domain_to_dc[fail_domain_key(dc, rack, pile_id)] = dc
 
         logger.info(
             "FailureModel: %s, %d host(s), %d fail domain(s) from %s",
@@ -254,12 +282,16 @@ class ClusterTopologyModel:
         t = self.hosts.get(host)
         return t.datacenter if t else None
 
+    def pile_of(self, host: str) -> int | None:
+        t = self.hosts.get(host)
+        return t.bridge_pile_id if t else None
+
     def domain_of(self, host: str) -> str | None:
         """Fail-domain key of ``host``, or None if it is not in ``cluster.yaml``."""
         t = self.hosts.get(host)
         if t is None or t.rack is None:
             return None
-        return fail_domain_key(t.datacenter, t.rack)
+        return fail_domain_key(t.datacenter, t.rack, t.bridge_pile_id)
 
     def domains_in_dc(self, dc: str | None) -> set[str]:
         """Fail-domain keys of realm ``dc``."""
@@ -275,7 +307,7 @@ class BudgetView:
     Advisory — :meth:`FailureModelGuard.reserve` re-checks atomically before anything is injected.
     """
 
-    __slots__ = ("impaired_racks", "impaired_slots", "touched", "_is_tolerable", "_max_slots")
+    __slots__ = ("impaired_racks", "impaired_slots", "touched", "_is_tolerable", "_max_slots", "_pile_slots", "_pile_limits")
 
     def __init__(
         self,
@@ -285,17 +317,21 @@ class BudgetView:
         touched: frozenset[str],
         is_tolerable,
         max_slots: int,
+        pile_slots=None,
+        pile_limits=None,
     ) -> None:
         self.impaired_racks = impaired_racks
         self.impaired_slots = impaired_slots
         self.touched = touched
         self._is_tolerable = is_tolerable
         self._max_slots = max_slots
+        self._pile_slots = dict(pile_slots or {})
+        self._pile_limits = None if pile_limits is None else dict(pile_limits)
 
     def fits(self, footprint: Footprint) -> bool:
         return self._is_tolerable(
             set(self.impaired_racks) | set(footprint.racks)
-        ) and _slots_within_budget(self.impaired_slots, footprint.slots, self._max_slots)
+        ) and _footprint_slots_fit(footprint, self.impaired_slots, self._max_slots, self._pile_slots, self._pile_limits)
 
 
 @dataclass
@@ -306,6 +342,7 @@ class _Impairment:
     racks: set[str]
     identity_key: str
     slots: int = 0
+    slots_by_pile: tuple[tuple[int, int], ...] = ()
 
 
 class FailureModelGuard:
@@ -316,6 +353,7 @@ class FailureModelGuard:
         topology: ClusterTopologyModel,
         *,
         total_slots: int = 0,
+        inventory=None,
         slot_fraction: float = DEFAULT_SLOT_FRACTION,
         metrics=None,
     ) -> None:
@@ -323,10 +361,23 @@ class FailureModelGuard:
         self._lock = threading.Lock()
         self._impairments: list[_Impairment] = []
         self._metrics = metrics
-        slots = max(0, int(total_slots))
+        self._placement = TargetTopology(
+            topology.hosts,
+            nodes=inventory.nodes.values() if inventory is not None else (),
+            slots=inventory.slots.values() if inventory is not None else (),
+            pile_names=topology.pile_names,
+        )
+        self._pile_totals = {p: self._placement.slots_per_pile.get(p, 0) for p in topology.pile_names}
+        if topology.pile_names and total_slots and inventory is None:
+            raise FailureModelConfigError("Bridge slot budgets require per-slot inventory")
+        self._pile_limits = {
+            p: max(1, int(n * float(slot_fraction))) if n else 0 for p, n in self._pile_totals.items()
+        } if topology.pile_names else None
+        slots = sum(self._pile_totals.values()) if topology.pile_names else max(0, int(total_slots))
         self._total_slots = slots
         # ≥1 on small clusters; 0 (unknown) never blocks.
-        self._max_slots = max(1, int(slots * float(slot_fraction))) if slots else 0
+        self._max_slots = (sum(self._pile_limits.values()) if self._pile_limits is not None
+                           else (max(1, int(slots * float(slot_fraction))) if slots else 0))
 
     @property
     def enabled(self) -> bool:
@@ -339,46 +390,22 @@ class FailureModelGuard:
 
     # -- rack resolution ----------------------------------------------------
 
-    def _racks_for_host(self, host: str, scope: ImpactScope) -> set[str]:
-        """Fail domains touched by injecting ``scope`` on ``host``."""
-        if scope == ImpactScope.DATACENTER:
-            dc = self._topology.dc_of(host)
-            domains = self._topology.domains_in_dc(dc)
-            return set(domains) if domains else {self._synthetic_key(host)}
-        # Everything else collapses to the host's own domain (SLOT is routed to the slot budget).
-        domain = self._topology.domain_of(host)
-        return {domain if domain is not None else self._synthetic_key(host)}
-
     @staticmethod
     def _is_slot(target: ChaosTarget, scope: ImpactScope) -> bool:
-        """A slot fault: draws from the slot budget, not from a fail domain."""
         return scope is ImpactScope.SLOT or target.kind is TargetKind.SLOT
 
-    def _racks_for_target(self, target: ChaosTarget, scope: ImpactScope) -> set[str]:
-        if target.kind is TargetKind.TABLET or self._is_slot(target, scope):
-            return set()
-        if target.kind is TargetKind.DATACENTER or scope == ImpactScope.DATACENTER:
-            dc = target.group_id or self._topology.dc_of(target.host)
-            domains = self._topology.domains_in_dc(dc)
-            return set(domains) if domains else {self._synthetic_key(target.host)}
-        return self._racks_for_host(target.host, scope)
-
-    def _synthetic_key(self, host: str) -> str:
-        """Fail-domain key for a host with no rack in ``cluster.yaml``; still namespaced by realm."""
-        return f"{_SYNTHETIC_DOMAIN_PREFIX}{fail_domain_key(self._topology.dc_of(host), host)}"
-
     def _realm_of_domain(self, domain: str) -> str | None:
-        """Realm of a fail-domain key, synthetic ones included."""
         if domain.startswith(_SYNTHETIC_DOMAIN_PREFIX):
             dc = domain[len(_SYNTHETIC_DOMAIN_PREFIX):].split("/", 1)[0]
             return None if dc == _UNKNOWN_DC else dc
-        return self._topology.dc_of_domain(domain)
+        return self._placement.domain_to_dc.get(domain)
 
     def footprint_for(self, target: ChaosTarget, scope: ImpactScope) -> Footprint:
-        """Empty for tablets, one slot for slot kills, the host's fail domain(s) otherwise."""
+        racks, counts = self._placement.resolve(target, scope.value)
         return Footprint(
-            racks=frozenset(self._racks_for_target(target, scope)),
-            slots=1 if self._is_slot(target, scope) else 0,
+            racks=racks,
+            slots=sum(n for _, n in counts),
+            slots_by_pile=counts if self._pile_limits is not None else (),
         )
 
     # -- impairment bookkeeping (call under _lock) --------------------------
@@ -392,11 +419,18 @@ class FailureModelGuard:
     def _active_slots(self) -> int:
         return sum(imp.slots for imp in self._impairments)
 
-    def _slots_ok(self, add_slots: int) -> bool:
-        """Whether ``add_slots`` more slots stay within the budget."""
-        if add_slots <= 0 or self._max_slots <= 0:
-            return True
-        return _slots_within_budget(self._active_slots(), add_slots, self._max_slots)
+    def _active_slots_by_pile(self) -> dict[int, int]:
+        counts = {}
+        for imp in self._impairments:
+            for pile, count in imp.slots_by_pile:
+                counts[pile] = counts.get(pile, 0) + count
+        return counts
+
+    def _slots_ok(self, footprint: Footprint) -> bool:
+        return _footprint_slots_fit(
+            footprint, self._active_slots(), self._max_slots,
+            self._active_slots_by_pile(), self._pile_limits,
+        )
 
     def _touched_keys(self) -> set[str]:
         return {imp.identity_key for imp in self._impairments}
@@ -404,6 +438,17 @@ class FailureModelGuard:
     # -- tolerance check ----------------------------------------------------
 
     def _is_tolerable(self, impaired_racks: set[str]) -> bool:
+        if self._topology.pile_names:
+            by_pile = {}
+            for domain in impaired_racks:
+                pile = self._placement.domain_to_pile.get(domain)
+                if pile not in self._topology.pile_names:
+                    return False
+                by_pile.setdefault(pile, set()).add(domain)
+            return all(self._pile_is_tolerable(domains) for domains in by_pile.values())
+        return self._pile_is_tolerable(impaired_racks)
+
+    def _pile_is_tolerable(self, impaired_racks: set[str]) -> bool:
         tol = self._topology.tolerance
         n = len(impaired_racks)
         if tol.kind == "none":
@@ -434,8 +479,8 @@ class FailureModelGuard:
     ) -> list[ChaosTarget]:
         """Safe subset of ``candidates`` against the current fail-domain budget.
 
-        Skips already-impaired identities. Fail domains only — a slot candidate has none, so it is
-        always admitted here and :meth:`reserve` is what refuses it.
+        Skips already-impaired identities and checks storage and slot budgets in every pile.
+        :meth:`reserve` re-checks atomically before dispatch.
 
         ``jointly=True`` (default): each admission narrows the budget for the next — a maximal
         packing in candidate order (first hosts win). Use when a planner may act on several
@@ -444,31 +489,32 @@ class FailureModelGuard:
         ``jointly=False``: each candidate is checked only against the current impairments — for
         single-inject ticks that then ``random.choice`` among the result.
         """
-        candidates = list(candidates)
         safe: list[ChaosTarget] = []
         with self._lock:
             active = self._active_racks()
+            slots = self._active_slots()
+            pile_slots = self._active_slots_by_pile()
             touched = self._touched_keys()
             for target in candidates:
                 if target.identity_key() in touched:
                     continue
-                racks = self._racks_for_target(target, scope)
-                if not racks:
-                    # e.g. TABLET — always safe for erasure budget
-                    safe.append(target)
-                    continue
-                hypothetical = active | racks
-                if self._is_tolerable(hypothetical):
+                fp = self.footprint_for(target, scope)
+                if self._is_tolerable(active | set(fp.racks)) and _footprint_slots_fit(
+                    fp, slots, self._max_slots, pile_slots, self._pile_limits,
+                ):
                     safe.append(target)
                     if jointly:
-                        active = hypothetical
+                        active.update(fp.racks)
+                        slots += fp.slots
+                        for pile, count in fp.slots_by_pile:
+                            pile_slots[pile] = pile_slots.get(pile, 0) + count
         return safe
 
     # -- lease-based budget API ---------------------------------------------
 
     def _snapshot_unlocked(self) -> dict:
         active = sorted(self._active_racks())
-        return {
+        result = {
             "enabled": self.enabled,
             "erasure": self._topology.tolerance.erasure,
             "impaired_racks": active,
@@ -477,6 +523,20 @@ class FailureModelGuard:
             "max_slots": self._max_slots,
             "tracked_executions": len(self._impairments),
         }
+        if self._pile_limits is not None:
+            counts = self._active_slots_by_pile()
+            result["piles"] = {
+                str(pile): {
+                    "name": name,
+                    "erasure": self._topology.tolerance.erasure,
+                    "impaired_racks": [d for d in active if self._placement.domain_to_pile.get(d) == pile],
+                    "impaired_slots": counts.get(pile, 0),
+                    "total_slots": self._pile_totals[pile],
+                    "max_slots": self._pile_limits[pile],
+                }
+                for pile, name in self._topology.pile_names.items()
+            }
+        return result
 
     def reserve(
         self,
@@ -495,7 +555,7 @@ class FailureModelGuard:
                 rejected = True
                 lease_id = None
                 key = identity_key
-            elif not self._slots_ok(footprint.slots):
+            elif not self._slots_ok(footprint):
                 snap = self._snapshot_unlocked() if metrics is not None else None
                 rejected = True
                 lease_id = None
@@ -510,6 +570,7 @@ class FailureModelGuard:
                         racks=set(footprint.racks),
                         identity_key=key,
                         slots=footprint.slots,
+                        slots_by_pile=footprint.slots_by_pile,
                     )
                 )
                 snap = self._snapshot_unlocked() if metrics is not None else None
@@ -545,6 +606,8 @@ class FailureModelGuard:
                 touched=frozenset(self._touched_keys()),
                 is_tolerable=self._is_tolerable,
                 max_slots=self._max_slots,
+                pile_slots=self._active_slots_by_pile(),
+                pile_limits=self._pile_limits,
             )
 
     def release(
@@ -574,7 +637,7 @@ class FailureModelGuard:
         if metrics is not None:
             metrics.budget_released(
                 lease_id=lease_id,
-                footprint=Footprint(racks=frozenset(removed.racks), slots=removed.slots),
+                footprint=Footprint(racks=frozenset(removed.racks), slots=removed.slots, slots_by_pile=removed.slots_by_pile),
                 identity_key=removed.identity_key,
                 budget_after=snap,
                 reason=reason,
@@ -612,6 +675,7 @@ class FailureModelGuard:
                     racks=set(footprint.racks),
                     identity_key=identity,
                     slots=footprint.slots,
+                    slots_by_pile=footprint.slots_by_pile,
                 )
             )
             snap = self._snapshot_unlocked() if metrics is not None else None
@@ -666,7 +730,7 @@ class FailureModelGuard:
         if removed is not None and metrics is not None:
             metrics.budget_released(
                 lease_id=removed.execution_id,
-                footprint=Footprint(racks=frozenset(removed.racks), slots=removed.slots),
+                footprint=Footprint(racks=frozenset(removed.racks), slots=removed.slots, slots_by_pile=removed.slots_by_pile),
                 identity_key=removed.identity_key,
                 budget_after=snap,
                 reason=reason,

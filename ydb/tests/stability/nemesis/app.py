@@ -126,7 +126,7 @@ def _initialize_app_body():
         inventory = ClusterInventory(topology, agent_hosts=loaded_hosts)
         metrics = NemesisMetrics()
         failure_guard = FailureModelGuard(
-            topology, total_slots=len(inventory.slots), metrics=metrics
+            topology, total_slots=len(inventory.slots), inventory=inventory, metrics=metrics
         )
         metrics.sync_budget_gauges(failure_guard.snapshot())
         logger.info("Failure model guard: %s", failure_guard.snapshot())

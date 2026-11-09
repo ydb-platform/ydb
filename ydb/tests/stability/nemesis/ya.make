@@ -51,6 +51,7 @@ PY_SRCS(
     internal/orchestrator/nemesis/network_planner.py
     internal/orchestrator/nemesis/nemesis_planner_base.py
     internal/orchestrator/nemesis/failure_model.py
+    internal/orchestrator/nemesis/target_topology.py
     internal/orchestrator/nemesis/metrics.py
     internal/orchestrator/nemesis/chaos_target.py
     internal/orchestrator/nemesis/cluster_inventory.py

@@ -10,6 +10,9 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/logger/stream.h>
+#include <util/generic/scope.h>
+#include <util/stream/str.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
@@ -146,6 +149,73 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.Status, TEvWorker::TEvGone::EStatus::DATA_ERROR, result.ToString());
         }
 
+    }
+
+    Y_UNIT_TEST(AuthenticationPolicyPreservesRetriesAndSanitizesIssues) {
+        struct TCase {
+            NYdb::EStatus Status;
+            EAuthFailurePolicy Policy;
+            TEvWorker::TEvGone::EStatus Expected;
+        };
+        const TCase cases[] = {
+            {NYdb::EStatus::UNAUTHORIZED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::AUTH_ERROR},
+            {NYdb::EStatus::CLIENT_UNAUTHENTICATED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::AUTH_ERROR},
+            {NYdb::EStatus::UNAVAILABLE, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::UNAVAILABLE},
+            {NYdb::EStatus::TRANSPORT_UNAVAILABLE, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::UNAVAILABLE},
+            {NYdb::EStatus::CLIENT_DISCOVERY_FAILED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::UNAVAILABLE},
+            {NYdb::EStatus::CLIENT_CANCELLED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::UNAVAILABLE},
+            {NYdb::EStatus::CLIENT_UNAUTHENTICATED, EAuthFailurePolicy::SourceRejectionOnly, TEvWorker::TEvGone::UNAVAILABLE},
+            {NYdb::EStatus::UNAUTHORIZED, EAuthFailurePolicy::SourceRejectionOnly, TEvWorker::TEvGone::AUTH_ERROR},
+        };
+        for (const auto& test : cases) {
+            TStringStream logs;
+            TTestActorRuntime runtime;
+            runtime.SetLogBackend(new TStreamLogBackend(&logs));
+            runtime.Initialize(TAppPrepare().Unwrap());
+            runtime.SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
+            const auto worker = runtime.AllocateEdgeActor();
+            const auto proxy = runtime.AllocateEdgeActor();
+            const auto session = runtime.AllocateEdgeActor();
+            const auto settings = TEvYdbProxy::TTopicReaderSettings()
+                .ConsumerName("consumer")
+                .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path("/Root/topic").AppendPartitionIds(0));
+            const auto reader = runtime.Register(CreateRemoteTopicReader(proxy, settings, test.Policy));
+            Y_DEFER {
+                runtime.Send(reader, worker, new TEvents::TEvPoison());
+                runtime.Send(session, worker, new TEvents::TEvPoison());
+            };
+            runtime.Send(reader, worker, new TEvWorker::TEvHandshake());
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicReaderRequest>(proxy, TDuration::Seconds(5)));
+            runtime.Send(reader, proxy, new TEvYdbProxy::TEvCreateTopicReaderResponse(session));
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvWorker::TEvHandshake>(worker, TDuration::Seconds(5)));
+
+            const bool authStatus = test.Status == NYdb::EStatus::UNAUTHORIZED
+                || test.Status == NYdb::EStatus::CLIENT_UNAUTHENTICATED;
+            NYdb::NIssue::TIssues issues;
+            if (authStatus) {
+                NYdb::NIssue::TIssue issue("UntrustedPasswordMarker27516");
+                issue.AddSubIssue(MakeIntrusive<NYdb::NIssue::TIssue>("UntrustedTokenMarker27516"));
+                issues.AddIssue(issue);
+            }
+            runtime.Send(reader, session, new TEvYdbProxy::TEvTopicReaderGone(NYdb::TStatus(test.Status, std::move(issues))));
+            const auto gone = runtime.GrabEdgeEvent<TEvWorker::TEvGone>(worker, TDuration::Seconds(5));
+            UNIT_ASSERT(gone);
+            UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, test.Expected);
+            if (authStatus) {
+                UNIT_ASSERT_STRING_CONTAINS(gone->Get()->ErrorDescription, "authentication");
+                UNIT_ASSERT_STRING_CONTAINS(gone->Get()->ErrorDescription, ToString(test.Status));
+                UNIT_ASSERT(!gone->Get()->ErrorDescription.Contains("UntrustedPasswordMarker27516"));
+                UNIT_ASSERT(!gone->Get()->ErrorDescription.Contains("UntrustedTokenMarker27516"));
+            }
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvents::TEvPoison>(session, TDuration::Seconds(5)));
+            // Drain the logger mailbox after the reader's closure and cleanup.
+            runtime.Send(runtime.GetActorSystem(0)->LoggerSettings()->LoggerActorId, worker,
+                new TLogComponentLevelRequest(NLog::PRI_DEBUG, NKikimrServices::REPLICATION_SERVICE));
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TLogComponentLevelResponse>(worker, TDuration::Seconds(5)));
+            UNIT_ASSERT(!logs.Str().empty());
+            UNIT_ASSERT(!logs.Str().Contains("UntrustedPasswordMarker27516"));
+            UNIT_ASSERT(!logs.Str().Contains("UntrustedTokenMarker27516"));
+        }
     }
 
     Y_UNIT_TEST(SourceIndexSchemeErrorIsRetryable) {

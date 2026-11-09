@@ -20,6 +20,7 @@
 #include <util/generic/scope.h>
 
 #include <util/string/builder.h>
+#include <util/generic/scope.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -459,6 +460,103 @@ Y_UNIT_TEST_SUITE(ServiceSchemaProtocol) {
             runtime.GrabEdgeEvent<TEvService::TEvStatus>(edge);
             const auto replay = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeReport>(edge);
             UNIT_ASSERT_VALUES_EQUAL(replay->Get()->Record.GetSchema().HasIndexes(), !supportsIndexes);
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(ServiceAuthentication) {
+    using namespace NTestHelpers;
+
+    // Removing the service-selected static policy or AUTH_ERROR wire mapping
+    // must fail this test; the injected SDK status does not test SDK Login.
+    Y_UNIT_TEST(StaticInitializationStopsWhileOAuthRetries) {
+        for (const bool staticLogin : {true, false}) {
+            TEnv<> env(true, ERuntimeMode::Simulated);
+            auto& runtime = env.GetRuntime();
+            const auto edge = env.GetSender();
+            env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+                .Name = "Table", .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}},
+            }));
+            const auto service = runtime.Register(CreateReplicationService());
+            TVector<TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr> requests;
+            THashSet<TActorId> cleanupActors{service, env.GetYdbProxy()};
+            auto cleanup = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+                if (ev->HasEvent() && ev->GetTypeRewrite() == TEvents::TEvPoison::EventType
+                    && cleanupActors.contains(ev->Sender)) {
+                    cleanupActors.insert(ev->GetRecipientRewrite());
+                }
+            });
+            Y_DEFER {
+                for (const auto& request : requests) {
+                    cleanupActors.insert(request->Sender);
+                    runtime.Send(new IEventHandle(request->Sender, edge, new TEvents::TEvPoison()));
+                    runtime.Send(new IEventHandle(request->Sender, request->GetRecipientRewrite(),
+                        new TEvYdbProxy::TEvCreateTopicReaderResponse(TActorId{})));
+                }
+                runtime.Send(new IEventHandle(service, edge, new TEvents::TEvPoison()));
+                runtime.Send(new IEventHandle(env.GetYdbProxy(), edge, new TEvents::TEvPoison()));
+                runtime.WaitFor("service and children stopped", [&] {
+                    for (const auto& actor : cleanupActors) {
+                        if (runtime.FindActor(actor)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }, TDuration::Seconds(5));
+            };
+            runtime.Send(new IEventHandle(service, edge, new TEvService::TEvHandshake(42, 1)));
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvStatus>(edge, TDuration::Seconds(5)));
+            auto intercept = runtime.AddObserver<TEvYdbProxy::TEvCreateTopicReaderRequest>(
+                [&](TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev) { requests.push_back(std::move(ev)); });
+            std::optional<NKikimrReplication::TEvWorkerStatus> stopped;
+            auto status = runtime.AddObserver<TEvService::TEvWorkerStatus>([&](TEvService::TEvWorkerStatus::TPtr& ev) {
+                if (ev->Get()->Record.GetStatus() == NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED) {
+                    stopped = ev->Get()->Record;
+                }
+            });
+            auto run = MakeHolder<TEvService::TEvRunWorker>();
+            run->Record.MutableController()->SetTabletId(42);
+            run->Record.MutableController()->SetGeneration(1);
+            run->Record.MutableWorker()->SetReplicationId(1);
+            run->Record.MutableWorker()->SetTargetId(1);
+            auto* command = run->Record.MutableCommand();
+            command->SetDatabase("/Root");
+            auto* reader = command->MutableRemoteTopicReader();
+            auto* connection = reader->MutableConnectionParams();
+            connection->SetEndpoint(env.GetEndpoint());
+            connection->SetDatabase(env.GetDatabase());
+            if (staticLogin) {
+                connection->MutableStaticCredentials()->SetUser("user");
+                connection->MutableStaticCredentials()->SetPassword("password");
+            } else {
+                connection->MutableOAuthToken()->SetToken("root@builtin");
+            }
+            reader->SetTopicPath("/Root/topic");
+            reader->SetConsumerName("consumer");
+            env.GetPathId("/Root/Table").ToProto(command->MutableLocalTableWriter()->MutablePathId());
+            runtime.Send(new IEventHandle(service, edge, run.Release()));
+            runtime.WaitFor("first reader", [&] { return requests.size() == 1; }, TDuration::Seconds(5));
+            const auto firstReader = requests.front()->Sender;
+            const auto session = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(firstReader, requests.front()->GetRecipientRewrite(),
+                new TEvYdbProxy::TEvCreateTopicReaderResponse(session)));
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvYdbProxy::TEvReadTopicRequest>(session, TDuration::Seconds(5)));
+            runtime.Send(new IEventHandle(firstReader, session, new TEvYdbProxy::TEvTopicReaderGone(
+                NYdb::TStatus(NYdb::EStatus::CLIENT_UNAUTHENTICATED, {}))));
+            runtime.WaitFor("terminal status or replacement reader", [&] {
+                return stopped.has_value() || requests.size() == 2;
+            }, TDuration::Seconds(5));
+            if (staticLogin) {
+                UNIT_ASSERT_C(stopped, "static Login initialization failure restarted the reader");
+                UNIT_ASSERT_VALUES_EQUAL(stopped->GetReason(), NKikimrReplication::TEvWorkerStatus::REASON_ERROR);
+                UNIT_ASSERT_STRING_CONTAINS(stopped->GetErrorDescription(), "authentication");
+                UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+            } else {
+                UNIT_ASSERT(!stopped);
+                UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
+                UNIT_ASSERT(requests.back()->Sender != firstReader);
+            }
         }
     }
 }

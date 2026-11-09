@@ -18,8 +18,6 @@ namespace {
 
 void ParseHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr) {
     table.HnswIndexes.clear();
-    table.HnswSettings.reset();
-    table.HnswVectorColumnTag = 0;
     for (const auto& index : descr.GetTableIndexes()) {
         if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalHnsw || !index.HasHnswIndexDescription()) {
             continue;
@@ -30,10 +28,6 @@ void ParseHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescripti
             table.HnswIndexes.emplace(TPathId(index.GetPathOwnerId(), index.GetLocalPathId()),
                 TUserTable::THnswIndexInfo{description.GetSettings().settings(),
                     description.GetEmbeddingColumnId(), index.GetSchemaVersion()});
-            if (!table.HnswSettings) {
-                table.HnswSettings = description.GetSettings().settings();
-                table.HnswVectorColumnTag = description.GetEmbeddingColumnId();
-            }
         }
     }
 }

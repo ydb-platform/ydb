@@ -33,7 +33,7 @@ using namespace NTabletFlatExecutor;
 
 namespace {
 
-bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state) {
+bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state, TPathId indexId) {
     if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
         return false;
     }
@@ -43,9 +43,10 @@ bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state) {
     }
     const auto& table = shard.GetUserTables().at(state.PathId.LocalPathId);
     const auto& record = state.Request->Record;
-    if (!table->HnswSettings || !table->HnswVectorColumnTag || !record.HasVectorTopK()
+    const auto* index = table->HnswIndexes.FindPtr(indexId);
+    if (!index || !record.HasVectorTopK()
             || record.GetVectorTopK().GetColumn() >= record.ColumnsSize()
-            || table->HnswVectorColumnTag != record.GetColumns(record.GetVectorTopK().GetColumn())) {
+            || index->VectorColumnTag != record.GetColumns(record.GetVectorTopK().GetColumn())) {
         return false;
     }
     return !shard.IsFollower() && !state.ReadVersion.IsMax();
@@ -80,6 +81,7 @@ struct TReadIteratorVectorTop {
     // Set when a ready in-memory HNSW index is available for this table/column;
     // if set, TReader::IterateRange uses it instead of the brute-force scan below.
     std::shared_ptr<NDataShard::THnswIndex> HnswIndex;
+    TPathId HnswIndexId;
 
     std::unordered_set<TString> UniqueKeys;
     std::vector<TReadIteratorVectorTopItem> Rows;
@@ -283,11 +285,10 @@ struct TShortTableInfo {
         SchemaVersion = tableInfo->GetTableSchemaVersion();
         KeyColumnTypes = tableInfo->KeyColumnTypes;
         KeyColumnCount = tableInfo->KeyColumnIds.size();
-        if (AppData()->FeatureFlags.GetEnableHnswIndex() && tableInfo->HnswSettings) {
+        if (AppData()->FeatureFlags.GetEnableHnswIndex() && !tableInfo->HnswIndexes.empty()) {
             KeyColumnIds.assign(tableInfo->KeyColumnIds.begin(), tableInfo->KeyColumnIds.end());
             ShardRange = tableInfo->Range;
-            HnswSettings = tableInfo->HnswSettings;
-            HnswVectorColumnTag = tableInfo->HnswVectorColumnTag;
+            HnswIndexes = tableInfo->HnswIndexes;
         }
 
         for (const auto& it: tableInfo->Columns) {
@@ -363,8 +364,7 @@ struct TShortTableInfo {
     TVector<NTable::TTag> KeyColumnIds;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
     std::optional<TSerializedTableRange> ShardRange;
-    std::optional<Ydb::Table::VectorIndexSettings> HnswSettings;
-    ui32 HnswVectorColumnTag = 0;
+    TMap<TPathId, TUserTable::THnswIndexInfo> HnswIndexes;
 };
 
 std::unique_ptr<IBlockBuilder> CreateBlockBuilder(
@@ -1468,7 +1468,7 @@ private:
             if (status == NTable::EReady::Gone) {
                 // The journal should already have filtered a visible deletion.
                 // Discard an inconsistent graph and finish through the scan.
-                Self->InvalidateHnswIndex(TableInfo.LocalTid);
+                Self->InvalidateHnswIndex(TableInfo.LocalTid, topK.HnswIndexId);
                 return {};
             }
             fetched.emplace_back(std::move(row));
@@ -1497,7 +1497,7 @@ private:
         // ANN replaces only reads covering the complete local partition.
         // Restricted ranges retain their exact table-scan semantics.
         if (State.VectorTopK && State.VectorTopK->HnswIndex
-                && CanUseHnsw(*Self, State) && TableInfo.CoversFullShard(tableRange)
+                && CanUseHnsw(*Self, State, State.VectorTopK->HnswIndexId) && TableInfo.CoversFullShard(tableRange)
                 && State.VectorTopK->HnswIndex->CanRead(State.ReadVersion)) {
             auto results = SearchHnswDistinct();
             // Filtering may exhaust NMSLIB's bounded candidate set. Preserve
@@ -1508,7 +1508,7 @@ private:
                 }
             }
             Self->RegisterHnswFallback(TableInfo.LocalTid, TableInfo.CoversFullShard(tableRange)
-                ? TDataShard::EHnswFallback::Candidates : TDataShard::EHnswFallback::PartialRange);
+                ? TDataShard::EHnswFallback::Candidates : TDataShard::EHnswFallback::PartialRange, State.VectorTopK->HnswIndexId);
         }
 
         auto keyAccessSampler = Self->GetKeyAccessSampler();
@@ -2913,42 +2913,56 @@ public:
             topState->Limit = topK.GetLimit();
             topState->Target = topK.GetTargetVector();
 
-            if (AppData()->FeatureFlags.GetEnableHnswIndex() && TableInfo.HnswSettings) {
-                // Reconstruct a missing graph asynchronously. The triggering read
-                // continues through the exact table scan.
+            if (AppData()->FeatureFlags.GetEnableHnswIndex() && !TableInfo.HnswIndexes.empty()) {
                 const ui32 localTid = TableInfo.LocalTid;
                 const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
-                const bool useCachedHnswParameters = topK.GetSettings().vector_dimension() == 0 && !topK.GetSettings().has_m() && !topK.GetSettings().has_ef_construction();
-                auto hnswSettings = topK.GetSettings();
-                if (NKMeans::NeedsVectorSettingsAutoSelect(hnswSettings)) {
-                    NKMeans::AutoSelectVectorSettings(hnswSettings, topK.GetTargetVector());
+                auto requested = topK.GetSettings();
+                if (NKMeans::NeedsVectorSettingsAutoSelect(requested)) {
+                    NKMeans::AutoSelectVectorSettings(requested, topK.GetTargetVector());
                 }
-                if (useCachedHnswParameters && TableInfo.HnswSettings && TableInfo.HnswVectorColumnTag == vectorColumnTag && TableInfo.HnswSettings->metric() == hnswSettings.metric() && TableInfo.HnswSettings->vector_type() == hnswSettings.vector_type() && TableInfo.HnswSettings->vector_dimension() == hnswSettings.vector_dimension()) {
-                    hnswSettings = *TableInfo.HnswSettings;
+                TPathId selected;
+                Ydb::Table::VectorIndexSettings hnswSettings;
+                for (const auto& [id, metadata] : TableInfo.HnswIndexes) {
+                    if (topK.HasHnswIndexId() && id != TPathId::FromProto(topK.GetHnswIndexId())) {
+                        continue;
+                    }
+                    auto candidate = requested;
+                    if (!candidate.has_m() && metadata.Settings.has_m()) { candidate.set_m(metadata.Settings.m()); }
+                    if (!candidate.has_ef_construction() && metadata.Settings.has_ef_construction()) { candidate.set_ef_construction(metadata.Settings.ef_construction()); }
+                    if (metadata.VectorColumnTag != vectorColumnTag
+                            || !AreHnswIndexSettingsCompatible(metadata.Settings, candidate)) {
+                        continue;
+                    }
+                    if (selected) {
+                        selected = {}; // Ambiguous legacy request: keep the exact scan.
+                        break;
+                    }
+                    selected = id;
+                    hnswSettings = metadata.Settings;
+                    // Threshold overrides affect when to build, not graph compatibility.
+                    if (requested.has_min_rows()) { hnswSettings.set_min_rows(requested.min_rows()); }
+                    if (requested.has_delta_rows()) { hnswSettings.set_delta_rows(requested.delta_rows()); }
                 }
-                const bool canUseHnsw = CanUseHnsw(*Self, state);
-                if (!canUseHnsw && TableInfo.HnswSettings && AppData()->FeatureFlags.GetEnableHnswIndex()) {
-                    Self->RegisterHnswFallback(localTid, TDataShard::EHnswFallback::UnsupportedRead);
+                topState->HnswIndexId = selected;
+                const bool canUseHnsw = selected && CanUseHnsw(*Self, state, selected);
+                if (selected && !canUseHnsw) {
+                    Self->RegisterHnswFallback(localTid, TDataShard::EHnswFallback::UnsupportedRead, selected);
                 }
-                // Select a generation whose base and committed journal cover this read.
                 Self->PruneHnswIndexes();
                 if (canUseHnsw) {
-                    if (auto cached = Self->GetHnswIndex(localTid, vectorColumnTag,
-                                                         hnswSettings, useCachedHnswParameters, state.ReadVersion)) {
-                        Self->RegisterHnswCacheLookup(localTid, true);
-                        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                                    Self->TabletID() << " HNSW: cache hit for localTid=" << localTid
-                                                     << " size=" << cached->Size());
-                        topState->HnswIndex = std::move(cached);
-                    } else {
-                        Self->RegisterHnswCacheLookup(localTid, false);
-                    }
+                    topState->HnswIndex = Self->GetHnswIndex(localTid, vectorColumnTag,
+                        hnswSettings, false, state.ReadVersion, selected);
+                    Self->RegisterHnswCacheLookup(localTid, bool(topState->HnswIndex), selected);
                 }
                 if (canUseHnsw && !topState->HnswIndex) {
                     const auto buildVersion = Self->GetHnswBuildVersion();
-                    if (!Self->GetHnswIndex(localTid, vectorColumnTag, hnswSettings, useCachedHnswParameters) && buildVersion < Self->Pipeline.GetUnreadableEdge() && hnswSettings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT && Self->GetHnswCacheMemoryLimit() != 0 && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag, hnswSettings, buildVersion)) {
-                        Self->TrackHnswOpenTransactions(localTid, txc.DB);
-                        Self->StartHnswSnapshotScan(localTid, Self->GetUserTables().at(state.PathId.LocalPathId), buildVersion, txc);
+                    if (!Self->GetHnswIndex(localTid, vectorColumnTag, hnswSettings, false, TRowVersion::Max(), selected)
+                            && buildVersion < Self->Pipeline.GetUnreadableEdge()
+                            && hnswSettings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+                            && Self->GetHnswCacheMemoryLimit() != 0
+                            && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag, hnswSettings, buildVersion, selected)) {
+                        Self->TrackHnswOpenTransactions(localTid, txc.DB, selected);
+                        Self->StartHnswSnapshotScan(localTid, Self->GetUserTables().at(state.PathId.LocalPathId), buildVersion, txc, {}, selected);
                     }
                 }
             }

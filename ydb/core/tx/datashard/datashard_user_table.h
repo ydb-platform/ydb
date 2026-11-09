@@ -498,9 +498,6 @@ struct TUserTable : public TThrRefBase {
         ui64 SchemaVersion = 0;
     };
     TMap<TPathId, THnswIndexInfo> HnswIndexes;
-    // Compatibility view while the read/build paths migrate to index identity.
-    std::optional<Ydb::Table::VectorIndexSettings> HnswSettings;
-    ui32 HnswVectorColumnTag = 0;
     TMap<ui32, TStorageRoom::TPtr> Rooms;
     TMap<ui32, TUserFamily> Families;
     TMap<ui32, TUserColumn> Columns;

@@ -6343,23 +6343,22 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         auto baseSchema = schema;
         baseSchema.AddTableIndexes()->CopyFrom(index);
         TUserTable baseTable(1, baseSchema, 0);
-        UNIT_ASSERT(!baseTable.HnswSettings);
+        UNIT_ASSERT(baseTable.HnswIndexes.empty());
 
         description->SetEmbeddingColumnId(42);
         table.AddIndex(index);
-        UNIT_ASSERT(table.HnswSettings);
-        UNIT_ASSERT_VALUES_EQUAL(table.HnswVectorColumnTag, 42);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.begin()->second.VectorColumnTag, 42);
         table.GetSchema(schema);
         TUserTable restored(1, schema, 0);
-        UNIT_ASSERT(restored.HnswSettings);
-        UNIT_ASSERT_VALUES_EQUAL(restored.HnswVectorColumnTag, 42);
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswIndexes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswIndexes.begin()->second.VectorColumnTag, 42);
 
         restored.DropIndex(TPathId(1, 2));
-        UNIT_ASSERT(!restored.HnswSettings);
-        UNIT_ASSERT_VALUES_EQUAL(restored.HnswVectorColumnTag, 0);
+        UNIT_ASSERT(restored.HnswIndexes.empty());
         restored.GetSchema(schema);
         TUserTable dropped(1, schema, 0);
-        UNIT_ASSERT(!dropped.HnswSettings);
+        UNIT_ASSERT(dropped.HnswIndexes.empty());
     }
 
 
@@ -6486,7 +6485,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         bool cached = false;
         for (ui32 attempt = 0; attempt < 20 && !cached; ++attempt) {
             cached = read() == 1 && bool(shard->GetHnswIndex(tid, 2,
-                                                             *shard->GetUserTables().begin()->second->HnswSettings, false));
+                                                             shard->GetUserTables().begin()->second->HnswIndexes.begin()->second.Settings, false));
             runtime.SimulateSleep(TDuration::MilliSeconds(200));
         }
         UNIT_ASSERT_C(cached, "growth did not re-enable the HNSW build");
@@ -6748,7 +6747,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                 ResolveTablet(runtime, helper.Tables.at("hnsw-distinct").TabletId)));
             UNIT_ASSERT(shard);
             const auto& table = *shard->GetUserTables().begin()->second;
-            auto graph = shard->GetHnswIndex(table.LocalTid, 3, *table.HnswSettings, false);
+            auto graph = shard->GetHnswIndex(table.LocalTid, 3, table.HnswIndexes.begin()->second.Settings, false);
             UNIT_ASSERT(graph);
             UNIT_ASSERT_VALUES_EQUAL(graph->ChangeCount(), duplicateRows + 1);
         }
@@ -7407,13 +7406,13 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         runtime.SetObserverFunc(observer);
         UNIT_ASSERT(annotationsCleared);
         UNIT_ASSERT(!graph->CanRead(TRowVersion::Max()));
-        UNIT_ASSERT(!fixture.Shard()->GetUserTables().begin()->second->HnswSettings);
+        UNIT_ASSERT(fixture.Shard()->GetUserTables().begin()->second->HnswIndexes.empty());
         UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 2u);
         RebootTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId,
             fixture.Helper.Sender);
         fixture.Helper.Tables.at("hnsw-lifecycle").ClientId = {};
         UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 2u);
-        UNIT_ASSERT(!fixture.Shard()->GetUserTables().begin()->second->HnswSettings);
+        UNIT_ASSERT(fixture.Shard()->GetUserTables().begin()->second->HnswIndexes.empty());
         UNIT_ASSERT(!fixture.Index());
     }
 

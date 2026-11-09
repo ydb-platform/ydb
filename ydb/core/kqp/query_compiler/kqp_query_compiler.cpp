@@ -2682,6 +2682,8 @@ private:
             }
         }
         YQL_ENSURE(indexDesc);
+        vectorTopK.MutableHnswIndexId()->SetOwnerId(indexDesc->PathOwnerId);
+        vectorTopK.MutableHnswIndexId()->SetLocalId(indexDesc->LocalPathId);
 
         // Index settings
         auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
@@ -3064,6 +3066,8 @@ private:
                 }
             }
             YQL_ENSURE(indexDesc);
+            proto.MutableHnswIndexId()->SetOwnerId(indexDesc->PathOwnerId);
+            proto.MutableHnswIndexId()->SetLocalId(indexDesc->LocalPathId);
 
             // Index settings
             auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);

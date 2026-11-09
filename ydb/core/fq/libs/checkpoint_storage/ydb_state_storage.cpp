@@ -72,6 +72,13 @@ public:
                 Y_ENSURE(*LastVersion == version, "Version is different: " << *LastVersion << ", " << version);
             }
             LastVersion = version;
+            const ui64 runtimeVersion = update.MiniKqlProgram->RuntimeVersion;
+            if (!RuntimeVersion) {
+                RuntimeVersion = runtimeVersion;
+            } else if (*RuntimeVersion != runtimeVersion) {
+                // Unknown or mixed runtimes cannot establish a single known runtime.
+                RuntimeVersion = 0;
+            }
             TStringBuf buf(blob);
 
             while (!buf.empty()) {
@@ -138,7 +145,9 @@ public:
             }
         }
 
-        auto& stateData = state.MiniKqlProgram.ConstructInPlace().Data;
+        auto& program = state.MiniKqlProgram.ConstructInPlace();
+        program.RuntimeVersion = RuntimeVersion.GetOrElse(0);
+        auto& stateData = program.Data;
         stateData.Blob = result;
         Y_ENSURE(LastVersion, "LastVersion is empty");
         stateData.Version = *LastVersion;
@@ -183,6 +192,7 @@ private:
     std::list<NYql::NDq::TSourceState> Sources;
     std::list<NYql::NDq::TSinkState> Sinks;
     TMaybe<ui64> LastVersion;
+    TMaybe<ui64> RuntimeVersion;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

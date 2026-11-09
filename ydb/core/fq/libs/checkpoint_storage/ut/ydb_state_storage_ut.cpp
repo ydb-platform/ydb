@@ -174,6 +174,12 @@ public:
             [](const NYql::NDq::TSourceState& state1, const NYql::NDq::TSourceState& state2) {
                 UNIT_ASSERT_VALUES_EQUAL(state1.InputIndex, state2.InputIndex);
                 UNIT_ASSERT_VALUES_EQUAL(state1.Data.size(), state2.Data.size());
+                auto it = state2.Data.begin();
+                for (const auto& data : state1.Data) {
+                    UNIT_ASSERT_VALUES_EQUAL(data.Blob, it->Blob);
+                    UNIT_ASSERT_VALUES_EQUAL(data.Version, it->Version);
+                    ++it;
+                }
                 return true;
             }));
 
@@ -413,6 +419,81 @@ Y_UNIT_TEST_F(ShouldGetMultipleStates, TFixture)
     CheckEquals(state1, states2[1]);
     CheckEquals(state4, states2[2]);
     CheckEquals(state3, states2[3]);
+}
+
+// Regressions for runtime metadata lost while materializing stored program state.
+Y_UNIT_TEST_F(ShouldPreserveSnapshotRuntimeVersion, TFixture)
+{
+    auto state = MakeIncrementState({ { "key", "value" } }, {}, {});
+    state.MiniKqlProgram->RuntimeVersion = 100000;
+    state.MiniKqlProgram->Data.Version = 7;
+    state.Sources.push_back({ { { TString("source\0bytes", 12), 17 }, { "second-source", 18 } }, 3 });
+    state.Sinks.push_back({ { TString("sink\0bytes", 10), 23 }, 5 });
+    ShouldSaveGetStateImpl("ShouldPreserveSnapshotRuntimeVersion", state);
+}
+
+Y_UNIT_TEST_F(ShouldMaterializeRuntimeVersionsAcrossGenerations, TFixture)
+{
+    auto storage = GetStateStorage("ShouldMaterializeRuntimeVersionsAcrossGenerations");
+    struct TCase {
+        ui64 SnapshotRuntime;
+        ui64 FirstIncrementRuntime;
+        ui64 LastIncrementRuntime;
+        ui64 ExpectedRuntime;
+    };
+    // A mismatch must stay unknown even if the latest two states agree.
+    const TCase cases[] = {
+        { 100000, 100000, 100000, 100000 },
+        { 100000, 100001, 100001, 0 },
+        { 100000, 0, 100000, 0 },
+        { 0, 100000, 100000, 0 },
+        { 0, 0, 0, 0 },
+    };
+    std::vector<ui64> taskIds;
+    for (size_t i = 0; i < std::size(cases); ++i) {
+        const auto& test = cases[i];
+        const ui64 taskId = i + 1;
+        taskIds.push_back(taskId);
+        auto snapshot = MakeIncrementState({ { "keep", "old" }, { "delete", "obsolete" } }, {}, {});
+        auto first = MakeIncrementState({}, { { "keep", "new" }, { "add", "added" } }, { "delete" });
+        auto last = MakeIncrementState({}, { { "final", "last" } }, {});
+        snapshot.MiniKqlProgram->RuntimeVersion = test.SnapshotRuntime;
+        first.MiniKqlProgram->RuntimeVersion = test.FirstIncrementRuntime;
+        last.MiniKqlProgram->RuntimeVersion = test.LastIncrementRuntime;
+        for (auto* state : { &snapshot, &first, &last }) {
+            state->MiniKqlProgram->Data.Version = 7;
+        }
+        snapshot.Sources.push_back({ { { "old-source", 1 } }, 2 });
+        first.Sinks.push_back({ { "old-sink", 2 }, 3 });
+        last.Sources.push_back({ { { TString("source\0bytes", 12), 17 }, { "second-source", 18 } }, 3 });
+        last.Sinks.push_back({ { TString("sink\0bytes", 10), 23 }, 5 });
+        SaveState(storage, taskId, "graph1", CheckpointId1, snapshot);
+        SaveState(storage, taskId, "graph1", CheckpointId2, first);
+        SaveState(storage, taskId, "graph1", CheckpointId4, last);
+    }
+    auto [states, issues] = storage->GetState(taskIds, "graph1", CheckpointId4).GetValueSync();
+    UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+    UNIT_ASSERT_VALUES_EQUAL(states.size(), std::size(cases));
+    for (size_t i = 0; i < std::size(cases); ++i) {
+        auto expected = MakeIncrementState({ { "keep", "new" }, { "add", "added" }, { "final", "last" } }, {}, {});
+        expected.MiniKqlProgram->RuntimeVersion = cases[i].ExpectedRuntime;
+        expected.MiniKqlProgram->Data.Version = 7;
+        expected.Sources.push_back({ { { TString("source\0bytes", 12), 17 }, { "second-source", 18 } }, 3 });
+        expected.Sinks.push_back({ { TString("sink\0bytes", 10), 23 }, 5 });
+        CheckEquals(expected, states[i]);
+    }
+}
+
+Y_UNIT_TEST_F(ShouldKeepNoProgramStateReadBehavior, TFixture)
+{
+    auto storage = GetStateStorage("ShouldKeepNoProgramStateReadBehavior");
+    NYql::NDq::TComputeActorState state;
+    state.Sources.push_back({ { { "source-only", 11 } }, 2 });
+    SaveState(storage, 1, "graph1", CheckpointId1, state);
+    auto [states, issues] = storage->GetState({ 1 }, "graph1", CheckpointId1).GetValueSync();
+    // Materialization already requires a program Data.Version. Preserve that behavior.
+    UNIT_ASSERT(!issues.Empty());
+    UNIT_ASSERT(states.empty());
 }
 
 Y_UNIT_TEST_F(ShouldLoadLastSnapshot, TFixture)

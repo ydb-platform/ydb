@@ -430,6 +430,9 @@ public:
 
         Error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc, nullptr,
             /*dryRun=*/ static_cast<bool>(Response));
+        if (!Response && !Error) {
+            OnExecuted();
+        }
 
         return true;
     }
@@ -468,6 +471,10 @@ protected:
     // make the changes in the state; returns the number of bridged groups changed, throws TExError on failure
     virtual size_t DoStep(TConfigState& state) = 0;
 
+    // called when the changes are made in the state of the controller, so that the transactions executed after this
+    // one see them, even before they are committed (and not when they are validated only)
+    virtual void OnExecuted() {}
+
     // called when the changes are committed (and not when they are validated only)
     virtual void OnCommitted() {}
 };
@@ -499,10 +506,13 @@ private:
         return Added.size();
     }
 
-    void OnCommitted() override {
-        // groups created from now on get their parts in the pile right away
+    void OnExecuted() override {
+        // groups created from now on get their parts in the pile right away; this can't wait for the commit, as the
+        // transactions executed meanwhile would create groups the addition has already passed by
         Self->BridgePileAddedOperationId = OperationId;
+    }
 
+    void OnCommitted() override {
         // new parts are unsynced from the very beginning, they get synced when the pile rejoins
         for (const auto& [bridgeProxyGroupId, targetGroupId] : Added) {
             const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, bridgeProxyGroupId,

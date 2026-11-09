@@ -574,8 +574,9 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             TEvBlobStorage::TEvPut *put;
 
             // VDisk requests are sent only after the whole buffer is encrypted, so it is restarted as it is, with
-            // AlreadyEncrypted set, and the new request must not encrypt it again
-            Y_DEBUG_ABORT_UNLESS(item.AlreadyEncrypted);
+            // AlreadyEncrypted set, and the new request must not encrypt it again; groups without encryption never
+            // set the flag
+            Y_DEBUG_ABORT_UNLESS(item.AlreadyEncrypted || Info->GetEncryptionMode() == TBlobStorageGroupInfo::EEM_NONE);
 
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,

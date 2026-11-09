@@ -165,6 +165,18 @@ Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
         CheckType("CAST(1 AS Decimal(12, 2))", "Decimal(12,2)");
     }
 
+    Y_UNIT_TEST(DecimalConstructors) {
+        CheckType("Decimal('0.06', 12, 2) - Decimal('0.01', 12, 2)", "Decimal(12,2)");
+        for (const TString sql : {"Decimal('bad', 12, 2)", "Decimal('1', 0, 0)", "Decimal('1', 12, 13)"}) {
+            TFixture f;
+            f.Parse("SELECT " + sql + ";");
+            auto root = f.Lower();
+            UNIT_ASSERT(root);
+            UNIT_ASSERT_C(!InstantAnnotateTypes(root, f.Ctx, false, f.Types), sql);
+            UNIT_ASSERT_C(!f.Ctx.IssueManager.GetIssues().Empty(), sql);
+        }
+    }
+
     // Structured predicates must lower into callables the existing annotator accepts,
     // including CASE branch coercion and membership options.
     Y_UNIT_TEST(CaseBetweenAndIn) {

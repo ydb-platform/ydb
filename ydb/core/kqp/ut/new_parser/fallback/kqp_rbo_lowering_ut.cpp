@@ -172,7 +172,11 @@ Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
         auto root = f.Run("SELECT d.key FROM (SELECT key FROM t AS x(key, label, count)) AS d;");
         auto* read = static_cast<TOpRead*>(f.Find(*root, EOperator::Source).at(0));
         UNIT_ASSERT_VALUES_EQUAL(read->GetColumns().Size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(root->PlanProps.InfoUnitRegistry.Get(*read->GetColumns().begin()).GetColumnName(), "id");
+        TVector<TString> storedNames;
+        for (const auto id : read->GetColumns()) {
+            storedNames.push_back(root->PlanProps.InfoUnitRegistry.Get(id).GetColumnName());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(storedNames, (TVector<TString>{"a", "id", "value"}));
     }
 
     // Presentation ordering is separate from catalog order; DISTINCT must emit

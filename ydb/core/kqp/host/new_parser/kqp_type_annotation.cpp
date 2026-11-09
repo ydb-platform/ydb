@@ -363,7 +363,8 @@ private:
             }
             if (element.Kind == EGroupingKind::Rollup) {
                 const auto full = result.front(); result.clear();
-                for (size_t n = full.size() + 1; n-- > 0;) { result.emplace_back(full.begin(), full.begin() + n); }
+                // Match YqlGroupingSet's prefix order, starting with the grand total.
+                for (size_t n = 0; n <= full.size(); ++n) { result.emplace_back(full.begin(), full.begin() + n); }
             }
             return result;
         };
@@ -394,6 +395,17 @@ private:
                     Error(node.Range, "Invalid aggregate arguments");
                 }
                 const auto* argument = call.StarArgument ? nullptr : call.Arguments.front().Expression.get();
+                // SELECT, HAVING and ORDER BY can reference the same aggregate.
+                // Reuse its result so DISTINCT expansion does not add another
+                // branch for an already computed value.
+                for (const auto& aggregate : grouping.Aggregates) {
+                    if (aggregate.Function == function && aggregate.Distinct == (call.Quantifier == ESetQuantifier::Distinct)
+                        && ((!argument && !aggregate.Argument)
+                            || (argument && aggregate.Argument && SameGroup(*argument, *aggregate.Argument)))) {
+                        Result.Values[&node] = aggregate.Output;
+                        return false;
+                    }
+                }
                 TType type = argument ? Expression(*argument, input) : Ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
                 if (function == "count") { type = Ctx.MakeType<TDataExprType>(EDataSlot::Uint64); }
                 else if (function == "sum") {

@@ -328,17 +328,73 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         });
     }
 
+    Y_UNIT_TEST_F(NfsExplicitRootKeepsLegacyRequestSpelling, TExportFixture) {
+        const TString root = GetDatabase() + "/dir/";
+        Service<TExportImpl>().ExpectFsBasePath("/mnt/export").ExpectCommonSourcePrefix(root).ExpectItem(GetDatabase() + "/dir/keep", "mapped");
+        RunCli({
+            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "nfs", "--fs-path", "/mnt/export", "--root-path", root, "--item",
+            "src=keep,dst=mapped",
+        });
+    }
+
     Y_UNIT_TEST_F(NfsExclusionsAndRetryPreserveTableMappings, TExportFixture) {
-        Service<TSchemeImpl>()
-            .ExpectListDirectory(GetDatabase() + "/dir")
-            .ExpectListDirectoryCalls(GetDatabase() + "/dir", 2)
-            .ExpectChild(GetDatabase() + "/dir", "keep", Ydb::Scheme::Entry::TABLE)
-            .ExpectChild(GetDatabase() + "/dir", "skip", Ydb::Scheme::Entry::TABLE);
-        Service<TExportImpl>().ExpectFsBasePath("/mnt/export").ExpectItem(GetDatabase() + "/dir/keep", "mapped/keep").ReturnBadRequestOnce(2);
+        for (const bool retry : { false, true }) {
+            Service<TSchemeImpl>()
+                .ExpectListDirectory(GetDatabase() + "/dir")
+                .ExpectListDirectoryCalls(GetDatabase() + "/dir", retry ? 2 : 1)
+                .ExpectChild(GetDatabase() + "/dir", "keep", Ydb::Scheme::Entry::TABLE)
+                .ExpectChild(GetDatabase() + "/dir", "skip", Ydb::Scheme::Entry::TABLE);
+            auto& service = Service<TExportImpl>();
+            service.ExpectFsBasePath("/mnt/export").ExpectItem(GetDatabase() + "/dir/keep", "mapped/keep");
+            if (retry) {
+                service.ReturnBadRequestOnce(2);
+            }
+
+            RunCli({
+                "-e", GetEndpoint(), "-d", GetDatabase(), "export", "nfs", "--fs-path", "/mnt/export", "--item", "src=dir,dst=mapped",
+                "--exclude", "skip$",
+            });
+        }
+    }
+
+    Y_UNIT_TEST_F(NfsImplicitItemsExpandWhenExclusionsAreProvided, TExportFixture) {
+        for (const bool hasRoot : { false, true }) {
+            const TString root = hasRoot ? GetDatabase() + "/dir" : GetDatabase();
+            Service<TSchemeImpl>()
+                .ExpectListDirectory(root)
+                .ExpectListDirectoryCalls(root, 1)
+                .ExpectChild(root, "keep", Ydb::Scheme::Entry::TABLE)
+                .ExpectChild(root, "skip", Ydb::Scheme::Entry::TABLE);
+            Service<TExportImpl>().ExpectFsBasePath("/mnt/export").ExpectCommonSourcePrefix(hasRoot ? root : "").ExpectItem(root + "/keep", "");
+
+            TList<TString> args = {
+                "-e",
+                GetEndpoint(),
+                "-d",
+                GetDatabase(),
+                "export",
+                "nfs",
+                "--fs-path",
+                "/mnt/export",
+                "--exclude",
+                "skip$",
+            };
+            if (hasRoot) {
+                args.insert(args.end(), { "--root-path", root });
+            }
+            RunCli(args);
+        }
+    }
+
+    Y_UNIT_TEST_F(NfsExcludeAllDoesNotSendAnEmptyExport, TExportFixture) {
+        Service<TSchemeImpl>().ExpectListDirectory(GetDatabase() + "/dir").ExpectChild(GetDatabase() + "/dir", "skip",
+            Ydb::Scheme::Entry::TABLE);
+        Service<TExportImpl>().ExpectNoExportCall();
+        ExpectFail();
 
         RunCli({
-            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "nfs", "--fs-path", "/mnt/export", "--item", "src=dir,dst=mapped", "--exclude",
-            "skip$",
+            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "nfs", "--fs-path", "/mnt/export", "--root-path", GetDatabase() + "/dir",
+            "--exclude", "skip$",
         });
     }
 
@@ -1026,6 +1082,17 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 "--destination-prefix", "common", "--include", "source", "--exclude", pattern,
             });
         }
+    }
+
+    Y_UNIT_TEST_F(EmptyExplicitExternalSelectionDoesNotSendAnEmptyExport, TExportFixture) {
+        Service<TSchemeImpl>().ExpectListDirectory(GetDatabase() + "/empty").ExpectListDirectoryCalls(GetDatabase() + "/empty", 2);
+        Service<TExportImpl>().ExpectNoExportCall();
+        ExpectFail();
+
+        RunCli({
+            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3", "--include-external", "--bucket", TEST_BUCKET, "--s3-endpoint",
+            TEST_S3_ENDPOINT, "--access-key", "test-key", "--secret-key", "test-access-key", "--include", "empty",
+        });
     }
 
     Y_UNIT_TEST_F(ImplicitExternalDestinationDoesNotRepeatCommonPrefix, TExportFixture) {

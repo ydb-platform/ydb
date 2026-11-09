@@ -9507,6 +9507,34 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
+    void CheckRestoredExternalObjects(TTestBasicRuntime & runtime) {
+        const auto sourceResult = DescribePath(runtime, "/MyRoot/DataSource");
+        TestDescribeResult(sourceResult, { NLs::Finished, NLs::IsExternalDataSource });
+        UNIT_ASSERT(sourceResult.GetPathDescription().HasExternalDataSourceDescription());
+        const auto& source = sourceResult.GetPathDescription().GetExternalDataSourceDescription();
+        UNIT_ASSERT_VALUES_EQUAL(source.GetSourceType(), "ObjectStorage");
+        UNIT_ASSERT_VALUES_EQUAL(source.GetLocation(), "https://s3.cloud.net/bucket");
+        UNIT_ASSERT(source.GetAuth().HasAws());
+        UNIT_ASSERT_VALUES_EQUAL(source.GetAuth().GetAws().GetAwsAccessKeyIdSecretName(), "id_secret");
+        UNIT_ASSERT_VALUES_EQUAL(source.GetAuth().GetAws().GetAwsSecretAccessKeySecretName(), "access_secret");
+        UNIT_ASSERT_VALUES_EQUAL(source.GetAuth().GetAws().GetAwsRegion(), "ru-central-1");
+
+        const auto tableResult = DescribePath(runtime, "/MyRoot/ExternalTable");
+        TestDescribeResult(tableResult, { NLs::Finished, NLs::IsExternalTable });
+        UNIT_ASSERT(tableResult.GetPathDescription().HasExternalTableDescription());
+        const auto& table = tableResult.GetPathDescription().GetExternalTableDescription();
+        UNIT_ASSERT_VALUES_EQUAL(table.GetDataSourcePath(), "/MyRoot/DataSource");
+        UNIT_ASSERT_VALUES_EQUAL(table.GetLocation(), "bucket");
+        UNIT_ASSERT_VALUES_EQUAL(table.GetColumns().size(), 3);
+        THashSet<TString> columnNames;
+        for (const auto& column : table.GetColumns()) {
+            columnNames.insert(column.GetName());
+        }
+        UNIT_ASSERT(columnNames.contains("key"));
+        UNIT_ASSERT(columnNames.contains("value1"));
+        UNIT_ASSERT(columnNames.contains("value2"));
+    }
+
     Y_UNIT_TEST_FLAG(ExternalDataSourceImport, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         auto options = TTestEnvOptions()
@@ -9722,10 +9750,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), {
-            NLs::Finished,
-            NLs::IsExternalTable,
-        });
+        CheckRestoredExternalObjects(runtime);
     }
 
     Y_UNIT_TEST_FLAG(ExternalTableImportToAnotherDatabase, EnableDataShardDirectPartImport) {
@@ -9800,10 +9825,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), {
-            NLs::Finished,
-            NLs::IsExternalTable,
-        });
+        CheckRestoredExternalObjects(runtime);
     }
 
     Y_UNIT_TEST_FLAG(ExternalTableExportImport, EnableDataShardDirectPartImport) {
@@ -9893,10 +9915,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), {
-            NLs::Finished,
-            NLs::IsExternalTable,
-        });
+        CheckRestoredExternalObjects(runtime);
     }
 
     Y_UNIT_TEST_FLAG(DisableIcbFlags, EnableDataShardDirectPartImport) {

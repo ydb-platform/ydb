@@ -267,7 +267,7 @@ bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId, const bool i
 THashMap<NHdrf::TFullPoolId, double> TComputeScheduler::GetLeafPoolFairShares() const {
     THashMap<NHdrf::TFullPoolId, double> result;
     auto snapshot = Root->GetSnapshot();
-    if (!snapshot) {
+    if (!snapshot || !snapshot->TotalCpuLimit) {
         return result;
     }
     const auto totalCpu = snapshot->TotalCpuLimit;

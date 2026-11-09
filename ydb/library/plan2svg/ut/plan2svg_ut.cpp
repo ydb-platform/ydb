@@ -1446,7 +1446,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT_C(pending.Contains("data-cs-max-pending-operations='3'"), pending);
         UNIT_ASSERT_C(CsRow(pending, "Filter", "", "Filter").Contains("data-cs-calls='1'"), pending);
         UNIT_ASSERT_C(CsRow(pending, "Filter", "", "Filter").Contains("data-cs-partial='true'"), pending);
-        UNIT_ASSERT_C(pending.Contains("cs-warning'><i></i>Observed"), pending);
+        UNIT_ASSERT_C(pending.Contains("Observed") && pending.Contains("Incomplete snapshots"), pending);
         auto finished = RenderScans(R"([
             {"StatsScanId":"a","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,"Truncated":false,"PendingOperations":0,"Steps":[
                 {"StepId":1,"StepKind":"Filter","MetaStep":"Filter","OwnedExecutionDuration":1}]},
@@ -1541,6 +1541,65 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT_C(CsRow(svg, "Filter", "Assemble", "Decode").Contains("data-cs-active-sum='8'"), svg);
     }
 
+    Y_UNIT_TEST(MetaStatsMinUsesActiveTabletTotalsRatherThanIndividualCalls) {
+        const ui64 totals[] = {30, 36, 40, 47};
+        TStringBuilder scans;
+        scans << '[';
+        for (ui32 tablet = 0; tablet < 16; ++tablet) {
+            if (tablet) {
+                scans << ',';
+            }
+            scans << "{\"StatsScanId\":\"scan_" << tablet << "\",\"TabletId\":\"" << tablet + 1
+                << "\",\"ReaderKind\":\"TRIVIAL\",\"Finished\":true,\"Truncated\":false,\"Steps\":[";
+            if (tablet < 4) {
+                scans << "{\"StepId\":1,\"StepKind\":\"Decode\",\"MetaStep\":\"Filter\",\"OwnedExecutionDuration\":5},"
+                    << "{\"StepId\":2,\"StepKind\":\"Decode\",\"MetaStep\":\"Filter\",\"OwnedExecutionDuration\":"
+                    << totals[tablet] - 5 << '}';
+            } else {
+                scans << "{\"StepId\":1,\"StepKind\":\"ReaderInit\",\"MetaStep\":\"Preparation\",\"OwnedExecutionDuration\":0}";
+            }
+            scans << "]}";
+        }
+        scans << ']';
+        const auto svg = RenderScans(scans);
+        const auto row = CsRow(svg, "Filter", "", "Decode");
+        UNIT_ASSERT_C(row.Contains("data-cs-active-shards='4'") && row.Contains("data-cs-received-shards='16'"), row);
+        UNIT_ASSERT_C(row.Contains("data-cs-calls='8'") && row.Contains("data-cs-active-known-shards='4'"), row);
+        UNIT_ASSERT_C(row.Contains("data-cs-active-sum='153'") && row.Contains("data-cs-active-min='30'"), row);
+        UNIT_ASSERT_C(row.Contains("data-cs-active-mean='38.25'") && row.Contains("data-cs-active-max='47'"), row);
+        UNIT_ASSERT_C(svg.Contains(">Min<") && svg.Contains(">Avg<") && !svg.Contains(">Mean<"), svg);
+    }
+
+    Y_UNIT_TEST(MetaStatsMinExcludesUnknownTotalsAndPreservesMeasuredZero) {
+        const auto partial = RenderScans(R"([
+            {"StatsScanId":"a","TabletId":"10","ReaderKind":"TRIVIAL","Finished":true,"Truncated":false,"Steps":[
+                {"StepId":1,"StepKind":"Decode","MetaStep":"Filter","OwnedExecutionDuration":4,"IntegralWaitDuration":3},
+                {"StepId":2,"StepKind":"Decode","MetaStep":"Filter","OwnedExecutionDuration":6,"IntegralWaitDuration":7}]},
+            {"StatsScanId":"b","TabletId":"20","ReaderKind":"TRIVIAL","Finished":true,"Truncated":false,"Steps":[
+                {"StepId":1,"StepKind":"Decode","MetaStep":"Filter","OwnedExecutionDuration":1},
+                {"StepId":2,"StepKind":"Decode","MetaStep":"Filter"}]},
+            {"StatsScanId":"c","TabletId":"30","ReaderKind":"TRIVIAL","Finished":true,"Truncated":false,"Steps":[
+                {"StepId":1,"StepKind":"Decode","MetaStep":"Filter","Outcome":"skipped","OwnedExecutionDuration":0,"IntegralWaitDuration":0}]},
+            {"StatsScanId":"d","TabletId":"40","ReaderKind":"TRIVIAL","Finished":true,"Truncated":false,"Steps":[]}
+        ])");
+        const auto row = CsRow(partial, "Filter", "", "Decode");
+        UNIT_ASSERT_C(row.Contains("data-cs-active-shards='2'") && row.Contains("data-cs-active-known-shards='1'"), row);
+        UNIT_ASSERT_C(row.Contains("data-cs-active-sum='11'") && row.Contains("data-cs-active-min='10'"), row);
+        UNIT_ASSERT_C(row.Contains("data-cs-active-mean='10'") && row.Contains("data-cs-active-max='10'"), row);
+        UNIT_ASSERT_C(row.Contains("data-cs-wait-min='10'") && row.Contains("data-cs-wait-known-shards='1'"), row);
+        const auto zero = RenderScans(R"([
+            {"StatsScanId":"a","TabletId":"10","ReaderKind":"TRIVIAL","Finished":true,"Truncated":false,"Steps":[
+                {"StepId":1,"StepKind":"Decode","MetaStep":"Filter","OwnedExecutionDuration":4,"IntegralWaitDuration":3},
+                {"StepId":2,"StepKind":"Decode","MetaStep":"Filter","OwnedExecutionDuration":6,"IntegralWaitDuration":7}]},
+            {"StatsScanId":"b","TabletId":"20","ReaderKind":"TRIVIAL","Finished":true,"Truncated":false,"Steps":[
+                {"StepId":1,"StepKind":"Decode","MetaStep":"Filter","OwnedExecutionDuration":0,"IntegralWaitDuration":0}]}
+        ])");
+        const auto zeroRow = CsRow(zero, "Filter", "", "Decode");
+        UNIT_ASSERT_C(zeroRow.Contains("data-cs-active-known-shards='2'") && zeroRow.Contains("data-cs-active-min='0'"), zeroRow);
+        UNIT_ASSERT_C(zeroRow.Contains("data-cs-active-mean='5'") && zeroRow.Contains("data-cs-active-max='10'"), zeroRow);
+        UNIT_ASSERT_C(zeroRow.Contains("data-cs-wait-min='0'") && zeroRow.Contains("data-cs-wait-known-shards='2'"), zeroRow);
+    }
+
     Y_UNIT_TEST(MetaStatsMissingSkippedAndPartialAreDifferent) {
         auto svg = RenderScans(R"([
             {"StatsScanId":"a","TabletId":"10","ReaderKind":"TRIVIAL","Finished":true,"Truncated":false,"Steps":[
@@ -1556,7 +1615,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT_C(row.Contains("data-cs-active-known-shards='1'"), row);
         UNIT_ASSERT_C(row.Contains("data-cs-active-eligible-shards='2'"), row);
         UNIT_ASSERT_C(row.Contains("data-cs-partial='true'"), row);
-        UNIT_ASSERT_C(svg.Contains("cs-warning'><i></i>Observed"), svg);
+        UNIT_ASSERT_C(svg.Contains("Observed") && svg.Contains("Incomplete snapshots"), svg);
         UNIT_ASSERT_C(row.Contains("data-cs-skipped='1'"), row);
         UNIT_ASSERT_C(row.Contains("data-cs-failed='0'") && row.Contains("data-cs-cancelled='0'"), row);
         UNIT_ASSERT_C(svg.Contains("Skipped"), svg);
@@ -1697,7 +1756,8 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         ])");
         UNIT_ASSERT_C(headerOnly.Contains("data-columnshard='read'"), headerOnly);
         UNIT_ASSERT_C(headerOnly.Contains("data-cs-attempts='0'"), headerOnly);
-        UNIT_ASSERT_C(headerOnly.Contains("class='cs-unknown'>Not recorded"), headerOnly);
+        UNIT_ASSERT_C(headerOnly.Contains("Runtime not observed") && headerOnly.Contains("<div class='cs-stat-summary'>"), headerOnly);
+        UNIT_ASSERT_C(!headerOnly.Contains("<div class='cs-stat cs-stat-head'>"), headerOnly);
         UNIT_ASSERT_C(CsRow(headerOnly, "", "", "", "UNKNOWN").Contains("data-cs-calls='0'"), headerOnly);
         UNIT_ASSERT_C(headerOnly.Contains("data-cs-received-shards='0'"), headerOnly);
         UNIT_ASSERT_C(headerOnly.Contains("data-cs-participating-shards='2'"), headerOnly);
@@ -1798,7 +1858,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT_C(!svg.Contains("column_c < 300"), svg);
     }
 
-    Y_UNIT_TEST(MetaStatsSemanticVariantsStayCompleteInScrollableDetails) {
+    Y_UNIT_TEST(MetaStatsSemanticVariantsStayCompleteWithoutInnerScrolling) {
         TStringBuilder scans;
         scans << R"([{"StatsScanId":"a","TabletId":"10","ReaderKind":"TRIVIAL","Finished":true,"Steps":[)";
         for (ui32 i = 0; i < 70; ++i) {
@@ -1809,7 +1869,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         const auto svg = RenderScans(scans);
         const auto row = CsRow(svg, "Filter", "", "Filter");
         UNIT_ASSERT_C(row.Contains("data-cs-calls='70'") && row.Contains("data-cs-active-sum='70'"), row);
-        UNIT_ASSERT_C(svg.Contains("class='cs-ui cs-details'") && svg.Contains("overflow:auto"), svg);
+        UNIT_ASSERT_C(svg.Contains("class='cs-ui cs-details'") && !svg.Contains("overflow:auto"), svg);
         UNIT_ASSERT_C(svg.Contains(">Filter</text>") && !svg.Contains(">Filter(column_"), svg);
         UNIT_ASSERT_C(svg.Contains("column_0 &gt; 10"), svg);
         UNIT_ASSERT_C(svg.Contains("column_63"), svg);
@@ -1920,7 +1980,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT_C(svg.Contains(">Filter</text>") && !svg.Contains(">Filter (колонка"), svg);
         UNIT_ASSERT_C(svg.Contains("class='cs-ui cs-details'") && svg.Contains("<foreignObject"), svg);
         UNIT_ASSERT_C(svg.Contains("<div class='cs-expression'>колонка_с_длинным_именем &gt; 10 AND another_very_long_column_name &lt; 300 AND final_column = 42</div>"), svg);
-        UNIT_ASSERT_C(svg.Contains("overflow:auto"), svg);
+        UNIT_ASSERT_C(!svg.Contains("overflow:auto") && svg.Contains("overflow-wrap:anywhere"), svg);
         UNIT_ASSERT_C(CsRow(svg, "Filter", "", "Filter").Contains("data-cs-active-sum='1'"), svg);
         AssertWellFormed(svg, "long UTF-8 predicates remain complete in structured details");
     }
@@ -1957,7 +2017,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
     Y_UNIT_TEST(GroupsPreserveZerosCoverageAndIndependentExtrema) {
         auto svg = RenderPlan("columnshard_steps", false);
         AssertWellFormed(svg, "ColumnShard fixture");
-        UNIT_ASSERT(svg.Contains("Active elapsed: coverage 2/2, sum 20us, min 0.00s, max 20us, mean 10us, argmin StepId 2, argmax StepId 3"));
+        UNIT_ASSERT(svg.Contains("Active elapsed: coverage 2/2, sum 20us, min 0.00s, max 20us, avg 10us, argmin StepId 2, argmax StepId 3"));
         UNIT_ASSERT(svg.Contains("Wait: coverage 1/2, sum 5us"));
         UNIT_ASSERT(svg.Contains("Read bytes (this boundary only): coverage 1/2, sum 0B"));
         UNIT_ASSERT(svg.Contains("Max active example:"));

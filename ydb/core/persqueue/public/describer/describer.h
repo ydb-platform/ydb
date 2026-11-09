@@ -54,7 +54,6 @@ struct TTopicInfo {
 
     ui64 CreateStep = 0;
     bool IsServerless = false;
-    // Set from the CDC stream attribute "__async_replication", not from streamImpl.
     bool IsAsyncReplication = false;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;

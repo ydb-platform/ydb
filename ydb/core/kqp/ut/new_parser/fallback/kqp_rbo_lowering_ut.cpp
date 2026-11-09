@@ -23,6 +23,7 @@ struct TFixture : NTests::TIdTestContext {
         auto table = std::make_shared<NNewYql::TTableMetadata>();
         table->Path = "/Root/t";
         table->Columns = {{"id", 1, "Int64", true}, {"value", 2, "String", false}, {"a", 3, "Int32", true}};
+        table->KeyColumns = {"id"};
         // RBO type recomputation consults the provider catalog independently of
         // the frontend snapshot. Register the same mock schema in both places.
         auto& description = Tables->GetOrAddTable(KqpCtx.Cluster, "/Root", table->Path);
@@ -45,14 +46,17 @@ struct TFixture : NTests::TIdTestContext {
     // Keep this separate from Run so a test can lower the same AST/annotation
     // result twice and verify that importing a plan did not consume or mutate it.
     TIntrusivePtr<TOpRoot> Lower(bool orderedColumns = false) {
-        const auto& query = *std::get<NNewYql::TQueryStatement>(Ast->Statements.back().Value).Query;
-        auto root = NNewYql::LowerToRbo(query, *Ast, *Names, *Annotations, ExprCtx,
-            [&](const NNewYql::TTableMetadata& metadata) {
+        const auto lookup = [&](const NNewYql::TTableMetadata& metadata) {
                 const auto table = NNodes::Build<NNodes::TKqpTable>(ExprCtx, Pos)
                     .Path().Build(metadata.Path).PathId().Build("1:1")
                     .SysView().Build("").Version().Build("1").Done().Ptr();
                 return NNewYql::TRboTable{table, NYql::EStorageType::RowStorage};
-            }, orderedColumns);
+            };
+        const auto& statement = Ast->Statements.back().Value;
+        const auto* write = std::get_if<NNewYql::TWriteStatement>(&statement);
+        auto root = write ? NNewYql::LowerWriteToRbo(*write, *Ast, *Names, *Annotations, ExprCtx, lookup)
+            : NNewYql::LowerToRbo(*std::get<NNewYql::TQueryStatement>(statement).Query,
+                *Ast, *Names, *Annotations, ExprCtx, lookup, orderedColumns);
         NTests::AssertIdInvariants(*root, root->PlanProps);
         for (const auto& item : IterateSubtreeWithSubplans(root.Get(), root->PlanProps)) {
             for (const auto& expression : item.Current->GetExpressions()) {
@@ -75,6 +79,39 @@ struct TFixture : NTests::TIdTestContext {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
+    Y_UNIT_TEST(DeclarationsAndParameterTablesLowerDirectly) {
+        for (const TString sql : {
+            "DECLARE $x AS Decimal(22,9)?; DECLARE $s AS String; SELECT $x AS x, $s AS s;",
+            "PRAGMA YqlSelectAllowUnnamedGroupByExpr; DECLARE $x AS Int64; SELECT $x AS k, SUM(id + $x) FROM t GROUP BY $x;",
+            "DECLARE $items AS List<Struct<>>; SELECT COUNT(*) FROM AS_TABLE($items);",
+            "SELECT CAST(RandomUuid(id) AS Utf8) AS uuid FROM t;",
+            "SELECT l.id, r.id, s.id FROM t AS l LEFT JOIN t AS r ON CAST(l.a AS Int64) = r.id "
+                "LEFT JOIN t AS s ON CAST(l.a AS Int64) = s.id;",
+            "SELECT MIN_BY(value, id), MAX_BY(id, value) FROM t;",
+            "SELECT a, MAX_BY(value, id), MIN_BY(value, value) FROM t GROUP BY a;",
+            "SELECT MAX_BY(id, NULL), MIN_BY(NULL, id) FROM t;",
+            "SELECT a, MIN_BY(value, id) FROM t GROUP BY ROLLUP(a);",
+            "DECLARE $items AS List<Struct<'id':Int64,'value':String?,'a':Int32>>; "
+                "SELECT r.id, r.value FROM AS_TABLE($items) AS r WHERE r.a > 0;",
+            "DECLARE $items AS List<Struct<'id':Int64,'value':String?,'a':Int32>>; "
+                "INSERT INTO t SELECT * FROM AS_TABLE($items);",
+            "DECLARE $id AS Int64; UPDATE t SET value = 'changed', a = a + 1 WHERE id = $id;",
+            "UPDATE t ON SELECT id, a + 1 AS a FROM t WHERE id > 0;",
+            "DECLARE $id AS Int64; DELETE FROM t WHERE id = $id;"}) {
+            TFixture f;
+            auto root = f.Run(sql);
+            auto annotator = CreateTypeAnnotationTransformer(CreateExtCallableTypeAnnotationTransformer(f.TypeCtx, true), f.TypeCtx);
+            TRBOContext ctx(f.KqpCtx, f.ExprCtx, f.TypeCtx, *annotator, *f.FuncRegistry);
+            try {
+                UNIT_ASSERT_C(root->ComputeTypes(ctx) == IGraphTransformer::TStatus::Ok,
+                    sql << ": " << f.ExprCtx.IssueManager.GetIssues().ToString());
+            } catch (const std::exception& e) {
+                UNIT_FAIL(sql << ": " << e.what() << ": " << f.ExprCtx.IssueManager.GetIssues().ToString());
+            }
+            f.Lower();
+        }
+    }
+
     Y_UNIT_TEST(SetProjectionOrderSurvivesTypeRecomputation) {
         for (const TString op : {"UNION ALL", "UNION", "INTERSECT", "EXCEPT"}) {
             TFixture f;

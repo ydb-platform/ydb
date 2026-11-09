@@ -19,6 +19,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
@@ -358,9 +359,23 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
 
                 // The full physical-stage peephole performs this pruning later.
                 const bool pruneUnusedOutputs = !rboCtx.KqpCtx.Config->GetEnableNewRBOPhysicalStagePeephole();
+                bool useBlocks = rboCtx.KqpCtx.Config->GetDqHashOperatorsUseBlocks();
+                const auto checkBlockType = [&](const IOperator& producer, TInfoUnitId iu) {
+                    if (useBlocks) {
+                        useBlocks = IsSupportedAsBlockType(op->Pos, *producer.GetIUType(iu, ctx), ctx, rboCtx.TypeCtx);
+                    }
+                };
+                // MIN_BY/MAX_BY retain arbitrary payloads, including lists.
+                // Use the row combiner when a key, state or result cannot be
+                // represented by the block combiner's Arrow buffers.
+                for (const auto iu : aggregate.GetKeyColumns().Items()) { checkBlockType(*aggregate.GetInput(), iu); }
+                for (const auto& [output, traits] : aggregate.GetAggregationTraits().Items()) {
+                    checkBlockType(*aggregate.GetInput(), traits.Input);
+                    checkBlockType(aggregate, output);
+                }
                 currentStageBody = NPhysicalConvertionUtils::TransformStageOutput(currentStageBody, [&](const NPhysicalConvertionUtils::TStageBody& body) {
                     return TPhysicalAggregationBuilder(aggregate, ctx, op->Pos, names, pruneUnusedOutputs,
-                        rboCtx.KqpCtx.Config->GetDqHashOperatorsUseBlocks()).BuildPhysicalOp(body, memLimit);
+                        useBlocks).BuildPhysicalOp(body, memLimit);
                 }, GetReplicateOutputIndex(aggregate), ctx);
 
                 stageBodies[opStageId] = currentStageBody;

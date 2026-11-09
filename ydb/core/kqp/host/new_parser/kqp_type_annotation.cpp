@@ -86,6 +86,7 @@ public:
         TTypeAnnotationContext& types, const TAstTypeAnnotationSettings& settings)
         : Profile(settings.CompileTrace), Script(script), Names(names), Ctx(ctx), Types(types), Settings(settings)
     {
+        Parameters = settings.Parameters;
         Result.Columns.resize(names.Columns.size());
         for (TColumnId id = 0; id < names.Columns.size(); ++id) {
             if (names.Columns[id].Source) { SourceColumns[names.Columns[id].Source].push_back(id); }
@@ -101,6 +102,13 @@ public:
                 // types at their uses. Query producers must establish column
                 // types before any named-source consumer follows their IDs.
                 if (const auto* query = Names.NamedQueries.FindPtr(&binding->Name)) { Query(**query); }
+            } else if (const auto* declaration = std::get_if<TDeclareStatement>(&statement.Value)) {
+                auto type = LowerType(declaration->Type, Script, Ctx, Settings.Expressions);
+                if (!type) { throw TAnnotationError{}; }
+                Annotate(type, statement.Range);
+                Parameters[Names.DeclarationNames.at(declaration)] = type->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            } else if (const auto* write = std::get_if<TWriteStatement>(&statement.Value)) {
+                Write(*write);
             } else {
                 const auto& pragma = std::get<TPragmaStatement>(statement.Value);
                 // This setting affects the optimizer only. Resolution decoded
@@ -253,8 +261,10 @@ private:
             }
             return {};
         };
-        for (const auto& [name, type] : Settings.Parameters) {
-            bindings.Parameters[name] = Call(pos, "Parameter", {Ctx.NewAtom(pos, name), ExpandType(pos, *type, Ctx)});
+        for (const auto& [name, type] : Parameters) {
+            auto& parameter = ParameterNodes[name];
+            if (!parameter) { parameter = Call(pos, "Parameter", {Ctx.NewAtom(pos, name), ExpandType(pos, *type, Ctx)}); }
+            bindings.Parameters[name] = parameter;
         }
         TNode body;
         if (const auto* star = Names.Stars.FindPtr(&expression)) {
@@ -333,6 +343,8 @@ private:
         if (function == "sum" || function == "min" || function == "max" || function == "avg"
             || function == "count" || function == "some") { return function; }
         if (function == "stddev_samp" || function == "stddev_sample") { return "variance_1_1"; }
+        if (function == "min_by" || function == "minby") { return "min_by"; }
+        if (function == "max_by" || function == "maxby") { return "max_by"; }
         return {};
     }
 
@@ -346,6 +358,10 @@ private:
             for (TColumnId id = 0; id < Names.Columns.size(); ++id) {
                 GroupBindings.Columns[id] = Ctx.NewAtom(Pos(expression.Range), ToString(id));
             }
+        }
+        for (const auto& [name, type] : Parameters) {
+            Y_UNUSED(type);
+            GroupBindings.Parameters[name] = Ctx.NewAtom(Pos(expression.Range), name);
         }
         auto lowered = LowerExpression(expression, Script, GroupBindings, Ctx, Settings.Expressions);
         if (!lowered) { throw TAnnotationError{}; }
@@ -485,16 +501,22 @@ private:
                 if (Result.Values.contains(&node)) { return false; }
                 const auto& call = std::get<TCall>(node.Value);
                 if (call.Filter || call.NullTreatment != ENullTreatment::Default) { Unsupported(node.Range, "aggregate FILTER/null treatment"); }
-                if ((call.StarArgument && function != "count") || (!call.StarArgument && call.Arguments.size() != 1)
+                const bool by = function == "min_by" || function == "max_by";
+                if (by && (call.Arguments.size() == 3 || call.Quantifier == ESetQuantifier::Distinct)) {
+                    Unsupported(node.Range, "MIN_BY/MAX_BY with limit or DISTINCT");
+                }
+                if ((call.StarArgument && function != "count") || (!call.StarArgument && call.Arguments.size() != (by ? 2 : 1))
                     || (call.StarArgument && call.Quantifier == ESetQuantifier::Distinct)) {
                     Error(node.Range, "Invalid aggregate arguments");
                 }
                 const auto* argument = call.StarArgument ? nullptr : call.Arguments.front().Expression.get();
+                const auto* key = by ? call.Arguments[1].Expression.get() : nullptr;
                 // SELECT, HAVING and ORDER BY can reference the same aggregate.
                 // Reuse its result so DISTINCT expansion does not add another
                 // branch for an already computed value.
                 for (const auto& aggregate : grouping.Aggregates) {
                     if (aggregate.Function == function && aggregate.Distinct == (call.Quantifier == ESetQuantifier::Distinct)
+                        && ((!key && !aggregate.Key) || (key && aggregate.Key && SameGroup(*key, *aggregate.Key)))
                         && ((!argument && !aggregate.Argument)
                             || (argument && aggregate.Argument && SameGroup(*argument, *aggregate.Argument)))) {
                         Result.Values[&node] = aggregate.Output;
@@ -502,7 +524,14 @@ private:
                     }
                 }
                 TType type = argument ? Expression(*argument, input) : Ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+                bool optionalState = scalar;
                 if (function == "count") { type = Ctx.MakeType<TDataExprType>(EDataSlot::Uint64); }
+                else if (by) {
+                    const auto keyType = Expression(*key, input);
+                    if (!EnsureComparableType(Pos(node.Range), *keyType, Ctx)) { throw TAnnotationError{}; }
+                    optionalState |= keyType->IsOptionalOrNull();
+                    if (optionalState) { type = Optional(type); }
+                }
                 else if (function == "sum") {
                     if (!GetSumResultType(Pos(node.Range), *type, type, Ctx)) { throw TAnnotationError{}; }
                 } else if (function == "avg" || function == "variance_1_1") {
@@ -510,7 +539,7 @@ private:
                 } else if (!EnsureComparableType(Pos(node.Range), *type, Ctx)) { throw TAnnotationError{}; }
                 if (scalar && function != "count") { type = Optional(type); }
                 const auto id = Value(type);
-                grouping.Aggregates.push_back({id, argument, function, call.Quantifier == ESetQuantifier::Distinct});
+                grouping.Aggregates.push_back({id, argument, function, call.Quantifier == ESetQuantifier::Distinct, key, optionalState});
                 Result.Values[&node] = id;
                 grouped[id] = type;
                 return false;
@@ -610,6 +639,122 @@ private:
     // A source has its own output schema. ON is typed against the original
     // input schemas before outer-join null extension; enclosing clauses consume
     // the nullable output schema stored for the join, not the child read schema.
+    void Write(const TWriteStatement& write) {
+        const auto& range = write.Target->Range;
+        const auto pos = Pos(range);
+        const auto scope = Source(*write.Target);
+        const auto& table = *Names.Tables.at(write.Target.get());
+        if (table.HasDefaults) { Unsupported(range, "writes to tables with default expressions"); }
+        THashMap<TString, TColumnId> targetColumns;
+        for (const auto& [id, type] : scope) { Y_UNUSED(type); targetColumns[Names.Columns[id].Name] = id; }
+        auto& output = Result.Writes[&write];
+        THashSet<TString> written;
+        const auto columnValue = [&](TColumnId id) {
+            auto argument = Ctx.NewArgument(pos, "value");
+            auto arguments = Ctx.NewArguments(pos, {argument});
+            auto lambda = Ctx.NewLambda(pos, std::move(arguments), std::move(argument));
+            UpdateLambdaAllArgumentsTypes(lambda, {Column(id)}, Ctx);
+            Annotate(lambda, range);
+            return TAnnotatedExpression{std::move(lambda), {id}};
+        };
+        const auto add = [&](const TString& name, TAnnotatedExpression value) {
+            const auto* target = targetColumns.FindPtr(name);
+            if (!target) { Error(range, "Unknown write column: " + name); }
+            if (!written.insert(name).second) { Error(range, "Duplicate write column: " + name); }
+            auto body = value.Lambda->TailPtr();
+            if (TryConvertTo(body, *scope.at(*target), Ctx, Types) == IGraphTransformer::TStatus::Error) {
+                Error(range, "Write column type mismatch: " + name);
+            }
+            value.Lambda = Ctx.NewLambda(pos, value.Lambda->HeadPtr(), std::move(body));
+            Annotate(value.Lambda, range);
+            output.emplace_back(name, std::move(value));
+        };
+        if (write.Input) {
+            Query(*write.Input);
+            const auto& inputs = Names.QueryOutputs.at(write.Input.get());
+            const auto& labels = Names.WriteColumns.at(&write);
+            if (!labels.empty() && labels.size() != inputs.size()) {
+                Error(range, "INSERT column count does not match SELECT output");
+            }
+            for (size_t i = 0; i < inputs.size(); ++i) {
+                add(labels.empty() ? Names.Columns[inputs[i]].Name : labels[i], columnValue(inputs[i]));
+            }
+            for (const auto& key : table.KeyColumns) {
+                if (!written.contains(key)) { Error(range, "Missing key column in input: " + key); }
+            }
+            // Match ordinary INSERT defaults: omitted nullable columns are NULL;
+            // non-nullable columns must have an explicitly supplied value.
+            if (write.Kind == EWriteKind::Insert) {
+                for (const auto& column : table.Columns) {
+                    if (written.contains(column.Name)) { continue; }
+                    const auto* type = scope.at(targetColumns.at(column.Name));
+                    if (type->GetKind() != ETypeAnnotationKind::Optional) {
+                        Error(range, "Missing non-nullable write column: " + column.Name);
+                    }
+                    auto nothing = Call(pos, "Nothing", {ExpandType(pos, *type, Ctx)});
+                    auto lambda = Ctx.NewLambda(pos, Ctx.NewArguments(pos, {}), std::move(nothing));
+                    UpdateLambdaAllArgumentsTypes(lambda, {}, Ctx);
+                    Annotate(lambda, range);
+                    add(column.Name, {std::move(lambda), {}});
+                }
+            }
+        } else {
+            if (write.Where) { Expression(*write.Where, scope, EUse::Predicate); }
+            for (const auto& key : table.KeyColumns) { add(key, columnValue(targetColumns.at(key))); }
+            const auto& labels = Names.WriteColumns.at(&write);
+            for (size_t i = 0; i < write.Assignments.size(); ++i) {
+                if (written.contains(labels[i])) { Error(range, "UPDATE cannot change a primary key: " + labels[i]); }
+                const auto& expression = *write.Assignments[i].Expression;
+                Expression(expression, scope, EUse::Value);
+                add(labels[i], Result.Expressions.at(&expression));
+            }
+        }
+    }
+
+    void NormalizeJoinKeys(const TExpression& predicate, const TColumnTypes& left, const TColumnTypes& right) {
+        auto& annotated = Result.Expressions.at(&predicate);
+        THashMap<const TExprNode*, ui32> sides;
+        std::vector<TType> argumentTypes;
+        for (size_t i = 0; i < annotated.Inputs.size(); ++i) {
+            const auto id = annotated.Inputs[i];
+            sides[annotated.Lambda->Head().Child(i)] = left.contains(id) ? 1 : right.contains(id) ? 2 : 4;
+            argumentTypes.push_back(annotated.Lambda->Head().Child(i)->GetTypeAnn());
+        }
+        const auto side = [&](const TNode& expression) {
+            ui32 result = 0;
+            VisitExpr(expression, [&](const TNode& node) {
+                if (const auto* value = sides.FindPtr(node.Get())) { result |= *value; }
+                return true;
+            });
+            return result;
+        };
+        TNodeOnNodeOwnedMap replacements;
+        VisitExpr(annotated.Lambda->TailPtr(), [&](const TNode& node) {
+            if (!node->IsCallable("==")) { return true; }
+            const auto a = side(node->HeadPtr()), b = side(node->TailPtr());
+            if (!((a == 1 && b == 2) || (a == 2 && b == 1))) { return true; }
+            const auto aType = node->Head().GetTypeAnn();
+            const auto bType = node->Tail().GetTypeAnn();
+            if (IsSameAnnotation(RemoveOptionality(*aType), RemoveOptionality(*bType))) { return true; }
+            const auto* common = JoinCommonDryKeyType(node->Pos(), true, aType, bType, Ctx, Types);
+            if (!common) { Unsupported(predicate.Range, "join keys without a common comparison type"); }
+            const auto cast = [&](TNode value) {
+                return IsSameAnnotation(*value->GetTypeAnn(), *common) ? value
+                    : Call(node->Pos(), "StrictCast", {value, ExpandType(node->Pos(), *common, Ctx)});
+            };
+            // Key values must have the same representation before RBO assigns
+            // hash shuffles. Casting only inside the physical join is too late:
+            // e.g. different Decimal scales send equal keys to different tasks.
+            replacements[node.Get()] = Call(node->Pos(), "==", {cast(node->HeadPtr()), cast(node->TailPtr())});
+            return true;
+        });
+        if (!replacements.empty()) {
+            annotated.Lambda = Ctx.ReplaceNodes(std::move(annotated.Lambda), replacements);
+            UpdateLambdaAllArgumentsTypes(annotated.Lambda, argumentTypes, Ctx);
+            Annotate(annotated.Lambda, predicate.Range);
+        }
+    }
+
     TColumnTypes Source(const TSource& source) {
         if (source.Sampling) { Unsupported(source.Range, "sampling"); }
         TColumnTypes scope;
@@ -618,7 +763,10 @@ private:
             auto right = Source(*join->Right);
             scope = left;
             scope.insert(right.begin(), right.end());
-            if (join->On) { Expression(*join->On, scope, EUse::Predicate); }
+            if (join->On) {
+                Expression(*join->On, scope, EUse::Predicate);
+                NormalizeJoinKeys(*join->On, left, right);
+            }
             const auto nullable = [&](TColumnTypes& columns) {
                 for (auto& [id, type] : columns) { Y_UNUSED(id); type = Optional(type); }
             };
@@ -636,6 +784,20 @@ private:
             }
             scope = std::move(left);
             scope.insert(right.begin(), right.end());
+        } else if (const auto* expression = std::get_if<TExpressionSource>(&source.Value)) {
+            const auto* type = Expression(*expression->Expression, {}, EUse::Value);
+            if (type->GetKind() != ETypeAnnotationKind::List
+                || type->Cast<TListExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Struct) {
+                Error(source.Range, "AS_TABLE expects a list of structs");
+            }
+            const auto* row = type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            for (const auto id : SourceColumns[&source]) {
+                const auto& column = Names.Columns[id];
+                auto field = column.Input ? Column(*column.Input) : row->FindItemType(column.Name);
+                if (!field) { Error(source.Range, "AS_TABLE field is missing: " + column.Name); }
+                scope[id] = field;
+                Result.Columns[id] = field;
+            }
         } else {
             if (const auto* derived = std::get_if<TDerivedTable>(&source.Value)) { Query(*derived->Query); }
             if (const auto* query = Names.NamedSources.FindPtr(&source)) { Query(**query); }
@@ -735,6 +897,10 @@ private:
 
     TAnnotationProfile Profile;
     TExpressionBindings GroupBindings;
+    THashMap<TString, TType> Parameters;
+    // Parameter identity must be shared across independently annotated scalars;
+    // DQ collects stage parameters by node identity.
+    THashMap<TString, TNode> ParameterNodes;
     THashMap<const TExpression*, TNode> GroupExpressions;
     THashMap<TString, TType> StoredTypes;
     const TScript& Script;

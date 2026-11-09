@@ -56,4 +56,7 @@ NYql::TExprNode::TPtr LowerExpression(const TExpression& expression, const TScri
     const TExpressionBindings& bindings, NYql::TExprContext& ctx,
     const TExpressionLoweringSettings& settings = {});
 
+NYql::TExprNode::TPtr LowerType(const TTypeName& type, const TScript& script,
+    NYql::TExprContext& ctx, const TExpressionLoweringSettings& settings = {});
+
 } // namespace NKikimr::NKqp::NNewYql

@@ -21,7 +21,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg", "variance_1_1", "some"};
+const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "min_by", "max_by", "count", "distinct", "avg", "variance_1_1", "some"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
@@ -404,7 +404,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
         // Special case for scalar aggregation (aka aggregation with empty keys).
         if (aggregationPhase != EOpPhase::Intermediate && scalarAggregation && !aggFieldType->IsOptionalOrNull() &&
             (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg" || aggFunction == "variance_1_1" ||
-             aggFunction == "some")) {
+             aggFunction == "some" || aggFunction == "min_by" || aggFunction == "max_by")) {
             const auto it = intermediateAggregation.find(originalColName);
             // count -> count::intermediate + sum::final
             if ((it == intermediateAggregation.end()) || (it->second.first != "count")) {
@@ -441,7 +441,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpGroupingSets> groupingSets, TRBOContext& c
     if (hasEmptySet) {
         for (const auto& [result, traits] : aggregate.GetAggregationTraits().Items()) {
             if (traits.AggFunction == "min" || traits.AggFunction == "max" || traits.AggFunction == "sum" || traits.AggFunction == "avg" ||
-                traits.AggFunction == "variance_1_1" || traits.AggFunction == "some") {
+                traits.AggFunction == "variance_1_1" || traits.AggFunction == "some" || traits.AggFunction == "min_by" || traits.AggFunction == "max_by") {
                 scalarOptionalResults.Add(result);
             }
         }

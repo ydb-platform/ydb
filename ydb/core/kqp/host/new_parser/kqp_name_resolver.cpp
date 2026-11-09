@@ -46,12 +46,37 @@ public:
     // outer row scope or inherited CTEs. Publish names only after the whole script
     // has resolved successfully.
     std::unique_ptr<TResolvedNames> Run() {
+        bool declarationsAllowed = true;
         for (const auto& statement : Script.Statements) {
             if (const auto* pragma = std::get_if<TPragmaStatement>(&statement.Value)) {
                 Pragma(*pragma);
             } else if (const auto* binding = std::get_if<TNamedBinding>(&statement.Value)) {
+                declarationsAllowed = false;
                 Define(*binding);
+            } else if (const auto* declaration = std::get_if<TDeclareStatement>(&statement.Value)) {
+                const auto name = ParameterName(declaration->Name, statement.Range);
+                if (!declarationsAllowed) { Unsupported(statement.Range, "DECLARE outside the script heading"); }
+                if (name == "$_") { Error(statement.Range, "Cannot use anonymous name in DECLARE statement"); }
+                if (DeclaredTypes.contains(name)) {
+                    // The legacy frontend retains the first declaration and
+                    // applies the configured duplicate-declaration warning policy.
+                    Unsupported(statement.Range, "duplicate declaration warning policy");
+                }
+                DeclaredTypes[name] = &declaration->Type;
+                Result.DeclarationNames[declaration] = name;
+            } else if (const auto* write = std::get_if<TWriteStatement>(&statement.Value)) {
+                declarationsAllowed = false;
+                auto scope = Source(*write->Target, {}, nullptr);
+                auto& columns = Result.WriteColumns[write];
+                for (const auto& column : write->Columns) { columns.push_back(Name(column)); }
+                if (write->Input) { Query(*write->Input, nullptr, {}); }
+                if (write->Where) { Expression(*write->Where, scope, {}, {}); }
+                for (const auto& assignment : write->Assignments) {
+                    columns.push_back(Name(*assignment.Alias));
+                    Expression(*assignment.Expression, scope, {}, {});
+                }
             } else {
+                declarationsAllowed = false;
                 Query(*std::get<TQueryStatement>(statement.Value).Query, nullptr, {});
             }
         }
@@ -64,6 +89,13 @@ public:
                 Pragma(*pragma);
             } else if (const auto* binding = std::get_if<TNamedBinding>(&statement.Value)) {
                 CollectExpression(*binding->Value, {});
+            } else if (const auto* write = std::get_if<TWriteStatement>(&statement.Value)) {
+                CollectSource(*write->Target, {});
+                if (write->Input) { CollectQuery(*write->Input, {}); }
+                if (write->Where) { CollectExpression(*write->Where, {}); }
+                for (const auto& assignment : write->Assignments) { CollectExpression(*assignment.Expression, {}); }
+            } else if (std::holds_alternative<TDeclareStatement>(statement.Value)) {
+                continue;
             } else {
                 CollectQuery(*std::get<TQueryStatement>(statement.Value).Query, {});
             }
@@ -124,6 +156,8 @@ private:
             CollectSource(*join->Left, ctes);
             CollectSource(*join->Right, ctes);
             if (join->On) { CollectExpression(*join->On, ctes); }
+        } else if (const auto* expression = std::get_if<TExpressionSource>(&source.Value)) {
+            CollectExpression(*expression->Expression, ctes);
         } else {
             CollectQuery(*std::get<TDerivedTable>(source.Value).Query, ctes);
         }
@@ -569,6 +603,30 @@ private:
                     inputs.push_back(AddColumn({column.Name, &source, metadata, column.Id, nullptr, {}}));
                 }
             }
+        } else if (const auto* expression = std::get_if<TExpressionSource>(&source.Value)) {
+            Expression(*expression->Expression, {}, ctes, {});
+            const auto* parameter = std::get_if<TParameter>(&expression->Expression->Value);
+            if (!parameter || Result.BindingReferences.contains(expression->Expression.get())) {
+                Unsupported(source.Range, "AS_TABLE schema inference without DECLARE");
+            }
+            const auto* declared = DeclaredTypes.FindPtr(ParameterName(*parameter, expression->Expression->Range));
+            if (!declared || !AsciiEqualsIgnoreCase((*declared)->Name.Spelling, "List")
+                || (*declared)->OptionalDepth || (*declared)->Arguments.size() != 1) {
+                Unsupported(source.Range, "AS_TABLE without a declared list type");
+            }
+            const auto& row = (*declared)->Arguments.front();
+            if (!AsciiEqualsIgnoreCase(row.Name.Spelling, "Struct") || row.OptionalDepth) {
+                Error(source.Range, "AS_TABLE expects a list of structs");
+            }
+            for (const auto& member : row.Members) {
+                Y_ENSURE(member.Name);
+                const auto& tag = *member.Name;
+                TString name;
+                if (const auto* id = std::get_if<TIdentifier>(&tag.Value)) { name = Name(*id); }
+                else if (const auto* literal = std::get_if<TLiteral>(&tag.Value)) { name = Decode(literal->Spelling, tag.Range); }
+                else { Unsupported(tag.Range, "bound struct field names"); }
+                inputs.push_back(AddColumn({name, &source, {}, {}, nullptr, {}}));
+            }
         } else {
             // Derived tables are not LATERAL: they inherit CTEs but no enclosing row
             // scope. Scalar subqueries use a different path that permits correlation.
@@ -768,6 +826,7 @@ private:
     const TTableLookup& Lookup;
     TResolvedNames Result;
     THashMap<TString, const TParameter*> NamedValues;
+    THashMap<TString, const TTypeName*> DeclaredTypes;
     size_t LambdaDepth = 0;
     THashSet<std::pair<TString, TString>> SeenTables;
     TVector<std::pair<TString, TString>> TableReferences;

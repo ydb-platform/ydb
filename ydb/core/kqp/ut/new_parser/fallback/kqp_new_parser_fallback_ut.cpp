@@ -162,6 +162,187 @@ bool HasOptimizerFallbackIssue(const NYdb::NIssue::TIssues& issues) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
+    Y_UNIT_TEST(NativeAggregatesAndComputedJoinKeysMatchLegacyOptimizer) {
+        const TVector<TString> queries = {
+            "SELECT MIN_BY(value, id), MAX_BY(value, id), MIN_BY(id, value), MAX_BY(id, value) FROM `/Root/t`;",
+            "SELECT g, MIN_BY(value, id), MAX_BY(id, value) FROM `/Root/t` GROUP BY g ORDER BY g;",
+            "SELECT MIN_BY(value, id), MAX_BY(id, value) FROM `/Root/t` WHERE id < 0;",
+            "SELECT MAX_BY(value, id) FROM `/Root/t` WHERE id <= 2;",
+            "SELECT MIN_BY(id, value), MAX_BY(id, value) FROM `/Root/t` WHERE value IS NULL;",
+            "SELECT MIN_BY(value, id), MAX_BY(value, id) FROM `/Root/t` WHERE value IS NULL;",
+            "SELECT MIN_BY(id, NULL), MAX_BY(NULL, id) FROM `/Root/t`;",
+            "SELECT MIN_BY(AsList(id, id + 1), value), MAX_BY(AsList(id, id + 1), value) FROM `/Root/t`;",
+            "SELECT MIN_BY(value, id), MAX_BY(id, value), COUNT(DISTINCT value) FROM `/Root/t`;",
+            "SELECT g, MAX_BY(value, id), COUNT(DISTINCT value) FROM `/Root/t` GROUP BY g ORDER BY g;",
+            "SELECT g, GROUPING(g) AS grouping, MIN_BY(value, id), MAX_BY(id, value) FROM `/Root/t` "
+                "GROUP BY ROLLUP(g) ORDER BY grouping, g;",
+            "SELECT l.id AS a, r.id AS b, s.id AS c FROM `/Root/t` AS l "
+                "LEFT JOIN `/Root/t` AS r ON CAST(l.id AS Decimal(10, 0)) = CAST(r.id AS Decimal(22, 9)) "
+                "LEFT JOIN `/Root/t` AS s ON CAST(l.id + 2 AS Decimal(10, 0)) = CAST(s.id AS Decimal(22, 9)) ORDER BY a;",
+            "SELECT Ensure(id, id > 0, 'positive') FROM `/Root/t` ORDER BY id;",
+        };
+        TVector<TString> baseline;
+        for (const bool native : {false, true}) {
+            NKikimrConfig::TAppConfig app;
+            auto* config = app.MutableTableServiceConfig();
+            config->SetEnableNewYqlParser(native);
+            // Legacy RBO does not import MIN_BY/MAX_BY; use the established
+            // optimizer as a result oracle, and require direct RBO for native.
+            config->SetEnableNewRBO(native);
+            config->SetEnableFallbackToYqlOptimizer(false);
+            TCapturedLog logs(true);
+            auto settings = TKikimrSettings(app).SetWithSampleTables(false).SetLogCapture(logs);
+            settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_INFO);
+            settings.LogSettings->DefaultLogPriority = NActors::NLog::PRI_CRIT;
+            TKikimrRunner kikimr(settings);
+            auto table = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto schema = table.ExecuteSchemeQuery("CREATE TABLE `/Root/t` "
+                "(id Int64 NOT NULL, g Int32 NOT NULL, value String, PRIMARY KEY(id));").GetValueSync();
+            UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+            auto rows = TValueBuilder().BeginList()
+                .AddListItem().BeginStruct().AddMember("id").Int64(1).AddMember("g").Int32(1).AddMember("value").OptionalString("b").EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(2).AddMember("g").Int32(1).AddMember("value").EmptyOptional(EPrimitiveType::String).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(3).AddMember("g").Int32(1).AddMember("value").OptionalString("a").EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(4).AddMember("g").Int32(2).AddMember("value").OptionalString("c").EndStruct()
+                .EndList().Build();
+            auto data = kikimr.GetTableClient().BulkUpsert("/Root/t", std::move(rows)).GetValueSync();
+            UNIT_ASSERT_C(data.IsSuccess(), data.GetIssues().ToString());
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            const auto start = logs.Snapshot().size();
+            for (size_t i = 0; i < queries.size(); ++i) {
+                const auto result = session.ExecuteQuery(queries[i], NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), queries[i] << ": " << result.GetIssues().ToString());
+                const auto actual = FormatResultSetYson(result.GetResultSet(0));
+                if (!native) { baseline.push_back(actual); }
+                else { UNIT_ASSERT_VALUES_EQUAL_C(actual, baseline[i], queries[i]); }
+            }
+            if (native) {
+                const auto text = logs.Snapshot().substr(start);
+                const TString marker = "New YQL native execution contract built";
+                size_t count = 0;
+                for (size_t pos = text.find(marker); pos != TString::npos; pos = text.find(marker, pos + marker.size())) { ++count; }
+                UNIT_ASSERT_VALUES_EQUAL_C(count, queries.size(), text);
+                UNIT_ASSERT_C(!text.Contains("New YQL parser fallback:"), text);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DeclaredParametersAndNativeWritesPreserveRowsAndIndexes) {
+        TString groupedBaseline;
+        for (const bool enable : {false, true}) {
+            NKikimrConfig::TAppConfig app;
+            auto* config = app.MutableTableServiceConfig();
+            config->SetEnableNewYqlParser(enable);
+            config->SetEnableNewRBO(true);
+            config->SetEnableFallbackToYqlOptimizer(false);
+            config->SetEnableFallbackOnMultipleStatements(false);
+            config->SetEnableIndexStreamWrite(true);
+            config->SetEnableAstCache(false);
+            config->SetCompileQueryCacheSize(0);
+            TCapturedLog logs(true);
+            auto settings = TKikimrSettings(app).SetWithSampleTables(false).SetLogCapture(logs);
+            settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_INFO);
+            settings.LogSettings->DefaultLogPriority = NActors::NLog::PRI_CRIT;
+            TKikimrRunner kikimr(settings);
+            auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto schema = tableSession.ExecuteSchemeQuery(
+                "CREATE TABLE `/Root/t` (id Int64 NOT NULL, value String, a Int32 NOT NULL, "
+                "PRIMARY KEY(id), INDEX by_value GLOBAL ON (value));").GetValueSync();
+            UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            const auto start = logs.Snapshot().size();
+            auto params = TParamsBuilder().AddParam("$items").BeginList()
+                .AddListItem().BeginStruct().AddMember("id").Int64(1).AddMember("value").OptionalString("a")
+                    .AddMember("a").Int32(1).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(2).AddMember("value").OptionalString("b")
+                    .AddMember("a").Int32(2).EndStruct()
+                .EndList().Build().Build();
+            const auto insert = session.ExecuteQuery(
+                "DECLARE $items AS List<Struct<'id':Int64,'value':String?,'a':Int32>>; "
+                "INSERT INTO `/Root/t` SELECT * FROM AS_TABLE($items);",
+                NQuery::TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+            UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+            UNIT_ASSERT(insert.GetResultSets().empty());
+            const auto execute = [&](const TString& sql) {
+                auto result = session.ExecuteQuery(sql, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), sql << ": " << result.GetIssues().ToString());
+                return result;
+            };
+            execute("INSERT INTO `/Root/t` (id, value, a) SELECT id + 10, value, a FROM `/Root/t`;");
+            execute("UPDATE `/Root/t` SET value = 'changed', a = a + 10 WHERE id = 1;");
+            execute("DELETE FROM `/Root/t` WHERE id = 2;");
+            const auto rows = execute("SELECT id, value, a FROM `/Root/t` ORDER BY id;");
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(rows.GetResultSet(0)),
+                "[[1;[\"changed\"];11];[11;[\"a\"];1];[12;[\"b\"];2]]");
+            const auto uuids = execute("SELECT CAST(RandomUuid(id) AS Utf8) FROM `/Root/t`;");
+            TResultSetParser uuidRows(uuids.GetResultSet(0));
+            THashSet<TString> uniqueUuids;
+            while (uuidRows.TryNextRow()) {
+                const auto value = uuidRows.ColumnParser(0).GetUtf8();
+                UNIT_ASSERT_VALUES_EQUAL(value.size(), 36);
+                uniqueUuids.insert(TString(value));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(uniqueUuids.size(), 3);
+            const auto duplicate = session.ExecuteQuery(
+                "INSERT INTO `/Root/t` SELECT 1 AS id, 'duplicate' AS value, 0 AS a;",
+                NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(!duplicate.IsSuccess());
+            if (enable) {
+                const TString marker = "New YQL native execution contract built";
+                size_t count = 0;
+                const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+                TString text;
+                do {
+                    text = logs.Snapshot().substr(start);
+                    count = 0;
+                    for (size_t pos = text.find(marker); pos != TString::npos; pos = text.find(marker, pos + marker.size())) { ++count; }
+                    if (count < 7) { Sleep(TDuration::MilliSeconds(10)); }
+                } while (count < 7 && TInstant::Now() < deadline);
+                UNIT_ASSERT_VALUES_EQUAL_C(count, 7, text);
+                UNIT_ASSERT_C(!text.Contains("New YQL parser fallback:"), text);
+            }
+            // Read the secondary index explicitly; VIEW itself can use the legacy frontend.
+            const auto indexed = execute("SELECT id FROM `/Root/t` VIEW by_value WHERE value = 'changed';");
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(indexed.GetResultSet(0)), "[[1]]");
+            for (const TString sql : {
+                "DECLARE $_ AS Int64; SELECT 1;",
+                "INSERT INTO `/Root/t` SELECT 'missing key' AS value, 1 AS a;",
+                "INSERT INTO `/Root/t` SELECT 'wrong type' AS id, 1 AS a;",
+                "UPDATE `/Root/t` SET id = id + 1;"}) {
+                const auto invalid = session.ExecuteQuery(sql, NQuery::TTxControl::NoTx(),
+                    NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).GetValueSync();
+                UNIT_ASSERT_C(!invalid.IsSuccess(), sql);
+            }
+            execute("UPDATE `/Root/t` ON SELECT id, a + 1 AS a FROM `/Root/t` WHERE id = 1;");
+            const auto updated = execute("SELECT a FROM `/Root/t` WHERE id = 1;");
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(updated.GetResultSet(0)), "[[12]]");
+            auto groupParams = TParamsBuilder().AddParam("$x").Int64(5).Build().Build();
+            const auto grouped = session.ExecuteQuery(
+                "PRAGMA YqlSelectAllowUnnamedGroupByExpr; "
+                "DECLARE $x AS Int64; SELECT $x AS k, SUM(id + $x) FROM `/Root/t` GROUP BY $x;",
+                NQuery::TTxControl::BeginTx().CommitTx(), groupParams).GetValueSync();
+            UNIT_ASSERT_C(grouped.IsSuccess(), grouped.GetIssues().ToString());
+            if (!enable) { groupedBaseline = FormatResultSetYson(grouped.GetResultSet(0)); }
+            else { UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(grouped.GetResultSet(0)), groupedBaseline); }
+
+            const auto duplicateDeclare = session.ExecuteQuery(
+                "DECLARE $x AS Int64; DECLARE $x AS String; SELECT $x + 1;",
+                NQuery::TTxControl::BeginTx().CommitTx(), groupParams).GetValueSync();
+            UNIT_ASSERT_C(duplicateDeclare.IsSuccess(), duplicateDeclare.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(duplicateDeclare.GetResultSet(0)), "[[6]]");
+
+            const auto decimalSchema = tableSession.ExecuteSchemeQuery(
+                "CREATE TABLE `/Root/d` (k Decimal(7,0), id Int64 NOT NULL, PRIMARY KEY(k));").GetValueSync();
+            UNIT_ASSERT_C(decimalSchema.IsSuccess(), decimalSchema.GetIssues().ToString());
+            const auto decimalData = tableSession.ExecuteDataQuery(
+                "UPSERT INTO `/Root/d` (k,id) VALUES (NULL,1),(Decimal('2',7,0),2);",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(decimalData.IsSuccess(), decimalData.GetIssues().ToString());
+            const auto nullBound = execute("SELECT id FROM `/Root/d` WHERE k IS NULL;");
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(nullBound.GetResultSet(0)), "[[1]]");
+        }
+    }
+
     // Use nonempty tables and compare actual result sets for both storage kinds.
     // This catches value/order/NULL mistakes that an explain-only plan check misses;
     // the native success log requirement additionally guards against silent fallback.

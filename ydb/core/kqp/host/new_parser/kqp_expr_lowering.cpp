@@ -35,6 +35,8 @@ public:
         : Script(script), Bindings(bindings), Ctx(ctx), Settings(settings)
     {}
 
+    TNode TypeExpression(const TTypeName& type) { return Type(type); }
+
     TNode Expression(const TExpression& expression) {
         const auto pos = Pos(expression.Range);
         if (const auto* replacement = Bindings.Expressions.FindPtr(&expression)) { return *replacement; }
@@ -70,7 +72,8 @@ public:
                         return Expression(**definition);
                     }
                 }
-                const auto* binding = Bindings.Parameters.FindPtr(value.Spelling);
+                const auto name = "$" + Identifier({value.Spelling.substr(1), expression.Range});
+                const auto* binding = Bindings.Parameters.FindPtr(name);
                 if (!binding || !*binding) {
                     Error(expression.Range, TStringBuilder() << "Missing parameter binding for " << value.Spelling);
                 }
@@ -404,8 +407,19 @@ private:
         TExprNode::TListType args;
         for (const auto& arg : type.Arguments) { args.push_back(Type(arg)); }
         TNode result;
-        if (!type.Members.empty() || !type.Tags.empty()) {
-            Unsupported(type.Name.Range, "struct, variant and tagged type expressions");
+        if (name == "struct") {
+            for (const auto& member : type.Members) {
+                Y_ENSURE(member.Name);
+                const auto& tag = *member.Name;
+                TString label;
+                if (const auto* id = std::get_if<TIdentifier>(&tag.Value)) { label = Identifier(*id); }
+                else if (const auto* literal = std::get_if<TLiteral>(&tag.Value)) { label = Decode(literal->Spelling, tag.Range); }
+                else { Unsupported(tag.Range, "bound struct field names"); }
+                args.push_back(Ctx.NewList(pos, {Atom(pos, label), Type(member.Type)}));
+            }
+            result = Call(pos, "StructType", std::move(args));
+        } else if (!type.Members.empty() || !type.Tags.empty()) {
+            Unsupported(type.Name.Range, "variant and tagged type expressions");
         } else if (name == "decimal") {
             args.push_back(Atom(pos, "Decimal"));
             for (const auto& parameter : type.Parameters) {
@@ -528,9 +542,14 @@ private:
         }
         // Only direct scalar builtins belong here. SQL aggregate names (e.g.
         // MIN/MAX/SUM) must not become similarly named scalar YQL callables.
+        if (spelling == "randomuuid") {
+            if (args.empty()) { Error(range, "RandomUuid requires at least one dependency argument"); }
+            for (auto& argument : args) { argument = Call(pos, "DependsOn", {argument}); }
+            return Call(pos, "RandomUuid", std::move(args));
+        }
         static const THashMap<TString, TString> builtins = {
             {"abs", "Abs"}, {"coalesce", "Coalesce"}, {"if", "If"}, {"ifstrict", "IfStrict"}, {"just", "Just"},
-            {"unwrap", "Unwrap"}, {"exists", "Exists"}, {"length", "Size"}, {"len", "Size"},
+            {"unwrap", "Unwrap"}, {"ensure", "EnsureWarn"}, {"exists", "Exists"}, {"length", "Size"}, {"len", "Size"},
             {"charlength", "Size"}, {"characterlength", "Size"},
             {"listlength", "Length"}, {"listhasitems", "HasItems"},
             {"aslist", "AsListMayWarn"}, {"asliststrict", "AsListStrict"},
@@ -559,6 +578,17 @@ TExprNode::TPtr LowerExpression(const TExpression& expression, const TScript& sc
 {
     try {
         return TLowerer(script, bindings, ctx, settings).Expression(expression);
+    } catch (const TLoweringError&) {
+        return {};
+    }
+}
+
+TExprNode::TPtr LowerType(const TTypeName& type, const TScript& script,
+    TExprContext& ctx, const TExpressionLoweringSettings& settings)
+{
+    try {
+        const TExpressionBindings bindings;
+        return TLowerer(script, bindings, ctx, settings).TypeExpression(type);
     } catch (const TLoweringError&) {
         return {};
     }

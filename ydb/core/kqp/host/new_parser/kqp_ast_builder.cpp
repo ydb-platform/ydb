@@ -127,8 +127,19 @@ public:
             } else if (auto* binding = Child(core, P::RuleNamed_nodes_stmt)) {
                 Require(item.Explain == EExplainMode::None, statement, "EXPLAIN on a named definition");
                 item.Value = NamedBinding(binding);
+            } else if (auto* declaration = Child(core, P::RuleDeclare_stmt)) {
+                Require(item.Explain == EExplainMode::None && !Token(declaration, P::TOKEN_EQUALS),
+                    declaration, "EXPLAIN or default values on DECLARE");
+                item.Value = TDeclareStatement{{TString(Child(declaration, P::RuleBind_parameter)->getText())},
+                    Type(Child(declaration, P::RuleType_name))};
+            } else if (auto* insert = Child(core, P::RuleInto_table_stmt)) {
+                item.Value = Write(insert, EWriteKind::Insert);
+            } else if (auto* update = Child(core, P::RuleUpdate_stmt)) {
+                item.Value = Write(update, EWriteKind::Update);
+            } else if (auto* remove = Child(core, P::RuleDelete_stmt)) {
+                item.Value = Write(remove, EWriteKind::Delete);
             } else {
-                Unsupported(core, "statements other than SELECT, PRAGMA and named definitions");
+                Unsupported(core, "this statement");
             }
             result->Statements.push_back(std::move(item));
         }
@@ -136,6 +147,53 @@ public:
     }
 
 private:
+    TWriteStatement Write(TContext* context, EWriteKind kind) {
+        Require(!Token(context, P::TOKEN_BATCH) && !Child(context, P::RuleReturning_columns_list),
+            context, "BATCH and RETURNING writes");
+        auto* simple = Child(context, P::RuleSimple_table_ref);
+        if (kind == EWriteKind::Insert) {
+            Require(Token(context, P::TOKEN_INSERT) && !Token(context, P::TOKEN_OR),
+                context, "this write mode");
+            auto* into = Child(context, P::RuleInto_simple_table_ref);
+            Require(!Token(into, P::TOKEN_ERASE), into, "ERASE BY");
+            simple = Child(into, P::RuleSimple_table_ref);
+        }
+        Require(!Child(simple, P::RuleTable_hints), simple, "write table hints");
+        auto* core = Child(simple, P::RuleSimple_table_ref_core);
+        auto* object = Child(core, P::RuleObject_ref);
+        Require(object && !Child(object, P::RuleCluster_expr), core, "qualified or dynamic write targets");
+        auto* id = Child(object, P::RuleId_or_at);
+        Require(!Token(id, P::TOKEN_COMMAT), id, "anonymous write targets");
+        auto target = std::make_unique<TSource>();
+        target->Range = Range(simple);
+        TTable table;
+        table.Name = Identifier(id);
+        target->Value = std::move(table);
+        TWriteStatement result{kind, std::move(target), {}, {}, {}, {}};
+        if (kind == EWriteKind::Insert || (kind == EWriteKind::Update && Token(context, P::TOKEN_ON))) {
+            auto* values = Child(context, P::RuleInto_values_source);
+            auto* source = Child(values, P::RuleValues_source);
+            auto* select = source ? Child(source, P::RuleSelect_stmt) : nullptr;
+            Require(select, values, "write sources other than SELECT");
+            result.Input = Query(select);
+            if (auto* columns = Child(values, P::RulePure_column_list)) {
+                for (auto* column : Children(columns, P::RuleAn_id)) { result.Columns.push_back(Identifier(column)); }
+            }
+        } else {
+            Require(!Token(context, P::TOKEN_ON), context, "UPDATE/DELETE ON");
+            if (auto* where = Child(context, P::RuleExpr)) { result.Where = Expression(where); }
+            if (kind == EWriteKind::Update) {
+                auto* clauses = Child(Child(context, P::RuleSet_clause_choice), P::RuleSet_clause_list);
+                Require(clauses, context, "multiple-column UPDATE assignments");
+                for (auto* clause : Children(clauses, P::RuleSet_clause)) {
+                    result.Assignments.push_back({Expression(Child(clause, P::RuleExpr)),
+                        Identifier(Child(Child(clause, P::RuleSet_target), P::RuleColumn_name))});
+                }
+            }
+        }
+        return result;
+    }
+
     // Preserve the definition rather than substituting text: captures, shadowing
     // and repeated query references are resolved by identity in the next phase.
     TNamedBinding NamedBinding(TContext* context) {
@@ -1093,6 +1151,19 @@ TSourcePtr TAstBuilder<P>::Source(TContext* context) {
             result->Value = TDerivedTable{Query(query)};
         }
     } else if (rule == P::RuleTable_ref) {
+        if (auto* function = Child(context, P::RuleAn_id_expr)) {
+            Require(Upper(function) == "AS_TABLE" && !Child(context, P::RuleCluster_expr)
+                && !Token(context, P::TOKEN_COMMAT), context, "this table-valued function");
+            auto arguments = Children(context, P::RuleTable_arg);
+            Require(arguments.size() == 1 && !Token(arguments.front(), P::TOKEN_COMMAT)
+                && !Child(arguments.front(), P::RuleView_name), context, "AS_TABLE arguments");
+            auto argument = Named(Child(arguments.front(), P::RuleNamed_expr));
+            Require(!argument.Alias, context, "aliased AS_TABLE argument");
+            result = std::make_unique<TSource>();
+            result->Range = Range(context);
+            result->Value = TExpressionSource{std::move(argument.Expression)};
+            return result;
+        }
         TTable table;
         table.Anonymous = Token(context, P::TOKEN_COMMAT);
         if (auto* key = Child(context, P::RuleTable_key)) {

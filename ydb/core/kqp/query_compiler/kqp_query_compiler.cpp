@@ -367,16 +367,16 @@ void FillNothingData(const TDataExprType& dataType, Ydb::TypedValue& value) {
     auto slot = dataType.GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
-    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
-        NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
-
     if (slot == EDataSlot::Decimal) {
         const auto& paramsDataType = *dataType.Cast<TDataExprParamsType>();
         auto precision = FromString<ui8>(paramsDataType.GetParamOne());
         auto scale = FromString<ui8>(paramsDataType.GetParamTwo());
+        YQL_ENSURE(NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(NKikimr::NScheme::TDecimalType(precision, scale))));
         value.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type()->set_precision(precision);
         value.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type()->set_scale(scale);
     } else {
+        YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
+            NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
         auto& protoType = *value.mutable_type();
         protoType.mutable_optional_type()->mutable_item()->set_type_id((Ydb::Type::PrimitiveTypeId)typeId);
     }

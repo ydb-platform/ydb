@@ -16,7 +16,8 @@ bool IsSuitableToExpandDistinctAggregation(const TIntrusivePtr<IOperator>& input
 }
 
 std::pair<TString, TString> GetAggFunctions(const TString& aggFunc) {
-    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg" || aggFunc == "variance_1_1" || aggFunc == "some") {
+    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg" || aggFunc == "variance_1_1" || aggFunc == "some"
+        || aggFunc == "min_by" || aggFunc == "max_by") {
         return std::make_pair(aggFunc, aggFunc);
     }
     if (aggFunc == "count") {

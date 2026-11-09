@@ -80,6 +80,7 @@ struct TExecutionOptions {
     bool RunAsDeamon = false;
 
     ui32 LoopCount = 1;
+    ui32 WarmupCount = 0;
     TDuration QueryDelay;
     TDuration LoopDelay;
     bool ContinueAfterFail = false;
@@ -162,6 +163,7 @@ struct TExecutionOptions {
             .Params = Params,
             .GroupSIDs = GetValue<std::optional<TVector<NACLib::TSID>>>(index, GroupSIDs, std::nullopt),
             .StatsCollectionMode = GetValue(index, StatsCollectionModes, Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE),
+            .TraceEnabled = loopId >= WarmupCount,
         };
     }
 
@@ -220,6 +222,14 @@ private:
     }
 
     void ValidateScriptExecutionOptions(const TRunnerOptions& runnerOptions) const {
+        if (WarmupCount) {
+            for (size_t i = 0; i < ScriptQueries.size(); ++i) {
+                if (GetExecutionCase(i) != EExecutionCase::GenericQuery || GetScriptQueryAction(i) != NKikimrKqp::QUERY_ACTION_EXPLAIN) {
+                    ythrow yexception() << "Warmup requires synchronous query EXPLAIN requests (-C query -A explain)";
+                }
+            }
+        }
+
         if (runnerOptions.YdbSettings.SameSession && HasExecutionCase(EExecutionCase::AsyncQuery)) {
             ythrow yexception() << "Same session cannot be used with async quries";
         }
@@ -404,9 +414,10 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
         return;
     }
 
-    const size_t numberLoops = executionOptions.LoopCount;
+    const size_t measuredLoops = executionOptions.LoopCount;
+    const size_t numberLoops = measuredLoops ? measuredLoops + executionOptions.WarmupCount : 0;
     std::vector<double> durations;
-    const size_t maxQueueSize = numberLoops ? (numberLoops * 7 + 9) / 10 : 10;
+    const size_t maxQueueSize = measuredLoops ? (measuredLoops * 7 + 9) / 10 : 10;
     double durationSec = 0.0;
     size_t failedQueries = 0;
     for (size_t queryId = 0; queryId < numberQueries * numberLoops || numberLoops == 0; ++queryId) {
@@ -417,6 +428,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
 
         const TInstant startTime = TInstant::Now();
         const size_t loopId = queryId / numberQueries;
+        const bool warmup = loopId < executionOptions.WarmupCount;
         if (const auto executionCase = executionOptions.GetExecutionCase(id); executionCase != TExecutionOptions::EExecutionCase::AsyncQuery) {
             Cout << colors.Yellow() << startTime.ToIsoStringLocal() << " Executing ";
             if (executionCase != TExecutionOptions::EExecutionCase::StreamingQuery) {
@@ -433,13 +445,18 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
             if (numberLoops != 1) {
                 Cout << ", loop " << loopId;
             }
+            if (warmup) {
+                Cout << " (warmup, tracing disabled)";
+            }
             Cout << "..." << colors.Default() << Endl;
         }
 
         try {
             TDuration duration;
             RunArgumentQuery(id, loopId, queryId, startTime, executionOptions, runner, duration);
-            durationSec += duration.SecondsFloat();
+            if (!warmup) {
+                durationSec += duration.SecondsFloat();
+            }
             if (id + 1 == numberQueries) {
                 if (durationSec > 0.001) {
                     durations.push_back(durationSec);
@@ -931,6 +948,11 @@ protected:
             .RequiredArgument("uint")
             .DefaultValue(ExecutionOptions.LoopCount)
             .StoreResult(&ExecutionOptions.LoopCount);
+
+        options.AddLongOption("warmup-count", "Untraced EXPLAIN passes before --loop-count measured passes, in the same process")
+            .RequiredArgument("uint")
+            .DefaultValue(0)
+            .StoreResult(&ExecutionOptions.WarmupCount);
 
         options.AddLongOption("loop-delay", "Delay in milliseconds between loop steps")
             .RequiredArgument("uint")

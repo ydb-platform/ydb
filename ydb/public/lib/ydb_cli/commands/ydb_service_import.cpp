@@ -191,7 +191,9 @@ void TCommandImportBase::FillCommonImportSettings(TSettings& settings) {
 bool IsSupportedObject(TStringBuf& key) {
     return key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
         || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
-        || key.ChopSuffix(NDump::NFiles::CreateTopic().FileName);
+        || key.ChopSuffix(NDump::NFiles::CreateTopic().FileName)
+        || key.ChopSuffix(NDump::NFiles::CreateExternalDataSource().FileName)
+        || key.ChopSuffix(NDump::NFiles::CreateExternalTable().FileName);
 }
 
 template <typename TSettings>

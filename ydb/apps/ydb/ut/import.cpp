@@ -1,5 +1,7 @@
 #include "mock_env.h"
 
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
+
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/api/grpc/ydb_import_v1.grpc.pb.h>
 
@@ -455,6 +457,118 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--encryption-key-file", encryptionKeyFile,
             }
         );
+    }
+
+    Y_UNIT_TEST_F(ExpandExternalOnlyArchive, TImportFixture) {
+        using namespace NYdb::NDump;
+        const TString root = "/" + TEST_BUCKET + "/archive/selected/";
+        PutS3Object(root + "nested/source/" + NFiles::CreateExternalDataSource().FileName);
+        PutS3Object(root + "nested/table/" + NFiles::CreateExternalTable().FileName);
+        PutS3Object(root + "nested/source/permissions.pb");
+        PutS3Object(root + "nested/table/metadata.json");
+        PutS3Object(root + "nested/table/data_00.csv");
+        PutS3Object(root + "sidecars/permissions.pb");
+        PutS3Object(root + "sidecars/" + NFiles::CreateExternalTable().FileName + ".sha256");
+        PutS3Object("/" + TEST_BUCKET + "/archive/unselected/source/" + NFiles::CreateExternalDataSource().FileName);
+
+        const TString s3Endpoint = GetS3Endpoint();
+        auto& service = Service<TImportImpl>();
+        service
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(s3Endpoint)
+            .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectDisableVirtualAddressing(true);
+        service.ExpectItem("archive/selected/nested/source", "/test_database/import-root/nested/source");
+        service.ExpectItem("archive/selected/nested/table", "/test_database/import-root/nested/table");
+        RunCli({
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "import", "s3",
+            "--bucket", TEST_BUCKET,
+            "--s3-endpoint", s3Endpoint,
+            "--scheme", "http",
+            "--access-key", "test-key",
+            "--secret-key", "test-access-key",
+            "--use-virtual-addressing", "false",
+            "--item", "src=archive/selected,dst=import-root/.",
+        });
+    }
+
+    Y_UNIT_TEST_F(ExpandMixedExternalArchive, TImportFixture) {
+        using namespace NYdb::NDump;
+        const TString root = "/" + TEST_BUCKET + "/archive/selected/";
+        PutS3Object(root + "nested/source/" + NFiles::CreateExternalDataSource().FileName);
+        PutS3Object(root + "nested/table/" + NFiles::CreateExternalTable().FileName);
+        PutS3Object(root + "nested/source/permissions.pb");
+        PutS3Object(root + "nested/table/metadata.json");
+        PutS3Object(root + "nested/table/data_00.csv");
+        PutS3Object(root + "sidecars/permissions.pb");
+        PutS3Object(root + "sidecars/" + NFiles::CreateExternalTable().FileName + ".sha256");
+        PutS3Object("/" + TEST_BUCKET + "/archive/unselected/source/" + NFiles::CreateExternalDataSource().FileName);
+        PutS3TableExport("archive/selected/regular");
+        const TString s3Endpoint = GetS3Endpoint();
+        auto& service = Service<TImportImpl>();
+        service
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(s3Endpoint)
+            .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectDisableVirtualAddressing(true);
+        service.ExpectItem("archive/selected/nested/source", "/test_database/import-root/nested/source");
+        service.ExpectItem("archive/selected/nested/table", "/test_database/import-root/nested/table");
+        service.ExpectItem("archive/selected/regular", "/test_database/import-root/regular");
+        RunCli({
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "import", "s3",
+            "--bucket", TEST_BUCKET,
+            "--s3-endpoint", s3Endpoint,
+            "--scheme", "http",
+            "--access-key", "test-key",
+            "--secret-key", "test-access-key",
+            "--use-virtual-addressing", "false",
+            "--item", "src=archive/selected,dst=import-root/.",
+        });
+    }
+
+    Y_UNIT_TEST_F(ExpandExternalArchiveWithExclusions, TImportFixture) {
+        using namespace NYdb::NDump;
+        const TString root = "/" + TEST_BUCKET + "/archive/selected/";
+        PutS3Object(root + "nested/source/" + NFiles::CreateExternalDataSource().FileName);
+        PutS3Object(root + "nested/table/" + NFiles::CreateExternalTable().FileName);
+        PutS3Object(root + "nested/source/permissions.pb");
+        PutS3Object(root + "nested/table/metadata.json");
+        PutS3Object(root + "nested/table/data_00.csv");
+        PutS3Object(root + "sidecars/permissions.pb");
+        PutS3Object(root + "sidecars/" + NFiles::CreateExternalTable().FileName + ".sha256");
+        PutS3Object("/" + TEST_BUCKET + "/archive/unselected/source/" + NFiles::CreateExternalDataSource().FileName);
+        PutS3TableExport("archive/selected/regular");
+        const TString s3Endpoint = GetS3Endpoint();
+        auto& service = Service<TImportImpl>();
+        service
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(s3Endpoint)
+            .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectDisableVirtualAddressing(true);
+        service.ExpectItem("archive/selected/nested/source", "/test_database/import-root/nested/source");
+        RunCli({
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "import", "s3",
+            "--bucket", TEST_BUCKET,
+            "--s3-endpoint", s3Endpoint,
+            "--scheme", "http",
+            "--access-key", "test-key",
+            "--secret-key", "test-access-key",
+            "--use-virtual-addressing", "false",
+            "--item", "src=archive/selected,dst=import-root/.",
+            "--exclude", "nested/table|regular",
+        });
     }
 
     Y_UNIT_TEST_F(ApplyExcludeClientFilter, TImportFixture) {

@@ -52,7 +52,7 @@ public:
             ythrow yexception() << "write fail";
         }
 
-        Client.GetClientInfo({"rt3.dc1--topic1"}, clientId, true);
+        Client.GetClientInfo({"topic1"}, clientId, true);
 
         if (!stream->Read(&resp)) {
             auto status = stream->Finish();
@@ -78,13 +78,13 @@ public:
             if (!stream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
-            Client.AlterTopic("rt3.dc1--topic1", i < 10 ? 2 : 3);
+            Client.AlterTopic("topic1", i < 10 ? 2 : 3);
         }
 
         if (checkACL) {
             NACLib::TDiffACL acl;
             acl.RemoveAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, clientId + "@" BUILTIN_ACL_DOMAIN);
-            Client.ModifyACL("/Root/PQ", "rt3.dc1--topic1", acl.SerializeAsString());
+            Client.ModifyACL("/Root/PQ", "topic1", acl.SerializeAsString());
 
             Ydb::PersQueue::V1::MigrationStreamingReadClientMessage req;
             req.mutable_read();
@@ -96,7 +96,7 @@ public:
             UNIT_ASSERT(resp.response_case() == Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::RESPONSE_NOT_SET && resp.issues(0).issue_code() == (ui32)Ydb::PersQueue::ErrorCode::ErrorCode::ACCESS_DENIED);
             return;
         }
-        Client.GetClientInfo({"rt3.dc1--topic1"}, clientId, true);
+        Client.GetClientInfo({"topic1"}, clientId, true);
         ui64 assignId = 0;
         for (ui32 i = 0; i < 11;) {
             Ydb::PersQueue::V1::MigrationStreamingReadServerMessage resp;
@@ -151,7 +151,7 @@ public:
                     UNIT_ASSERT(i <= 11);
                 }
             }
-            Client.GetClientInfo({"rt3.dc1--topic1"}, clientId, true);
+            Client.GetClientInfo({"topic1"}, clientId, true);
         }
     }
 

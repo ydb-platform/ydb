@@ -8,13 +8,16 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Iterable, List
 
 import requests
 
 from ydb.tests.stability.nemesis.routers.agent_router import create_process_helper
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import (
+    scheduled_nemesis_rejection_reason,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
     confirm_timeout_for,
@@ -105,6 +108,9 @@ class OrchestratorNemesisSchedule:
         Start a daemon thread running _run_schedule_loop and record the task.
         Returns False if this process_type is already scheduled as enabled.
         """
+        rejection = scheduled_nemesis_rejection_reason(process_type)
+        if rejection is not None:
+            raise ValueError(rejection)
         with self._lock:
             if process_type in self._tasks and self._tasks[process_type].get("enabled"):
                 return False
@@ -191,8 +197,11 @@ class OrchestratorNemesisSchedule:
                 if uniform_interval is not None
                 else int(defn.get("schedule") or 60)
             )
-            started = self.enable_schedule(process_type, interval)
-            results[process_type] = "started" if started else "already_enabled"
+            try:
+                started = self.enable_schedule(process_type, interval)
+                results[process_type] = "started" if started else "already_enabled"
+            except ValueError:
+                results[process_type] = "unavailable"
         return results
 
     def disable_all_schedules(self) -> list[str]:
@@ -229,11 +238,13 @@ class OrchestratorNemesisSchedule:
                 "target": cmd.target.to_dict(),
             }
             if self._is_local_host(cmd.host):
-                create_process_helper(
+                result = create_process_helper(
                     cmd.nemesis_type,
                     cmd.action,
                     payload=payload,
                 )
+                if result.get("status") == "error":
+                    raise ValueError(result["message"])
                 logger.debug(
                     "Started %s on local host (%s) target=%s",
                     cmd.nemesis_type,
@@ -259,7 +270,7 @@ class OrchestratorNemesisSchedule:
                         "target": cmd.target.to_dict(),
                         "execution_id": cmd.execution_id,
                         "scenario_id": cmd.scenario_id,
-                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                     }
                 )
             if metrics is not None:

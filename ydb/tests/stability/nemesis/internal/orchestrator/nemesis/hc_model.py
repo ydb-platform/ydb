@@ -51,6 +51,8 @@ class HcSnapshot:
     fresh: bool
     data_at: float | None
     answering: frozenset[str]
+    # Endpoints whose top-level self-check is explicitly GOOD.
+    good: frozenset[str] = field(default_factory=frozenset)
     # node_id -> entity id -> worst overall across all hosts' views
     storage_by_node: dict[int, dict[str, str]] = field(default_factory=dict)
     alive_compute: int = 0
@@ -94,6 +96,7 @@ def build_snapshot(
     """Merge hosts' HC reports; ``fresh=False`` when data is stale or no endpoint answered."""
     fresh = last_update is not None and (now - last_update) <= max_age_sec
     answering: set[str] = set()
+    good: set[str] = set()
     storage: dict[int, dict[str, str]] = {}
     alive_by_host: list[set[int]] = []
     skew_green = True
@@ -105,6 +108,8 @@ def build_snapshot(
         if entry.get("self_check_result") in HC_ERROR_RESULTS:
             continue
         answering.add(host)
+        if entry.get("self_check_result") == "GOOD":
+            good.add(host)
         host_alive: set[int] = set()
         seen_skew = False
         host_skew_ok = True
@@ -147,6 +152,7 @@ def build_snapshot(
         fresh=fresh,
         data_at=last_update,
         answering=frozenset(answering),
+        good=frozenset(good),
         storage_by_node=storage,
         alive_compute=alive_compute,
         clock_skew_green=skew_green,
@@ -191,7 +197,7 @@ def node_predicate(target: ChaosTarget) -> Callable[[HcSnapshot], bool]:
     """Endpoint answers and every pdisk/vdisk of the node is GREEN."""
 
     def recovered(snap: HcSnapshot) -> bool:
-        return target.host in snap.answering and snap.storage_green(target.node_id)
+        return target.host in snap.good and snap.storage_green(target.node_id)
 
     return recovered
 
@@ -200,7 +206,7 @@ def disk_predicate(target: ChaosTarget) -> Callable[[HcSnapshot], bool]:
     """Node-scoped: all of the node's disks are GREEN."""
 
     def recovered(snap: HcSnapshot) -> bool:
-        return target.host in snap.answering and snap.storage_green(target.node_id)
+        return target.host in snap.good and snap.storage_green(target.node_id)
 
     return recovered
 
@@ -231,7 +237,7 @@ def datacenter_predicate(
     def recovered(snap: HcSnapshot) -> bool:
         if not dc_hosts or not dc_node_ids:
             return False
-        return all(h in snap.answering for h in dc_hosts) and all(
+        return all(h in snap.good for h in dc_hosts) and all(
             snap.storage_green(nid) for nid in dc_node_ids
         )
 

@@ -43,11 +43,18 @@ class ClusterInventory:
         topology: ClusterTopologyModel,
         *,
         agent_hosts: Iterable[str] | None = None,
+        cluster_view=None,
     ) -> None:
         self._topology = topology
+        self._cluster_view = cluster_view
         self._agent_hosts = [h for h in (agent_hosts or []) if h]
         if not self._agent_hosts:
-            self._agent_hosts = list(topology.hosts.keys())
+            if cluster_view is not None:
+                self._agent_hosts = [
+                    node.logical_host for node in cluster_view.nodes.values()
+                ]
+            else:
+                self._agent_hosts = list(topology.hosts.keys())
         self.nodes: dict[int, NodeInfo] = {}
         self.slots: dict[int, SlotInfo] = {}
         # Set when nodes had to be synthesized: ids and ports are guesses, and there are no slots.
@@ -57,6 +64,9 @@ class ClusterInventory:
     # -- loading ------------------------------------------------------------
 
     def _load_from_harness(self) -> None:
+        if self._cluster_view is not None:
+            self._load_from_cluster_view()
+            return
         try:
             from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
 
@@ -107,6 +117,30 @@ class ClusterInventory:
             len(self.slots),
         )
 
+    def _load_from_cluster_view(self) -> None:
+        for node_id, node in self._cluster_view.nodes.items():
+            self.nodes[int(node_id)] = NodeInfo(
+                node_id=int(node_id),
+                host=node.logical_host,
+                ic_port=int(node.ic_port),
+                rack=node.rack,
+                datacenter=node.datacenter,
+            )
+        for slot_idx, slot in self._cluster_view.slots.items():
+            self.slots[int(slot_idx)] = SlotInfo(
+                slot_idx=int(slot_idx),
+                host=slot.logical_host,
+                ic_port=int(slot.ic_port),
+                node_id=int(slot.node_id),
+                rack=None,
+                datacenter=None,
+            )
+        logger.info(
+            "ClusterInventory: loaded %d local harness node(s), %d slot(s)",
+            len(self.nodes),
+            len(self.slots),
+        )
+
     def _synthesize_nodes_from_hosts(self) -> None:
         """One synthetic node per agent host when harness has no node map."""
         for i, host in enumerate(self._agent_hosts, start=1):
@@ -147,7 +181,11 @@ class ClusterInventory:
                     s.host, slot_idx=s.slot_idx, ic_port=s.ic_port, node_id=s.node_id
                 )
                 for s in self.slots.values()
-                if s.host in self._agent_hosts or not self._agent_hosts
+                if (
+                    self._cluster_view is not None
+                    or s.host in self._agent_hosts
+                    or not self._agent_hosts
+                )
             ]
         if kind is TargetKind.DISK:
             # Disk path chosen on agent; plan at node granularity.

@@ -468,7 +468,6 @@ namespace NTabletFlatExecutor {
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
         using ELockMode = NTable::ELockMode;
         using TScheme = NTable::TRowScheme;
-        using TPartWriter = NTable::TPartWriter;
         using TStorage = TIntrusivePtr<TTabletStorageInfo>;
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
@@ -532,8 +531,7 @@ namespace NTabletFlatExecutor {
 
                 Outputs.Start(*Scheme);
                 if (Conf->IsFulltextCompact) {
-                    Writer = Outputs.GetWriter(0);
-                    FtState = TFulltextCompact::Init(Conf.Get(), Scheme, Writer);
+                    FtState = TFulltextCompact::Init(Conf.Get(), Scheme, Outputs.GetWriter(0));
                 }
 
                 return EScan::Feed;
@@ -572,7 +570,7 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            Writer = Outputs.BeginKey(key);
+            Outputs.BeginKey(key);
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl
@@ -632,7 +630,7 @@ namespace NTabletFlatExecutor {
 
             // We write the first (latest) lock we observe
             if (!IsLocked) {
-                Writer->AddKeyLock(mode, txId);
+                Outputs.AddKeyLock(mode, txId);
                 IsLocked = true;
             }
 
@@ -659,7 +657,7 @@ namespace NTabletFlatExecutor {
                 for (ui64 txId : DeltasOrder) {
                     auto it = Deltas.find(txId);
                     Y_ENSURE(it != Deltas.end(), "Unexpected failure to find txId " << txId);
-                    Writer->AddKeyDelta(it->second, txId);
+                    Outputs.AddKeyDelta(it->second, txId);
                 }
 
                 Deltas.clear();
@@ -693,7 +691,7 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            Writer->AddKeyVersion(row, rowVersion);
+            Outputs.AddKeyVersion(row, rowVersion);
 
             return Flush(false /* intermediate, sleep or feed */);
         }
@@ -1086,8 +1084,6 @@ namespace NTabletFlatExecutor {
         TIntrusiveConstPtr<TScheme> Scheme;
 
         TCompactionOutputs Outputs;
-        // Borrowed from Outputs, which owns every writer for this scan.
-        TPartWriter* Writer = nullptr;
 
         NTable::TWriteStats WriteStats;
         TVector<TCompactionOutputs::TResult> Results;

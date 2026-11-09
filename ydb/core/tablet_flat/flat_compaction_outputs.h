@@ -84,19 +84,29 @@ namespace NKikimr::NTabletFlatExecutor {
             return States.at(index).Writer.Get();
         }
 
-        NTable::TPartWriter* BeginKey(TArrayRef<const TCell> key) {
+        void BeginKey(TArrayRef<const TCell> key) {
             Y_ENSURE(Started && !Finished && !KeyActive, "Unexpected compaction key start");
             CurrentOutput = Router->RouteKey(key);
             Y_ENSURE(CurrentOutput < States.size(), "Compaction router returned an invalid output index");
             auto* writer = GetWriter(CurrentOutput);
             writer->BeginKey(key);
             KeyActive = true;
-            return writer;
+        }
+
+        void AddKeyLock(NTable::ELockMode mode, ui64 txId) {
+            CurrentWriter().AddKeyLock(mode, txId);
+        }
+
+        void AddKeyDelta(const NTable::TRowState& row, ui64 txId) {
+            CurrentWriter().AddKeyDelta(row, txId);
+        }
+
+        void AddKeyVersion(const NTable::TRowState& row, TRowVersion version) {
+            CurrentWriter().AddKeyVersion(row, version);
         }
 
         ui32 EndKey() {
-            Y_ENSURE(KeyActive, "Unexpected compaction key end");
-            auto written = States[CurrentOutput].Writer->EndKey();
+            auto written = CurrentWriter().EndKey();
             KeyActive = false;
             return written;
         }
@@ -158,6 +168,11 @@ namespace NKikimr::NTabletFlatExecutor {
         }
 
     private:
+        NTable::TPartWriter& CurrentWriter() const {
+            Y_ENSURE(KeyActive, "Compaction key is not active");
+            return *States[CurrentOutput].Writer;
+        }
+
         static TVector<NWriter::TConf::TSlot> CollectSlots(const TCompactCfg& conf) {
             Y_ENSURE(!conf.Outputs.empty(), "Compaction requires at least one output");
             TVector<NWriter::TConf::TSlot> slots;

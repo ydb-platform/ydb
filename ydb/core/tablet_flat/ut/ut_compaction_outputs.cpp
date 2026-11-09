@@ -65,18 +65,18 @@ namespace {
     void WriteKey(TCompactionOutputs& outputs, ui32 key, const TString& value,
             bool withHistory = false) {
         const TCell keyCell = TCell::Make(key);
-        auto writer = outputs.BeginKey({&keyCell, 1});
+        outputs.BeginKey({&keyCell, 1});
         TRowState row(2);
         row.Touch(ERowOp::Upsert);
         row.Set(0, ECellOp::Set, keyCell);
         row.Set(1, ECellOp::Set, TCell(value.data(), value.size()));
         if (withHistory) {
-            writer->AddKeyLock(ELockMode::Exclusive, 100 + key);
-            writer->AddKeyDelta(row, 200 + key);
+            outputs.AddKeyLock(ELockMode::Exclusive, 100 + key);
+            outputs.AddKeyDelta(row, 200 + key);
         }
-        writer->AddKeyVersion(row, TRowVersion(20, 1));
+        outputs.AddKeyVersion(row, TRowVersion(20, 1));
         if (withHistory) {
-            writer->AddKeyVersion(row, TRowVersion(10, 1));
+            outputs.AddKeyVersion(row, TRowVersion(10, 1));
         }
         outputs.EndKey();
     }

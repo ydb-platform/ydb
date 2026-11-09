@@ -7,9 +7,6 @@ TEST_SRCS(
     ydb/tests/functional/sqs/common/test_garbage_collection.py
 )
 
-IF (SANITIZER_TYPE)
-ELSE()
-    REQUIREMENTS(cpu:1)
-ENDIF()
+REQUIREMENTS(cpu:1)
 
 END()

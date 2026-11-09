@@ -16,9 +16,6 @@ PEERDIR(
     ydb/library/actors/wilson
 )
 
-IF (SANITIZER_TYPE)
-ELSE()
-    REQUIREMENTS(cpu:1)
-ENDIF()
+REQUIREMENTS(cpu:1)
 
 END()

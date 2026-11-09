@@ -133,8 +133,7 @@ struct TTestBootstrap: public TTestActorRuntime {
             using namespace NKikimr::NMiniKQL;
             TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
-            const auto raw =
-                SerializeRuntimeNode(TRuntimeNode(TCallableBuilder(env, "NoState", env.GetTypeOfVoidLazy()).Build(), false), env);
+            const auto raw = SerializeRuntimeNode(TRuntimeNode(TCallableBuilder(env, "NoState", env.GetTypeOfVoidLazy()).Build(), false), env);
             for (const auto& ready : GraphState.GetTask()) {
                 auto& task = *Params.AddTasks();
                 task.SetId(ready.GetId());
@@ -303,8 +302,8 @@ struct TTestBootstrap: public TTestActorRuntime {
 Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     class CheckpointsTestHelper: public TTestBootstrap {
     public:
-        CheckpointsTestHelper(ui64 graphFlags, ui64 snaphotRotationPeriod = 0, const TString& sourceType = TString(NYql::PqSource),
-            bool foreignRestore = false)
+        CheckpointsTestHelper(
+            ui64 graphFlags, ui64 snaphotRotationPeriod = 0, const TString& sourceType = TString(NYql::PqSource), bool foreignRestore = false)
             : TTestBootstrap(graphFlags, snaphotRotationPeriod, sourceType, {}, foreignRestore)
         {
         }
@@ -409,11 +408,10 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
             CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 0, TString(NYql::PqSource), true);
             const auto oldId = TCheckpointId(test.CoordinatorId.Generation - 1, 7);
             TCheckpointMetadata old(test.CoordinatorId.GraphId, oldId,
-                boundary == 4 ? ECheckpointStatus::PendingCommit : ECheckpointStatus::Completed,
-                TInstant::Zero(), TInstant::Zero());
+                boundary == 4 ? ECheckpointStatus::PendingCommit : ECheckpointStatus::Completed, TInstant::Zero(), TInstant::Zero());
             old.Graph = test.Params;
-            test.RegisterCoordinator({old});
-            for (auto actor : {test.IngressActor, test.MapActor, test.EgressActor}) {
+            test.RegisterCoordinator({ old });
+            for (auto actor : { test.IngressActor, test.MapActor, test.EgressActor }) {
                 const auto restore = test.GrabEdgeEvent<NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpoint>(actor, TDuration::Seconds(10));
                 UNIT_ASSERT(restore);
                 UNIT_ASSERT(restore->Get()->Record.GetStateLoadPlan().GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN);
@@ -432,25 +430,26 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
             };
             noConfirmation();
             if (!boundary) {
-                continue; // Saved candidate, before foreign restore completes.
+                continue;   // Saved candidate, before foreign restore completes.
             }
             if (boundary == 1) {
                 UNIT_ASSERT(test.GrabEdgeEvent<TEvCheckpointStorage::TEvCreateCheckpointRequest>(test.StorageProxy, TDuration::Seconds(10)));
-                continue; // Foreign restore finished, before checkpoint metadata is saved.
+                continue;   // Foreign restore finished, before checkpoint metadata is saved.
             }
             TCheckpointId transition(test.CoordinatorId.Generation, 1);
             test.InjectCheckpoint(transition);
             noConfirmation();
             if (boundary == 2) {
-                continue; // Metadata exists, task states have not been saved.
+                continue;   // Metadata exists, task states have not been saved.
             }
             test.MockNodeStateSavedEvent(transition, test.IngressActor);
             test.MockNodeStateSavedEvent(transition, test.MapActor);
             test.MockNodeStateSavedEvent(transition, test.EgressActor);
-            UNIT_ASSERT(test.GrabEdgeEvent<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest>(test.StorageProxy, TDuration::Seconds(10)));
+            UNIT_ASSERT(
+                test.GrabEdgeEvent<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest>(test.StorageProxy, TDuration::Seconds(10)));
             noConfirmation();
             if (boundary == 3) {
-                continue; // Task states saved, PendingCommit is not confirmed.
+                continue;   // Task states saved, PendingCommit is not confirmed.
             }
             test.MockSetCheckpointPendingCommitStatusResponse(transition);
             UNIT_ASSERT(test.GrabEdgeEvent<TEvCheckpointCoordinator::TEvZeroCheckpointDone>(test.RunActor, TDuration::Seconds(10)));

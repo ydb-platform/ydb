@@ -19,9 +19,9 @@ namespace NKikimr::NKqp {
 //
 // The actor collects PQ source descriptors from `transactions`, describes every
 // discovered topic in parallel using `pqGatewayFactory`, patches the partition
-// counts in `*queryPhysicalGraph` for legacy restores, and then sends
-// TEvKqpExecuter::TEvPqTopicResolveStatus back to `owner`. With a null graph,
-// returns execution-local source descriptors in the event without mutating saved tasks.
+// counts in `*queryPhysicalGraph`, and then sends
+// TEvKqpExecuter::TEvPqTopicResolveStatus back to `owner`. With prepareReplanning,
+// also returns execution-local source descriptors without changing the saved topology.
 //
 // Must be called only after SecureParams have been resolved (i.e. after secrets
 // snapshot is obtained) so that the secureParams map is fully populated.
@@ -36,6 +36,7 @@ namespace NKikimr::NKqp {
 //   secureParams        – populated SecureParams (source name → token value)
 //   pqGatewayFactory    – used to create the gateway that does DescribeFederatedTopic
 //   queryPhysicalGraph  – will be patched in-place with new partition counts
+//   prepareReplanning   – also prepare source descriptors for building a new graph
 NActors::IActor* CreateKqpPqTopicResolver(
     const NActors::TActorId& owner,
     ui64 txId,
@@ -43,6 +44,7 @@ NActors::IActor* CreateKqpPqTopicResolver(
     const TString& database,
     THashMap<TString, TString> secureParams,
     NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-    std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph);
+    std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph,
+    bool prepareReplanning = false);
 
 } // namespace NKikimr::NKqp

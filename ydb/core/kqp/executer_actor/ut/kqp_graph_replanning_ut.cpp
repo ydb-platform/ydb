@@ -61,6 +61,37 @@ Y_UNIT_TEST_SUITE(TStreamingGraphReplanning) {
         UNIT_ASSERT(!MaterializedGraphsEqual(old, next));
     }
 
+    Y_UNIT_TEST(ComparatorIgnoresRedundantPqSourceSnapshotButPreservesSourceChanges) {
+        NKikimrKqp::TQueryPhysicalGraph old;
+        auto& task = *old.AddTasks()->MutableDqTask();
+        task.SetId(1);
+        auto& source = *task.AddInputs()->MutableSource();
+        source.SetType("PqSource");
+        NYql::NPq::NProto::TDqPqTopicSource settings;
+        settings.SetTopicPath("input");
+        auto& cluster = *settings.AddFederatedClusters();
+        cluster.SetName("local");
+        cluster.SetPartitionsCount(1);
+        source.MutableSettings()->PackFrom(settings);
+
+        auto next = old;
+        auto& nextTask = *next.MutableTasks(0)->MutableDqTask();
+        (*nextTask.MutableTaskParams())["pq_topic_source"] = settings.SerializeAsString();
+        UNIT_ASSERT(MaterializedGraphsEqual(old, next));
+        UNIT_ASSERT(MaterializedGraphsEqual(next, old));
+
+        // The cache is redundant only while it matches the actual source settings.
+        cluster.SetPartitionsCount(2);
+        (*nextTask.MutableTaskParams())["pq_topic_source"] = settings.SerializeAsString();
+        UNIT_ASSERT(!MaterializedGraphsEqual(old, next));
+        nextTask.MutableInputs(0)->MutableSource()->MutableSettings()->PackFrom(settings);
+        UNIT_ASSERT(!MaterializedGraphsEqual(old, next));
+
+        // Updating the actual source must also be detected without a cached snapshot.
+        nextTask.MutableTaskParams()->erase("pq_topic_source");
+        UNIT_ASSERT(!MaterializedGraphsEqual(old, next));
+    }
+
     Y_UNIT_TEST(ComparatorIgnoresTableSinkActorsButPreservesTableIdentity) {
         NKikimrKqp::TQueryPhysicalGraph old;
         auto& task = *old.AddTasks()->MutableDqTask();

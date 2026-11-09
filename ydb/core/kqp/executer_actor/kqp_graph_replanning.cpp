@@ -106,6 +106,28 @@ void NormalizeTableSinkSettings(google::protobuf::Any& value) {
     }
 }
 
+void NormalizePqSourceSnapshot(NYql::NDqProto::TDqTask& task) {
+    const auto snapshot = task.GetTaskParams().find("pq_topic_source");
+    if (snapshot == task.GetTaskParams().end()) {
+        return;
+    }
+    NYql::NPq::NProto::TDqPqTopicSource cached;
+    if (!cached.ParseFromString(snapshot->second)) {
+        return;
+    }
+    for (const auto& input : task.GetInputs()) {
+        NYql::NPq::NProto::TDqPqTopicSource source;
+        if (input.HasSource() && input.GetSource().GetType() == "PqSource" && input.GetSource().GetSettings().UnpackTo(&source)
+            && google::protobuf::util::MessageDifferencer::Equals(cached, source))
+        {
+            // Replanning adds this duplicate for the task transform. Its presence
+            // alone does not change the source settings or the materialized graph.
+            task.MutableTaskParams()->erase("pq_topic_source");
+            return;
+        }
+    }
+}
+
 NKikimrKqp::TQueryPhysicalGraph NormalizeGraph(const NKikimrKqp::TQueryPhysicalGraph& graph) {
     auto result = graph;
     result.ClearPreparedQuery();
@@ -127,6 +149,7 @@ NKikimrKqp::TQueryPhysicalGraph NormalizeGraph(const NKikimrKqp::TQueryPhysicalG
         task.MutableTaskParams()->erase("current_execution_generation");
         task.MutableTaskParams()->erase("checkpoints_enabled");
         task.MutableTaskParams()->erase("fq.job_id");
+        NormalizePqSourceSnapshot(task);
         // Control-plane actor IDs are serialized as task parameters, but do
         // not describe the materialized task/channel topology.
         if (graph.HasPreparedQuery()) {

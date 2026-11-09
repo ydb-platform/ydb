@@ -125,6 +125,8 @@ class TContinuationPlanBuilder {
     struct THashRouting {
         TString Settings;
         TVector<const NKikimr::NMiniKQL::TType*> KeyTypes;
+        // Runtime hash partition order is independent of task IDs and placement.
+        TVector<const NYql::NDqProto::TDqTask*> TasksBySlot;
         bool Block = false;
 
         bool IsSame(const THashRouting& other) const {
@@ -180,7 +182,8 @@ class TContinuationPlanBuilder {
     using TTopicsMapping = THashMap<TTopic, TTopicMappingInfo, TTopic::THash>;
 
 public:
-    TContinuationPlanBuilder(const TGraphStateInfo& src, const TGraphStateInfo& dst, const bool force, NYql::TIssues& issues, bool automaticReplanning)
+    TContinuationPlanBuilder(
+        const TGraphStateInfo& src, const TGraphStateInfo& dst, const bool force, NYql::TIssues& issues, bool automaticReplanning)
         : Force(force)
         , Issues(issues)
     {
@@ -207,7 +210,7 @@ public:
 private:
     //// Stateful operators recovery
 
-    static THashRouting GetAggregationRouting(const TGraphStateInfo& graph, const TStageStateInfo& aggregation) {
+    THashRouting GetAggregationRouting(const TGraphStateInfo& graph, const TStageStateInfo& aggregation) const {
         struct TOutputChannel {
             size_t OutputIndex = 0;
             size_t Slot = 0;
@@ -220,7 +223,7 @@ private:
         };
 
         if (aggregation.Tasks.size() == 1) {
-            return {};
+            return { .TasksBySlot = aggregation.Tasks };
         }
 
         THashMap<ui64, TProducer> producers;
@@ -232,8 +235,10 @@ private:
         }
 
         TMaybe<THashRouting> result;
+        TVector<const NYql::NDqProto::TDqTask*> tasksBySlot(aggregation.Tasks.size(), nullptr);
         for (size_t taskIndex = 0; taskIndex < aggregation.Tasks.size(); ++taskIndex) {
             bool hasShuffle = false;
+            TMaybe<size_t> taskSlot;
 
             const auto& target = *aggregation.Tasks[taskIndex];
             for (const auto& input : target.GetInputs()) {
@@ -265,8 +270,14 @@ private:
 
                     YQL_ENSURE(output.HasHashPartition() && !output.HasTransform(),
                         "Unsupported aggregation input routing, expected direct hash shuffle without output transforms");
-                    YQL_ENSURE(outgoing.GetDstTaskId() == target.GetId() && sourceChannel->Slot == taskIndex,
+                    YQL_ENSURE(outgoing.GetDstTaskId() == target.GetId() && (!taskSlot || *taskSlot == sourceChannel->Slot),
                         "Unexpected aggregation hash shuffle routing");
+                    YQL_ENSURE(sourceChannel->Slot < tasksBySlot.size() &&
+                                   (!tasksBySlot[sourceChannel->Slot] || tasksBySlot[sourceChannel->Slot] == &target),
+                        "Unexpected aggregation hash shuffle routing");
+                    YQL_ENSURE(AutomaticReplanning || sourceChannel->Slot == taskIndex, "Unexpected aggregation hash shuffle routing");
+                    taskSlot = sourceChannel->Slot;
+                    tasksBySlot[*taskSlot] = &target;
 
                     auto settings = output.GetHashPartition();
                     YQL_ENSURE(static_cast<size_t>(output.ChannelsSize()) == aggregation.Tasks.size() &&
@@ -299,6 +310,7 @@ private:
         }
 
         YQL_ENSURE(result, "Missing aggregation tasks");
+        result->TasksBySlot = std::move(tasksBySlot);
         return std::move(*result);
     }
 
@@ -409,8 +421,11 @@ private:
                 continue;
             }
 
+            THashRouting previousRouting, targetRouting;
             try {
-                if (!GetAggregationRouting(src, *old.Stage).IsSame(GetAggregationRouting(dst, *target.Stage))) {
+                previousRouting = GetAggregationRouting(src, *old.Stage);
+                targetRouting = GetAggregationRouting(dst, *target.Stage);
+                if (!previousRouting.IsSame(targetRouting)) {
                     StateLossError(TStringBuilder() << "Streaming aggregation shuffle routing changed for output table " << table);
                     continue;
                 }
@@ -425,8 +440,8 @@ private:
                 continue;
             }
 
-            for (size_t i = 0; i < target.Stage->Tasks.size(); ++i) {
-                const auto& task = *target.Stage->Tasks[i];
+            for (size_t slot = 0; slot < targetRouting.TasksBySlot.size(); ++slot) {
+                const auto& task = *targetRouting.TasksBySlot[slot];
                 auto& taskPlan = Plan[task.GetId()];
                 if (taskPlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
                     InitForeignPlan(task, taskPlan);
@@ -435,7 +450,7 @@ private:
                 auto& program = *taskPlan.MutableProgram();
                 YQL_ENSURE(!program.HasForeignTaskId(), "Ambiguous foreign program checkpoint for task " << task.GetId());
                 program.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
-                program.SetForeignTaskId(old.Stage->Tasks[i]->GetId());
+                program.SetForeignTaskId(previousRouting.TasksBySlot[slot]->GetId());
             }
         }
     }
@@ -443,8 +458,7 @@ private:
     void BuildIdenticalProgramContinuation(const TGraphStateInfo& src, const TGraphStateInfo& dst) {
         const auto supportsIdenticalTransfer = [](const NKikimr::NMiniKQL::TCallable* op) {
             const auto name = op->GetType()->GetName();
-            return name == "MultiHoppingCore"
-                || (name == "KqpStreamingAggregation" && GetStreamingAggregationIdentity(*op).empty());
+            return name == "MultiHoppingCore" || (name == "KqpStreamingAggregation" && GetStreamingAggregationIdentity(*op).empty());
         };
         const auto rawProgram = [](const TGraphStateInfo& graph, const TStageStateInfo& stage) -> const TString& {
             const auto& raw = stage.Tasks.front()->GetProgram().GetRaw();
@@ -454,23 +468,23 @@ private:
             if (!std::any_of(old.StatefulOperators.begin(), old.StatefulOperators.end(), supportsIdenticalTransfer)) {
                 continue;
             }
-            const auto target = std::find_if(dst.GetStages().begin(), dst.GetStages().end(),
-                [&](const auto& stage) { return stage.StageId == old.StageId; });
-            if (old.StatefulOperators.size() != 1 || target == dst.GetStages().end()
-                || target->StatefulOperators.size() != 1
-                || target->StatefulOperators.front()->GetType()->GetName() != old.StatefulOperators.front()->GetType()->GetName()
-                || old.RuntimeVersion != target->RuntimeVersion
-                || rawProgram(src, old) != rawProgram(dst, *target)
-                || old.Tasks.size() != target->Tasks.size())
+            const auto target = std::find_if(dst.GetStages().begin(), dst.GetStages().end(), [&](const auto& stage) {
+                return stage.StageId == old.StageId;
+            });
+            if (old.StatefulOperators.size() != 1 || target == dst.GetStages().end() || target->StatefulOperators.size() != 1 ||
+                target->StatefulOperators.front()->GetType()->GetName() != old.StatefulOperators.front()->GetType()->GetName() ||
+                old.RuntimeVersion != target->RuntimeVersion || rawProgram(src, old) != rawProgram(dst, *target) ||
+                old.Tasks.size() != target->Tasks.size())
             {
                 StateLossError(TStringBuilder() << "Cannot transfer changed or mixed compiled program in stage " << old.StageId);
                 continue;
             }
             try {
-                YQL_ENSURE(GetAggregationRouting(src, old).IsSame(GetAggregationRouting(dst, *target)),
-                    "Checkpointed operator shuffle routing changed");
-                for (size_t slot = 0; slot < target->Tasks.size(); ++slot) {
-                    const auto& task = *target->Tasks[slot];
+                const auto previousRouting = GetAggregationRouting(src, old);
+                const auto targetRouting = GetAggregationRouting(dst, *target);
+                YQL_ENSURE(previousRouting.IsSame(targetRouting), "Checkpointed operator shuffle routing changed");
+                for (size_t slot = 0; slot < targetRouting.TasksBySlot.size(); ++slot) {
+                    const auto& task = *targetRouting.TasksBySlot[slot];
                     auto& taskPlan = Plan[task.GetId()];
                     if (taskPlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
                         InitForeignPlan(task, taskPlan);
@@ -478,7 +492,7 @@ private:
                     auto& program = *taskPlan.MutableProgram();
                     YQL_ENSURE(!program.HasForeignTaskId(), "Ambiguous compiled program checkpoint");
                     program.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
-                    program.SetForeignTaskId(old.Tasks[slot]->GetId());
+                    program.SetForeignTaskId(previousRouting.TasksBySlot[slot]->GetId());
                 }
             } catch (const std::exception& e) {
                 StateLossError(TStringBuilder() << "Cannot transfer compiled program state in stage " << old.StageId << ": " << e.what());

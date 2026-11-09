@@ -195,7 +195,7 @@ private:
         TopicClusterPartitions[ev->Get()->TopicKey] = std::move(ev->Get()->ClusterPartitions);
 
         if (--Pending == 0) {
-            if (QueryPhysicalGraph) {
+            if (SourceTemplates.empty()) {
                 PatchAndDie();
             } else {
                 PlanAndDie();
@@ -268,7 +268,8 @@ private:
                 const auto& snapshot = TopicClusterPartitions.at(key);
                 RefreshPqSourcePartitions(source, snapshot.ByClusterName, snapshot.MaxPartitionsCount, MaxTasksPerStage);
             }
-            ReplyOkAndDie();
+            // Keep refreshed metadata for restoring the saved topology if replanning falls back.
+            PatchAndDie();
         } catch (const std::exception& e) {
             ReplyErrorAndDie(e.what());
         }
@@ -305,6 +306,9 @@ private:
 
                     NYql::NPq::NProto::TDqPqTopicSource topicSource;
                     if (!input.GetSource().GetSettings().UnpackTo(&topicSource)) {
+                        continue;
+                    }
+                    if (topicSource.GetUsedPartitionPredicate()) {
                         continue;
                     }
 
@@ -440,12 +444,13 @@ NActors::IActor* CreateKqpPqTopicResolver(
     const TString& database,
     THashMap<TString, TString> secureParams,
     NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-    std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph)
+    std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph,
+    bool prepareReplanning)
 {
-    auto sources = CollectPqSources(transactions, database, !queryPhysicalGraph);
+    auto sources = CollectPqSources(transactions, database, prepareReplanning);
     TPqSourcePlanningSnapshot sourceTemplates;
     ui32 maxTasksPerStage = 0;
-    if (!queryPhysicalGraph) {
+    if (prepareReplanning) {
         ui32 txId = 0;
         ui32 stageBase = 0;
         for (const auto& tx : transactions) {

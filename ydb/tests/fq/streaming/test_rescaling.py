@@ -197,6 +197,94 @@ class TestRescaling(StreamingTestBase):
         finally:
             self._cleanup_query(kikimr, query_name, added_slots)
 
+    @pytest.mark.parametrize("kikimr", [{"enable_exactly_once_topics_writing": True}], indirect=True)
+    def test_pq_source_fallback_refreshes_partitions(
+        self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+    ) -> None:
+        """Refresh partition metadata even when an exactly-once sink prevents replanning."""
+        query_name = entity_name("pq_source_fallback_refreshes_partitions")
+        inp, out, _ = self.get_io_names(kikimr, query_name, True, entity_name, partitions_count=1)
+        client = kikimr.ydb_client
+        kikimr.ydb_client.query(f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                INSERT INTO {out} WITH (DELIVERY_GUARANTEE = "exactly_once")
+                SELECT Data FROM {inp};
+            END DO;
+        ''')
+        try:
+            self._wait_started(kikimr, query_name)
+            self._wait_reader_count(kikimr, query_name, 1)
+            self._write_and_checkpoint(kikimr, query_name, {0: ["before_restart"]})
+            assert client.topic_read(self.output_topic, self.consumer_name, 1) == ["before_restart"]
+            self._stop_query(kikimr, query_name)
+
+            partitions_count = 20
+            client.driver.topic_client.alter_topic(
+                self.input_topic,
+                set_min_active_partitions=partitions_count,
+            )
+            # Write while stopped so a fresh start also fails this check.
+            expected = [f"after_restart_{partition}" for partition in range(partitions_count)]
+            for partition, message in enumerate(expected):
+                client.topic_write(self.input_topic, [message], partition_id=partition)
+
+            # Deferred publication keeps the saved task graph, including its single reader.
+            self._resume_query(kikimr, query_name, 1, expect_growth=False)
+            actual = client.topic_read(self.output_topic, self.consumer_name, len(expected))
+            assert sorted(actual) == sorted(expected), (actual, expected)
+            self.wait_completed_checkpoints(kikimr, query_name)
+            assert self._reader_count(kikimr) == 1, "Fallback unexpectedly rescaled the saved graph"
+        finally:
+            self._cleanup_query(kikimr, query_name, [])
+
+    def test_pq_source_rescaling_without_checkpoints(
+        self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+    ) -> None:
+        """Keep source scale-up available with both rescaling flags enabled and no checkpoints."""
+        partitions_count = 100
+        query_name = entity_name("pq_source_rescaling_without_checkpoints")
+        inp, out, _ = self.get_io_names(
+            kikimr, query_name, True, entity_name, partitions_count=partitions_count
+        )
+        kikimr.ydb_client.query(f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                PRAGMA ydb.DisableCheckpoints = "TRUE";
+                INSERT INTO {out} SELECT Data FROM {inp};
+            END DO;
+        ''')
+        added_slots = []
+        try:
+            # Readiness is observed through readers, without waiting for a checkpoint.
+            self._wait_reader_count(kikimr, query_name)
+            readers_before = self._reader_count(kikimr)
+            assert 0 < readers_before < (partitions_count + 4) // 5, readers_before
+            self._stop_query(kikimr, query_name)
+            added_slots.extend(kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3))
+            kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
+            kikimr.wait_kqp_node_count(len(counter_nodes(kikimr.cluster)), timeout_seconds=120)
+
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
+            assert wait_for(
+                lambda: self._reader_count(kikimr) > readers_before,
+                timeout_seconds=120,
+                step_seconds=1,
+            ), (
+                f"Readers did not scale up without checkpoints: "
+                f"before={readers_before}, after={self._reader_count(kikimr)}"
+            )
+
+            expected = [f"after_scale_up_{partition}" for partition in range(partitions_count)]
+            for partition, message in enumerate(expected):
+                kikimr.ydb_client.topic_write(self.input_topic, [message], partition_id=partition)
+            actual = kikimr.ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected))
+            assert sorted(actual) == sorted(expected), (actual, expected)
+        finally:
+            self._cleanup_query(kikimr, query_name, added_slots)
+
     @pytest.mark.parametrize("scale_up", [False, True], ids=["restart", "scale_up"])
     def test_pq_source_rescaling_insert_select(
         self,

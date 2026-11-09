@@ -578,6 +578,7 @@ private:
                 return;
             }
             PqPlanningSnapshotFailed = true;
+            RefreshedPhysicalGraph.reset();
         } else {
             PqPlanningSnapshot = std::move(ev->Get()->Snapshot);
         }
@@ -672,7 +673,11 @@ private:
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         // TODO: move graph restoration outside of executer
-        const bool graphRestored = PrepareGraphReplanning() ? false : RestoreTasksGraph(GraphChangedOnRestart);
+        const bool replanGraph = PrepareGraphReplanning();
+        if (!replanGraph && RefreshedPhysicalGraph) {
+            Request.QueryPhysicalGraph = std::move(RefreshedPhysicalGraph);
+        }
+        const bool graphRestored = replanGraph ? false : RestoreTasksGraph(GraphChangedOnRestart);
         if (GraphChangedOnRestart) {
             Request.SaveQueryPhysicalGraph = true;
         }
@@ -1586,8 +1591,10 @@ private:
         YDB_LOG_INFO("Streaming graph replanning fallback", {"reason", reason});
         ReplanningCounters->GetCounter("replan_failed", true)->Inc();
         ReplanningCounters->GetCounter("replan_fallback", true)->Inc();
-        TasksGraph.RestoreAfterReplan(ResourcesSnapshot, *PreviousPhysicalGraph);
-        Request.QueryPhysicalGraph = std::move(PreviousPhysicalGraph);
+        auto graph = RefreshedPhysicalGraph ? std::move(RefreshedPhysicalGraph) : std::move(PreviousPhysicalGraph);
+        TasksGraph.RestoreAfterReplan(ResourcesSnapshot, *graph);
+        Request.QueryPhysicalGraph = std::move(graph);
+        PreviousPhysicalGraph.reset();
     }
 
     void CompleteGraphReplanning() {
@@ -1601,6 +1608,7 @@ private:
             ReplanningCounters->GetCounter("replan_unchanged", true)->Inc();
             TasksGraph.RestoreAfterReplan(ResourcesSnapshot, *PreviousPhysicalGraph);
             Request.QueryPhysicalGraph = std::move(PreviousPhysicalGraph);
+            RefreshedPhysicalGraph.reset();
             return;
         }
         // Preflight against the previous materialized graph. The coordinator will
@@ -1630,14 +1638,21 @@ private:
             {"sourceTaskCountAfter", sourceTaskCount(*candidate)},
             {"candidateTaskCount", candidate->TasksSize()}, {"foreignStateMappingTasks", plan.size()});
         Request.QueryPhysicalGraph = std::move(candidate);
+        RefreshedPhysicalGraph.reset();
         GraphChangedOnRestart = true;
         Request.SaveQueryPhysicalGraph = true;
     }
 
     void StartPqTopicResolver() {
-        // Pass a non-const mutable copy of the shared_ptr so the resolver can patch it.
-        auto mutableGraph = UseGraphReplanning() ? nullptr
+        const bool prepareReplanning = UseGraphReplanning();
+        // Preserve the previous graph for state compatibility checks. The refreshed copy
+        // keeps the same task identities and is used if building a new graph falls back.
+        auto mutableGraph = prepareReplanning
+            ? std::make_shared<NKikimrKqp::TQueryPhysicalGraph>(*Request.QueryPhysicalGraph)
             : std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(Request.QueryPhysicalGraph);
+        if (prepareReplanning) {
+            RefreshedPhysicalGraph = mutableGraph;
+        }
 
         THashMap<TString, TString> resolvedSecureParams;
         for (const auto& transaction : Request.Transactions) {
@@ -1653,7 +1668,7 @@ private:
             Database,
             std::move(resolvedSecureParams),
             FederatedQuerySetup->PqGatewayFactory,
-            std::move(mutableGraph));
+            std::move(mutableGraph), prepareReplanning);
 
         RegisterWithSameMailbox(resolverActor);
     }
@@ -1689,6 +1704,7 @@ private:
     bool GraphChangedOnRestart = false;
     NMonitoring::TDynamicCounterPtr ReplanningCounters;
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> PreviousPhysicalGraph;
+    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> RefreshedPhysicalGraph;
     TPqSourcePlanningSnapshot PqPlanningSnapshot;
     bool PqPlanningSnapshotFailed = false;
 };

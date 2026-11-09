@@ -270,8 +270,6 @@ int TCommandRestore::Run(TConfig& config) {
 
     if (ExternalTableSourceMapping == "backup-root") {
         settings.ExternalTableSourceMapping(NDump::EExternalTableSourceMapping::BackupRoot);
-    } else if (ExternalTableSourceMapping != "database-root") {
-        throw TMisuseException() << "--external-table-source-mapping must be database-root or backup-root";
     }
 
     if (InFlight) {

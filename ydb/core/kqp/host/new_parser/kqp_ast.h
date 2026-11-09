@@ -277,6 +277,10 @@ struct TDerivedTable {
     TQueryPtr Query;
 };
 
+struct TExpressionSource {
+    TExpressionPtr Expression; // AS_TABLE(list-of-struct expression).
+};
+
 enum class EJoinKind { Inner, Cross, Left, Right, Full, LeftOnly, RightOnly, LeftSemi, RightSemi, Exclusion };
 // ON and USING remain distinct because USING/NATURAL require column merging.
 // ANY belongs to an immediate join input, not to the entire accumulated join
@@ -337,7 +341,7 @@ struct TTableHint {
 // and therefore receive independent resolved column identities.
 struct TSource {
     TSourceRange Range;
-    std::variant<TTable, TDerivedTable, TJoin> Value;
+    std::variant<TTable, TDerivedTable, TJoin, TExpressionSource> Value;
     std::optional<TIdentifier> Alias;
     TVector<TIdentifier> ColumnAliases;
     std::optional<TSampling> Sampling;
@@ -405,6 +409,21 @@ struct TQueryStatement {
     TQueryPtr Query;
 };
 
+struct TDeclareStatement {
+    TParameter Name;
+    TTypeName Type;
+};
+
+enum class EWriteKind { Insert, Update, Delete };
+struct TWriteStatement {
+    EWriteKind Kind;
+    TSourcePtr Target;
+    TQueryPtr Input; // INSERT SELECT.
+    TVector<TIdentifier> Columns; // Optional positional INSERT column list.
+    TExpressionPtr Where;
+    TVector<TNamedExpression> Assignments; // UPDATE SET, evaluated on the original row.
+};
+
 struct TPragmaValue {
     TSourceRange Range;
     std::variant<TIdentifier, TLiteral, TParameter> Value;
@@ -422,7 +441,7 @@ enum class EExplainMode { None, Explain, QueryPlan };
 struct TStatement {
     TSourceRange Range;
     EExplainMode Explain = EExplainMode::None;
-    std::variant<TQueryStatement, TPragmaStatement, TNamedBinding> Value;
+    std::variant<TQueryStatement, TPragmaStatement, TNamedBinding, TDeclareStatement, TWriteStatement> Value;
 };
 
 // Pragmas remain interleaved with queries so each semantic pass can apply

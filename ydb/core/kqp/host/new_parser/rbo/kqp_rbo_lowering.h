@@ -26,4 +26,8 @@ TIntrusivePtr<TOpRoot> LowerToRbo(const TQuery& query, const TScript& script,
     const TResolvedNames& names, const TAnnotatedAst& annotations,
     NYql::TExprContext& ctx, const TRboTableLookup& tables, bool orderedColumns = false);
 
+TIntrusivePtr<TOpRoot> LowerWriteToRbo(const TWriteStatement& write, const TScript& script,
+    const TResolvedNames& names, const TAnnotatedAst& annotations,
+    NYql::TExprContext& ctx, const TRboTableLookup& tables);
+
 } // namespace NKikimr::NKqp::NNewYql

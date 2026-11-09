@@ -1,6 +1,8 @@
 #include "impl.h"
 #include "bridge_storage.h"
 
+#include <google/protobuf/timestamp.pb.h>
+
 namespace {
 
     void SetTimestamp(TInstant instant, google::protobuf::Timestamp* to) {

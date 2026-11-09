@@ -5,6 +5,8 @@
 #include <util/stream/output.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <google/protobuf/timestamp.pb.h>
+
 using namespace NKikimr;
 using namespace NKikimr::NBsController;
 using namespace NKikimr::NBsController::NBridgeStorage;

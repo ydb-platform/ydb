@@ -6495,7 +6495,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             UNIT_ASSERT(usage->HasEstimateDeadline());
         }
         // nobody reports it: the estimate expires
-        runtime.SimulateSleep(NHive::THive::NAMED_RESOURCE_ESTIMATE_TIMEOUT + TDuration::Seconds(10));
+        runtime.SimulateSleep(NHive::NAMED_RESOURCE_ESTIMATE_TIMEOUT + TDuration::Seconds(10));
         UNIT_ASSERT(!getUsage());
 
         reportUsage(3, true);

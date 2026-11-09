@@ -1176,10 +1176,6 @@ protected:
     // How moving the tablet to the node changes the imbalance of each balanced named resource of the tablet:
     // the total amount over capacity for SATURATION, the usage stdev for SCATTER
     TNamedResourcesMoveEffect CheckNamedResourcesMoveEffect(const TTabletInfo& tablet, const TNodeInfo& node) const;
-public:
-    // How long the transferable part of named resources of a restarted tablet is assumed to stay with it
-    // until reported by the new incarnation
-    static constexpr TDuration NAMED_RESOURCE_ESTIMATE_TIMEOUT = TDuration::Minutes(2);
     // growth of the built-in resources stdev that a move is allowed to cause when it improves something else
     static constexpr double BUILTIN_STDEV_WORSENING_TOLERANCE = 0.01;
     void ScheduleNamedResourceEstimatesCheck(TFullTabletId tabletId, TInstant deadline);
@@ -1194,7 +1190,6 @@ public:
     // Returns settings of the balancer for a named resource which needs balancing among the nodes, if any
     template<std::forward_iterator TIter>
     std::optional<TBalancerSettings> CheckNamedResources(TIter begin, TIter end);
-protected:
     bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const {
         return CheckTabletMoveExpediency(tablet, node).Expedient;
     }

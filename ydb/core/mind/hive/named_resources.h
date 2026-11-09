@@ -76,6 +76,10 @@ private:
     TStorage Values;
 };
 
+// How long the named resources of a restarted tablet are assumed to stay with it (as an estimate, see
+// TNamedResourceValues::CarryOverAsEstimate) until reported by the new incarnation
+constexpr TDuration NAMED_RESOURCE_ESTIMATE_TIMEOUT = TDuration::Minutes(2);
+
 using ENamedResourceBalanceMode = NKikimrConfig::THiveConfig::TNamedResourceSettings::EBalanceMode;
 
 struct TNamedResourceSettings {

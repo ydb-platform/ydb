@@ -514,7 +514,7 @@ void TTabletInfo::CarryOverNamedResources() {
         return;
     }
     auto before = ResourceValues;
-    const TInstant deadline = TActivationContext::Now() + THive::NAMED_RESOURCE_ESTIMATE_TIMEOUT;
+    const TInstant deadline = TActivationContext::Now() + NAMED_RESOURCE_ESTIMATE_TIMEOUT;
     if (!ResourceValues.NamedResources.CarryOverAsEstimate(deadline)) {
         return;
     }

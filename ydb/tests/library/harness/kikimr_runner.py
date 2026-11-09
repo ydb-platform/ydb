@@ -35,6 +35,24 @@ logger = logging.getLogger(__name__)
 _ITEM_CONFIG_GENERATION_ANY = (1 << 64) - 1
 
 
+_NO_MLOCK_SUPPORT = {}
+
+
+def _supports_no_mlock(binary_path):
+    # Mixed-version tests also run older binaries that do not accept this option.
+    if binary_path not in _NO_MLOCK_SUPPORT:
+        result = yatest.common.execute([binary_path, '--help'])
+        _NO_MLOCK_SUPPORT[binary_path] = b'--no-mlock' in result.std_out
+    return _NO_MLOCK_SUPPORT[binary_path]
+
+
+def _ydbd_command(binary_path, lock_memory):
+    command = [binary_path]
+    if not lock_memory and _supports_no_mlock(binary_path):
+        command.append('--no-mlock')
+    return command
+
+
 def _allow_applied_bs_config_retry(request):
     for command in request.Command:
         name = command.WhichOneof("Command")
@@ -225,7 +243,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             out.write(b'\0')
 
     def __make_run_command(self):
-        command = [self.binary_path, "server"]
+        command = _ydbd_command(self.binary_path, self.__configurator.lock_memory) + ["server"]
 
         if self.__common_udfs_dir is not None:
             command.append("--udfs-dir={}".format(self.__common_udfs_dir))
@@ -534,7 +552,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
 
         binary_path = self.__configurator.get_binary_path(0)
-        full_command = [binary_path]
+        full_command = _ydbd_command(binary_path, self.__configurator.lock_memory)
         if connect_to_server:
             full_command += ["--server", server]
             if self.__configurator.protected_mode:

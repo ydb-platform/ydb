@@ -14,7 +14,7 @@ namespace {
 
 bool EnsureWatermarkExpr(const TPosition pos, TCoArgument arg, TExprBase body, TExprContext& ctx) {
     static constexpr std::string_view message =
-        "Unrecognized watermark expression, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')";
+        "Unrecognized watermark expression, please use WATERMARK = __ydb_write_time - Interval('PT5S')";
 
     const auto maybeMember = body.Maybe<TCoMember>();
     if (!maybeMember) {

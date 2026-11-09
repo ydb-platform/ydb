@@ -1061,9 +1061,6 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
 
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl) {
     ConvertDirectoryEntry(from.GetSelf(), to, processAcl);
-    for (const auto& attr : from.GetUserAttributes()) {
-        (*to->mutable_attributes())[attr.GetKey()] = attr.GetValue();
-    }
 
     switch (from.GetSelf().GetPathType()) {
     case NKikimrSchemeOp::EPathTypeTable:

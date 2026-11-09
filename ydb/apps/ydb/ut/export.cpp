@@ -461,20 +461,18 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ExpectListDirectory("/test_database/export-root")
             .ExpectChild("/test_database/export-root", "keep", Ydb::Scheme::Entry::TABLE)
             .ExpectChild("/test_database/export-root", "omit", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/export-root", "omitted_column", Ydb::Scheme::Entry::COLUMN_TABLE)
+            .ExpectChild("/test_database/export-root", "kept_column", Ydb::Scheme::Entry::COLUMN_TABLE)
             .ExpectChild("/test_database/export-root", "replica", Ydb::Scheme::Entry::TABLE)
             .ExpectChild("/test_database/export-root", "both", Ydb::Scheme::Entry::TABLE)
             .ExpectChild("/test_database/export-root", "false_attributes", Ydb::Scheme::Entry::TABLE)
             .ExpectChild("/test_database/export-root", "topic", Ydb::Scheme::Entry::TOPIC)
             .ExpectChild("/test_database/export-root", "omitted_view", Ydb::Scheme::Entry::VIEW)
-            .ExpectChild("/test_database/export-root", "kept_view", Ydb::Scheme::Entry::VIEW)
-            .ExpectDescribePath("/test_database/export-root/topic", Ydb::Scheme::Entry::TOPIC)
-            .ExpectDescribePath("/test_database/export-root/omitted_view", Ydb::Scheme::Entry::VIEW,
-                {{"__omit_backup", "true"}})
-            .ExpectDescribePath("/test_database/export-root/kept_view", Ydb::Scheme::Entry::VIEW,
-                {{"__omit_backup", "false"}});
+            .ExpectChild("/test_database/export-root", "kept_view", Ydb::Scheme::Entry::VIEW);
 
         Service<TTableImpl>()
             .SetTableAttribute("/test_database/export-root/omit", "__omit_backup", "true")
+            .SetTableAttribute("/test_database/export-root/omitted_column", "__omit_backup", "true")
             .SetTableAttribute("/test_database/export-root/replica", "__async_replica", "true")
             .SetTableAttribute("/test_database/export-root/both", "__async_replica", "true")
             .SetTableAttribute("/test_database/export-root/both", "__omit_backup", "true")
@@ -487,8 +485,10 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ExpectS3AccessKey("test-key")
             .ExpectS3SecretKey("test-access-key")
             .ExpectItem("/test_database/export-root/keep", "dst/keep")
+            .ExpectItem("/test_database/export-root/kept_column", "dst/kept_column")
             .ExpectItem("/test_database/export-root/false_attributes", "dst/false_attributes")
             .ExpectItem("/test_database/export-root/topic", "dst/topic")
+            .ExpectItem("/test_database/export-root/omitted_view", "dst/omitted_view")
             .ExpectItem("/test_database/export-root/kept_view", "dst/kept_view");
 
         RunCli(

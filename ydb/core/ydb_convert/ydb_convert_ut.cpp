@@ -1211,17 +1211,6 @@ Y_UNIT_TEST(TestEqualGranularAndDeprecatedAcl) {
 } // ConvertYdbPermissionNameToACLAttrs
 
 Y_UNIT_TEST_SUITE(ConvertDirectoryEntryTest) {
-    Y_UNIT_TEST(UserAttributes) {
-        NKikimrSchemeOp::TPathDescription from;
-        auto* attribute = from.AddUserAttributes();
-        attribute->SetKey("__omit_backup");
-        attribute->SetValue("true");
-        Ydb::Scheme::Entry to;
-        ConvertDirectoryEntry(from, &to, false);
-        UNIT_ASSERT_VALUES_EQUAL(to.attributes().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(to.attributes().at("__omit_backup"), "true");
-    }
-
     Y_UNIT_TEST(InterruptPermissionsInheritance) {
         NACLib::TACL acl;
         acl.SetInterruptInheritance(true);

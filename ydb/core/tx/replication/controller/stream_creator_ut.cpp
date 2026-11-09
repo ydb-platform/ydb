@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         const auto creator = runtime.Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1, 1,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
         runtime.EnableScheduleForActor(creator);
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender()));
         runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());

@@ -620,10 +620,32 @@ NScheme::TSchemeEntry DescribePath(TDriver driver, const TString& fullPath) {
     return status.GetEntry();
 }
 
-static bool IsPathOmittedFromBackup(TDriver driver, const TString& path) {
-    const auto entry = DescribePath(driver, path);
-    return IsOmittedFromBackup(entry.Attributes)
-        || entry.Attributes.contains(ATTR_ASYNC_REPLICATION);
+static bool IsPathOmittedFromBackup(TDriver driver, const TString& path, NScheme::ESchemeEntryType type) {
+    if (type == NScheme::ESchemeEntryType::Table || type == NScheme::ESchemeEntryType::ColumnTable) {
+        const auto description = DescribeTable(driver, path);
+        const auto& attributes = description.GetAttributes();
+        const auto replica = attributes.find(ATTR_ASYNC_REPLICA);
+        return IsOmittedFromBackup(attributes)
+            || (replica != attributes.end() && replica->second == "true");
+    }
+    if (type == NScheme::ESchemeEntryType::Topic) {
+        // A directly requested changefeed is exposed as a topic. Its attributes
+        // belong to the parent table's changefeed description, not DescribeTopic.
+        const TString parentPath(TStringBuf(path).RBefore('/'));
+        const auto parent = DescribePath(driver, parentPath);
+        if (parent.Type == NScheme::ESchemeEntryType::Table) {
+            const auto description = DescribeTable(driver, parentPath);
+            for (const auto& feed : description.GetChangefeedDescriptions()) {
+                if (TStringBuf(feed.GetName()) == TStringBuf(path).RAfter('/')) {
+                    return IsOmittedFromBackup(feed.GetAttributes())
+                        || feed.GetAttributes().contains(ATTR_ASYNC_REPLICATION);
+                }
+            }
+        }
+    }
+    // Other object types do not expose scheme user attributes through the
+    // existing public API. Their exclusion is supported by server-side export.
+    return false;
 }
 
 TAsyncStatus CopyTableAsyncStart(TDriver driver, const TString& src, const TString& dst) {
@@ -1116,7 +1138,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
         while (dbIt) {
             if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)
-                || (!dbIt.IsDir() && IsPathOmittedFromBackup(driver, dbIt.GetFullPath())))
+                || IsPathOmittedFromBackup(driver, dbIt.GetFullPath(), dbIt.GetCurrentNode()->Type))
             {
                 LOG_D("Skip " << dbIt.GetFullPath().Quote());
                 dbIt.Next();

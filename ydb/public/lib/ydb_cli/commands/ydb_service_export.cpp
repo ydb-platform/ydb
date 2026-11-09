@@ -39,15 +39,14 @@ namespace {
     }
 
     // The legacy replica-table rule is independent of __omit_backup.
-    TStatus FilterNotExportableItems(NScheme::TSchemeClient& schemeClient, NTable::TSession& session,
-            TVector<NScheme::TSchemeEntry>& entries) {
-        auto isNotExportable = [&schemeClient, &session](const NScheme::TSchemeEntry& entry) {
-            if (entry.Type != NScheme::ESchemeEntryType::Table) {
-                const auto result = schemeClient.DescribePath(entry.Name).ExtractValueSync();
-                NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-                const auto& attributes = result.GetEntry().Attributes;
-                const auto it = attributes.find("__omit_backup");
-                return it != attributes.end() && it->second == "true";
+    TStatus FilterNotExportableTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
+        auto isNotExportable = [&session](const NScheme::TSchemeEntry& entry) {
+            if (entry.Type != NScheme::ESchemeEntryType::Table
+                && entry.Type != NScheme::ESchemeEntryType::ColumnTable)
+            {
+                // Other objects are filtered by the export service, which can
+                // read their scheme attributes without extending the public API.
+                return false;
             }
             auto describeResult = session.DescribeTable(entry.Name).ExtractValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
@@ -84,8 +83,8 @@ namespace {
         auto ret = RecursiveList(schemeClient, TString{srcPath}, TRecursiveListSettings().Filter(filter));
         NStatusHelpers::ThrowOnErrorOrPrintIssues(ret.Status);
 
-        const auto status = tableClient.RetryOperationSync([&ret, &schemeClient](NTable::TSession session) {
-            return FilterNotExportableItems(schemeClient, session, ret.Entries);
+        const auto status = tableClient.RetryOperationSync([&ret](NTable::TSession session) {
+            return FilterNotExportableTables(session, ret.Entries);
         });
         NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
 

@@ -4191,7 +4191,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
-    Y_UNIT_TEST(OmittedObjectsAreNotDumped) {
+    Y_UNIT_TEST(OmittedTablesAndChangefeedsAreNotDumped) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
@@ -4205,6 +4205,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             ).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+
+        NTopic::TTopicClient topicClient(driver);
+        const auto topicStatus = topicClient.CreateTopic("/Root/topic", NTopic::TCreateTopicSettings()
+            .PartitioningSettings(NTopic::TPartitioningSettings(1, 1))).ExtractValueSync();
+        UNIT_ASSERT_C(topicStatus.IsSuccess(), topicStatus.GetIssues().ToString());
 
         NQuery::TQueryClient queryClient(driver);
         auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -4230,15 +4235,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 NMsgBusProxy::MSTATUS_OK);
         }
 
-        TSchemeClient schemeClient(driver);
-        const auto view = schemeClient.DescribePath("/Root/omitted_view").ExtractValueSync();
-        UNIT_ASSERT_C(view.IsSuccess(), view.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(view.GetEntry().Attributes.at("__omit_backup"), "true");
-        const auto feed = schemeClient.DescribePath("/Root/kept/replication_without_omit").ExtractValueSync();
-        UNIT_ASSERT_C(feed.IsSuccess(), feed.GetIssues().ToString());
-        UNIT_ASSERT(feed.GetEntry().Attributes.contains("__async_replication"));
-        UNIT_ASSERT(!feed.GetEntry().Attributes.contains("__omit_backup"));
-
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
         NDump::TClient backupClient(driver);
@@ -4249,8 +4245,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         pathToBackup.ListNames(children);
         UNIT_ASSERT_C(FindPtr(children, "kept"), JoinSeq(", ", children));
         UNIT_ASSERT_C(!FindPtr(children, "omitted"), JoinSeq(", ", children));
-        UNIT_ASSERT_C(!FindPtr(children, "omitted_view"), JoinSeq(", ", children));
+        // Views do not expose user attributes through the existing public API.
+        // Server-side export handles them, while tools dump retains them.
+        UNIT_ASSERT_C(FindPtr(children, "omitted_view"), JoinSeq(", ", children));
         UNIT_ASSERT_C(FindPtr(children, "kept_view"), JoinSeq(", ", children));
+        UNIT_ASSERT_C(FindPtr(children, "topic"), JoinSeq(", ", children));
         const auto tableFolder = pathToBackup.Child("kept");
         UNIT_ASSERT(tableFolder.Child("application").Exists());
         UNIT_ASSERT(tableFolder.Child("unmarked_feed").Exists());
@@ -4258,11 +4257,15 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         UNIT_ASSERT(!tableFolder.Child("replication_feed").Exists());
         UNIT_ASSERT(!tableFolder.Child("replication_without_omit").Exists());
 
-        TTempDir directFeedDump;
-        const auto directResult = backupClient.Dump("/Root/kept/replication_without_omit", directFeedDump.Path(),
-            NDump::TDumpSettings().Database("/Root"));
-        UNIT_ASSERT_C(directResult.IsSuccess(), directResult.GetIssues().ToString());
-        UNIT_ASSERT(!directFeedDump.Path().Child("replication_without_omit").Exists());
+        for (const auto& name : {"replication_without_omit", "replication_feed", "omitted_feed", "application", "unmarked_feed"}) {
+            TTempDir directFeedDump;
+            const auto directResult = backupClient.Dump(TString("/Root/kept/") + name, directFeedDump.Path(),
+                NDump::TDumpSettings().Database("/Root"));
+            UNIT_ASSERT_C(directResult.IsSuccess(), directResult.GetIssues().ToString());
+            const bool excluded = TStringBuf(name) != "application" && TStringBuf(name) != "unmarked_feed";
+            UNIT_ASSERT_VALUES_EQUAL(directFeedDump.Path().Child(name).Exists(), !excluded);
+        }
+
     }
 
     Y_UNIT_TEST(SkipEmptyDirsOnRestore) {

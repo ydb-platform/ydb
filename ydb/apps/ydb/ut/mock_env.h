@@ -112,33 +112,7 @@ public:
         std::vector<std::pair<TString, Ydb::Scheme::Entry::Type>> Children;
     };
 
-    grpc::Status DescribePath(grpc::ServerContext*, const Ydb::Scheme::DescribePathRequest* request,
-            Ydb::Scheme::DescribePathResponse* response) override {
-        Ydb::Scheme::DescribePathResult result;
-        const auto it = DescribedEntries.find(request->path());
-        CHECK_EXP(it != DescribedEntries.end(), "Unexpected DescribePath path: " << request->path());
-        if (it != DescribedEntries.end()) {
-            *result.mutable_self() = it->second;
-        }
-        auto* operation = response->mutable_operation();
-        operation->set_ready(true);
-        operation->set_status(Ydb::StatusIds::SUCCESS);
-        operation->mutable_result()->PackFrom(result);
-        return grpc::Status();
-    }
-
-    TSchemeImpl& ExpectDescribePath(TString path, Ydb::Scheme::Entry::Type type,
-            const THashMap<TString, TString>& attributes = {}) {
-        auto& entry = DescribedEntries[path];
-        entry.set_name(TStringBuf(path).RNextTok('/'));
-        entry.set_type(type);
-        for (const auto& [name, value] : attributes) {
-            (*entry.mutable_attributes())[name] = value;
-        }
-        return *this;
-    }
-
-    grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) override {
+    grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) {
         CheckClientMetadata(context, "x-ydb-database", TEST_DATABASE);
         if (Token) {
             CheckClientMetadata(context, "x-ydb-auth-ticket", Token);
@@ -210,10 +184,9 @@ public:
         Token = token;
     }
 
-    void ClearExpectations() override {
+    void ClearExpectations() {
         ExpectedClientCert = Token = {};
         Directories.clear();
-        DescribedEntries.clear();
     }
 
     void ExpectClientCert(const TString& cert) {
@@ -223,7 +196,6 @@ public:
     TString Token;
     TString ExpectedClientCert;
     THashMap<TString, TDirectory> Directories;
-    THashMap<TString, Ydb::Scheme::Entry> DescribedEntries;
 };
 
 class TAuthImpl : public TMockGrpcServiceBase<Ydb::Auth::V1::AuthService::Service> {

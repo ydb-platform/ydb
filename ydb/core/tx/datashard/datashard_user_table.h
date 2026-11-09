@@ -492,6 +492,13 @@ struct TUserTable : public TThrRefBase {
     ui32 ShadowTid = 0;
     TString Name;
     TString Path;
+    struct THnswIndexInfo {
+        Ydb::Table::VectorIndexSettings Settings;
+        ui32 VectorColumnTag = 0;
+        ui64 SchemaVersion = 0;
+    };
+    TMap<TPathId, THnswIndexInfo> HnswIndexes;
+    // Compatibility view while the read/build paths migrate to index identity.
     std::optional<Ydb::Table::VectorIndexSettings> HnswSettings;
     ui32 HnswVectorColumnTag = 0;
     TMap<ui32, TStorageRoom::TPtr> Rooms;

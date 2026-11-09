@@ -6299,6 +6299,34 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
+    Y_UNIT_TEST(HnswMultipleIndexMetadataSurvivesRestartAndDrop) {
+        NKikimrSchemeOp::TTableDescription schema;
+        schema.SetPath("/Root/posting");
+        for (ui32 id : {2u, 3u}) {
+            auto* index = schema.AddTableIndexes();
+            index->SetName(TStringBuilder() << "hnsw" << id);
+            index->SetPathOwnerId(1);
+            index->SetLocalPathId(id);
+            index->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+            index->SetSchemaVersion(id + 10);
+            auto* description = index->MutableHnswIndexDescription();
+            description->SetEmbeddingColumnId(id + 40);
+            description->MutableSettings()->mutable_settings()->set_vector_dimension(2);
+        }
+        TUserTable table(1, schema, 0);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.at(TPathId(1, 2)).VectorColumnTag, 42);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.at(TPathId(1, 3)).SchemaVersion, 13);
+        table.GetSchema(schema);
+        TUserTable restored(1, schema, 0);
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswIndexes.size(), 2);
+        restored.DropIndex(TPathId(1, 2));
+        restored.GetSchema(schema);
+        TUserTable dropped(1, schema, 0);
+        UNIT_ASSERT_VALUES_EQUAL(dropped.HnswIndexes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dropped.HnswIndexes.at(TPathId(1, 3)).VectorColumnTag, 43);
+    }
+
     Y_UNIT_TEST(HnswIndexMetadataAddDropAndRestart) {
         NKikimrSchemeOp::TTableDescription schema;
         schema.SetPath("/Root/posting");

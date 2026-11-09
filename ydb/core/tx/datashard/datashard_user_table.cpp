@@ -17,6 +17,7 @@ namespace NDataShard {
 namespace {
 
 void ParseHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr) {
+    table.HnswIndexes.clear();
     table.HnswSettings.reset();
     table.HnswVectorColumnTag = 0;
     for (const auto& index : descr.GetTableIndexes()) {
@@ -26,9 +27,13 @@ void ParseHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescripti
         const auto& description = index.GetHnswIndexDescription();
         if (description.HasSettings() && description.GetSettings().has_settings()
                 && description.HasEmbeddingColumnId()) {
-            table.HnswSettings = description.GetSettings().settings();
-            table.HnswVectorColumnTag = description.GetEmbeddingColumnId();
-            return;
+            table.HnswIndexes.emplace(TPathId(index.GetPathOwnerId(), index.GetLocalPathId()),
+                TUserTable::THnswIndexInfo{description.GetSettings().settings(),
+                    description.GetEmbeddingColumnId(), index.GetSchemaVersion()});
+            if (!table.HnswSettings) {
+                table.HnswSettings = description.GetSettings().settings();
+                table.HnswVectorColumnTag = description.GetEmbeddingColumnId();
+            }
         }
     }
 }

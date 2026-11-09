@@ -635,9 +635,11 @@ class WorkflowContractTest(unittest.TestCase):
 
     def test_wait_job_covers_host_day(self):
         text = (_GITHUB / "workflows/dispatch_remote.yml").read_text(encoding="utf-8")
-        self.assertIn("timeout-minutes: 1500", text)
+        self.assertIn("timeout-minutes: 1560", text)
         self.assertGreaterEqual(dre.EXECUTOR_WAIT_ATTEMPTS * 30, 24 * 60 * 60)
         self.assertEqual(dre.EXECUTOR_WAIT_ATTEMPTS, 2880)
+        # Job budget = claim 60m + executor 24h + ≥60m slack.
+        self.assertGreaterEqual(1560, 60 + 24 * 60 + 60)
 
 
 if __name__ == "__main__":

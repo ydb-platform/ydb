@@ -93,7 +93,11 @@ def read_claim(cfg, platform_run_id: str) -> dict | None:
     body = http_get_text(object_url(endpoint, bucket, f"remote-claims/{platform_run_id}.json"))
     if not body:
         return None
-    claim = json.loads(body)
+    try:
+        claim = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
+        # Treat corrupt/partial objects as not-yet-ready and keep polling.
+        return None
     return claim if isinstance(claim, dict) else None
 
 

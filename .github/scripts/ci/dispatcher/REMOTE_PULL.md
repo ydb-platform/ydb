@@ -65,8 +65,9 @@ they are absent, ingest skips those steps and still succeeds.
 3. **wait** (`runner-waiter`) — poll `remote-claims/{platform_run_id}.json` on
    host S3 (up to 120×30s), then the host Actions run. The executor poll is
    `EXECUTOR_WAIT_ATTEMPTS` = 2880×30s (24h), matching the host execute job
-   `timeout-minutes: 1440`. The wait job `timeout-minutes` is 1500 so the claim
-   window plus a full executor day fit in the job.
+   `timeout-minutes: 1440`. The wait job `timeout-minutes` is 1560 so the claim
+   window plus a full executor day fit with slack for HTTP overhead (avoids
+   cancelling the host when the job hits the GHA timeout ceiling).
 4. **ingest** — read host `remote_artifacts.json` (`files` list + metadata),
    anonymous GetObject for each key, copy to platform S3, write a summary.
    Test-results upload and `ci_metrics` flush run only when `started_at` /

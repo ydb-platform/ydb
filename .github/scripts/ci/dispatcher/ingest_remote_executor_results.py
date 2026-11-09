@@ -92,7 +92,10 @@ def load_manifest(
     raw = http_get_bytes_retry(url)
     if not raw:
         die(f"missing remote_artifacts.json at {url}")
-    meta = json.loads(raw.decode())
+    try:
+        meta = json.loads(raw.decode())
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError) as exc:
+        die(f"invalid remote_artifacts.json at {url}: {exc}")
     if not isinstance(meta, dict) or int(meta.get("version") or 0) != 1:
         die(f"unexpected remote_artifacts.json schema: {meta!r}")
     normalize_manifest_files(meta)

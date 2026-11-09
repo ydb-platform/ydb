@@ -4,10 +4,6 @@
 
 namespace NKikimr::NStorage {
 
-    // Generate set of mandatory pile ids for configuration quorum.
-    THashSet<TBridgePileId> GetMandatoryPileIds(const NKikimrBlobStorage::TStorageConfig& config,
-            const THashSet<TBridgePileId>& pileIdQuorumOverride);
-
     bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TNodeIdentifier> successful,
         TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, TStringStream *out,
         bool allowConfigQuorum = false);

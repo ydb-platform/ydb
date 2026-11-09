@@ -555,7 +555,7 @@ namespace Tests {
 
             const auto& pathMapping = Settings->AppConfig->GetResourcePathPrefixMapping();
             if (pathMapping.RulesSize()) {
-                appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping);
+                appData.SetPathNormalizer(std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping, appData.Counters));
             }
 
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
@@ -724,7 +724,7 @@ namespace Tests {
 
     void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId, const std::optional<TString>& tenant) {
         auto* grpcInfo = &TenantsGRpc[tenant ? *tenant : Settings->DomainName][grpcServiceNodeId];
-        grpcInfo->Shutdown();
+        grpcInfo->Shutdown(StoppedGRpcServers);
 
         grpcInfo->GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = grpcInfo->GRpcServerRootCounters;

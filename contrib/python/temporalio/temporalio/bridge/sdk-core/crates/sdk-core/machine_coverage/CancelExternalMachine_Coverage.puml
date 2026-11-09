@@ -1,0 +1,9 @@
+@startuml
+Created -[#blue]-> RequestCancelExternalCommandCreated: Schedule
+RequestCancelExternalCommandCreated -[#blue]-> RequestCancelExternalCommandCreated: CommandRequestCancelExternalWorkflowExecution
+RequestCancelExternalCommandCreated -[#blue]-> RequestCancelExternalCommandRecorded: RequestCancelExternalWorkflowExecutionInitiated
+RequestCancelExternalCommandRecorded -[#blue]-> CancelRequested: ExternalWorkflowExecutionCancelRequested
+RequestCancelExternalCommandRecorded -[#blue]-> RequestCancelFailed: RequestCancelExternalWorkflowExecutionFailed
+CancelRequested --> [*]
+RequestCancelFailed --> [*]
+@enduml

@@ -9,7 +9,6 @@
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
-#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>

@@ -1,0 +1,10 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run ya-tc tool",
+        "availability": "hidden",
+        "definition": {
+            "formula": "build/external_resources/ya-tc/public.resources.json"
+        }
+    }
+}

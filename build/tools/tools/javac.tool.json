@@ -1,0 +1,6 @@
+{
+    "tool": {
+        "type": "toolchain",
+        "description": "Run current javac (17)"
+    }
+}

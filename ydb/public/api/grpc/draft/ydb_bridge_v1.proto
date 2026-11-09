@@ -11,6 +11,9 @@ import "ydb/public/api/protos/draft/ydb_bridge.proto";
 // Service for managing cluster in bridge mode
 service BridgeService {
 
+    // Change bridge mode of the specified database.
+    rpc SetDatabaseBridgeMode(Ydb.Bridge.SetDatabaseBridgeModeRequest) returns (Ydb.Bridge.SetDatabaseBridgeModeResponse);
+
     // Get current cluster state
     // Useful for monitoring and decision-making before state changes
     rpc GetClusterState(Ydb.Bridge.GetClusterStateRequest) returns (Ydb.Bridge.GetClusterStateResponse);

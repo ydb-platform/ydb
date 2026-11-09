@@ -10,7 +10,7 @@
 #include <ydb/core/tablet_flat/flat_boot_cookie.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <ydb/core/tablet_flat/flat_part_scheme.h>
 #include <ydb/core/tablet_flat/flat_part_writer.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>

@@ -498,7 +498,6 @@ jobs:
           build_preset: ${{ inputs.build_preset }}
           increment: false
           build_target: ${{ inputs.test_targets }}
-          run_build: true
           run_tests: true
           test_retry_count: 3
           test_size: ${{ inputs.test_size }}

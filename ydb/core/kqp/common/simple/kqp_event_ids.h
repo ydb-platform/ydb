@@ -57,6 +57,8 @@ struct TKqpEvents {
         EvCurrentQueryStats,
         EvKillSessionRequest,
         EvKillSessionResponse,
+        EvGetVectorIndexLevelsCacheRequest,
+        EvGetVectorIndexLevelsCacheResponse,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -186,6 +188,7 @@ struct TKqpScriptExecutionEvents {
         EvResetScriptExecutionRetriesResponse,
         EvGetScriptExecutionPhysicalGraph,
         EvDescribeResourceIdResponse,
+        EvFetchScriptResultsRequest,
     };
 };
 

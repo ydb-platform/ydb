@@ -4,6 +4,7 @@ SRCS(
     kqp_data_executer.cpp
     kqp_executer_impl.cpp
     kqp_executer_stats.cpp
+    kqp_graph_replanning.cpp
     kqp_literal_executer.cpp
     kqp_locks_helper.cpp
     kqp_partition_helper.cpp

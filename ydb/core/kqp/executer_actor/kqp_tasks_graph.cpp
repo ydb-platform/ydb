@@ -2733,6 +2733,26 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
     }
 }
 
+const NKqpProto::TKqpExternalSource& TKqpTasksGraph::GetExternalSource(const TStageInfo& stageInfo) const {
+    if (const auto* snapshot = PqSourcePlanningSnapshot.FindPtr(stageInfo.Id)) {
+        return *snapshot;
+    }
+    return stageInfo.Meta.GetStage(stageInfo.Id).GetSources(0).GetExternalSource();
+}
+
+void TKqpTasksGraph::RestoreAfterReplan(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
+    const NKikimrKqp::TQueryPhysicalGraph& graphInfo)
+{
+    GetTasks().clear();
+    GetChannels().clear();
+    for (auto& [id, stage] : GetStagesInfo()) {
+        stage.Tasks.clear();
+    }
+    PlanningConstraints = {};
+    PqSourcePlanningSnapshot.clear();
+    RestoreTasksGraphInfo(resourcesSnapshot, graphInfo);
+}
+
 void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
     const auto& stageId = stageInfo.Id;
     const auto& stage = stageInfo.Meta.GetStage(stageId);
@@ -2741,7 +2761,7 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
     YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
 
     const auto& stageSource = stage.GetSources(0);
-    const auto& externalSource = stageSource.GetExternalSource();
+    const auto& externalSource = GetExternalSource(stageInfo);
 
     auto sourceName = externalSource.GetSourceName();
     TString structuredToken;
@@ -2785,6 +2805,9 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
 
         if (externalSource.GetType() == NYql::PqSource && i == 0) {   // Only first task will check partition count.
             task.Meta.TaskParams.emplace("partition_count_check_enabled", "true");
+        }
+        if (PqSourcePlanningSnapshot.contains(stageId)) {
+            task.Meta.TaskParams["pq_topic_source"] = externalSource.GetSettings().value();
         }
         tasksIds.push_back(task.Id);
     }
@@ -4232,14 +4255,15 @@ void TKqpTasksGraph::CountSysViewTasksFromSource(TStageInfo& stageInfo) {
 void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t resourceSnapshotSize, ui32 scheduledTaskCount) {
     const auto& stageId = stageInfo.Id;
     const auto& stage = stageInfo.Meta.GetStage(stageId);
-    const auto& externalSource = stage.GetSources(0).GetExternalSource();
+    const auto& externalSource = GetExternalSource(stageInfo);
 
     // TODO: can it have any inputs at all?
     std::list<TStageId> inputs;
     for (const auto& input : stage.GetInputs()) {
         inputs.push_back(MakeStageId(stageId.TxId, input.GetStageIndex()));
     }
-    MaxTasksGraph->AddStage(stageInfo, TMaxTasksGraph::ANY, inputs);
+    const auto* fixed = PlanningConstraints.FixedTaskCountByStage.FindPtr(stageId);
+    MaxTasksGraph->AddStage(stageInfo, fixed ? TMaxTasksGraph::FIXED : TMaxTasksGraph::ANY, inputs);
 
     ui32 taskCountHint = stage.GetTaskCount();
     if (!taskCountHint) {
@@ -4256,6 +4280,11 @@ void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t reso
         } else {
             taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
         }
+    }
+
+    if (fixed) {
+        YQL_ENSURE(*fixed && *fixed <= externalSource.PartitionedTaskParamsSize(), "Incompatible fixed source task count");
+        taskCount = *fixed;
     }
 
     for (ui32 i = 0; i < taskCount; ++i) {
@@ -4422,6 +4451,19 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount);
             partitionsCount = std::max(newPartitionCount, partitionsCount);
         }
+    }
+
+    if (const auto* fixed = PlanningConstraints.FixedTaskCountByStage.FindPtr(stageId)) {
+        YQL_ENSURE(*fixed, "Fixed stage task count must be positive");
+        if (copyInput) {
+            YQL_ENSURE(partitionsCount == *fixed,
+                "Fixed stateful task count conflicts with COPY input on stage " << stageId
+                << ": " << *fixed << " vs " << partitionsCount);
+            MaxTasksGraph->FixStageTasksCount(*copyInput);
+        } else {
+            stageType = TMaxTasksGraph::FIXED;
+        }
+        partitionsCount = *fixed;
     }
 
     // Tasks writing through the shared per-query buffer actor must run on the executer's own node (see

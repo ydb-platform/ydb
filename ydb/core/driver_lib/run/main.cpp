@@ -36,7 +36,7 @@ void SetupTerminateHandler() {
 int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFactories> factories) {
     try {
 #ifndef _win_
-        mlockall(MCL_CURRENT);
+        // mlockall(MCL_CURRENT);
 #endif
         NKikimr::EnableYDBBacktraceFormat();
         return NKikimr::NDriverClient::NewClient(argc, argv, std::move(factories));

@@ -394,36 +394,6 @@ Alias=nemesis.service
     return orchestrator_host
 
 
-def graceful_disable_schedules(orchestrator_host: str, app_port: int = 31434, timeout: int = 30) -> bool:
-    """
-    Call the orchestrator HTTP API to disable all nemesis schedules
-    before stopping systemd services. This ensures that extract/cleanup
-    commands are flushed to agents while they are still running.
-
-    Returns True if the API call succeeded, False otherwise.
-    """
-    url = f"http://{orchestrator_host}:{app_port}/api/schedule/all"
-    try:
-        resp = requests.post(url, json={"enabled": False}, timeout=timeout)
-        if resp.status_code == 200:
-            data = resp.json()
-            stopped = data.get("stopped", [])
-            print(f"[{orchestrator_host}] Gracefully disabled schedules: {stopped}")
-            return True
-        else:
-            print(
-                f"[{orchestrator_host}] WARNING: schedule disable returned HTTP {resp.status_code}: {resp.text}",
-                file=sys.stderr,
-            )
-            return False
-    except Exception as e:
-        print(
-            f"[{orchestrator_host}] WARNING: could not disable schedules via API (orchestrator may already be down): {e}",
-            file=sys.stderr,
-        )
-        return False
-
-
 def stop_agent_services(hosts, app_port: int = 31434):
     if not hosts:
         return

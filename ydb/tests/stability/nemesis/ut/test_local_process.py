@@ -306,7 +306,7 @@ def test_local_app_wires_process_inventory_and_engine_without_harness(tmp_path, 
     for name in ("hosts", "host_endpoints", "mon_port", "healthcheck_reporter", "chaos_problems",
                  "failure_guard", "cluster_inventory", "nemesis_metrics", "chaos_store",
                  "orchestrator_warden_checker", "recovery_probe", "command_dispatcher",
-                 "nemesis_schedule", "fault_engine", "nemesis_scheduler"):
+                 "available_fault_types", "fault_engine", "nemesis_scheduler"):
         monkeypatch.setattr(orchestrator_router, name, getattr(orchestrator_router, name))
     monkeypatch.setattr(agent_router, "execution_service", None)
     monkeypatch.setattr(agent_router, "warden_checker", None)

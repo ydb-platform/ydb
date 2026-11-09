@@ -1,7 +1,6 @@
 /**
  * Scheduler state, failure budget, recovery probe and problems
- * (GET /api/scheduler + GET /api/problems). This drives scheduled chaos; the per-type toggles in
- * the accordion belong to the legacy loop.
+ * (GET /api/scheduler + GET /api/problems). This is the single scheduler for all automated chaos.
  */
 export default {
   props: {
@@ -38,6 +37,7 @@ export default {
     const pileBudgets = computed(() => props.scheduler?.failure_budget?.piles || {})
     const probe = computed(() => props.scheduler?.recovery_probe || null)
     const probeFaults = computed(() => probe.value?.faults || [])
+    const pileRecovery = computed(() => probe.value?.piles || {})
 
     const intervalText = computed(() => {
       const base = props.scheduler?.base_interval
@@ -88,6 +88,7 @@ export default {
       enabledTypes,
       budget,
       pileBudgets,
+      pileRecovery,
       probe,
       probeFaults,
       intervalText,
@@ -189,13 +190,15 @@ export default {
             </div>
             <div v-if="Object.keys(pileBudgets).length" class="overflow-x-auto pt-2">
               <table class="table table-xs">
-                <thead><tr><th>Pile</th><th>Storage domains down</th><th>Slots down / budget</th><th>Total slots</th></tr></thead>
+                <thead><tr><th>Pile</th><th>Storage domains down</th><th>Slots down / budget</th><th>Total slots</th><th>Recovery: tracked / confirm / stuck</th><th>Alive compute</th></tr></thead>
                 <tbody>
                   <tr v-for="(p, id) in pileBudgets" :key="id">
                     <td>{{ p.name }} ({{ id }})</td>
                     <td>{{ p.impaired_racks.length }}</td>
                     <td>{{ p.impaired_slots }} / {{ p.max_slots }}</td>
                     <td>{{ p.total_slots }}</td>
+                    <td :class="pileRecovery[id]?.stuck ? 'text-error' : ''">{{ pileRecovery[id]?.tracked ?? 0 }} / {{ pileRecovery[id]?.confirming ?? 0 }} / {{ pileRecovery[id]?.stuck ?? 0 }}</td>
+                    <td>{{ pileRecovery[id]?.alive_compute ?? 'unknown' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -205,7 +208,7 @@ export default {
             </div>
             <div v-if="showProbe" class="pt-1 space-y-1">
               <div v-if="probeFaults.length === 0" class="text-xs opacity-50">no faults tracked</div>
-              <div v-for="f in probeFaults" :key="f.identity_key"
+              <div v-for="f in probeFaults" :key="f.operation_id || f.identity_key"
                    class="flex flex-wrap items-center gap-1 text-xs">
                 <span class="badge badge-outline badge-xs font-mono">{{ f.nemesis_type }}</span>
                 <span class="font-mono opacity-80" :title="f.identity_key">{{ shortHost(f.host) }}</span>
@@ -216,6 +219,7 @@ export default {
                         : (f.toggle ? 'holding until auto-extract' : 'waiting for recovery predicate')">
                   {{ f.stuck ? 'stuck' : f.phase }}
                 </span>
+                <span v-for="pile in f.piles" :key="pile" class="badge badge-outline badge-xs">Pile {{ pile }}</span>
                 <span class="opacity-50 font-mono">{{ Math.round(f.held_sec) }}s</span>
               </div>
             </div>

@@ -150,7 +150,6 @@ def test_old_manual_api_reserves_before_dispatch_and_extract_does_not_release(tm
     monkeypatch.setattr(orchestrator_router, "command_dispatcher", object())
     monkeypatch.setattr(orchestrator_router, "chaos_store", object())
     monkeypatch.setattr(orchestrator_router, "cluster_inventory", None)
-    monkeypatch.setattr(orchestrator_router, "nemesis_schedule", SimpleNamespace(is_schedule_enabled=lambda n: False))
     app = Flask(__name__)
     app.register_blueprint(orchestrator_router.blueprint)
     client = app.test_client()

@@ -160,10 +160,9 @@ def test_shared_history_and_metrics_keep_existing_api(delivery, monkeypatch):
     assert [name for name, _ in metrics.events] == ["started", "started", "extract", "started"]
     assert all(fields["lease_id"] == "lease" for _, fields in metrics.events)
     monkeypatch.setattr(orchestrator_router, "command_dispatcher", sender)
-    monkeypatch.setattr(orchestrator_router, "nemesis_schedule", None)
     app = Flask(__name__)
     app.register_blueprint(orchestrator_router.blueprint)
-    rows = app.test_client().get("/api/schedule/history").get_json()
+    rows = app.test_client().get("/api/history").get_json()
     assert [row["execution_id"] for row in rows] == [c.execution_id for c in reversed(commands[1:])]
     assert set(rows[0]) == {"type", "action", "host", "target", "execution_id", "scenario_id", "timestamp"}
     assert rows[0]["target"] == target.to_dict()
@@ -193,9 +192,6 @@ def test_existing_manual_api_uses_shared_dispatcher(delivery, monkeypatch, local
     target = ChaosTarget.for_node("h1", node_id=2, ic_port=19002)
     monkeypatch.setattr(orchestrator_router, "hosts", ["h1"])
     monkeypatch.setattr(orchestrator_router, "command_dispatcher", sender)
-    monkeypatch.setattr(orchestrator_router, "nemesis_schedule", SimpleNamespace(
-        is_schedule_enabled=lambda name: False,
-    ))
     monkeypatch.setattr(orchestrator_router, "chaos_store", SimpleNamespace(
         plan_manual=lambda name, host, action: [dispatch(name, host, action, {})],
     ))

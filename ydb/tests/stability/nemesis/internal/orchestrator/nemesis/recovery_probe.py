@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget
@@ -62,6 +62,9 @@ class _Pending:
     extracting: bool = False  # in-flight guard vs concurrent drain/tick
     dispatching: bool = False
     stuck_reported: bool = False
+    piles: tuple[int, ...] = ()
+    pile_baseline: dict[int, int] = field(default_factory=dict)
+    on_recovered: Callable | None = None
 
 
 class RecoveryProbe:
@@ -93,6 +96,7 @@ class RecoveryProbe:
         self._metrics = metrics
         self._lock = threading.Lock()
         self._pending: dict[str, _Pending] = {}
+        self._last_snapshot = None
         self._blind = False
         self._blind_since: float | None = None
         self._blind_reported = False
@@ -114,13 +118,17 @@ class RecoveryProbe:
             except Exception:
                 logger.exception("Cannot resolve current compute nodes to piles")
                 node_piles = {}
-        return build_snapshot(
+        snap = build_snapshot(
             getattr(self._hc_source, "last_results", None) or {},
             node_piles=node_piles,
             now=self._clock(),
             last_update=getattr(self._hc_source, "last_update", None),
             max_age_sec=self._max_hc_age_sec,
         )
+
+        with self._lock:
+            self._last_snapshot = snap
+        return snap
 
     def alive_compute_baseline(self) -> int | None:
         """Alive compute nodes right now; None when blind (a slot inject must not proceed)."""
@@ -140,6 +148,16 @@ class RecoveryProbe:
             if p is not None:
                 p.reserved_at = self._clock()
                 p.dispatching = False
+
+    def restore_operation(self, lease_id):
+        with self._lock:
+            p = self._pending.get(lease_id)
+            if p is None or p.recover_action is None:
+                return False
+        self._dispatch_extract(p, self._clock(), reason="manual operation restore")
+        if not p.extract_ok:
+            raise RuntimeError("Restore failed or is still in progress; budget remains held")
+        return True
 
     def restore_identity(self, identity_key, nemesis_type):
         with self._lock:
@@ -174,6 +192,9 @@ class RecoveryProbe:
         extract_after_sec: float | None = None,
         confirm_timeout_sec: float | None = None,
         dispatching: bool = False,
+        piles=(),
+        pile_baseline=None,
+        on_recovered=None,
     ) -> None:
         """Track until HC confirms recovery. Toggle: extract after ``extract_after_sec``, then confirm."""
         if not lease_id:
@@ -181,7 +202,8 @@ class RecoveryProbe:
         timeout = float(stuck_timeout_sec)
         with self._lock:
             self._pending[lease_id] = _Pending(
-                dispatching=dispatching,
+                dispatching=dispatching, piles=tuple(piles), pile_baseline=dict(pile_baseline or {}),
+                on_recovered=on_recovered,
                 lease_id=lease_id,
                 target=target,
                 nemesis_type=nemesis_type,
@@ -257,7 +279,7 @@ class RecoveryProbe:
     def drain_extracts(self, nemesis_type: str | None = None) -> int:
         """Extract toggles still needing it (HOLD, or CONFIRM after a failed recover_action).
 
-        If ``nemesis_type`` is set, only that type is drained (legacy per-type schedule disable).
+        If ``nemesis_type`` is set, only that type is drained.
         """
         with self._lock:
             pending = [
@@ -300,25 +322,34 @@ class RecoveryProbe:
     def snapshot(self) -> dict:
         now = self._clock()
         with self._lock:
-            faults = [
-                {
-                    "nemesis_type": p.nemesis_type,
-                    "host": p.target.host,
-                    "identity_key": p.target.identity_key(),
-                    "phase": p.phase,
-                    "held_sec": round(now - p.reserved_at, 1),
-                    "stuck": p.stuck_reported,
-                    "toggle": p.recover_action is not None,
-                }
-                for p in self._pending.values()
-            ]
+            snap = self._last_snapshot
+            fresh = bool(snap and snap.fresh and snap.data_at is not None
+                         and now - snap.data_at <= self._max_hc_age_sec)
+            alive = snap.alive_compute_by_pile if fresh else {}
+            faults = []
+            for p in self._pending.values():
+                faults.append({
+                    "operation_id": p.lease_id, "nemesis_type": p.nemesis_type,
+                    "host": p.target.host, "target": p.target.to_dict(),
+                    "identity_key": p.target.identity_key(), "phase": p.phase,
+                    "held_sec": round(now - p.reserved_at, 1), "stuck": p.stuck_reported,
+                    "toggle": p.recover_action is not None, "piles": list(p.piles),
+                    "dispatching": p.dispatching, "extracting": p.extracting, "extract_ok": p.extract_ok,
+                    "pile_recovery": {str(pile): {"baseline": p.pile_baseline.get(pile),
+                                                "alive": alive.get(pile)} for pile in p.piles},
+                })
             faults.sort(key=lambda f: (-f["held_sec"], f["nemesis_type"], f["identity_key"]))
+            piles = set(alive) | {pile for p in self._pending.values() for pile in p.piles}
             return {
-                "tracked": len(self._pending),
-                "stuck": sum(1 for p in self._pending.values() if p.stuck_reported),
-                "confirming": sum(1 for p in self._pending.values() if p.phase == PHASE_CONFIRM),
-                "blind": self._blind,
-                "faults": faults,
+                "tracked": len(faults), "stuck": sum(f["stuck"] for f in faults),
+                "confirming": sum(f["phase"] == PHASE_CONFIRM for f in faults),
+                "blind": self._blind, "faults": faults,
+                "piles": {str(pile): {
+                    "tracked": sum(pile in f["piles"] for f in faults),
+                    "confirming": sum(pile in f["piles"] and f["phase"] == PHASE_CONFIRM for f in faults),
+                    "stuck": sum(pile in f["piles"] and f["stuck"] for f in faults),
+                    "alive_compute": alive.get(pile),
+                } for pile in sorted(piles)},
             }
 
     # -- internals ----------------------------------------------------------------
@@ -336,6 +367,11 @@ class RecoveryProbe:
             nemesis_type=p.nemesis_type,
             source="probe",
         )
+        if released and p.on_recovered is not None:
+            try:
+                p.on_recovered()
+            except Exception:
+                logger.exception("Operation recovery callback failed for %s", p.lease_id)
         metrics = self._metrics
         if metrics is not None and released:
             metrics.fault_ended(

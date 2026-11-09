@@ -3,7 +3,6 @@ from ydb.tests.stability.nemesis.routers.agent_router import blueprint as agent_
 import ydb.tests.stability.nemesis.routers.orchestrator_router as orchestrator_router
 import ydb.tests.stability.nemesis.routers.agent_router as agent_router
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop import OrchestratorNemesisSchedule
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.boundary_scheduler import BoundaryNemesisScheduler
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.fault_engine import FaultEngine
@@ -27,7 +26,7 @@ from ydb.tests.stability.nemesis.internal.config import AgentSettings
 from ydb.tests.stability.nemesis.internal.agent.agent_warden_checker import AgentWardenChecker
 from ydb.tests.stability.nemesis.internal.agent.nemesis.runner import NemesisManager
 from ydb.tests.stability.nemesis.internal.agent.nemesis.service import AgentExecutionService
-from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES, supports_boundary_scheduler
 from ydb.tests.stability.nemesis.internal.nemesis.command_transport import AgentCommandTransport
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.command_dispatcher import CommandDispatcher
 from ydb.tests.stability.nemesis.internal import config
@@ -173,8 +172,11 @@ def _initialize_app_body():
                 },
             )
 
+        orchestrator_router.available_fault_types = {
+            name for name in definitions if supports_boundary_scheduler(name)
+        }
         orchestrator_router.chaos_store = ChaosOrchestratorStore(
-            enabled_types=definitions if process_specs is not None else None,
+            enabled_types=orchestrator_router.available_fault_types,
             failure_guard=failure_guard,
             inventory=inventory,
         )
@@ -184,7 +186,7 @@ def _initialize_app_body():
             fetch_agent_warden_result=orchestrator_router.fetch_agent_warden_result,
             get_monitored_hosts=lambda: orchestrator_router.hosts,
         )
-        # App-owned probe: boundary, legacy loop and manual injects all release through it.
+        # App-owned probe: boundary and manual operations release through it.
         probe = RecoveryProbe(
             guard=failure_guard,
             hc_source=orchestrator_router.healthcheck_reporter,
@@ -210,16 +212,6 @@ def _initialize_app_body():
             metrics=metrics,
         )
         orchestrator_router.command_dispatcher = dispatcher
-        orchestrator_router.nemesis_schedule = OrchestratorNemesisSchedule(
-            chaos_store=orchestrator_router.chaos_store,
-            get_hosts=lambda: orchestrator_router.hosts,
-            dispatcher=dispatcher,
-            failure_guard=failure_guard,
-            recovery_probe=probe,
-            inventory=inventory,
-            metrics=metrics,
-        )
-
         class LocalAdmission:
             def check(self, plan):
                 if plan.nemesis_type not in definitions:
@@ -252,8 +244,6 @@ def _initialize_app_body():
 def _begin_shutdown():
     if orchestrator_router.fault_engine:
         orchestrator_router.fault_engine.begin_shutdown()
-    if orchestrator_router.nemesis_schedule:
-        orchestrator_router.nemesis_schedule.begin_shutdown()
     if agent_router.execution_service:
         agent_router.execution_service.begin_shutdown()
 
@@ -348,7 +338,7 @@ def create_app():
     def ensure_initialized():
         if app.config.get("NEMESIS_STOPPING"):
             data = request.get_json(silent=True) or {}
-            if request.method == "POST" and request.path != "/api/agent/drain" and data.get("action") != "extract":
+            if request.method == "POST" and request.path != "/api/agent/drain" and not request.path.endswith("/restore") and data.get("action") != "extract":
                 return jsonify({"status": "error", "message": "Nemesis is stopping"}), 503
         initialize_app()
 

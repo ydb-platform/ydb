@@ -41,8 +41,8 @@ http://<orchestrator_host>:31434/static/index.html
 
 The UI shows:
 - Available fault types grouped by category
-- Active schedules and their intervals
-- Manual inject/extract controls
+- One scheduler, its profile and separate budgets for each pile
+- Manual operations with exact targets, operation IDs and recovery progress
 - Execution history and logs
 - Liveness and safety check results
 
@@ -80,8 +80,7 @@ Each agent runs on a cluster host and:
 
 The app constructs one `AgentExecutionService` for local actions and one
 `CommandDispatcher` for orchestrator delivery/history/metrics. The boundary
-scheduler, legacy schedule and manual API share that dispatcher; delivery no
-longer lives inside the legacy scheduler. `AgentCommandTransport` sends the same
+scheduler and manual API share that dispatcher. `AgentCommandTransport` sends the same
 explicit target to the local service or the existing agent HTTP API. Agent
 selection does not change a node/slot/disk target into a whole-host action.
 
@@ -89,8 +88,7 @@ The transport reports acceptance, not action completion or YDB recovery. A
 rejection or delivery error is reported as failed dispatch and is not retried;
 a timeout alone does not prove that the agent did not apply the action. Budget
 and recovery accounting belong to the shared FaultEngine for boundary/manual
-execution. Local process control and service shutdown are described below; the
-legacy per-type scheduling path remains until the UI migration.
+execution. Local process control and service shutdown are described below.
 
 ### Execution Flow
 
@@ -144,22 +142,11 @@ tick: fill the budget up to the boundary
   → stop(): drains still-held toggle faults through their extract (leases move to confirm)
 ```
 
-**Flow — legacy per-type schedule** (`schedule_loop.py`, still available via `/api/schedule/*`):
-
-```text
-ClusterInventory.entities(kind)
-  → FailureModelGuard.filter_safe(...)
-  → planner.scheduled_tick(candidates)
-  → dispatch → record_inject (held) + RecoveryProbe.track with the same per-kind predicate
-     (slot injects without a fresh HC baseline are skipped, same as the boundary scheduler)
-```
-
 Boundary and manual calls share one app-owned `FaultEngine`. The engine reserves
 before dispatch and atomically locks every target identity in a compound plan.
 The scheduler only chooses candidates and controls cadence. The router validates
-the HTTP request and returns the existing response shape; it no longer accounts
-for faults after sending. Legacy per-type scheduling still uses `record_inject`
-and is scheduled for removal with the manual UI transition.
+the HTTP request; it does not account for faults after sending. The legacy
+per-type scheduler and `/api/schedule*` routes have been removed.
 
 Manual extract requests restore through the probe for tracked toggles, avoiding a
 second restore concurrent with the automatic one. They do not free a reservation:
@@ -172,7 +159,7 @@ longer bypasses shared admission. `/api/scheduler/start`, `/api/scheduler/stop`,
 **Recovery predicates are per target kind** (`hc_model.py`, over the cluster-wide healthcheck each host's endpoint serves):
 
 - `node` / `disk` — host endpoint answers **and** every pdisk/vdisk with the `"{node_id}-"` id prefix is GREEN (strict: BLUE resync / YELLOW SyncGuidRecovery block release until redundancy is restored).
-- `slot` — alive compute nodes (non-empty `pools`) back to the pre-inject count. Without a fresh HC baseline the inject is skipped (boundary / legacy) or rejected with 503 (manual).
+- `slot` — alive compute nodes (non-empty `pools`) back to the pre-inject count. Without a fresh HC baseline the inject is skipped (boundary) or rejected with 503 (manual).
 - `host` (time skew) — endpoint answers and `compute.clock_skew` is GREEN.
 - `datacenter` — every DC endpoint answers and its nodes' storage is GREEN; without resolvable node ids the predicate never recovers (stuck, not silent release).
 
@@ -181,7 +168,7 @@ While healthcheck data is stale or no endpoint answers, the probe is *blind*: re
 **Two independent budgets**, both from `cluster.yaml` (the erasure mode, `location.rack` / `data_center`). The erasure mode is read as `static_erasure` or `erasure` — `ydb/tools/cfg` accepts both spellings — at the top level or under `config:`, the same two places `hosts` is looked up:
 
 - *Fail domains* — `block-4-2` ≤ 2 domains, `mirror-3-dc` = 1 full realm + 1 domain elsewhere, `none` = 0. A domain is keyed `"<data_center>/<rack>"`: rack labels are only unique inside a DC (`rack: '1'` in every DC is normal), so the realm is part of the key. Only static-node / disk / DC faults spend this budget.
-- *Slots* — killing a dynamic node does not reduce storage redundancy, so it draws from its own budget: ≤ 30% of the cluster's slots down at once (`total_slots × slot_fraction`, ≥1 on small clusters). Charged by `reserve` (shared engine for boundary/manual) and by `record_inject` (legacy loop). `filter_safe` checks both budgets; `reserve` repeats the check atomically.
+- *Slots* — killing a dynamic node does not reduce storage redundancy, so it draws from its own budget: ≤ 30% of the cluster's slots down at once (`total_slots × slot_fraction`, ≥1 on small clusters). Charged by `reserve` in the shared engine for boundary/manual. `filter_safe` checks both budgets; `reserve` repeats the check atomically.
 
 **Bridge budgets are independent per pile.** Storage fail domains are keyed by pile/DC/rack,
 so repeating rack or DC labels in different piles do not merge their budgets. Each pile has
@@ -206,11 +193,11 @@ made safe merely by having another pile: it still requires a separate bridge-awa
 **UI / API:**
 
 - History shows the target (not only host)
-- Manual Run lists nodes/slots when `supports_manual` and `target_kind` need them; types with `supports_manual: false` (network, time skew, rolling restart, bridge pile) are schedule-only
+- Manual fault selects a type and exact inventory target, shows host/pile/DC/rack placement, and optionally sets the hold duration for this operation only. Types whose planners cannot execute an explicitly reserved target are shown as unavailable; there is no legacy fallback.
 - `GET /api/inventory` — hosts/nodes/slots used for planning (built once, on the orchestrator's first request; the UI fetches it once, not on every poll)
 - `GET /api/scheduler`, `POST /api/scheduler/start|stop` — boundary scheduler state and profile (`enabled`, `base_interval`, `jitter`, `max_per_tick`, `max_bypass_per_tick`). Rejected with 400: invalid values, unknown type names, and types whose planner keeps its own target state (`supports_boundary_scheduler`)
 - `GET /api/problems` — nemesis-side problems: faults that never recovered (budget still held), a blind recovery probe (no fresh healthcheck data), and a degraded inventory (harness unavailable → synthesized node ids, no slot chaos). `ydb/tests/stability/tests` fetches this when disabling nemesis and attaches it to the Allure report
-- The UI's Nemesis Scheduler card shows run state, profile, both budgets, the recovery probe and the problem list; the per-type schedule toggles in the accordion belong to the legacy loop
+- The Scheduler card shows run state, profile, separate storage/slot budgets per pile, per-pile recovery counts and problems. Operations shows both manual and scheduled faults, their delivery status and recovery progress; it can filter by pile. Stale compute counts are unknown, not zero.
 
 **Metrics (orchestrator):**
 
@@ -310,46 +297,32 @@ out["MyCustomNemesis"] = {
 }
 ```
 
-### Parameterized Planners
+### Manual operation API
 
-A nemesis entry may declare a `params` schema. When present, the UI replaces the simple toggle with a "Run" button that opens a modal asking the user for parameter values; those values are sent to `POST /api/schedule` and used to rebuild the planner before the schedule is enabled. Planners that do not declare `params` keep the default behaviour.
+- `GET /api/faults` lists types, availability/reasons and recovery metadata.
+- `GET /api/targets?type=<name>` lists exact inventory targets with placement.
+- `POST /api/operations` accepts `{"type": "...", "target": {...}, "hold_sec": 30}`.
+  `hold_sec` is optional, bounded to 1–86400 seconds and only valid for extract-mode
+  faults. It never mutates a shared planner or scheduler profile. The target must
+  match an inventory entry, including its port. Success returns HTTP 201 and an
+  `operation_id`; delivery acceptance does not mean execution or recovery.
+- `GET /api/operations` returns active operations and up to 100 recent completed
+  records for this orchestrator process lifetime. Delivery failures remain visible;
+  guarded faults retain recovery ownership and their budget.
+- `POST /api/operations/<operation_id>/restore` requests restore of that particular
+  toggle. It never resolves a new operation by target identity. Completed operations
+  are no-ops; unknown IDs return 404. The budget stays held until fresh observations
+  confirm recovery. Automatic and manual restore use the same probe synchronization.
+- `GET /api/history` lists recent command deliveries; agent execution logs remain
+  separately available in the UI.
 
-Schema format (each item is a field rendered in the UI):
-
-```python
-{
-    "name": "nodes_per_step",       # kwarg passed to the planner factory
-    "label": "Nodes per step",      # human-readable label in the UI
-    "type": "int",                  # "int" | "float" | "bool" | "string"
-    "default": 2,                   # initial value shown in the modal
-    "min": 1, "max": 64,            # optional, used for number inputs
-    "description": "How many nodes to restart per tick",  # optional tooltip
-}
-```
-
-The factory must accept `params` (a `dict[str, Any] | None`); the catalog auto-detects this via `inspect.signature` for backwards compatibility with factories that only take `nemesis_type_key`.
-
-Example — `ClusterRollingRestartNemesis`:
-
-```python
-out["ClusterRollingRestartNemesis"] = {
-    "runner": ClusterRollingRestartNemesis(),
-    "schedule": 600,
-    "ui_group": "Node",
-    "planner_factory": lambda key, params=None: RollingRestartNemesisPlanner(**(params or {})),
-    "params": [
-        {"name": "nodes_per_step",    "label": "Nodes per step",      "type": "int",  "default": 2,     "min": 1},
-        {"name": "use_storage_nodes", "label": "Use storage nodes",   "type": "bool", "default": False},
-        {"name": "node_downtime_sec", "label": "Node downtime (sec)", "type": "int",  "default": 60,    "min": 1},
-    ],
-}
-```
-
-Parameters of `RollingRestartNemesisPlanner`:
-
-- `nodes_per_step` (`int`, default `2`) — how many cluster nodes are restarted within one scheduled tick.
-- `use_storage_nodes` (`bool`, default `False`) — when `True`, the planner targets storage nodes; when `False`, compute nodes.
-- `node_downtime_sec` (`int`, default `60`) — how long the agent keeps each node stopped before starting it back via systemd. Forwarded to the agent as `duration` in the dispatch payload.
+The old manual `/api/hosts/process` adapter remains, but the UI uses operations.
+The stability test protocol (`/api/scheduler/start`, `/api/scheduler/stop`,
+`/api/problems`, install/stop CLI) is unchanged. Deploy the new static directory
+along with the binary: the old UI's `/api/schedule*` routes no longer exist.
+Catalog planner parameter schemas are internal metadata; the UI no longer rebuilds
+planners from arbitrary parameters. Stateful planners must first be adapted to
+explicit target admission before they can be enabled in the shared engine.
 
 ### Adding a Liveness Check
 
@@ -603,7 +576,7 @@ this stage replaces process inventory/control, not every monitoring adapter.
 ### Service shutdown and restoration
 
 `nemesis run` handles SIGTERM and SIGINT explicitly. The signal handler only wakes
-the main loop; shutdown then closes admission on the FaultEngine, legacy scheduler
+the main loop; shutdown then closes admission on the FaultEngine, boundary scheduler
 and local execution service. It waits for current dispatch and agent actions,
 restores retained impacts, then stops background checks and the HTTP server.
 `atexit` is only an idempotent fallback.

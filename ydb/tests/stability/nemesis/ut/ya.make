@@ -6,7 +6,6 @@ TEST_SRCS(
     test_chaos_target.py
     test_boundary_scheduler.py
     test_recovery_probe.py
-    test_schedule_loop.py
     test_command_dispatch.py
     test_chaos_problems.py
     test_catalog_annotations.py
@@ -14,6 +13,7 @@ TEST_SRCS(
     test_pile_budget.py
     test_fault_engine.py
     test_orchestrator_api.py
+    test_operations_api.py
     test_metrics.py
     test_local_kikimr.py
     test_local_process.py

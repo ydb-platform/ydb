@@ -39,7 +39,6 @@ PY_SRCS(
     internal/orchestrator/orchestrator_warden_execution.py
     internal/orchestrator/unified_agent_verify_failed_aggregated.py
     internal/orchestrator/orchestrator_warden_checker.py
-    internal/orchestrator/nemesis/schedule_loop.py
     internal/orchestrator/nemesis/boundary_scheduler.py
     internal/orchestrator/nemesis/runtime_topology.py
     internal/orchestrator/nemesis/recovery_probe.py

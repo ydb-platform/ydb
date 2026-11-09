@@ -284,6 +284,9 @@ public:
                 }
                 if (groups.HaveValue<T::FailRealmStates>()) {
                     const NKikimrBlobStorage::TFailRealmStates states = groups.GetValue<T::FailRealmStates>();
+                    if (states.HasGroupState()) {
+                        group.Mirror3dcState = states.GetGroupState();
+                    }
                     if (states.StateSize()) {
                         Y_ABORT_UNLESS(states.StateSize() == 3);
                         group.FailRealmStates.emplace();

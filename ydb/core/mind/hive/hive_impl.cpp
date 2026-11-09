@@ -2544,6 +2544,19 @@ std::optional<TBalancerSettings> THive::CheckNamedResources(TIter begin, TIter e
             {"resource", name},
             {"sourceNodes", sources});
         NextNamedResourceToCheck = (index + 1) % names.size();
+        auto [minIt, maxIt] = std::minmax_element(usages.begin(), usages.end(), [](const TNodeUsage& a, const TNodeUsage& b) {
+            return a.Usage < b.Usage;
+        });
+        const bool saturation = settings.BalanceMode == NKikimrConfig::THiveConfig::TNamedResourceSettings::SATURATION;
+        TStringBuilder triggerDetails;
+        triggerDetails << "resource=" << name
+            << " maxUsage=" << Sprintf("%.3f", maxIt->Usage) << " maxUsageNode=" << maxIt->NodeId
+            << " minUsage=" << Sprintf("%.3f", minIt->Usage) << " minUsageNode=" << minIt->NodeId;
+        if (!saturation) {
+            triggerDetails << " scatter=" << Sprintf("%.3f", (maxIt->Usage - minIt->Usage) / maxIt->Usage)
+                << " minScatterToBalance=" << Sprintf("%.3f", settings.MinScatterToBalance);
+        }
+        triggerDetails << " sourceNodes=" << sources;
         return TBalancerSettings{
             .Type = EBalancerType::ScatterNamed,
             .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
@@ -2551,6 +2564,8 @@ std::optional<TBalancerSettings> THive::CheckNamedResources(TIter begin, TIter e
             .MaxInFlight = GetBalancerInflight(),
             .FilterNodeIds = std::move(sources),
             .NamedResource = name,
+            .Trigger = saturation ? "named resource saturation" : "named resource scatter",
+            .TriggerDetails = triggerDetails,
         };
     }
     return std::nullopt;

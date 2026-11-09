@@ -125,8 +125,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
         bool operator==(const TQueueUsageValue&) const = default;
     };
-    // Last usage reported for online tablets: tablet -> resource name -> value
+    // Usage reported for online tablets: tablet -> resource name -> value. Names stay (with zero value) after
+    // the usage is gone, and everything is resent periodically and on reconnect: Hive keeps a reported value
+    // until it is changed, so a lost update (e.g. acked by Hive but not persisted before its restart) has to be
+    // repaired by a resend.
     std::unordered_map<TTabletId, THashMap<TString, TQueueUsageValue>> ReportedQueueUsage;
+    TInstant LastQueueUsageResend;
+    constexpr static TDuration QUEUE_USAGE_RESEND_INTERVAL = TDuration::Seconds(60);
     // Queue limits (only for queues limited by CPU): resource name -> limit
     TMap<TString, ui64> QueueLimits;
 
@@ -443,6 +448,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             NTabletPipe::SendData(ctx, HivePipeClient, eventSyncTablets.Release());
 
             Connected = true;
+            LastQueueUsageResend = TInstant::Zero(); // resend all queue usage with the next update
             YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing: connected to hive");
             for (const auto& tabletEntries : RetainedCutHistory) {
                 for (const auto& e : tabletEntries.second) {
@@ -792,42 +798,42 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             changed = true;
         };
 
-        // Report usage which disappeared as zero
-        for (auto it = ReportedQueueUsage.begin(); it != ReportedQueueUsage.end();) {
-            const auto& [tabletId, reported] = *it;
-            if (!OnlineTablets.contains(tabletId)) {
-                it = ReportedQueueUsage.erase(it);
-                continue;
-            }
+        // Tablets which went offline are forgotten, see also the (re)start of a tablet
+        std::erase_if(ReportedQueueUsage, [&](const auto& item) { return !OnlineTablets.contains(item.first); });
+
+        // Usage which disappeared becomes zero, but the name stays for the resend
+        for (auto& [tabletId, reported] : ReportedQueueUsage) {
             auto current = currentUsage.find(tabletId);
-            for (const auto& [name, value] : reported) {
+            for (auto& [name, value] : reported) {
                 if (current == currentUsage.end() || !current->second.contains(name)) {
-                    reportChange(tabletId, name, TQueueUsageValue{});
+                    if (value != TQueueUsageValue{}) {
+                        value = TQueueUsageValue{};
+                        reportChange(tabletId, name, value);
+                    }
                 }
             }
-            ++it;
         }
 
-        // Report new and changed usage
-        for (const auto& [tabletId, usage] : currentUsage) {
-            const auto* reported = ReportedQueueUsage.contains(tabletId) ? &ReportedQueueUsage.at(tabletId) : nullptr;
-            for (const auto& [name, value] : usage) {
-                const TQueueUsageValue* prev = reported ? reported->FindPtr(name) : nullptr;
-                if (prev == nullptr || *prev != value) {
+        // New and changed usage
+        for (auto& [tabletId, usage] : currentUsage) {
+            auto& reported = ReportedQueueUsage[tabletId];
+            for (auto& [name, value] : usage) {
+                auto& prev = reported[name];
+                if (prev != value) {
+                    prev = value;
                     reportChange(tabletId, name, value);
                 }
             }
         }
 
-        for (auto it = ReportedQueueUsage.begin(); it != ReportedQueueUsage.end();) {
-            if (!currentUsage.contains(it->first)) {
-                it = ReportedQueueUsage.erase(it);
-            } else {
-                ++it;
+        // Periodic resend of everything, including zeros
+        if (Connected && ctx.Now() - LastQueueUsageResend >= QUEUE_USAGE_RESEND_INTERVAL) {
+            LastQueueUsageResend = ctx.Now();
+            for (const auto& [tabletId, reported] : ReportedQueueUsage) {
+                for (const auto& [name, value] : reported) {
+                    reportChange(tabletId, name, value);
+                }
             }
-        }
-        for (auto& [tabletId, usage] : currentUsage) {
-            ReportedQueueUsage[tabletId] = std::move(usage);
         }
 
         if (changed && Connected) {

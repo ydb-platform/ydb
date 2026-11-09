@@ -1,6 +1,6 @@
 #include "../pg_compat.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <benchmark/benchmark.h>
 #include <library/cpp/resource/resource.h>
 #include <yql/essentials/minikql/codegen/codegen.h>
 #include <yql/essentials/minikql/arrow/arrow_defs.h>
@@ -21,8 +21,6 @@ extern "C" {
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 
-#include <util/datetime/cputimer.h>
-
 using namespace NYql;
 using namespace NYql::NCodegen;
 
@@ -41,8 +39,9 @@ enum class EKernelFlavor {
     Ideal
 };
 
-Y_UNIT_TEST_SUITE(TPgCodegen) {
-void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
+namespace {
+
+void PgFuncImpl(benchmark::State& benchmarkState, EKernelFlavor flavor, bool constArg, bool fixed) {
     const TString& name = fixed ? "date_eq" : "textout";
     ICodegen::TPtr codegen;
     TExecFunc execFunc;
@@ -77,8 +76,7 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
             codegen->Verify();
             codegen->ExportSymbol(func);
             codegen->Compile();
-            // codegen->ShowGeneratedFunctions(&Cerr);
-            typedef TExecFunc (*TFunc)();
+            using TFunc = TExecFunc (*)();
             auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
             execFunc = funcPtr();
             break;
@@ -87,7 +85,6 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
             if (fixed) {
                 execFunc = [](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
                     size_t length = batch.values[0].length();
-                    // NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *arrow::default_memory_pool(), length);
                     NUdf::TTypedBufferBuilder<ui64> dataBuilder(arrow::default_memory_pool());
                     NUdf::TTypedBufferBuilder<ui8> nullBuilder(arrow::default_memory_pool());
                     dataBuilder.Reserve(length);
@@ -102,8 +99,6 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
                         const auto& array2 = *batch.values[1].array();
                         const auto ptr2 = array2.GetValues<ui64>(1);
                         for (size_t i = 0; i < length; ++i) {
-                            // auto x = reader1.GetItem(array1, i).As<ui64>();
-                            // auto y = reader2.GetItem(array2, i).As<ui64>();
                             auto x = ptr1[i];
                             auto y = ptr2[i];
                             out[i] = x == y ? 1 : 0;
@@ -192,7 +187,8 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
 
         std::shared_ptr<arrow::ArrayData> out;
         ARROW_OK(builder.FinishInternal(&out));
-        arrow::Datum arg1(out), arg2;
+        arrow::Datum arg1(out);
+        arrow::Datum arg2;
         if (constArg) {
             Cout << "with const arg\n";
             arg2 = NKikimr::NMiniKQL::MakeScalarDatum<ui64>(0);
@@ -221,70 +217,39 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
 
     arrow::compute::ExecBatch batch(std::move(batchArgs), N);
 
-    {
-        Cout << "begin...\n";
-        TSimpleTimer timer;
+    for (auto _ : benchmarkState) {
         for (size_t count = 0; count < (fixed ? 10000 : 1000); ++count) {
             arrow::Datum res;
             ARROW_OK(execFunc(&kernelCtx, batch, &res));
             Y_ENSURE(res.length() == N);
         }
-
-        Cout << "done, elapsed: " << timer.Get() << "\n";
     }
 }
 
-Y_UNIT_TEST(PgFixedFuncIdeal) {
-    PgFuncImpl(EKernelFlavor::Ideal, false, true);
-    PgFuncImpl(EKernelFlavor::Ideal, true, true);
-}
-
-Y_UNIT_TEST(PgFixedFuncDefArg) {
-    PgFuncImpl(EKernelFlavor::DefArg, false, true);
-    PgFuncImpl(EKernelFlavor::DefArg, true, true);
-}
-
-Y_UNIT_TEST(PgFixedFuncIndirect) {
-    PgFuncImpl(EKernelFlavor::Indirect, false, true);
-    PgFuncImpl(EKernelFlavor::Indirect, true, true);
-}
+BENCHMARK_CAPTURE(PgFuncImpl, PgFixedFuncIdeal_Vector, EKernelFlavor::Ideal, false, true);
+BENCHMARK_CAPTURE(PgFuncImpl, PgFixedFuncIdeal_Scalar, EKernelFlavor::Ideal, true, true);
+BENCHMARK_CAPTURE(PgFuncImpl, PgFixedFuncDefArg_Vector, EKernelFlavor::DefArg, false, true);
+BENCHMARK_CAPTURE(PgFuncImpl, PgFixedFuncDefArg_Scalar, EKernelFlavor::DefArg, true, true);
+BENCHMARK_CAPTURE(PgFuncImpl, PgFixedFuncIndirect_Vector, EKernelFlavor::Indirect, false, true);
+BENCHMARK_CAPTURE(PgFuncImpl, PgFixedFuncIndirect_Scalar, EKernelFlavor::Indirect, true, true);
 
 #if !defined(USE_SLOW_PG_KERNELS)
-Y_UNIT_TEST(PgFixedFuncCpp) {
-    PgFuncImpl(EKernelFlavor::Cpp, false, true);
-    PgFuncImpl(EKernelFlavor::Cpp, true, true);
-}
-
+BENCHMARK_CAPTURE(PgFuncImpl, PgFixedFuncCpp_Vector, EKernelFlavor::Cpp, false, true);
+BENCHMARK_CAPTURE(PgFuncImpl, PgFixedFuncCpp_Scalar, EKernelFlavor::Cpp, true, true);
     #if defined(YQL_USE_PG_BC)
-Y_UNIT_TEST(PgFixedFuncBC) {
-    PgFuncImpl(EKernelFlavor::BitCode, false, true);
-    PgFuncImpl(EKernelFlavor::BitCode, true, true);
-}
+BENCHMARK_CAPTURE(PgFuncImpl, PgFixedFuncBC_Vector, EKernelFlavor::BitCode, false, true);
+BENCHMARK_CAPTURE(PgFuncImpl, PgFixedFuncBC_Scalar, EKernelFlavor::BitCode, true, true);
     #endif
 #endif
 
-Y_UNIT_TEST(PgStrFuncIdeal) {
-    PgFuncImpl(EKernelFlavor::Ideal, false, false);
-}
-
-Y_UNIT_TEST(PgStrFuncDefArg) {
-    PgFuncImpl(EKernelFlavor::DefArg, false, false);
-}
-
-Y_UNIT_TEST(PgStrFuncIndirect) {
-    PgFuncImpl(EKernelFlavor::Indirect, false, false);
-}
-
+BENCHMARK_CAPTURE(PgFuncImpl, PgStrFuncIdeal, EKernelFlavor::Ideal, false, false);
+BENCHMARK_CAPTURE(PgFuncImpl, PgStrFuncDefArg, EKernelFlavor::DefArg, false, false);
+BENCHMARK_CAPTURE(PgFuncImpl, PgStrFuncIndirect, EKernelFlavor::Indirect, false, false);
 #if !defined(USE_SLOW_PG_KERNELS)
-Y_UNIT_TEST(PgStrFuncCpp) {
-    PgFuncImpl(EKernelFlavor::Cpp, false, false);
-}
-
+BENCHMARK_CAPTURE(PgFuncImpl, PgStrFuncCpp, EKernelFlavor::Cpp, false, false);
     #if defined(YQL_USE_PG_BC)
-Y_UNIT_TEST(PgStrFuncBC) {
-    PgFuncImpl(EKernelFlavor::BitCode, false, false);
-}
+BENCHMARK_CAPTURE(PgFuncImpl, PgStrFuncBC, EKernelFlavor::BitCode, false, false);
     #endif
 #endif
 
-} // Y_UNIT_TEST_SUITE(TPgCodegen)
+} // namespace

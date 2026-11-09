@@ -870,7 +870,7 @@ PDisk ведёт журнал восстановления, общий для с
 
 #### VDisk {#vdisk}
 
-**VDisk**, **virtual disk** или **виртуальный диск** — это компонент, который реализует хранение данных [распределённого хранилища](#distributed-storage) [LogoBlob](#logoblob) на [PDisk](#pdisk). VDisk хранит все свои данные на PDisk. Один VDisk соответствует одному PDisk, но обычно несколько VDisk связаны с одним PDisk.
+**VDisk**, **virtual disk** или **виртуальный диск** — это компонент, который реализует хранение данных [распределённого хранилища](#distributed-storage) [LogoBlob](#logoblob) на [PDisk](#pdisk). VDisk хранит все свои данные на PDisk. Один VDisk хранит свои данные на одном PDisk-е, однако одному PDisk-у обычно соответствует несколько VDisk.
 
 VDisk предоставляет интерфейс операций на уровне LogoBlob и [LogoBlobID](#logoblobid), например запись LogoBlob, чтение данных LogoBlobID и удаление набора LogoBlob с помощью специальной команды.
 

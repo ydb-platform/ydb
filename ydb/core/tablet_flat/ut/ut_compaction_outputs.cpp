@@ -9,6 +9,7 @@
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 #include <ydb/core/tablet_flat/test/libs/rows/tool.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 
@@ -17,6 +18,7 @@
 #include <util/string/cast.h>
 
 #include <algorithm>
+#include <cstring>
 
 namespace NKikimr::NTabletFlatExecutor {
 namespace {
@@ -197,6 +199,10 @@ namespace {
 
     class TWrittenPages final : public IPages {
     public:
+        explicit TWrittenPages(const THashMap<TLogoBlobID, TSharedData>* blobs = nullptr)
+            : Blobs(blobs)
+        { }
+
         void Add(const TPart* part) {
             const auto* store = dynamic_cast<const NTable::TPartStore*>(part);
             UNIT_ASSERT(store);
@@ -229,22 +235,65 @@ namespace {
             return {};
         }
 
-        TResult Locate(const TPart*, ui64, ELargeObj) override {
-            UNIT_FAIL("Unexpected outlined value");
-            return {};
+        TResult Locate(const TPart* part, ui64 ref, ELargeObj kind) override {
+            UNIT_ASSERT_C(Blobs, "Unexpected outlined value without captured blob storage");
+            UNIT_ASSERT(ref <= Max<ui32>());
+            if (kind == ELargeObj::Extern) {
+                ++ExternalReads;
+                return {true, &Blobs->at(part->Blobs->Glob(ui32(ref)).Logo)};
+            }
+            UNIT_ASSERT(kind == ELargeObj::Outer);
+            ++OuterReads;
+            return {true, GetPage(part, part->OuterSlot(),
+                part->GetPageCollection(part->OuterSlot())->GetLocation(ui32(ref)))};
         }
 
         const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location,
                 TGroupId groupId) override {
-            return &Pages.at(part).at(part->DataSlot(groupId)).at(location.Offset);
+            return GetPage(part, part->DataSlot(groupId), location);
         }
 
         const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location,
                 TGroupId groupId) override {
-            return &Pages.at(part).at(part->IndexSlot(groupId)).at(location.Offset);
+            return GetPage(part, part->IndexSlot(groupId), location);
         }
 
+        ui32 ExternalReads = 0;
+        ui32 OuterReads = 0;
+        ui32 StoragePageReads = 0;
+
     private:
+        const TSharedData* GetPage(const TPart* part, ui32 slot, const TPageLocation& location) {
+            auto& slots = Pages[part];
+            if (slots.empty()) {
+                const auto* store = dynamic_cast<const TPartStore*>(part);
+                UNIT_ASSERT(store);
+                slots.resize(store->PageCollections.size());
+            }
+            auto& pages = slots.at(slot);
+            if (const auto it = pages.find(location.Offset); it != pages.end()) {
+                return &it->second;
+            }
+            UNIT_ASSERT_C(Blobs, "Missing freshly written page " << location);
+            const auto* collection = part->GetPageCollection(slot);
+            const auto bounds = collection->Bounds(location);
+            auto data = TSharedData::Uninitialized(bounds.Bytes);
+            size_t copied = 0;
+            for (ui32 index = bounds.Lo.Blob; copied < data.size(); ++index) {
+                UNIT_ASSERT(index <= bounds.Up.Blob);
+                const auto& blob = Blobs->at(collection->Glob(index).Logo);
+                const size_t skip = index == bounds.Lo.Blob ? bounds.Lo.Skip : 0;
+                UNIT_ASSERT(skip < blob.size());
+                const size_t size = Min(data.size() - copied, blob.size() - skip);
+                memcpy(data.mutable_data() + copied, blob.data() + skip, size);
+                copied += size;
+            }
+            UNIT_ASSERT(collection->Verify(location, data));
+            ++StoragePageReads;
+            return &pages.emplace(location.Offset, std::move(data)).first->second;
+        }
+
+        const THashMap<TLogoBlobID, TSharedData>* Blobs;
         THashMap<const TPart*, TVector<THashMap<NPage::TPageOffset, TSharedData>>> Pages;
     };
 
@@ -266,6 +315,7 @@ namespace {
                         const auto& put = *ev->Get<TEvBlobStorage::TEvPut>();
                         UNIT_ASSERT_VALUES_EQUAL(put.Buffer.size(), put.Id.BlobSize());
                         UNIT_ASSERT(Env.WrittenBlobs.insert(put.Id).second);
+                        Env.WrittenBlobData.emplace(put.Id, TSharedData::Copy(put.Buffer.ConvertToString()));
                         Env.PendingPuts.emplace_back(ev.Release());
                         break;
                     }
@@ -290,8 +340,9 @@ namespace {
             Runtime.Initialize(app.Unwrap());
             Owner = Runtime.Register(new TReceiver(*this));
             Storage = Owner;
-            Runtime.RegisterService(MakeBlobStorageProxyID(11), Storage);
-            Runtime.RegisterService(MakeBlobStorageProxyID(13), Storage);
+            for (ui32 channel = 1; channel <= 11; ++channel) {
+                Runtime.RegisterService(MakeBlobStorageProxyID(channel + 10), Storage);
+            }
 
             NSharedCache::TSharedCacheConfig config;
             config.SetMemoryLimit(128 * 1024 * 1024);
@@ -371,6 +422,7 @@ namespace {
         THolder<IEventHandle> Result;
         TDeque<THolder<IEventHandle>> PendingPuts;
         THashSet<TLogoBlobID> WrittenBlobs;
+        THashMap<TLogoBlobID, TSharedData> WrittenBlobData;
     };
 
     THolder<TCompactCfg> ScanConfig(ui32 outputs = 2) {
@@ -485,6 +537,116 @@ namespace {
         return MakeHolder<TTierCompactionRouter>(conf,
             std::optional<TTieringPolicy>(TierScanPolicy(archive)), TInstant::Seconds(1000),
             archive ? TVector<ui32>{0, 42, 7} : TVector<ui32>{0, 42});
+    }
+
+    void ConfigureOutlinedTierOutputs(TCompactCfg& conf, bool sharedChannels,
+            bool btreeV2 = false, bool indexInDescriptor = true) {
+        for (ui32 index = 0; index < conf.Outputs.size(); ++index) {
+            auto& output = conf.Outputs[index];
+            const bool cold = index != 0 && !sharedChannels;
+            output.Layout.SmallEdge = 32;
+            output.Layout.LargeEdge = 256;
+            output.Layout.MainPageCollectionEdge = 1024;
+            output.Layout.WriteFlatIndex = !btreeV2;
+            output.Layout.WriteBTreeIndexV2 = btreeV2;
+            output.Layout.Layout.KeyIndexInDescriptor = cold ? indexInDescriptor : true;
+            output.Writer.WriteBTreeIndexV2 = btreeV2;
+            output.Writer.Groups[0].Channel = cold ? 3 : 1;
+            output.Writer.Groups[0].MaxBlobSize = 4096;
+            output.Writer.OuterChannel = cold ? 4 : 2;
+            output.Writer.BlobsChannels = {ui8(cold ? 6 : 5)};
+            output.Writer.ExtraChannel = 1;
+            output.Writer.Slots = cold
+                ? TVector<NWriter::TConf::TSlot>{{1, 11}, {3, 13}, {4, 14}, {6, 16}}
+                : TVector<NWriter::TConf::TSlot>{{1, 11}, {2, 12}, {5, 15}};
+            NWriter::ApplyDescriptorChannel(output.Layout, output.Writer, 1);
+        }
+    }
+
+    TString OutlinedScanValue(ui32 key, bool historic) {
+        const ui32 sizes[] = {16, 128, 4096};
+        return TString(sizes[key % 3], char((historic ? 'a' : 'A') + key));
+    }
+
+    void CheckOutlinedTierScan(bool sharedChannels, bool btreeV2, bool indexInDescriptor) {
+        TCompactionScanEnv env;
+        auto input = TierScanInput();
+        constexpr ui32 keyCount = 12;
+        for (ui32 key = 0; key < keyCount; ++key) {
+            for (bool historic : {true, false}) {
+                AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+                    key, ui32(key % 2 ? 100 : 950), OutlinedScanValue(key, historic)),
+                    historic ? TRowVersion(10, 1) : TRowVersion(20, 1));
+            }
+        }
+        auto conf = TierScanConfig(input);
+        ConfigureOutlinedTierOutputs(*conf, sharedChannels, btreeV2, indexInDescriptor);
+        auto router = TierScanRouter(*conf);
+        env.Start(std::move(conf), input, std::move(router));
+        UNIT_ASSERT(!env.PendingPuts.empty());
+        UNIT_ASSERT(!env.Result);
+        env.Complete();
+        const auto& product = env.Product();
+        UNIT_ASSERT(product.Success);
+        const auto result = TProdCompact::MakeCompactionResult(product.Results);
+        THashSet<ui32> outputs;
+        // Read data, indexes and outlined cells from the captured BS payloads,
+        // without preloading the writer's cached data pages into this environment.
+        TWrittenPages pages(&env.WrittenBlobData);
+        const TVector<ui32> tags{0, 1, 2};
+        for (const auto& part : result->Parts) {
+            const ui32 output = result->PartOutputIds.at(part->Label);
+            outputs.insert(output);
+            const bool cold = output == 31;
+            const ui8 dataChannel = cold && !sharedChannels ? 3 : 1;
+            const ui8 outerChannel = cold && !sharedChannels ? 4 : 2;
+            const ui8 blobChannel = cold && !sharedChannels ? 6 : 5;
+            const auto* store = dynamic_cast<const TPartStore*>(part.Part.Get());
+            UNIT_ASSERT(store);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(store->GetSlotChannel(part->DescriptorSlot())), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(store->GetSlotChannel(part->DataSlot(NPage::TGroupId(0)))),
+                ui32(dataChannel));
+            UNIT_ASSERT_VALUES_EQUAL(ui32(store->GetSlotChannel(part->IndexSlot(NPage::TGroupId(0)))),
+                ui32(cold && !sharedChannels && !indexInDescriptor ? dataChannel : 1));
+            if (part->Small) {
+                UNIT_ASSERT_VALUES_EQUAL(ui32(store->GetSlotChannel(part->OuterSlot())), ui32(outerChannel));
+            }
+            if (part->Blobs) {
+                for (ui32 ref = 0; ref < part->Blobs->Total(); ++ref) {
+                    const auto blob = part->Blobs->Glob(ref).Logo;
+                    UNIT_ASSERT_VALUES_EQUAL(ui32(blob.Channel()), ui32(blobChannel));
+                    UNIT_ASSERT(env.WrittenBlobData.contains(blob));
+                }
+            }
+            auto table = ReadTable(*input->Scheme, {&part, 1});
+            auto iter = table->Iterate(TRawVals{}, tags, &pages, ESeek::Lower, TRowVersion::Max());
+            while (iter->Next(ENext::Data) == EReady::Data) {
+                const ui32 key = iter->GetKey().Cells()[0].AsValue<ui32>();
+                UNIT_ASSERT_VALUES_EQUAL(output, key % 2 ? 31 : 17);
+            }
+        }
+        UNIT_ASSERT(outputs == (THashSet<ui32>{17, 31}));
+
+        auto table = ReadTable(*input->Scheme, result->Parts);
+        for (bool historic : {false, true}) {
+            const auto version = historic ? TRowVersion(10, 1) : TRowVersion::Max();
+            auto forward = table->Iterate(TRawVals{}, tags, &pages, ESeek::Lower, version);
+            auto reverse = table->IterateReverse(TRawVals{}, tags, &pages, ESeek::Lower, version);
+            for (ui32 step = 0; step < keyCount; ++step) {
+                UNIT_ASSERT_VALUES_EQUAL(forward->Next(ENext::Data), EReady::Data);
+                UNIT_ASSERT_VALUES_EQUAL(forward->GetKey().Cells()[0].AsValue<ui32>(), step);
+                UNIT_ASSERT_VALUES_EQUAL(forward->Row().Get(2).AsBuf(), OutlinedScanValue(step, historic));
+                const ui32 key = keyCount - step - 1;
+                UNIT_ASSERT_VALUES_EQUAL(reverse->Next(ENext::Data), EReady::Data);
+                UNIT_ASSERT_VALUES_EQUAL(reverse->GetKey().Cells()[0].AsValue<ui32>(), key);
+                UNIT_ASSERT_VALUES_EQUAL(reverse->Row().Get(2).AsBuf(), OutlinedScanValue(key, historic));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(forward->Next(ENext::Data), EReady::Gone);
+            UNIT_ASSERT_VALUES_EQUAL(reverse->Next(ENext::Data), EReady::Gone);
+        }
+        UNIT_ASSERT(pages.ExternalReads > 0);
+        UNIT_ASSERT(pages.OuterReads > 0);
+        UNIT_ASSERT(pages.StoragePageReads > 0);
     }
 
     class TCountingTierRouter final : public ICompactionRouter {
@@ -743,7 +905,12 @@ Y_UNIT_TEST_SUITE(TCompactionOutputConfigTest) {
             for (const auto& output : conf.Outputs) {
                 UNIT_ASSERT(!output.Layout.Final);
                 UNIT_ASSERT(!output.Layout.UnderlayMask);
-                const auto eggs = NTest::TPartCook(env.RowLayout, output.Layout)
+                // The preparation fixture has no input rows and therefore an
+                // infinite version floor. Give this synthetic erase a valid
+                // floor while retaining the prepared garbage-collection rules.
+                auto layout = output.Layout;
+                layout.MinRowVersion = TRowVersion::Min();
+                const auto eggs = NTest::TPartCook(env.RowLayout, layout)
                     .AddOpN(ERowOp::Erase, ui32(20)).Finish();
                 UNIT_ASSERT(eggs.Written);
                 UNIT_ASSERT_VALUES_EQUAL(eggs.Written->Rows, 1);
@@ -1121,6 +1288,56 @@ Y_UNIT_TEST_SUITE(TCompactionOutputsTest) {
 }
 
 Y_UNIT_TEST_SUITE(TCompactionScanOutputsTest) {
+    Y_UNIT_TEST(TierAwareOutlinedValuesUseTheirOwnChannelsAndPreserveMvccHistory) {
+        for (bool btreeV2 : {false, true}) {
+            for (bool indexInDescriptor : {false, true}) {
+                CheckOutlinedTierScan(false, btreeV2, indexInDescriptor);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TierAwareOutlinedValuesRemainReadableWithSharedChannels) {
+        CheckOutlinedTierScan(true, false, true);
+        CheckOutlinedTierScan(true, true, true);
+    }
+
+    Y_UNIT_TEST(TierAwareWriteErrorAndCancellationDiscardEveryChannelOutput) {
+        for (bool cancel : {false, true}) {
+            TCompactionScanEnv env;
+            auto input = TierScanInput();
+            for (ui32 key = 0; key < 12; ++key) {
+                AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+                    key, ui32(key % 2 ? 100 : 950), OutlinedScanValue(key, false)), {20, 1});
+            }
+            auto conf = TierScanConfig(input);
+            ConfigureOutlinedTierOutputs(*conf, false);
+            auto router = TierScanRouter(*conf);
+            env.Start(std::move(conf), input, std::move(router));
+            env.ConfirmChannel(1);
+            env.ConfirmChannel(2);
+            env.ConfirmChannel(5);
+            UNIT_ASSERT(!env.PendingPuts.empty());
+            UNIT_ASSERT(!env.Result);
+            if (cancel) {
+                env.Runtime.Send(new IEventHandle(env.Driver, env.Owner, new TEvents::TEvPoison));
+                env.Drain();
+                UNIT_ASSERT(env.Result);
+                UNIT_ASSERT_VALUES_EQUAL(env.Result->Get<NOps::TEvResult>()->Status, EStatus::Term);
+            } else {
+                const auto pending = std::find_if(env.PendingPuts.begin(), env.PendingPuts.end(),
+                    [](const auto& ev) {
+                        return ev->template Get<TEvBlobStorage::TEvPut>()->Id.Channel() == 3;
+                    });
+                UNIT_ASSERT(pending != env.PendingPuts.end());
+                env.Confirm(pending - env.PendingPuts.begin(), NKikimrProto::ERROR);
+            }
+            const auto& product = env.Product();
+            UNIT_ASSERT(!product.Success);
+            UNIT_ASSERT(product.Results.empty());
+            UNIT_ASSERT(product.TxStatus.empty());
+        }
+    }
+
     Y_UNIT_TEST(NewestCommittedValueSelectsTheTierForAllVersions) {
         TCompactionScanEnv env;
         auto input = TierScanInput();

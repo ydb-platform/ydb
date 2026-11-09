@@ -1618,15 +1618,24 @@ void TGenCompactionStrategy::ReleaseTierCompaction(ui32 generation, ui64 compact
     const auto it = TierCompactions.find(generation);
     Y_ENSURE(it != TierCompactions.end() && it->second.CompactionId == compactionId,
         "Unexpected tier-managed compaction release");
+    const bool successfulTac = success
+        && it->second.Params->Mode == TCompactionParams::EMode::TierAware;
     for (const auto& part : it->second.Context->Inputs) {
         Y_ENSURE(BusyTierParts.erase(part.Label()) == 1, "Compaction input was not reserved");
     }
     TierCompactions.erase(it);
     ++TierOccupancyRevision;
-    if (success) {
+    if (successfulTac) {
         TierConflicts.erase(generation);
         if (SerialTierGeneration == generation) {
             SerialTierGeneration.reset();
+        }
+    } else if (success) {
+        // Regular completed its own request, but has not resolved TAC's
+        // accumulated conflicts. Retain the count without a stale wait marker.
+        const auto conflicts = TierConflicts.find(generation);
+        if (conflicts != TierConflicts.end()) {
+            conflicts->second.WaitRevision.reset();
         }
     }
 }
@@ -1744,12 +1753,8 @@ void TGenCompactionStrategy::CancelTierCompactions() {
     FinalCompactionLevel = 0;
     FinalCompactionTaken = 0;
     TierSweepGeneration.reset();
-    for (auto it = TierCompactions.begin(); it != TierCompactions.end();) {
-        for (const auto& part : it->second.Context->Inputs) {
-            BusyTierParts.erase(part.Label());
-        }
-        it = TierCompactions.erase(it);
-    }
+    TierCompactions.clear();
+    BusyTierParts.clear();
     ++TierOccupancyRevision;
     const auto memory = TierConflicts.find(0);
     if (memory != TierConflicts.end() && memory->second.WaitRevision) {
@@ -1815,7 +1820,9 @@ ui64 TGenCompactionStrategy::PrepareTierCompaction(TTaskId taskId, TSnapEdge edg
     params->Tiering = MakeHolder<TTieringCompaction>();
     params->Tiering->PartLevels = KnownParts;
     const bool cool = Backend->IsDataTieringEnabled() && Backend->TableScheme(Table)->TieringPolicy;
-    params->Mode = sweep || cool
+    // An exclusive retry must run TAC even when cooling is disabled: only a
+    // successful TAC resolves the accumulated conflicts and releases the mode.
+    params->Mode = sweep || cool || SerialTierGeneration == generation
         ? TCompactionParams::EMode::TierAware : TCompactionParams::EMode::Regular;
     params->KeepInCache = generation == 0
         || (generation != 255 && Policy->Generations[generation - 1].KeepInCache);

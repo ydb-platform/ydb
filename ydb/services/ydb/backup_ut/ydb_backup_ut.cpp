@@ -5449,7 +5449,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         }
         NExport::TExportClient client(testEnv.GetDriver(), TCommonClientSettings().Database("/Root"));
         NOperation::TOperationClient operationClient(testEnv.GetDriver());
-        for (const auto& sourceBase : {"dir", "/Root/dir/", "/Root/dir/."}) {
+        // The export RPC accepts relative and trailing-slash paths, but does not
+        // normalize dot components. The CLI normalizes its root before sending it.
+        for (const auto& sourceBase : {"dir", "/Root/dir/", "/Root/dir"}) {
             auto settings = NExport::TExportToS3Settings()
                 .Endpoint(Sprintf("localhost:%u", testEnv.GetS3Port()))
                 .Scheme(ES3Scheme::HTTP)

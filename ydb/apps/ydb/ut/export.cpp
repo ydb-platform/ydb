@@ -817,7 +817,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 .ExpectS3Endpoint(TEST_S3_ENDPOINT)
                 .ExpectS3AccessKey("test-key")
                 .ExpectS3SecretKey("test-access-key")
-                .ExpectCommonSourcePrefix("dir")
+                .ExpectCommonSourcePrefix(GetDatabase() + "/dir")
                 .ExpectCommonDstPrefix("common")
                 .ExpectItem(GetDatabase() + "/dir/source", "");
             // Both documented root-relative patterns and legacy absolute patterns
@@ -833,7 +833,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
     }
 
     Y_UNIT_TEST_F(ExternalExclusionsAreRelativeToRootAndPreserveTableSelection, TExportFixture) {
-        for (const auto& root : {TString("dir"), GetDatabase() + "/dir/", GetDatabase() + "/dir/."}) {
+        for (const auto& root : { TString("dir"), TString("./dir"), GetDatabase() + "/dir/", GetDatabase() + "/dir/." }) {
             Service<TSchemeImpl>()
                 .ExpectListDirectory(GetDatabase() + "/dir")
                 .ExpectChild(GetDatabase() + "/dir", "source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE)
@@ -847,7 +847,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 .ExpectS3Endpoint(TEST_S3_ENDPOINT)
                 .ExpectS3AccessKey("test-key")
                 .ExpectS3SecretKey("test-access-key")
-                .ExpectCommonSourcePrefix(root)
+                .ExpectCommonSourcePrefix(GetDatabase() + "/dir")
                 .ExpectCommonDstPrefix("common")
                 .ExpectItem(GetDatabase() + "/dir/data", "common/data")
                 .ExpectItem(GetDatabase() + "/dir/nested/source", "");
@@ -872,7 +872,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 .ExpectS3Endpoint(TEST_S3_ENDPOINT)
                 .ExpectS3AccessKey("test-key")
                 .ExpectS3SecretKey("test-access-key")
-                .ExpectCommonSourcePrefix("dir")
+                .ExpectCommonSourcePrefix(GetDatabase() + "/dir")
                 .ExpectCommonDstPrefix("common")
                 .ExpectItem(GetDatabase() + "/dir/nested/keep", "specific/keep");
             RunCli({
@@ -940,7 +940,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 .ExpectS3Endpoint(TEST_S3_ENDPOINT)
                 .ExpectS3AccessKey("test-key")
                 .ExpectS3SecretKey("test-access-key")
-                .ExpectCommonSourcePrefix(GetDatabase() + suffix)
+                .ExpectCommonSourcePrefix(GetDatabase())
                 .ExpectCommonDstPrefix("common")
                 .ExpectItem(GetDatabase() + "/source", "");
             RunCli({

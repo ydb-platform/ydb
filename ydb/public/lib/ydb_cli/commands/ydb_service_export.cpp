@@ -479,7 +479,11 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     }
 
     if (CommonSourcePath) {
-        settings.SourcePath(CommonSourcePath);
+        auto sourcePath = CommonSourcePath;
+        if (ObjectSelection == EExportObjectSelection::IncludeExternal) {
+            NConsoleClient::AdjustPath(sourcePath, config);
+        }
+        settings.SourcePath(sourcePath);
     }
 
     const bool encryption = EncryptionAlgorithm && EncryptionKey;

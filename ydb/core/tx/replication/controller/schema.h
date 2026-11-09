@@ -98,6 +98,10 @@ struct TControllerSchema: NIceDb::Schema {
         };
 
         struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
+        // Persist before proposing CREATE; retries must identify their own secret.
+        struct SecretCreateTxId: Column<21, NScheme::NTypeIds::Uint64> {
+            static constexpr ui64 Default = 0;
+        };
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -120,7 +124,8 @@ struct TControllerSchema: NIceDb::Schema {
             SchemaBarrierFlushTxIds,
             PendingDstPathOwnerId,
             PendingDstPathLocalId,
-            IndexBuild
+            IndexBuild,
+            SecretCreateTxId
         >;
     };
 

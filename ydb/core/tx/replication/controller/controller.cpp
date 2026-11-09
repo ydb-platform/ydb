@@ -87,6 +87,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvCancelDropStream, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
         HFunc(TEvPrivate::TEvSecretsCopied, Handle);
+        HFunc(TEvPrivate::TEvPrepareSecretCreate, Handle);
         HFunc(TEvPrivate::TEvPrepareAttachDst, Handle);
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
         HFunc(TEvPrivate::TEvSchemaChangeDstAlterResult, Handle);

@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
         auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
         replication->AddTarget(TReplication::ETargetKind::Table,
             std::make_shared<TTargetTable::TTableConfig>("/Source/table", "/Root/table"));
-        runtime.Register(CreateSecretCopier(parent, replication));
+        runtime.Register(CreateSecretCopier(parent, *replication));
         const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvSecretsCopied>(parent, TDuration::Seconds(5));
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Get()->Status.IsSuccess());
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
         target->SetStreamState(TReplication::EStreamState::Ready);
         target->SetStreamName("Stream");
         target->SetStreamConsumerName("replicationConsumer");
-        runtime.Register(CreateSecretCopier(parent, replication));
+        runtime.Register(CreateSecretCopier(parent, *replication));
         const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvSecretsCopied>(parent, TDuration::Seconds(5));
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Get()->Status.IsSuccess());

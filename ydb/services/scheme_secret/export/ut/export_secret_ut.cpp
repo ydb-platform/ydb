@@ -30,16 +30,20 @@ struct TExportSecretEnv {
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     }
 
+    void CreateTopic(const NYdb::NTopic::TCreateTopicSettings& settings) {
+        const auto created = topicClient.CreateTopic("/Root/export-topic", settings).GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+    }
+
     void CreateTopic(ui32 partitions = 1, bool important = true) {
-        const auto created = topicClient.CreateTopic("/Root/export-topic", NYdb::NTopic::TCreateTopicSettings()
+        CreateTopic(NYdb::NTopic::TCreateTopicSettings()
             .BeginConfigurePartitioningSettings()
                 .MinActivePartitions(partitions)
                 .MaxActivePartitions(partitions)
             .EndConfigurePartitioningSettings()
             .BeginAddConsumer("replicationConsumer")
                 .Important(important)
-            .EndAddConsumer()).GetValueSync();
-        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+            .EndAddConsumer());
     }
 
     auto DescribeTopic(const TString& path = "/Root/export-topic") {
@@ -165,6 +169,48 @@ Y_UNIT_TEST_SUITE(ExportSecret) {
         setup.AssertOffsets(topic, 1, 0);
     }
 
+    Y_UNIT_TEST(RejectsExistingTopicWithoutReplicationConsumer) {
+        TExportSecretEnv setup;
+        setup.Execute("CREATE SECRET `source` WITH (value = 'one');");
+        setup.CreateTopic(NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddConsumer("otherConsumer")
+                .Important(true)
+            .EndAddConsumer());
+        const auto exported = setup.client.ExportSecret("/Root/source", "/Root/export-topic").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(exported.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
+        setup.AssertOffsets(setup.DescribeTopic().GetTopicDescription(), 1, 0);
+    }
+
+    Y_UNIT_TEST(RejectsExistingTopicWithSharedReplicationConsumer) {
+        TExportSecretEnv setup;
+        setup.Execute("CREATE SECRET `source` WITH (value = 'one');");
+        setup.CreateTopic(NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer("replicationConsumer")
+                .Important(true)
+            .EndAddConsumer());
+        const auto exported = setup.client.ExportSecret("/Root/source", "/Root/export-topic").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(exported.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
+        const auto described = setup.DescribeTopic();
+        const auto& topic = described.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetConsumers().size(), 1);
+        UNIT_ASSERT(topic.GetConsumers().front().GetConsumerType() == NYdb::NTopic::EConsumerType::Shared);
+        UNIT_ASSERT(topic.GetConsumers().front().GetImportant());
+        setup.AssertOffsets(topic, 1, 0);
+    }
+
+    Y_UNIT_TEST(RejectsExistingTopicWithFilteredReplicationConsumer) {
+        TExportSecretEnv setup;
+        setup.Execute("CREATE SECRET `source` WITH (value = 'one');");
+        setup.CreateTopic(NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddConsumer("replicationConsumer")
+                .Important(true)
+                .ReadFrom(TInstant::Now() + TDuration::Days(1))
+            .EndAddConsumer());
+        const auto exported = setup.client.ExportSecret("/Root/source", "/Root/export-topic").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(exported.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
+        setup.AssertOffsets(setup.DescribeTopic().GetTopicDescription(), 1, 0);
+    }
+
     Y_UNIT_TEST(DeduplicatesCanonicalPathAndPreservesEmptyValue) {
         TExportSecretEnv setup;
         setup.Execute("CREATE SECRET `source/first` WITH (value = 'one');");
@@ -187,23 +233,41 @@ Y_UNIT_TEST_SUITE(ExportSecret) {
         UNIT_ASSERT_VALUES_EQUAL(topic.GetConsumers().size(), 1);
         UNIT_ASSERT(topic.GetConsumers().front().GetImportant());
         UNIT_ASSERT_VALUES_EQUAL(topic.GetOwner(), "root@builtin");
+        UNIT_ASSERT(!topic.GetInterruptInheritance());
         setup.AssertOffsets(topic, 1, 2);
         const auto records = setup.ReadRecords();
         UNIT_ASSERT_VALUES_EQUAL(records.at("/Root/source/first"), "one");
         UNIT_ASSERT_VALUES_EQUAL(records.at("/Root/source/nested/second"), "");
     }
 
-    Y_UNIT_TEST(ReusesExistingTopicAndWritesToPartitionZero) {
+    Y_UNIT_TEST(RejectsExistingTopicWithMultiplePartitions) {
         TExportSecretEnv setup;
         setup.Execute("CREATE SECRET `source/first` WITH (value = 'one');");
         setup.CreateTopic(4);
-        for (const auto& path : {"/Root/source/first", "source//first"}) {
-            const auto exported = setup.client.ExportSecret(path, "/Root/export-topic").GetValueSync();
-            UNIT_ASSERT_C(exported.IsSuccess(), exported.GetIssues().ToString());
-        }
+        const auto exported = setup.client.ExportSecret("/Root/source/first", "/Root/export-topic").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(exported.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
         const auto described = setup.DescribeTopic();
         UNIT_ASSERT(!described.GetTopicDescription().GetInterruptInheritance());
-        setup.AssertOffsets(described.GetTopicDescription(), 4, 1);
+        setup.AssertOffsets(described.GetTopicDescription(), 4, 0);
+    }
+
+    Y_UNIT_TEST(RejectsExistingTopicWithAutoPartitioning) {
+        TExportSecretEnv setup;
+        setup.Execute("CREATE SECRET `source` WITH (value = 'one');");
+        setup.CreateTopic(NYdb::NTopic::TCreateTopicSettings()
+            .BeginConfigurePartitioningSettings()
+                .MinActivePartitions(1)
+                .MaxActivePartitions(2)
+                .BeginConfigureAutoPartitioningSettings()
+                    .Strategy(NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings()
+            .BeginAddConsumer("replicationConsumer")
+                .Important(true)
+            .EndAddConsumer());
+        const auto exported = setup.client.ExportSecret("/Root/source", "/Root/export-topic").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(exported.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
+        setup.AssertOffsets(setup.DescribeTopic().GetTopicDescription(), 1, 0);
     }
 }
 

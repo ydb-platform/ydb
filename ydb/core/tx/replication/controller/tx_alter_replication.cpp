@@ -25,6 +25,39 @@ bool HasRelevantTransferConfigChanges(
             != nextSpecific.GetBatching().GetFlushIntervalMilliSeconds();
 }
 
+void RetrySecretTarget(
+        TReplication& replication,
+        TReplication::ITarget& target,
+        NIceDb::TNiceDb& db)
+{
+    if (replication.GetDesiredState() != TReplication::EState::Ready
+        || target.GetDstState() == TReplication::EDstState::Done)
+    {
+        return;
+    }
+
+    const bool retryDestination = target.GetDstState() == TReplication::EDstState::Error;
+    const bool retryStream = target.GetStreamState() == TReplication::EStreamState::Error;
+    if (!retryDestination && !retryStream) {
+        return;
+    }
+
+    // Secrets have no destination ALTER. Resume only unfinished copying and
+    // keep the destination identity and source stream metadata for the retry.
+    if (retryDestination) {
+        target.SetDstState(TReplication::EDstState::Creating);
+    }
+    if (retryStream) {
+        target.SetStreamState(TReplication::EStreamState::Creating);
+        db.Table<TControllerSchema::SrcStreams>().Key(replication.GetId(), target.GetId()).Update(
+            NIceDb::TUpdate<TControllerSchema::SrcStreams::State>(target.GetStreamState()));
+    }
+    target.SetIssue({});
+    db.Table<TControllerSchema::Targets>().Key(replication.GetId(), target.GetId()).Update(
+        NIceDb::TUpdate<TControllerSchema::Targets::DstState>(target.GetDstState()),
+        NIceDb::TUpdate<TControllerSchema::Targets::Issue>(target.GetIssue()));
+}
+
 bool RetryPausedBootstrap(
         TReplication& replication,
         NIceDb::TNiceDb& db,
@@ -354,7 +387,11 @@ public:
         Replication->ResetCredentials(ctx);
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
-            if (!target || target->GetKind() == TReplication::ETargetKind::Secret) {
+            if (!target) {
+                continue;
+            }
+            if (target->GetKind() == TReplication::ETargetKind::Secret) {
+                RetrySecretTarget(*Replication, *target, db);
                 continue;
             }
 
@@ -468,7 +505,11 @@ public:
 
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
-            if (!target || target->GetKind() == TReplication::ETargetKind::Secret) {
+            if (!target) {
+                continue;
+            }
+            if (target->GetKind() == TReplication::ETargetKind::Secret) {
+                RetrySecretTarget(*Replication, *target, db);
                 continue;
             }
             target->Shutdown(ctx);

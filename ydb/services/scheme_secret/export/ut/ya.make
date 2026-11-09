@@ -11,6 +11,7 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/core/protos
     ydb/core/tx/replication/ut_helpers
+    ydb/public/sdk/cpp/src/client/secret
 )
 
 SRCS(

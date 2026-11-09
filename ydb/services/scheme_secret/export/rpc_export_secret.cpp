@@ -6,7 +6,6 @@
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/persqueue/public/schema/schema_operation.h>
-#include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -138,27 +137,36 @@ private:
         if (!IsAdministrator(AppData(), ownerIdentity)) {
             return Fail(Ydb::StatusIds::UNAUTHORIZED, "Secret export topic must be owned by a cluster administrator");
         }
-        const auto& config = entry.PQGroupInfo->Description.GetPQTabletConfig();
+        const auto& description = entry.PQGroupInfo->Description;
+        const auto& config = description.GetPQTabletConfig();
+        if (description.PartitionsSize() != 1
+            || description.GetPartitions(0).GetPartitionId() != 0
+            || description.GetPartitions(0).GetStatus() != NKikimrPQ::Active
+            || config.GetPartitionStrategy().GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig::DISABLED)
+        {
+            return Fail(Ydb::StatusIds::PRECONDITION_FAILED,
+                "Secret export requires a single active partition 0 with auto-partitioning disabled");
+        }
         const auto consumerName = NPersQueue::ConvertNewConsumerName("replicationConsumer", AppData()->PQConfig);
-        bool importantConsumer = false;
+        bool compatibleConsumer = false;
         for (const auto& consumer : config.GetConsumers()) {
-            if (consumer.GetName() == consumerName && consumer.GetImportant()) {
-                importantConsumer = true;
+            if (consumer.GetName() == consumerName && consumer.GetImportant()
+                && consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING
+                && consumer.GetReadFromTimestampsMs() == 0)
+            {
+                compatibleConsumer = true;
                 break;
             }
         }
-        if (!importantConsumer) {
-            return Fail(Ydb::StatusIds::PRECONDITION_FAILED, "Secret export requires the important replication consumer");
-        }
-        const auto chooser = NPQ::CreatePartitionChooser(entry.PQGroupInfo->Description);
-        const auto* partition = chooser->GetPartition(ui32{0});
-        if (!partition) {
-            return Fail(Ydb::StatusIds::BAD_REQUEST, "Secret export topic has no writable partition 0");
+        if (!compatibleConsumer) {
+            return Fail(Ydb::StatusIds::PRECONDITION_FAILED,
+                "Secret export requires an important streaming replication consumer without a read timestamp filter");
         }
         auto opts = NPQ::TPartitionWriterOpts()
             .WithSourceId(SecretPath).WithDatabase(Database).WithTopicPath(TopicPath)
             .WithToken(Request_->GetSerializedToken());
-        Writer = Register(NPQ::CreatePartitionWriter(SelfId(), partition->TabletId, partition->PartitionId, opts));
+        const auto& partition = description.GetPartitions(0);
+        Writer = Register(NPQ::CreatePartitionWriter(SelfId(), partition.GetTabletId(), partition.GetPartitionId(), opts));
     }
 
     void PrepareTopicDirectory() {

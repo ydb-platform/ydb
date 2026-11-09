@@ -62,8 +62,9 @@ class TReplication::TImpl: public TLagProvider {
     }
 
     bool CanApplyResolvedCredentials() const {
-        // DROP still needs source credentials to remove retained streams after DONE.
-        return State != EState::Done && (DesiredState != EState::Done || State == EState::Removing);
+        // A persisted CREATE must also be settled after DONE and a restart.
+        return HasPendingSecretCreates()
+            || (State != EState::Done && (DesiredState != EState::Done || State == EState::Removing));
     }
 
     template <typename... Args>
@@ -129,12 +130,23 @@ class TReplication::TImpl: public TLagProvider {
         if (pendingSecrets && secretTopicsReady && !SecretCopier && YdbProxy && Database
             && State == EState::Ready && DesiredState == EState::Ready)
         {
-            SecretCopier = ctx.Register(CreateSecretCopier(ctx.SelfID, TReplication::TPtr(self)));
+            SecretCopier = ctx.Register(CreateSecretCopier(ctx.SelfID, *self));
         }
 
         for (auto& [_, target] : Targets) {
             target->Progress(ctx);
         }
+    }
+
+    bool HasPendingSecretCreates() const {
+        for (const auto& [_, target] : Targets) {
+            if (target->GetKind() == ETargetKind::Secret && !target->GetDstPathId()
+                && static_cast<const TTargetSecret*>(target.Ptr.Get())->GetCreateTxId())
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {
@@ -210,11 +222,13 @@ public:
             ctx.Send(SecretCopier, new TEvPrivate::TEvCancelSecretCopy());
             return;
         }
-        if (State == EState::Done) {
+        const bool recoverSecrets = State != EState::Error && HasPendingSecretCreates()
+            && (State != EState::Ready || DesiredState != EState::Ready);
+        if (State == EState::Done && !recoverSecrets) {
             return;
         }
 
-        if (DesiredState == EState::Done && (State == EState::Ready || State == EState::Paused)) {
+        if (!recoverSecrets && DesiredState == EState::Done && (State == EState::Ready || State == EState::Paused)) {
             // Forced DONE only needs local destination cleanup. In particular,
             // unresolved source credentials must not prevent it after restart.
             if (!Database) {
@@ -272,6 +286,16 @@ public:
 
         if (!Database) {
             ResolveDatabase(ctx);
+        }
+
+        if (recoverSecrets) {
+            // A restart can lose the live copier while its persisted CREATE
+            // is still in flight. Settle it before removing the source topic
+            // or declaring a paused/done replication fully stopped.
+            if (!SecretCopier && YdbProxy && Database) {
+                SecretCopier = ctx.Register(CreateSecretCopier(ctx.SelfID, *self, true));
+            }
+            return;
         }
 
         switch (State) {
@@ -372,7 +396,7 @@ public:
             // Keep the old source connection alive until the copier returns
             // its accepted destination DDL and the controller saves it.
             PendingCredentialsReset = true;
-            ctx.Send(SecretCopier, new TEvPrivate::TEvCancelSecretCopy());
+            ctx.Send(SecretCopier, new TEvPrivate::TEvCancelSecretCopy(true));
         } else {
             ResetYdbProxy(ctx);
         }

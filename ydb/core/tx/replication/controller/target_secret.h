@@ -16,6 +16,9 @@ public:
         : TTargetWithStream(replication, ETargetKind::Secret, id, config)
     {}
 
+    ui64 GetCreateTxId() const { return CreateTxId; }
+    void SetCreateTxId(ui64 txId) { CreateTxId = txId; }
+
 protected:
     TString BuildStreamPath() const override;
     void ProgressDestination(const TActorContext& ctx) override;
@@ -23,6 +26,9 @@ protected:
     IActor* CreateWorkerRegistar(const TActorContext&) const override {
         Y_ABORT("Secret targets use initial copying");
     }
+
+private:
+    ui64 CreateTxId = 0;
 
 };
 

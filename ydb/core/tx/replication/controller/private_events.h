@@ -11,6 +11,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 #include <optional>
 
@@ -54,6 +55,8 @@ struct TEvPrivate {
         EvSecretsCopied,
         EvCancelSecretCopy,
         EvSecretsCopiedSaved,
+        EvPrepareSecretCreate,
+        EvSecretCreatePrepared,
 
         EvEnd,
     };
@@ -87,22 +90,50 @@ struct TEvPrivate {
         bool IsSuccess() const;
     };
 
-    struct TEvCancelSecretCopy: public TEventLocal<TEvCancelSecretCopy, EvCancelSecretCopy> {};
+    struct TEvCancelSecretCopy: public TEventLocal<TEvCancelSecretCopy, EvCancelSecretCopy> {
+        bool Reconnect;
+
+        explicit TEvCancelSecretCopy(bool reconnect = false)
+            : Reconnect(reconnect)
+        {}
+    };
 
     struct TEvSecretsCopiedSaved: public TEventLocal<TEvSecretsCopiedSaved, EvSecretsCopiedSaved> {};
+
+    struct TEvPrepareSecretCreate: public TEventLocal<TEvPrepareSecretCreate, EvPrepareSecretCreate> {
+        ui64 ReplicationId;
+        ui64 TargetId;
+        ui64 TxId;
+
+        TEvPrepareSecretCreate(ui64 rid, ui64 tid, ui64 txId)
+            : ReplicationId(rid), TargetId(tid), TxId(txId)
+        {}
+    };
+
+    struct TEvSecretCreatePrepared: public TEventLocal<TEvSecretCreatePrepared, EvSecretCreatePrepared> {
+        ui64 TxId;
+
+        explicit TEvSecretCreatePrepared(ui64 txId)
+            : TxId(txId)
+        {}
+    };
 
     struct TEvSecretsCopied: public TEventLocal<TEvSecretsCopied, EvSecretsCopied> {
         ui64 ReplicationId;
         NYdb::TStatus Status;
         THashMap<ui64, TPathId> Created;
+        // Only definite SchemeShard rejections may discard a prepared CREATE.
+        THashSet<ui64> Rejected;
         // A checkpoint keeps the copier alive until its offset-cookie is
         // acknowledged by TEvSecretsCopiedSaved after the transaction commits.
         bool Finished;
 
-        TEvSecretsCopied(ui64 rid, NYdb::TStatus status, THashMap<ui64, TPathId> created, bool finished = true)
+        TEvSecretsCopied(ui64 rid, NYdb::TStatus status, THashMap<ui64, TPathId> created,
+                bool finished = true, THashSet<ui64> rejected = {})
             : ReplicationId(rid)
             , Status(std::move(status))
             , Created(std::move(created))
+            , Rejected(std::move(rejected))
             , Finished(finished)
         {}
     };

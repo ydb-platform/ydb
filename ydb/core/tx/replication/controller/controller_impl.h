@@ -139,6 +139,7 @@ private:
     void Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvSecretsCopied::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvPrepareSecretCreate::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPrepareAttachDst::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
@@ -215,6 +216,7 @@ private:
     class TTxDropStreamResult;
     class TTxCreateDstResult;
     class TTxSecretsCopied;
+    class TTxPrepareSecretCreate;
     class TTxPrepareAttachDst;
     class TTxAlterDstResult;
     class TTxDropDstResult;

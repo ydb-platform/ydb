@@ -136,6 +136,10 @@ class TController::TTxInit: public TTxBase {
             target->SetDstPathId(dstPathId);
             target->SetPendingDstPathId(pendingDstPathId);
             target->SetIssue(issue);
+            if (kind == TReplication::ETargetKind::Secret) {
+                static_cast<TTargetSecret*>(target)->SetCreateTxId(
+                    rowset.GetValueOrDefault<Schema::Targets::SecretCreateTxId>(0));
+            }
             const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());
             if (indexBuild) {
                 target->SetIndexBuild(true);

@@ -1480,6 +1480,7 @@ Y_UNIT_TEST_SUITE(SecretCopyLifecycle) {
         TReplicationTestInfo Info;
         TActorId Copier;
         TActorId Reader;
+        TActorId BrokenRecoveryCopier;
         TString Topic;
         ui64 TargetId = 0;
         ui64 CompletionTxId = 0;
@@ -1491,11 +1492,19 @@ Y_UNIT_TEST_SUITE(SecretCopyLifecycle) {
         ui32 TopicDrops = 0;
         ui32 Subscriptions = 0;
         ui32 FinishedCopies = 0;
+        ui32 QuotaRejectedCreates = 0;
+        ui32 RecoveryReadFailures = 0;
+        THashSet<ui64> DestinationCreateTxIds;
+        bool FailExport = false;
+        bool RejectCreateForQuota = false;
+        bool FailRecoveryReads = false;
         bool HoldExport = false;
         bool HoldCreateStatus = false;
         bool HoldCompletion = false;
+        bool HoldCheckpoint = false;
         TAutoPtr<IEventHandle> Export;
         TAutoPtr<IEventHandle> CreateStatus;
+        TAutoPtr<IEventHandle> Checkpoint;
         TVector<TAutoPtr<IEventHandle>> Completions;
         TTestActorRuntimeBase::TRegistrationObserver PreviousRegistrationObserver;
         TTestActorRuntime::TEventObserverHolder Observer;
@@ -1512,6 +1521,13 @@ Y_UNIT_TEST_SUITE(SecretCopyLifecycle) {
                 if (const auto* request = dynamic_cast<const TEvYdbProxy::TEvExportSecretRequest*>(event)) {
                     ++Exports;
                     Topic = std::get<1>(request->GetArgs());
+                    if (FailExport) {
+                        FailExport = false;
+                        GetRuntime().Send(new IEventHandle(ev->Sender, ev->Recipient,
+                            new TEvYdbProxy::TEvExportSecretResponse(
+                                NYdb::TStatus(NYdb::EStatus::UNAUTHORIZED, {})), 0, ev->Cookie));
+                        ev.Reset();
+                    }
                 } else if (HoldExport && dynamic_cast<const TEvYdbProxy::TEvExportSecretResponse*>(event)) {
                     UNIT_ASSERT(!Export);
                     Export = std::move(ev);
@@ -1519,22 +1535,42 @@ Y_UNIT_TEST_SUITE(SecretCopyLifecycle) {
                     ++Readers;
                 } else if (const auto* response = dynamic_cast<const TEvYdbProxy::TEvCreateTopicReaderResponse*>(event)) {
                     Reader = response->Result;
+                } else if (BrokenRecoveryCopier && ev->GetRecipientRewrite() == BrokenRecoveryCopier
+                    && dynamic_cast<const TEvYdbProxy::TEvReadTopicResponse*>(event))
+                {
+                    ++RecoveryReadFailures;
+                    GetRuntime().Send(new IEventHandle(BrokenRecoveryCopier, ev->Sender,
+                        new TEvYdbProxy::TEvTopicReaderGone(NYdb::TStatus(NYdb::EStatus::UNAVAILABLE, {}))));
+                    ev.Reset();
                 } else if (dynamic_cast<const TEvYdbProxy::TEvMakeDirectoryRequest*>(event)
                     || dynamic_cast<const TEvYdbProxy::TEvCreateTopicRequest*>(event))
                 {
                     ++ReceiverTopicCreates;
                 } else if (dynamic_cast<const TEvYdbProxy::TEvDropTopicRequest*>(event)) {
                     ++TopicDrops;
-                } else if (const auto* proposal = dynamic_cast<const TEvTxUserProxy::TEvProposeTransaction*>(event)) {
-                    const auto& tx = proposal->Record.GetTransaction().GetModifyScheme();
-                    if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSecret
-                        && tx.GetCreateSecret().GetName() == "copy")
-                    {
-                        Copier = ev->Sender;
-                        ++DestinationCreates;
+                } else if (const auto* proposal = dynamic_cast<const NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction*>(event)) {
+                    for (const auto& tx : proposal->Record.GetTransaction()) {
+                        if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSecret
+                            && tx.GetCreateSecret().GetName() == "copy")
+                        {
+                            ++DestinationCreates;
+                            DestinationCreateTxIds.insert(proposal->Record.GetTxId());
+                            if (RejectCreateForQuota) {
+                                // Reject before path lookup, as a quota check
+                                // can do even when the original CREATE succeeded.
+                                RejectCreateForQuota = false;
+                                ++QuotaRejectedCreates;
+                                auto* response = new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                                    NKikimrScheme::StatusQuotaExceeded, proposal->Record.GetTxId(),
+                                    proposal->Record.GetTabletId(), "injected quota rejection before path lookup");
+                                GetRuntime().Send(new IEventHandle(ev->Sender, ev->Recipient, response, 0, ev->Cookie));
+                                ev.Reset();
+                                return;
+                            }
+                        }
                     }
                 } else if (HoldCreateStatus && ev->GetRecipientRewrite() == Copier
-                    && dynamic_cast<const TEvTxUserProxy::TEvProposeTransactionStatus*>(event))
+                    && dynamic_cast<const NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult*>(event))
                 {
                     UNIT_ASSERT(!CreateStatus);
                     CreateStatus = std::move(ev);
@@ -1554,6 +1590,10 @@ Y_UNIT_TEST_SUITE(SecretCopyLifecycle) {
                     TargetId = result->TargetId;
                 } else if (const auto* result = dynamic_cast<const TEvPrivate::TEvSecretsCopied*>(event)) {
                     FinishedCopies += result->Finished;
+                    if (HoldCheckpoint && !result->Finished && !result->Created.empty()) {
+                        UNIT_ASSERT(!Checkpoint);
+                        Checkpoint = std::move(ev);
+                    }
                 }
             }))
         {
@@ -1561,7 +1601,12 @@ Y_UNIT_TEST_SUITE(SecretCopyLifecycle) {
                 [this](TTestActorRuntimeBase& runtime, const TActorId& parent, const TActorId& actorId) {
                     PreviousRegistrationObserver(runtime, parent, actorId);
                     if (runtime.FindActorName(actorId).Contains("TSecretCopier")) {
+                        Copier = actorId;
                         ++CopierStarts;
+                        if (FailRecoveryReads && CopierStarts == 2) {
+                            BrokenRecoveryCopier = actorId;
+                            runtime.EnableScheduleForActor(actorId);
+                        }
                     }
                 });
             Execute("CREATE SECRET source WITH (value = 'one');");
@@ -1591,8 +1636,8 @@ Y_UNIT_TEST_SUITE(SecretCopyLifecycle) {
 
         void WaitForPendingCreate() {
             GetRuntime().WaitFor("accepted destination secret DDL", [&] { return bool(CreateStatus); }, TDuration::Seconds(60));
-            const auto* status = CreateStatus->Get<TEvTxUserProxy::TEvProposeTransactionStatus>();
-            UNIT_ASSERT_VALUES_EQUAL(status->Status(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+            const auto* status = CreateStatus->Get<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>();
+            UNIT_ASSERT_VALUES_EQUAL(status->Record.GetStatus(), NKikimrScheme::StatusAccepted);
             CompletionTxId = status->Record.GetTxId();
             UNIT_ASSERT(CompletionTxId);
             UNIT_ASSERT(status->Record.GetPathId());
@@ -1618,6 +1663,28 @@ Y_UNIT_TEST_SUITE(SecretCopyLifecycle) {
                 return TargetId && ReadPersistedDstState(GetRuntime(), Info.ControllerId,
                     TWorkerId(1, TargetId, 0)) == TReplication::EDstState::Done;
             }, TDuration::Seconds(60));
+            const auto query = Sprintf(R"((
+                (let key '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '%lu))))
+                (return (AsList (SetResult 'Target (SelectRow 'Targets key '('Issue)))))
+            ))", TargetId);
+            const auto result = ReadControllerQuery(GetRuntime(), Info.ControllerId, query);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStruct(0).GetOptional().GetOptional()
+                .GetStruct(0).GetOptional().GetText(), "");
+        }
+
+        void WaitError() {
+            GetRuntime().WaitFor("secret replication error", [&] {
+                return DescribeReplication(*this, Info)->Get()->Record.GetState().HasError();
+            }, TDuration::Seconds(60));
+        }
+
+        ui64 ReadSecretCreateTxId() {
+            const auto query = Sprintf(R"((
+                (let key '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '%lu))))
+                (return (AsList (SetResult 'Target (SelectRow 'Targets key '('SecretCreateTxId)))))
+            ))", TargetId);
+            const auto result = ReadControllerQuery(GetRuntime(), Info.ControllerId, query);
+            return result.GetValue().GetStruct(0).GetOptional().GetOptional().GetStruct(0).GetOptional().GetUint64();
         }
 
         void Resume(ui64 txId) {
@@ -1661,6 +1728,185 @@ Y_UNIT_TEST_SUITE(SecretCopyLifecycle) {
             UNIT_ASSERT_VALUES_EQUAL(result.SecretValues.at(0), expected);
         }
     };
+
+    Y_UNIT_TEST(ResumeRetriesFailedSecretExport) {
+        TSecretReplicationEnv env;
+        env.FailExport = true;
+        env.Start();
+        env.WaitError();
+        UNIT_ASSERT(env.TargetId);
+        UNIT_ASSERT_VALUES_EQUAL(ReadPersistedStreamState(env.GetRuntime(), env.Info.ControllerId,
+            TWorkerId(1, env.TargetId, 0)), static_cast<ui32>(TReplication::EStreamState::Error));
+        UNIT_ASSERT_VALUES_EQUAL(env.CopierStarts, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.DestinationCreates, 0);
+
+        env.Resume(201);
+        env.WaitDone();
+        UNIT_ASSERT_VALUES_EQUAL(env.Exports, 2);
+        UNIT_ASSERT_VALUES_EQUAL(env.CopierStarts, 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.DestinationCreates, 1);
+        env.AssertValue("one");
+        UNIT_ASSERT(!DescribeReplication(env, env.Info)->Get()->Record.GetState().HasError());
+    }
+
+    Y_UNIT_TEST(ResumeRetriesFailedSecretCopyAfterConflictRemoved) {
+        TSecretReplicationEnv env;
+        env.Execute("CREATE SECRET copy WITH (value = 'conflict');");
+        const auto conflictingPathId = env.GetPathId("/Root/copy");
+        env.DestinationCreates = 0;
+        env.DestinationCreateTxIds.clear();
+        env.Start();
+        env.WaitError();
+        UNIT_ASSERT_VALUES_EQUAL(ReadPersistedDstState(env.GetRuntime(), env.Info.ControllerId,
+            TWorkerId(1, env.TargetId, 0)), TReplication::EDstState::Error);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/copy"), conflictingPathId);
+        env.AssertValue("conflict");
+
+        env.Execute("DROP SECRET copy;");
+        env.Resume(201);
+        env.WaitDone();
+        UNIT_ASSERT_VALUES_EQUAL(env.CopierStarts, 2);
+        UNIT_ASSERT_VALUES_EQUAL(env.Exports, 1);
+        UNIT_ASSERT(env.GetPathId("/Root/copy") != conflictingPathId);
+        env.AssertValue("one");
+        UNIT_ASSERT(!DescribeReplication(env, env.Info)->Get()->Record.GetState().HasError());
+    }
+
+    Y_UNIT_TEST(FreshQuotaRejectionDoesNotStartRecoveryOnDrop) {
+        TSecretReplicationEnv env;
+        env.RejectCreateForQuota = true;
+        env.Start();
+        env.WaitError();
+        UNIT_ASSERT_VALUES_EQUAL(env.QuotaRejectedCreates, 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadSecretCreateTxId(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/copy").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.CopierStarts, 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.DestinationCreates, 1);
+
+        env.Drop(true);
+        env.WaitDropped();
+        UNIT_ASSERT_VALUES_EQUAL(env.CopierStarts, 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.DestinationCreates, 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/copy").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
+    }
+
+    Y_UNIT_TEST(SecretDestinationKeepsOwnerWithGroupPermissions) {
+        TSecretReplicationEnv env;
+        env.Execute("CREATE USER copy_owner;");
+        env.Execute("CREATE GROUP copy_creators;");
+        env.Execute("ALTER GROUP copy_creators ADD USER copy_owner;");
+        env.Execute("GRANT ALL ON `/Root` TO copy_creators;");
+        env.HoldExport = true;
+        env.Start();
+        env.GetRuntime().WaitFor("source secret export reply", [&] { return bool(env.Export); }, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(env.CopierStarts, 0);
+        const auto status = env.RunCall([&] {
+            return env.ModifyOwner("/Root", "replication", "copy_owner");
+        });
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetPathDescription().GetSelf().GetOwner(), "copy_owner");
+
+        env.HoldExport = false;
+        env.GetRuntime().Send(env.Export.Release());
+        env.WaitDone();
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/copy").GetPathDescription().GetSelf().GetOwner(), "copy_owner");
+        env.AssertValue("one");
+        env.AssertSingleCopy();
+    }
+
+    Y_UNIT_TEST_TWIN(RestartAfterSecretCreateBeforeCheckpoint, QuotaOnRetry) {
+        TSecretReplicationEnv env;
+        env.HoldCheckpoint = true;
+        env.Start();
+        env.GetRuntime().WaitFor("secret destination checkpoint", [&] { return bool(env.Checkpoint); }, TDuration::Seconds(60));
+        const auto pathId = env.GetPathId("/Root/copy");
+        const auto createTxId = env.GetDescription("/Root/copy").GetPathDescription().GetSelf().GetCreateTxId();
+        UNIT_ASSERT(createTxId);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadSecretCreateTxId(), createTxId);
+        UNIT_ASSERT_VALUES_EQUAL(env.Checkpoint->Get<TEvPrivate::TEvSecretsCopied>()->Created.at(env.TargetId), pathId);
+        UNIT_ASSERT(ReadPersistedDstState(env.GetRuntime(), env.Info.ControllerId,
+            TWorkerId(1, env.TargetId, 0)) != TReplication::EDstState::Done);
+
+        // Lose the successful CREATE result before the controller records it.
+        env.Checkpoint.Reset();
+        env.HoldCheckpoint = false;
+        env.RejectCreateForQuota = QuotaOnRetry;
+        RestartController(env, env.Info.ControllerId);
+        env.WaitDone();
+        UNIT_ASSERT_VALUES_EQUAL(env.QuotaRejectedCreates, QuotaOnRetry ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/copy"), pathId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/copy").GetPathDescription().GetSelf().GetCreateTxId(), createTxId);
+        UNIT_ASSERT_VALUES_EQUAL(env.DestinationCreateTxIds.size(), 1);
+        UNIT_ASSERT(env.DestinationCreateTxIds.contains(createTxId));
+        UNIT_ASSERT_VALUES_EQUAL(env.Exports, 1);
+        env.AssertValue("one");
+        UNIT_ASSERT(!DescribeReplication(env, env.Info)->Get()->Record.GetState().HasError());
+    }
+
+    Y_UNIT_TEST(RestartDuringAcceptedSecretCreateCompletesDropCascade) {
+        TSecretReplicationEnv env;
+        env.HoldCreateStatus = true;
+        env.HoldCompletion = true;
+        env.Start();
+        env.WaitForPendingCreate();
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadSecretCreateTxId(), env.CompletionTxId);
+        env.Drop(true);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeReplication(env, env.Info)->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(env.TopicDrops, 0);
+
+        env.Completions.clear();
+        env.HoldCompletion = false;
+        RestartController(env, env.Info.ControllerId);
+        env.GetRuntime().WaitFor("recovered secret copy and cascade cleanup", [&] {
+            return DescribeReplication(env, env.Info)->Get()->Record.GetStatus()
+                == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND;
+        }, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/copy").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(env.Topic).GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.DestinationCreateTxIds.size(), 1);
+        UNIT_ASSERT(env.DestinationCreateTxIds.contains(env.CompletionTxId));
+        UNIT_ASSERT_VALUES_EQUAL(env.Exports, 1);
+    }
+
+    Y_UNIT_TEST(ResumeReplacesFailedSecretRecoveryReader) {
+        TSecretReplicationEnv env;
+        env.HoldCreateStatus = true;
+        env.HoldCompletion = true;
+        env.Start();
+        env.WaitForPendingCreate();
+        const auto pathId = env.GetPathId("/Root/copy");
+        const auto createTxId = env.CompletionTxId;
+        RequestPause(env, env.Info, 201);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadSecretCreateTxId(), createTxId);
+
+        env.Completions.clear();
+        env.HoldCompletion = false;
+        env.FailRecoveryReads = true;
+        RestartController(env, env.Info.ControllerId);
+        env.GetRuntime().WaitFor("failed secret recovery reader retries", [&] {
+            return env.RecoveryReadFailures >= 2;
+        }, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(env.CopierStarts, 2);
+        UNIT_ASSERT_VALUES_EQUAL(env.Copier, env.BrokenRecoveryCopier);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadSecretCreateTxId(), createTxId);
+
+        // Reconnecting must replace the actor whose reader keeps failing.
+        // Failure injection remains active only for that old recovery actor.
+        env.Resume(202);
+        env.GetRuntime().WaitFor("replacement secret copier", [&] {
+            return env.CopierStarts == 3;
+        }, TDuration::Seconds(60));
+        UNIT_ASSERT(env.Copier != env.BrokenRecoveryCopier);
+        env.WaitDone();
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/copy"), pathId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/copy").GetPathDescription().GetSelf().GetCreateTxId(), createTxId);
+        UNIT_ASSERT_VALUES_EQUAL(env.DestinationCreateTxIds.size(), 1);
+        UNIT_ASSERT(env.DestinationCreateTxIds.contains(createTxId));
+        UNIT_ASSERT_VALUES_EQUAL(env.Exports, 1);
+        env.AssertValue("one");
+        UNIT_ASSERT(!DescribeReplication(env, env.Info)->Get()->Record.GetState().HasError());
+    }
 
     Y_UNIT_TEST(DropWaitsForPendingSecretExport) {
         TSecretReplicationEnv env;

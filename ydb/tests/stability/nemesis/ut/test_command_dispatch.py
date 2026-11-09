@@ -182,6 +182,14 @@ def test_agent_api_and_local_service_share_execution(delivery):
 @pytest.mark.parametrize("local", [True, False])
 def test_existing_manual_api_uses_shared_dispatcher(delivery, monkeypatch, local):
     sender = CommandDispatcher(delivery.transport(local))
+    from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.fault_engine import FaultEngine
+    from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import GuardMode
+    engine = FaultEngine(
+        guard=None, inventory=None,
+        plan_inject=lambda name, target: [dispatch(name, target, "inject", {})],
+        dispatch=lambda cmd: sender.dispatch(cmd, track_history=False),
+        mode_for=lambda name: GuardMode.BYPASS)
+    monkeypatch.setattr(orchestrator_router, "fault_engine", engine)
     target = ChaosTarget.for_node("h1", node_id=2, ic_port=19002)
     monkeypatch.setattr(orchestrator_router, "hosts", ["h1"])
     monkeypatch.setattr(orchestrator_router, "command_dispatcher", sender)

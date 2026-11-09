@@ -60,6 +60,7 @@ class _Pending:
     confirm_since: float | None = None
     extract_ok: bool = False  # True only after recover_action() succeeds
     extracting: bool = False  # in-flight guard vs concurrent drain/tick
+    dispatching: bool = False
     stuck_reported: bool = False
 
 
@@ -77,6 +78,7 @@ class RecoveryProbe:
         max_hc_age_sec: float = DEFAULT_MAX_HC_AGE_SEC,
         clock: Callable[[], float] = time.monotonic,
         metrics=None,
+        node_piles_source=None,
     ) -> None:
         self._guard = guard
         self._hc_source = hc_source  # duck-typed: .last_results (dict), .last_update (monotonic)
@@ -87,6 +89,7 @@ class RecoveryProbe:
         self._min_hold_sec = float(min_hold_sec)
         self._max_hc_age_sec = float(max_hc_age_sec)
         self._clock = clock
+        self._node_piles_source = node_piles_source
         self._metrics = metrics
         self._lock = threading.Lock()
         self._pending: dict[str, _Pending] = {}
@@ -104,8 +107,16 @@ class RecoveryProbe:
 
     def snapshot_now(self) -> HcSnapshot:
         """Current healthcheck snapshot (also used to capture pre-inject baselines)."""
+        node_piles = None
+        if self._node_piles_source is not None:
+            try:
+                node_piles = self._node_piles_source()
+            except Exception:
+                logger.exception("Cannot resolve current compute nodes to piles")
+                node_piles = {}
         return build_snapshot(
             getattr(self._hc_source, "last_results", None) or {},
+            node_piles=node_piles,
             now=self._clock(),
             last_update=getattr(self._hc_source, "last_update", None),
             max_age_sec=self._max_hc_age_sec,
@@ -115,6 +126,39 @@ class RecoveryProbe:
         """Alive compute nodes right now; None when blind (a slot inject must not proceed)."""
         snap = self.snapshot_now()
         return snap.alive_compute if snap.fresh else None
+
+    def pile_compute_baseline(self, piles) -> dict[int, int] | None:
+        snap = self.snapshot_now()
+        if not snap.fresh or any(p not in snap.alive_compute_by_pile for p in piles):
+            return None
+        counts = {p: snap.alive_compute_by_pile[p] for p in piles}
+        return counts if all(n > 0 for n in counts.values()) else None
+
+    def dispatched(self, lease_id):
+        with self._lock:
+            p = self._pending.get(lease_id)
+            if p is not None:
+                p.reserved_at = self._clock()
+                p.dispatching = False
+
+    def restore_identity(self, identity_key, nemesis_type):
+        with self._lock:
+            pending = [p for p in self._pending.values()
+                       if p.target.identity_key() == identity_key and p.nemesis_type == nemesis_type
+                       and p.recover_action is not None]
+        for p in pending:
+            self._dispatch_extract(p, self._clock(), reason="manual restore")
+            if not p.extract_ok:
+                raise RuntimeError("Restore failed or still in progress; budget remains held")
+        return bool(pending)
+
+    def confirm_identity(self, identity_key, nemesis_type):
+        with self._lock:
+            for p in self._pending.values():
+                if p.target.identity_key() == identity_key and p.nemesis_type == nemesis_type:
+                    p.phase = PHASE_CONFIRM
+                    p.confirm_since = self._clock()
+                    p.extract_ok = True
 
     # -- tracking ---------------------------------------------------------------
 
@@ -129,6 +173,7 @@ class RecoveryProbe:
         recover_action: Callable[[], None] | None = None,
         extract_after_sec: float | None = None,
         confirm_timeout_sec: float | None = None,
+        dispatching: bool = False,
     ) -> None:
         """Track until HC confirms recovery. Toggle: extract after ``extract_after_sec``, then confirm."""
         if not lease_id:
@@ -136,6 +181,7 @@ class RecoveryProbe:
         timeout = float(stuck_timeout_sec)
         with self._lock:
             self._pending[lease_id] = _Pending(
+                dispatching=dispatching,
                 lease_id=lease_id,
                 target=target,
                 nemesis_type=nemesis_type,
@@ -161,6 +207,8 @@ class RecoveryProbe:
             items = list(self._pending.values())
         stuck: list[StuckFault] = []
         for p in items:
+            if p.dispatching:
+                continue
             held = now - p.reserved_at
             if p.recover_action is not None and p.phase == PHASE_HOLD:
                 # Extracts still fire while blind — do not extend the fault.
@@ -215,7 +263,7 @@ class RecoveryProbe:
             pending = [
                 p
                 for p in self._pending.values()
-                if p.recover_action is not None
+                if p.recover_action is not None and not p.dispatching
                 and (nemesis_type is None or p.nemesis_type == nemesis_type)
                 and (p.phase == PHASE_HOLD or (p.phase == PHASE_CONFIRM and not p.extract_ok))
             ]
@@ -308,6 +356,8 @@ class RecoveryProbe:
     def _dispatch_extract(self, p: _Pending, now: float, reason: str = "hold elapsed") -> None:
         """Dispatch extract; CONFIRM starts on first attempt, extract_ok only after success."""
         with self._lock:
+            if p.dispatching or p.extracting:
+                return
             if p.phase == PHASE_HOLD:
                 p.phase = PHASE_CONFIRM
                 p.confirm_since = now
@@ -323,6 +373,7 @@ class RecoveryProbe:
                 p.extracting = False
             return
         with self._lock:
+            p.confirm_since = self._clock()
             p.extract_ok = True
             p.extracting = False
         logger.info(

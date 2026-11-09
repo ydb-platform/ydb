@@ -39,6 +39,7 @@ PY_SRCS(
     internal/orchestrator/orchestrator_warden_checker.py
     internal/orchestrator/nemesis/schedule_loop.py
     internal/orchestrator/nemesis/boundary_scheduler.py
+    internal/orchestrator/nemesis/runtime_topology.py
     internal/orchestrator/nemesis/recovery_probe.py
     internal/orchestrator/nemesis/hc_model.py
     internal/orchestrator/nemesis/chaos_state.py
@@ -50,6 +51,7 @@ PY_SRCS(
     internal/orchestrator/nemesis/topology_fanout_planner.py
     internal/orchestrator/nemesis/network_planner.py
     internal/orchestrator/nemesis/nemesis_planner_base.py
+    internal/orchestrator/nemesis/fault_engine.py
     internal/orchestrator/nemesis/failure_model.py
     internal/orchestrator/nemesis/target_topology.py
     internal/orchestrator/nemesis/metrics.py

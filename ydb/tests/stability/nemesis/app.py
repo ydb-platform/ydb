@@ -6,6 +6,8 @@ from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_check
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop import OrchestratorNemesisSchedule
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.boundary_scheduler import BoundaryNemesisScheduler
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.fault_engine import FaultEngine
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.runtime_topology import RuntimeNodePiles
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.recovery_probe import RecoveryProbe
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     ClusterTopologyModel,
@@ -159,6 +161,10 @@ def _initialize_app_body():
         probe = RecoveryProbe(
             guard=failure_guard,
             hc_source=orchestrator_router.healthcheck_reporter,
+            node_piles_source=(RuntimeNodePiles(
+                [f"http://{orchestrator_router.agent_http_host(h)}:{orchestrator_router.mon_port}"
+                 for h in loaded_hosts[:2]], topology.pile_names,
+            ) if topology.pile_names else None),
             on_stuck=problems.record_stuck_fault,  # a never-recovering fault holds budget forever
             on_blind=problems.record_probe_blind,
             on_sighted=lambda: problems.resolve_kind(KIND_PROBE_BLIND),
@@ -187,8 +193,17 @@ def _initialize_app_body():
             metrics=metrics,
         )
 
+        engine = FaultEngine(
+            guard=failure_guard, inventory=inventory,
+            plan_inject=orchestrator_router.chaos_store.plan_inject_target,
+            plan_extract=orchestrator_router.chaos_store.plan_extract_target,
+            dispatch=lambda cmd: dispatcher.dispatch(cmd, track_history=True),
+            recovery_probe=probe,
+        )
+        orchestrator_router.fault_engine = engine
         # Boundary scheduler, started on demand via /api/scheduler/start.
         orchestrator_router.nemesis_scheduler = BoundaryNemesisScheduler(
+            engine=engine,
             guard=failure_guard,
             inventory=inventory,
             plan_inject=orchestrator_router.chaos_store.plan_inject_target,

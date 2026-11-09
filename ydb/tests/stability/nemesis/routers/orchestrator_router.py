@@ -14,22 +14,15 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop imp
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
-    guard_mode_for,
-    impact_scope_for,
     nemesis_types_flat_for_api,
     nemesis_types_grouped_for_api,
-    stuck_timeout_for,
     supports_boundary_scheduler,
     target_kind_for,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_problems import ChaosProblemStore
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import ClusterInventory
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.hc_model import (
-    hc_predicate_for,
-    needs_baseline,
-)
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.boundary_scheduler import (
     BoundaryNemesisScheduler,
     default_enabled_types,
@@ -51,6 +44,7 @@ mon_port = 8765  # Default monitoring port
 orchestrator_warden_checker: OrchestratorWardenChecker | None = None
 nemesis_schedule: OrchestratorNemesisSchedule | None = None
 command_dispatcher: CommandDispatcher | None = None
+fault_engine = None
 nemesis_scheduler: BoundaryNemesisScheduler | None = None
 chaos_store: ChaosOrchestratorStore | None = None
 failure_guard: FailureModelGuard | None = None
@@ -153,7 +147,8 @@ def create_host_process():
     process_type = data.get("type")
     host = data.get("host")
     action = data.get("action", "inject")
-    force = bool(data.get("force", False))
+    if action not in ("inject", "extract"):
+        return jsonify({"status": "error", "message": "Invalid action"}), 400
     target_data = data.get("target")
 
     if not process_type:
@@ -209,113 +204,13 @@ def create_host_process():
     try:
         if chaos_store is None:
             return jsonify({"status": "error", "message": "Chaos store not initialized"}), 500
-        # Plan-time safety for a FULL-mode manual inject; force=true skips it.
-        if (
-            not force
-            and action == "inject"
-            and failure_guard is not None
-            and guard_mode_for(process_type) is GuardMode.FULL
-        ):
-            scope = impact_scope_for(process_type)
-            safe = failure_guard.filter_safe([chaos_target], scope)
-            if not safe:
-                return jsonify(
-                    {
-                        "status": "error",
-                        "message": (
-                            f"Rejected by failure model: injecting {process_type} on "
-                            f"{chaos_target.identity_key()} would exceed the cluster's fault "
-                            f"tolerance (kind={target_kind_for(process_type).value}). "
-                            f"Retry with force=true to override."
-                        ),
-                    }
-                ), 409
-
-        cmds = chaos_store.plan_manual(process_type, host, action)
-        if not cmds:
-            return jsonify(
-                {"status": "error", "message": "Could not plan manual execution for this type/action"}
-            ), 400
-        # Prefer the request's ChaosTarget over whatever the planner picked.
-        cmds = [
-            type(c)(
-                execution_id=c.execution_id,
-                scenario_id=c.scenario_id,
-                nemesis_type=c.nemesis_type,
-                action=c.action,
-                target=chaos_target,
-                payload=c.payload,
-            )
-            for c in cmds
-        ]
-        record_scope = impact_scope_for(process_type) if failure_guard is not None else None
-        for cmd in cmds:
-            full = failure_guard is not None and guard_mode_for(process_type) is GuardMode.FULL
-            baseline = None
-            if (
-                full and cmd.action == "inject" and recovery_probe is not None
-                and needs_baseline(target_kind_for(process_type), record_scope)
-            ):
-                baseline = recovery_probe.alive_compute_baseline()  # before inject
-                if baseline is None:
-                    return jsonify(
-                        {
-                            "status": "error",
-                            "message": (
-                                f"Cannot inject {process_type}: no fresh healthcheck data "
-                                f"for a slot baseline (recovery probe is blind)"
-                            ),
-                        }
-                    ), 503
-            if not command_dispatcher.dispatch(cmd, track_history=False):
-                return jsonify(
-                    {"status": "error", "message": f"dispatch failed for {process_type}"},
-                ), 502
-            if full:
-                if cmd.action == "extract":
-                    failure_guard.record_extract(
-                        cmd.execution_id,
-                        cmd.target,
-                        record_scope,
-                        nemesis_type=cmd.nemesis_type,
-                        source="manual",
-                    )
-                    if recovery_probe is not None:
-                        recovery_probe.untrack_identity(cmd.target.identity_key())
-                    if nemesis_metrics is not None:
-                        nemesis_metrics.fault_ended(
-                            target=cmd.target,
-                            nemesis_type=cmd.nemesis_type,
-                            reason="extract",
-                            lease_id=cmd.execution_id,
-                            execution_id=cmd.execution_id,
-                            source="manual",
-                            guard_mode="full",
-                        )
-                elif cmd.action == "inject":
-                    # Held until HC confirms (or a manual extract); never on a timer.
-                    failure_guard.record_inject(
-                        cmd.execution_id,
-                        cmd.target,
-                        record_scope,
-                        nemesis_type=cmd.nemesis_type,
-                        source="manual",
-                    )
-                    if recovery_probe is not None:
-                        recovery_probe.track(
-                            cmd.execution_id,
-                            cmd.target,
-                            cmd.nemesis_type,
-                            recovered=hc_predicate_for(
-                                cmd.target,
-                                kind=target_kind_for(cmd.nemesis_type),
-                                scope=record_scope,
-                                inventory=cluster_inventory,
-                                baseline=baseline,
-                                nemesis_type=cmd.nemesis_type,
-                            ),
-                            stuck_timeout_sec=stuck_timeout_for(cmd.nemesis_type),
-                        )
+        if fault_engine is None:
+            return jsonify({"status": "error", "message": "Fault engine not initialized"}), 503
+        # force is accepted for wire compatibility, but cannot bypass shared admission.
+        if action == "inject":
+            cmds = fault_engine.inject(process_type, chaos_target, source="manual")
+        else:
+            cmds = fault_engine.extract(process_type, chaos_target)
         return jsonify(
             {
                 "status": "ok",
@@ -332,7 +227,7 @@ def create_host_process():
             }
         )
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": str(e)}), getattr(e, "status_code", 500)
 
 
 @blueprint.route("/api/process_types", methods=["GET"])

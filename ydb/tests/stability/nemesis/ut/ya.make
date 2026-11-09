@@ -12,6 +12,7 @@ TEST_SRCS(
     test_catalog_annotations.py
     test_guard_invariants.py
     test_pile_budget.py
+    test_fault_engine.py
     test_orchestrator_api.py
     test_metrics.py
     test_local_kikimr.py

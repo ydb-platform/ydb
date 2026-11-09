@@ -341,6 +341,7 @@ class _Impairment:
     execution_id: str
     racks: set[str]
     identity_key: str
+    identity_keys: frozenset[str] = frozenset()
     slots: int = 0
     slots_by_pile: tuple[tuple[int, int], ...] = ()
 
@@ -433,7 +434,7 @@ class FailureModelGuard:
         )
 
     def _touched_keys(self) -> set[str]:
-        return {imp.identity_key for imp in self._impairments}
+        return {key for imp in self._impairments for key in (imp.identity_keys | {imp.identity_key})}
 
     # -- tolerance check ----------------------------------------------------
 
@@ -543,14 +544,16 @@ class FailureModelGuard:
         footprint: Footprint,
         identity_key: str | None = None,
         *,
+        identity_keys: Iterable[str] = (),
         target: ChaosTarget | None = None,
         nemesis_type: str | None = None,
         source: str | None = None,
     ) -> str | None:
         """Claim ``footprint``; return lease id or None. Held until :meth:`release`."""
+        keys = frozenset(identity_keys) | ({identity_key} if identity_key else set())
         metrics = self._metrics
         with self._lock:
-            if not self._is_tolerable(self._active_racks() | set(footprint.racks)):
+            if keys & self._touched_keys() or not self._is_tolerable(self._active_racks() | set(footprint.racks)):
                 snap = self._snapshot_unlocked() if metrics is not None else None
                 rejected = True
                 lease_id = None
@@ -569,6 +572,7 @@ class FailureModelGuard:
                         execution_id=lease_id,
                         racks=set(footprint.racks),
                         identity_key=key,
+                        identity_keys=keys,
                         slots=footprint.slots,
                         slots_by_pile=footprint.slots_by_pile,
                     )

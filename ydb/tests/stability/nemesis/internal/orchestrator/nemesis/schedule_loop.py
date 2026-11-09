@@ -237,7 +237,9 @@ class OrchestratorNemesisSchedule:
         baseline = None
         if full and cmd.action == "inject" and probe is not None and needs_baseline(kind, scope):
             # Pre-dispatch; skip when blind — same as the boundary scheduler.
-            baseline = probe.alive_compute_baseline()
+            footprint = guard.footprint_for(cmd.target, scope)
+            baseline = (probe.pile_compute_baseline(dict(footprint.slots_by_pile))
+                        if footprint.slots_by_pile else probe.alive_compute_baseline())
             if baseline is None:
                 logger.warning(
                     "skipping %s on %s: no fresh healthcheck data for a slot baseline",

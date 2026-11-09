@@ -128,12 +128,14 @@ Planning is entity-based (`ChaosTarget`), not host-only. Dispatch still goes to 
 ```text
 tick: fill the budget up to the boundary
   → menu of (type, target) that currently fits the budget   (guard.budget_view)
-  → pick uniformly, guard.reserve(footprint)                 (atomic, held until the probe)
+  → pick uniformly → FaultEngine.inject(type, target)
+      plan complete fanout → admission → guard.reserve(footprint) (atomic)
   → repeat while something fits; max_per_tick is only a burst fuse (default 16),
     tablet (BYPASS) chaos is capped separately by max_bypass_per_tick (default 1)
-  → plan_inject → dispatch (payload includes chaos_target)
-      on failure: release the lease only if nothing dispatched;
-      a partial fanout keeps the budget charged and stays tracked
+  → register recovery ownership → dispatch (payload includes chaos_target)
+      planning/registration failure before sending releases any reservation;
+      any delivery failure, including the first timeout, keeps the lease tracked
+      and charged. Confirmation is paused during dispatch and requires newer HC.
   → RecoveryProbe releases the budget on healthcheck facts — never on a timer
        self    — the per-kind predicate holds (else: stuck past stuck_timeout_sec, budget kept)
        extract — dispatch the extract after auto_recovery_sec, then the same predicate
@@ -152,7 +154,20 @@ ClusterInventory.entities(kind)
      (slot injects without a fresh HC baseline are skipped, same as the boundary scheduler)
 ```
 
-There is **no** dispatch-time `can_inject` veto. Safety is plan-time (`filter_safe` / `fits`) plus accounting after dispatch (`record_inject` / `reserve`).
+Boundary and manual calls share one app-owned `FaultEngine`. The engine reserves
+before dispatch and atomically locks every target identity in a compound plan.
+The scheduler only chooses candidates and controls cadence. The router validates
+the HTTP request and returns the existing response shape; it no longer accounts
+for faults after sending. Legacy per-type scheduling still uses `record_inject`
+and is scheduled for removal with the manual UI transition.
+
+Manual extract requests restore through the probe for tracked toggles, avoiding a
+second restore concurrent with the automatic one. They do not free a reservation:
+a fresh healthcheck must confirm recovery. For a tracked toggle the response can
+contain an empty `executions` list because restore belongs to the existing
+operation. `force` is accepted in the manual request for compatibility but no
+longer bypasses shared admission. `/api/scheduler/start`, `/api/scheduler/stop`,
+`/api/problems` and the test client's protocol remain unchanged.
 
 **Recovery predicates are per target kind** (`hc_model.py`, over the cluster-wide healthcheck each host's endpoint serves):
 
@@ -166,7 +181,7 @@ While healthcheck data is stale or no endpoint answers, the probe is *blind*: re
 **Two independent budgets**, both from `cluster.yaml` (the erasure mode, `location.rack` / `data_center`). The erasure mode is read as `static_erasure` or `erasure` — `ydb/tools/cfg` accepts both spellings — at the top level or under `config:`, the same two places `hosts` is looked up:
 
 - *Fail domains* — `block-4-2` ≤ 2 domains, `mirror-3-dc` = 1 full realm + 1 domain elsewhere, `none` = 0. A domain is keyed `"<data_center>/<rack>"`: rack labels are only unique inside a DC (`rack: '1'` in every DC is normal), so the realm is part of the key. Only static-node / disk / DC faults spend this budget.
-- *Slots* — killing a dynamic node does not reduce storage redundancy, so it draws from its own budget: ≤ 30% of the cluster's slots down at once (`total_slots × slot_fraction`, ≥1 on small clusters). Charged by `reserve` (boundary scheduler) and by `record_inject` (legacy loop, manual inject). `filter_safe` checks both budgets; `reserve` repeats the check atomically.
+- *Slots* — killing a dynamic node does not reduce storage redundancy, so it draws from its own budget: ≤ 30% of the cluster's slots down at once (`total_slots × slot_fraction`, ≥1 on small clusters). Charged by `reserve` (shared engine for boundary/manual) and by `record_inject` (legacy loop). `filter_safe` checks both budgets; `reserve` repeats the check atomically.
 
 **Bridge budgets are independent per pile.** Storage fail domains are keyed by pile/DC/rack,
 so repeating rack or DC labels in different piles do not merge their budgets. Each pile has
@@ -475,8 +490,26 @@ without requesting another permission. Integrate this lifecycle with atomic loca
 reservations and shutdown, including cleanup of permissions acquired before a
 failed dispatch. Do not infer absence of an effect from a dispatch timeout.
 
-The next FaultEngine stage must also scope slot recovery to the affected pile and
-resource set: the existing global alive-compute baseline can otherwise hide a
-missing slot behind recovery or growth in another pile. The current changes split
-admission budgets; they do not yet replace that recovery predicate, provide local
-process discovery/control, or change the existing test-facing start/stop API.
+Slot recovery now captures a baseline for each affected pile. `RuntimeNodePiles`
+refreshes `node ID -> pile` from the YDB monitoring endpoint
+`/viewer/json/nodes?fields_required=SystemState`, using
+`SystemState.Location.BridgePileName`; it does not infer a pile from the physical
+host or cache dynamic IDs across restarts. The application tries the first two
+configured monitoring endpoints. A deployment must expose this location field
+and allow the monitoring request; an unavailable/incomplete mapping blocks bridge
+slot admission and confirmation instead of falling back to the global count.
+Non-bridge clusters keep the previous count-based predicate.
+
+The healthcheck's compute nodes are partitioned using this current mapping, with
+the minimum count across reporting endpoints for each pile. Growth in another
+pile cannot confirm recovery. Missing bridge storage evidence also cannot confirm
+a node/disk/group recovery; the affected node's storage must actually be observed
+and GREEN. This is pile-level slot recovery, not proof that the same process has
+returned: a replacement slot in the same pile may restore its population.
+
+`FaultPlan` and the engine's admission extension receive the complete dispatch
+plan before sending, including local-budget BYPASS faults. This extension currently
+has no provider configured; it must not be mistaken for a CMS permission lifecycle.
+Permission renewal/completion and the scheduler setting remain future work.
+Independent local process discovery/control and shutdown guarantees remain the
+next stages; no live cluster fault is required by these unit tests.

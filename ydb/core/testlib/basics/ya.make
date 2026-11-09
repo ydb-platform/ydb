@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    appdata.cpp
     helpers.cpp
     services.cpp
 )
@@ -23,6 +22,7 @@ PEERDIR(
     ydb/core/statistics/service
     ydb/core/tablet_flat
     ydb/core/testlib/actors
+    ydb/core/testlib/basics/appdata
     ydb/core/testlib/basics/runtime
     ydb/core/tx/columnshard
     ydb/core/tx/general_cache
@@ -50,6 +50,7 @@ ENDIF()
 END()
 
 RECURSE(
+    appdata
     default
     pg
     runtime

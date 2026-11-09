@@ -2,6 +2,7 @@
 
 #include "flat_scan_iface.h"
 #include "flat_scan_spent.h"
+#include "flat_saved_row.h"
 #include "flat_writer_bundle.h"
 #include "flat_sausage_chop.h"
 #include "flat_row_misc.h"
@@ -65,48 +66,6 @@ namespace NTabletFlatExecutor {
         using TRow = NTable::TRowState;
         using TPartWriter = NTable::TPartWriter;
 
-        // Deep-copy of a TRowState for fulltext buffering
-        struct TSavedRow {
-            NTable::ERowOp Op = NTable::ERowOp::Absent;
-            TString Buf;
-            struct TSlot { ui32 Offset = 0; ui32 Size = 0; NTable::TCellOp CellOp; };
-            TVector<TSlot> Slots;
-
-            void Save(const NTable::TRowState& row) {
-                Op = row.GetRowState();
-                Slots.resize(row.Size());
-                Buf.clear();
-                for (ui32 i = 0; i < row.Size(); i++) {
-                    Slots[i].CellOp = row.GetCellOp(i);
-                    const auto& cell = row.Get(i);
-                    Slots[i].Offset = Buf.size();
-                    if (!cell.IsNull()) {
-                        Slots[i].Size = cell.Size();
-                        Buf.append(cell.Data(), cell.Size());
-                    } else {
-                        Slots[i].Size = 0;
-                    }
-                }
-            }
-
-            void Restore(NTable::TRowState& out) const {
-                out.Init(Slots.size());
-                out.Touch(Op);
-                if (Op == NTable::ERowOp::Erase || Op == NTable::ERowOp::Reset) {
-                    return;
-                }
-                for (ui32 i = 0; i < Slots.size(); i++) {
-                    if (Slots[i].CellOp != NTable::ECellOp::Empty) {
-                        TCell cell;
-                        if (Slots[i].Size > 0) {
-                            cell = TCell(Buf.data() + Slots[i].Offset, Slots[i].Size);
-                        }
-                        out.Set(i, Slots[i].CellOp, cell);
-                    }
-                }
-            }
-        };
-
         // Per-key buffer for fulltext compaction
         struct TFtKeyBuf {
             // Part of the key (Gen + MaxId). Current token is stored outside
@@ -118,14 +77,14 @@ namespace NTabletFlatExecutor {
             ui64 LockTxId = 0;
 
             // Deltas
-            struct TDelta { ui64 TxId; TSavedRow Row; };
+            struct TDelta { ui64 TxId; NTable::TSavedRow Row; };
             TVector<TDelta> SavedDeltas;
             TVector<ui64> SavedDeltaOrder;
 
             // Committed versions (descending order)
             struct TVersion {
                 TRowVersion Ver;
-                TSavedRow Row;
+                NTable::TSavedRow Row;
                 bool Added = true;
                 TString Segment;
             };

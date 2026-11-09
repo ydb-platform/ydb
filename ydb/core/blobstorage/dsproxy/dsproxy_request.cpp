@@ -1264,7 +1264,13 @@ namespace NKikimr {
             ReplyAndDie(NKikimrProto::RACE);
             return false;
         }
-        Y_VERIFY_S(!Info->Group || !Info->Group->HasBridgeProxyGroupId() || ForceGroupGeneration, "Type# " << TypeName(*this));
+        if (Info->Group && Info->Group->HasBridgeProxyGroupId() && !ForceGroupGeneration) {
+            // a part of bridged group is reached through its bridge proxy, which fences every request with the
+            // generation of the part; a request addressed to the part directly (e.g. from a monitoring page) is refused
+            ErrorReason = "request to a part of bridged group without forced generation";
+            ReplyAndDie(NKikimrProto::ERROR);
+            return false;
+        }
         return true;
     }
 

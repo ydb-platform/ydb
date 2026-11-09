@@ -8,6 +8,8 @@
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
+#include <yt/cpp/mapreduce/interface/error_codes.h>
+#include <yt/cpp/mapreduce/interface/errors.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -128,7 +130,9 @@ THostManager::TClusterHostList THostManager::GetHosts(const TClientContext& cont
         auto hosts = ParseJsonStringArray(response->GetResponse());
         if (hosts.empty()) {
             const auto error = Format("Getting %Qv returned empty host list", url);
-            return TClusterHostList(std::make_exception_ptr(yexception() << error));
+            return TClusterHostList(std::make_exception_ptr(TErrorResponse(
+                TYtError(NClusterErrorCodes::NRpc::Unavailable, error),
+                requestId)));
         }
         for (auto& host : hosts) {
             host = CreateHostNameWithPort(host, context);

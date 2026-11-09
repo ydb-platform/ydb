@@ -131,7 +131,7 @@ public:
     void Start() {
         Completion.reset();
         Syncer = Env.Runtime->Register(NBridge::CreateSyncerActor(Info, Source->GroupID, Target->GroupID,
-            std::make_shared<NBridge::TSyncerDataStats>(), nullptr, Source->Type), 1);
+            std::make_shared<NBridge::TSyncerDataStats>(), nullptr), 1);
     }
 
     void CheckCompletion(bool success) {

@@ -10,54 +10,99 @@
 
 #include <util/system/byteorder.h>
 
+#include <cmath>
+#include <limits>
+#include <utility>
+#include <variant>
+
 namespace NYT::NFormats {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <NSkiff::EWireType wireType>
-Y_FORCE_INLINE auto TSimpleSkiffParser<wireType>::operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const
+template <>
+struct TDirectSkiffTypeTraits<NSkiff::EWireType::Nothing>
 {
-    using namespace NSkiff;
+    using TWire = std::monostate;
+    using TPhysical = std::monostate;
 
-    if constexpr (wireType == EWireType::Int8) {
-        return parser->ParseInt8();
-    } else if constexpr (wireType == EWireType::Int16) {
-        return parser->ParseInt16();
-    } else if constexpr (wireType == EWireType::Int32) {
-        return parser->ParseInt32();
-    } else if constexpr (wireType == EWireType::Int64) {
-        return parser->ParseInt64();
-    } else if constexpr (wireType == EWireType::Uint8) {
-        return parser->ParseUint8();
-    } else if constexpr (wireType == EWireType::Uint16) {
-        return parser->ParseUint16();
-    } else if constexpr (wireType == EWireType::Uint32) {
-        return parser->ParseUint32();
-    } else if constexpr (wireType == EWireType::Uint64) {
-        return parser->ParseUint64();
-    } else if constexpr (wireType == EWireType::Boolean) {
-        return parser->ParseBoolean();
-    } else if constexpr (wireType == EWireType::Double) {
-        return parser->ParseDouble();
-    } else if constexpr (wireType == EWireType::String32) {
-        return parser->ParseString32();
-    } else if constexpr (wireType == EWireType::Nothing) {
-        return nullptr;
-    } else {
-        static_assert(wireType == EWireType::Int64);
+    static TWire Parse(NSkiff::TCheckedInDebugSkiffParser* /*parser*/)
+    {
+        return {};
     }
+
+    static void Write(TPhysical /*value*/, NSkiff::TCheckedInDebugSkiffWriter* /*writer*/)
+    { }
+};
+
+#define XX(WireType, TWireType, TPhysicalType)                                         \
+    template <>                                                                        \
+    struct TDirectSkiffTypeTraits<NSkiff::EWireType::WireType>                         \
+    {                                                                                  \
+        using TWire = TWireType;                                                       \
+        using TPhysical = TPhysicalType;                                               \
+                                                                                       \
+        static TWire Parse(NSkiff::TCheckedInDebugSkiffParser* parser)                 \
+        {                                                                              \
+            return parser->Parse##WireType();                                          \
+        }                                                                              \
+                                                                                       \
+        static void Write(TPhysical value, NSkiff::TCheckedInDebugSkiffWriter* writer) \
+        {                                                                              \
+            writer->Write##WireType(value);                                            \
+        }                                                                              \
+    };
+
+XX(Boolean, bool, bool)
+XX(Int8, i8, i64)
+XX(Int16, i16, i64)
+XX(Int32, i32, i64)
+XX(Int64, i64, i64)
+XX(VarInt32, i32, i64)
+XX(VarInt64, i64, i64)
+XX(Uint8, ui8, ui64)
+XX(Uint16, ui16, ui64)
+XX(Uint32, ui32, ui64)
+XX(Uint64, ui64, ui64)
+XX(Float, float, double)
+XX(Double, double, double)
+XX(String32, TStringBuf, TStringBuf)
+XX(StringVar, TStringBuf, TStringBuf)
+#undef XX
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NSkiff::EWireType WireType>
+Y_FORCE_INLINE auto TDirectParseFunction<WireType>::operator()(
+    NSkiff::TCheckedInDebugSkiffParser* parser) const -> typename TTraits::TPhysical
+{
+    return TTraits::Parse(parser);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NSkiff::EWireType WireType>
+Y_FORCE_INLINE void TDirectWriteFunction<WireType>::operator()(
+    typename TTraits::TPhysical value,
+    NSkiff::TCheckedInDebugSkiffWriter* writer) const
+{
+    if (!IsInRange<typename TTraits::TWire>(value)) {
+        THROW_ERROR_EXCEPTION("Value %v is out of range of wire type %Qlv",
+            value,
+            WireType);
+    }
+    TTraits::Write(value, writer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <NSkiff::EWireType internalWireType>
-TTzTupleSkiffParser<internalWireType>::TTzTupleSkiffParser()
+TTzTupleParseFunction<internalWireType>::TTzTupleParseFunction()
 {
     Buffer_.resize(NTzTypes::GetMaxPossibleTzStringSize());
 }
 
 template <NSkiff::EWireType internalWireType>
-Y_FORCE_INLINE TStringBuf TTzTupleSkiffParser<internalWireType>::operator()(NSkiff::TCheckedInDebugSkiffParser* parser)
+Y_FORCE_INLINE TStringBuf TTzTupleParseFunction<internalWireType>::operator()(NSkiff::TCheckedInDebugSkiffParser* parser)
 {
     using namespace NSkiff;
     using namespace NTzTypes;
@@ -83,7 +128,7 @@ Y_FORCE_INLINE TStringBuf TTzTupleSkiffParser<internalWireType>::operator()(NSki
 ////////////////////////////////////////////////////////////////////////////////
 
 template <NSkiff::EWireType internalWireType>
-void TTzTupleSkiffWriter<internalWireType>::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
+void TTzTupleWriteFunction<internalWireType>::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
 {
     using namespace NSkiff;
     using namespace NTzTypes;
@@ -118,14 +163,12 @@ void TTzTupleSkiffWriter<internalWireType>::operator()(TStringBuf value, NSkiff:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <NSkiff::EWireType SkiffWireType>
-TDecimalSkiffParser<SkiffWireType>::TDecimalSkiffParser(int precision)
+TDecimalParseFunction<SkiffWireType>::TDecimalParseFunction(int precision)
     : Precision_(precision)
-{
-    CheckSkiffWireTypeForDecimal(precision, SkiffWireType);
-}
+{ }
 
 template <NSkiff::EWireType SkiffWireType>
-Y_FORCE_INLINE TStringBuf TDecimalSkiffParser<SkiffWireType>::operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const
+Y_FORCE_INLINE TStringBuf TDecimalParseFunction<SkiffWireType>::operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const
 {
     using namespace NSkiff;
     using namespace NDecimal;
@@ -161,14 +204,12 @@ Y_FORCE_INLINE TStringBuf TDecimalSkiffParser<SkiffWireType>::operator()(NSkiff:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <NSkiff::EWireType SkiffWireType>
-TDecimalSkiffWriter<SkiffWireType>::TDecimalSkiffWriter(int precision)
+TDecimalWriteFunction<SkiffWireType>::TDecimalWriteFunction(int precision)
     : Precision_(precision)
-{
-    CheckSkiffWireTypeForDecimal(precision, SkiffWireType);
-}
+{ }
 
 template <NSkiff::EWireType SkiffWireType>
-void TDecimalSkiffWriter<SkiffWireType>::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
+void TDecimalWriteFunction<SkiffWireType>::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
 {
     using namespace NSkiff;
     using namespace NDecimal;
@@ -196,7 +237,7 @@ void TDecimalSkiffWriter<SkiffWireType>::operator()(TStringBuf value, NSkiff::TC
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStringBuf TUuidParser::operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const
+TStringBuf TUuidParseFunction::operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const
 {
     static_assert(sizeof(Buffer_) == 16);
 
@@ -208,7 +249,7 @@ TStringBuf TUuidParser::operator()(NSkiff::TCheckedInDebugSkiffParser* parser) c
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TUuidWriter::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
+void TUuidWriteFunction::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
 {
     constexpr size_t ExpectedSize = 16;
     if (value.size() != ExpectedSize) {
@@ -222,23 +263,246 @@ void TUuidWriter::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWrite
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <NSkiff::EWireType wireType, typename TValueType>
-void CheckIntSize(TValueType value)
+TStringFixedParseFunction::TStringFixedParseFunction(i64 size)
+    : Size_(size)
+{ }
+
+TStringBuf TStringFixedParseFunction::operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const
 {
-    using TIntType = typename NSkiff::TUnderlyingIntegerType<wireType>::TValue;
-    bool ok;
-    if constexpr (std::is_same_v<TValueType, i64>) {
-        ok = std::numeric_limits<TIntType>::min() <= value && value <= std::numeric_limits<TIntType>::max();
-    } else if constexpr (std::is_same_v<TValueType, ui64>) {
-        ok = value <= std::numeric_limits<TIntType>::max();
+    return parser->ParseStringFixed(Size_);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TStringFixedWriteFunction::TStringFixedWriteFunction(i64 size)
+    : Size_(size)
+{ }
+
+void TStringFixedWriteFunction::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
+{
+    if (std::ssize(value) != Size_) {
+        THROW_ERROR_EXCEPTION("Invalid size of wire type %Qlv value: expected %v bytes, got %v",
+            NSkiff::EWireType::StringFixed,
+            Size_,
+            std::ssize(value));
+    }
+    writer->WriteStringFixed(value);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <typename TCppType>
+struct TCppTypeToValueType
+{
+    static constexpr NTableClient::EValueType Value = [] {
+        using namespace NTableClient;
+
+        if constexpr (std::is_same_v<TCppType, std::monostate>) {
+            return EValueType::Null;
+        } else if constexpr (std::is_same_v<TCppType, i64>) {
+            return EValueType::Int64;
+        } else if constexpr (std::is_same_v<TCppType, ui64>) {
+            return EValueType::Uint64;
+        } else if constexpr (std::is_same_v<TCppType, bool>) {
+            return EValueType::Boolean;
+        } else if constexpr (std::is_same_v<TCppType, double>) {
+            return EValueType::Double;
+        } else if constexpr (std::is_same_v<TCppType, TStringBuf>) {
+            return EValueType::String;
+        } else {
+            static_assert(false, "Unexpected C++ type");
+        }
+    }();
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <typename TFunction>
+auto DispatchNonComplexWireType(NSkiff::EWireType wireType, TFunction&& function)
+{
+    using namespace NSkiff;
+
+    switch (wireType) {
+#define CASE(WireType) \
+        case EWireType::WireType: \
+            return function.template operator()<EWireType::WireType>();
+        CASE(Nothing)
+        CASE(Boolean)
+        CASE(Int8)
+        CASE(Int16)
+        CASE(Int32)
+        CASE(Int64)
+        CASE(Int128)
+        CASE(Int256)
+        CASE(VarInt32)
+        CASE(VarInt64)
+        CASE(Uint8)
+        CASE(Uint16)
+        CASE(Uint32)
+        CASE(Uint64)
+        CASE(Uint128)
+        CASE(Uint256)
+        CASE(Float)
+        CASE(Double)
+        CASE(String32)
+        CASE(StringVar)
+        CASE(Yson32)
+        CASE(StringFixed)
+#undef CASE
+        case EWireType::Tuple:
+        case EWireType::Variant8:
+        case EWireType::Variant16:
+        case EWireType::VariantVar:
+        case EWireType::RepeatedVariant8:
+        case EWireType::RepeatedVariant16:
+        case EWireType::RepeatedBlockVar:
+            break;
+    }
+    YT_ABORT();
+}
+
+template <typename TFunction>
+auto DispatchOptionalKind(NSkiffExt::EOptionalKind optionalKind, TFunction&& function)
+{
+    using namespace NSkiffExt;
+
+    switch (optionalKind) {
+        case EOptionalKind::None:
+            return function.template operator()<EOptionalKind::None>();
+        case EOptionalKind::Variant8:
+            return function.template operator()<EOptionalKind::Variant8>();
+        case EOptionalKind::VariantVar:
+            return function.template operator()<EOptionalKind::VariantVar>();
+    }
+    YT_ABORT();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <
+    typename TConverter,
+    typename TConverters,
+    typename TFunctions,
+    typename... TArgs
+>
+TConverter CreateSimpleConverter(
+    const NSkiff::TSkiffSchemaPtr& skiffSchema,
+    NTableClient::ESimpleLogicalValueType simpleType,
+    TArgs&&... args)
+{
+    using namespace NSkiff;
+    using namespace NTableClient;
+
+    ValidateMatchesSimpleType(skiffSchema, simpleType);
+
+    auto wireType = skiffSchema->GetWireType();
+    if (simpleType == ESimpleLogicalValueType::Uuid && wireType == EWireType::Uint128) {
+        using TUuidFunction = typename TFunctions::TUuidFunction;
+        using TUuidConverter = typename TConverters::template TPhysicalConverter<TStringBuf, TUuidFunction>;
+        return TUuidConverter(
+            std::forward<TArgs>(args)...,
+            TUuidFunction());
+    } else if (IsTzType(simpleType) && wireType == EWireType::Tuple) {
+        auto timeValueWireType = skiffSchema->GetChildren()[0]->GetWireType();
+        return DispatchNonComplexWireType(timeValueWireType, [&args...] <EWireType TimeValueWireType> () -> TConverter {
+            if constexpr (
+                TimeValueWireType == EWireType::Int32 ||
+                TimeValueWireType == EWireType::Int64 ||
+                TimeValueWireType == EWireType::Uint16 ||
+                TimeValueWireType == EWireType::Uint32 ||
+                TimeValueWireType == EWireType::Uint64)
+            {
+                using TTzTupleFunction = typename TFunctions::template TTzTupleFunction<TimeValueWireType>;
+                using TTzTupleConverter = typename TConverters::template TPhysicalConverter<
+                    TStringBuf,
+                    TTzTupleFunction
+                >;
+                return TTzTupleConverter(
+                    std::forward<TArgs>(args)...,
+                    TTzTupleFunction());
+            } else {
+                YT_ABORT();
+            }
+        });
     } else {
-        static_assert(std::is_same_v<TIntType, i64>, "We expect either i64 or ui64 here");
+        return DispatchNonComplexWireType(wireType, [&skiffSchema, &args...] <EWireType WireType> () -> TConverter {
+            if constexpr (WireType == EWireType::Yson32) {
+                using TYson32Converter = typename TConverters::TYson32Converter;
+                return TYson32Converter(std::forward<TArgs>(args)...);
+            } else if constexpr (WireType == EWireType::StringFixed) {
+                using TStringFixedFunction = typename TFunctions::TStringFixedFunction;
+                using TStringFixedConverter = typename TConverters::template TPhysicalConverter<
+                    TStringBuf,
+                    TStringFixedFunction
+                >;
+                return TStringFixedConverter(
+                    std::forward<TArgs>(args)...,
+                    TStringFixedFunction(skiffSchema->GetSize()));
+            } else if constexpr (requires { typename TDirectSkiffTypeTraits<WireType>::TPhysical; }) {
+                using TPhysical = typename TDirectSkiffTypeTraits<WireType>::TPhysical;
+                using TDirectFunction = typename TFunctions::template TDirectFunction<WireType>;
+                using TDirectConverter = typename TConverters::template TPhysicalConverter<TPhysical, TDirectFunction>;
+                return TDirectConverter(
+                    std::forward<TArgs>(args)...,
+                    TDirectFunction());
+            } else {
+                YT_ABORT();
+            }
+        });
     }
-    if (!ok) {
-        THROW_ERROR_EXCEPTION("Value %v is out of range for possible values for skiff type %Qlv",
-            value,
-            wireType);
+}
+
+template <
+    typename TConverter,
+    typename TConverters,
+    typename TFunctions,
+    typename... TArgs
+>
+TConverter CreateDecimalConverter(
+    const NSkiff::TSkiffSchemaPtr& skiffSchema,
+    int precision,
+    TArgs&&... args)
+{
+    using namespace NSkiff;
+
+    auto wireType = skiffSchema->GetWireType();
+    ValidateSkiffWireTypeForDecimal(precision, wireType);
+
+    return DispatchNonComplexWireType(wireType, [precision, &args...] <EWireType WireType> () -> TConverter {
+        if constexpr (WireType == EWireType::Yson32) {
+            using TYson32Converter = typename TConverters::TYson32Converter;
+            return TYson32Converter(std::forward<TArgs>(args)...);
+        } else if constexpr (
+            WireType == EWireType::Int32 ||
+            WireType == EWireType::Int64 ||
+            WireType == EWireType::Int128 ||
+            WireType == EWireType::Int256)
+        {
+            using TDecimalFunction = typename TFunctions::template TDecimalFunction<WireType>;
+            using TDecimalConverter = typename TConverters::template TPhysicalConverter<TStringBuf, TDecimalFunction>;
+            return TDecimalConverter(
+                std::forward<TArgs>(args)...,
+                TDecimalFunction(precision));
+        } else {
+            YT_ABORT();
+        }
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <typename TWire, typename TValue>
+bool IsInRange(TValue value)
+{
+    if constexpr (std::is_same_v<TValue, i64> || std::is_same_v<TValue, ui64>) {
+        return std::in_range<TWire>(value);
     }
+    if constexpr (std::is_same_v<TWire, float>) {
+        return std::isinf(value) ||
+            std::isnan(value) ||
+            (std::numeric_limits<TWire>::lowest() <= value && value <= std::numeric_limits<TWire>::max());
+    }
+    return true;
 }
 
 template <typename TContainer>

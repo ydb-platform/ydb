@@ -109,8 +109,10 @@ Y_UNIT_TEST_SUITE(IScanS3Retry) {
                 ev->Get()->Result = TResult(MakeThrottleError());
             }
         });
-        auto resetObserver = runtime.AddObserver<NDataShard::TEvExportScan::TEvReset>([&](auto&) {
-            ++resetCount;
+        auto resetObserver = runtime.AddObserver<NDataShard::TEvExportScan::TEvReset>([&](auto& ev) {
+            if (dynamic_cast<NDataShard::TEvExportScan::TEvReset*>(ev->GetBase())) {
+                ++resetCount;
+            }
         });
 
         // Deliver the real retry timer immediately instead of waiting for the
@@ -130,12 +132,13 @@ Y_UNIT_TEST_SUITE(IScanS3Retry) {
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
         auto actor = NColumnShard::NBackup::CreateExportUploaderActor(edge, task, exportFactory.get(), MakeYdbColumns(), 0);
         const auto exporter = runtime.Register(actor.release());
+        std::shared_ptr<arrow::RecordBatch> prefix;
         if (acknowledgedBatch) {
             UNIT_ASSERT(keys.Append("ack").ok());
             UNIT_ASSERT(values.Append("saved").ok());
             UNIT_ASSERT(keys.Finish(&keyArray).ok());
             UNIT_ASSERT(values.Finish(&valueArray).ok());
-            auto prefix = arrow::RecordBatch::Make(schema, 1, { keyArray, valueArray });
+            prefix = arrow::RecordBatch::Make(schema, 1, { keyArray, valueArray });
             runtime.Send(new IEventHandle(exporter, edge, new TEvPrivate::TEvBackupExportRecordBatch(prefix, false)), 0, true);
             TAutoPtr<IEventHandle> intermediateHandle;
             const auto* intermediate = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupExportRecordBatchResult>(intermediateHandle);
@@ -146,26 +149,37 @@ Y_UNIT_TEST_SUITE(IScanS3Retry) {
         runtime.Send(new IEventHandle(exporter, edge, new TEvPrivate::TEvBackupExportRecordBatch(batch, true)), 0, true);
 
         TAutoPtr<IEventHandle> handle;
-        if (injectFailure) {
+        if (injectFailure && !allowRetry) {
             const auto* error = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupExportError>(handle);
             UNIT_ASSERT(error);
-            if (allowRetry) {
-                UNIT_ASSERT_STRING_CONTAINS(error->ErrorMessage, "scan reset (EScan::Reset)");
-                UNIT_ASSERT_STRING_CONTAINS(error->ErrorMessage, "restarting the scan is not supported");
-                UNIT_ASSERT_STRING_CONTAINS(error->ErrorMessage, "HTTP 429 TooManyRequests");
-                UNIT_ASSERT_STRING_CONTAINS(error->ErrorMessage, "export s3");
-            } else {
-                UNIT_ASSERT_STRING_CONTAINS(error->ErrorMessage, "Reduce request rate.");
-                UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount(bucketName, s3Client), 0);
-            }
+            UNIT_ASSERT_STRING_CONTAINS(error->ErrorMessage, "Reduce request rate.");
             UNIT_ASSERT_VALUES_EQUAL(injectedErrors, 1);
-            UNIT_ASSERT_VALUES_EQUAL(retryWakeups, allowRetry ? 1 : 0);
-            UNIT_ASSERT_VALUES_EQUAL(resetCount, allowRetry ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(retryWakeups, 0);
+            UNIT_ASSERT_VALUES_EQUAL(resetCount, 0);
+            UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount(bucketName, s3Client), 0);
             return;
+        }
+
+        ui32 generation = 0;
+        if (injectFailure) {
+            const auto* reset = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupExportReset>(handle);
+            generation = reset->Generation;
+            UNIT_ASSERT_VALUES_EQUAL(generation, 1);
+            // Emulate a fresh scan, including the already acknowledged prefix.
+            if (prefix) {
+                runtime.Send(new IEventHandle(exporter, edge, new TEvPrivate::TEvBackupExportRecordBatch(prefix, false, generation)), 0, true);
+                const auto* intermediate = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupExportRecordBatchResult>(handle);
+                UNIT_ASSERT(!intermediate->IsFinish);
+                UNIT_ASSERT_VALUES_EQUAL(intermediate->Generation, generation);
+            }
+            runtime.Send(new IEventHandle(exporter, edge, new TEvPrivate::TEvBackupExportRecordBatch(batch, true, generation)), 0, true);
         }
         const auto* result = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupExportRecordBatchResult>(handle);
         UNIT_ASSERT(result->IsFinish);
-        UNIT_ASSERT_VALUES_EQUAL(resetCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Generation, generation);
+        UNIT_ASSERT_VALUES_EQUAL(injectedErrors, injectFailure ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(resetCount, generation);
+        UNIT_ASSERT_VALUES_EQUAL(retryWakeups, generation);
 
         const TString dataKey = NDataShard::NBackupRestoreTraits::DataKeySuffix(0, EDataFormat::YdbDump, ECompressionCodec::None, false);
         Aws::S3::Model::GetObjectRequest request;

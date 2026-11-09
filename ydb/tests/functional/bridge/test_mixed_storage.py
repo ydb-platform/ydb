@@ -5,6 +5,7 @@ import ydb
 
 from common import BridgeKiKiMRTest
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
+from ydb.tests.library.common.wait_for import retry_assertions
 
 
 class TestMixedStorageDatabases(BridgeKiKiMRTest):
@@ -112,7 +113,7 @@ class TestMixedStorageDatabases(BridgeKiKiMRTest):
             rows = self.execute(kind, "SELECT id, value FROM data ORDER BY id;")[0].rows
             assert [(row.id, row.value) for row in rows] == [(1, "before-promotion"), (2, "after-promotion")]
             self.cluster.alter_database(f"/Root/{kind}", storage_units_to_add={kind: 1})
-        self.check_pools(2)
+        retry_assertions(lambda: self.check_pools(2), timeout_seconds=120)
 
     def test_database_bridge_mode(self):
         self.execute("bridged", "CREATE TABLE data (id Uint64, value Utf8, PRIMARY KEY(id));", scheme=True)

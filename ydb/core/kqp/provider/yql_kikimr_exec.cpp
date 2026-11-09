@@ -2795,6 +2795,9 @@ public:
                     }
 
                     switch (add_index->type_case()) {
+                        case Ydb::Table::TableIndex::kGlobalHnswIndex:
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "HNSW index implementation is not available yet"));
+                            return SyncError();
                         case Ydb::Table::TableIndex::kGlobalIndex:
                         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
@@ -3785,6 +3788,11 @@ public:
             TDropReplicationSettings settings;
             settings.Name = TString(dropReplication.Replication());
             settings.Cascade = (dropReplication.Cascade().Value() == "1");
+            if (const auto cleanup = dropReplication.SourceCleanup()) {
+                settings.SourceCleanup = cleanup.Cast().Value() == "abandon"
+                    ? NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON
+                    : NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP;
+            }
 
             auto cluster = TString(dropReplication.DataSink().Cluster());
             auto future = Gateway->DropReplication(cluster, settings);

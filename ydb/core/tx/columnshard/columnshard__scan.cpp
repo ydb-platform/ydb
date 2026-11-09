@@ -2,6 +2,7 @@
 #include "columnshard__scan.h"
 #include "columnshard_impl.h"
 
+#include "engines/predicate/filter.h"
 #include "engines/reader/transaction/tx_internal_scan.h"
 #include "engines/reader/transaction/tx_scan.h"
 
@@ -31,19 +32,39 @@ void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContex
         {"readable", maxReadVersion},
         {"tabletID", TabletID()});
 
-    if (maxReadVersion < readVersion) {
-        WaitingScans.emplace(readVersion, std::move(ev));
+    if (!ScanGate.PassSnapshot(ev, readVersion, maxReadVersion)) {
         WaitPlanStep(readVersion.GetPlanStep());
+        return;
+    }
+
+    auto targetConclusion = NOlap::NReader::BuildScanTarget(*this, record);
+    if (targetConclusion.IsFail()) {
+        NOlap::NReader::SendScanError(TabletID(), ev->Sender, record.GetGeneration(), record.GetTablePath(), "cannot build scan target",
+            targetConclusion.GetErrorMessage(), ctx);
+        return;
+    }
+    NOlap::NReader::TScanTarget target = targetConclusion.DetachResult();
+    if (!ScanGate.PassLoadedPortions(ev, GetIndexOptional(), target)) {
         return;
     }
 
     ScanTxInFlight.insert({ txId, TAppData::TimeProvider->Now() });
     Counters.GetTabletCounters()->SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
-    Execute(new NOlap::NReader::TTxScan(this, ev), ctx);
+    Execute(new NOlap::NReader::TTxScan(this, ev, std::move(target)), ctx);
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx) {
-    Execute(new NOlap::NReader::TTxInternalScan(this, ev), ctx);
+    const auto& request = *ev->Get();
+    const NOlap::TSnapshot readSnapshot =
+        TablesManager.ResolveReadSnapshot(request.GetPathId().GetSchemeShardLocalPathId(), request.GetSnapshot());
+    NOlap::NReader::TScanTarget target{ readSnapshot,
+        TablesManager.BuildTableMetadataAccessor(
+            "internal_request", request.GetPathId().GetInternalPathId(), request.GetPathId().GetSchemeShardLocalPathId(), readSnapshot),
+        request.RangesFilter ? request.RangesFilter : std::make_shared<NOlap::TPKRangesFilter>(NOlap::TPKRangesFilter::BuildEmpty()) };
+    if (!ScanGate.PassLoadedPortions(ev, GetIndexOptional(), target)) {
+        return;
+    }
+    Execute(new NOlap::NReader::TTxInternalScan(this, ev, std::move(target)), ctx);
 }
 
 }   // namespace NKikimr::NColumnShard

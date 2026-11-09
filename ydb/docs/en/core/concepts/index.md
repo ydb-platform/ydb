@@ -15,6 +15,7 @@ The following topics provide comprehensive coverage of the core functionality of
 - [Transactions](transactions.md)
 - [Change Data Capture (CDC)](cdc.md)
 - [Time to Live (TTL) and data eviction to external storage](ttl.md)
+- [Table data compression](compression.md)
 - [Database limitations](limits-ydb.md)
 - [Asynchronous replication](async-replication.md)
 - [Bridge mode](./bridge.md)

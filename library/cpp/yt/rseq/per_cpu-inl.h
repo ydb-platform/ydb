@@ -4,7 +4,7 @@
 #include "per_cpu.h"
 #endif
 
-#include "cpu_id.h"
+#include <library/cpp/yt/system/access_spreader.h>
 
 #include <util/system/compiler.h>
 
@@ -41,22 +41,10 @@ int ParsePossibleCpuCount(std::string_view list);
 /*!
  *  The fast path indexes the slot array by the raw rseq cpu_id and bounds-checks it against
  *  this value with a single unsigned compare (which also rejects a negative, unregistered
- *  cpu_id); an out-of-range cpu_id takes the clamped atomic fallback instead. Set by the
- *  first call to #GetCpuCount; defaults to 0 so every update falls back until the size is
- *  known -- callers must therefore size the array via #GetCpuCount before any update.
+ *  cpu_id); an out-of-range cpu_id takes the atomic fallback instead. Set by the
+ *  first call to #GetCpuCount; callers must size the array via #GetCpuCount before any update.
  */
 extern constinit int CpuCount;
-
-//! Maps a CPU id (>= 0) to a slot index in [0, GetCpuCount()) for the atomic fallback path.
-Y_FORCE_INLINE int GetFallbackSlotIndex(int cpuId)
-{
-    if (cpuId >= CpuCount) [[unlikely]] {
-        // A CPU beyond the configured count, or CpuCount not published yet. Slots are
-        // touched atomically on this path, so a shared slot is safe.
-        return cpuId % GetCpuCount();
-    }
-    return cpuId;
-}
 
 //! Returns a pointer to slot |index| of a per-CPU array -- |base| advanced by
 //! |index * stride| bytes. The size_t cast keeps the byte offset from overflowing.
@@ -186,13 +174,23 @@ abort:
     return false;
 }
 
-//! Turns an rseq cpu_id that failed the fast-path bounds check into a CPU id (>= 0).
-Y_FORCE_INLINE int ToFallbackCpuId(ui32 cpuId)
+//! Selects an atomic fallback slot in [0, CpuCount).
+//! CpuCount must be initialized and positive. |rseqCpuId| is a raw rseq cpu_id:
+//! a nonnegative CPU id (possibly >= CpuCount), or a negative sentinel encoded as ui32.
+//! Known IDs are preserved when in range and reduced modulo CpuCount otherwise;
+//! unavailable IDs use access spreader.
+Y_FORCE_INLINE int SelectAtomicFallbackSlot(ui32 rseqCpuId)
 {
-    // Negative: rseq is unavailable to this thread.
-    return static_cast<int>(cpuId) >= 0
-        ? static_cast<int>(cpuId)
-        : GetCurrentCpuIdSlow();
+    auto cpuId = static_cast<int>(rseqCpuId);
+    if (cpuId >= 0) {
+        if (cpuId >= CpuCount) [[unlikely]] {
+            return cpuId % GetCpuCount();
+        }
+
+        return cpuId;
+    }
+
+    return GetCurrentAccessStripe(CpuCount);
 }
 
 //! Runs |commit(slot, cpuId)| for the calling CPU under rseq, retrying on abort.
@@ -200,17 +198,16 @@ Y_FORCE_INLINE int ToFallbackCpuId(ui32 cpuId)
  *  |commit| runs one rseq critical section (see the RseqCommit* helpers above) and returns
  *  true on commit, false if the kernel aborted it. Returns false when the fast path is
  *  unavailable -- the rseq cpu_id is not within [0, CpuCount) -- in which case nothing is
- *  written, |fallbackCpuId| receives the calling CPU's id (>= 0) and the caller must use the
+ *  written, |fallbackSlotIndex| receives the slot index and the caller must use the atomic
  *  fallback. The cpu_id is read unsigned, so the single |cpuId >= CpuCount| test also rejects
  *  an unregistered thread (whose cpu_id sentinel reads as ~0u) and a cpu_id beyond the slot
  *  array (reachable only when #GetCpuCount could not read an exact bound).
  *
  *  Must be reached only after #GetCpuCount has run (see NDetail::CpuCount); callers satisfy
- *  this by sizing the slot array with #GetCpuCount. CpuCount defaults to 0, so every update
- *  falls back until the size is known.
+ *  this by sizing the slot array with #GetCpuCount.
  */
 template <class TCommit>
-Y_FORCE_INLINE bool RunRseqPerCpu(void* base, size_t stride, TCommit commit, int* fallbackCpuId)
+Y_FORCE_INLINE bool RunRseqPerCpu(void* base, size_t stride, TCommit commit, int* fallbackSlotIndex)
 {
     ui32 cpuId = ReadRseqAreaField<ui32>(offsetof(TRseqArea, CpuId));
     ui32 cpuCount = CpuCount;
@@ -220,7 +217,7 @@ Y_FORCE_INLINE bool RunRseqPerCpu(void* base, size_t stride, TCommit commit, int
         EnsureCurrentThreadRegistered();
         cpuId = ReadRseqAreaField<ui32>(offsetof(TRseqArea, CpuId));
         if (cpuId >= cpuCount) [[unlikely]] {
-            *fallbackCpuId = ToFallbackCpuId(cpuId);
+            *fallbackSlotIndex = SelectAtomicFallbackSlot(cpuId);
             return false;
         }
     }
@@ -233,7 +230,7 @@ Y_FORCE_INLINE bool RunRseqPerCpu(void* base, size_t stride, TCommit commit, int
         // since after a migration it may name an out-of-range CPU.
         cpuId = ReadRseqAreaField<ui32>(offsetof(TRseqArea, CpuId));
         if (cpuId >= cpuCount) [[unlikely]] {
-            *fallbackCpuId = ToFallbackCpuId(cpuId);
+            *fallbackSlotIndex = SelectAtomicFallbackSlot(cpuId);
             return false;
         }
     }
@@ -256,9 +253,7 @@ Y_FORCE_INLINE void AtomicAdd(T* slot, T value)
 
 //! Stores |value| into |rawSlot| with relaxed atomic stores: one 8-byte store, or two for a
 //! 16-byte value. Each 8-byte store is single-copy atomic, but the two halves of a 16-byte
-//! value may be observed split -- a torn value matching the fast path, which the
-//! last-writer-wins gauge tolerates. |T| is bit-cast to ui64 halves, so any 8- or 16-byte
-//! trivially-copyable type (incl. __m128i) works on any arch.
+//! value may be observed split, as on the fast path. |rawSlot| must be 8-byte aligned.
 template <class T>
     requires (sizeof(T) == 8 || sizeof(T) == 16)
 Y_FORCE_INLINE void AtomicStore(T* rawSlot, T value)
@@ -281,17 +276,17 @@ Y_FORCE_INLINE void AddPerCpuImpl(T* base, size_t stride, T value)
 {
 #ifdef YT_RSEQ_PERCPU_FAST
     i64 delta = static_cast<i64>(value);
-    int fallbackCpuId;
+    int slotIndex;
     if (RunRseqPerCpu(base, stride, [&] (void* slot, int cpuId) {
             return RseqCommitAdd8(slot, delta, cpuId);
-        }, &fallbackCpuId)) [[likely]]
+        }, &slotIndex)) [[likely]]
     {
         return;
     }
 #else
-    int fallbackCpuId = GetCurrentCpuId();
+    int slotIndex = GetCurrentAccessStripe(GetCpuCount());
 #endif
-    AtomicAdd(GetSlot(base, stride, GetFallbackSlotIndex(fallbackCpuId)), value);
+    AtomicAdd(GetSlot(base, stride, slotIndex), value);
 }
 
 template <class T>
@@ -299,12 +294,12 @@ template <class T>
 Y_FORCE_INLINE void StorePerCpuImpl(T* base, size_t stride, T value)
 {
 #ifdef YT_RSEQ_PERCPU_FAST
-    int fallbackCpuId;
+    int slotIndex;
     if constexpr (sizeof(T) == 16) {
         auto packed = __builtin_bit_cast(__m128i, value);
         if (RunRseqPerCpu(base, stride, [&] (void* slot, int cpuId) {
                 return RseqCommitStore16(slot, packed, cpuId);
-            }, &fallbackCpuId)) [[likely]]
+            }, &slotIndex)) [[likely]]
         {
             return;
         }
@@ -312,15 +307,15 @@ Y_FORCE_INLINE void StorePerCpuImpl(T* base, size_t stride, T value)
         auto packed = __builtin_bit_cast(i64, value);
         if (RunRseqPerCpu(base, stride, [&] (void* slot, int cpuId) {
                 return RseqCommitStore8(slot, packed, cpuId);
-            }, &fallbackCpuId)) [[likely]]
+            }, &slotIndex)) [[likely]]
         {
             return;
         }
     }
 #else
-    int fallbackCpuId = GetCurrentCpuId();
+    int slotIndex = GetCurrentAccessStripe(GetCpuCount());
 #endif
-    AtomicStore(GetSlot(base, stride, GetFallbackSlotIndex(fallbackCpuId)), value);
+    AtomicStore(GetSlot(base, stride, slotIndex), value);
 }
 
 template <class T>

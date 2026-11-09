@@ -1,9 +1,6 @@
 PY3TEST()
 
 FORK_SUBTESTS()
-# Keep the 36 test cases isolated: audit log capture can affect neighbouring tests.
-# Keep the split factor at least as large as the collected test count.
-SPLIT_FACTOR(40)
 SIZE(MEDIUM)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)

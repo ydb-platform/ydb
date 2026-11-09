@@ -1,4 +1,5 @@
 RECURSE_FOR_TESTS(
+    eds_import/ut
     ut_auditsettings
     ut_topic_cloud_events
     ut_background_cleaning
@@ -356,6 +357,7 @@ GENERATE_ENUM_SERIALIZATION(operation_queue_timer.h)
 GENERATE_ENUM_SERIALIZATION_WITH_HEADER(schemeshard__monitoring.h)  # for ESweepAlert
 
 PEERDIR(
+    ydb/core/tx/schemeshard/eds_import
     contrib/libs/protobuf
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata

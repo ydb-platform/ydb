@@ -1,11 +1,11 @@
 #include "schemeshard__operation_common_external_data_source.h"
+#include "eds_import/limits.h"
 
 #include <utility>
 
 namespace NKikimr::NSchemeShard::NExternalDataSource {
 
 constexpr uint32_t MAX_FIELD_SIZE    = 1000;
-constexpr uint32_t MAX_PROTOBUF_SIZE = 2 * 1024 * 1024; // 2 MiB
 
 bool ValidateLocationAndInstallation(const TString& location,
                                      const TString& installation,

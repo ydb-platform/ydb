@@ -2274,7 +2274,7 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
                 // oneof member introduced by a newer sender.
                 UNIT_ASSERT(request.ParseFromString(TString("\xA2\x06\x00", 3)));
             }
-            UNIT_ASSERT_VALUES_EQUAL(request.GetSettingsCase(), NKikimrImport::TCreateImportRequest::SETTINGS_NOT_SET);
+            UNIT_ASSERT(request.GetSettingsCase() == NKikimrImport::TCreateImportRequest::SETTINGS_NOT_SET);
             if (reuseUid) {
                 (*request.MutableOperationParams()->mutable_labels())["uid"] = "existing-import";
             }

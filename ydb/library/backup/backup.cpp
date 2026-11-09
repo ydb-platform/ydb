@@ -66,8 +66,9 @@ static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
 static constexpr i64 READ_TABLE_RETRIES = 100;
 static const std::string ATTR_ASYNC_REPLICATION = "__async_replication";
 static const std::string ATTR_ASYNC_REPLICA = "__async_replica";
-// Objects marked this way are implementation details (e.g. replication feeds) and are never dumped.
-static const std::string ATTR_OMIT_EXPORT = "__omit_export";
+// Explicit backup exclusion for scheme objects; independent of the
+// replication markers above. Directories do not support this attribute.
+static const std::string ATTR_OMIT_BACKUP = "__omit_backup";
 
 ////////////////////////////////////////////////////////////////////////////////
 //                               Util
@@ -78,8 +79,8 @@ void TYdbErrorException::LogToStderr() const {
 }
 
 template <typename TAttributes>
-static bool IsOmittedFromExport(const TAttributes& attributes) {
-    const auto it = attributes.find(ATTR_OMIT_EXPORT);
+static bool IsOmittedFromBackup(const TAttributes& attributes) {
+    const auto it = attributes.find(ATTR_OMIT_BACKUP);
     return it != attributes.end() && it->second == "true";
 }
 
@@ -619,6 +620,12 @@ NScheme::TSchemeEntry DescribePath(TDriver driver, const TString& fullPath) {
     return status.GetEntry();
 }
 
+static bool IsPathOmittedFromBackup(TDriver driver, const TString& path) {
+    const auto entry = DescribePath(driver, path);
+    return IsOmittedFromBackup(entry.Attributes)
+        || entry.Attributes.contains(ATTR_ASYNC_REPLICATION);
+}
+
 TAsyncStatus CopyTableAsyncStart(TDriver driver, const TString& src, const TString& dst) {
     LOG_I("Copy table " << src.Quote() << " to " << dst.Quote());
 
@@ -714,10 +721,10 @@ NTopic::TTopicDescription DescribeTopic(TDriver driver, const TString& path) {
 
 void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& folderPath, const NTable::TTableDescription& desc) {
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
-        if (IsOmittedFromExport(changefeedDesc.GetAttributes())
+        if (IsOmittedFromBackup(changefeedDesc.GetAttributes())
             || changefeedDesc.GetAttributes().contains(ATTR_ASYNC_REPLICATION))
         {
-            // this changefeed is managed by ASYNC REPLICATION and does not need backing up separately
+            // Replication feeds remain excluded even if __omit_backup is removed.
             continue;
         }
         TFsPath changefeedDirPath = CreateDirectory(folderPath, TString{changefeedDesc.GetName()});
@@ -743,9 +750,9 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     const auto originalTableDesc = DescribeTable(driver, originalTablePath);
     if (auto replicaAttribute = originalTableDesc.GetAttributes().find(ATTR_ASYNC_REPLICA);
         (replicaAttribute != originalTableDesc.GetAttributes().end() && replicaAttribute->second == "true")
-        || IsOmittedFromExport(originalTableDesc.GetAttributes())
+        || IsOmittedFromBackup(originalTableDesc.GetAttributes())
     ) {
-        LOG_D("Skip table " << originalTablePath.Quote() << ", because it is a replica table or is marked with " << ATTR_OMIT_EXPORT);
+        LOG_D("Skip table " << originalTablePath.Quote() << ", because it is a replica table or is marked with " << ATTR_OMIT_BACKUP);
         // remove the backup folder
         TVector<TString> children;
         folderPath.ListNames(children);
@@ -1108,7 +1115,9 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
+            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)
+                || (!dbIt.IsDir() && IsPathOmittedFromBackup(driver, dbIt.GetFullPath())))
+            {
                 LOG_D("Skip " << dbIt.GetFullPath().Quote());
                 dbIt.Next();
                 continue;

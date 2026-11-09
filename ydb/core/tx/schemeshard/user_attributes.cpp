@@ -60,7 +60,7 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
                 HANDLE_ATTR(ASYNC_REPLICATION);
                 HANDLE_ATTR(ASYNC_REPLICA);
                 HANDLE_ATTR(INCREMENTAL_BACKUP);
-                HANDLE_ATTR(OMIT_EXPORT);
+                HANDLE_ATTR(OMIT_BACKUP);
 
             #undef HANDLE_ATTR
             return EAttribute::UNKNOWN;
@@ -155,9 +155,16 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
             case EAttribute::INCREMENTAL_BACKUP:
                 // TODO(enjection): check ops
                 return CheckValueJson(name, value, errStr);
-            case EAttribute::OMIT_EXPORT:
-                // Presence is what export checks; refuse values that would
-                // read as "not omitted" while still marking the object.
+            case EAttribute::OMIT_BACKUP:
+                // Directory-like objects cannot carry an inherited backup
+                // policy. AlterUserAttrs checks the existing target's type.
+                if (op != EUserAttributesOp::CreateTable
+                    && op != EUserAttributesOp::CreateChangefeed
+                    && op != EUserAttributesOp::AlterUserAttrs)
+                {
+                    errStr = Sprintf("UserAttributes: attribute '%s' is not supported on directory-like objects", name.c_str());
+                    return false;
+                }
                 if (value != "true") {
                     errStr = Sprintf("UserAttributes: attribute '%s' accepts only 'true', got '%s'", name.c_str(), value.c_str());
                     return false;
@@ -208,7 +215,7 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
             case EAttribute::INCREMENTAL_BACKUP:
                 // TODO(enjection): check ops
                 return true;
-            case EAttribute::OMIT_EXPORT:
+            case EAttribute::OMIT_BACKUP:
                 return true;
         }
 

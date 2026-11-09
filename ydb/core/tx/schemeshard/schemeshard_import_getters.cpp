@@ -8,7 +8,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
-#include <ydb/core/backup/common/omit_export.h>
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/table_index.h>
@@ -897,7 +897,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         auto& changefeeds = *ImportInfo->Items.at(ItemIdx).Changefeeds.MutableChangefeeds();
 
         for (int i = 0; i < changefeeds.size();) {
-            if (!::NKikimr::NBackup::IsChangefeedOmittedFromExport(changefeeds.Get(i).GetChangefeed())) {
+            if (!::NKikimr::NBackup::IsChangefeedOmittedFromBackup(changefeeds.Get(i).GetChangefeed())) {
                 ++i;
                 continue;
             }

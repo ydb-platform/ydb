@@ -456,7 +456,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         );
     }
 
-    Y_UNIT_TEST_F(SkipNotExportableTables, TExportFixture) {
+    Y_UNIT_TEST_F(SkipNotExportableItems, TExportFixture) {
         Service<TSchemeImpl>()
             .ExpectListDirectory("/test_database/export-root")
             .ExpectChild("/test_database/export-root", "keep", Ydb::Scheme::Entry::TABLE)
@@ -464,15 +464,22 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ExpectChild("/test_database/export-root", "replica", Ydb::Scheme::Entry::TABLE)
             .ExpectChild("/test_database/export-root", "both", Ydb::Scheme::Entry::TABLE)
             .ExpectChild("/test_database/export-root", "false_attributes", Ydb::Scheme::Entry::TABLE)
-            .ExpectChild("/test_database/export-root", "topic", Ydb::Scheme::Entry::TOPIC);
+            .ExpectChild("/test_database/export-root", "topic", Ydb::Scheme::Entry::TOPIC)
+            .ExpectChild("/test_database/export-root", "omitted_view", Ydb::Scheme::Entry::VIEW)
+            .ExpectChild("/test_database/export-root", "kept_view", Ydb::Scheme::Entry::VIEW)
+            .ExpectDescribePath("/test_database/export-root/topic", Ydb::Scheme::Entry::TOPIC)
+            .ExpectDescribePath("/test_database/export-root/omitted_view", Ydb::Scheme::Entry::VIEW,
+                {{"__omit_backup", "true"}})
+            .ExpectDescribePath("/test_database/export-root/kept_view", Ydb::Scheme::Entry::VIEW,
+                {{"__omit_backup", "false"}});
 
         Service<TTableImpl>()
-            .SetTableAttribute("/test_database/export-root/omit", "__omit_export", "true")
+            .SetTableAttribute("/test_database/export-root/omit", "__omit_backup", "true")
             .SetTableAttribute("/test_database/export-root/replica", "__async_replica", "true")
             .SetTableAttribute("/test_database/export-root/both", "__async_replica", "true")
-            .SetTableAttribute("/test_database/export-root/both", "__omit_export", "true")
+            .SetTableAttribute("/test_database/export-root/both", "__omit_backup", "true")
             .SetTableAttribute("/test_database/export-root/false_attributes", "__async_replica", "false")
-            .SetTableAttribute("/test_database/export-root/false_attributes", "__omit_export", "false");
+            .SetTableAttribute("/test_database/export-root/false_attributes", "__omit_backup", "false");
 
         Service<TExportImpl>()
             .ExpectBucket(TEST_BUCKET)
@@ -481,7 +488,8 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ExpectS3SecretKey("test-access-key")
             .ExpectItem("/test_database/export-root/keep", "dst/keep")
             .ExpectItem("/test_database/export-root/false_attributes", "dst/false_attributes")
-            .ExpectItem("/test_database/export-root/topic", "dst/topic");
+            .ExpectItem("/test_database/export-root/topic", "dst/topic")
+            .ExpectItem("/test_database/export-root/kept_view", "dst/kept_view");
 
         RunCli(
             {

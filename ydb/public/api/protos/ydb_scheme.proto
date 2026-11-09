@@ -93,6 +93,10 @@ message Entry {
 
     // When true, permissions are not inherited from parent objects
     bool interrupt_permission_inheritance = 10;
+
+    // User attributes of the described object. Populated for DescribePath and
+    // ListDirectory's self entry; not populated for ListDirectory's children.
+    map<string, string> attributes = 11;
 }
 
 message ListDirectoryResult {

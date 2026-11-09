@@ -7928,26 +7928,26 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     // table. Replication keeps reading the source feed, so a restored copy of
     // that feed is never consumed; its important consumer would retain every
     // write to the destination forever once the table takes writes. The
-    // controller marks the feed with __omit_export so backups leave it out.
+    // existing __async_replication marker excludes both old and new feeds.
     static constexpr TStringBuf AsyncReplicationChangefeedName = "replication_feed";
     static constexpr TStringBuf AsyncReplicationAttrValue = R"({"id":"1","path":"/MyRoot/Replication"})";
 
     using TAttrs = TVector<std::pair<TString, TString>>;
 
-    TAttrs ReplicationFeedAttrs() {
+    TAttrs ReplicationFeedWithOmitBackupAttrs() {
         return {
             {"__async_replication", TString(AsyncReplicationAttrValue)},
-            {"__omit_export", "true"},
+            {"__omit_backup", "true"},
         };
     }
 
-    // Feeds installed before the controller started marking them.
+    // Both old and new controllers send only the existing replication marker.
     TAttrs LegacyReplicationFeedAttrs() {
         return {{"__async_replication", TString(AsyncReplicationAttrValue)}};
     }
 
-    TAttrs OmitExportAttrs() {
-        return {{"__omit_export", "true"}};
+    TAttrs OmitBackupAttrs() {
+        return {{"__omit_backup", "true"}};
     }
 
     TString ChangefeedAttrsProto(const TAttrs& attrs) {
@@ -8096,7 +8096,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST_FLAG(ImportSkipsOmittedChangefeed, EnableDataShardDirectPartImport) {
-        ImportSkipsChangefeed(OmitExportAttrs(), EnableDataShardDirectPartImport, false);
+        ImportSkipsChangefeed(OmitBackupAttrs(), EnableDataShardDirectPartImport, false);
     }
 
     Y_UNIT_TEST_FLAG(ImportSkipsLegacyAsyncReplicationChangefeed, EnableDataShardDirectPartImport) {
@@ -8104,10 +8104,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST_FLAG(ReplicaImportSkipsOmittedChangefeed, EnableDataShardDirectPartImport) {
-        ImportSkipsChangefeed(ReplicationFeedAttrs(), EnableDataShardDirectPartImport, true);
+        ImportSkipsChangefeed(ReplicationFeedWithOmitBackupAttrs(), EnableDataShardDirectPartImport, true);
     }
 
-    void ExportSkipsChangefeed(const TAttrs& attrs, bool enableDataShardDirectPartImport) {
+    void ExportSkipsChangefeed(const TAttrs& attrs, bool enableDataShardDirectPartImport, bool removeOmitBackup = false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -8168,6 +8168,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::ConsumerExist("replicationConsumer"),
         });
 
+        if (removeOmitBackup) {
+            TestUserAttrs(runtime, ++txId, "/MyRoot/Original", TString(AsyncReplicationChangefeedName),
+                AlterUserAttrs({}, {"__omit_backup"}));
+            env.TestWaitNotification(runtime, txId);
+        }
+
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
@@ -8213,14 +8219,22 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST_FLAG(ExportSkipsOmittedChangefeed, EnableDataShardDirectPartImport) {
-        ExportSkipsChangefeed(ReplicationFeedAttrs(), EnableDataShardDirectPartImport);
+        ExportSkipsChangefeed(OmitBackupAttrs(), EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(ExportSkipsReplicationChangefeedAfterOmitBackupRemoval, EnableDataShardDirectPartImport) {
+        ExportSkipsChangefeed(ReplicationFeedWithOmitBackupAttrs(), EnableDataShardDirectPartImport, true);
+    }
+
+    Y_UNIT_TEST_FLAG(ReplicaImportSkipsLegacyAsyncReplicationChangefeed, EnableDataShardDirectPartImport) {
+        ImportSkipsChangefeed(LegacyReplicationFeedAttrs(), EnableDataShardDirectPartImport, true);
     }
 
     Y_UNIT_TEST_FLAG(ExportSkipsLegacyAsyncReplicationChangefeed, EnableDataShardDirectPartImport) {
         ExportSkipsChangefeed(LegacyReplicationFeedAttrs(), EnableDataShardDirectPartImport);
     }
 
-    // An explicitly requested object marked with __omit_export is refused with
+    // An explicitly requested object marked with __omit_backup is refused with
     // an explanation rather than exported or silently dropped.
     Y_UNIT_TEST(ExportRejectsOmittedTable) {
         TPortManager portManager;
@@ -8240,7 +8254,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestUserAttrs(runtime, ++txId, "/MyRoot", "Omitted", AlterUserAttrs({{"__omit_export", "true"}}));
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Omitted", AlterUserAttrs({{"__omit_backup", "true"}}));
         env.TestWaitNotification(runtime, txId);
 
         const auto request = Sprintf(R"(
@@ -8256,7 +8270,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestExport(runtime, ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
         UNIT_ASSERT(s3Mock.GetData().empty());
 
-        TestUserAttrs(runtime, ++txId, "/MyRoot", "Omitted", AlterUserAttrs({}, {"__omit_export"}));
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Omitted", AlterUserAttrs({}, {"__omit_backup"}));
         env.TestWaitNotification(runtime, txId);
 
         TestExport(runtime, ++txId, "/MyRoot", request);

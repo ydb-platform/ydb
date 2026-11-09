@@ -5,7 +5,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/backup/common/omit_export.h>
+#include <ydb/core/backup/common/omit_backup.h>
 
 
 namespace NKikimr::NSchemeShard {
@@ -91,9 +91,9 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         if (!srcTablePath.IsResolved() || srcTablePath.IsDeleted()) {
             continue;
         }
-        if (::NKikimr::NBackup::IsOmittedFromExport(srcTablePath.Base()->UserAttrs->Attrs)) {
+        if (::NKikimr::NBackup::IsOmittedFromBackup(srcTablePath.Base()->UserAttrs->Attrs)) {
             return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
-                << "Table " << item.GetPath() << " is marked with " << ::NKikimr::NBackup::OMIT_EXPORT_ATTRIBUTE
+                << "Table " << item.GetPath() << " is marked with " << ::NKikimr::NBackup::OMIT_BACKUP_ATTRIBUTE
                 << " and cannot be backed up")};
         }
         if (omitIndexes) {

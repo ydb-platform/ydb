@@ -3,6 +3,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/virtual_timestamp.h>
 
+#include <unordered_map>
+
 namespace Ydb {
     class VirtualTimestamp;
     namespace Scheme {
@@ -68,6 +70,9 @@ struct TSchemeEntry {
     bool InterruptInheritance = false;
     uint64_t SizeBytes = 0;
     TVirtualTimestamp CreatedAt;
+    // Available in DescribePath and ListDirectory's self entry. Empty for
+    // directory children and when connected to servers predating this field.
+    std::unordered_map<std::string, std::string> Attributes;
 
     TSchemeEntry() = default;
     TSchemeEntry(const ::Ydb::Scheme::Entry& proto);

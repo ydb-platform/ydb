@@ -88,6 +88,7 @@ private:
         }
 
         OverrideName = entry.Self->Info.GetName();
+        OverrideAttributes = entry.Attributes;
         const auto& childName = entry.ListNodeEntry->Children.at(0).Name;
 
         return SendProposeRequest(ctx,
@@ -129,6 +130,11 @@ private:
                 ConvertDirectoryEntry(pathDescription, result.mutable_self(), true);
                 if (OverrideName) {
                     result.mutable_self()->set_name(*OverrideName);
+                    auto* attributes = result.mutable_self()->mutable_attributes();
+                    attributes->clear();
+                    for (const auto& [name, value] : OverrideAttributes) {
+                        (*attributes)[name] = value;
+                    }
                 }
                 const auto& requestedPath = this->GetProtoRequest()->path();
                 if (Path != requestedPath) {
@@ -190,6 +196,7 @@ private:
 private:
     TString Path;
     TMaybe<TString> OverrideName;
+    THashMap<TString, TString> OverrideAttributes;
 };
 
 class TListDirectoryRPC : public TBaseDescribe<TListDirectoryRPC, TEvListDirectoryRequest, Ydb::Scheme::ListDirectoryResult, true> {

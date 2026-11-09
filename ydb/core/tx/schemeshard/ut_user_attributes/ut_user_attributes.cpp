@@ -237,41 +237,91 @@ Y_UNIT_TEST_SUITE(TSchemeShardUserAttrsTest) {
         TestMkDir(runtime, txId++, "/MyRoot", "DirD", {NKikimrScheme::StatusInvalidParameter}, AlterUserAttrs(dirDAttrs));
     }
 
-    // __omit_export marks any object that export and backup must leave out.
-    Y_UNIT_TEST(OmitExport) {
+    Y_UNIT_TEST(OmitBackup) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestMkDir(runtime, ++txId, "/MyRoot", "Omitted", {NKikimrScheme::StatusAccepted},
-            AlterUserAttrs({{"__omit_export", "true"}}));
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusAccepted}, AlterUserAttrs({{"__omit_backup", "true"}}));
         env.TestWaitNotification(runtime, txId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Omitted"), {
-            NLs::UserAttrsEqual({{"__omit_export", "true"}}),
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::UserAttrsEqual({{"__omit_backup", "true"}}),
         });
 
-        // Only "true" has a meaning; anything else is a typo.
-        TestMkDir(runtime, ++txId, "/MyRoot", "Invalid", {NKikimrScheme::StatusInvalidParameter},
-            AlterUserAttrs({{"__omit_export", "yes"}}));
+        for (const TString value : {"yes", "false", ""}) {
+            TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusInvalidParameter},
+                AlterUserAttrs({{"__omit_backup", value}}));
+        }
 
-        // The attribute can be set and cleared on existing objects.
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", AlterUserAttrs({}, {"__omit_backup"}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::UserAttrsEqual({})});
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", AlterUserAttrs({{"__omit_backup", "true"}}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::UserAttrsEqual({{"__omit_backup", "true"}}),
+        });
+
+        TestCreateView(runtime, ++txId, "/MyRoot", R"(Name: "View" QueryText: "SELECT 1")");
+        env.TestWaitNotification(runtime, txId);
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "View", AlterUserAttrs({{"__omit_backup", "true"}}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/View"), {
+            NLs::UserAttrsEqual({{"__omit_backup", "true"}}),
+        });
+    }
+
+    Y_UNIT_TEST(OmitBackupRejectsDirectoryLikeObjects) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        const auto attrs = AlterUserAttrs({{"__omit_backup", "true"}});
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "Rejected", {NKikimrScheme::StatusInvalidParameter}, attrs);
+        TestMkDir(runtime, ++txId, "/MyRoot", "Dir");
+        env.TestWaitNotification(runtime, txId);
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Dir", {NKikimrScheme::StatusInvalidParameter}, attrs);
+        TestUserAttrs(runtime, ++txId, "", "MyRoot", {NKikimrScheme::StatusInvalidParameter}, attrs);
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "Database")",
+            {NKikimrScheme::StatusInvalidParameter}, attrs);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir"), {NLs::UserAttrsEqual({})});
+    }
+
+    Y_UNIT_TEST(OmitBackupChangefeedRemovalPreservesReplicationMarker) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint64" }
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
-
-        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", AlterUserAttrs({{"__omit_export", "true"}}));
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+                Name: "Feed"
+                Mode: ECdcStreamModeUpdate
+                Format: ECdcStreamFormatJson
+                UserAttributes { Key: "__async_replication" Value: "{}" }
+                UserAttributes { Key: "__omit_backup" Value: "true" }
+            }
+        )");
         env.TestWaitNotification(runtime, txId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::UserAttrsEqual({{"__omit_export", "true"}}),
+        TestUserAttrs(runtime, ++txId, "/MyRoot/Table", "Feed", AlterUserAttrs({}, {"__omit_backup"}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Feed"), {
+            NLs::UserAttrsEqual({{"__async_replication", "{}"}}),
         });
-
-        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", AlterUserAttrs({}, {"__omit_export"}));
+        TestUserAttrs(runtime, ++txId, "/MyRoot/Table", "Feed", AlterUserAttrs({{"__omit_backup", "true"}}));
         env.TestWaitNotification(runtime, txId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::UserAttrsEqual({}),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Feed"), {
+            NLs::UserAttrsEqual({{"__async_replication", "{}"}, {"__omit_backup", "true"}}),
         });
     }
 

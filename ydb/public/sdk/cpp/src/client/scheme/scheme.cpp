@@ -87,6 +87,7 @@ TSchemeEntry::TSchemeEntry(const ::Ydb::Scheme::Entry& proto)
     , InterruptInheritance(proto.interrupt_permission_inheritance())
     , SizeBytes(proto.size_bytes())
     , CreatedAt(proto.created_at())
+    , Attributes(proto.attributes().begin(), proto.attributes().end())
 {
     PermissionToSchemeEntry(proto.effective_permissions(), &EffectivePermissions);
     PermissionToSchemeEntry(proto.permissions(), &Permissions);

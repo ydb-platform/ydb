@@ -4191,8 +4191,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
-    // __omit_export marks objects that backups must leave out.
-    Y_UNIT_TEST(OmittedTablesAreNotDumped) {
+    Y_UNIT_TEST(OmittedObjectsAreNotDumped) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
@@ -4202,10 +4201,43 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         ExecuteDataDefinitionQuery(session, "CREATE TABLE `/Root/omitted` (k Uint32, PRIMARY KEY (k));");
         {
             const auto result = session.AlterTable("/Root/omitted", TAlterTableSettings()
-                .BeginAlterAttributes().Add("__omit_export", "true").EndAlterAttributes()
+                .BeginAlterAttributes().Add("__omit_backup", "true").EndAlterAttributes()
             ).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        ExecuteQuery(querySession, "CREATE VIEW `/Root/omitted_view` WITH security_invoker = TRUE AS SELECT 1;", true);
+        ExecuteQuery(querySession, "CREATE VIEW `/Root/kept_view` WITH security_invoker = TRUE AS SELECT 2;", true);
+        Tests::TClient legacyClient(*server.ServerSettings);
+        UNIT_ASSERT_VALUES_EQUAL(legacyClient.AlterUserAttributes("/Root", "omitted_view", {{"__omit_backup", "true"}}),
+            NMsgBusProxy::MSTATUS_OK);
+
+        for (const auto& name : {"application", "omitted_feed", "replication_feed", "replication_without_omit", "unmarked_feed"}) {
+            auto feed = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json);
+            if (TStringBuf(name).StartsWith("replication")) {
+                feed.AddAttribute("__async_replication", "{}");
+            }
+            if (TStringBuf(name) != "application" && TStringBuf(name) != "replication_feed") {
+                feed.AddAttribute("__omit_backup", "true");
+            }
+            const auto result = session.AlterTable("/Root/kept", TAlterTableSettings().AppendAddChangefeeds(feed)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        for (const auto& name : {"replication_without_omit", "unmarked_feed"}) {
+            UNIT_ASSERT_VALUES_EQUAL(legacyClient.AlterUserAttributes("/Root/kept", name, {}, {"__omit_backup"}),
+                NMsgBusProxy::MSTATUS_OK);
+        }
+
+        TSchemeClient schemeClient(driver);
+        const auto view = schemeClient.DescribePath("/Root/omitted_view").ExtractValueSync();
+        UNIT_ASSERT_C(view.IsSuccess(), view.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(view.GetEntry().Attributes.at("__omit_backup"), "true");
+        const auto feed = schemeClient.DescribePath("/Root/kept/replication_without_omit").ExtractValueSync();
+        UNIT_ASSERT_C(feed.IsSuccess(), feed.GetIssues().ToString());
+        UNIT_ASSERT(feed.GetEntry().Attributes.contains("__async_replication"));
+        UNIT_ASSERT(!feed.GetEntry().Attributes.contains("__omit_backup"));
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
@@ -4217,6 +4249,20 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         pathToBackup.ListNames(children);
         UNIT_ASSERT_C(FindPtr(children, "kept"), JoinSeq(", ", children));
         UNIT_ASSERT_C(!FindPtr(children, "omitted"), JoinSeq(", ", children));
+        UNIT_ASSERT_C(!FindPtr(children, "omitted_view"), JoinSeq(", ", children));
+        UNIT_ASSERT_C(FindPtr(children, "kept_view"), JoinSeq(", ", children));
+        const auto tableFolder = pathToBackup.Child("kept");
+        UNIT_ASSERT(tableFolder.Child("application").Exists());
+        UNIT_ASSERT(tableFolder.Child("unmarked_feed").Exists());
+        UNIT_ASSERT(!tableFolder.Child("omitted_feed").Exists());
+        UNIT_ASSERT(!tableFolder.Child("replication_feed").Exists());
+        UNIT_ASSERT(!tableFolder.Child("replication_without_omit").Exists());
+
+        TTempDir directFeedDump;
+        const auto directResult = backupClient.Dump("/Root/kept/replication_without_omit", directFeedDump.Path(),
+            NDump::TDumpSettings().Database("/Root"));
+        UNIT_ASSERT_C(directResult.IsSuccess(), directResult.GetIssues().ToString());
+        UNIT_ASSERT(!directFeedDump.Path().Child("replication_without_omit").Exists());
     }
 
     Y_UNIT_TEST(SkipEmptyDirsOnRestore) {
@@ -4483,9 +4529,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    // Items marked with __omit_export are dropped from the export, whether the
+    // Items marked with __omit_backup are dropped from the export, whether the
     // client listed them explicitly or the server expanded a directory.
-    Y_UNIT_TEST(OmittedTablesAreNotExported) {
+    Y_UNIT_TEST(OmittedObjectsAreNotExported) {
         TS3TestEnv testEnv;
         auto& session = testEnv.GetTableSession();
 
@@ -4493,19 +4539,28 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         ExecuteDataDefinitionQuery(session, "CREATE TABLE `/Root/omitted` (k Uint32, PRIMARY KEY (k));");
         {
             const auto result = session.AlterTable("/Root/omitted", TAlterTableSettings()
-                .BeginAlterAttributes().Add("__omit_export", "true").EndAlterAttributes()
+                .BeginAlterAttributes().Add("__omit_backup", "true").EndAlterAttributes()
             ).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
+        ExecuteQuery(testEnv.GetQuerySession(), "CREATE VIEW `/Root/omitted_view` WITH security_invoker = TRUE AS SELECT 1;", true);
+        ExecuteQuery(testEnv.GetQuerySession(), "CREATE VIEW `/Root/kept_view` WITH security_invoker = TRUE AS SELECT 2;", true);
+        Tests::TClient legacyClient(*testEnv.GetServer().ServerSettings);
+        UNIT_ASSERT_VALUES_EQUAL(legacyClient.AlterUserAttributes("/Root", "omitted_view", {{"__omit_backup", "true"}}),
+            NMsgBusProxy::MSTATUS_OK);
+
         CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port())();
 
         bool keptExported = false;
+        bool keptViewExported = false;
         for (const auto& [key, content] : testEnv.GetS3Mock().GetData()) {
             UNIT_ASSERT_C(!key.Contains("omitted"), key);
-            keptExported |= key.Contains("kept");
+            keptExported |= key.Contains("kept/");
+            keptViewExported |= key.Contains("kept_view/");
         }
         UNIT_ASSERT(keptExported);
+        UNIT_ASSERT(keptViewExported);
 
         const auto clientSettings = TCommonClientSettings().Database("/Root");
         NExport::TExportClient exportClient(testEnv.GetDriver(), clientSettings);
@@ -4518,6 +4573,19 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             .AppendItem({.Src = "/Root/omitted", .Dst = "only_omitted"});
         const auto response = exportClient.ExportToS3(exportSettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(response.Status().GetStatus(), EStatus::BAD_REQUEST, response.Status().GetIssues().ToString());
+
+        exportSettings.Item_.clear();
+        exportSettings.AppendItem({.Src = "/Root", .Dst = "recursive"});
+        const auto recursiveResponse = exportClient.ExportToS3(exportSettings).ExtractValueSync();
+        UNIT_ASSERT_C(recursiveResponse.Status().IsSuccess(), recursiveResponse.Status().GetIssues().ToString());
+        NOperation::TOperationClient operationClient(testEnv.GetDriver(), clientSettings);
+        UNIT_ASSERT(WaitForOperation<NExport::TExportToS3Response>(operationClient, recursiveResponse.Id()));
+        bool recursiveExported = false;
+        for (const auto& [key, content] : testEnv.GetS3Mock().GetData()) {
+            UNIT_ASSERT_C(!key.Contains("omitted"), key);
+            recursiveExported |= key.Contains("recursive/kept_view/");
+        }
+        UNIT_ASSERT(recursiveExported);
     }
 
     Y_UNIT_TEST(RestoreIndexTablePartitioningSettings) {

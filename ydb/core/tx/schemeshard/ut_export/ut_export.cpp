@@ -2265,7 +2265,7 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         TestImport(Runtime(), ++txId, "/MyRoot", knownRequest);
         const ui64 existingId = txId;
         TestImport(Runtime(), ++txId, "/MyRoot", knownRequest);
-        TestGetImport(Runtime(), txId, "/MyRoot", {Ydb::StatusIds::NOT_FOUND});
+        TestGetImport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
 
         auto reject = [&](bool addUnknownField, bool reuseUid) {
             NKikimrImport::TCreateImportRequest request;
@@ -2293,7 +2293,7 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
             UNIT_ASSERT(operation.ready());
             UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::UNSUPPORTED);
             UNIT_ASSERT(operation.id().empty());
-            TestGetImport(Runtime(), rejectedId, "/MyRoot", {Ydb::StatusIds::NOT_FOUND});
+            TestGetImport(Runtime(), rejectedId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         };
 
         reject(false, false);

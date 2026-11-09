@@ -24,6 +24,14 @@ namespace NDataShard {
 
 namespace {
 
+bool IsReadLockForTable(const TLockInfo& lock, const TPathId& tableId) {
+    return lock.GetReadTables().contains(tableId);
+}
+
+bool IsLockInheritedFromShard(const TLockInfo& lock, ui64 shardId) {
+    return lock.GetAncestorLocks().contains(shardId);
+}
+
 bool IsReadOnlyLock(const NKikimrDataEvents::TLock& lockProto, const TSysLocks& sysLocks, bool allowAncestorLocks) {
     const ui64 tabletId = sysLocks.SelfShardId();
     if (lockProto.GetHasWrites() || (lockProto.GetDataShard() != tabletId && !allowAncestorLocks)) {
@@ -31,12 +39,15 @@ bool IsReadOnlyLock(const NKikimrDataEvents::TLock& lockProto, const TSysLocks& 
     }
 
     const auto lock = sysLocks.GetRawLock(lockProto.GetLockId());
-    if (!lock || lock->IsBroken() || lock->IsWriteLock() ||
-        !lock->GetReadTables().contains(TPathId(lockProto.GetSchemeShard(), lockProto.GetPathId()))) {
+    if (!lock || lock->IsBroken() || lock->IsWriteLock()) {
         return false;
     }
-    if (lockProto.GetDataShard() != tabletId && !lock->GetAncestorLocks().contains(lockProto.GetDataShard())) {
+    const TPathId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
+    if (!IsReadLockForTable(*lock, tableId)) {
         return false;
+    }
+    if (lockProto.GetDataShard() != tabletId) {
+        return IsLockInheritedFromShard(*lock, lockProto.GetDataShard());
     }
     return true;
 }
@@ -114,10 +125,25 @@ TValidatedWriteTx::~TValidatedWriteTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
 
+bool TValidatedWriteTx::IsAtPrepareStep() const {
+    return !IsImmediate;
+}
+
 bool TValidatedWriteTx::IsReadOnlyPrepareStepForShard(const TSysLocks& sysLocks) const {
-    if (!Ready() || IsImmediate || LockTxId || HasOperations() ||
-        !KqpLocks || KqpLocks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit ||
-        KqpLocks->LocksSize() == 0 || KqpLocks->ReceivingShardsSize() == 0) {
+    if (!Ready() || !IsAtPrepareStep()) {
+        return false;
+    }
+    if (HasOperations()) {
+        return false;
+    }
+    if (LockTxId != 0) {
+        return false;
+    }
+    if (!KqpLocks || KqpLocks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit) {
+        return false;
+    }
+    // Writers in ReceivingShards need these locks checked before committing their writes.
+    if (KqpLocks->LocksSize() == 0 || KqpLocks->ReceivingShardsSize() == 0) {
         return false;
     }
 

@@ -125,6 +125,7 @@ public:
     }
 
 private:
+    bool IsAtPrepareStep() const;
     void ComputeTxSize();
 
 private:

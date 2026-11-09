@@ -2,6 +2,7 @@
 #include "limits.h"
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 
 #include <util/string/ascii.h>
 #include <util/string/strip.h>
@@ -73,6 +74,20 @@ bool GetDatabaseSuffix(TStringBuf reference, TStringBuf database, TStringBuf& su
 
 bool ReadSourceDatabase(TStringBuf query, TStringBuf& database) {
     query = query.SubStr(0, MetadataLimit);
+    // Use the same directive parser as KQP, on a bounded complete-line prefix.
+    // In particular, an original BOM or ordinary comment ends the flag preamble.
+    // A complete line also avoids cutting a UTF-8 character at the size bound.
+    const auto lastLineEnd = query.find_last_of("\r\n");
+    if (lastLineEnd == TStringBuf::npos) {
+        return false;
+    }
+    NSQLTranslation::TParsedSettings settings;
+    NYql::TIssues issues;
+    if (!NSQLTranslation::ParseTranslationSettingsFromComments(
+            TString(query.SubStr(0, lastLineEnd + 1)), settings, issues))
+    {
+        return false;
+    }
     if (query.StartsWith("\xEF\xBB\xBF")) {
         query.Skip(3);
     }
@@ -81,7 +96,7 @@ bool ReadSourceDatabase(TStringBuf query, TStringBuf& database) {
             query.Skip(1);
         }
         if (query.StartsWith("--")) {
-            const auto newline = query.find('\n');
+            const auto newline = query.find_first_of("\r\n");
             if (newline == TStringBuf::npos) {
                 return false;
             }
@@ -98,11 +113,22 @@ bool ReadSourceDatabase(TStringBuf query, TStringBuf& database) {
             }
             query.Skip(newline + 1);
         } else if (query.StartsWith("/*")) {
-            const auto end = query.find("*/", 2);
-            if (end == TStringBuf::npos || query.SubStr(2, end - 2).Contains("/*")) {
+            size_t depth = 1;
+            query.Skip(2);
+            while (depth && !query.empty()) {
+                if (query.StartsWith("/*") && settings.HasAnsiLexer) {
+                    ++depth;
+                    query.Skip(2);
+                } else if (query.StartsWith("*/")) {
+                    --depth;
+                    query.Skip(2);
+                } else {
+                    query.Skip(1);
+                }
+            }
+            if (depth) {
                 return false;
             }
-            query.Skip(end + 2);
         } else {
             // KQP has already parsed the statement. Do not tokenize it again,
             // and never treat comments or literals inside it as backup metadata.

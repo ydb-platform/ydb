@@ -227,6 +227,56 @@ Y_UNIT_TEST_SUITE(ImportedEdsInitialToken) {
         UNIT_ASSERT_VALUES_EQUAL(Reference(result), "/Dest/token");
     }
 
+    Y_UNIT_TEST(MetadataLineEndingsAndActualCommentModes) {
+        for (const auto ending : {"\n", "\r", "\r\n"}) {
+            for (const auto prefix : {"", "--!ansi_lexer\r", "\xEF\xBB\xBF"}) {
+                auto status = Ydb::StatusIds::SUCCESS;
+                TImportedSchemeResult result = PreparedEds("/Source/token");
+                const TString query = TStringBuilder() << prefix << "-- database: \"/Source\"" << ending
+                    << "CREATE EXTERNAL DATA SOURCE `source` WITH (AUTH_METHOD = 'IAM');";
+                RebindImportedEdsInitialToken(status, result, query, "/Destination");
+                UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(Reference(result), "/Destination/token");
+            }
+        }
+        // In ANSI, the apparent database header inside the outer comment is hidden.
+        const TString ansi = " \t--!syntax_v1\r\n\t--!ansi_lexer\r"
+            "/* outer /* inner */\r-- database: \"/Other\"\r*/\r";
+        auto status = Ydb::StatusIds::SUCCESS;
+        TImportedSchemeResult result = PreparedEds("/Source/token");
+        RebindImportedEdsInitialToken(status, result, ansi + Query("/Source"), "/Destination");
+        UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(Reference(result), "/Destination/token");
+        // Default comments stop at the first close, including a nested-looking opener.
+        // A directive following an ordinary comment, or the original BOM, does not
+        // enable ANSI according to ParseTranslationSettingsFromComments.
+        for (const auto prefix : {"", "-- ordinary\r--!ansi_lexer\r", "\xEF\xBB\xBF--!ansi_lexer\r"}) {
+            status = Ydb::StatusIds::SUCCESS;
+            result = PreparedEds("/Source/token");
+            const TString query = TStringBuilder() << prefix << "/* outer /* inner */\r" << Query("/Source");
+            RebindImportedEdsInitialToken(status, result, query, "/Destination");
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(Reference(result), "/Destination/token");
+        }
+        CheckFailure("/Source/token", "--!ansi_lexer\r/* outer /* inner */\r" + Query("/Source"), "/Destination");
+        CheckFailure("/Source/token", "--!ansi_lexer\r/* -- database: \"/Source\" */\rCREATE EXTERNAL DATA SOURCE `source`;", "/Destination");
+        CheckFailure("/Source/token", "-- database: \"/Other\"\r-- database: \"/Source\"\rCREATE EXTERNAL DATA SOURCE `source`;", "/Destination");
+        CheckFailure("/Source/token", "--!ansi_lexer\r/*" + TString(NExternalDataSource::MAX_PROTOBUF_SIZE, 'x') + "*/\r" + Query("/Source"), "/Destination");
+        TString deep = "--!ansi_lexer\r";
+        for (size_t i = 0; i < 1024; ++i) {
+            deep += "/*";
+        }
+        for (size_t i = 0; i < 1024; ++i) {
+            deep += "*/";
+        }
+        deep += "\r";
+        status = Ydb::StatusIds::SUCCESS;
+        result = PreparedEds("/Source/token");
+        RebindImportedEdsInitialToken(status, result, deep + Query("/Source"), "/Destination");
+        UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(Reference(result), "/Destination/token");
+    }
+
     Y_UNIT_TEST(SqlBodyIsNotTokenizedOrParsedAgain) {
         TImportedSchemeResult result = PreparedEds("/Source/token");
         auto status = Ydb::StatusIds::SUCCESS;

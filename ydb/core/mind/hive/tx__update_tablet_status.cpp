@@ -73,9 +73,7 @@ public:
                     // KIKIMR-9614
                     return true;
                 }
-                if (Self->BridgeInfo && !(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) &&
-                    !tablet->IsPresentOnLocal(Local) &&
-                    !tablet->GetNodeFilter().IsAllowedPile(node->BridgePileId)) {
+                if (!(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) && !tablet->IsPresentOnLocal(Local)) {
                     SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tablet->GetFullTabletId(), Generation));
                     return true;
                 }

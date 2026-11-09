@@ -10486,6 +10486,90 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     };
 
+    Y_UNIT_TEST(TestMoveAfterLateStartingStatus) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true, 2, [](TAppPrepare& app) {
+            app.HiveConfig.SetEnableFastTabletMove(true);
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 ownerTablet = MakeTabletID(false, 1);
+        const TActorId sender = runtime.AllocateEdgeActor(0);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        const TActorId hiveActor = GetHiveActor(runtime, hiveTablet);
+        runtime.EnableScheduleForActor(hiveActor);
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveDomainStats());
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveDomainStats>(handle);
+            std::unordered_set<ui32> aliveNodes;
+            for (const auto& domain : response->Record.GetDomainStats()) {
+                aliveNodes.insert(domain.GetNodeIds().begin(), domain.GetNodeIds().end());
+            }
+            return aliveNodes.size() == runtime.GetNodeCount();
+        }), "Locals did not connect to Hive");
+
+        TBlockEvents<TEvLocal::TEvTabletStatus> blockStatus(runtime, [&](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.GetTabletID() != hiveTablet && record.GetStatus() == TEvLocal::TEvTabletStatus::StatusOk;
+        });
+        auto create = MakeHolder<TEvHive::TEvCreateTablet>(ownerTablet, 0, TTabletTypes::Dummy, BINDED_CHANNELS);
+        create->Record.SetBalancerPolicy(NKikimrHive::POLICY_IGNORE);
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, ownerTablet, std::move(create), 0, false);
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] { return blockStatus.size() == 1; }), "initial boot did not report success");
+        const TActorId sourceLocal = blockStatus.front()->Sender;
+        const ui32 generation = blockStatus.front()->Get()->Record.GetGeneration();
+        const ui32 targetNodeId = runtime.GetNodeId(sourceLocal.NodeId() == runtime.GetNodeId(0) ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(GetHiveTabletInfo(runtime, hiveTablet, tabletId, sender).GetVolatileState()),
+            ui32(NKikimrHive::TABLET_VOLATILE_STATE_STARTING));
+
+        TBlockEvents<NHive::TEvPrivate::TEvProcessBootQueue> blockBootQueue(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == hiveActor;
+        });
+        NActorsProto::TRemoteHttpInfo request;
+        request.SetMethod(HTTP_METHOD_POST);
+        request.SetPath("/app");
+        auto* page = request.AddQueryParams();
+        page->SetKey("page");
+        page->SetValue("MoveTablet");
+        auto* tablet = request.AddQueryParams();
+        tablet->SetKey("tablet");
+        tablet->SetValue(ToString(tabletId));
+        auto* node = request.AddQueryParams();
+        node->SetKey("node");
+        node->SetValue(ToString(targetNodeId));
+        auto* wait = request.AddQueryParams();
+        wait->SetKey("wait");
+        wait->SetValue("0");
+        runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(request)), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] {
+            return !blockBootQueue.empty() &&
+                GetHiveTabletInfo(runtime, hiveTablet, tabletId, sender).GetVolatileState() == NKikimrHive::TABLET_VOLATILE_STATE_BOOTING;
+        }), "move did not queue the STARTING tablet for restart");
+
+        TBlockEvents<TEvLocal::TEvStopTablet> blockStop(runtime, [&](const auto& ev) {
+            return ev->Get()->Record.GetTabletId() == tabletId;
+        });
+        blockStatus.Stop().Unblock();
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] { return !blockStop.empty(); }), "late boot success was not rejected");
+        UNIT_ASSERT_VALUES_EQUAL(blockStop.front()->GetRecipientRewrite(), sourceLocal);
+        UNIT_ASSERT_VALUES_EQUAL(blockStop.front()->Get()->Record.GetGeneration(), generation);
+        const auto pendingInfo = GetHiveTabletInfo(runtime, hiveTablet, tabletId, sender);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(pendingInfo.GetVolatileState()), ui32(NKikimrHive::TABLET_VOLATILE_STATE_BOOTING));
+        UNIT_ASSERT_VALUES_EQUAL(pendingInfo.GetNodeID(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pendingInfo.GetGeneration(), generation);
+        blockStop.Stop().Unblock();
+        blockBootQueue.Stop().Unblock();
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] {
+            const auto info = GetHiveTabletInfo(runtime, hiveTablet, tabletId, sender);
+            return info.GetNodeID() == targetNodeId && info.GetVolatileState() == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING &&
+                info.GetGeneration() == generation + 1;
+        }), "the old boot success cancelled the move to the target node");
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_TABLETS_STARTING), 0);
+    }
+
     Y_UNIT_TEST(TestBridgeDrainAfterLateStartingStatus) {
         TBridgeDrainTest test;
         auto& runtime = test.Runtime;

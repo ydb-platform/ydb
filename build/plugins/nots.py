@@ -1,5 +1,6 @@
 import functools
 import hashlib
+import json
 import shlex
 import os
 from typing import Any, TYPE_CHECKING
@@ -259,6 +260,8 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
 
     pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
     erm_json = _create_erm_json(unit)
+    with open(_arc_path(unit, unit.get("NODEJS_CATALOG_PATH")), encoding="utf-8") as catalog:
+        erm_json.data["nodejs"] = json.load(catalog)
     dirs = []
 
     nodejs_version = _select_matching_version(erm_json, "nodejs", pj.get_nodejs_version())
@@ -275,7 +278,7 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
             # These tools are installed with the project dependencies, not as build resources.
             continue
         elif tool == "nodejs":
-            dirs.append(os.path.join("build", "platform", dir_name, str(nodejs_version)))
+            dirs.append(os.path.join("build", "platform", dir_name, f"v{nodejs_version.major}", f"v{nodejs_version}"))
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
 
             if nodejs_version.major >= 25:

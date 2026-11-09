@@ -160,7 +160,7 @@ int GetMetadata(const void* context, TYqlUdfMetaString module, TYqlUdfMetaString
 std::unique_ptr<TUdfMeta> ParseUdfMeta(const NJson::TJsonValue& json) {
     auto storage = std::make_unique<TStorage>(json);
     auto result = std::make_unique<TUdfMeta>(TYqlUdfMeta{storage.get(), Free, HasModule, HasFunction, GetMetadata});
-    storage.release();
+    storage.release(); // NOLINT(bugprone-unused-return-value): ownership has been transferred to result.
     return result;
 }
 

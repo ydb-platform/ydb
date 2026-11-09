@@ -126,6 +126,8 @@ public:
             i32 tag;
             if constexpr (OptionalKind == EOptionalKind::Variant8) {
                 tag = parser->ParseVariant8Tag();
+            } else if constexpr (OptionalKind == EOptionalKind::VariantVar) {
+                tag = parser->ParseVariantVarTag();
             }
 
             if (tag == 0) {
@@ -135,7 +137,7 @@ public:
                 const auto name = valueConsumer->GetNameTable()->GetName(ColumnId_);
                 THROW_ERROR_EXCEPTION(
                     "Unexpected %Qlv tag of optional field %Qv: expected 0 or 1, got %v",
-                    EWireType::Variant8,
+                    OptionalKind,
                     name,
                     tag);
             }

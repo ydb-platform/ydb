@@ -19,7 +19,6 @@ IF (SANITIZER_TYPE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:1)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

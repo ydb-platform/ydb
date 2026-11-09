@@ -8,7 +8,6 @@ IF (SANITIZER_TYPE == "thread")
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
 ENDIF()
 
 SRCS(

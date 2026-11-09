@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(16)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_rbo_yql_basic_ut.cpp

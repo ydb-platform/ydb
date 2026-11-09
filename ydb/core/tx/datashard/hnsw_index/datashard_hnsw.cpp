@@ -1,5 +1,6 @@
 #include "../datashard_impl.h"
 #include "hnsw_index_build_actor.h"
+#include "../build_index/kmeans_helper.h"
 
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 
@@ -17,13 +18,15 @@ namespace NKikimr::NDataShard {
 
             THnswSnapshotScan(const TUserTable& table, ui32 vectorTag,
                               Ydb::Table::VectorIndexSettings settings,
-                              std::shared_ptr<THnswCacheMemoryTracker> tracker, ui64 owner, bool rebuilding, TFinish finish)
+                              std::shared_ptr<THnswCacheMemoryTracker> tracker, ui64 owner, bool rebuilding,
+                              std::shared_ptr<std::atomic<bool>> cancelled, TFinish finish)
                 : Range(table.Range)
                 , Tags{vectorTag}
                 , Settings(std::move(settings))
                 , Reservation(std::make_shared<TReservation>(std::move(tracker), owner))
                 , OnFinish(std::move(finish))
                 , Rebuilding(rebuilding)
+                , Cancelled(std::move(cancelled))
             {
                 if (Reservation->Tracker->TryAcquire(ScanMetadataBytes, Reservation->Owner)) {
                     Reservation->Bytes = ScanMetadataBytes;
@@ -40,15 +43,16 @@ namespace NKikimr::NDataShard {
                 if (seq) {
                     return EScan::Final;
                 }
-                const auto range = Range.ToTableRange();
-                lead.To(Tags, range.From, range.InclusiveFrom ? NTable::ESeek::Lower : NTable::ESeek::Upper);
-                if (range.To) {
-                    lead.Until(range.To, range.InclusiveTo);
-                }
+                lead = NKMeans::CreateLeadFrom(Range.ToTableRange());
+                lead.SetTags(Tags);
                 return EScan::Feed;
             }
 
             EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
+                if (Cancelled && Cancelled->load(std::memory_order_relaxed)) {
+                    Failed = true;
+                    return EScan::Final;
+                }
                 const auto cells = *row;
                 if (cells.empty() || cells[0].IsNull() || !THnswIndex::IsValidVector(cells[0].AsBuf(), Settings.vector_dimension())) {
                     return EScan::Feed;
@@ -67,7 +71,7 @@ namespace NKikimr::NDataShard {
                 }
                 const size_t count = Rows.size() + 1;
                 const auto graphBytes = THnswIndex::EstimateMemoryBytes(count,
-                                                                        Settings.vector_dimension(), Settings.has_m() ? Settings.m() : 16, 2 * KeyBytes);
+                                                                        Settings.vector_dimension(), Settings.has_m() ? Settings.m() : DefaultHnswM, 2 * KeyBytes);
                 if (graphBytes == Max<size_t>() || count > (Max<size_t>() - graphBytes) / cells[0].Size()) {
                     Failed = true;
                     return EScan::Final;
@@ -91,7 +95,8 @@ namespace NKikimr::NDataShard {
 
             TAutoPtr<IDestructable> Finish(EStatus status) override {
                 THnswSnapshotScanResult result;
-                result.Success = !Failed && status == EStatus::Done;
+                result.Success = !Failed && status == EStatus::Done
+                    && (!Cancelled || !Cancelled->load(std::memory_order_relaxed));
                 result.BelowMinRows = result.Success && !Rebuilding && (Rows.empty() || Rows.size() < GetHnswMinRows(Settings));
                 result.Success &= !result.BelowMinRows;
                 if (result.Success) {
@@ -99,6 +104,7 @@ namespace NKikimr::NDataShard {
                     result.MemoryReservation = Reservation;
                     result.ReservedBytes = Reservation->Bytes;
                     result.AllowEmpty = Rebuilding;
+                    result.ReduceReservation = [reservation = Reservation](ui64 bytes) { reservation->ReduceTo(bytes); };
                 }
                 Rows.clear();
                 Reservation.reset();
@@ -117,6 +123,11 @@ namespace NKikimr::NDataShard {
                     , Owner(owner)
                 {
                 }
+                void ReduceTo(ui64 bytes) {
+                    const ui64 released = Bytes - Min(Bytes, bytes);
+                    Bytes -= released;
+                    Tracker->Release(released, Owner);
+                }
                 ~TReservation() {
                     Tracker->Release(Bytes, Owner);
                 }
@@ -133,6 +144,7 @@ namespace NKikimr::NDataShard {
             size_t KeyBytes = 0;
             bool Failed = false;
             bool Rebuilding;
+            std::shared_ptr<std::atomic<bool>> Cancelled;
         };
 
     } // namespace
@@ -142,6 +154,8 @@ namespace NKikimr::NDataShard {
         auto* cached = FindHnswIndexEntry(localTid, indexId);
         if (!cached) { return; }
         auto& entry = *cached;
+        if (entry.OpenTransactionsTracked) { return; }
+        entry.OpenTransactionsTracked = true;
         for (ui64 txId : db.GetOpenTxs(localTid)) {
             if (!entry.Pending.contains(txId) && !entry.UntrackedTransactions.contains(txId)) {
                 auto reservation = TryReserveHnswCacheMemory(THnswIndexCacheEntry::PendingTransactionBytes, entry.MemoryOwner);
@@ -170,24 +184,15 @@ namespace NKikimr::NDataShard {
             const auto* cached = FindHnswIndexEntry(localTid, indexId);
             if (!cached) { return; }
             const auto& entry = *cached;
-            finish = [replyTo = SelfId(), localTid, indexId, tag = entry.VectorColumnTag, settings = entry.Settings,
-                      base, token, memoryOwner = entry.MemoryOwner](THnswSnapshotScanResult&& result) {
-                if (!result.Success) {
-                    auto event = MakeHolder<TEvPrivate::TEvHnswIndexBuildResult>();
-                    event->LocalTid = localTid;
-                    event->IndexId = indexId;
-                    event->BuildToken = token;
-                    event->MemoryOwner = memoryOwner;
-                    event->BelowMinRows = result.BelowMinRows;
-                    event->Error = "Snapshot scan aborted or exceeded its memory budget";
-                    TActivationContext::Send(new IEventHandle(replyTo, TActorId(), event.Release()));
-                    return;
-                }
-                const auto count = result.Rows.size();
-                auto* actor = CreateHnswIndexBuildActor(replyTo, localTid, tag, count, settings,
-                                                        std::move(result.Rows), std::move(result.MemoryReservation), result.ReservedBytes,
-                                                        base, token, result.AllowEmpty, indexId, memoryOwner);
-                TActivationContext::Register(actor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId);
+            finish = [replyTo = SelfId(), localTid, indexId, token,
+                      memoryOwner = entry.MemoryOwner](THnswSnapshotScanResult&& result) {
+                auto event = MakeHolder<TEvPrivate::TEvHnswSnapshotFinished>();
+                event->LocalTid = localTid;
+                event->IndexId = indexId;
+                event->BuildToken = token;
+                event->MemoryOwner = memoryOwner;
+                event->Result = std::move(result);
+                TActivationContext::Send(new IEventHandle(replyTo, TActorId(), event.Release()));
             };
         }
         PromoteImmediatePostExecuteEdges(base, EPromotePostExecuteEdges::RepeatableRead, txc);
@@ -221,16 +226,16 @@ namespace NKikimr::NDataShard {
             request.Finish(THnswSnapshotScanResult{});
             return;
         }
-        const auto& entry = *FindHnswIndexEntry(request.LocalTid, request.IndexId);
+        auto& entry = *FindHnswIndexEntry(request.LocalTid, request.IndexId);
         auto* scan = new THnswSnapshotScan(*request.Table, entry.VectorColumnTag, entry.Settings,
-                                           HnswCacheMemoryTracker, entry.MemoryOwner, bool(entry.Index), std::move(request.Finish));
-        Executor()->QueueScan(request.LocalTid, scan, 0, NTabletFlatExecutor::TScanOptions().DisableResourceBroker().SetReadPrio(NTabletFlatExecutor::TScanOptions::EReadPrio::Low).SetReadAhead(0, 512_KB).SetSnapshotRowVersion(request.BaseVersion));
+                                           HnswCacheMemoryTracker, entry.MemoryOwner, bool(entry.Index), entry.CancelBuild, std::move(request.Finish));
+        entry.ScanId = Executor()->QueueScan(request.LocalTid, scan, 0, NTabletFlatExecutor::TScanOptions().SetReadPrio(NTabletFlatExecutor::TScanOptions::EReadPrio::Low).SetReadAhead(0, 512_KB).SetSnapshotRowVersion(request.BaseVersion));
     }
 
     class TDataShard::TTxRebuildHnswIndex: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     public:
-        TTxRebuildHnswIndex(TDataShard* self, ui32 tid, bool initialBuild, TPathId indexId)
-            : TBase(self), LocalTid(tid), IndexId(self->ResolveHnswIndexId(tid, indexId)), InitialBuild(initialBuild) {}
+        TTxRebuildHnswIndex(TDataShard* self, ui32 tid, bool initialBuild, TPathId indexId, std::optional<TRowVersion> waitingBase)
+            : TBase(self), LocalTid(tid), IndexId(self->ResolveHnswIndexId(tid, indexId)), InitialBuild(initialBuild), WaitingBase(waitingBase) {}
 
         TTxType GetTxType() const override { return TXTYPE_READ; }
 
@@ -246,10 +251,6 @@ namespace NKikimr::NDataShard {
             const auto* metadata = table->HnswIndexes.FindPtr(IndexId);
             if (!metadata || !metadata->VectorColumnTag || !table->Columns.contains(metadata->VectorColumnTag)
                     || metadata->Settings.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) { return true; }
-            if (InitialBuild && !Self->GetHnswCacheMemoryLimit()) {
-                Retry = !Self->IsHnswCacheMemoryLimitKnown();
-                return true;
-            }
             auto* cached = Self->FindHnswIndexEntry(LocalTid, IndexId);
             if (!cached) { return true; }
             auto& entry = *cached;
@@ -257,11 +258,44 @@ namespace NKikimr::NDataShard {
                     || entry.NextScanAttemptAt == TInstant::Max()) { return true; }
             if (InitialBuild ? bool(entry.Index) : (!entry.Index || !entry.Changes->Valid
                     || !entry.Index->NeedsRebuild(GetHnswDeltaRows(entry.Settings)))) { return true; }
-            const auto base = Self->GetHnswBuildVersion();
+            if (!entry.Changes->Valid) {
+                entry.Changes = std::make_shared<THnswIndexChanges>();
+                entry.OpenTransactionsTracked = false;
+            }
+            if (!entry.VectorColumnTag) {
+                entry.VectorColumnTag = metadata->VectorColumnTag;
+                entry.Settings = metadata->Settings;
+            }
+            if (AppData()->TimeProvider->Now() < entry.NextScanAttemptAt) { Retry = true; return true; }
+            Self->GetHnswCacheMemoryLimit();
+            Self->HnswCacheMemoryTracker->Request(entry.RetryMemoryBytes, entry.MemoryOwner);
+            if (!Self->GetHnswCacheMemoryLimit()) {
+                if (entry.InitialBuildAttemptsLeft) { --entry.InitialBuildAttemptsLeft; }
+                if (!entry.InitialBuildAttemptsLeft && !entry.Index) {
+                    Self->DisableHnswIndexBuild(LocalTid, IndexId);
+                } else { Retry = true; }
+                return true;
+            }
+            Self->TrackHnswOpenTransactions(LocalTid, txc.DB, IndexId);
+            if (!entry.Changes->Valid || !entry.UntrackedTransactions.empty()) {
+                Self->HnswCacheMemoryTracker->ResetDemand(entry.MemoryOwner);
+                Retry = true;
+                return true;
+            }
+            const auto base = WaitingBase.value_or(Self->GetHnswBuildVersion());
             if ((entry.Index && base <= entry.Index->GetBaseVersion()) || base < Self->SnapshotManager.GetLowWatermark()
-                    || base >= Self->Pipeline.GetUnreadableEdge() || Self->VolatileTxManager.HasVolatileTxsAtSnapshot(base)
-                    || AppData()->TimeProvider->Now() < entry.NextScanAttemptAt) { Retry = true; return true; }
-            const auto& settings = InitialBuild ? metadata->Settings : entry.Settings;
+                    || base >= Self->Pipeline.GetUnreadableEdge()) {
+                Self->HnswCacheMemoryTracker->ResetDemand(entry.MemoryOwner);
+                Retry = true;
+                return true;
+            }
+            if (Self->VolatileTxManager.HasVolatileTxsAtSnapshot(base)) {
+                Self->HnswCacheMemoryTracker->ResetDemand(entry.MemoryOwner);
+                WaitingBase = base;
+                WaitVolatile = true;
+                return true;
+            }
+            const auto& settings = entry.Settings;
             if (Self->TryStartHnswIndexBuild(LocalTid, metadata->VectorColumnTag, settings, base, IndexId)) {
                 if (InitialBuild) { --entry.InitialBuildAttemptsLeft; }
                 Self->TrackHnswOpenTransactions(LocalTid, txc.DB, IndexId);
@@ -277,6 +311,13 @@ namespace NKikimr::NDataShard {
         }
 
         void Complete(const TActorContext& ctx) override {
+            if (WaitVolatile) {
+                auto event = std::make_unique<IEventHandle>(Self->SelfId(), Self->SelfId(),
+                    new TEvPrivate::TEvRebuildHnswIndex(LocalTid, InitialBuild, IndexId, WaitingBase));
+                if (auto* entry = Self->FindHnswIndexEntry(LocalTid, IndexId)) { entry->RebuildScheduled = true; }
+                Self->VolatileTxManager.AttachWaitingSnapshotEvent(*WaitingBase, std::move(event));
+                return;
+            }
             if (Retry) {
                 if (auto* entry = Self->FindHnswIndexEntry(LocalTid, IndexId)) {
                     entry->RebuildScheduled = true;
@@ -289,10 +330,12 @@ namespace NKikimr::NDataShard {
         TPathId IndexId;
         bool InitialBuild;
         bool Retry = false;
+        bool WaitVolatile = false;
+        std::optional<TRowVersion> WaitingBase;
     };
 
     void TDataShard::Handle(TEvPrivate::TEvRebuildHnswIndex::TPtr& ev, const TActorContext& ctx) {
-        Execute(new TTxRebuildHnswIndex(this, ev->Get()->LocalTid, ev->Get()->InitialBuild, ev->Get()->IndexId), ctx);
+        Execute(new TTxRebuildHnswIndex(this, ev->Get()->LocalTid, ev->Get()->InitialBuild, ev->Get()->IndexId, ev->Get()->WaitingBase), ctx);
     }
 
     std::shared_ptr<THnswIndex> TDataShard::GetHnswIndex(ui32 localTid, ui32 vectorColumnTag,
@@ -321,10 +364,27 @@ namespace NKikimr::NDataShard {
         return {};
     }
 
+    void TDataShard::RequestHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
+        const Ydb::Table::VectorIndexSettings& settings, TPathId indexId) {
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex() || IsFollower() || IsStopping() || State != TShardState::Ready) { return; }
+        const auto* metadata = FindHnswIndexInfo(localTid, indexId);
+        if (!metadata || metadata->VectorColumnTag != vectorColumnTag
+                || !AreHnswIndexSettingsCompatible(metadata->Settings, settings)) { return; }
+        auto* entry = GetOrCreateHnswIndexEntry(localTid, indexId);
+        if (!entry || entry->Building || entry->RebuildScheduled || entry->Index) { return; }
+        const bool changedThreshold = entry->VectorColumnTag && GetHnswMinRows(entry->Settings) != GetHnswMinRows(settings);
+        if (entry->NextScanAttemptAt == TInstant::Max() && !changedThreshold) { return; }
+        if (changedThreshold) { entry->NextScanAttemptAt = TInstant::Zero(); }
+        entry->VectorColumnTag = vectorColumnTag;
+        entry->Settings = settings;
+        if (!entry->InitialBuildAttemptsLeft) { entry->InitialBuildAttemptsLeft = 30; }
+        ScheduleHnswRebuild(localTid, indexId);
+    }
+
     bool TDataShard::TryStartHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
                                             const Ydb::Table::VectorIndexSettings& settings, TRowVersion baseVersion, TPathId indexId) {
         indexId = ResolveHnswIndexId(localTid, indexId);
-        if (IsFollower() || !AppData()->FeatureFlags.GetEnableHnswIndex()) {
+        if (IsFollower() || IsStopping() || State != TShardState::Ready || !AppData()->FeatureFlags.GetEnableHnswIndex()) {
             return false;
         }
         const auto* metadata = FindHnswIndexInfo(localTid, indexId);
@@ -340,6 +400,7 @@ namespace NKikimr::NDataShard {
         if (!compatible || !entry.Changes->Valid) {
             InvalidateHnswIndex(localTid, indexId);
             entry.Changes = std::make_shared<THnswIndexChanges>();
+            entry.OpenTransactionsTracked = false;
             entry.VectorColumnTag = vectorColumnTag;
             entry.Settings = settings;
         } else {
@@ -371,10 +432,10 @@ namespace NKikimr::NDataShard {
         HnswBuildQueue.erase(HnswBuildQueue.begin());
         entry.Rebuilds += bool(entry.Index);
         entry.Building = true;
-        entry.BuildObsolete = false;
         entry.BuildVersion = baseVersion;
         entry.IndexSchemaVersion = FindHnswIndexInfo(localTid, indexId)->SchemaVersion;
         entry.BuildToken = ++NextHnswBuildToken;
+        entry.CancelBuild = std::make_shared<std::atomic<bool>>(false);
         HnswBuildsInFlight.insert(entry.BuildToken);
         return true;
     }
@@ -390,7 +451,7 @@ namespace NKikimr::NDataShard {
         const auto* it = FindHnswIndexEntry(localTid, indexId);
         const auto* metadata = FindHnswIndexInfo(localTid, indexId);
         return it && metadata && it->IndexSchemaVersion == metadata->SchemaVersion && it->Building
-            && it->BuildToken == token && !it->BuildObsolete && it->Changes->Valid;
+            && it->BuildToken == token && it->Changes->Valid;
     }
 
     void TDataShard::InvalidateHnswIndex(ui32 localTid, TPathId indexId) {
@@ -445,6 +506,14 @@ namespace NKikimr::NDataShard {
     }
 
     void TDataShard::InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry) {
+        if (entry.CancelBuild) { entry.CancelBuild->store(true, std::memory_order_relaxed); }
+        if (entry.ScanId) {
+            Executor()->CancelScan(entry.LocalTid, std::exchange(entry.ScanId, 0));
+        }
+        if (entry.BuildActor) { Send(entry.BuildActor, new TEvents::TEvPoison()); entry.BuildActor = {}; }
+        entry.Building = false;
+        entry.OpenTransactionsTracked = false;
+        entry.LastRetentionVersion = TRowVersion::Min();
         if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetDemand(entry.MemoryOwner); }
         // Readers may still own a graph. They must stop using it if its journal
         // no longer receives every write (including eviction on memory pressure).
@@ -458,7 +527,6 @@ namespace NKikimr::NDataShard {
         entry.PendingReservations.clear();
         entry.UntrackedTransactions.clear();
         entry.RowCountAtBuild = 0;
-        entry.BuildObsolete = entry.Building;
         entry.NextScanAttemptAt = TInstant::Zero();
     }
 
@@ -484,12 +552,7 @@ namespace NKikimr::NDataShard {
         auto* cached = FindHnswIndexEntry(localTid, indexId);
         if (!cached) { return; }
         auto& entry = *cached;
-        if (index && HnswCacheMemoryTracker->GetUsed() > GetHnswCacheMemoryLimit()) {
-            DeferHnswIndexBuild(localTid, TDuration::Seconds(5), indexId);
-            ScheduleHnswRebuild(localTid, indexId);
-            return;
-        }
-        if (!index) {
+        if (!index || HnswCacheMemoryTracker->GetUsed() > GetHnswCacheMemoryLimit()) {
             DeferHnswIndexBuild(localTid, TDuration::Seconds(5), indexId);
             ScheduleHnswRebuild(localTid, indexId);
             return;
@@ -506,14 +569,10 @@ namespace NKikimr::NDataShard {
         auto owned = std::make_shared<TOwnedIndex>(TOwnedIndex{std::move(memoryReservation), std::move(index)});
         index = std::shared_ptr<THnswIndex>(owned, owned->Index.get());
         entry.Generations.push_back(index);
-        if (entry.Index && entry.Index->GetBaseVersion() > baseVersion) {
-            entry.Retained.push_back(std::move(index));
-        } else {
-            if (entry.Index && entry.Index->GetBaseVersion() != baseVersion) {
-                entry.Retained.push_back(std::move(entry.Index));
-            }
-            entry.Index = std::move(index);
+        if (entry.Index && entry.Index->GetBaseVersion() != baseVersion) {
+            entry.Retained.push_back(std::move(entry.Index));
         }
+        entry.Index = std::move(index);
         Sort(entry.Retained, [](const auto& a, const auto& b) {
             return a->GetBaseVersion() < b->GetBaseVersion();
         });
@@ -523,11 +582,27 @@ namespace NKikimr::NDataShard {
         entry.VectorColumnTag = vectorColumnTag;
         entry.Settings = settings;
         entry.Building = false;
-        entry.BuildObsolete = false;
         entry.NextScanAttemptAt = TInstant::Zero();
         HnswCacheMemoryTracker->ResetDemand(entry.MemoryOwner);
         PruneHnswIndexes();
         ScheduleHnswRebuild(localTid, indexId);
+    }
+
+    std::vector<TRowVersion> TDataShard::GetHnswReadVersions(ui32 localTid) const {
+        std::vector<TRowVersion> pins;
+        for (const auto& [_, reader] : ReadIterators) {
+            const auto table = TableInfos.find(reader.PathId.LocalPathId);
+            if (table != TableInfos.end() && table->second->LocalTid == localTid && !reader.ReadVersion.IsMax()) {
+                pins.push_back(reader.ReadVersion);
+            }
+        }
+        for (const auto& [tableId, table] : TableInfos) {
+            if (table->LocalTid != localTid) { continue; }
+            for (const auto& [snapshot, _] : SnapshotManager.GetSnapshots({GetPathOwnerId(), tableId})) {
+                pins.emplace_back(snapshot.Step, snapshot.TxId);
+            }
+        }
+        return pins;
     }
 
     void TDataShard::PruneHnswIndexes() {
@@ -540,7 +615,10 @@ namespace NKikimr::NDataShard {
             return;
         }
         const auto low = SnapshotManager.GetLowWatermark();
+        const auto floor = GetHnswBuildVersion();
         ForEachHnswIndexEntry([&](ui32 tid, const TPathId&, auto& entry) {
+            auto pins = GetHnswReadVersions(tid);
+            if (entry.Building) { pins.push_back(entry.BuildVersion); }
             TRowVersion nextBase = entry.Index ? entry.Index->GetBaseVersion() : TRowVersion::Max();
             for (size_t i = entry.Retained.size(); i-- > 0;) {
                 const auto base = entry.Retained[i]->GetBaseVersion();
@@ -570,6 +648,9 @@ namespace NKikimr::NDataShard {
             }
             if (!oldestBase.IsMax()) {
                 entry.Changes->PruneThrough(oldestBase);
+                entry.Changes->Compact(floor, pins);
+            } else {
+                entry.Changes->Clear();
             }
         });
     }
@@ -586,9 +667,19 @@ namespace NKikimr::NDataShard {
             InvalidateHnswIndex(localTid, indexId);
             return;
         }
-        entry.Changes->Set(std::move(key), change.Version, std::move(change.Vector),
-                           std::move(change.MemoryReservation));
-        entry.NextScanAttemptAt = TInstant::Zero();
+        if (entry.Index || entry.Building) {
+            if (entry.LastRetentionVersion != change.Version) {
+                auto pins = GetHnswReadVersions(localTid);
+                if (entry.Building) { pins.push_back(entry.BuildVersion); }
+                entry.Changes->AdvanceRetention(GetHnswBuildVersion(), pins);
+                entry.LastRetentionVersion = change.Version;
+            }
+            entry.Changes->Set(std::move(key), change.Version, std::move(change.Vector), std::move(change.MemoryReservation));
+        }
+        if (entry.NextScanAttemptAt == TInstant::Max()) {
+            entry.NextScanAttemptAt = TInstant::Zero();
+            if (!entry.Index) { entry.InitialBuildAttemptsLeft = 30; }
+        }
         ScheduleHnswRebuild(localTid, indexId);
     }
 
@@ -695,9 +786,15 @@ namespace NKikimr::NDataShard {
             }
             auto& entry = *it;
             auto pending = entry.Pending.find(txId);
-            if (entry.UntrackedTransactions.erase(txId) || pending == entry.Pending.end()) {
-                InvalidateHnswIndex(localTid, indexId);
+            if (entry.UntrackedTransactions.erase(txId)) {
+                // No scan starts before these pre-journal intents have resolved.
+                entry.Pending.erase(txId);
+                entry.PendingReservations.erase(txId);
+                ScheduleHnswRebuild(localTid, indexId);
                 return;
+            }
+            if (pending == entry.Pending.end()) {
+                return; // A lock-only transaction does not change any vector.
             }
             auto committed = std::move(pending->second);
             entry.Pending.erase(pending);

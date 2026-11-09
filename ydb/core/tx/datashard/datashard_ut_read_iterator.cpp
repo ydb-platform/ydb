@@ -27,6 +27,7 @@
 #include <util/system/env.h>
 #include <util/string/hex.h>
 #include <sys/resource.h>
+#include <thread>
 
 #include <algorithm>
 #include <map>
@@ -7654,12 +7655,16 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
     Y_UNIT_TEST(HnswMultipleIndexesSurviveSplitRecovery) {
         THnswMultiFixture fixture;
         fixture.WarmAll();
+        auto sourceFirst = fixture.Graph(0);
+        auto sourceSecond = fixture.Graph(1);
         auto& runtime = *fixture.Helper.Server->GetRuntime();
         auto& table = fixture.Helper.Tables.at("hnsw-lifecycle");
         SetSplitMergePartCountLimit(&runtime, -1);
         const auto tx = AsyncSplitTable(fixture.Helper.Server, fixture.Helper.Sender,
             "/Root/hnsw-lifecycle", table.TabletId, 2);
         WaitTxNotification(fixture.Helper.Server, fixture.Helper.Sender, tx);
+        UNIT_ASSERT(!sourceFirst->CanRead(TRowVersion::Max()));
+        UNIT_ASSERT(!sourceSecond->CanRead(TRowVersion::Max()));
         const auto shards = GetTableShards(fixture.Helper.Server, fixture.Helper.Sender, "/Root/hnsw-lifecycle");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
         for (const auto tablet : shards) {
@@ -7808,6 +7813,174 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         fixture.Check(*fixture.ReadAt(0), 2);
         fixture.Check(*fixture.ReadAt(1), 2);
         UNIT_ASSERT(fixture.Graph(0) != first && fixture.Graph(1) != second);
+    }
+
+    Y_UNIT_TEST(HnswVolatileCommitRanksOwnWriteAboveFlushedLockWrite) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto graph = fixture.Index();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        TString session, tx;
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleBegin(runtime, session, tx, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            SELECT key FROM `/Root/hnsw-lifecycle` WHERE key = 1;
+        )"), "{ items { uint32_value: 1 } }");
+        // The first request flushed the negative vector under the lock id.
+        // A distributed commit supplies a newer positive vector under its own id.
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleCommit(runtime, session, tx, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+            UPSERT INTO `/Root/movies` (id, title, rating) VALUES (99, "participant", 1);
+            SELECT 1;
+        )"), "{ items { int32_value: 1 } }");
+        UNIT_ASSERT(fixture.Index() == graph);
+        fixture.Read(1);
+        TString stored;
+        const TVector<TCell> key{TCell::Make<ui32>(1)};
+        UNIT_ASSERT(graph->GetVector(TSerializedCellVec::Serialize(key), stored));
+        UNIT_ASSERT_VALUES_EQUAL(stored, TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+    }
+
+    Y_UNIT_TEST(HnswHistoricalReadIgnoresFutureVolatileTransaction) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto graph = fixture.Index();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(true);
+        const auto snapshot = CreateVolatileSnapshot(fixture.Helper.Server,
+            {"/Root/hnsw-lifecycle"}, TDuration::Hours(1));
+        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
+        std::vector<TEvTxProcessing::TEvReadSet::TPtr> blocked;
+        auto capture = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+            if (ev->GetRecipientRewrite() == actor) { blocked.push_back(std::move(ev)); }
+        });
+        auto write = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            UPSERT INTO `/Root/movies` (id, title, rating) VALUES (99, "participant", 1);
+        )");
+        runtime.WaitFor("future volatile transaction", [&] {
+            return !blocked.empty() && fixture.Shard()->GetVolatileTxManager().GetTxInFlight();
+        });
+        UNIT_ASSERT(!fixture.Shard()->GetVolatileTxManager().HasVolatileTxsAtSnapshot(snapshot));
+        auto old = fixture.Helper.SendRead("hnsw-lifecycle", fixture.Request(snapshot).release());
+        fixture.Check(*old, 1);
+        UNIT_ASSERT_VALUES_EQUAL(old->Record.GetStats().GetRows(), 1u);
+        capture.Remove();
+        for (auto& ev : blocked) { runtime.Send(ev.Release(), 0, true); }
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(write))), "<empty>");
+        UNIT_ASSERT(fixture.Index() == graph);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read(2)->Record.GetStats().GetRows(), 1u);
+    }
+
+    Y_UNIT_TEST(HnswLockOnlyCommitPreservesGraph) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto graph = fixture.Index();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        TString session, tx;
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleBegin(runtime, session, tx,
+            "SELECT key FROM `/Root/hnsw-lifecycle` WHERE key = 1;"), "{ items { uint32_value: 1 } }");
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleCommit(runtime, session, tx, R"(
+            UPSERT INTO `/Root/movies` (id, title, rating) VALUES (99, "participant", 1);
+            SELECT 1;
+        )"), "{ items { int32_value: 1 } }");
+        UNIT_ASSERT(fixture.Index() == graph);
+        UNIT_ASSERT(!graph->HasChanges());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 1u);
+    }
+
+    Y_UNIT_TEST(HnswPreJournalWritesResolveBeforeInitialBuild) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        runtime.GetAppData(0).FeatureFlags.SetEnableHnswIndex(false);
+        fixture.Shard()->InvalidateHnswIndexes();
+        TString session, tx;
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleBegin(runtime, session, tx, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            SELECT key FROM `/Root/hnsw-lifecycle` WHERE key = 1;
+        )"), "{ items { uint32_value: 1 } }");
+        runtime.GetAppData(0).FeatureFlags.SetEnableHnswIndex(true);
+        for (ui32 i = 0; i < 5; ++i) {
+            fixture.Read(1);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(!fixture.Index()); // Unobserved pre-journal intents must resolve first.
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleCommit(runtime, session, tx, "SELECT 1;"), "{ items { int32_value: 1 } }");
+        runtime.WaitFor("HNSW graph after pre-journal commit", [&] { return bool(fixture.Index()); });
+        auto graph = fixture.Index();
+        UNIT_ASSERT(graph);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read(2)->Record.GetStats().GetRows(), 1u);
+        UNIT_ASSERT(!graph->HasChanges());
+    }
+
+    Y_UNIT_TEST(HnswDroppingTableInvalidatesReaderOwnedGraph) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto graph = fixture.Index();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime, "DROP TABLE `/Root/hnsw-lifecycle`;"), "SUCCESS");
+        UNIT_ASSERT(!graph->CanRead(TRowVersion::Max()));
+    }
+
+    Y_UNIT_TEST(HnswGraphDestructionRetainsReservationUntilBackgroundRelease) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        const auto caller = std::this_thread::get_id();
+        std::atomic<bool> released = false;
+        std::atomic<bool> releasedOffThread = false;
+        auto reservation = std::shared_ptr<void>(new int(0), [&](void* value) {
+            delete static_cast<int*>(value);
+            releasedOffThread.store(std::this_thread::get_id() != caller);
+            released.store(true);
+        });
+        std::optional<THnswIndexBuildResult> built;
+        runtime.Register(CreateHnswIndexBuildWorker(fixture.Settings(), {
+            {"key", TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9)}
+        }, std::move(reservation), 0,
+            [&](THnswIndexBuildResult&& result, const TActorContext&) { built.emplace(std::move(result)); }));
+        runtime.WaitFor("background HNSW build", [&] { return built.has_value(); });
+        UNIT_ASSERT_C(built->Index, built->Error);
+        built->MemoryReservation.reset();
+        UNIT_ASSERT(!released.load());
+        built->Index.reset();
+        runtime.WaitFor("background HNSW graph release", [&] { return released.load(); });
+        UNIT_ASSERT(releasedOffThread.load());
+    }
+
+    Y_UNIT_TEST(HnswCancelledSnapshotCannotStartGraphWorker) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        constexpr ui32 snapshotFinished = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 37;
+        TVector<TAutoPtr<IEventHandle>> snapshots;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == snapshotFinished) {
+                snapshots.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        fixture.Shard()->InvalidateHnswIndexes();
+        fixture.Read();
+        runtime.WaitFor("completed HNSW snapshot scan", [&] { return !snapshots.empty(); });
+        auto* shard = fixture.Shard();
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        const auto token = shard->GetHnswBuildToken(tid);
+        UNIT_ASSERT(shard->IsHnswBuildCurrent(tid, token));
+        runtime.GetAppData(0).FeatureFlags.SetEnableHnswIndex(false);
+        shard->InvalidateHnswIndexes();
+        UNIT_ASSERT(!shard->IsHnswBuildCurrent(tid, token));
+        observer.Remove();
+        for (auto& ev : snapshots) { runtime.Send(ev.Release()); }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(!fixture.Index());
+        const auto stats = shard->GetHnswIndexStats(tid, {});
+        UNIT_ASSERT(stats);
+        UNIT_ASSERT(!stats->Building);
+        UNIT_ASSERT_VALUES_EQUAL(stats->MemoryBytes, 0u);
     }
 
     Y_UNIT_TEST_TWIN(HnswPendingWritesPublishOnlyOnCommit, Commit) {

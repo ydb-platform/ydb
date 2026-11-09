@@ -22,6 +22,8 @@
 
 #include <cmath>
 #include <tuple>
+#include <queue>
+#include <cstring>
 
 namespace NKikimr::NDataShard {
 
@@ -33,7 +35,6 @@ namespace NKikimr::NDataShard {
         constexpr size_t EstimatedBytesPerNodeOverhead = 256;
         // Construct synchronously with one NMSLIB worker; the caller controls scheduling.
         constexpr unsigned BuildThreadsPerIndex = 1;
-        constexpr ui32 DefaultHnswM = 16;
         constexpr ui32 DefaultHnswEfConstruction = 200;
         constexpr ui64 DefaultHnswDeltaRows = 10000;
         constexpr ui64 DefaultHnswMinRows = 10000;
@@ -69,6 +70,7 @@ namespace NKikimr::NDataShard {
         struct TFloatVectorView {
             const void* Data = nullptr;
             size_t Dimension = 0;
+            bool AllZero = true;
 
             static TFloatVectorView FromSerialized(TStringBuf serialized) {
                 TFloatVectorView result;
@@ -84,6 +86,13 @@ namespace NKikimr::NDataShard {
                 const size_t dataSize = serialized.size() - HeaderLen;
                 if (dataSize % sizeof(float) != 0 || dataSize == 0) {
                     return result;
+                }
+
+                for (size_t offset = 0; offset < dataSize; offset += sizeof(float)) {
+                    float value;
+                    std::memcpy(&value, serialized.data() + offset, sizeof(value));
+                    if (!std::isfinite(value)) { return result; }
+                    result.AllZero &= value == 0;
                 }
 
                 // similarity::Object copies raw bytes into its own aligned storage;
@@ -130,6 +139,7 @@ namespace NKikimr::NDataShard {
     void THnswIndexChanges::Set(TString key, TRowVersion version,
                                 std::optional<TString> vector, std::shared_ptr<void> reservation) {
         auto& history = Rows[key];
+        const auto before = history.empty() ? std::optional<TRowVersion>{} : history.back().Version;
         auto it = std::lower_bound(history.begin(), history.end(), version,
                                    [](const TVersion& item, TRowVersion value) { return item.Version < value; });
         TVersion item{version, std::move(vector), std::move(reservation)};
@@ -142,6 +152,16 @@ namespace NKikimr::NDataShard {
             ++VersionCount;
         }
         EstimatedBytes += bytes;
+        UpdateCounts(before, history.back().Version);
+        if (RetentionInitialized) { CompactHistory(key, history); }
+    }
+
+    void THnswIndexChanges::UpdateCounts(std::optional<TRowVersion> before, std::optional<TRowVersion> after) {
+        std::lock_guard guard(CountsMutex);
+        for (auto& [base, count] : CountsByBase) {
+            if (before && *before > base) { --count; }
+            if (after && *after > base) { ++count; }
+        }
     }
 
     const THnswIndexChanges::TVersion* THnswIndexChanges::Find(
@@ -161,10 +181,15 @@ namespace NKikimr::NDataShard {
     }
 
     size_t THnswIndexChanges::CountAfter(TRowVersion base) const {
+        std::lock_guard guard(CountsMutex);
+        if (const auto* count = CountsByBase.FindPtr(base)) { return *count; }
         size_t count = 0;
         for (const auto& [_, history] : Rows) {
             count += !history.empty() && history.back().Version > base;
         }
+        // Bound auxiliary accounting even for callers probing arbitrary bases.
+        if (CountsByBase.size() == 8) { CountsByBase.erase(CountsByBase.begin()); }
+        CountsByBase.emplace(base, count);
         return count;
     }
 
@@ -177,6 +202,8 @@ namespace NKikimr::NDataShard {
                 ++it;
                 continue;
             }
+            UpdateCounts(history.back().Version, end == history.end()
+                ? std::optional<TRowVersion>{} : history.back().Version);
             VersionCount -= end - history.begin();
             for (auto removed = history.begin(); removed != end; ++removed) {
                 EstimatedBytes -= EstimateBytes(it->first, removed->Vector ? removed->Vector->size() : 0);
@@ -190,6 +217,66 @@ namespace NKikimr::NDataShard {
                 ++it;
             }
         }
+    }
+
+    bool THnswIndexChanges::Covers(TRowVersion version) const {
+        return version >= LowerReadVersion || std::binary_search(PinnedVersions.begin(), PinnedVersions.end(), version);
+    }
+
+    void THnswIndexChanges::AdvanceRetention(TRowVersion floor, const std::vector<TRowVersion>& pins) {
+        std::vector<TRowVersion> retained;
+        for (auto version : pins) {
+            if (Covers(version)) { retained.push_back(version); }
+        }
+        Sort(retained);
+        retained.erase(std::unique(retained.begin(), retained.end()), retained.end());
+        PinnedVersions.swap(retained);
+        LowerReadVersion = Max(LowerReadVersion, floor);
+        RetentionInitialized = true;
+    }
+
+    void THnswIndexChanges::CompactHistory(TStringBuf key, THistory& history) {
+        std::vector<size_t> keep;
+        for (auto version : PinnedVersions) {
+            const auto it = std::upper_bound(history.begin(), history.end(), version,
+                [](TRowVersion value, const TVersion& item) { return value < item.Version; });
+            if (it != history.begin()) { keep.push_back(it - history.begin() - 1); }
+        }
+        // Keep the predecessor of the floor, every newer version, and each pin's predecessor.
+        auto boundary = std::upper_bound(history.begin(), history.end(), LowerReadVersion,
+            [](TRowVersion value, const TVersion& item) { return value < item.Version; });
+        if (boundary != history.begin()) { --boundary; }
+        for (size_t i = boundary - history.begin(); i < history.size(); ++i) { keep.push_back(i); }
+        Sort(keep);
+        keep.erase(std::unique(keep.begin(), keep.end()), keep.end());
+        size_t next = 0;
+        size_t output = 0;
+        const size_t previousSize = history.size();
+        for (size_t i = 0; i < previousSize; ++i) {
+            if (next < keep.size() && keep[next] == i) {
+                if (output != i) { history[output] = std::move(history[i]); }
+                ++output;
+                ++next;
+            } else {
+                EstimatedBytes -= EstimateBytes(key, history[i].Vector ? history[i].Vector->size() : 0);
+            }
+        }
+        VersionCount -= previousSize - output;
+        history.resize(output);
+        if (history.capacity() > 2 * history.size()) { THistory(history).swap(history); }
+    }
+
+    void THnswIndexChanges::Compact(TRowVersion floor, const std::vector<TRowVersion>& pins) {
+        AdvanceRetention(floor, pins);
+        for (auto& [key, history] : Rows) { CompactHistory(key, history); }
+    }
+
+    void THnswIndexChanges::Clear() {
+        Rows.clear();
+        std::lock_guard guard(CountsMutex);
+        CountsByBase.clear();
+        VersionCount = 0;
+        EstimatedBytes = 0;
     }
 
     size_t THnswIndexChanges::EstimateBytes(TStringBuf key, size_t vectorBytes) {
@@ -210,19 +297,22 @@ namespace NKikimr::NDataShard {
             Index.reset();
         }
 
-        void AddVector(TString key, const void* data) {
+        void AddVector(TString key, const void* data, bool allZero) {
+            HasZeroVector |= allZero;
             const auto id = static_cast<similarity::IdType>(Keys.size());
             auto obj = std::make_unique<similarity::Object>(
                 id, /* label */ -1, Dimension * sizeof(float), data);
             KeyBytes += key.size();
             Keys.push_back(std::move(key));
-            KeyToIndex.emplace(Keys.back(), static_cast<size_t>(id));
             Objects.push_back(obj.get());
             OwnedObjects.push_back(std::move(obj));
         }
 
-        bool Build(const VectorIndexSettings& settings) {
+        bool Build(const VectorIndexSettings& settings, const std::atomic<bool>* cancelled) {
+            ScopedLoggingDisabled quietBuild;
             SquaredGraphDistances = settings.metric() == VectorIndexSettings::DISTANCE_EUCLIDEAN;
+            CosineDistances = settings.metric() == VectorIndexSettings::DISTANCE_COSINE
+                || settings.metric() == VectorIndexSettings::SIMILARITY_COSINE;
             if (Objects.empty()) {
                 return true; // Empty rebuilt generations still have a searchable journal.
             }
@@ -239,7 +329,10 @@ namespace NKikimr::NDataShard {
                                                        : DefaultHnswEfConstruction),
                 "indexThreadQty=" + std::to_string(BuildThreadsPerIndex),
             });
+            Index->SetBuildCancellation(cancelled);
             Index->CreateIndex(buildParams);
+            Index->SetBuildCancellation(nullptr);
+            if (cancelled && cancelled->load(std::memory_order_relaxed)) { return false; }
             for (size_t i = 0; i < Objects.size(); ++i) {
                 if (Objects[i]->id() != static_cast<similarity::IdType>(i)) {
                     Index.reset();
@@ -264,10 +357,18 @@ namespace NKikimr::NDataShard {
                 return result;
             }
 
+            if (CosineDistances && (view.AllZero || HasZeroVector)) {
+                result.Covered = false;
+                return result;
+            }
+
             std::unique_ptr<const similarity::Object> queryObj(
                 new similarity::Object(-1, -1, Dimension * sizeof(float), view.Data));
 
-            const size_t graphK = Min(k, Keys.size()) + Min(ChangeCount(), Keys.size() - Min(k, Keys.size()));
+            // Dirty base nodes may hide live candidates, but a large journal
+            // must never turn ANN into an ef ~= journal-size traversal.
+            const size_t baseK = Min(k, Keys.size());
+            const size_t graphK = baseK + Min(Min(ChangeCount(), Keys.size() - baseK), Max<size_t>(k, efSearch));
             similarity::KNNQuery<float> query(*Space, queryObj.get(), static_cast<unsigned>(Max<size_t>(graphK, 1)));
             if (Index) {
                 Index->SearchWithEf(&query, efSearch);
@@ -291,33 +392,43 @@ namespace NKikimr::NDataShard {
                 }
             }
 
-            THashMap<TString, float> merged;
-            for (auto it = reversed.rbegin(); it != reversed.rend(); ++it) {
-                if (!Changes->Find(it->first, readVersion, BaseVersion)) {
-                    merged.emplace(it->first, it->second);
+            using TCandidate = std::pair<float, TString>;
+            std::priority_queue<TCandidate> nearest;
+            auto add = [&](const TString& key, float distance) {
+                if (std::isnan(distance)) { result.Covered = false; return; }
+                TCandidate candidate(distance, key);
+                if (nearest.size() < k) {
+                    nearest.push(std::move(candidate));
+                } else if (candidate < nearest.top()) {
+                    nearest.pop();
+                    nearest.push(std::move(candidate));
+                }
+            };
+            size_t cleanGraphCandidates = 0;
+            for (const auto& candidate : reversed) {
+                if (!Changes->Find(candidate.first, readVersion, BaseVersion)) {
+                    ++cleanGraphCandidates;
+                    add(candidate.first, candidate.second);
                 }
             }
-
+            if (graphK < Keys.size() && cleanGraphCandidates < k) {
+                result.Covered = false; // The bounded overfetch could have hidden live rows.
+            }
             for (const auto& [key, history] : Changes->Rows) {
                 const auto* visible = THnswIndexChanges::Find(history, readVersion, BaseVersion);
-                if (!visible || !visible->Vector) {
-                    continue;
-                }
+                if (!visible || !visible->Vector) { continue; }
                 auto deltaView = TFloatVectorView::FromSerialized(*visible->Vector);
-                if (!deltaView.IsValid() || deltaView.Dimension != Dimension) {
-                    continue;
-                }
+                if (!deltaView.IsValid() || deltaView.Dimension != Dimension) { continue; }
+                if (CosineDistances && deltaView.AllZero) { result.Covered = false; continue; }
                 similarity::Object deltaObj(-1, -1, Dimension * sizeof(float), deltaView.Data);
-                merged[key] = query.DistanceObjLeft(&deltaObj);
+                add(key, query.DistanceObjLeft(&deltaObj));
             }
-
-            result.Results.assign(merged.begin(), merged.end());
-            Sort(result.Results, [](const auto& lhs, const auto& rhs) {
-                return std::tie(lhs.second, lhs.first) < std::tie(rhs.second, rhs.first);
-            });
-            if (result.Results.size() > k) {
-                result.Results.resize(k);
+            result.Results.reserve(nearest.size());
+            while (!nearest.empty()) {
+                result.Results.emplace_back(nearest.top().second, nearest.top().first);
+                nearest.pop();
             }
+            std::reverse(result.Results.begin(), result.Results.end());
             return result;
         }
 
@@ -348,11 +459,10 @@ namespace NKikimr::NDataShard {
                 result = *visible->Vector;
                 return true;
             }
-            auto it = KeyToIndex.find(key);
-            if (it == KeyToIndex.end()) {
-                return false;
-            }
-            const auto* object = OwnedObjects[it->second].get();
+            // Inspection helper; serving queries reads projected cells from LocalDB.
+            const auto it = std::find(Keys.begin(), Keys.end(), key);
+            if (it == Keys.end()) { return false; }
+            const auto* object = OwnedObjects[it - Keys.begin()].get();
             result.assign(object->data(), object->datalength());
             result.push_back(static_cast<char>(Format<float>));
             return true;
@@ -380,7 +490,7 @@ namespace NKikimr::NDataShard {
         }
 
         bool CanRead(TRowVersion version) const {
-            return Changes->Valid && BaseVersion <= version && version <= UpperVersion;
+            return Changes->Valid && Changes->Covers(version) && BaseVersion <= version && version <= UpperVersion;
         }
 
         TRowVersion BaseVersion = TRowVersion::Min();
@@ -392,11 +502,12 @@ namespace NKikimr::NDataShard {
         size_t Dimension = 0;
         ui32 Connectivity = DefaultHnswM;
         bool SquaredGraphDistances = false;
+        bool CosineDistances = false;
+        bool HasZeroVector = false;
         size_t KeyBytes = 0;
         std::vector<const similarity::Object*> Objects;
         std::vector<std::unique_ptr<similarity::Object>> OwnedObjects;
         std::vector<TString> Keys; // Object::id() -> serialized primary key
-        THashMap<TString, size_t> KeyToIndex;
         std::unique_ptr<similarity::Hnsw<float>> Index;
     };
 
@@ -429,7 +540,7 @@ namespace NKikimr::NDataShard {
         const Ydb::Table::VectorIndexSettings& settings,
         const std::vector<std::pair<TString, TString>>& keysAndVectors,
         ui64 maxMemoryBytes,
-        TString& error, bool allowEmpty)
+        TString& error, bool allowEmpty, const std::atomic<bool>* cancelled)
     {
         if (settings.vector_type() != VectorIndexSettings::VECTOR_TYPE_FLOAT) {
             error = "HNSW index is only supported for float vectors";
@@ -494,11 +605,12 @@ namespace NKikimr::NDataShard {
         auto impl = std::make_unique<TImpl>(std::move(space), dimension);
 
         for (const auto& [key, vec] : keysAndVectors) {
+            if (cancelled && cancelled->load(std::memory_order_relaxed)) { error = "HNSW build cancelled"; return nullptr; }
             auto view = TFloatVectorView::FromSerialized(vec);
             if (!view.IsValid() || view.Dimension != dimension) {
                 continue; // Skip malformed/mismatched rows; do not fail the whole build.
             }
-            impl->AddVector(key, view.Data);
+            impl->AddVector(key, view.Data, view.AllZero);
         }
 
         if (impl->Size() == 0 && !allowEmpty) {
@@ -506,7 +618,7 @@ namespace NKikimr::NDataShard {
             return nullptr;
         }
 
-        if (!impl->Build(settings)) {
+        if (!impl->Build(settings, cancelled)) {
             error = "Failed to build HNSW index";
             return nullptr;
         }

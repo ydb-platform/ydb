@@ -13,6 +13,21 @@ namespace NKikimr::NDataShard {
     // existing memory controller supplies the grant; graphs are not shared here.
     class THnswCacheMemoryTracker {
     public:
+        explicit THnswCacheMemoryTracker(bool growthHeadroom = false) : GrowthHeadroom(growthHeadroom) {}
+
+        void Request(ui64 bytes, ui64 owner) {
+            std::lock_guard guard(Mutex);
+            auto& account = Accounts[owner];
+            account.Demand = Max(account.Demand, bytes);
+            Report();
+        }
+
+        ui64 GetDemand(ui64 owner) const {
+            std::lock_guard guard(Mutex);
+            const auto* account = Accounts.FindPtr(owner);
+            return account ? Max(account->Used, account->Demand) : 0;
+        }
+
         void SetConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
             std::lock_guard guard(Mutex);
             Consumer = std::move(consumer);
@@ -100,6 +115,9 @@ namespace NKikimr::NDataShard {
                 for (const auto& [_, account] : Accounts) {
                     demand = SaturatingAdd(demand, account.Demand > account.Used ? account.Demand - account.Used : 0);
                 }
+                if (GrowthHeadroom && Used) {
+                    demand = Max(demand, SaturatingAdd(Used, Max<ui64>(64 * 1024, Used / 8)));
+                }
                 // Serialize reports with reservations released by worker threads.
                 Consumer->SetReport({.Used = Used, .Demand = demand});
             }
@@ -111,6 +129,7 @@ namespace NKikimr::NDataShard {
         };
         THashMap<ui64, TAccount> Accounts;
         mutable std::mutex Mutex;
+        const bool GrowthHeadroom;
         ui64 Limit = 0;
         bool LimitKnown = false;
         ui64 Used = 0;

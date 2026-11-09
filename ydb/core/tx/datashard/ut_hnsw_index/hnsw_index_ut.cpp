@@ -9,8 +9,11 @@
 #include <util/generic/algorithm.h>
 #include <util/random/fast.h>
 
+#include <ydb/library/nmslib/include/logging.h>
+
 #include <atomic>
 #include <barrier>
+#include <limits>
 #include <thread>
 
 namespace NKikimr::NDataShard {
@@ -766,6 +769,145 @@ namespace NKikimr::NDataShard {
             UNIT_ASSERT(changes.Rows.empty());
             UNIT_ASSERT_VALUES_EQUAL(changes.GetVersionCount(), 0);
             UNIT_ASSERT_VALUES_EQUAL(changes.GetEstimatedBytes(), 0);
+        }
+
+        Y_UNIT_TEST(RejectsNonFiniteVectorsBeforeGraphAndJournalScoring) {
+            auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                                         Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+            const auto valid = SerializeFloatVector({1, 0});
+            for (float value : {std::numeric_limits<float>::quiet_NaN(),
+                                std::numeric_limits<float>::infinity(),
+                                -std::numeric_limits<float>::infinity()}) {
+                const auto invalid = SerializeFloatVector({value, 0});
+                TString unaligned = "x" + invalid;
+                UNIT_ASSERT(!THnswIndex::IsValidVector(TStringBuf(unaligned).SubStr(1), 2));
+                TString error;
+                auto index = THnswIndex::Build(settings, {{"good", valid}, {"bad", invalid}}, 0, error);
+                UNIT_ASSERT_C(index, error);
+                UNIT_ASSERT_VALUES_EQUAL(index->Size(), 1);
+                UNIT_ASSERT(!index->Upsert("good", invalid));
+                UNIT_ASSERT(index->Search(invalid, 1).Results.empty());
+                UNIT_ASSERT_VALUES_EQUAL(index->Search(valid, 1).Results.front().first, "good");
+            }
+        }
+
+        Y_UNIT_TEST(ZeroNormCosineUsesExactFallbackForGraphJournalAndTarget) {
+            const auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                                               Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+            const auto zero = SerializeFloatVector({0, 0});
+            const auto vector = SerializeFloatVector({1, 0});
+            TString error;
+            auto index = THnswIndex::Build(settings, {{"a", vector}}, 0, error);
+            UNIT_ASSERT_C(index, error);
+            UNIT_ASSERT(!index->Search(zero, 1).Covered);
+            UNIT_ASSERT(index->Upsert("zero", zero));
+            UNIT_ASSERT(!index->Search(vector, 1).Covered);
+            index = THnswIndex::Build(settings, {{"zero", zero}, {"a", vector}}, 0, error);
+            UNIT_ASSERT_C(index, error);
+            UNIT_ASSERT(!index->Search(vector, 1).Covered);
+        }
+
+        Y_UNIT_TEST(BuildLoggingSuppressionIsThreadLocalAndRestoresPreviousState) {
+            auto* logger = getGlobalLogger();
+            {
+                ScopedLoggingDisabled quiet;
+                UNIT_ASSERT(!getGlobalLogger());
+                { ScopedLoggingDisabled nested; UNIT_ASSERT(!getGlobalLogger()); }
+                UNIT_ASSERT(!getGlobalLogger());
+                std::atomic<bool> unaffected = false;
+                std::thread other([&] { unaffected.store(getGlobalLogger() == logger); });
+                other.join();
+                UNIT_ASSERT(unaffected.load());
+            }
+            UNIT_ASSERT(getGlobalLogger() == logger);
+        }
+
+        Y_UNIT_TEST(CancelledBuildDoesNotConstructGraph) {
+            const auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                                               Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+            const std::vector<std::pair<TString, TString>> rows = {{"a", SerializeFloatVector({1, 0})}};
+            std::atomic<bool> cancelled{true};
+            TString error;
+            UNIT_ASSERT(!THnswIndex::Build(settings, rows, 0, error, false, &cancelled));
+            UNIT_ASSERT_STRING_CONTAINS(error, "cancelled");
+            cancelled.store(false);
+            UNIT_ASSERT(THnswIndex::Build(settings, rows, 0, error, false, &cancelled));
+        }
+
+        Y_UNIT_TEST(MvccCachedCountsFollowOutOfOrderReplacementAndPruning) {
+            THnswIndexChanges changes;
+            const std::vector<TRowVersion> bases{{100, 0}, {120, 0}, {140, 0}};
+            auto check = [&](std::initializer_list<size_t> expected) {
+                size_t i = 0;
+                for (auto count : expected) {
+                    UNIT_ASSERT_VALUES_EQUAL(changes.CountAfter(bases[i++]), count);
+                }
+            };
+            check({0, 0, 0});
+            changes.Set("a", {130, 0}, TString("new"));
+            check({1, 1, 0});
+            changes.Set("a", {110, 0}, TString("old"));
+            changes.Set("a", {130, 0}, std::nullopt);
+            check({1, 1, 0});
+            changes.Set("b", {150, 0}, TString("b"));
+            check({2, 2, 1});
+            changes.PruneThrough({120, 0});
+            check({2, 2, 1});
+            changes.PruneThrough({130, 0});
+            check({1, 1, 1});
+            changes.Clear();
+            check({0, 0, 0});
+        }
+
+        Y_UNIT_TEST(MvccHotKeysRetainPinnedSnapshotsWithoutUnboundedHistory) {
+            auto changes = std::make_shared<THnswIndexChanges>();
+            const auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                                               Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+            TString error;
+            auto index = THnswIndex::Build(settings, {{"hot", SerializeFloatVector({0, 0})}}, 0, error);
+            UNIT_ASSERT_C(index, error);
+            index->SetSnapshot({10, 0}, changes);
+            std::weak_ptr<int> obsolete;
+            for (ui64 step = 11; step <= 1000; ++step) {
+                auto reservation = std::make_shared<int>(0);
+                if (step == 12) { obsolete = reservation; }
+                changes->AdvanceRetention({step, 0}, {{11, 0}, {20, 0}});
+                changes->Set("hot", {step, 0}, SerializeFloatVector({float(step), 0}), std::move(reservation));
+            }
+            UNIT_ASSERT(obsolete.expired());
+            UNIT_ASSERT_VALUES_EQUAL(changes->GetVersionCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(changes->CountAfter({10, 0}), 1);
+            UNIT_ASSERT_VALUES_EQUAL(changes->GetEstimatedBytes(), 3 * THnswIndexChanges::EstimateBytes("hot", 9));
+            for (ui64 step : {11, 20, 1000}) {
+                const auto result = index->Search(SerializeFloatVector({0, 0}), 1, {step, 0});
+                UNIT_ASSERT(result.Covered);
+                UNIT_ASSERT_DOUBLES_EQUAL(result.Results.front().second, step, 1e-5);
+            }
+            UNIT_ASSERT(!index->Search(SerializeFloatVector({0, 0}), 1, {500, 0}).Covered);
+            changes->Compact({1000, 0});
+            UNIT_ASSERT_VALUES_EQUAL(changes->GetVersionCount(), 1);
+            // Once history is released, a newly requested old pin cannot resurrect coverage.
+            changes->Compact({1000, 0}, {{20, 0}});
+            UNIT_ASSERT(!index->CanRead({20, 0}));
+        }
+
+        Y_UNIT_TEST(BoundedOverfetchDeclaresUncoveredWhenShadowsHideLiveRows) {
+            const auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                                               Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+            std::vector<std::pair<TString, TString>> rows;
+            for (ui32 i = 0; i < 100; ++i) {
+                rows.emplace_back(KeyFor(i), SerializeFloatVector({float(i), 0}));
+            }
+            TString error;
+            auto index = THnswIndex::Build(settings, rows, 0, error);
+            UNIT_ASSERT_C(index, error);
+            index->SetSnapshot({100, 0}, std::make_shared<THnswIndexChanges>());
+            for (ui32 i = 0; i < 50; ++i) { index->Erase(KeyFor(i), {120, 0}); }
+            const auto target = SerializeFloatVector({0, 0});
+            UNIT_ASSERT(!index->Search(target, 1, {120, 0}, 1).Covered);
+            const auto complete = index->Search(target, 1, {120, 0}, 100);
+            UNIT_ASSERT(complete.Covered);
+            UNIT_ASSERT_VALUES_EQUAL(complete.Results.front().first, KeyFor(50));
         }
 
         Y_UNIT_TEST(MvccEmptyGenerationAcceptsNewVectors) {

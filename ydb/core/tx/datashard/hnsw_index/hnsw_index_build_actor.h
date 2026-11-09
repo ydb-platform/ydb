@@ -13,6 +13,7 @@ namespace NKikimr::NDataShard {
         std::vector<std::pair<TString, TString>> Rows;
         std::shared_ptr<void> MemoryReservation;
         ui64 ReservedBytes = 0;
+        std::function<void(ui64)> ReduceReservation;
         bool Success = false;
         bool BelowMinRows = false;
         bool AllowEmpty = false;
@@ -36,7 +37,9 @@ namespace NKikimr::NDataShard {
         std::vector<std::pair<TString, TString>> keysAndVectors,
         std::shared_ptr<void> memoryReservation,
         ui64 maxMemoryBytes,
-        THnswIndexBuildCallback callback, bool allowEmpty = false);
+        THnswIndexBuildCallback callback, bool allowEmpty = false,
+        std::shared_ptr<std::atomic<bool>> cancelled = {},
+        std::function<void(ui64)> reduceReservation = {});
 
     NActors::IActor* CreateHnswIndexBuildActor(
         const NActors::TActorId& replyTo,
@@ -47,6 +50,8 @@ namespace NKikimr::NDataShard {
         std::vector<std::pair<TString, TString>> keysAndVectors,
         std::shared_ptr<void> memoryReservation,
         ui64 maxMemoryBytes,
-        TRowVersion baseVersion, ui64 buildToken, bool allowEmpty = false, TPathId indexId = {}, ui64 memoryOwner = 0);
+        TRowVersion baseVersion, ui64 buildToken, bool allowEmpty = false, TPathId indexId = {}, ui64 memoryOwner = 0,
+        std::shared_ptr<std::atomic<bool>> cancelled = {},
+        std::function<void(ui64)> reduceReservation = {});
 
 } // namespace NKikimr::NDataShard

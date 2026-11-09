@@ -392,6 +392,7 @@ class TDataShard
             EvHnswIndexBuildResult,
             EvRebuildHnswIndex,
             EvStartHnswSnapshotScan,
+            EvHnswSnapshotFinished,
             EvEnd
         };
 
@@ -439,11 +440,12 @@ class TDataShard
         };
 
         struct TEvRebuildHnswIndex : public TEventLocal<TEvRebuildHnswIndex, EvRebuildHnswIndex> {
-            explicit TEvRebuildHnswIndex(ui32 localTid, bool initialBuild = false, TPathId indexId = {})
-                : LocalTid(localTid), IndexId(indexId), InitialBuild(initialBuild) {}
+            explicit TEvRebuildHnswIndex(ui32 localTid, bool initialBuild = false, TPathId indexId = {}, std::optional<TRowVersion> waitingBase = {})
+                : LocalTid(localTid), IndexId(indexId), InitialBuild(initialBuild), WaitingBase(waitingBase) {}
             ui32 LocalTid;
             TPathId IndexId;
             bool InitialBuild;
+            std::optional<TRowVersion> WaitingBase;
         };
 
         struct TEvStartHnswSnapshotScan : public TEventLocal<TEvStartHnswSnapshotScan, EvStartHnswSnapshotScan> {
@@ -453,6 +455,14 @@ class TDataShard
             TRowVersion BaseVersion;
             ui64 BuildToken = 0;
             THnswSnapshotScanCallback Finish;
+        };
+
+        struct TEvHnswSnapshotFinished : public TEventLocal<TEvHnswSnapshotFinished, EvHnswSnapshotFinished> {
+            ui32 LocalTid = 0;
+            TPathId IndexId;
+            ui64 BuildToken = 0;
+            ui64 MemoryOwner = 0;
+            THnswSnapshotScanResult Result;
         };
 
         struct TEvHnswIndexBuildResult : public TEventLocal<TEvHnswIndexBuildResult, EvHnswIndexBuildResult> {
@@ -1449,6 +1459,7 @@ class TDataShard
     void Handle(TEvPrivate::TEvBuildTableStatsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvBuildTableStatsError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvHnswSnapshotFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
@@ -1947,26 +1958,13 @@ public:
         }
     }
 
+    void RequestHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
+        const Ydb::Table::VectorIndexSettings& settings, TPathId indexId);
     bool TryStartHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
         const Ydb::Table::VectorIndexSettings& settings,
         TRowVersion baseVersion = TRowVersion::Min(), TPathId indexId = {});
     ui64 GetHnswBuildToken(ui32 localTid, TPathId indexId = {}) const;
     bool IsHnswBuildCurrent(ui32 localTid, ui64 token, TPathId indexId = {}) const;
-
-    void SetHnswIndexBuilding(ui32 localTid, bool building, TPathId indexId = {}) {
-        if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
-            entry->Building = building;
-            if (!building) {
-                HnswBuildsInFlight.erase(entry->BuildToken);
-                entry->BuildObsolete = false;
-            }
-        }
-    }
-
-    bool IsHnswIndexBuildObsolete(ui32 localTid, TPathId indexId = {}) const {
-        const auto* entry = FindHnswIndexEntry(localTid, indexId);
-        return entry && entry->BuildObsolete;
-    }
 
     struct THnswIndexStats {
         bool Ready = false;
@@ -1987,6 +1985,7 @@ public:
     void ReconcileHnswIndexes(const TUserTable& before, const TUserTable& after);
     void InvalidateHnswIndexes();
     void PruneHnswIndexes();
+    std::vector<TRowVersion> GetHnswReadVersions(ui32 localTid) const;
     void ScheduleHnswRebuild(ui32 localTid, TPathId indexId = {});
     void ScheduleHnswInitialBuilds();
     void TrackHnswOpenTransactions(ui32 localTid, const NTable::TDatabase& db, TPathId indexId = {});
@@ -2000,6 +1999,9 @@ public:
     void DeferHnswIndexBuild(ui32 localTid, TDuration delay, TPathId indexId = {}) {
         if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
             entry->Building = false;
+            const ui64 desired = HnswCacheMemoryTracker ? HnswCacheMemoryTracker->GetDemand(entry->MemoryOwner) : 0;
+            entry->RetryMemoryBytes = Max(entry->RetryMemoryBytes, desired > Max<ui64>() / 2 ? Max<ui64>() : desired * 2);
+            if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetDemand(entry->MemoryOwner); }
             entry->NextScanAttemptAt = AppData()->TimeProvider->Now() + delay;
         }
     }
@@ -2014,11 +2016,11 @@ public:
 
     ui64 GetHnswCacheMemoryLimit() {
         if (!HnswCacheMemoryTracker) {
-            HnswCacheMemoryTracker = std::make_shared<THnswCacheMemoryTracker>();
+            HnswCacheMemoryTracker = std::make_shared<THnswCacheMemoryTracker>(true);
             // Graphs, build buffers and MVCC journals share the node-wide
             // SharedCache quota with the shared table-page cache.
             Send(NMemory::MakeMemoryControllerId(),
-                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache),
+                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache, true),
                 NActors::IEventHandle::FlagTrackDelivery);
         }
         return HnswCacheMemoryTracker->GetLimit();
@@ -2065,7 +2067,6 @@ public:
         if (limit > previousLimit) {
             ForEachHnswIndexEntry([&](ui32 localTid, const TPathId& indexId, auto& entry) {
                 if (entry.NextScanAttemptAt != TInstant::Max()) {
-                    entry.NextScanAttemptAt = TInstant::Zero();
                     if (entry.InitialBuildAttemptsLeft) { ScheduleHnswRebuild(localTid, indexId); }
                 }
             });
@@ -3228,6 +3229,7 @@ private:
     // retain the scan path until graph replication and readiness are implemented.
     struct THnswIndexCacheEntry {
         static constexpr ui64 PendingTransactionBytes = 256;
+        ui32 LocalTid = 0;
         std::shared_ptr<NDataShard::THnswIndex> Index;
         ui64 RowCountAtBuild = 0;
         ui64 IndexSchemaVersion = 0;
@@ -3242,10 +3244,15 @@ private:
         THashSet<ui64> UntrackedTransactions;
         TRowVersion BuildVersion = TRowVersion::Min();
         ui64 BuildToken = 0;
+        ui64 ScanId = 0;
+        TActorId BuildActor;
+        std::shared_ptr<std::atomic<bool>> CancelBuild;
+        bool OpenTransactionsTracked = false;
+        TRowVersion LastRetentionVersion = TRowVersion::Min();
+        ui64 RetryMemoryBytes = 4 * 1024 * 1024;
         ui32 InitialBuildAttemptsLeft = 0;
         bool RebuildScheduled = false;
         bool Building = false;
-        bool BuildObsolete = false;
         TInstant NextScanAttemptAt;
         ui64 CacheHits = 0;
         ui64 CacheMisses = 0;
@@ -3285,6 +3292,7 @@ private:
         indexId = ResolveHnswIndexId(localTid, indexId);
         if (!FindHnswIndexInfo(localTid, indexId)) { return nullptr; }
         auto& entry = HnswIndexCache[localTid][indexId];
+        entry.LocalTid = localTid;
         if (!entry.MemoryOwner) { entry.MemoryOwner = ++NextHnswMemoryOwner; }
         return &entry;
     }
@@ -3796,6 +3804,7 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
+            HFunc(TEvPrivate::TEvHnswSnapshotFinished, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
             HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);
@@ -3874,6 +3883,7 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
+            HFunc(TEvPrivate::TEvHnswSnapshotFinished, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
             HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);
@@ -3995,6 +4005,7 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
+            HFunc(TEvPrivate::TEvHnswSnapshotFinished, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
             HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);

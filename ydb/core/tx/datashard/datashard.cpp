@@ -303,7 +303,7 @@ void TDataShard::Die(const TActorContext& ctx) {
     InvalidateHnswIndexes();
     if (HnswCacheMemoryTracker) {
         Send(NMemory::MakeMemoryControllerId(),
-            new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::SharedCache));
+            new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::SharedCache, true));
     }
     if (InMemoryRestoreActor) {
         InMemoryRestoreActor->OnTabletDead();
@@ -2252,6 +2252,8 @@ void TDataShard::DropUserTable(TTransactionContext& txc, ui64 tableId) {
     db.Table<Schema::UserTables>().Key(ti->first).Delete();
     db.Table<Schema::UserTablesStats>().Key(ti->first).Delete();
 
+    InvalidateHnswTable(ti->second->LocalTid);
+    HnswIndexCache.erase(ti->second->LocalTid);
     TableInfos.erase(ti);
 }
 
@@ -2274,6 +2276,8 @@ void TDataShard::DropAllUserTables(TTransactionContext& txc) {
         db.Table<Schema::UserTablesStats>().Key(ti.first).Delete();
     }
 
+    InvalidateHnswIndexes();
+    HnswIndexCache.clear();
     TableInfos.clear();
 }
 

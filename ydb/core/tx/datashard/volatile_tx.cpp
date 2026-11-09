@@ -60,9 +60,17 @@ namespace NKikimr::NDataShard {
 
             Y_ENSURE(info && info->State == EVolatileTxState::Committed);
 
+            // LocalDB resolves the transaction's own write above earlier
+            // flushed lock writes at the same MVCC version. Apply the journal
+            // in that order too, independently of hash-set iteration order.
+            TVector<ui64> commitTxIds;
+            for (ui64 id : info->CommitTxIds) {
+                if (id != info->TxId) { commitTxIds.push_back(id); }
+            }
+            if (info->CommitTxIds.contains(info->TxId)) { commitTxIds.push_back(info->TxId); }
             for (auto& pr : Self->GetUserTables()) {
                 auto tid = pr.second->LocalTid;
-                for (ui64 commitTxId : info->CommitTxIds) {
+                for (ui64 commitTxId : commitTxIds) {
                     if (txc.DB.HasOpenTx(tid, commitTxId)) {
                         txc.DB.CommitTx(tid, commitTxId, info->Version);
                         Self->CommitHnswIndexChanges(tid, commitTxId, info->Version, txc.DB);

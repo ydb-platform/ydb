@@ -38,7 +38,7 @@ bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state, TPathI
         return false;
     }
     // ANN candidate reads cannot observe conflicts on rows they did not visit.
-    if (!shard.IsUserTable(state.PathId) || state.LockId || shard.GetVolatileTxManager().GetTxInFlight()) {
+    if (!shard.IsUserTable(state.PathId) || state.LockId || shard.GetVolatileTxManager().HasVolatileTxsAtSnapshot(state.ReadVersion)) {
         return false;
     }
     const auto& table = shard.GetUserTables().at(state.PathId.LocalPathId);
@@ -2475,6 +2475,22 @@ public:
             }
         }
 
+        if (request->Record.HasVectorTopK() && !state.LockId
+                && !Self->IsFollower() && Self->IsUserTable(state.PathId)
+                && AppData()->FeatureFlags.GetEnableHnswIndex()
+                && !Self->GetUserTables().at(state.PathId.LocalPathId)->HnswIndexes.empty()
+                && Self->VolatileTxManager.HasVolatileTxsAtSnapshot(state.ReadVersion)) {
+            if (state.IsHeadRead) {
+                if (auto status = upgradeToRepeatableRead()) { return *status; }
+            }
+            if (Self->VolatileTxManager.HasVolatileTxsAtSnapshot(state.ReadVersion)) {
+                Self->Pipeline.RegisterWaitingReadIterator(state.ReadId, state.Ev->Get());
+                Self->VolatileTxManager.AttachWaitingSnapshotEvent(state.ReadVersion,
+                    std::unique_ptr<IEventHandle>(state.Ev.Release()));
+                return abortRescheduled();
+            }
+        }
+
         if (state.Sampling) {
             if (state.IsHeadRead) {
                 if (auto status = upgradeToRepeatableRead()) {
@@ -2957,15 +2973,7 @@ public:
                     Self->RegisterHnswCacheLookup(localTid, bool(topState->HnswIndex), selected);
                 }
                 if (canUseHnsw && !topState->HnswIndex) {
-                    const auto buildVersion = Self->GetHnswBuildVersion();
-                    if (!Self->GetHnswIndex(localTid, vectorColumnTag, hnswSettings, false, TRowVersion::Max(), selected)
-                            && buildVersion < Self->Pipeline.GetUnreadableEdge()
-                            && hnswSettings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
-                            && Self->GetHnswCacheMemoryLimit() != 0
-                            && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag, hnswSettings, buildVersion, selected)) {
-                        Self->TrackHnswOpenTransactions(localTid, txc.DB, selected);
-                        Self->StartHnswSnapshotScan(localTid, Self->GetUserTables().at(state.PathId.LocalPathId), buildVersion, txc, {}, selected);
-                    }
+                    Self->RequestHnswIndexBuild(localTid, vectorColumnTag, hnswSettings, selected);
                 }
             }
             state.VectorTopK = std::move(topState);

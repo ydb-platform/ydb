@@ -5,6 +5,9 @@
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
+#include <util/generic/map.h>
+#include <atomic>
+#include <mutex>
 
 #include <memory>
 #include <optional>
@@ -12,6 +15,8 @@
 #include <vector>
 
 namespace NKikimr::NDataShard {
+
+    inline constexpr ui32 DefaultHnswM = 16;
 
     // Omitted proto3 parameters use the documented server-side default.
     ui64 GetHnswDeltaRows(const Ydb::Table::VectorIndexSettings& settings);
@@ -45,6 +50,12 @@ namespace NKikimr::NDataShard {
         size_t CountAfter(TRowVersion base) const;
         // Every remaining generation already contains these versions in its base.
         void PruneThrough(TRowVersion base);
+        // Keep each pinned snapshot, the predecessor at the floor, and newer versions.
+        // Future reads below this floor deliberately use the exact table scan.
+        void Compact(TRowVersion floor, const std::vector<TRowVersion>& pins = {});
+        void AdvanceRetention(TRowVersion floor, const std::vector<TRowVersion>& pins);
+        bool Covers(TRowVersion version) const;
+        void Clear();
         static size_t EstimateBytes(TStringBuf key, size_t vectorBytes);
 
         size_t GetVersionCount() const {
@@ -56,8 +67,15 @@ namespace NKikimr::NDataShard {
 
         THashMap<TString, THistory> Rows;
         bool Valid = true;
+        TRowVersion LowerReadVersion = TRowVersion::Min();
 
     private:
+        void UpdateCounts(std::optional<TRowVersion> before, std::optional<TRowVersion> after);
+        mutable std::mutex CountsMutex;
+        mutable TMap<TRowVersion, size_t> CountsByBase;
+        void CompactHistory(TStringBuf key, THistory& history);
+        std::vector<TRowVersion> PinnedVersions;
+        bool RetentionInitialized = false;
         size_t VersionCount = 0;
         size_t EstimatedBytes = 0;
     };
@@ -83,7 +101,8 @@ namespace NKikimr::NDataShard {
             const Ydb::Table::VectorIndexSettings& settings,
             const std::vector<std::pair<TString, TString>>& keysAndVectors,
             ui64 maxMemoryBytes,
-            TString& error, bool allowEmpty = false);
+            TString& error, bool allowEmpty = false,
+            const std::atomic<bool>* cancelled = nullptr);
 
         // Returns up to k nearest neighbors of targetVector (same wire format as
         // build-time vectors), ordered from closest to farthest.
@@ -122,7 +141,7 @@ namespace NKikimr::NDataShard {
         // Estimates the memory required to hold an HNSW index over `rowCount`
         // vectors of `dimension` float elements, without building anything.
         // Used to decide up front whether a build should even be attempted.
-        static size_t EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 connectivity = 16,
+        static size_t EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 connectivity = DefaultHnswM,
                                           size_t serializedKeyBytes = 0);
 
     private:

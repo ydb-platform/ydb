@@ -2,6 +2,8 @@
 #include <ydb/core/tx/datashard/hnsw_index/hnsw_memory_tracker.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/size_literals.h>
+
 #include <atomic>
 #include <thread>
 
@@ -149,6 +151,23 @@ namespace NKikimr::NDataShard {
             UNIT_ASSERT(!tracker.TryAcquire(Max<ui64>(), 1));
             UNIT_ASSERT(!tracker.TryAcquire(Max<ui64>(), 2));
             UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, Max<ui64>());
+        }
+
+        Y_UNIT_TEST(IdleDemandIsZeroAndAbandonedRequestsReleaseTheirShare) {
+            THnswCacheMemoryTracker tracker(true);
+            auto consumer = MakeIntrusive<TTestMemoryConsumer>();
+            tracker.SetConsumer(consumer);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 0);
+            tracker.Request(4_MB, 1);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 4_MB);
+            tracker.ResetDemand(1);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 0);
+            tracker.SetLimit(1_MB);
+            UNIT_ASSERT(tracker.TryAcquire(1_MB, 1));
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 1_MB + 128_KB);
+            tracker.Release(1_MB, 1);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 0);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 0);
         }
 
         Y_UNIT_TEST(CacheMemoryTrackersHaveIndependentLimits) {

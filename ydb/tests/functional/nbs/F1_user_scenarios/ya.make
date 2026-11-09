@@ -20,7 +20,4 @@ TEST_SRCS(
     F1_26_resize_grow.py
 )
 
-
-REQUIREMENTS(cpu:1)
-
 END()

@@ -13,7 +13,7 @@ USE_RECIPE(
     ydb/tests/functional/sdk/cpp/relative_database/recipe/recipe
 )
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1200)
@@ -22,6 +22,7 @@ IF (SANITIZER_TYPE == "thread")
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 PEERDIR(

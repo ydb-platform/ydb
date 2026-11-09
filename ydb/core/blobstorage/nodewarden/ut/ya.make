@@ -2,12 +2,13 @@ UNITTEST_FOR(ydb/core/blobstorage/nodewarden)
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 PEERDIR(

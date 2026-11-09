@@ -3,8 +3,10 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_SQS_MIGRATION_STAGE=topic_creation)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/cloud.inc)
-
-SPLIT_FACTOR(47)
-REQUIREMENTS(cpu:1)
+IF (SANITIZER_TYPE)
+ELSE()
+    SPLIT_FACTOR(47)
+    REQUIREMENTS(cpu:1)
+ENDIF()
 
 END()

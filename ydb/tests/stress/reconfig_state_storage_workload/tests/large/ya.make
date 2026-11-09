@@ -12,7 +12,4 @@ FORK_TEST_FILES()
 SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
-
-REQUIREMENTS(cpu:1)
-
 END()

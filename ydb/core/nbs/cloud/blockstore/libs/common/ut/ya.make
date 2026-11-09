@@ -11,7 +11,9 @@ PEERDIR(
     contrib/libs/xxhash
 )
 
-
-REQUIREMENTS(cpu:1)
+IF (SANITIZER_TYPE)
+ELSE()
+    REQUIREMENTS(cpu:1)
+ENDIF()
 
 END()

@@ -8,7 +8,4 @@ TEST_SRCS(
     F1_23_zero_blocks.py
 )
 
-
-REQUIREMENTS(cpu:1)
-
 END()

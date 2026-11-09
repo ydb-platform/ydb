@@ -18,7 +18,4 @@ TEST_SRCS(
     F2_14_combined_faults.py
 )
 
-
-REQUIREMENTS(cpu:1)
-
 END()

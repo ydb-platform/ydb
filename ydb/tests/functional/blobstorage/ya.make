@@ -34,3 +34,7 @@ FORK_SUBTESTS()
 FORK_TEST_FILES()
 
 END()
+
+RECURSE(
+    replication_rate_control
+)

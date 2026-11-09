@@ -24,6 +24,22 @@
 using namespace NKikimr;
 using namespace NStorage;
 
+namespace {
+
+    constexpr TAtomicBase MaxReplBytesPerSecond = 1'000'000'000'000;
+
+    ui64 GetVDiskControlDefault(const char *name) {
+        const auto *descriptor = NKikimrConfig::TImmediateControlsConfig_TVDiskControls::descriptor();
+        const auto *field = descriptor->FindFieldByName(name);
+        Y_ABORT_UNLESS(field);
+        Y_ABORT_UNLESS(field->options().HasExtension(NKikimrConfig::ControlOptions));
+        const auto& controlOptions = field->options().GetExtension(NKikimrConfig::ControlOptions);
+        Y_ABORT_UNLESS(controlOptions.HasDefaultValue());
+        return controlOptions.GetDefaultValue();
+    }
+
+} // anonymous namespace
+
 TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     : Cfg(cfg)
     , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
@@ -383,6 +399,60 @@ void TNodeWarden::Bootstrap() {
 
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats);
 
+    const auto& replBrokerConfig = Cfg->BlobStorageConfig.GetServiceSet().GetReplBrokerConfig();
+
+    ui64 requestBytesPerSecond = GetVDiskControlDefault("ReplTotalRequestBytesPerSecond");
+    if (replBrokerConfig.HasTotalRequestBytesPerSecond()) {
+        requestBytesPerSecond = replBrokerConfig.GetTotalRequestBytesPerSecond();
+    } else if (replBrokerConfig.HasRateBytesPerSecond()) {
+        requestBytesPerSecond = replBrokerConfig.GetRateBytesPerSecond();
+    }
+    const ui64 responseBytesPerSecond = replBrokerConfig.HasTotalResponseBytesPerSecond()
+        ? replBrokerConfig.GetTotalResponseBytesPerSecond()
+        : GetVDiskControlDefault("ReplTotalResponseBytesPerSecond");
+
+    ui64 replPDiskReadBytesPerSecondHDD = GetVDiskControlDefault("ReplPDiskReadBytesPerSecondHDD");
+    ui64 replPDiskWriteBytesPerSecondHDD = GetVDiskControlDefault("ReplPDiskWriteBytesPerSecondHDD");
+    ui64 replPDiskReadBytesPerSecondSSD = GetVDiskControlDefault("ReplPDiskReadBytesPerSecondSSD");
+    ui64 replPDiskWriteBytesPerSecondSSD = GetVDiskControlDefault("ReplPDiskWriteBytesPerSecondSSD");
+    ui64 replPDiskReadBytesPerSecondNVME = GetVDiskControlDefault("ReplPDiskReadBytesPerSecondNVME");
+    ui64 replPDiskWriteBytesPerSecondNVME = GetVDiskControlDefault("ReplPDiskWriteBytesPerSecondNVME");
+    for (const auto& item : replBrokerConfig.GetMediaTypeQuota()) {
+        ui64 *readBytesPerSecond = nullptr;
+        ui64 *writeBytesPerSecond = nullptr;
+        switch (PDiskTypeToPDiskType(item.GetType())) {
+            case NPDisk::DEVICE_TYPE_ROT:
+                readBytesPerSecond = &replPDiskReadBytesPerSecondHDD;
+                writeBytesPerSecond = &replPDiskWriteBytesPerSecondHDD;
+                break;
+            case NPDisk::DEVICE_TYPE_SSD:
+                readBytesPerSecond = &replPDiskReadBytesPerSecondSSD;
+                writeBytesPerSecond = &replPDiskWriteBytesPerSecondSSD;
+                break;
+            case NPDisk::DEVICE_TYPE_NVME:
+                readBytesPerSecond = &replPDiskReadBytesPerSecondNVME;
+                writeBytesPerSecond = &replPDiskWriteBytesPerSecondNVME;
+                break;
+            default:
+                continue;
+        }
+        if (item.HasReadBytesPerSecond()) {
+            *readBytesPerSecond = item.GetReadBytesPerSecond();
+        }
+        if (item.HasWriteBytesPerSecond()) {
+            *writeBytesPerSecond = item.GetWriteBytesPerSecond();
+        }
+    }
+
+    ReplTotalRequestBytesPerSecond.Reset(requestBytesPerSecond, 0, MaxReplBytesPerSecond);
+    ReplTotalResponseBytesPerSecond.Reset(responseBytesPerSecond, 0, MaxReplBytesPerSecond);
+    ReplPDiskReadBytesPerSecondHDD.Reset(replPDiskReadBytesPerSecondHDD, 0, MaxReplBytesPerSecond);
+    ReplPDiskWriteBytesPerSecondHDD.Reset(replPDiskWriteBytesPerSecondHDD, 0, MaxReplBytesPerSecond);
+    ReplPDiskReadBytesPerSecondSSD.Reset(replPDiskReadBytesPerSecondSSD, 0, MaxReplBytesPerSecond);
+    ReplPDiskWriteBytesPerSecondSSD.Reset(replPDiskWriteBytesPerSecondSSD, 0, MaxReplBytesPerSecond);
+    ReplPDiskReadBytesPerSecondNVME.Reset(replPDiskReadBytesPerSecondNVME, 0, MaxReplBytesPerSecond);
+    ReplPDiskWriteBytesPerSecondNVME.Reset(replPDiskWriteBytesPerSecondNVME, 0, MaxReplBytesPerSecond);
+
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
@@ -444,6 +514,30 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
                 "VDiskControls.DiskTimeAvailableScaleNVME");
 
+        auto registerReplControl = [&](TControlWrapper& control, TAtomicBase configuredValue, const char *name) {
+            icb->RegisterSharedControl(control, TStringBuilder() << "VDiskControls." << name);
+            const TAtomicBase schemaDefault = GetVDiskControlDefault(name);
+            if (control.IsDefault() && control.GetDefault() == schemaDefault) {
+                control.Reset(configuredValue, 0, MaxReplBytesPerSecond);
+            }
+        };
+        registerReplControl(ReplTotalRequestBytesPerSecond,
+            requestBytesPerSecond, "ReplTotalRequestBytesPerSecond");
+        registerReplControl(ReplTotalResponseBytesPerSecond,
+            responseBytesPerSecond, "ReplTotalResponseBytesPerSecond");
+        registerReplControl(ReplPDiskReadBytesPerSecondHDD,
+            replPDiskReadBytesPerSecondHDD, "ReplPDiskReadBytesPerSecondHDD");
+        registerReplControl(ReplPDiskWriteBytesPerSecondHDD,
+            replPDiskWriteBytesPerSecondHDD, "ReplPDiskWriteBytesPerSecondHDD");
+        registerReplControl(ReplPDiskReadBytesPerSecondSSD,
+            replPDiskReadBytesPerSecondSSD, "ReplPDiskReadBytesPerSecondSSD");
+        registerReplControl(ReplPDiskWriteBytesPerSecondSSD,
+            replPDiskWriteBytesPerSecondSSD, "ReplPDiskWriteBytesPerSecondSSD");
+        registerReplControl(ReplPDiskReadBytesPerSecondNVME,
+            replPDiskReadBytesPerSecondNVME, "ReplPDiskReadBytesPerSecondNVME");
+        registerReplControl(ReplPDiskWriteBytesPerSecondNVME,
+            replPDiskWriteBytesPerSecondNVME, "ReplPDiskWriteBytesPerSecondNVME");
+
         icb->RegisterSharedControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
         icb->RegisterSharedControl(SlowDiskThresholdHDD, "DSProxyControls.SlowDiskThresholdHDD");
         icb->RegisterSharedControl(SlowDiskThresholdSSD, "DSProxyControls.SlowDiskThresholdSSD");
@@ -465,21 +559,8 @@ void TNodeWarden::Bootstrap() {
     }
 
     // start replication broker
-    const auto& replBrokerConfig = Cfg->BlobStorageConfig.GetServiceSet().GetReplBrokerConfig();
-
-    ui64 requestBytesPerSecond = 500000000; // 500 MB/s by default
-    if (replBrokerConfig.HasTotalRequestBytesPerSecond()) {
-        requestBytesPerSecond = replBrokerConfig.GetTotalRequestBytesPerSecond();
-    } else if (replBrokerConfig.HasRateBytesPerSecond()) { // compatibility option
-        requestBytesPerSecond = replBrokerConfig.GetRateBytesPerSecond();
-    }
-    ReplNodeRequestQuoter = std::make_shared<TReplQuoter>(requestBytesPerSecond);
-
-    ui64 responseBytesPerSecond = 500000000; // the same as for request
-    if (replBrokerConfig.HasTotalResponseBytesPerSecond()) {
-        responseBytesPerSecond = replBrokerConfig.GetTotalResponseBytesPerSecond();
-    }
-    ReplNodeResponseQuoter = std::make_shared<TReplQuoter>(responseBytesPerSecond);
+    ReplNodeRequestQuoter = std::make_shared<TReplQuoter>(ReplTotalRequestBytesPerSecond);
+    ReplNodeResponseQuoter = std::make_shared<TReplQuoter>(ReplTotalResponseBytesPerSecond);
 
     const ui64 maxBytes = replBrokerConfig.GetMaxInFlightReadBytes();
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));

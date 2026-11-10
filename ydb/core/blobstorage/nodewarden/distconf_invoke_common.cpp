@@ -858,18 +858,21 @@ namespace NKikimr::NStorage {
             SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
             return;
         }
-        if (ev->Get()->Record.HasQueryBridgeRollbackStatus()) {
-            if (!IsSelfStatic && ConnectedToStaticNode && StaticNodeSessionId) {
+        if (const auto& record = ev->Get()->Record; !IsSelfStatic && (record.HasQueryBridgeRollbackStatus() ||
+                record.HasRollbackBridge())) {
+            if (ConnectedToStaticNode && StaticNodeSessionId) {
                 // dynamic nodes have no binding of their own, the static node they are subscribed to forwards it
                 ForwardInvokeOnRoot(std::move(ev), ConnectedToStaticNode);
-                return;
-            } else if (!IsSelfStatic) {
+            } else {
                 auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
                 response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM);
-                response->Record.SetErrorReason("No static node connection for rollback status query");
+                response->Record.SetErrorReason("No static node connection for the rollback of the bridged cluster");
                 SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
-                return;
-            } else if (!Halted && !Binding) {
+            }
+            return;
+        }
+        if (ev->Get()->Record.HasQueryBridgeRollbackStatus()) {
+            if (!Halted && !Binding) {
                 // the root collects it; static nodes having binding forward it to the root as usual
                 if (Scepter && StorageConfig) {
                     QueryBridgeRollbackStatus(std::move(ev));

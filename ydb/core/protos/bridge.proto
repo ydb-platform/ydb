@@ -109,6 +109,9 @@ message TBridgeRollbackRecord {
     // the lowest id for the parts of static groups allocated when piles are added after the cluster is converted again;
     // static group ids are never reused (see TClusterStateDetails.NextStaticGroupId)
     uint32 NextStaticGroupId = 2;
+    // generation of the cluster state removed; the cluster state of the next conversion goes on from it (the records of
+    // older versions don't have it)
+    optional uint64 ClusterStateGeneration = 4;
 }
 
 message TGroupState {

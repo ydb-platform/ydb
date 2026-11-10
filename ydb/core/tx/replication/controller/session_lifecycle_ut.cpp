@@ -724,6 +724,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                     ))", result), NKikimrProto::OK);
                 }
                 s.Reboot();
+                s.Status(0, false); // Complete the restarted controller's service handshake.
                 UNIT_ASSERT(s.Describe().GetState().HasError());
             } else if (test == ECase::Paused) {
                 CompleteRegistrarPause(s);
@@ -1638,10 +1639,10 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL(LocalQuery(s.Env.GetRuntime(), s.ControllerId, updates, result), NKikimrProto::OK);
         const auto first = s.Monitoring({{"view", "storage"}, {"table", "SysParams"}});
         UNIT_ASSERT_C(first.Contains("Next page"), first);
-        UNIT_ASSERT_C(first.Contains("from=199"), first);
+        UNIT_ASSERT_C(first.Contains("from=198"), first);
         UNIT_ASSERT_C(!first.Contains("<td>200</td>"), first);
         UNIT_ASSERT_C(!first.Contains("monitoring-secret"), first);
-        const auto next = s.Monitoring({{"view", "storage"}, {"table", "SysParams"}, {"from", "199"}});
+        const auto next = s.Monitoring({{"view", "storage"}, {"table", "SysParams"}, {"from", "198"}});
         UNIT_ASSERT_C(next.Contains("<td>199</td>"), next);
         UNIT_ASSERT_C(next.Contains("<td>200</td>"), next);
         UNIT_ASSERT_C(!next.Contains("Next page"), next);

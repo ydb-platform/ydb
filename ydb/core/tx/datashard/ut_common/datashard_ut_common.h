@@ -459,6 +459,7 @@ struct TShardedTableOptions {
         bool SchemaChanges = false;
         bool UserSIDs = true;
         bool TraceIds = false;
+        ui32 TopicPartitions = 0;
     };
 
     struct TFamily {

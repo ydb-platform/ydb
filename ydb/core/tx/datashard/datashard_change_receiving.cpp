@@ -61,7 +61,7 @@ public:
     }
 
     bool ExecuteHandshake(NIceDb::TNiceDb& db, const NKikimrChangeExchange::TEvHandshake& req, NKikimrChangeExchange::TEvStatus& resp) {
-        if (Self->State != TShardState::Ready) {
+        if (!Self->CanReceiveChangeRecords()) {
             resp.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
             resp.SetReason(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE);
             return true;
@@ -336,6 +336,7 @@ public:
         , Ev(std::move(ev))
         , Status(new TEvChangeExchange::TEvStatus)
     {
+        ++Self->DatabaseFreezeLocalWrites;
     }
 
     TTxType GetTxType() const override {
@@ -343,7 +344,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        if (Self->State != TShardState::Ready) {
+        if (!Self->CanReceiveChangeRecords()) {
             Status->Record.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
             Status->Record.SetReason(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE);
             return true;
@@ -408,6 +409,8 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         Y_ENSURE(Status);
+
+        --Self->DatabaseFreezeLocalWrites;
 
         if (MvccVersion) {
             Pipeline.RemoveCommittingOp(*MvccVersion);
@@ -476,4 +479,3 @@ void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TAct
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

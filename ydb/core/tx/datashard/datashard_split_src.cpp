@@ -39,6 +39,12 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         if (Self->State == TShardState::Ready) {
+            // SchemeShard must stabilize topology before installing a database
+            // fence. TEvSplitAck has no rejection status, so fail closed on a
+            // protocol violation instead of acknowledging a split we did not do.
+            Y_ENSURE(!Self->IsDatabaseFrozen(),
+                "Cannot start split/merge while database is frozen"
+                << ": tabletId# " << Self->TabletID() << " opId# " << opId);
             Self->SrcAckSplitTo.insert(Ev->Sender);
             Self->SrcSplitOpId = opId;
             Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());

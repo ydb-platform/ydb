@@ -3983,6 +3983,80 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 }
 
 Y_UNIT_TEST_SUITE(TImportTests) {
+    void TestTablePermissions(bool enableDataShardDirectPartImport, bool interruptInheritance) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
+        ui64 txId = 100;
+
+        const auto permissions = Sprintf(R"(
+            actions {
+              change_owner: "eve"
+            }
+            actions {
+              grant {
+                subject: "alice"
+                permission_names: "ydb.generic.read"
+              }
+            }
+            actions {
+              grant {
+                subject: "alice"
+                permission_names: "ydb.generic.write"
+              }
+            }
+            actions {
+              grant {
+                subject: "bob"
+                permission_names: "ydb.generic.read"
+              }
+            }
+            %s
+        )", interruptInheritance ? "interrupt_inheritance: true" : "");
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, permissions);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::HasOwner("eve"),
+            NLs::HasRight("+R:alice"),
+            NLs::HasRight("+W:alice"),
+            NLs::HasRight("+R:bob")
+        });
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
+        const NACLib::TACL acl(describeResult.GetPathDescription().GetSelf().GetACL());
+        UNIT_ASSERT_VALUES_EQUAL(acl.GetInterruptInheritance(), interruptInheritance);
+    }
+
     ui64 Run(TTestBasicRuntime& runtime, TTestEnv& env,
             THashMap<TString, TString>&& data, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
@@ -6832,77 +6906,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST_FLAG(TablePermissions, EnableDataShardDirectPartImport) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
-        ui64 txId = 100;
+        TestTablePermissions(EnableDataShardDirectPartImport, /* interruptInheritance */ false);
+    }
 
-        const auto permissions = R"(
-            actions {
-              change_owner: "eve"
-            }
-            actions {
-              grant {
-                subject: "alice"
-                permission_names: "ydb.generic.read"
-              }
-            }
-            actions {
-              grant {
-                subject: "alice"
-                permission_names: "ydb.generic.write"
-              }
-            }
-            actions {
-              grant {
-                subject: "bob"
-                permission_names: "ydb.generic.read"
-              }
-            }
-            interrupt_inheritance: true
-        )";
-
-        const auto data = GenerateTestData(R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            primary_key: "key"
-        )", {{"a", 1}}, permissions);
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::PathExist,
-            NLs::HasOwner("eve"),
-            NLs::HasRight("+R:alice"),
-            NLs::HasRight("+W:alice"),
-            NLs::HasRight("+R:bob")
-        });
-
-        const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
-        const NACLib::TACL acl(describeResult.GetPathDescription().GetSelf().GetACL());
-        UNIT_ASSERT(acl.GetInterruptInheritance());
+    Y_UNIT_TEST_FLAG(TablePermissionsWithInterruptInheritance, EnableDataShardDirectPartImport) {
+        TestTablePermissions(EnableDataShardDirectPartImport, /* interruptInheritance */ true);
     }
 
     Y_UNIT_TEST_FLAG(UnexpectedPermission, EnableDataShardDirectPartImport) {

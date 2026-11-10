@@ -119,6 +119,9 @@ namespace NTable {
 
         // Slice changes to apply to the database
         TVector<TChangeSlices> SliceChanges;
+
+        // When nonempty, covers every new part and overrides NewPartsLevel.
+        THashMap<TLogoBlobID, ui32> NewPartLevels;
     };
 
     /**

@@ -7,6 +7,8 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <google/protobuf/util/message_differencer.h>
 
+#include <optional>
+
 namespace NKikimr {
 namespace NLocalDb {
 
@@ -45,6 +47,8 @@ struct TCompactionPolicy : public TThrRefBase {
         ui64 ExtraCompactionMinSize;
         ui64 ExtraCompactionExpMaxSize;
         ui64 UpliftPartSize;
+        // Family id of the storage tier; an absent value means the default tier (family 0).
+        std::optional<ui32> TierId;
 
         TGenerationPolicy(ui64 sizeToCompact, ui32 countToCompact, ui32 forceCountToCompact,
                           ui64 forceSizeToCompact, const TString &resourceBrokerTask,
@@ -67,7 +71,8 @@ struct TCompactionPolicy : public TThrRefBase {
                     && ExtraCompactionExpPercent == p.ExtraCompactionExpPercent
                     && ExtraCompactionMinSize == p.ExtraCompactionMinSize
                     && ExtraCompactionExpMaxSize == p.ExtraCompactionExpMaxSize
-                    && UpliftPartSize == p.UpliftPartSize;
+                    && UpliftPartSize == p.UpliftPartSize
+                    && TierId == p.TierId;
         }
     };
 
@@ -135,6 +140,7 @@ typedef TIntrusivePtr<TCompactionPolicy> TCompactionPolicyPtr;
 TCompactionPolicyPtr CreateDefaultTablePolicy();
 TCompactionPolicyPtr CreateDefaultUserTablePolicy();
 
+bool ValidateCompactionPolicy(const TCompactionPolicy& policy, TString& err);
 bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err);
 
 // Get Resource Broker task type name by Compaction Broker queue ID.

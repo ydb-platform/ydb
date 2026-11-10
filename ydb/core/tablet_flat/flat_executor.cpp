@@ -4142,11 +4142,18 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     if (results) {
         auto *snap = proto.MutableIntroducedParts();
+        const auto& levels = logicResult.Changes.NewPartLevels;
+        Y_ENSURE(levels.empty() || levels.size() == results.size(),
+            "Compaction levels do not cover all output parts");
 
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
-            TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
+            const ui32 level = levels.empty() ? logicResult.Changes.NewPartsLevel : levels.at(newPart->Label);
+            TPageCollectionProtoHelper::Snap(snap, newPart, tableId, level);
+            if (!levels.empty()) {
+                snap->MutableBundles(snap->BundlesSize() - 1)->SetCompactionLevel(level);
+            }
             TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }

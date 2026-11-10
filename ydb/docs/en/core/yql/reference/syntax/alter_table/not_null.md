@@ -2,7 +2,7 @@
 
 The `NOT NULL` constraint is a column-level data integrity constraint that prohibits writing `NULL` values. It ensures that the column always contains a valid value.
 
-{% if feature_alter_column_not_null == true %}
+{% if feature_flags.enable_set_column_constraint == true %}
 
 In YDB, the `SET NOT NULL` operation is performed as a synchronous SQL operation that waits for the schema change to be applied. At the same time, a background operation is created to check the table for `NULL` values in existing data.
 

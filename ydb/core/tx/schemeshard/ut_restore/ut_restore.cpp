@@ -6859,6 +6859,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 permission_names: "ydb.generic.read"
               }
             }
+            interrupt_inheritance: true
         )";
 
         const auto data = GenerateTestData(R"(
@@ -6898,6 +6899,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::HasRight("+W:alice"),
             NLs::HasRight("+R:bob")
         });
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
+        const NACLib::TACL acl(describeResult.GetPathDescription().GetSelf().GetACL());
+        UNIT_ASSERT(acl.GetInterruptInheritance());
     }
 
     Y_UNIT_TEST_FLAG(UnexpectedPermission, EnableDataShardDirectPartImport) {

@@ -1515,6 +1515,9 @@ bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
 
     NACLib::TDiffACL diffACL;
     diffACL.ClearAccess();
+    if (in->has_interrupt_inheritance()) {
+        diffACL.SetInterruptInheritance(in->interrupt_inheritance());
+    }
     for (const auto& action : in->actions()) {
         if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
             return false;

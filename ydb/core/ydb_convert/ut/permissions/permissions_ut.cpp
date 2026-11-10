@@ -4,6 +4,23 @@
 
 namespace NKikimr {
 
+Y_UNIT_TEST_SUITE(FillACL) {
+    Y_UNIT_TEST(InterruptInheritance) {
+        for (const bool interruptInheritance : {false, true}) {
+            Ydb::Scheme::ModifyPermissionsRequest permissions;
+            permissions.set_interrupt_inheritance(interruptInheritance);
+
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            TString error;
+            UNIT_ASSERT_C(FillACL(modifyScheme, permissions, error), error);
+
+            const NACLib::TDiffACL diffACL(modifyScheme.GetModifyACL().GetDiffACL());
+            UNIT_ASSERT(diffACL.HasInterruptInheritance());
+            UNIT_ASSERT_VALUES_EQUAL(diffACL.GetInterruptInheritance(), interruptInheritance);
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(RevokeYdbPermission) {
     Y_UNIT_TEST(ConnectRevokesLegacyAndCurrentGrants) {
         using namespace NACLib;

@@ -4914,6 +4914,7 @@ partitioning_settings {
 
         NACLib::TDiffACL diffACL;
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
+        diffACL.SetInterruptInheritance(true);
         TestModifyACL(Runtime(), ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
         Env().TestWaitNotification(Runtime(), txId);
 
@@ -4941,6 +4942,7 @@ partitioning_settings {
                 permission_names: "ydb.generic.use"
               }
             }
+            interrupt_inheritance: true
         )"));
     }
 

@@ -3,4 +3,5 @@ RECURSE(
     lib
     medium
     medium/tpch
+    medium/wm
 )

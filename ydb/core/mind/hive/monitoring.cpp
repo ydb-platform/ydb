@@ -1695,11 +1695,7 @@ public:
             jsonUpdate["MaxCount"] = *maxCount;
             jsonOperation["TabletAvailability"].AppendValue(std::move(jsonUpdate));
             db.Table<Schema::TabletAvailabilityRestrictions>().Key(NodeId, changeType).Update<Schema::TabletAvailabilityRestrictions::MaxCount>(*maxCount);
-            Node->TabletAvailabilityRestrictions[changeType] = *maxCount;
-            auto it = Node->TabletAvailability.find(changeType);
-            if (it != Node->TabletAvailability.end()) {
-                it->second.UpdateRestriction(*maxCount);
-            }
+            Node->SetTabletAvailabilityRestriction(changeType, *maxCount);
         }
         if (resetType != TTabletTypes::TypeInvalid) {
             ChangeRequest = true;
@@ -1708,19 +1704,14 @@ public:
             jsonUpdate["Type"] = GetTabletTypeShortName(resetType);
             jsonUpdate["MaxCount"] = "[default]";
             jsonOperation["TabletAvailability"].AppendValue(std::move(jsonUpdate));
-            Node->TabletAvailabilityRestrictions.erase(resetType);
-            auto it = Node->TabletAvailability.find(resetType);
-            if (it != Node->TabletAvailability.end()) {
-                it->second.RemoveRestriction();
-                if (it->second.IsSet) {
-                    db.Table<Schema::TabletAvailabilityRestrictions>()
-                      .Key(NodeId, resetType)
-                      .Update<Schema::TabletAvailabilityRestrictions::MaxCount>(TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE);
-                } else {
-                    db.Table<Schema::TabletAvailabilityRestrictions>()
-                      .Key(NodeId, resetType)
-                      .Delete();
-                }
+            if (Node->ResetTabletAvailabilityRestriction(resetType)) {
+                db.Table<Schema::TabletAvailabilityRestrictions>()
+                  .Key(NodeId, resetType)
+                  .Update<Schema::TabletAvailabilityRestrictions::MaxCount>(TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE);
+            } else {
+                db.Table<Schema::TabletAvailabilityRestrictions>()
+                  .Key(NodeId, resetType)
+                  .Delete();
             }
         }
         if (ChangeRequest) {
@@ -2957,6 +2948,7 @@ public:
         ui64 LeaderCount = 0;
         ui64 FollowerCount = 0;
         ui64 MaxCount = 0;
+        bool Explicit = false; // availability is set on the node, overriding DefaultTabletLimit
 
         TTabletsRunningInfo(TNodeId node, TTabletTypes::EType tabletType) : NodeId(node)
                                                                           , TabletType(tabletType)
@@ -2966,14 +2958,22 @@ public:
         TString ToHTML() const {
             auto totalCount = LeaderCount + FollowerCount;
             TStringBuilder str;
-            str << "<span title='" << TTabletTypes::EType_Name(TabletType) << "' ";
+            str << "<span title='" << TTabletTypes::EType_Name(TabletType)
+                << (Explicit ? " (set on node)" : " (default)") << "' ";
             if (MaxCount > 0) {
                 str << " class='box' ";
             } else {
                 str << " class='box box-disabled' ";
             }
-            if (totalCount > MaxCount) {
-                str << " style='color: red' ";
+            if (totalCount > MaxCount || Explicit) {
+                str << " style='";
+                if (totalCount > MaxCount) {
+                    str << "color: red;";
+                }
+                if (Explicit) {
+                    str << "font-weight: bold;";
+                }
+                str << "' ";
             }
             str << " onclick='"  << (MaxCount == 0 ? "enableType" : "disableType")
                 << "(this," << NodeId << "," << (ui32)TabletType << ")";
@@ -3022,6 +3022,9 @@ public:
                 tabletsByType.emplace_back(pr.first, tabletType);
                 auto& current = tabletsByType.back();
                 current.MaxCount = pr.second.GetMaxCountForTabletType(tabletType);
+                if (auto itAvailability = pr.second.TabletAvailability.find(tabletType); itAvailability != pr.second.TabletAvailability.end()) {
+                    current.Explicit = itAvailability->second.IsSet;
+                }
                 auto tabletsRunningIt = pr.second.TabletsRunningByType.find(tabletType);
                 if (tabletsRunningIt == pr.second.TabletsRunningByType.end()) {
                     continue;
@@ -5931,7 +5934,12 @@ public:
         {
             TStringBuilder restrictions;
             for (const auto& [type, maxCount] : node.TabletAvailabilityRestrictions) {
-                restrictions << (restrictions.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=" << maxCount;
+                restrictions << (restrictions.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=";
+                if (maxCount == TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE) {
+                    restrictions << "allowed";
+                } else {
+                    restrictions << maxCount;
+                }
             }
             add("TabletAvailabilityRestrictions", restrictions);
         }

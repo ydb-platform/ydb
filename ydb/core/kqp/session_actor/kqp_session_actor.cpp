@@ -1656,12 +1656,12 @@ public:
                     "x-ydb-mvcc-version is only supported for Table Service data queries");
                 return false;
         }
-        QueryState->MvccVersion = *version;
+        QueryState->ExternalMvccVersion = *version;
         return true;
     }
 
     bool ApplyMvccVersion() {
-        if (!QueryState->MvccVersion) {
+        if (!QueryState->ExternalMvccVersion) {
             return true;
         }
 
@@ -1678,7 +1678,7 @@ public:
             }
         }
 
-        const auto& version = *QueryState->MvccVersion;
+        const auto& version = *QueryState->ExternalMvccVersion;
         const IKqpGateway::TKqpSnapshot snapshot(version.Step, version.TxId);
         const bool continuing = QueryState->HasTxControl() && QueryState->GetTxControl().has_tx_id();
         if (continuing || txCtx.GetSnapshot().IsValid()) {
@@ -3179,7 +3179,7 @@ public:
                     break;
             }
 
-            if (status == Ydb::StatusIds::ABORTED && QueryState->MvccVersion) {
+            if (status == Ydb::StatusIds::ABORTED && QueryState->ExternalMvccVersion) {
                 // A new attempt cannot restore a caller-owned snapshot that is no longer readable.
                 for (const auto& issue : issues) {
                     WalkThroughIssues(issue, false, [&](const TIssue& nested, ui16) {

@@ -157,7 +157,7 @@ public:
     // this counter may be used as a cookie by a session actor to reject events
     // with cookie less than current QueryId.
     ui64 QueryId = 0;
-    TMaybe<TRowVersion> MvccVersion;
+    TMaybe<TRowVersion> ExternalMvccVersion;
     ui64 QuerySpanId = 0;
     TString Database;
     TMaybe<TString> ApplicationName;

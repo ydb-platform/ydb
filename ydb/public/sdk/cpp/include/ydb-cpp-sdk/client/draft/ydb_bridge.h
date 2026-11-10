@@ -43,6 +43,14 @@ struct TAddPileSettings : public TOperationRequestSettings<TAddPileSettings> {};
 
 struct TRemovePileSettings : public TOperationRequestSettings<TRemovePileSettings> {};
 
+struct TGetRollbackStatusSettings : public TOperationRequestSettings<TGetRollbackStatusSettings> {};
+
+struct TRollbackSettings : public TOperationRequestSettings<TRollbackSettings> {
+    //! Don't ask the storage controller whether it can make its groups ordinary ones before static groups are made such;
+    //! for the case when it can't start, as it relies on static groups.
+    FLUENT_SETTING_DEFAULT(bool, SkipBscValidation, false);
+};
+
 struct TSetDatabaseBridgeModeSettings : public TOperationRequestSettings<TSetDatabaseBridgeModeSettings> {
     //! With ordinary mode, retain data copies in this pile. Empty selects copies automatically.
     FLUENT_SETTING_DEFAULT(std::string, RetainPileName, {});
@@ -72,6 +80,7 @@ struct TPendingPileOperation {
         UNSPECIFIED = 0,
         ADD = 1, // the pile is being added to the cluster: its storage groups are being created
         REMOVE = 2, // the pile is being removed from the cluster: its storage groups are being deleted
+        ROLLBACK = 3, // the cluster is being rolled back to ordinary one: its storage groups are being made ordinary
     };
 
     std::string PileName;
@@ -290,6 +299,62 @@ private:
 
 using TAsyncGetClusterStateResult = NThreading::TFuture<TGetClusterStateResult>;
 
+// How far the rollback of a cluster prepared for bridge mode back to ordinary mode has gone.
+class TGetRollbackStatusResult : public TStatus {
+public:
+    TGetRollbackStatusResult(TStatus&& status, bool bridged = false, std::vector<uint32_t>&& bridgeConfigNodeIds = {},
+            std::vector<uint32_t>&& unreportedStaticNodeIds = {}, bool complete = false, bool rollbackInProgress = false,
+            std::string errorReason = {})
+        : TStatus(std::move(status))
+        , Bridged_(bridged)
+        , BridgeConfigNodeIds_(std::move(bridgeConfigNodeIds))
+        , UnreportedStaticNodeIds_(std::move(unreportedStaticNodeIds))
+        , Complete_(complete)
+        , RollbackInProgress_(rollbackInProgress)
+        , ErrorReason_(std::move(errorReason))
+    {}
+
+    // The rollback of the bridged cluster is in progress: storage groups are being made ordinary ones.
+    bool IsRollbackInProgress() const {
+        return RollbackInProgress_;
+    }
+
+    // Why the last attempt to make storage groups ordinary ones has failed; it is retried meanwhile.
+    const std::string& GetErrorReason() const {
+        return ErrorReason_;
+    }
+
+    // The cluster is a bridged one; see Rollback, the cluster state goes away when it finishes.
+    bool IsBridged() const {
+        return Bridged_;
+    }
+
+    // Connected nodes still running with a bridge config; they have to be restarted without one.
+    const std::vector<uint32_t>& GetBridgeConfigNodeIds() const {
+        return BridgeConfigNodeIds_;
+    }
+
+    // Static nodes that have not reported their config, as they are not running or not connected.
+    const std::vector<uint32_t>& GetUnreportedStaticNodeIds() const {
+        return UnreportedStaticNodeIds_;
+    }
+
+    // The cluster is not bridged, and every node has reported running without a bridge config.
+    bool IsComplete() const {
+        return Complete_;
+    }
+
+private:
+    bool Bridged_ = false;
+    std::vector<uint32_t> BridgeConfigNodeIds_;
+    std::vector<uint32_t> UnreportedStaticNodeIds_;
+    bool Complete_ = false;
+    bool RollbackInProgress_ = false;
+    std::string ErrorReason_;
+};
+
+using TAsyncGetRollbackStatusResult = NThreading::TFuture<TGetRollbackStatusResult>;
+
 class TListPileSynchronizationResult: public TStatus {
 public:
     TListPileSynchronizationResult(TStatus&& status, std::vector<TPileSynchronization> rows = {},
@@ -424,6 +489,15 @@ public:
     // Completes when every storage group has lost its part in the pile; the pile is INACTIVE then and may be dropped
     // from the bridge config along with its hosts.
     TAsyncStatus RemovePile(const std::string& pileName, const TRemovePileSettings& settings = {});
+
+    // Report how far the rollback of a cluster prepared for bridge mode has gone: the bridge config is removed from
+    // the cluster configuration and every node is restarted without it. Dynamic nodes not connected are not reported.
+    TAsyncGetRollbackStatusResult GetRollbackStatus(const TGetRollbackStatusSettings& settings = {});
+
+    // Roll a cluster converted from an ordinary one back to it, while it has the only pile, the original one, and every
+    // storage group is inline in that pile. Completes when static storage groups are ordinary ones; the rest is reported
+    // by GetRollbackStatus.
+    TAsyncStatus Rollback(const TRollbackSettings& settings = {});
 
     // Atomically change bridge mode of databasePath. For serverless databases, select their shared database.
     // Requires cluster administrator privileges and non-uniform storage; data synchronization and cleanup continue in the background.

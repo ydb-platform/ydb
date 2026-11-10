@@ -304,4 +304,5 @@ enum ETxTypes {
     TXTYPE_ADD_BRIDGE_PILE = 38 [(TxTypeOpts) = {Name: "TTxAddBridgePile"}];
     TXTYPE_REMOVE_BRIDGE_PILE = 39 [(TxTypeOpts) = {Name: "TTxRemoveBridgePile"}];
     TXTYPE_UPDATE_BRIDGE_GROUP_MODES = 40 [(TxTypeOpts) = {Name: "TTxUpdateBridgeGroupModes"}];
+    TXTYPE_BRIDGE_ROLLBACK = 41 [(TxTypeOpts) = {Name: "TTxBridgeRollback"}];
 }

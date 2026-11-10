@@ -45,6 +45,8 @@ namespace NYdb::NConsoleClient {
                     return "ADD";
                 case NBridge::TPendingPileOperation::EKind::REMOVE:
                     return "REMOVE";
+                case NBridge::TPendingPileOperation::EKind::ROLLBACK:
+                    return "ROLLBACK";
             }
             return "UNKNOWN";
         }

@@ -12,6 +12,9 @@ namespace NKikimr {
 const NKikimrBlobStorage::TStoragePoolPileOverride* FindStoragePoolPileOverride(
     const NKikimrConfig::TBlobStorageConfig& config, TStringBuf pileName, std::optional<TStringBuf> kind);
 
+// Whether some rule has settings for the pile (for its static groups or for any kind of pools).
+bool HasStoragePoolPileOverrides(const NKikimrConfig::TBlobStorageConfig& config, TStringBuf pileName);
+
 std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrConfig::TBlobStorageConfig& config);
 
 void ApplyStoragePoolPileOverride(NKikimrBlobStorage::TDefineStoragePool& pool,

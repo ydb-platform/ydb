@@ -118,15 +118,6 @@ def merge_default_gateway_cfg(cfg_dir, gateway_config):
     with open(yql_source_path(os.path.join(cfg_dir, gateway_cfg_filename))) as f:
         text_format.Merge(f.read(), gateway_config)
 
-    suffix = get_gateway_cfg_suffix()
-    if suffix:
-        # The patch lives in a dedicated folder (e.g. tests-experimental),
-        # independent of the base cfg_dir which may point elsewhere
-        # (yql/cfg/local for LOCAL_BENCH, yql/essentials/cfg/udf_test, etc.).
-        patch_dir = get_gateway_cfg_dir()
-        with open(yql_source_path(os.path.join(patch_dir, gateway_cfg_filename))) as f:
-            text_format.Merge(f.read(), gateway_config)
-
 
 def find_file(path):
     arcadia_root = '.'

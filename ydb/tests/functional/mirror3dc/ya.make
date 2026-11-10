@@ -2,10 +2,13 @@ PY3TEST()
 
 TEST_SRCS(
     test_mirror3dc.py
+    test_mirror3dc_chaos.py
 )
 
 PY_SRCS(
+    kv_churn.py
     kv_workload.py
+    mirror3dc_base.py
     write2x2.py
 )
 

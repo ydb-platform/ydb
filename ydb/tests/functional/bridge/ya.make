@@ -4,9 +4,11 @@ TEST_SRCS(
     common.py
     state_storage_selfheal.py
     test_bridge.py
+    test_skipper.py
     test_conversion.py
     test_discovery.py
     test_pile_ops.py
+    test_rollback.py
     test_three_piles.py
     test_mixed_storage.py
     test_sdk_cleanup.py
@@ -29,12 +31,11 @@ ELSE()
 ENDIF()
 
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(IAM_TOKEN="")
 DEPENDS(
-    ydb/apps/ydbd
-    ydb/apps/ydb
+    ydb/apps/bridge_skipper
 )
 
 PEERDIR(

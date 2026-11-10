@@ -6,6 +6,7 @@
 
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
@@ -302,7 +303,8 @@ void TDirectReadSessionActor::SetupCounters() {
     }
 
     auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
-    subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", ClientPath);
+    subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup(
+        "ConsumerPath", ReadWithoutConsumer ? ClientPath : NPQ::MetricsConsumerName(ClientId));
     const TString name = "sensor";
 
     Errors = subGroup->GetExpiringNamedCounter(name, "Errors", true);

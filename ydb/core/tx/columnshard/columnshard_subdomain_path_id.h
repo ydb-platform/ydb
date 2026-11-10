@@ -32,6 +32,14 @@ public:
     {
     }
 
+    bool IsSubDomainOutOfSpace() const {
+        return SubDomainOutOfSpace;
+    }
+
+    bool IsSubDomainSmallBlobsQuotaExceeded() const {
+        return SubDomainSmallBlobsQuotaExceeded;
+    }
+
     void PersistSubDomainPathId(ui64 localPathId, NTabletFlatExecutor::TTransactionContext& txc);
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();

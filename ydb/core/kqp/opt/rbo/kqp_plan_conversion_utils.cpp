@@ -198,12 +198,16 @@ TExpression PlanConverter::ConvertExpression(TExprNode::TPtr lambda, const TExpr
         ESubplanType type;
         TOrderedIUs<> tuple;
         std::optional<TInfoUnitId> resultIU;
+        bool optionalResult = false;
         if (TKqpExprSublink::Match(node.Get())) {
             type = ESubplanType::EXPR;
         } else if (TKqpExistsSublink::Match(node.Get())) {
             type = ESubplanType::EXISTS;
         } else {
             type = ESubplanType::IN_SUBPLAN;
+            // The sublink keeps the type the query gave the IN, see AnnotateSublinkBase.
+            Y_ENSURE(node->GetTypeAnn(), "IN sublink is not type annotated");
+            optionalResult = node->GetTypeAnn()->IsOptionalOrNull();
             const auto& inLambda = node->Child(TKqpInSublink::idx_InLambda);
             Y_ENSURE(inLambda->IsLambda());
             const auto& comparison = inLambda->Child(1);
@@ -229,7 +233,7 @@ TExpression PlanConverter::ConvertExpression(TExprNode::TPtr lambda, const TExpr
             resultIU = ResolveBinding(*subplanBindings, row->GetItems().front()->GetName());
         }
         const auto id = PlanProps.InfoUnitRegistry.AddGenerated("subquery");
-        PlanProps.Subplans.Add(id, std::move(subplan), type, std::move(tuple), resultIU);
+        PlanProps.Subplans.Add(id, std::move(subplan), type, std::move(tuple), resultIU, optionalResult);
         // clang-format off
         auto member = Build<TCoMember>(Ctx, node->Pos())
             .Struct(lambda->Head().HeadPtr())
@@ -361,6 +365,58 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
         Projections[key] = std::move(projection);
         OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(bindings);
         result = std::move(read);
+    } else if (TKqlSequencer::Match(node.Get())) {
+        const auto sequencer = TKqlSequencer(node);
+        auto input = ExprNodeToOperator(sequencer.Input().Ptr());
+        const auto inputBindings = GetBindings(sequencer.Input().Ptr());
+        auto bindings = std::make_shared<TExpression::TBindings>();
+        TOrderedIUs<TString> inputColumns;
+        TOrderedIUs<TString> generatedColumns;
+        THashSet<TString> generatedNames;
+        for (const auto column : sequencer.DefaultConstraintColumns()) {
+            Y_ENSURE(generatedNames.insert(column.StringValue()).second, "Duplicate sequence column");
+        }
+        TOrderedIUs<> projection;
+        for (const auto column : sequencer.Columns()) {
+            const auto name = column.StringValue();
+            const auto generated = generatedNames.contains(name);
+            Y_ENSURE(!generated || !inputBindings->contains(name), "Sequence column already supplied: " << name);
+            const auto id = generated ? PlanProps.InfoUnitRegistry.Add(TInfoUnit("", name)) : ResolveBinding(*inputBindings, name);
+            (generated ? generatedColumns : inputColumns).Append(id, name);
+            Y_ENSURE(bindings->emplace(name, id).second, "Duplicate sequencer output " << name);
+            projection.Append(id);
+        }
+        Y_ENSURE(generatedColumns.Items().size() == generatedNames.size(), "Missing sequencer output column");
+        Projections[key] = std::move(projection);
+        OutputBindings[key] = std::move(bindings);
+        result = MakeIntrusive<TOpSequencer>(std::move(input), node->Pos(), sequencer.Table().Ptr(),
+            std::move(inputColumns), std::move(generatedColumns));
+    } else if (TKqlStreamLookupTable::Match(node.Get())) {
+        const auto lookup = TKqlStreamLookupTable(node);
+        Y_ENSURE(TKqpStreamLookupSettings::Parse(lookup.Settings()).Strategy == EStreamLookupStrategyType::LookupRows);
+        auto input = ExprNodeToOperator(lookup.LookupKeys().Ptr());
+        const auto inputBindings = GetBindings(lookup.LookupKeys().Ptr());
+        TOpTableLookup::TLookupKeys keys;
+        const auto* schema = lookup.LookupKeys().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        for (const auto* field : schema->GetItems()) {
+            keys.Append(ResolveBinding(*inputBindings, field->GetName()), TString(field->GetName()));
+        }
+        TUnorderedIUs columns;
+        TOrderedIUs<> projection;
+        auto bindings = std::make_shared<TExpression::TBindings>();
+        for (const auto column : lookup.Columns()) {
+            const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit("", column.StringValue()));
+            columns.Add(id);
+            projection.Append(id);
+            Y_ENSURE(bindings->emplace(column.StringValue(), id).second);
+        }
+        auto op = MakeIntrusive<TOpTableLookup>(std::move(input), node->Pos(), lookup.Table().Ptr(),
+            std::move(columns), std::move(keys));
+        // Index rows can refer to a nullable main-table primary key.
+        op->AllowNullKeys = true;
+        Projections[key] = std::move(projection);
+        OutputBindings[key] = std::move(bindings);
+        result = std::move(op);
     } else if (NYql::NNodes::TKqpOpMap::Match(node.Get())) {
         result = ConvertTKqpOpMap(node);
     } else if (NYql::NNodes::TKqpInfuseDependents::Match(node.Get())) {
@@ -933,21 +989,12 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpEmptySource(TExprNode::TPtr
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr node) {
     const auto opTableEffect = TKqpOpTableEffect(node);
     auto input = ExprNodeToOperator(opTableEffect.Input().Ptr());
-    
+    const auto bindings = GetBindings(opTableEffect.Input().Ptr());
     PlanProps.WithEffects = true;
 
     EEffectType type = EEffectType::InsertRows;
     TEffectOptions options;
-
     auto effectType = opTableEffect.EffectType().StringValue();
-
-    auto processColumns = [](const TCoAtomList& atomList) {
-        TVector<TString> result;
-        for (auto a : atomList) {
-            result.push_back(a.StringValue());
-        }
-        return result;
-    };
 
     auto processSettings = [](const TCoNameValueTupleList& settingsList) {
         TVector<TExprNode::TPtr> result;
@@ -957,87 +1004,76 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
         return result;
     };
 
-    auto columns = opTableEffect.Columns().Maybe<TCoAtomList>();
     auto onConflict = opTableEffect.OnConflict().Maybe<TCoAtom>();
     auto returningColumns = opTableEffect.ReturningColumns().Maybe<TCoAtomList>();
     auto settings = opTableEffect.Settings().Maybe<TCoNameValueTupleList>();
     auto isBatch = opTableEffect.IsBatch().Maybe<TCoAtom>();
 
-    PlanProps.WithReturning = (bool)returningColumns;
+    PlanProps.WithReturning = returningColumns && !returningColumns.Cast().Empty();
 
     if (effectType == "TKqlInsertRows") {
         type = EEffectType::InsertRows;
 
-        options.Columns = processColumns(columns.Cast());
         options.OnConflict = onConflict.Cast().StringValue();
-        options.ReturningColumns = processColumns(returningColumns.Cast());
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "TKqlInsertRowsIndex") {
         type = EEffectType::InsertRowsIndex;
 
-        options.Columns = processColumns(columns.Cast());
         options.OnConflict = onConflict.Cast().StringValue();
-        options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "TKqlUpdateRows") {
         type = EEffectType::UpdateRows;
-
-        options.Columns = processColumns(columns.Cast());
-        options.ReturningColumns = processColumns(returningColumns.Cast());
     } else if (effectType == "TKqlUpdateRowsIndex") {
         type = EEffectType::UpdateRowsIndex;
 
-        options.Columns = processColumns(columns.Cast());
-        options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
-    } else if (effectType == "KqlUpsertRows") {
-        type = EEffectType::UpsertRows;
+    } else if (effectType == "KqlUpsertRows" || effectType == "KqlUpsertRowsIndex") {
+        type = effectType == "KqlUpsertRowsIndex" ? EEffectType::UpsertRowsIndex : EEffectType::UpsertRows;
 
-        options.Columns = processColumns(columns.Cast());
-        options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
-        if (auto defaultColumns = opTableEffect.DefaultColumns().Maybe<TCoAtomList>()) {
-            options.DefaultColumns = processColumns(defaultColumns.Cast());
-        }
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         if (settings) {
             options.Settings = processSettings(settings.Cast());
         }
     } else if (effectType == "KqlDeleteRows") {
         type = EEffectType::DeleteRows;
 
-        options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "KqlDeleteRowsIndex") {
         type = EEffectType::DeleteRowsIndex;
 
-        options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else {
         Y_ENSURE(false, "Unexpected table effects operation");
     }
 
-    const auto bindings = GetBindings(opTableEffect.Input().Ptr());
-    TOrderedIUs<TString> inputColumns;
     const auto* schema = opTableEffect.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     for (const auto* field : schema->GetItems()) {
-        inputColumns.Append(ResolveBinding(*bindings, field->GetName()), TString(field->GetName()));
+        options.Columns.Append(ResolveBinding(*bindings, field->GetName()), TString(field->GetName()));
+    }
+    if (auto defaultColumns = opTableEffect.DefaultColumns().Maybe<TCoAtomList>()) {
+        for (const auto column : defaultColumns.Cast()) {
+            // The frontend also lists omitted RETURNING fields here. They
+            // are fetched by the returning sink, not supplied default values.
+            if (const auto it = bindings->find(column.StringValue()); it != bindings->end()) {
+                options.DefaultColumns.Add(it->second);
+            }
+        }
     }
     auto output = std::make_shared<TExpression::TBindings>();
-    TOrderedIUs<TString> returning;
-    if (options.ReturningColumns) {
-        for (const auto& column : *options.ReturningColumns) {
-            const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit("", column));
-            returning.Append(id, column);
-            Y_ENSURE(output->emplace(column, id).second, "Duplicate returning column " << column);
+    if (returningColumns) {
+        for (const auto column : returningColumns.Cast()) {
+            const auto name = column.StringValue();
+            const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit("", name));
+            options.ReturningColumns.Append(id, name);
+            Y_ENSURE(output->emplace(name, id).second, "Duplicate returning column " << name);
         }
     }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
-    return MakeIntrusive<TOpTableEffect>(std::move(input), node->Pos(), opTableEffect.Table().Ptr(), type, std::move(options),
-        std::move(inputColumns), std::move(returning));
+    return MakeIntrusive<TOpTableEffect>(std::move(input), node->Pos(), opTableEffect.Table().Ptr(), type, std::move(options));
 }
 
 } // namespace NKikimr::Nkqp

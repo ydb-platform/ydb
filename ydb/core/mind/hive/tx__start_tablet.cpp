@@ -15,6 +15,15 @@ class TTxStartTablet : public TTransactionBase<THive> {
     TSideEffects SideEffects;
     bool Success;
 
+    void SendBootTablet(TTabletInfo& tablet, TEvLocal::TEvBootTablet* event) {
+        if (External) {
+            SideEffects.Send(Local, event, IEventHandle::FlagSubscribeOnSession, Cookie);
+        } else {
+            SideEffects.Send(Local, event, IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
+                Self->TrackBootAttempt(tablet, Local));
+        }
+    }
+
 public:
     TTxStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external, THive *hive)
         : TBase(hive)
@@ -100,10 +109,8 @@ public:
                         {"nodeId", Local.NodeId()},
                         {"storageInfo", leader.TabletStorageInfo->ToString()});
                     TFollowerId promotableFollowerId = leader.GetFollowerPromotableOnNode(Local.NodeId());
-                    SideEffects.Send(Local,
-                                new TEvLocal::TEvBootTablet(*leader.TabletStorageInfo, promotableFollowerId, leader.KnownGeneration),
-                                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                                Cookie);
+                    SendBootTablet(leader,
+                        new TEvLocal::TEvBootTablet(*leader.TabletStorageInfo, promotableFollowerId, leader.KnownGeneration));
                     Success = true;
                     return true;
                 } else {
@@ -120,10 +127,7 @@ public:
                         {"tabletId", TabletId},
                         {"nodeId", Local.NodeId()},
                         {"storageInfo", follower.LeaderTablet.TabletStorageInfo->ToString()});
-                    SideEffects.Send(Local,
-                             new TEvLocal::TEvBootTablet(*follower.LeaderTablet.TabletStorageInfo, follower.Id),
-                             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                             Cookie);
+                    SendBootTablet(follower, new TEvLocal::TEvBootTablet(*follower.LeaderTablet.TabletStorageInfo, follower.Id));
                     Success = true;
                     return true;
                 } else {

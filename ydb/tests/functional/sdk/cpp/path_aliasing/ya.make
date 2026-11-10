@@ -1,12 +1,13 @@
 GTEST(path_aliasing_it)
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
+
 SIZE(LARGE)
 TIMEOUT(1200)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 REQUIREMENTS(ram:32)
 
 DEPENDS(
-    ydb/apps/ydbd
     ydb/tests/functional/sdk/cpp/path_aliasing/recipe
 )
 

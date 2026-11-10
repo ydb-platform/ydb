@@ -32,19 +32,19 @@
                                           },
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"household_demographics"
+                                            "table":"date_dim"
                                           }
                                         ]
                                     },
                                     {
                                       "op_name":"TableFullScan",
-                                      "table":"store"
+                                      "table":"household_demographics"
                                     }
                                   ]
                               },
                               {
                                 "op_name":"TableFullScan",
-                                "table":"date_dim"
+                                "table":"store"
                               }
                             ]
                         }

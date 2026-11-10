@@ -16,6 +16,7 @@
 #include <memory>
 
 #include <util/network/address.h>
+#include <util/network/interface.h>
 
 #if defined(__APPLE__) || defined(_darwin_)
 /* OSX seems not to define these. */
@@ -241,5 +242,23 @@ TRdmaCtx* GetCtx(const NInterconnect::TAddress& addr) {
 #endif
 
 } 
+
+TRdmaCtx* GetCtxByInterface(const TString& interfaceName) {
+    TRdmaCtx* linkLocalCtx = nullptr;
+    for (const auto& interface : NAddr::GetNetworkInterfaces()) {
+        if (interface.Name == interfaceName) {
+            NInterconnect::TAddress address(*interface.Address);
+            if (TRdmaCtx* ctx = GetCtx(address)) {
+                if (!address.IsLinkLocal()) {
+                    return ctx;
+                }
+                if (!linkLocalCtx) {
+                    linkLocalCtx = ctx;
+                }
+            }
+        }
+    }
+    return linkLocalCtx;
+}
 
 }

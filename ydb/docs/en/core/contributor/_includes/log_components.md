@@ -1,0 +1,1 @@
+Logging in {{ydb-short-name}} assumes that the system consists of a large number of internal components, each of which has its own unique code assigned. You can find the full list of components and their codes [on GitHub](https://github.com/ydb-platform/ydb/blob/main/ydb/library/services/services.proto#L6).

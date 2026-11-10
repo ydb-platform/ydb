@@ -36,6 +36,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
 #include <ydb/core/blobstorage/ddisk/persistent_buffer_mon.h>
+#include <ydb/core/blobstorage/subsystem/subsystem.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
@@ -221,9 +222,6 @@
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
 
-#include <ydb/core/tx/conveyor/service/service.h>
-#include <ydb/core/tx/conveyor/usage/config.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
@@ -291,8 +289,6 @@
 #include <library/cpp/containers/absl/btree_set.h>
 #include <library/cpp/logger/global/global.h>
 #include <library/cpp/logger/log.h>
-
-#include <library/cpp/monlib/messagebus/mon_messagebus.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 
@@ -604,6 +600,8 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     if (config.HasMaxRdmaRetryBackoffLevel()) {
         result.MaxRdmaRetryBackoffLevel = config.GetMaxRdmaRetryBackoffLevel();
     }
+    result.RdmaAddress = config.GetRdmaAddress();
+    result.RdmaInterface = config.GetRdmaInterface();
 
     if (config.HasCollectSubscriptionStackTrace()) {
         result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();
@@ -1357,9 +1355,8 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     ObtainStaticKey(&nodeWardenConfig->StaticKey);
     ObtainPDiskKey(&nodeWardenConfig->PDiskKey, Config.GetPDiskKeyConfig());
 
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeBlobStorageNodeWardenID(NodeId),
-                                                                       TActorSetupCmd(CreateBSNodeWarden(nodeWardenConfig.Release()),
-                                                                                      TMailboxType::ReadAsFilled, appData->SystemPoolId)));
+    InstallBlobStorageSubsystem(*setup, CreateBlobStorageSubsystem(
+        nodeWardenConfig, appData->SystemPoolId, TMailboxType::ReadAsFilled));
 
     setup->LocalServices.emplace_back(MakeUniversalSchedulerActorId(), TActorSetupCmd(CreateUniversalSchedulerActor(),
         TMailboxType::ReadAsFilled, appData->SystemPoolId));

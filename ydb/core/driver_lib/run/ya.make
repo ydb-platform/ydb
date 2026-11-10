@@ -32,7 +32,6 @@ PEERDIR(
     library/cpp/malloc/api
     library/cpp/messagebus
     library/cpp/monlib/dynamic_counters
-    library/cpp/monlib/messagebus
     library/cpp/sighandler
     library/cpp/string_utils/parse_size
     library/cpp/svnversion
@@ -48,6 +47,7 @@ PEERDIR(
     ydb/core/blobstorage/nodewarden
     ydb/core/blobstorage/other
     ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/subsystem
     ydb/core/blobstorage/vdisk/common
     ydb/core/client/minikql_compile
     ydb/core/client/scheme_cache_lib
@@ -117,7 +117,6 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/tx/columnshard/column_fetching
     ydb/core/tx/columnshard/data_accessor/cache_policy
-    ydb/core/tx/conveyor/service
     ydb/core/tx/conveyor_composite/service
     ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/coordinator

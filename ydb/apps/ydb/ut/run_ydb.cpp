@@ -91,7 +91,7 @@ public:
     std::unique_ptr<TTempDir> TempHomeDir;
 };
 
-TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode, bool autoAddEndpointAndDatabase, const THashMap<TString, TString>& env, int expectedExitCode)
+TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode, bool autoAddEndpointAndDatabase, const THashMap<TString, TString>& env, int expectedExitCode, TString* stderrOutput)
 {
     TShellCommand command(BinaryPath(GetEnv("YDB_CLI_BINARY")));
 
@@ -119,6 +119,9 @@ TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool ch
             "stderr: " << Endl << command.GetError() << Endl;
     }
 
+    if (stderrOutput) {
+        *stderrOutput = command.GetError();
+    }
     return command.GetOutput();
 }
 

@@ -78,7 +78,10 @@ def toolchain_environment(args, work):
 
 def dependency_name(path):
     name = Path(path).name
-    for suffix in ("-host.a", "-host.lib", ".a", ".lib", ".dylib", ".so", ".dll"):
+    # Windows DLLs have no library prefix, even for crate names starting with lib.
+    if name.endswith(".dll"):
+        return name[:-4].replace("-", "_")
+    for suffix in ("-host.a", "-host.lib", ".a", ".lib", ".dylib", ".so"):
         if name.endswith(suffix):
             name = name[:-len(suffix)]
             break
@@ -230,6 +233,9 @@ def compile_crate(args):
         if args.mode == "host":
             linker = env["CARGO_TARGET_" + config["host"].upper().replace("-", "_") + "_LINKER"]
             command += ["-C", "linker=" + linker]
+            if args.kind in ("bin", "proc-macro") and target.endswith("-windows-msvc"):
+                # Build scripts and compiler plugins must not require an installed VC runtime.
+                command += ["-C", "target-feature=+crt-static"]
         if args.kind == "proc-macro":
             command += ["--extern", "proc_macro", "-C", "prefer-dynamic"]
         if args.kind in ("bin", "proc-macro"):

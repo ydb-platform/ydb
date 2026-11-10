@@ -326,6 +326,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsStream(), "Expected WideStream as a left stream");
+    EnsureNoPgTypes(leftType);
     const auto leftStreamType = AS_TYPE(TStreamType, leftType);
     MKQL_ENSURE(leftStreamType->GetItemType()->IsMulti(), "Expected Multi as a left stream item type");
     const auto leftStreamComponents = GetWideComponents(leftStreamType);
@@ -336,6 +337,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
     const auto rightType = callable.GetInput(1).GetStaticType();
     MKQL_ENSURE(rightType->IsStream(), "Expected WideStream as a right stream");
+    EnsureNoPgTypes(rightType);
     const auto rightStreamType = AS_TYPE(TStreamType, rightType);
     MKQL_ENSURE(rightStreamType->GetItemType()->IsMulti(), "Expected Multi as a right stream item type");
     const auto rightStreamComponents = GetWideComponents(rightStreamType);
@@ -395,6 +397,9 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     }
     const ESide preservedSide = PreservedSideForLeftBuild(leftIsBuild);
     meta.UserTypes = ForceOptionalOnNullableSide(itemTypes, meta.Kind, OtherSide(preservedSide), ctx.Env);
+    for (ESide side : EachSide) {
+        EnsureNoResourceKeys(meta.UserTypes.SelectSide(side), meta.KeyColumns.SelectSide(side));
+    }
 
     const auto streams = SidesForLeftBuild(leftIsBuild, leftStream, rightStream);
     TJoinFilters filters = ParseJoinFiltersForBuildSide(ctx, callable, BaseInputs, leftIsBuild);

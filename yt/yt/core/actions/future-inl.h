@@ -39,7 +39,7 @@ class TFiberCanceledException
 } // namespace NConcurrency
 
 // Forward declaration from invoker_util.h.
-IInvokerPtr GetSyncInvoker();
+const IInvokerPtr& GetSyncInvoker();
 
 namespace NDetail {
 
@@ -1212,6 +1212,14 @@ TFuture<T> TFutureBase<T>::WithDeadline(
     }
 
     return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options));
+}
+
+template <class T>
+TFuture<T> TFutureBase<T>::WithDeadline(
+    std::optional<TInstant> deadline,
+    TFutureTimeoutOptions options) const
+{
+    return deadline ? WithDeadline(*deadline, std::move(options)) : TFuture<T>(Impl_);
 }
 
 template <class T>

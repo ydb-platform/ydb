@@ -93,9 +93,11 @@ public:
     }
 
     void SimpleSubscriber();
+    void EmptyPayloadAddition();
     void ManySubscribersManyPublisher();
     void NotAvailableByShutdown();
     void ReconnectReplica();
+    void RepublishAfterReplicaShutdown();
     void DropByDisconnect();
     void KeepInfoFromOtherRingGroup();
     void IgnoreWriteOnlyRingGroupOnLookup();
@@ -108,9 +110,11 @@ protected:
 class TBoardSubscriberTest : public TBoardSubscriberTestBase {
     UNIT_TEST_SUITE(TBoardSubscriberTest);
     UNIT_TEST(SimpleSubscriber);
+    UNIT_TEST(EmptyPayloadAddition);
     UNIT_TEST(ManySubscribersManyPublisher);
     UNIT_TEST(NotAvailableByShutdown);
     UNIT_TEST(ReconnectReplica);
+    UNIT_TEST(RepublishAfterReplicaShutdown);
     UNIT_TEST(DropByDisconnect);
     UNIT_TEST_SUITE_END();
 };
@@ -227,6 +231,53 @@ void TBoardSubscriberTestBase::SimpleSubscriber() {
     }
 }
 
+void TBoardSubscriberTestBase::EmptyPayloadAddition() {
+    const auto replicas = ResolveReplicas();
+    const auto edgeSubscriber = Context->AllocateEdgeActor(1);
+    CreateSubscriber("path", edgeSubscriber, 1);
+
+    auto initial = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edgeSubscriber);
+    UNIT_ASSERT_EQUAL(initial->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    UNIT_ASSERT(initial->Get()->InfoEntries.empty());
+
+    Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvStateStorage::TEvReplicaBoardPublish::EventType
+                && ev->Recipient != replicas[0]) {
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
+    const auto edgePublisher = Context->AllocateEdgeActor(0);
+    const TActorId publisher = CreatePublisher("path", "", edgePublisher, 0);
+
+    auto added = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfoUpdate>(edgeSubscriber);
+    UNIT_ASSERT_VALUES_EQUAL(added->Get()->Updates.size(), 1);
+    const auto& entry = added->Get()->Updates.at(publisher);
+    UNIT_ASSERT(!entry.Dropped);
+    UNIT_ASSERT(entry.Payload.empty());
+
+    Disconnect(1, 0);
+    auto dropped = Context->GrabEdgeEventIf<TEvStateStorage::TEvBoardInfoUpdate>(
+        {edgeSubscriber}, [publisher](const TEvStateStorage::TEvBoardInfoUpdate::TPtr& ev) {
+            const auto it = ev->Get()->Updates.find(publisher);
+            return it != ev->Get()->Updates.end() && it->second.Dropped;
+        });
+    UNIT_ASSERT(dropped);
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back(TEvStateStorage::EvReplicaBoardInfo);
+    Context->DispatchEvents(options);
+
+    auto readded = Context->GrabEdgeEventIf<TEvStateStorage::TEvBoardInfoUpdate>(
+        {edgeSubscriber}, [publisher](const TEvStateStorage::TEvBoardInfoUpdate::TPtr& ev) {
+            const auto it = ev->Get()->Updates.find(publisher);
+            return it != ev->Get()->Updates.end() && !it->second.Dropped;
+        });
+    UNIT_ASSERT(readded);
+    UNIT_ASSERT(readded->Get()->Updates.at(publisher).Payload.empty());
+}
+
 void TBoardSubscriberTestBase::ManySubscribersManyPublisher() {
     size_t subscribersCount = 10;
     size_t publishersCount = 10;
@@ -329,6 +380,40 @@ void TBoardSubscriberTestBase::ReconnectReplica() {
 
         UNIT_ASSERT_EQUAL(updatesIt->second.Payload, "test");
     }
+}
+
+void TBoardSubscriberTestBase::RepublishAfterReplicaShutdown() {
+    const auto replicas = ResolveReplicas();
+    UNIT_ASSERT(!replicas.empty());
+
+    size_t publications = 0;
+    TActorId replicaPublisher;
+    auto prevObserverFunc = Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvStateStorage::TEvReplicaBoardPublish::EventType
+                && ev->Recipient == replicas[0]) {
+            ++publications;
+            replicaPublisher = ev->Sender;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
+    const auto edgePublisher = Context->AllocateEdgeActor(0);
+    CreatePublisher("path", "test", edgePublisher, 0);
+    Context->WaitFor("initial publication", [&] { return publications == 1; }, TDuration::Seconds(10));
+    UNIT_ASSERT(replicaPublisher);
+
+    Send(
+        replicaPublisher,
+        replicas[0],
+        new TEvStateStorage::TEvReplicaShutdown(),
+        0
+    );
+
+    Context->WaitFor(
+        "publication after replica recovery",
+        [&] { return publications == 2; },
+        TDuration::Seconds(10)
+    );
 }
 
 void TBoardSubscriberTestBase::DropByDisconnect() {

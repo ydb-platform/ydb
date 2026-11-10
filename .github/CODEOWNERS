@@ -265,6 +265,7 @@
 /ydb/tests/functional/secrets @ydb-platform/Security
 /ydb/tests/functional/security @ydb-platform/Security
 
+/ydb/tests/functional/tpc/medium @ydb-platform/Engineering
 /ydb/tests/library @ydb-platform/Engineering
 
 /ydb/core/nbs @ydb-platform/nbs_yandex

@@ -206,6 +206,8 @@ message TQueryRequest {
     // relayed by proxies across nodes; this flag is ignored for forwarded
     // requests. Notifications retain the request cookie.
     optional bool ReportWmStateChanges = 44;
+    // Raw internal x-ydb-mvcc-version metadata; validated by the session actor.
+    optional string MvccVersion = 45;
 }
 
 message TVectorIndexKmeansTreeDescription {
@@ -1092,6 +1094,13 @@ message TKqpFullTextSourceSettings {
             optional bytes Value = 2;
         }
         repeated TPrefixColumn PrefixColumns = 4;
+
+        message TPatternQuery {
+            optional bytes Pattern = 1;
+            optional bytes Escape = 2;
+            optional NKqpProto.TKqpFullTextSource.TKqpQuerySettings.TPatternQuery.EMatchMode Mode = 3;
+        }
+        repeated TPatternQuery PatternQueries = 5;
     }
 
     message TIndexTable {
@@ -1136,6 +1145,7 @@ message TKqpFullTextSourceSettings {
     optional uint32 LockNodeId = 21;
     optional NKikimrDataEvents.ELockMode LockMode = 22;
     optional uint64 QuerySpanId = 23;
+    optional bool MainTableCovered = 24;
 };
 
 message TKqpSysViewSourceSettings {

@@ -83,35 +83,49 @@ void UpsertTexts(NQuery::TQueryClient& db) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-void AddIndex(NQuery::TQueryClient& db, const TString& indexName) {
+void AddIndex(NQuery::TQueryClient& db, const TString& indexName, const TString& tokenizer) {
     TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
             GLOBAL USING %s
             ON (Text)
-            WITH (tokenizer=standard, use_filter_lowercase=true)
-    )sql", indexName.c_str());
+            WITH (tokenizer=%s, use_filter_lowercase=true)
+    )sql", indexName.c_str(), tokenizer.c_str());
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
 void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength, const size_t nGramMaxLength,
-    const bool relevance, const bool edgeNGram, const bool covered) {
+    const bool relevance, const bool edgeNGram, const bool covered, const TString& tokenizer,
+    const TFulltextNGramOptions& options) {
+    TStringBuilder lengthSettings;
+    if (options.MinTokenLength || options.MaxTokenLength) {
+        lengthSettings << ", use_filter_length=true";
+        if (options.MinTokenLength) {
+            lengthSettings << ", filter_length_min=" << *options.MinTokenLength;
+        }
+        if (options.MaxTokenLength) {
+            lengthSettings << ", filter_length_max=" << *options.MaxTokenLength;
+        }
+    }
     const TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
             GLOBAL USING %s
             ON (Text) %s
             WITH (
-                tokenizer=standard,
-                use_filter_lowercase=true,
+                tokenizer=%s,
+                use_filter_lowercase=%s,
+                use_filter_stopwords=%s,
                 use_filter_ngram=%d,
                 use_filter_edge_ngram=%d,
                 filter_ngram_min_length=%d,
-                filter_ngram_max_length=%d
+                filter_ngram_max_length=%d%s
             );
         )sql",
         relevance ? "fulltext_relevance" : "fulltext_plain",
         covered ? "COVER (Text, Data)" : "",
-        !edgeNGram, edgeNGram, nGramMinLength, nGramMaxLength
+        tokenizer.c_str(),
+        options.Lowercase ? "true" : "false", options.Stopwords ? "true" : "false",
+        !edgeNGram, edgeNGram, nGramMinLength, nGramMaxLength, lengthSettings.c_str()
     );
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

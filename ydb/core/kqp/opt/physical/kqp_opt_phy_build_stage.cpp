@@ -1,5 +1,6 @@
 #include "kqp_opt_phy_rules.h"
 
+#include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
@@ -264,6 +265,31 @@ TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx,
     const TKqlReadTableFullTextIndex& read = node.Cast<TKqlReadTableFullTextIndex>();
 
     auto phyRead = ctx.RenameNode(*node.Raw(), TKqpReadTableFullTextIndex::CallableName());
+
+    // Materialize computed patterns as parameters before the fulltext source runs.
+    TVector<TExprBase> query;
+    query.reserve(read.Query().Size());
+    for (auto expr : read.Query()) {
+        auto pattern = expr;
+        const auto patternQuery = TryParseFulltextPatternQuery(expr.Ptr());
+        if (patternQuery) {
+            pattern = TExprBase(patternQuery->Pattern);
+        }
+        if (auto just = pattern.Maybe<TCoJust>()) {
+            pattern = just.Cast().Input();
+        }
+        if (!pattern.Maybe<TCoDataCtor>() && !pattern.Maybe<TCoParameter>() &&
+            !pattern.Maybe<TDqPhyPrecompute>() && !pattern.Maybe<TKqpTxResultBinding>())
+        {
+            pattern = KqpPrecomputeParameter(pattern, ctx);
+        }
+        expr = patternQuery
+            ? TExprBase(ctx.ChangeChild(expr.Ref(), 0, pattern.Ptr()))
+            : pattern;
+        query.push_back(expr);
+    }
+    phyRead = ctx.ChangeChild(*phyRead, TKqpReadTableFullTextIndex::idx_Query,
+        Build<TExprList>(ctx, read.Query().Pos()).Add(query).Done().Ptr());
 
     auto stage = Build<TDqStage>(ctx, read.Pos())
         .Inputs()

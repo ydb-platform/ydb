@@ -446,6 +446,21 @@ message TKqpFullTextSource {
             optional TKqpPhyValue Value = 2;
         }
         repeated TPrefixColumn PrefixColumns = 4;
+
+        message TPatternQuery {
+            enum EMatchMode {
+                LIKE = 0;
+                EXACT = 1;
+                STARTS_WITH = 2;
+                ENDS_WITH = 3;
+                CONTAINS = 4;
+                ILIKE = 5;
+            }
+            optional TKqpPhyValue Pattern = 1;
+            optional bytes Escape = 2;
+            optional EMatchMode Mode = 3;
+        }
+        repeated TPatternQuery PatternQueries = 5;
     }
 
     message TIndexTable {

@@ -71,6 +71,8 @@ void TCommandRemoveDirectory::Config(TConfig& config) {
         .NoArgument().StoreValue(&Prompt, ERecursiveRemovePrompt::Always);
     config.Opts->AddCharOption('I', "Prompt once")
         .NoArgument().StoreValue(&Prompt, ERecursiveRemovePrompt::Once);
+    config.Opts->AddLongOption("threads", "Number of threads removing objects in recursive mode. Objects are removed one by one with -i")
+        .DefaultValue(Threads).StoreResult(&Threads);
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to remove");
@@ -80,6 +82,9 @@ void TCommandRemoveDirectory::Config(TConfig& config) {
 void TCommandRemoveDirectory::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
+    if (Threads == 0) {
+        throw TMisuseException() << "--threads must be greater than 0";
+    }
 }
 
 int TCommandRemoveDirectory::Run(TConfig& config) {
@@ -91,6 +96,7 @@ int TCommandRemoveDirectory::Run(TConfig& config) {
         const auto settings = TRemoveDirectoryRecursiveSettings()
             .SkipMode(ERecursiveListSkipMode::System)
             .Prompt(Prompt.GetOrElse(ERecursiveRemovePrompt::Once))
+            .Threads(Threads)
             .CreateProgressBar(true);
         NStatusHelpers::ThrowOnErrorOrPrintIssues(RemoveDirectoryRecursive(driver, Path, settings));
     } else {

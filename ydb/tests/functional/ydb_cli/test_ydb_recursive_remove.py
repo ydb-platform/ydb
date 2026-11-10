@@ -257,3 +257,24 @@ class TestRecursiveRemove:
                 [child.name for child in driver.scheme_client.list_directory(database_path).children],
                 only_contains(".metadata", ".sys"),
             )
+
+    @pytest.mark.parametrize("threads", [1, 16])
+    def test_nested_directories(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session, threads):
+        database_path = ydb_database
+        driver = ydb_client(database_path)
+        session_pool = ydb_client_session(database_path)
+        with session_pool.checkout() as session:
+            for directory in ["a", "a/b", "a/b/c", "a/d"]:
+                for i in range(5):
+                    create_table(session, f"{directory}/table_{i}")
+            create_external_data_source(session, "a/b/c/externals/data_source")
+            create_external_table(session, "external_table", "a/b/c/externals/data_source")
+            execute_ydb_cli_command(
+                ydb_cluster.nodes[1],
+                database_path,
+                ["scheme", "rmdir", "--recursive", "--force", "--threads", str(threads), "."],
+            )
+            assert_that(
+                [child.name for child in driver.scheme_client.list_directory(database_path).children],
+                only_contains(".metadata", ".sys"),
+            )

@@ -1007,7 +1007,50 @@ namespace NKikimr {
         void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             StorageConfig = std::move(ev->Get()->Config);
             BridgeInfo = std::move(ev->Get()->BridgeInfo);
+            RestartRequestsWaitingForPilesOut();
             RetryPending(PendingForClusterState);
+        }
+
+        // the handle restarting the request with its original sender and cookie, and its restart counter advanced
+        std::tuple<std::unique_ptr<IEventHandle>, TEvBlobStorage::TEvRequestCommon*> MakeRestartHandle(TRequest& request) {
+            auto& ev = request.OriginalRequest;
+            auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(ev.get());
+            Y_ABORT_UNLESS(common);
+            ++common->RestartCounter;
+            return {std::make_unique<IEventHandle>(SelfId(), request.Sender, ev.release(), 0, request.Cookie), common};
+        }
+
+        // The request waiting for the pile which takes no part in data quorum by the new cluster state is restarted with
+        // it, as the one admitted now: the pile may never answer, or answer with an error (e.g. when its nodes are gone and
+        // that is why it is out), which would fail the request, while the piles staying in data quorum are enough. What
+        // the pile does with the subrequest doesn't matter then, it gets synced when it is back.
+        void RestartRequestsWaitingForPilesOut() {
+            if (!BridgeInfo) {
+                return;
+            }
+            std::vector<std::shared_ptr<TRequest>> requests;
+            THashSet<const TRequest*> seen;
+            for (const auto& [cookie, item] : RequestsInFlight) {
+                const TBridgeInfo::TPile *pile = BridgeInfo->FindPile(item.Pile->BridgePileId);
+                if (!item.Request->Finished && (!pile || !NBridge::PileStateTraits(pile->State).RequiresDataQuorum) &&
+                        seen.insert(item.Request.get()).second) {
+                    requests.push_back(item.Request);
+                }
+            }
+            for (const auto& request : requests) {
+                STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB12, "request restarted as it waits for pile out of data quorum",
+                    (RequestId, request->RequestId), (GroupId, GroupId));
+                for (ui64 cookie : std::exchange(request->CookiesInFlight, {})) {
+                    RequestsInFlight.erase(cookie); // the responses of the subrequests are of no use anymore
+                }
+                request->Finished = true;
+                auto [handle, common] = MakeRestartHandle(*request);
+                if (common->RestartCounter >= 100) {
+                    ReplyWithError(*handle, "too many restarts of the request racing with cluster state");
+                } else {
+                    TActivationContext::Send(handle.release());
+                }
+            }
         }
 
         template<typename TEvent>
@@ -1345,11 +1388,7 @@ namespace NKikimr {
 
                 if (msg->Status == NKikimrProto::RACE) {
                     // route repeated request through node warden to ensure group info propagation before request gets restarted
-                    auto& ev = request->OriginalRequest;
-                    auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(ev.get());
-                    Y_ABORT_UNLESS(common);
-                    ++common->RestartCounter;
-                    auto handle = std::make_unique<IEventHandle>(SelfId(), request->Sender, ev.release(), 0, request->Cookie);
+                    auto [handle, common] = MakeRestartHandle(*request);
 
                     // when the group has no part in this pile anymore, our configuration is newer than the one the
                     // request was executed with

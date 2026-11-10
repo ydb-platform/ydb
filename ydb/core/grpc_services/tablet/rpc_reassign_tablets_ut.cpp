@@ -75,9 +75,11 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
             std::move(request), "", "", runtime.GetActorSystem(0)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SUCCESS, response.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(response.selected_tablets(), 0);
-        UNIT_ASSERT_C(TStringBuf(response.id()).StartsWith(ToString(tenantHive) + ":"), response.id());
+        UNIT_ASSERT_VALUES_EQUAL(response.id().hive_id(), tenantHive);
+        UNIT_ASSERT(response.id().hive_generation());
+        UNIT_ASSERT(response.id().reassign_id());
         Ydb::Tablet::StopReassignTabletsRequest stop;
-        stop.set_id(response.id());
+        *stop.mutable_id() = response.id();
         const auto stopped = NRpcService::DoLocalRpc<TEvStopReassignTabletsRequest>(
             std::move(stop), "", "", runtime.GetActorSystem(0)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(stopped.status(), Ydb::StatusIds::NOT_FOUND); // Empty job has finished.
@@ -90,8 +92,7 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
         const auto rootResponse = NRpcService::DoLocalRpc<TEvReassignTabletsRequest>(
             std::move(rootRequest), "", "", runtime.GetActorSystem(0)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(rootResponse.status(), Ydb::StatusIds::SUCCESS, rootResponse.DebugString());
-        const TString rootHivePrefix = ToString(runtime.GetAppData().DomainsInfo->GetHive()) + ":";
-        UNIT_ASSERT_C(TStringBuf(rootResponse.id()).StartsWith(rootHivePrefix), rootResponse.id());
+        UNIT_ASSERT_VALUES_EQUAL(rootResponse.id().hive_id(), runtime.GetAppData().DomainsInfo->GetHive());
     }
 
     Y_UNIT_TEST(RequiresAdministrator) {
@@ -100,7 +101,9 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
         start.set_database("/Root/db");
         start.set_storage_pool("test-pool");
         Ydb::Tablet::StopReassignTabletsRequest stop;
-        stop.set_id("1:2:3");
+        stop.mutable_id()->set_hive_id(1);
+        stop.mutable_id()->set_hive_generation(2);
+        stop.mutable_id()->set_reassign_id(3);
         for (const TString& token : {TString(), NACLib::TUserToken("reader", {"monitoring"}).SerializeAsString()}) {
             UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start, token).status(), Ydb::StatusIds::UNAUTHORIZED);
             UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvStopReassignTabletsRequest>(stop, token).status(), Ydb::StatusIds::UNAUTHORIZED);
@@ -122,10 +125,11 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
         start.set_percent(101);
         UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start).status(), Ydb::StatusIds::BAD_REQUEST);
         Ydb::Tablet::StopReassignTabletsRequest stop;
-        for (const TString id : {"", "1:2", "1:2:0", "1:2:3:4", "invalid:2:3"}) {
-            stop.set_id(id);
-            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvStopReassignTabletsRequest>(stop).status(), Ydb::StatusIds::BAD_REQUEST);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvStopReassignTabletsRequest>(stop).status(), Ydb::StatusIds::BAD_REQUEST);
+        stop.mutable_id()->set_hive_id(1);
+        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvStopReassignTabletsRequest>(stop).status(), Ydb::StatusIds::BAD_REQUEST);
+        stop.mutable_id()->set_hive_generation(2);
+        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvStopReassignTabletsRequest>(stop).status(), Ydb::StatusIds::BAD_REQUEST);
     }
 }
 

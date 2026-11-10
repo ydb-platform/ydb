@@ -83,6 +83,12 @@ message ReassignTabletsRequest {
     bool async = 6;
 }
 
+message ReassignTabletsId {
+    uint64 hive_id = 1;
+    uint64 hive_generation = 2;
+    uint64 reassign_id = 3;
+}
+
 message ReassignTabletsResponse {
     Ydb.StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
@@ -91,12 +97,12 @@ message ReassignTabletsResponse {
     // SUCCESS means the job was started, not that these tablets have finished reassignment.
     uint64 selected_tablets = 3;
 
-    // Opaque identifier for StopReassignTablets. Valid for the current Hive incarnation.
-    string id = 4;
+    // Identifier for StopReassignTablets. Valid for the current Hive incarnation.
+    ReassignTabletsId id = 4;
 }
 
 message StopReassignTabletsRequest {
-    string id = 1;
+    ReassignTabletsId id = 1;
 }
 
 message StopReassignTabletsResponse {

@@ -9,8 +9,6 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <util/string/vector.h>
-
 namespace NKikimr::NGRpcService {
 
 class TRpcReassignTablets : public TActorBootstrapped<TRpcReassignTablets> {
@@ -33,18 +31,16 @@ public:
         }
         const TString user = token ? token->GetUserSID() : TString();
         if (Action == EAction::Stop) {
-            const auto& request = *TEvStopReassignTabletsRequest::GetProtoRequest(Request);
-            ui64 generation = 0, id = 0;
-            const auto parts = SplitString(request.id(), ":");
-            if (parts.size() != 3 || !TryFromString(parts[0], HiveId)
-                    || !TryFromString(parts[1], generation) || !TryFromString(parts[2], id)
-                    || !HiveId || !generation || !id) {
+            const auto& id = TEvStopReassignTabletsRequest::GetProtoRequest(Request)->id();
+            if (!id.hive_id() || !id.hive_generation() || !id.reassign_id()) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid reassignment id");
             }
-            Request->AddAuditLogPart("reassign_id", request.id());
+            HiveId = id.hive_id();
+            Request->AddAuditLogPart("reassign_id", ToString(id.reassign_id()));
+            Request->AddAuditLogPart("hive_generation", ToString(id.hive_generation()));
             auto event = std::make_unique<TEvHive::TEvStopReassignTablets>();
-            event->Record.SetReassignId(id);
-            event->Record.SetHiveGeneration(generation);
+            event->Record.SetReassignId(id.reassign_id());
+            event->Record.SetHiveGeneration(id.hive_generation());
             event->Record.SetUserSID(user);
             HiveRequest = std::move(event);
         } else {
@@ -163,8 +159,10 @@ private:
         Ydb::Tablet::ReassignTabletsResponse response;
         response.set_status(Ydb::StatusIds::SUCCESS);
         response.set_selected_tablets(record.GetSelectedTablets());
-        const TString id = TStringBuilder() << HiveId << ':' << record.GetHiveGeneration() << ':' << record.GetReassignId();
-        response.set_id(id);
+        auto* id = response.mutable_id();
+        id->set_hive_id(HiveId);
+        id->set_hive_generation(record.GetHiveGeneration());
+        id->set_reassign_id(record.GetReassignId());
         TProtoResponseHelper::SendProtoResponse(response, response.status(), Request);
         PassAway();
     }

@@ -1,20 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from decimal import Decimal
+
 import boto3
 import logging
-import pytest
 
 import ydb.public.api.protos.ydb_value_pb2 as ydb
-import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
+
+from ydb.tests.fq.s3.s3_helpers import create_bucket_and_put_object
+from ydb.tests.library.common.wait_for import wait_for
 
 
-class TestBindings:
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    @pytest.mark.parametrize("kikimr_settings", [{"bindings_mode": "BM_DROP_WITH_WARNING"}], indirect=True)
-    def test_s3_insert(self, kikimr, s3, client, yq_version, unique_prefix):
+class TestExternalTables:
+    def test_s3_insert(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -23,64 +22,47 @@ class TestBindings:
         bucket.create(ACL='public-read')
         bucket.objects.all().delete()
 
-        kikimr.control_plane.wait_bootstrap(1)
-        connection_id = client.create_storage_connection(unique_prefix + "bb", "bindbucket").result.connection_id
+        data_source = client.create_external_data_source(unique_prefix + "bb", "bindbucket").name
 
         fooType = ydb.Column(name="foo", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         barType = ydb.Column(name="bar", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))
         storage_binding_name = unique_prefix + "s3binding"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path="path1/",
             format="csv_with_names",
-            connection_id=connection_id,
+            data_source=data_source,
             columns=[fooType, barType],
         )
 
         sql = fR'''
-            insert into bindings.`{storage_binding_name}`
+            insert into `{storage_binding_name}`
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        if yq_version == "v2":
-            issues = str(client.describe_query(query_id).result.query.issue)
-            assert (
-                "message: \"Please remove \\\'bindings.\\\' from your query, the support for this syntax will be dropped soon"
-                in issues
-            )
-            assert "severity: 2" in issues
+        query = client.execute(sql)
+        query.check()
 
         sql = fR'''
-            select foo, bar from bindings.`{storage_binding_name}`;
+            select foo, bar from `{storage_binding_name}`;
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        if yq_version == "v2":
-            issues = str(client.describe_query(query_id).result.query.issue)
-            assert (
-                "message: \"Please remove \\\'bindings.\\\' from your query, the support for this syntax will be dropped soon"
-                in issues
-            )
-            assert "severity: 2" in issues
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         assert len(result_set.columns) == 2
         assert result_set.columns[0].name == "foo"
         assert result_set.columns[0].type.type_id == ydb.Type.INT32
         assert result_set.columns[1].name == "bar"
         assert result_set.columns[1].type.type_id == ydb.Type.UTF8
         assert len(result_set.rows) == 2
-        assert result_set.rows[0].items[0].int32_value == 123
-        assert result_set.rows[0].items[1].text_value == 'xxx'
-        assert result_set.rows[1].items[0].int32_value == 456
-        assert result_set.rows[1].items[1].text_value == 'yyy'
+        assert result_set.rows[0][0] == 123
+        assert result_set.rows[0][1] == 'xxx'
+        assert result_set.rows[1][0] == 456
+        assert result_set.rows[1][1] == 'yyy'
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_s3_format_mismatch(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -89,34 +71,31 @@ class TestBindings:
         bucket = resource.Bucket("bindbucket")
         bucket.create(ACL='public-read')
 
-        kikimr.control_plane.wait_bootstrap(1)
-        connection_id = client.create_storage_connection(unique_prefix + "bb", "bindbucket").result.connection_id
+        data_source = client.create_external_data_source(unique_prefix + "bb", "bindbucket").name
 
         fooType = ydb.Column(name="foo", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))
         barType = ydb.Column(name="bar", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         storage_binding_name = unique_prefix + "s3binding"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path="path2/",
             format="csv_with_names",
-            connection_id=connection_id,
+            data_source=data_source,
             columns=[fooType, barType],
         )
 
         sql = fR'''
-            insert into bindings.`{storage_binding_name}`
+            insert into `{storage_binding_name}`
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query(query_id, statuses=[fq.QueryMeta.FAILED])
+        query = client.execute(sql)
+        query.check(False)
 
-        describe_result = client.describe_query(query_id).result
+        describe_result = query
         describe_string = "{}".format(describe_result)
         assert "Row type mismatch for S3 external table" in describe_string, describe_string
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_count_for_pg_binding(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -132,40 +111,37 @@ class TestBindings:
         row = R'''{"a": 42, "b": 3.14, "c": "text"}'''
         s3_client.put_object(Body=row, Bucket='count_for_pg_binding', Key='abc.json', ContentType='text/json')
 
-        kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(unique_prefix + "abc", "count_for_pg_binding")
+        connection_response = client.create_external_data_source(unique_prefix + "abc", "count_for_pg_binding")
 
         aType = ydb.Column(name="a", type=ydb.Type(pg_type=ydb.PgType(oid=23)))
         bType = ydb.Column(name="b", type=ydb.Type(pg_type=ydb.PgType(oid=701)))
         cType = ydb.Column(name="c", type=ydb.Type(pg_type=ydb.PgType(oid=25)))
         storage_binding_name = unique_prefix + "binding_for_count"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path="abc.json",
             format="json_each_row",
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[aType, bType, cType],
         )
 
         sql = fR'''
             SELECT COUNT(*)
-            FROM bindings.{storage_binding_name};
+            FROM {storage_binding_name};
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 1
         assert len(result_set.rows) == 1
         assert result_set.columns[0].type.type_id == ydb.Type.UINT64
-        assert result_set.rows[0].items[0].uint64_value == 1
+        assert result_set.rows[0][0] == 1
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_ast_in_failed_query_compilation(self, kikimr, s3, client, unique_prefix):
+    def test_unknown_column_in_external_table(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -174,45 +150,91 @@ class TestBindings:
         bucket.create(ACL='public-read')
         bucket.objects.all().delete()
 
-        kikimr.control_plane.wait_bootstrap(1)
-        connection_id = client.create_storage_connection(unique_prefix + "bb", "bindbucket").result.connection_id
+        data_source = client.create_external_data_source(unique_prefix + "bb", "bindbucket").name
 
         data_column = ydb.Column(name="data", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         storage_binding_name = unique_prefix + "s3binding"
-        client.create_object_storage_binding(
-            name=storage_binding_name, path="/", format="raw", connection_id=connection_id, columns=[data_column]
+        client.create_external_table(
+            name=storage_binding_name, path="/", format="raw", data_source=data_source, columns=[data_column]
         )
 
         sql = fR'''
-            SELECT some_unknown_column FROM bindings.`{storage_binding_name}`;
+            SELECT some_unknown_column FROM `{storage_binding_name}`;
         '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        query = client.execute(sql)
+        query.check(False)
 
-        ast = client.describe_query(query_id).result.query.ast.data
-        assert "(\'columns \'(\'\"some_unknown_column\"))" in ast, "Invalid query ast"
+        assert "some_unknown_column" in query.error
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_raw_empty_schema_binding(self, kikimr, client, unique_prefix):
-        kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
-        binding_response = client.create_object_storage_binding(
+    def test_ast_in_failed_query_compilation(self, kikimr, s3, client, unique_prefix):
+        create_bucket_and_put_object(s3.s3_url, 'failed-compilation-ast', 'data.txt', 'dictionary')
+        source = client.create_external_data_source(unique_prefix + 'source', 'failed-compilation-ast').name
+        table = client.path(unique_prefix + 'dictionary')
+
+        def create_table(column):
+            client.create_external_table(
+                table,
+                'data.txt',
+                'raw',
+                source,
+                [ydb.Column(name=column, type=ydb.Type(type_id=ydb.Type.STRING))],
+            )
+
+        create_table('some_unknown_column')
+        input_topic = client.path(unique_prefix + 'input')
+        output_topic = client.path(unique_prefix + 'output')
+        for topic in (input_topic, output_topic):
+            client.query(f'CREATE TOPIC `{topic}`;')
+            client.objects.append(('TOPIC', topic))
+        query_path = client.path(unique_prefix + 'failed_compilation')
+        state = None
+
+        def failed_with_ast():
+            nonlocal state
+            rows = kikimr.ydb_client.query(f"""
+                SELECT Status, Issues, Ast FROM `.sys/streaming_queries`
+                WHERE Path = '{query_path}';
+            """)[0].rows
+            state = rows[0] if rows else None
+            return state is not None and state['Status'] == 'FAILED' and bool(state['Ast'])
+
+        try:
+            # Validate the definition before changing the schema. Starting it
+            # must then fail compilation and retain the AST in the sys view.
+            client.query(f"""
+                CREATE STREAMING QUERY `{query_path}` WITH (RUN = FALSE) AS DO BEGIN
+                    INSERT INTO `{output_topic}`
+                    SELECT input_rows.Data || dictionary.some_unknown_column AS Data
+                    FROM `{input_topic}`
+                    WITH (FORMAT=raw, SCHEMA=(Data String NOT NULL)) AS input_rows
+                    CROSS JOIN `{table}` AS dictionary;
+                END DO;
+            """)
+            client.drop('EXTERNAL TABLE', table)
+            create_table('data')
+            result = client.execute(f'ALTER STREAMING QUERY `{query_path}` SET (RUN = TRUE);').check(False)
+            assert 'some_unknown_column' in result.error, result.error
+            assert wait_for(failed_with_ast, timeout_seconds=120, step_seconds=0.5), state
+            assert 'some_unknown_column' in state['Issues'], state
+            assert 'some_unknown_column' in state['Ast'], state['Ast']
+            assert table in state['Ast'], state['Ast']
+        finally:
+            client.query(f'DROP STREAMING QUERY IF EXISTS `{query_path}`;')
+
+    def test_external_table_empty_schema(self, kikimr, client, unique_prefix):
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
+        binding_response = client.create_external_table(
             name=unique_prefix + "my_binding",
             path="fruits.csv",
             format="raw",
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[],
-            check_issues=False,
+            expect_error=True,
         )
-        assert "Only one column in schema supported in raw format" in str(binding_response.issues), str(
-            binding_response.issues
-        )
+        assert binding_response.error
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_binding_with_backslash_in_location(self, s3, client, unique_prefix):
+    def test_external_table_with_backslash_in_location(self, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -228,37 +250,35 @@ class TestBindings:
 test'''
         s3_client.put_object(Body=data, Bucket='backslash_bucket', Key='\\', ContentType='text/plain')
 
-        connection_response = client.create_storage_connection(unique_prefix + "backslash_bucket", "backslash_bucket")
+        connection_response = client.create_external_data_source(unique_prefix + "backslash_bucket", "backslash_bucket")
 
         data_type = ydb.Column(name="data", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))
         storage_binding_name = unique_prefix + "binding_name"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path="\\",
             format="csv_with_names",
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[data_type],
         )
 
         sql = fR'''
             SELECT *
-            FROM bindings.{storage_binding_name};
+            FROM {storage_binding_name};
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 1
         assert result_set.columns[0].name == "data"
         assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].text_value == "test"
+        assert result_set.rows[0][0] == "test"
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_decimal_binding(self, kikimr, s3, client, unique_prefix):
+    def test_decimal_external_table(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -276,35 +296,34 @@ test'''
         '''
         s3_client.put_object(Body=row, Bucket='decimal_binding', Key='abc.json', ContentType='text/json')
 
-        kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(unique_prefix + "_decc", "decimal_binding")
+        connection_response = client.create_external_data_source(unique_prefix + "_decc", "decimal_binding")
 
         aType = ydb.Column(name="a", type=ydb.Type(decimal_type=ydb.DecimalType(precision=22, scale=9)))
         bType = ydb.Column(name="b", type=ydb.Type(decimal_type=ydb.DecimalType(precision=22, scale=9)))
 
         storage_binding_name = unique_prefix + "_decb"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path="abc.json",
             format="json_each_row",
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[aType, bType],
         )
 
         sql = fR'''
             SELECT Unwrap(SUM(a)) as a, Unwrap(SUM(b)) as b
-            FROM bindings.{storage_binding_name};
+            FROM {storage_binding_name};
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 2
         assert len(result_set.rows) == 1
         assert result_set.columns[0].type == ydb.Type(decimal_type=ydb.DecimalType(precision=35, scale=9))
         assert result_set.columns[1].type == ydb.Type(decimal_type=ydb.DecimalType(precision=35, scale=9))
-        assert result_set.rows[0].items[0].low_128 == 222222222
-        assert result_set.rows[0].items[1].low_128 == 222222230
+        assert result_set.rows[0][0] == Decimal("0.222222222")
+        assert result_set.rows[0][1] == Decimal("0.222222230")

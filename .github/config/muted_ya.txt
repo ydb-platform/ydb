@@ -51,10 +51,8 @@ ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.Recovere
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapBeforeSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableWithLocalBloomIndexes
-ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
 ydb/core/viewer/ut Viewer.TabletMerging
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
-ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedClusterTableFailsGetClustersList
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedVersionsTableIsRecreated
 ydb/services/ydb/backup_ut EncryptedExportTest.EncryptedExportAndImportWithLargeDataBatch-WithCompression-DirectPartImport
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]

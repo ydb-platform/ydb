@@ -18,7 +18,6 @@ private:
     static inline TAtomicCounter Counter = 0;
     const ui64 TaskId = Counter.Inc();
     const NActors::TActorId SourceId;
-    const NActors::TActorId RecipientId;
     const std::optional<ui32> GranuleShardingVersionId;
     const TUnifiedPathId PathId;
     const ui64 Cookie;
@@ -32,7 +31,6 @@ private:
     const std::optional<TDuration> Timeout;
     const ui64 TxId;
     const bool IsBulk;
-    const std::optional<ui64> OverloadSubscribeSeqNo;
     const std::shared_ptr<NLWTrace::TOrbit> Orbit;
     const TMonotonic ReceivedAt;
 
@@ -41,20 +39,23 @@ public:
         return std::tie(Created, PathId.GetInternalPathId(), TaskId) < std::tie(item.Created, item.PathId.GetInternalPathId(), item.TaskId);
     }
 
+    std::optional<TMonotonic> GetDeadline() const {
+        return Timeout ? std::optional<TMonotonic>(Created + *Timeout) : std::nullopt;
+    }
+
     bool IsDeprecated(const TMonotonic now) const {
-        return Timeout ? (Created + *Timeout <= now) : false;
+        const std::optional<TMonotonic> deadline = GetDeadline();
+        return deadline && *deadline <= now;
     }
 
     TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
-        const NActors::TActorId recipientId, const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie,
+        const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie,
         const NOlap::TSnapshot& mvccSnapshot, const ui64 lockId, const ui64 lockNodeId, const NKikimrDataEvents::ELockMode lockMode,
         const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout,
-        const ui64 txId, const bool isBulk, const std::optional<ui64>& overloadSubscribeSeqNo, std::shared_ptr<NLWTrace::TOrbit> orbit,
-        const TMonotonic receivedAt)
+        const ui64 txId, const bool isBulk, std::shared_ptr<NLWTrace::TOrbit> orbit, const TMonotonic receivedAt)
         : ArrowData(arrowData)
         , Schema(schema)
         , SourceId(sourceId)
-        , RecipientId(recipientId)
         , GranuleShardingVersionId(granuleShardingVersionId)
         , PathId(pathId)
         , Cookie(cookie)
@@ -67,7 +68,6 @@ public:
         , Timeout(timeout)
         , TxId(txId)
         , IsBulk(isBulk)
-        , OverloadSubscribeSeqNo(overloadSubscribeSeqNo)
         , Orbit(std::move(orbit))
         , ReceivedAt(receivedAt)
     {
@@ -75,6 +75,10 @@ public:
 
     const TInternalPathId& GetInternalPathId() const {
         return PathId.InternalPathId;
+    }
+
+    ui64 GetLockId() const {
+        return LockId;
     }
 
     const TMonotonic& GetCreatedMonotonic() const {
@@ -85,25 +89,6 @@ public:
     void Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx,
         const NKikimrDataEvents::TEvWriteResult::EStatus& status = NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR) const;
     void FailByOverload(TColumnShard* owner, const EOverloadStatus overloadStatus, const TActorContext& ctx) const;
-};
-
-class TWriteTasksQueue {
-private:
-    bool WriteTasksOverloadCheckerScheduled = false;
-    bool CompactionOverloadReported = false;
-    std::set<TWriteTask> WriteTasks;
-    TColumnShard* Owner;
-
-public:
-    TWriteTasksQueue(TColumnShard* owner)
-        : Owner(owner)
-    {
-    }
-
-    ~TWriteTasksQueue();
-
-    void Enqueue(TWriteTask&& task);
-    bool Drain(const bool onWakeup, const TActorContext& ctx);
 };
 
 }   // namespace NKikimr::NColumnShard

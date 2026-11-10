@@ -1598,6 +1598,8 @@ private:
                         if (const auto* write = std::get_if<NNewYql::TWriteStatement>(&statement.Value)) {
                             switch (write->Kind) {
                                 case NNewYql::EWriteKind::Insert: result.CommandTagName = "INSERT"; break;
+                                case NNewYql::EWriteKind::Upsert: result.CommandTagName = "UPSERT"; break;
+                                case NNewYql::EWriteKind::Replace: result.CommandTagName = "REPLACE"; break;
                                 case NNewYql::EWriteKind::Update: result.CommandTagName = "UPDATE"; break;
                                 case NNewYql::EWriteKind::Delete: result.CommandTagName = "DELETE"; break;
                             }
@@ -2717,9 +2719,10 @@ private:
                     if (!type) {
                         ythrow TNewYqlParserFallback() << "Column type is not available: " << path << "." << column.Name;
                     }
-                    snapshot->Columns.push_back({column.Name, column.Id, FormatType(type), column.NotNull});
-                    snapshot->HasDefaults |= column.DefaultKind != NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED
+                    const bool hasDefault = column.DefaultKind != NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED
                         || bool(column.DefaultExpression);
+                    snapshot->Columns.push_back({column.Name, column.Id, FormatType(type), column.NotNull, hasDefault});
+                    snapshot->HasDefaults |= hasDefault;
                 };
                 // Catalog order determines native star expansion and result columns.
                 if (metadata.ColumnOrder.empty()) {
@@ -2782,12 +2785,16 @@ private:
                     ythrow TNewYqlParserFallback() << "Native writes require sink-maintained indexes";
                 }
             }
-            if (write->Input) { writeOnlyTargets.insert(write->Target.get()); }
+            const bool inputRows = write->Input || !write->Rows.empty();
+            if (inputRows) { writeOnlyTargets.insert(write->Target.get()); }
             auto& op = native->Execution.TableOperations.emplace_back();
             op.SetTable(snapshot.Path);
-            const auto operation = write->Kind == NNewYql::EWriteKind::Insert ? TYdbOperation::InsertAbort
-                : write->Kind == NNewYql::EWriteKind::Update ? (write->Input ? TYdbOperation::UpdateOn : TYdbOperation::Update)
-                : TYdbOperation::Delete;
+            const auto operation = write->Kind == NNewYql::EWriteKind::Insert
+                ? (write->OnConflict == "revert" ? TYdbOperation::InsertRevert : TYdbOperation::InsertAbort)
+                : write->Kind == NNewYql::EWriteKind::Upsert ? TYdbOperation::Upsert
+                : write->Kind == NNewYql::EWriteKind::Replace ? TYdbOperation::Replace
+                : write->Kind == NNewYql::EWriteKind::Update ? (inputRows ? TYdbOperation::UpdateOn : TYdbOperation::Update)
+                : inputRows ? TYdbOperation::DeleteOn : TYdbOperation::Delete;
             op.SetOperation(static_cast<ui32>(operation));
         }
         THashSet<TString> tables;
@@ -2805,9 +2812,17 @@ private:
         for (const auto& statement : NewParserAst->Statements) {
             if (const auto* write = std::get_if<NNewYql::TWriteStatement>(&statement.Value)) {
                 TCompileTraceScope lowerTrace(trace, TCompileTraceLevels::Step, "Lower native AST to RBO");
-                auto root = NNewYql::LowerWriteToRbo(*write, *NewParserAst, *NewParserNames, *NewParserTypes, ctx, lookup);
+                auto root = NNewYql::LowerWriteToRbo(*write, *NewParserAst, *NewParserNames, *NewParserTypes, ctx, lookup,
+                    TypesCtx->OrderedColumns);
                 root->PlanProps.PhysicalTxGroup = 0;
                 root->PlanProps.EffectPriority = 0;
+                if (root->PlanProps.WithReturning) {
+                    root->PlanProps.ResultIndex = native->Execution.DiscardResults.size();
+                    if (cap && *cap < Max<ui64>()) {
+                        root->PlanProps.ReturningRowsLimit = Build<TCoUint64>(ctx, root->Pos).Literal().Build(ToString(*cap + 1)).Done().Ptr();
+                    }
+                    native->Execution.DiscardResults.push_back(false);
+                }
                 native->Roots.push_back(std::move(root));
                 continue;
             }
@@ -2836,7 +2851,7 @@ private:
         }
         if (native->Roots.empty()) { ythrow TNewYqlParserFallback() << "No native query results"; }
         for (const auto& root : native->Roots) {
-            if (root->PlanProps.WithEffects) { continue; }
+            if (root->PlanProps.WithEffects && !root->PlanProps.WithReturning) { continue; }
             native->Results.push_back({root->GetQueryColumns(), cap.GetOrElse(0)});
         }
         // Annotation can clone the same parameter into several expressions.

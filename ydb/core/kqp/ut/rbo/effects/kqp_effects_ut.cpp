@@ -121,6 +121,71 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
         CompareYson(R"([[[1u];["updated"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(UsingJoinKeysInWrites) {
+        auto kikimr = NewRboKikimrRunner();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto schema = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE UsingLeft (k Int32, v String, PRIMARY KEY(k));
+            CREATE TABLE UsingRight (k Int64, v String, PRIMARY KEY(k));
+            CREATE TABLE UsingOutput (k Int64, v String, PRIMARY KEY(k));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+        const auto execute = [&](const TString& sql) {
+            auto result = session.ExecuteDataQuery(sql, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), sql << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        execute("UPSERT INTO UsingLeft (k,v) VALUES (1,'l1'),(2,'l2');");
+        execute("UPSERT INTO UsingRight (k,v) VALUES (2,'r2'),(3,'r3');");
+        for (const auto& [join, expected] : TVector<std::pair<TString, TString>>{
+            {"INNER", R"([[[2];["l2"]]])"},
+            {"LEFT", R"([[[1];["l1"]];[[2];["l2"]]])"},
+            {"RIGHT", R"([[[2];["l2"]];[[3];["r3"]]])"},
+            {"FULL", R"([[[1];["l1"]];[[2];["l2"]];[[3];["r3"]]])"},
+        }) {
+            execute("DELETE FROM UsingOutput;");
+            execute("INSERT INTO UsingOutput (k,v) SELECT k, COALESCE(l.v,r.v) "
+                "FROM UsingLeft AS l " + join + " JOIN UsingRight AS r USING(k);");
+            auto result = execute("SELECT k,v FROM UsingOutput ORDER BY k;");
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(CompactMembershipInWrites) {
+        auto kikimr = NewRboKikimrRunner();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto schema = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE CompactLeft (k Int32, PRIMARY KEY(k));
+            CREATE TABLE CompactRight (k Int32, PRIMARY KEY(k));
+            CREATE TABLE CompactOutput (k Int32, PRIMARY KEY(k));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+        const auto execute = [&](const TString& sql) {
+            auto result = session.ExecuteDataQuery(sql, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), sql << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        execute("UPSERT INTO CompactLeft (k) VALUES (NULL),(1),(2);");
+        execute("UPSERT INTO CompactRight (k) VALUES (NULL),(2);");
+        for (const bool empty : {false, true}) {
+            if (empty) { execute("DELETE FROM CompactRight;"); }
+            for (const bool negate : {false, true}) {
+                for (const bool compact : {false, true}) {
+                    execute("DELETE FROM CompactOutput;");
+                    execute(TStringBuilder() << "PRAGMA AnsiInForEmptyOrNullableItemsCollections; "
+                        "INSERT INTO CompactOutput SELECT l.k FROM CompactLeft AS l WHERE l.k "
+                        << (negate ? "NOT " : "") << "IN " << (compact ? "COMPACT " : "")
+                        << "(SELECT k FROM CompactRight);");
+                    const auto result = execute("SELECT k FROM CompactOutput ORDER BY k;");
+                    const TString expected = empty
+                        ? (negate ? "[[#];[[1]];[[2]]]" : "[]")
+                        : (negate ? "[]" : "[[[2]]]");
+                    CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(IndexedReplaceClearsOmittedColumns) {
         auto kikimr = NewRboKikimrRunner();
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -749,7 +814,10 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
                 ++reads;
                 const auto& read = node["Operators"][0];
                 UNIT_ASSERT_VALUES_EQUAL(read["Table"].GetStringSafe(), "Tmp");
-                UNIT_ASSERT_VALUES_EQUAL(read["ReadColumns"].GetArraySafe().size(), 3);
+                // Native DELETE passes only keys to the sink. The sink looks up
+                // old index values; legacy lowering also carries Value here.
+                UNIT_ASSERT_VALUES_EQUAL(read["ReadColumns"].GetArraySafe().size(),
+                    GetEnv("YDB_KQP_TEST_NEW_AST") == "1" ? 2 : 3);
                 UNIT_ASSERT_VALUES_EQUAL(read["ReadRangesKeys"][0].GetStringSafe(), "Key1");
             }
             if (node.Has("Plans")) {
@@ -760,6 +828,25 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
         };
         checkReads(checkReads, plan["SimplifiedPlan"]);
         UNIT_ASSERT_VALUES_EQUAL(reads, 1);
+
+        auto seed = session.ExecuteDataQuery(R"(
+            INSERT INTO Tmp (Key1, Key2, Value) VALUES
+                (1u, 'a', 'remove-a'), (1u, 'b', 'remove-b'), (2u, 'c', 'keep');
+        )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(seed.IsSuccess(), seed.GetIssues().ToString());
+        auto params = TParamsBuilder().AddParam("$key1").Uint32(1).Build().Build();
+        auto removed = session.ExecuteDataQuery(R"(
+            DECLARE $key1 AS Uint32;
+            DELETE FROM Tmp WHERE Key1 = $key1;
+        )", NYdb::NTable::TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+        UNIT_ASSERT_C(removed.IsSuccess(), removed.GetIssues().ToString());
+        for (const TString source : {"Tmp", "Tmp VIEW Index"}) {
+            auto remaining = session.ExecuteDataQuery(
+                "SELECT Key1, Key2, Value FROM " + source + " ORDER BY Key1, Key2;",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(remaining.IsSuccess(), remaining.GetIssues().ToString());
+            CompareYson(FormatResultSetYson(remaining.GetResultSet(0)), R"([[[2u];["c"];["keep"]]])");
+        }
 
     }
 
@@ -958,14 +1045,6 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
         UNIT_ASSERT_VALUES_EQUAL_C(upsertResult2.GetStatus(), EStatus::ABORTED, upsertResult2.GetIssues().ToString());
     }
 
-    // FIXME: Re-enable both RandomWithIndex variants after implementing JOIN USING
-    // in yql/essentials/sql/v1/translation/sql_select_yql.cpp (currently rejected
-    // as "YqlSelect unsupported: USING pure_column_or_named_list"). Lower USING
-    // keys and output-column resolution with the correct LEFT JOIN nullability,
-    // and verify that RBO preserves the shared $rowUpdates input for both REPLACEs
-    // (including the generated RandomNumber key). Keep optimizer fallback disabled;
-    // both variants must pass the row-count and key-association checks below.
-#if 0
     Y_UNIT_TEST_TWIN(RandomWithIndex, UseSecondaryIndex) {
         auto kikimr = NewRboKikimrRunner();
         auto db = kikimr.GetTableClient();
@@ -1043,7 +1122,6 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
             CompareYson(FormatResultSetYson(result.GetResultSet(0)), R"([[1u]])");
         }
     }
-#endif // FIXME: JOIN USING support in YqlSelect/RBO
 
     Y_UNIT_TEST_TWIN(DeleteWithJoinAndIndex, UseSecondaryIndex) {
         auto kikimr = NewRboKikimrRunner();
@@ -1234,16 +1312,6 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
         }
     }
 
-    // FIXME: Re-enable EffectWithSelect after supporting NOT IN COMPACT in the
-    // YqlSelect path of yql/essentials/sql/v1/translation/sql_expression.cpp
-    // (currently rejected as "YqlSelect unsupported: COMPACT"). Carry the COMPACT
-    // hint through membership/anti-join lowering without changing ANSI IN behavior
-    // for empty inputs or nullable keys. Preserve shared subquery evaluation across
-    // SELECT and UPSERT/DELETE roots so the single-table-read contract still holds.
-    // Update the legacy plan["tables"] assertions to inspect RBO's SimplifiedPlan,
-    // retaining the single-read check. Validate every Explain case below through
-    // both TableService and QueryService with optimizer fallback disabled.
-#if 0
     Y_UNIT_TEST(EffectWithSelect) {
         auto kikimr = NewRboKikimrRunner();
         auto db = kikimr.GetTableClient();
@@ -1263,6 +1331,30 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
+        const auto checkSharedRead = [](const auto& text) {
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(text, &plan, true);
+            THashSet<TString> readStages;
+            const auto visit = [&](const auto& self, const NJson::TJsonValue& node) -> void {
+                for (const auto& op : node["Operators"].GetArray()) {
+                    const auto kind = op["Name"].GetStringSafe();
+                    if (kind == "TableRangeScan" || kind == "TableFullScan" || kind == "TablePointLookup") {
+                        UNIT_ASSERT_VALUES_EQUAL(op["Table"].GetStringSafe(), "Rows");
+                        const auto stage = node["StageGuid"].GetStringSafe();
+                        UNIT_ASSERT(!stage.empty());
+                        readStages.insert(stage);
+                    }
+                }
+                if (node.Has("Plans")) {
+                    for (const auto& child : node["Plans"].GetArraySafe()) { self(self, child); }
+                }
+            };
+            // SimplifiedPlan expands shared CTE references into several tree
+            // occurrences. Count physical read stages in the execution DAG.
+            visit(visit, plan["Plan"]);
+            UNIT_ASSERT_VALUES_EQUAL_C(readStages.size(), 1, text);
+        };
+
         {
             const TString query = R"(
                 INSERT INTO `/Root/Rows` (k1, k2, v1, v2) VALUES
@@ -1313,10 +1405,7 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
                 UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
 
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
-                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+                checkSharedRead(result.GetPlan());
             }
 
             {
@@ -1326,10 +1415,24 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
                 UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
 
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
-                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
-                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+                checkSharedRead(*result.GetStats()->GetPlan());
+            }
+
+            auto params = TParamsBuilder()
+                .AddParam("$k").Uint64(1).Build()
+                .AddParam("$rows").BeginList()
+                    .AddListItem().BeginStruct()
+                        .AddMember("k2").Uint64(4)
+                        .AddMember("v1").Uint64(40)
+                        .AddMember("v2").Uint64(400)
+                    .EndStruct()
+                .EndList().Build().Build();
+            for (const bool alreadyWritten : {false, true}) {
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
+                CompareYson(alreadyWritten ? "[[0u]]" : "[[1u]]", FormatResultSetYson(result.GetResultSet(0)));
+                CompareYson(alreadyWritten ? "[]" : "[[4u;40u;400u]]", FormatResultSetYson(result.GetResultSet(1)));
             }
         }
 
@@ -1376,10 +1479,7 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
                 UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
 
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
-                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+                checkSharedRead(result.GetPlan());
             }
 
             {
@@ -1389,10 +1489,7 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
                 UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
 
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
-                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
-                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+                checkSharedRead(*result.GetStats()->GetPlan());
             }
         }
 
@@ -1420,10 +1517,7 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
                 UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
 
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
-                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+                checkSharedRead(result.GetPlan());
             }
 
             {
@@ -1433,14 +1527,10 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
                 UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
 
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
-                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
-                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+                checkSharedRead(*result.GetStats()->GetPlan());
             }
         }
     }
-#endif // FIXME: NOT IN COMPACT and shared-read explain coverage
 
 }
 

@@ -204,6 +204,9 @@ struct TPlanProps {
     bool WithReturning = false;
     // Public result order is independent of the read/effect transaction order.
     std::optional<ui32> ResultIndex;
+    // An internal result evaluated once before the query block's consumers.
+    // It is bound as a parameter and is not returned to the client.
+    std::optional<TString> MaterializedResult;
     TExprNode::TPtr ReturningRowsLimit;
 };
 

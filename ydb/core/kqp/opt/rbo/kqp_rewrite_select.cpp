@@ -1563,7 +1563,9 @@ bool IsAsTable(const TExprNode::TPtr input) {
            (input->IsCallable("ToList") && TCoParameter::Match(input->HeadPtr().Get()));
 }
 
-TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
+} // anonymous namespace
+
+TExprNode::TPtr RewriteSublinks(TExprNode::TPtr node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
                               ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated) {
 
     auto sublinks = FindSublinks(node);
@@ -1613,8 +1615,6 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
     }
     return node;
 }
-} // anonymous namespace
-
 namespace {
 
 TExprNode::TPtr RewriteReadOrEffectInput(const TExprNode::TPtr& node, TExprContext& ctx,
@@ -1883,10 +1883,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
     TExprNode::TPtr node = input;
 
-    if (generateRoot) {
-        node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated);
-    }
-
     auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
     TVector<TExprNode::TPtr> setItemsResults;
     for (ui32 i = 0; i < setItems->ChildrenSize(); ++i) {
@@ -2065,13 +2061,26 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     TVector<TInfoUnit> joinKeys;
                     TVector<TExprNode::TPtr> joinPredicates;
                     TExprNode::TPtr joinLambda;
-                    Y_ENSURE(join->ChildrenSize() > 1 && join->Child(1)->ChildrenSize() > 1);
-
-                    auto yqlWhere = join->ChildPtr(1);
-                    Y_ENSURE(yqlWhere->IsCallable("YqlWhere"), yqlWhere->Content());
-                    Y_ENSURE(yqlWhere->ChildPtr(1)->IsLambda(), "YqlWhere invalid child type.");
-                    joinLambda = TCoLambda(ctx.DeepCopyLambda(*(yqlWhere->Child(1)))).Ptr();
-                    ExtractJoinKeysAndPredicates(joinLambda, joinKeys, joinPredicates);
+                    Y_ENSURE(join->ChildrenSize() > 1);
+                    const bool usingColumns = join->Child(1)->IsAtom("using");
+                    const auto usingName = [](const TExprNode& reference) -> TString {
+                        // A list refers to a merged column from an earlier USING;
+                        // atoms name qualified columns of an original input.
+                        return TString(reference.IsAtom() ? reference.Content() : reference.Head().Content());
+                    };
+                    if (usingColumns) {
+                        Y_ENSURE(join->ChildrenSize() >= 4);
+                        for (const auto& pair : join->Child(3)->Children()) {
+                            joinKeys.emplace_back(usingName(pair->Head()));
+                            joinKeys.emplace_back(usingName(pair->Tail()));
+                        }
+                    } else {
+                        auto yqlWhere = join->ChildPtr(1);
+                        Y_ENSURE(yqlWhere->IsCallable("YqlWhere"), yqlWhere->Content());
+                        Y_ENSURE(yqlWhere->ChildPtr(1)->IsLambda(), "YqlWhere invalid child type.");
+                        joinLambda = TCoLambda(ctx.DeepCopyLambda(*(yqlWhere->Child(1)))).Ptr();
+                        ExtractJoinKeysAndPredicates(joinLambda, joinKeys, joinPredicates);
+                    }
 
                     TExprNode::TPtr leftInput;
                     TExprNode::TPtr rightInput;
@@ -2118,6 +2127,37 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                         .Build()
                     .Done().Ptr();
                     // clang-format on
+                    if (usingColumns) {
+                        TExprNode::TListType elements;
+                        for (ui32 column = 0; column < join->Child(3)->ChildrenSize(); ++column) {
+                            const auto& pair = *join->Child(3)->Child(column);
+                            auto argument = ctx.NewArgument(join->Pos(), "row");
+                            auto leftValue = ctx.NewCallable(join->Pos(), "Member", {
+                                argument, ctx.NewAtom(join->Pos(), usingName(pair.Head()))});
+                            auto rightValue = ctx.NewCallable(join->Pos(), "Member", {
+                                argument, ctx.NewAtom(join->Pos(), usingName(pair.Tail()))});
+                            auto value = joinKind == "Right" ? rightValue : leftValue;
+                            if (joinKind == "Full") {
+                                value = ctx.NewCallable(join->Pos(), "Coalesce", {leftValue, rightValue});
+                            }
+                            auto lambda = ctx.NewLambda(join->Pos(), ctx.NewArguments(join->Pos(), {argument}), std::move(value));
+                            const auto name = join->ChildrenSize() > 4
+                                ? join->Child(4)->Child(column)->Content()
+                                : join->Child(2)->Child(column)->Content();
+                            elements.push_back(Build<TKqpOpMapElementLambda>(ctx, join->Pos())
+                                .Input(joinExpr)
+                                .Variable().Value(name).Build()
+                                .Lambda(lambda)
+                                .ForceOptional().Value("False").Build()
+                                .Done().Ptr());
+                        }
+                        // Keep qualified input columns as well as the merged
+                        // USING outputs, with the outer join's nullability.
+                        joinExpr = Build<TKqpOpMap>(ctx, join->Pos())
+                            .Input(joinExpr)
+                            .MapElements().Add(elements).Build()
+                            .Done().Ptr();
+                    }
                     tableInputsCount = 0;
                     leftSideAliases.push_back(rightSideAlias);
                 }

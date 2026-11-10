@@ -414,7 +414,7 @@ struct TDeclareStatement {
     TTypeName Type;
 };
 
-enum class EWriteKind { Insert, Update, Delete };
+enum class EWriteKind { Insert, Upsert, Replace, Update, Delete };
 struct TWriteStatement {
     EWriteKind Kind;
     TSourcePtr Target;
@@ -422,6 +422,10 @@ struct TWriteStatement {
     TVector<TIdentifier> Columns; // Optional positional INSERT column list.
     TExpressionPtr Where;
     TVector<TNamedExpression> Assignments; // UPDATE SET, evaluated on the original row.
+    TVector<TVector<TExpressionPtr>> Rows; // VALUES, converted to the destination types before list construction.
+    TString OnConflict = "abort";
+    TVector<TIdentifier> Returning;
+    bool ReturningAll = false;
 };
 
 struct TPragmaValue {

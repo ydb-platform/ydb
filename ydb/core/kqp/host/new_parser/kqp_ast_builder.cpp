@@ -148,12 +148,13 @@ public:
 
 private:
     TWriteStatement Write(TContext* context, EWriteKind kind) {
-        Require(!Token(context, P::TOKEN_BATCH) && !Child(context, P::RuleReturning_columns_list),
-            context, "BATCH and RETURNING writes");
+        Require(!Token(context, P::TOKEN_BATCH), context, "BATCH writes");
         auto* simple = Child(context, P::RuleSimple_table_ref);
+        const bool intoTable = kind == EWriteKind::Insert;
         if (kind == EWriteKind::Insert) {
-            Require(Token(context, P::TOKEN_INSERT) && !Token(context, P::TOKEN_OR),
-                context, "this write mode");
+            Require(!Token(context, P::TOKEN_IGNORE), context, "INSERT OR IGNORE");
+            if (Token(context, P::TOKEN_UPSERT)) { kind = EWriteKind::Upsert; }
+            if (Token(context, P::TOKEN_REPLACE)) { kind = EWriteKind::Replace; }
             auto* into = Child(context, P::RuleInto_simple_table_ref);
             Require(!Token(into, P::TOKEN_ERASE), into, "ERASE BY");
             simple = Child(into, P::RuleSimple_table_ref);
@@ -169,15 +170,32 @@ private:
         TTable table;
         table.Name = Identifier(id);
         target->Value = std::move(table);
-        TWriteStatement result{kind, std::move(target), {}, {}, {}, {}};
-        if (kind == EWriteKind::Insert || (kind == EWriteKind::Update && Token(context, P::TOKEN_ON))) {
+        TWriteStatement result{};
+        result.Kind = kind;
+        result.Target = std::move(target);
+        if (Token(context, P::TOKEN_REVERT)) { result.OnConflict = "revert"; }
+        if (auto* returning = Child(context, P::RuleReturning_columns_list)) {
+            result.ReturningAll = Token(returning, P::TOKEN_ASTERISK);
+            for (auto* column : Children(returning, P::RuleAn_id)) { result.Returning.push_back(Identifier(column)); }
+        }
+        if (intoTable || Token(context, P::TOKEN_ON)) {
             auto* values = Child(context, P::RuleInto_values_source);
             auto* source = Child(values, P::RuleValues_source);
             auto* select = source ? Child(source, P::RuleSelect_stmt) : nullptr;
-            Require(select, values, "write sources other than SELECT");
-            result.Input = Query(select);
             if (auto* columns = Child(values, P::RulePure_column_list)) {
                 for (auto* column : Children(columns, P::RuleAn_id)) { result.Columns.push_back(Identifier(column)); }
+            }
+            if (select) {
+                result.Input = Query(select);
+            } else {
+                auto* rows = source ? Child(source, P::RuleValues_stmt) : nullptr;
+                Require(rows && !result.Columns.empty(), values, "DEFAULT VALUES or VALUES without column names");
+                for (auto* row : Children(Child(rows, P::RuleValues_source_row_list), P::RuleValues_source_row)) {
+                    auto& output = result.Rows.emplace_back();
+                    for (auto* expression : Children(Child(row, P::RuleExpr_list), P::RuleExpr)) {
+                        output.push_back(Expression(expression));
+                    }
+                }
             }
         } else {
             Require(!Token(context, P::TOKEN_ON), context, "UPDATE/DELETE ON");

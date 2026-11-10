@@ -3,6 +3,7 @@
 #include "context.h"
 #include "source.h"
 
+#include <util/generic/algorithm.h>
 #include <util/generic/overloaded.h>
 #include <util/generic/scope.h>
 #include <util/stream/output.h>
@@ -335,6 +336,11 @@ public:
 
             item->Add(Q(Y(Q("from"), Q(std::move(from)))));
             item->Add(Q(Y(Q("join_ops"), Q(Y(Q(std::move(joinOps)))))));
+            // Resolve merged USING columns against the preserved outer-join
+            // side, and give each merged key a distinct physical name.
+            if (AnyOf(Source->Constraints, [](const auto& constraint) { return !constraint.UsingColumns.empty(); })) {
+                item->Add(Q(Y(Q("ansi_joins"))));
+            }
         }
 
         if (Where) {
@@ -501,6 +507,11 @@ private:
         for (const auto& constraint : Source->Constraints) {
             if (constraint.Condition && !constraint.Condition->Init(ctx, src)) {
                 return false;
+            }
+            for (const auto& column : constraint.UsingColumns) {
+                if (!column.Build()->Init(ctx, src)) {
+                    return false;
+                }
             }
         }
 
@@ -732,6 +743,13 @@ private:
     }
 
     TNodePtr BuildJoinConstraint(const TYqlJoinConstraint& constraint) const {
+        if (!constraint.UsingColumns.empty()) {
+            auto columns = Y();
+            for (const auto& column : constraint.UsingColumns) {
+                columns->Add(column.Build());
+            }
+            return Q(Y(Q(ToString(constraint.Kind)), Q("using"), Q(std::move(columns))));
+        }
         // YQL has no IMPLICIT CROSS JOIN (COMMA) over JOIN precedence.
         // Consider the following query:
         // FROM       (VALUES (01)      ) AS a(a)
@@ -1159,6 +1177,7 @@ public:
 
     struct TIn {
         TNodePtr Expression;
+        bool Compact = false;
     };
 
     using TVariant = std::variant<
@@ -1234,10 +1253,18 @@ private:
     TNodePtr ToSubLink(TNodePtr lambda, const TIn& in, const TContext& ctx) {
         TNodePtr compare = Y("lambda", Q(Y("value")), Y("==", in.Expression, "value"));
         TNodePtr link = Y("YqlSubLink", Q("any"), Y("Void"), Y("Void"), std::move(compare), std::move(lambda));
+        auto settings = Y();
         if (!ctx.AnsiInForEmptyOrNullableItemsCollections.Defined()) {
-            link = L(std::move(link), Q(Y(Q(Y(Q("warnNoAnsiIn"))))));
+            settings->Add(Q(Y(Q("warnNoAnsiIn"))));
         } else if (*ctx.AnsiInForEmptyOrNullableItemsCollections) {
-            link = L(std::move(link), Q(Y(Q(Y(Q("ansiIn"))))));
+            settings->Add(Q(Y(Q("ansiIn"))));
+        }
+        if (in.Compact) {
+            settings->Add(Q(Y(Q("isCompact"))));
+        }
+        if (!ctx.AnsiInForEmptyOrNullableItemsCollections.Defined()
+            || *ctx.AnsiInForEmptyOrNullableItemsCollections || in.Compact) {
+            link = L(std::move(link), Q(std::move(settings)));
         }
         return link;
     }
@@ -1357,9 +1384,10 @@ TNodePtr BuildYqlExistsSubquery(TNodePtr node) {
     return new TYqlSubLinkNode(std::move(node), variant);
 }
 
-TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression) {
+TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression, bool compact) {
     TYqlSubLinkNode::TIn variant = {
         .Expression = std::move(expression),
+        .Compact = compact,
     };
     return new TYqlSubLinkNode(std::move(node), std::move(variant));
 }

@@ -1053,7 +1053,7 @@ IGraphTransformer::TStatus ValidateYqlSubLinkSettings(
         return true;
     };
 
-    if (!EnsureValidSettings(*settings, {"ansiIn", "warnNoAnsiIn"}, validator, ctx.Expr)) {
+    if (!EnsureValidSettings(*settings, {"ansiIn", "warnNoAnsiIn", "isCompact"}, validator, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 

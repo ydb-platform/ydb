@@ -1022,8 +1022,15 @@ private:
         switch (rule.GetAltCase()) {
             case TRule_join_constraint::kAltJoinConstraint1:
                 return Build(rule.GetAlt_join_constraint1(), kind);
-            case TRule_join_constraint::kAltJoinConstraint2:
-                return Unsupported("USING pure_column_or_named_list");
+            case TRule_join_constraint::kAltJoinConstraint2: {
+                const auto& alt = rule.GetAlt_join_constraint2();
+                Token(alt.GetToken1());
+                TVector<TDeferredAtom> columns;
+                if (!PureColumnOrNamedListStr(alt.GetRule_pure_column_or_named_list2(), *this, columns)) {
+                    return std::unexpected(ESQLError::Basic);
+                }
+                return TYqlJoinConstraint{.Kind = kind, .Condition = TNodePtr(), .UsingColumns = std::move(columns)};
+            }
             case TRule_join_constraint::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
         }

@@ -2009,6 +2009,20 @@ bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrCompaction::TCo
         }
     }
 
+    // The runtime policy derives omitted sizes by dividing by CountToCompact.
+    for (size_t index = 0; index < policy.GenerationSize(); ++index) {
+        const auto& generation = policy.GetGeneration(index);
+        if (generation.HasCountToCompact() && generation.GetCountToCompact() == 0 &&
+            (!generation.HasExtraCompactionExpMaxSize() || !generation.HasUpliftPartSize()))
+        {
+            err = TStringBuilder()
+                << "Compaction generation " << index
+                << ": CountToCompact must be nonzero when "
+                   "ExtraCompactionExpMaxSize or UpliftPartSize is omitted";
+            return false;
+        }
+    }
+
     return NLocalDb::ValidateCompactionPolicy(NLocalDb::TCompactionPolicy(policy), err);
 }
 

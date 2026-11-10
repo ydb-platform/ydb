@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/concurrency/fls.h>
 
+#include <yt/yt/core/phoenix/type_def.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 
 namespace NYT::NRpc {
@@ -15,6 +17,14 @@ TAuthenticationIdentity::TAuthenticationIdentity(const std::string& user, const 
     : User(user)
     , UserTag(userTag)
 { }
+
+void TAuthenticationIdentity::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, User);
+    PHOENIX_REGISTER_FIELD(2, UserTag);
+}
+
+PHOENIX_DEFINE_TYPE(TAuthenticationIdentity);
 
 void Serialize(const TAuthenticationIdentity& identity, IYsonConsumer* consumer)
 {

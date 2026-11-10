@@ -14,8 +14,8 @@ struct TResult {
 
 template <class THandle>
 THandle* AllocationFailure() noexcept {
-    static THandle result;
-    return &result;
+    static THandle Result;
+    return &Result;
 }
 
 template <class THandle, class TFunction>

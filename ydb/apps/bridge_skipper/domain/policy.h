@@ -18,11 +18,14 @@ struct TConfirmation {
     // The verdict's newest evidence at the first Down evaluation.
     TMonotonic FirstEvidenceSentAt;
     TMonotonic NewestEvidenceSentAt;
+    // Fallback failure has a generation-local confirmation span of its own.
+    bool FallbackFailure = false;
 };
 
 // Entries belong to Generation. A generation change keeps an entry only when
 // the pile's state and the PRIMARY and PROMOTED roles are unchanged between
-// the two views (a no-op bump); any other change clears it (B9).
+// the two views (a no-op bump); fallback failure never crosses a generation.
+// Switching between fallback failure and BSC/Lost also restarts the span.
 struct TConfirmations {
     std::optional<ui64> Generation;
     TNamedPileStates States;

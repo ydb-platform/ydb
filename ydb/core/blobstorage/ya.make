@@ -32,6 +32,7 @@ RECURSE(
     backpressure
     base
     bridge
+    contracts
     crypto
     ddisk
     dsproxy

@@ -10,6 +10,8 @@
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h> // for TEvNodeConfigInvokeOnRootResult
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NBridge {
 
     class TSyncerActor : public TActorBootstrapped<TSyncerActor> {
@@ -28,6 +30,9 @@ namespace NKikimr::NBridge {
         };
         // Preserve both flags observed by assimilation: the later data read may use VDisks that do not know them yet.
         THashMap<TLogoBlobID, TSourceBlobFlags> SourceBlobFlags;
+        // blobs counted in BytesToCopy by the scan of the data stage, as the target has no data for them; the others
+        // are counted when the target turns out to lack them
+        THashSet<TLogoBlobID> CountedToCopy;
         TReplQuoter::TPtr SyncRateQuoter;
 
     public:
@@ -102,6 +107,9 @@ namespace NKikimr::NBridge {
 
         void ProcessRestoreQueue();
         TSourceBlobFlags TakeSourceBlobFlags(const TLogoBlobID& id);
+        bool ScansBlobs() const; // whether the current step merges blobs
+        void CountToCopy(const TLogoBlobID& id);
+        void CountCopied(const TLogoBlobID& id);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Per-group assimilation status

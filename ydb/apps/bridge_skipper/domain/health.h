@@ -78,6 +78,10 @@ struct THealthState {
     std::map<TString, TCleanWindow> CleanSince;
     // The mode of each endpoint's latest fresh reply.
     std::map<TString, ESelfCheckMode> EndpointModes;
+    // SelfCheck has no generation. The fallback-failure rule admits only sends
+    // started after observing the current generation, including at startup.
+    std::optional<ui64> Generation;
+    TMonotonic GenerationChangedAt;
 };
 
 struct THealthEvaluation {

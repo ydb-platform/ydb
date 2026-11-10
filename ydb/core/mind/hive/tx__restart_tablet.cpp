@@ -43,6 +43,10 @@ public:
                     {"preferredNodeId", PreferredNodeId});
             }
             if (!tablet->IsStopped()) {
+                if (tablet->IsStarting() && tablet->BootTime != TInstant()) {
+                    Self->UpdateCounterTabletsStarting(-1);
+                    tablet->BootTime = {};
+                }
                 NIceDb::TNiceDb db(txc.DB);
                 if (tablet->Node != nullptr) {
                     if (tablet->IsLeader()) {

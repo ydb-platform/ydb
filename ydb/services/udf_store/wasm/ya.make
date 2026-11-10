@@ -2,6 +2,8 @@ LIBRARY()
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    async_runtime/host.cpp
+    async_runtime/runtime.cpp
     ../cpu_spec.cpp
     bridge_host.cpp
     bridge_node_table.cpp

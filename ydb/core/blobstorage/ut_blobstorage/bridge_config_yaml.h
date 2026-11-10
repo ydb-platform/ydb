@@ -52,12 +52,14 @@ namespace NBridgeTest {
     constexpr ui32 LastThirdPileNodeId = 24;
 
     // add hosts of nodes firstNodeId..lastNodeId (located as GetBridgedLocation does, but in the designated pile) to the
-    // config section of main YAML; hosts get the designated host config, if any
+    // config section of main YAML; hosts get the designated host config, if any, and their node ids, as hosts without
+    // them get the ones of their positions in the list
     inline void AddPileHosts(YAML::Node& config, const TString& pileName, ui32 firstNodeId, ui32 lastNodeId,
             std::optional<ui32> hostConfigId = std::nullopt) {
         for (ui32 nodeId = firstNodeId; nodeId <= lastNodeId; ++nodeId) {
             YAML::Node host;
             host["host"] = "host_" + std::to_string(nodeId);
+            host["node_id"] = nodeId;
             if (hostConfigId) {
                 host["host_config_id"] = *hostConfigId;
             }

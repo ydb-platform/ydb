@@ -3,6 +3,8 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
     SIZE(MEDIUM)
 
     FORK_SUBTESTS()
+    # the chunks of the default split come close to the timeout of MEDIUM tests
+    SPLIT_FACTOR(20)
 
     SRCS(
         bridge_check_integrity.cpp

@@ -132,6 +132,81 @@ namespace {
         UNIT_ASSERT_VALUES_UNEQUAL(config.GetClusterStateDetails().GetNextStaticGroupId(), 0);
     }
 
+    // the notification of BSC about the finished conversion delivered after the cluster has been rolled back and
+    // converted again doesn't finish the new conversion; BSC of older version reports no identity of the conversion
+    void CheckStaleConversionNotificationIgnored(bool olderBsc) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        // the notification of the first conversion stays undelivered, then the reply to it is held
+        bool holdNotification = true;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> notifications;
+        std::optional<TActorId> bscId;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> replies;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (holdNotification && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType &&
+                    ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasNotifyBscConversionFinished()) {
+                notifications.emplace_back(nodeId, std::move(ev));
+                return false;
+            } else if (bscId && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType &&
+                    ev->Recipient == *bscId) {
+                replies.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        WaitUntil(env, [&] { return !notifications.empty(); }, "notification of BSC");
+        UNIT_ASSERT_VALUES_EQUAL(notifications.size(), 1);
+        CheckInlinePileGroup(env, groupId);
+        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+        holdNotification = false;
+        const ui64 clusterStateGeneration = QueryStorageConfig(env).GetClusterState().GetGeneration();
+
+        // the conversion is rolled back, and the cluster is converted again
+        res = InvokeDistconf(env, [](auto& record) { record.MutableRollbackBridge(); });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        WaitUntil(env, [&] { return !QueryStorageConfig(env).HasClusterState(); }, "cluster state removed");
+        res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+        // generations of the cluster state go on from the ones of the cluster rolled back
+        UNIT_ASSERT_GT(QueryStorageConfig(env).GetClusterState().GetGeneration(), clusterStateGeneration);
+
+        // the late notification of the first conversion leaves the second one pending
+        bscId.emplace(notifications.front().second->Sender);
+        for (auto& [nodeId, ev] : notifications) {
+            auto& record = *ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.MutableNotifyBscConversionFinished();
+            UNIT_ASSERT(record.GetBscConversionId());
+            if (olderBsc) {
+                record.ClearBscConversionId();
+            }
+        }
+        for (auto& [nodeId, ev] : std::exchange(notifications, {})) {
+            ResendEvent(env, nodeId, std::move(ev));
+        }
+        WaitUntil(env, [&] { return !replies.empty(); }, "reply to the notification");
+        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+
+        // BSC performs the second conversion then
+        bscId.reset();
+        for (auto& [nodeId, ev] : std::exchange(replies, {})) {
+            ResendEvent(env, nodeId, std::move(ev));
+        }
+        WaitUntil(env, [&] { return !QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending(); },
+            "second conversion finished");
+        CheckInlinePileGroup(env, groupId);
+        checker.Write(groupId);
+        checker.CheckAll();
+        env.Runtime->FilterFunction = {};
+    }
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeRollback) {
@@ -243,6 +318,7 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         checker.CheckAll();
 
         // static groups are ordinary ones as soon as the rollback is accepted
+        const ui64 clusterStateGeneration = QueryStorageConfig(env).GetClusterState().GetGeneration();
         auto res = InvokeDistconf(env, [](auto& record) { record.MutableRollbackBridge(); });
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
         const auto accepted = QueryStorageConfig(env); // a temporary would be gone before the loop body (pre-C++23)
@@ -258,6 +334,7 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         UNIT_ASSERT(!config.HasClusterStateDetails());
         UNIT_ASSERT_C(config.HasBridgeRollback(), config.ShortDebugString());
         UNIT_ASSERT_VALUES_UNEQUAL(config.GetBridgeRollback().GetNextStaticGroupId(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetBridgeRollback().GetClusterStateGeneration(), clusterStateGeneration);
         for (const auto *pb : {&config.GetStateStorageConfig(), &config.GetStateStorageBoardConfig(),
                 &config.GetSchemeBoardConfig()}) {
             for (const auto& ringGroup : pb->GetRingGroups()) {
@@ -295,8 +372,9 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         }
         checker.CheckAll();
 
-        // the cluster can be converted again, static group ids are not reused
+        // the cluster can be converted again, static group ids are not reused, generations of the cluster state go on
         ConvertClusterAgain(env, checker, groupId);
+        UNIT_ASSERT_GT(QueryStorageConfig(env).GetClusterState().GetGeneration(), clusterStateGeneration);
         for (ui32 id : dynamicGroupIds) {
             CheckInlinePileGroup(env, id);
         }
@@ -590,69 +668,12 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         env.Runtime->FilterFunction = {};
     }
 
-    // the notification of BSC about the finished conversion delivered after the cluster has been rolled back and
-    // converted again doesn't finish the new conversion
     Y_UNIT_TEST(StaleConversionNotificationIgnored) {
-        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
-        TEnvironmentSetup env(MakeUnbridgedSettings());
-        const ui32 groupId = CreatePoolAndGetGroup(env);
-        TDataChecker checker(env);
-        checker.Write(groupId);
-        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+        CheckStaleConversionNotificationIgnored(false);
+    }
 
-        // the notification of the first conversion stays undelivered, then the reply to it is held
-        bool holdNotification = true;
-        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> notifications;
-        std::optional<TActorId> bscId;
-        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> replies;
-        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-            if (holdNotification && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType &&
-                    ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasNotifyBscConversionFinished()) {
-                notifications.emplace_back(nodeId, std::move(ev));
-                return false;
-            } else if (bscId && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType &&
-                    ev->Recipient == *bscId) {
-                replies.emplace_back(nodeId, std::move(ev));
-                return false;
-            }
-            return true;
-        };
-        auto res = ConvertToBridge(env);
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
-        WaitUntil(env, [&] { return !notifications.empty(); }, "notification of BSC");
-        UNIT_ASSERT_VALUES_EQUAL(notifications.size(), 1);
-        CheckInlinePileGroup(env, groupId);
-        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
-        holdNotification = false;
-
-        // the conversion is rolled back, and the cluster is converted again
-        res = InvokeDistconf(env, [](auto& record) { record.MutableRollbackBridge(); });
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
-        WaitUntil(env, [&] { return !QueryStorageConfig(env).HasClusterState(); }, "cluster state removed");
-        res = ConvertToBridge(env);
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
-        env.Sim(TDuration::Seconds(10));
-        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
-
-        // the late notification of the first conversion leaves the second one pending
-        bscId.emplace(notifications.front().second->Sender);
-        for (auto& [nodeId, ev] : std::exchange(notifications, {})) {
-            ResendEvent(env, nodeId, std::move(ev));
-        }
-        WaitUntil(env, [&] { return !replies.empty(); }, "reply to the notification");
-        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
-
-        // BSC performs the second conversion then
-        bscId.reset();
-        for (auto& [nodeId, ev] : std::exchange(replies, {})) {
-            ResendEvent(env, nodeId, std::move(ev));
-        }
-        WaitUntil(env, [&] { return !QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending(); },
-            "second conversion finished");
-        CheckInlinePileGroup(env, groupId);
-        checker.Write(groupId);
-        checker.CheckAll();
-        env.Runtime->FilterFunction = {};
+    Y_UNIT_TEST(StaleConversionNotificationOfOlderBscIgnored) {
+        CheckStaleConversionNotificationIgnored(true);
     }
 
 }

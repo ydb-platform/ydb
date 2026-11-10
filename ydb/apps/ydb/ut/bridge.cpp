@@ -244,8 +244,11 @@ public:
 
 Y_UNIT_TEST_SUITE(BridgeCli) {
     Y_UNIT_TEST_F(DefaultListOutputIsUnchanged, TBridgeCliFixture) {
-        UNIT_ASSERT_VALUES_EQUAL(RunList(), "Pile primary: PRIMARY\nPile secondary: SYNCHRONIZED\nGeneration: 42\n");
+        const TString expected = "Pile primary: PRIMARY\nPile secondary: SYNCHRONIZED\nGeneration: 42\n";
+        UNIT_ASSERT_VALUES_EQUAL(RunList(), expected);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ClusterCalls.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(RunList({"piles"}), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ClusterCalls.load(), 2);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().Summary.Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().Databases.Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().Groups.Calls.load(), 0);
@@ -263,21 +266,32 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().Summary.Calls.load(), 0);
     }
 
+    Y_UNIT_TEST_F(ListHelpShowsSubcommandsAndPileOptions, TBridgeCliFixture) {
+        for (const auto* option : {"--help", "-hh"}) {
+            const auto help = RunList({option});
+            for (const auto* item : {"Subcommands", "piles", "databases", "groups", "--detailed", "--pile", "--format"}) {
+                UNIT_ASSERT_STRING_CONTAINS(help, item);
+            }
+            UNIT_ASSERT(!help.Contains("--database-path"));
+        }
+    }
+
     Y_UNIT_TEST_F(InvalidListOptionsAreRejectedBeforeRpc, TBridgeCliFixture) {
         const TVector<TList<TString>> invalid = {
-            {"--databases", "--groups"}, {"--path", "/Root/app"}, {"--pool", "pool"},
-            {"--databases", "--pool", "pool"}, {"--groups", "--path", "/Root/app", "--pool", "pool"},
+            {"databases", "groups"}, {"--database-path", "/Root/app"}, {"--pool", "pool"},
+            {"piles", "--database-path", "/Root/app"}, {"--detailed", "databases"},
+            {"databases", "--pool", "pool"}, {"groups", "--database-path", "/Root/app", "--pool", "pool"},
             {"--not-synced"}, {"--detailed", "--not-synced"},
-            {"--mode", "ordinary"}, {"--groups", "--path", "/Root/app", "--mode", "ordinary"},
-            {"--databases", "--mode", "unknown"},
-            {"--databases", "--page-size", "10"}, {"--groups", "--path", "/Root/app", "--page-token", "previous"},
-            {"--groups", "--path", "relative/path"}, {"--databases", "--path", ""}, {"--groups", "--pool", ""},
-            {"--pool-id", "1:2"}, {"--databases", "--pool-id", "1:2"},
-            {"--groups", "--pool", "pool", "--pool-id", "1:2"},
-            {"--groups", "--path", "/Root/app", "--pool-id", "1:2"},
-            {"--groups", "--pool-id", "1:0"}, {"--groups", "--pool-id", ":2"}, {"--groups", "--pool-id", "1:"},
-            {"--groups", "--pool-id", "1:2:3"}, {"--groups", "--pool-id", "-1:2"},
-            {"--groups", "--pool-id", "18446744073709551616:2"}, {"--groups", "--pool-id", "1:+2"},
+            {"--mode", "ordinary"}, {"groups", "--database-path", "/Root/app", "--mode", "ordinary"},
+            {"databases", "--mode", "unknown"},
+            {"databases", "--page-size", "10"}, {"groups", "--database-path", "/Root/app", "--page-token", "previous"},
+            {"groups", "--database-path", "relative/path"}, {"databases", "--database-path", ""}, {"groups", "--pool", ""},
+            {"--pool-id", "1:2"}, {"databases", "--pool-id", "1:2"},
+            {"groups", "--pool", "pool", "--pool-id", "1:2"},
+            {"groups", "--database-path", "/Root/app", "--pool-id", "1:2"},
+            {"groups", "--pool-id", "1:0"}, {"groups", "--pool-id", ":2"}, {"groups", "--pool-id", "1:"},
+            {"groups", "--pool-id", "1:2:3"}, {"groups", "--pool-id", "-1:2"},
+            {"groups", "--pool-id", "18446744073709551616:2"}, {"groups", "--pool-id", "1:+2"},
         };
         for (const auto& options : invalid) {
             ExpectFail();
@@ -321,7 +335,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_VALUES_EQUAL(counts["total"].GetUInteger(), 3);
         UNIT_ASSERT_VALUES_EQUAL(counts["not_required"].GetUInteger(), 1);
         UNIT_ASSERT(!json.Has("storage_state"));
-        const auto csv = RunList({"--detailed", "--pile", "secondary", "--format", "csv"});
+        const auto csv = RunList({"piles", "--detailed", "--pile", "secondary", "--format", "csv"});
         UNIT_ASSERT_STRING_CONTAINS(csv, "pile_name_present");
         UNIT_ASSERT_STRING_CONTAINS(csv, "databases_not_required");
         UNIT_ASSERT(!csv.Contains("false"));
@@ -384,7 +398,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         row->mutable_last_sync_error()->set_message("retrying");
         row->mutable_last_sync_error()->mutable_occurred_at()->set_nanos(500000000);
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--databases", "--path", "/Root/serverless", "--pile", "secondary",
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"databases", "--database-path", "/Root/serverless", "--pile", "secondary",
             "--not-synced", "--mode", "mixed", "--format", "json"}), &json));
         UNIT_ASSERT_VALUES_EQUAL(json["storage_owner_database_path"].GetString(), "/Root/shared");
         UNIT_ASSERT(!json.Has("next_page_token"));
@@ -415,10 +429,10 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         row->mutable_groups()->set_unknown(2);
         row->mutable_last_sync_error()->set_message("retrying");
         row->mutable_last_sync_error()->mutable_occurred_at()->set_nanos(500000000);
-        UNIT_ASSERT_VALUES_EQUAL(RunList({"--databases", "--detailed", "--format", "csv"}),
+        UNIT_ASSERT_VALUES_EQUAL(RunList({"databases", "--detailed", "--format", "csv"}),
             "database_path,storage_pools,storage_mode,pile_name,pile_name_present,groups_synced,groups_required,groups_syncing,groups_pending,groups_unknown,last_sync_error,last_sync_error_occurred_at\n"
             "/Root/app,\"[{\"\"id\"\":{\"\"box_id\"\":1,\"\"pool_id\"\":2},\"\"name\"\":\"\"pool,ssd\"\"}]\",bridged,secondary,true,3,8,2,1,2,retrying,1970-01-01T00:00:00.500000Z\n");
-        const auto pretty = RunList({"--databases", "--detailed"});
+        const auto pretty = RunList({"databases", "--detailed"});
         UNIT_ASSERT_STRING_CONTAINS(pretty, "SYNCING");
         UNIT_ASSERT_STRING_CONTAINS(pretty, "3/8");
         for (const auto* header : {"Synced groups", "Syncing groups", "Pending groups", "Unknown groups"}) {
@@ -426,7 +440,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         }
         UNIT_ASSERT_STRING_CONTAINS(pretty, "pool,ssd");
         UNIT_ASSERT_STRING_CONTAINS(pretty, "1970-01-01T00:00:00.500000Z");
-        UNIT_ASSERT(!RunList({"--databases", "--format", "csv"}).Contains("last_sync_error"));
+        UNIT_ASSERT(!RunList({"databases", "--format", "csv"}).Contains("last_sync_error"));
     }
 
     Y_UNIT_TEST_F(OrdinaryStoragePreservesAbsentOwnerAndPile, TBridgeCliFixture) {
@@ -434,15 +448,15 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         SetPool(row->add_storage_pools(), "ordinary");
         row->set_storage_mode(Ydb::Bridge::ORDINARY);
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--databases", "--format", "json"}), &json));
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"databases", "--format", "json"}), &json));
         const auto& database = json["databases"][0];
         UNIT_ASSERT(!database.Has("database_path"));
         UNIT_ASSERT(!database.Has("pile_name"));
         UNIT_ASSERT_VALUES_EQUAL(database["groups"]["required"].GetUInteger(), 0);
-        UNIT_ASSERT_STRING_CONTAINS(RunList({"--databases"}), "NOT_REQUIRED");
-        UNIT_ASSERT_STRING_CONTAINS(RunList({"--databases", "--format", "csv"}), ",ordinary,,false,0,0\n");
+        UNIT_ASSERT_STRING_CONTAINS(RunList({"databases"}), "NOT_REQUIRED");
+        UNIT_ASSERT_STRING_CONTAINS(RunList({"databases", "--format", "csv"}), ",ordinary,,false,0,0\n");
         Service<TBridgeService>().Databases.ExpectedRequest->set_storage_mode(Ydb::Bridge::ORDINARY);
-        UNIT_ASSERT_STRING_CONTAINS(RunList({"--databases", "--mode", "ordinary"}), "NOT_REQUIRED");
+        UNIT_ASSERT_STRING_CONTAINS(RunList({"databases", "--mode", "ordinary"}), "NOT_REQUIRED");
     }
 
     Y_UNIT_TEST_F(GroupViewPreservesEmptyPileAndPhysicalGroupPresence, TBridgeCliFixture) {
@@ -457,20 +471,20 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         SetPool(unplaced->mutable_storage_pool());
         unplaced->set_sync_status(Ydb::Bridge::NOT_REQUIRED);
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--groups", "--path", "/Root/app", "--format", "json"}), &json));
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"groups", "--database-path", "/Root/app", "--format", "json"}), &json));
         UNIT_ASSERT(json["groups"][0].Has("pile_name"));
         UNIT_ASSERT(json["groups"][0]["pile_name"].GetString().empty());
         UNIT_ASSERT(!json["groups"][0].Has("physical_group_id"));
         UNIT_ASSERT(!json["groups"][1].Has("pile_name"));
-        const auto csv = RunList({"--groups", "--path", "/Root/app", "--format", "csv"});
+        const auto csv = RunList({"groups", "--database-path", "/Root/app", "--format", "csv"});
         UNIT_ASSERT(csv.StartsWith("group_id,storage_pool,pile_name,pile_name_present,sync_status\n"));
         UNIT_ASSERT_STRING_CONTAINS(csv, ",,true,UNKNOWN\n");
         UNIT_ASSERT_STRING_CONTAINS(csv, ",,false,NOT_REQUIRED\n");
         UNIT_ASSERT(!csv.Contains("physical_group_id"));
-        UNIT_ASSERT_STRING_CONTAINS(RunList({"--groups", "--path", "/Root/app"}), "NOT_REQUIRED");
+        UNIT_ASSERT_STRING_CONTAINS(RunList({"groups", "--database-path", "/Root/app"}), "NOT_REQUIRED");
         result.mutable_groups()->RemoveLast();
         Service<TBridgeService>().Groups.ExpectedRequest->set_pile_name("");
-        UNIT_ASSERT_STRING_CONTAINS(RunList({"--groups", "--path", "/Root/app", "--pile", ""}), "\"\"");
+        UNIT_ASSERT_STRING_CONTAINS(RunList({"groups", "--database-path", "/Root/app", "--pile", ""}), "\"\"");
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ClusterCalls.load(), 0);
     }
 
@@ -488,11 +502,11 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         row->mutable_last_sync_error()->set_message("retry \"dc,2\"\r\nlater");
         row->mutable_last_sync_error()->mutable_occurred_at()->set_nanos(77000);
         TString error;
-        UNIT_ASSERT_VALUES_EQUAL(RunList({"--groups", "--pool", "pool,ssd", "--pile", "secondary", "--detailed", "--format", "csv"}, &error),
+        UNIT_ASSERT_VALUES_EQUAL(RunList({"groups", "--pool", "pool,ssd", "--pile", "secondary", "--detailed", "--format", "csv"}, &error),
             "group_id,storage_pool,pile_name,pile_name_present,sync_status,physical_group_id,sync_phase,last_sync_error,last_sync_error_occurred_at\n"
             "123,\"{\"\"id\"\":{\"\"box_id\"\":1,\"\"pool_id\"\":2},\"\"name\"\":\"\"pool,ssd\"\"}\",secondary,true,SYNCING,456,WRITE_KEEP_BARRIER_DONOTKEEP_DATA,\"retry \"\"dc,2\"\"\r\nlater\",1970-01-01T00:00:00.000077Z\n");
         UNIT_ASSERT(!error.Contains("Next page token:"));
-        const auto pretty = RunList({"--groups", "--pool", "pool,ssd", "--pile", "secondary", "--detailed"});
+        const auto pretty = RunList({"groups", "--pool", "pool,ssd", "--pile", "secondary", "--detailed"});
         UNIT_ASSERT_STRING_CONTAINS(pretty, "Physical group");
         UNIT_ASSERT_STRING_CONTAINS(pretty, "DATA");
         UNIT_ASSERT(!pretty.Contains("WRITE_KEEP"));
@@ -508,7 +522,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         SetPool(group->mutable_storage_pool(), "ambiguous", 0, 42);
         group->set_sync_status(Ydb::Bridge::SYNCED);
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--groups", "--pool-id", "0:42", "--format", "json"}), &json));
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"groups", "--pool-id", "0:42", "--format", "json"}), &json));
         UNIT_ASSERT_VALUES_EQUAL(json["groups"][0]["storage_pool"]["id"]["box_id"].GetUInteger(), 0);
         UNIT_ASSERT_VALUES_EQUAL(json["groups"][0]["storage_pool"]["id"]["pool_id"].GetUInteger(), 42);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().Groups.Calls.load(), 1);
@@ -528,16 +542,16 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         row->set_physical_group_id(0);
         row->set_pile_name("secondary");
         row->set_sync_status(Ydb::Bridge::SYNCING);
-        const auto pretty = RunList({"--groups", "--pile", "secondary", "--not-synced"});
+        const auto pretty = RunList({"groups", "--pile", "secondary", "--not-synced"});
         UNIT_ASSERT_STRING_CONTAINS(pretty, "SYNCING");
         UNIT_ASSERT_STRING_CONTAINS(pretty, "—");
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--groups", "--pile", "secondary", "--not-synced", "--format", "json"}), &json));
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"groups", "--pile", "secondary", "--not-synced", "--format", "json"}), &json));
         const auto& group = json["groups"][0];
         UNIT_ASSERT_VALUES_EQUAL(group["group_id"].GetUInteger(), 0);
         UNIT_ASSERT_VALUES_EQUAL(group["physical_group_id"].GetUInteger(), 0);
         UNIT_ASSERT(!group.Has("storage_pool"));
-        UNIT_ASSERT_STRING_CONTAINS(RunList({"--groups", "--pile", "secondary", "--not-synced", "--format", "csv"}),
+        UNIT_ASSERT_STRING_CONTAINS(RunList({"groups", "--pile", "secondary", "--not-synced", "--format", "csv"}),
             "0,,secondary,true,SYNCING\n");
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ClusterCalls.load(), 0);
     }
@@ -557,7 +571,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
             group->set_sync_status(Ydb::Bridge::PENDING);
         }
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--groups", "--path", "/Root/app", "--pile", "secondary",
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"groups", "--database-path", "/Root/app", "--pile", "secondary",
             "--not-synced", "--format", "json"}), &json));
         UNIT_ASSERT_VALUES_EQUAL(json["groups"].GetArray().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(json["groups"][1]["group_id"].GetUInteger(), 124);
@@ -576,7 +590,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
             group->set_sync_status(Ydb::Bridge::SYNCED);
         }
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--groups", "--path", "/Root/app", "--format", "json"}), &json));
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"groups", "--database-path", "/Root/app", "--format", "json"}), &json));
         UNIT_ASSERT_VALUES_EQUAL(json["groups"].GetArray().size(), 1001);
         UNIT_ASSERT_VALUES_EQUAL(json["groups"][1000]["group_id"].GetUInteger(), 1100);
         UNIT_ASSERT(!json.Has("next_page_token"));
@@ -590,7 +604,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         reply.ExpectedRequest->set_database_path("/Root/serverless");
         result.set_storage_owner_database_path("/Root/shared");
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--databases", "--path", "/Root/serverless", "--format", "json"}), &json));
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"databases", "--database-path", "/Root/serverless", "--format", "json"}), &json));
         UNIT_ASSERT(json["databases"].GetArray().empty());
         UNIT_ASSERT_VALUES_EQUAL(json["storage_owner_database_path"].GetString(), "/Root/shared");
         UNIT_ASSERT(!json.Has("next_page_token"));
@@ -605,13 +619,13 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         service.Databases.Issue = "Result limit exceeded; narrow database/pool/pile/status filter";
         ExpectFail();
         TString error;
-        UNIT_ASSERT(RunList({"--databases", "--format", "json"}, &error).empty());
+        UNIT_ASSERT(RunList({"databases", "--format", "json"}, &error).empty());
         UNIT_ASSERT_STRING_CONTAINS(error, "narrow database/pool/pile/status filter");
         PrepareGroups();
         service.Groups.Status = Ydb::StatusIds::PRECONDITION_FAILED;
         service.Groups.Issue = service.Databases.Issue;
         ExpectFail();
-        UNIT_ASSERT(RunList({"--groups", "--path", "/Root/app", "--format", "csv"}, &error).empty());
+        UNIT_ASSERT(RunList({"groups", "--database-path", "/Root/app", "--format", "csv"}, &error).empty());
         UNIT_ASSERT_STRING_CONTAINS(error, "narrow database/pool/pile/status filter");
         UNIT_ASSERT_VALUES_EQUAL(service.Databases.Calls.load(), 1);
         UNIT_ASSERT_VALUES_EQUAL(service.Groups.Calls.load(), 1);
@@ -626,7 +640,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         reply.Issue = "storage pool name is ambiguous; use its ID";
         ExpectFail();
         TString error;
-        UNIT_ASSERT(RunList({"--groups", "--pool", "ambiguous", "--format", "json"}, &error).empty());
+        UNIT_ASSERT(RunList({"groups", "--pool", "ambiguous", "--format", "json"}, &error).empty());
         UNIT_ASSERT_STRING_CONTAINS(error, "ambiguous");
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ClusterCalls.load(), 0);
     }

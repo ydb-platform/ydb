@@ -374,7 +374,7 @@ namespace NKikimr::NBsController {
             return true;
         };
         ui64 unattributedPools = 0;
-        for (const auto& poolId : selected) {
+щ        for (const auto& poolId : selected) {
             const auto& pool = StoragePools.at(poolId);
             TOwnerSummary* owner = nullptr;
             if (query.GetView() != TQuery::GROUPS) {

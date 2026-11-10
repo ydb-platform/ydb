@@ -3,7 +3,6 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
-#include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/generic/string.h>
 
@@ -47,24 +46,17 @@ private:
     std::vector<NYdb::NBridge::TPileStateUpdate> Updates;
 };
 
-class TCommandBridgeList : public TYdbReadOnlyCommand, public TCommandWithOutput {
+class TCommandBridgeList : public TClientCommandTree {
 public:
     TCommandBridgeList(bool allowEmptyDatabase);
-    void Config(TConfig& config) override;
-    void Parse(TConfig& config) override;
-    int Run(TConfig& config) override;
+    void Prepare(TConfig& config) override;
 
 private:
-    bool AllowEmptyDatabase;
-    bool Detailed = false;
-    enum class EView { Piles, Databases, Groups };
-    EView View = EView::Piles;
-    bool NotSynced = false;
-    TString DatabasePath;
-    TString StoragePool;
-    std::optional<NBridge::TStoragePoolId> StoragePoolId;
-    std::optional<TString> PileName;
-    std::optional<NBridge::EStorageMode> StorageModeFilter;
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+    class TView;
+    TView* Piles;
 };
 
 class TCommandBridgeSwitchover : public TYdbCommand {

@@ -639,4 +639,12 @@ message TTableServiceConfig {
     optional bool EnableLookupJoinPointPrefixes = 154 [default = false, (InvalidateCompileCache) = true];
 
     optional bool UseScalarHashJoin = 155 [default = false, (InvalidateCompileCache) = true];
+
+    // Try the direct YQL frontend before the existing compilation pipeline.
+    // Supported queries resolve names, reuse YQL scalar type annotation and lower
+    // directly to RBO. Unsupported constructs explicitly fall back to the legacy
+    // frontend; syntax/type errors remain diagnostics. Catalog loading and result
+    // packaging still use the existing pipeline. Changing frontend selection
+    // invalidates cached compilations even when both paths produce the same result.
+    optional bool EnableNewYqlParser = 156 [default = false, (InvalidateCompileCache) = true];
 };

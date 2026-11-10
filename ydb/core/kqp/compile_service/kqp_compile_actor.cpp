@@ -671,6 +671,9 @@ private:
         }
 
         auto kqpResult = std::move(AsyncCompileResult->GetResult());
+        // Native frontend fallback can switch optimizers during asynchronous
+        // preparation, after the initial Prepare call has returned.
+        EnableNewRBO = Config->GetEnableNewRBO();
         auto status = GetYdbStatus(kqpResult);
         auto meta = CollectMeta();
 

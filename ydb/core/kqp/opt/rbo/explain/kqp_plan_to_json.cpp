@@ -535,6 +535,7 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
     queryNode["PlanNodeType"] = "Query";
     queryNode["Plans"] = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
     queryNode["Plans"] = txPlan.GetMapSafe().at("Plans");
+    if (txPlan.Has("Stats")) { queryNode["Stats"] = txPlan["Stats"]; }
 
     queryPlan["Plan"] = queryNode;
 
@@ -544,9 +545,6 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
 }
 
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "") {
-    Y_UNUSED(queryStats);
-    Y_UNUSED(poolId);
-
     YQL_CLOG(TRACE, CoreDq) << "Serialize analyze plan";
 
 
@@ -597,6 +595,19 @@ TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKq
     applyStats(applyStats, txPlanJson);
 
     AddStatsToSimplifiedPlan(txPlanJson);
+    auto& stats = txPlanJson["Stats"];
+    if (queryStats.HasCompilation()) {
+        const auto& compilation = queryStats.GetCompilation();
+        stats["Compilation"]["FromCache"] = compilation.GetFromCache();
+        stats["Compilation"]["DurationUs"] = compilation.GetDurationUs();
+        stats["Compilation"]["CpuTimeUs"] = compilation.GetCpuTimeUs();
+    }
+    stats["ProcessCpuTimeUs"] = queryStats.GetWorkerCpuTimeUs();
+    stats["TotalDurationUs"] = queryStats.GetDurationUs();
+    if (poolId) {
+        stats["QueuedTimeUs"] = queryStats.GetQueuedTimeUs();
+        stats["ResourcePoolId"] = poolId;
+    }
     return SerializeRBOExplainPlan(txPlanJson);
 }
 

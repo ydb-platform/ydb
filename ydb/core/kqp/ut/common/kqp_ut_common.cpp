@@ -167,6 +167,14 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetDynamicNodeCount(settings.DynamicNodeCount);
 
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
+    // The new-parser regression driver reuses the original RBO binaries.
+    // Keep explicitly selected old-optimizer baselines on their old frontend.
+    // This is a test-runner hook, not a production configuration source. Running
+    // the original binaries preserves their data/setup/assertions; the wrapper
+    // changes only frontend selection for tests already configured to use RBO.
+    if (GetEnv("YDB_KQP_TEST_NEW_AST") == "1" && appConfig.GetTableServiceConfig().GetEnableNewRBO()) {
+        appConfig.MutableTableServiceConfig()->SetEnableNewYqlParser(true);
+    }
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     if (settings.EnableStorageProxy) {

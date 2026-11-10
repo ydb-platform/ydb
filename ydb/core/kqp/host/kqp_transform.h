@@ -12,6 +12,7 @@
 #include <util/generic/ptr.h>
 
 #include <optional>
+#include <functional>
 
 namespace NYql {
 
@@ -30,6 +31,8 @@ class TKqpPhyQuery;
 
 namespace NKikimr::NKqp {
 
+struct TNativeQuery;
+
 struct TKqlTransformContext : TThrRefBase {
     TKqlTransformContext(const TIntrusivePtr<NYql::TKikimrConfiguration>& config, TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx,
         TIntrusivePtr<NYql::TKikimrTablesData> tables);
@@ -45,6 +48,11 @@ struct TKqlTransformContext : TThrRefBase {
     TIntrusivePtr<NYql::TExprNode> ExplainTransformerInput; // Explain transformer must work after other transformers, but use input before peephole
     std::optional<NJson::TJsonValue> PlanJson; // JSON plan for the new optimizer
     TMaybe<NYql::NNodes::TKiDataQueryBlocks> DataQueryBlocks;
+
+    // Frontend input survives runner output resets and owns its RBO roots.
+    std::shared_ptr<TNativeQuery> NativeQuery;
+    TMaybe<bool> FrontendKeepInCache;
+    TMaybe<TString> FrontendCommandTag;
 
     void Reset();
 };

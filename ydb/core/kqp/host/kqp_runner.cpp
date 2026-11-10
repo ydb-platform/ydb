@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/opt/rbo/kqp_native_query.h>
 #include "kqp_host_impl.h"
 #include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
@@ -101,7 +102,7 @@ public:
             auto& preparedQuery = *TransformCtx.QueryCtx->PreparingQuery;
             TKqpPhysicalQuery physicalQuery(input);
 
-            YQL_ENSURE(TransformCtx.DataQueryBlocks);
+            YQL_ENSURE(TransformCtx.NativeQuery || TransformCtx.DataQueryBlocks);
             auto compiler = CreateKqpQueryCompiler(Cluster, Database, FuncRegistry, TypesCtx, OptimizeCtx, Config);
             if (!ctx.IssueManager.GetIssues().Empty()) {
                 bool errorFound = false;
@@ -126,7 +127,9 @@ public:
                 }
             }
 
-            auto ret = compiler->CompilePhysicalQuery(physicalQuery, *TransformCtx.DataQueryBlocks, *preparedQuery.MutablePhysicalQuery(), ctx);
+            auto ret = TransformCtx.NativeQuery
+                ? compiler->CompilePhysicalQuery(physicalQuery, TransformCtx.NativeQuery->Execution, *preparedQuery.MutablePhysicalQuery(), ctx)
+                : compiler->CompilePhysicalQuery(physicalQuery, *TransformCtx.DataQueryBlocks, *preparedQuery.MutablePhysicalQuery(), ctx);
             if (!ret) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Failed to compile physical query."));
                 return TStatus::Error;
@@ -251,7 +254,42 @@ public:
 
         const auto dataQueryBlocks = TKiDataQueryBlocks(query);
 
-        if (IsOlapQuery(dataQueryBlocks)) {
+        ConfigureBlockEngine(IsOlapQuery(dataQueryBlocks));
+
+        return PrepareQueryInternal(cluster, dataQueryBlocks, ctx, settings);
+    }
+
+    TIntrusivePtr<TAsyncQueryResult> PrepareNativeQuery(std::shared_ptr<TNativeQuery> query, TExprContext& ctx) override {
+        YQL_ENSURE(TransformCtx->QueryCtx->PrepareOnly && Config->GetEnableNewRBO());
+        if (TransformCtx->QueryCtx->Type == EKikimrQueryType::Scan && query->Results.size() != 1) {
+            ctx.AddError(YqlIssue(TPosition(), TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                "Scan query should have a single result set."));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+        }
+        const bool isOlap = std::any_of(query->Execution.TableOperations.begin(), query->Execution.TableOperations.end(),
+            [this](const auto& op) { return SessionCtx->Tables().ExistingTable(Cluster, op.GetTable()).Metadata->IsOlap(); });
+        if (TransformCtx->QueryCtx->Type == EKikimrQueryType::Query) { ConfigureBlockEngine(isOlap); }
+        YQL_ENSURE(query->Results.size() == query->Roots.size());
+        if (TransformCtx->QueryCtx->Type == EKikimrQueryType::Dml) {
+            for (size_t i = 0; i < query->Results.size(); ++i) {
+                auto& result = *TransformCtx->QueryCtx->PreparingQuery->AddResults();
+                result.SetKqlIndex(0);
+                result.SetResultIndex(i);
+                result.SetRowsLimit(query->Results[i].RowsLimit);
+                for (const auto& column : query->Results[i].ColumnHints) { *result.AddColumnHints() = column; }
+            }
+        }
+        TransformCtx->Reset();
+        TransformCtx->NativeQuery = std::move(query);
+        BuildQueryCtx->Reset();
+        CreateGraphTransformer(&TypesCtx, SessionCtx, FunctionRegistry);
+        NewRBOTransformer->Rewind();
+        return MakeIntrusive<TPrepareQueryAsyncResult>(ctx.NewWorld(TPositionHandle()), *NewRBOTransformer, ctx, *TransformCtx);
+    }
+
+private:
+    void ConfigureBlockEngine(bool isOlap) {
+        if (isOlap) {
             if (TransformCtx->Config->DisableBlockExecution.Get().GetOrElse(false)) {
                 TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Disable;
             } else {
@@ -268,11 +306,8 @@ public:
                 }
             }
         }
-
-        return PrepareQueryInternal(cluster, dataQueryBlocks, ctx, settings);
     }
 
-private:
     bool IsOlapQuery(const TKiDataQueryBlocks& dataQueryBlocks) {
         if (dataQueryBlocks.ArgCount() != 1) {
             return false;
@@ -492,11 +527,13 @@ private:
             //    .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             //    .Build(false);
 
-            auto newRBOPhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
+            auto nativePipeline = TTransformationPipeline(typesCtx)
                 .AddServiceTransformers()
                 .Add(Log("NewRBOPhysicalOptimize"), "LogNewRBOPhysicalOptimize")
                 .Add(CreateCompileTraceBegin(getTrace, TCompileTraceLevels::Phase, "Optimize query",
-                    &optimization, newRbo), "TraceBeginOptimizeQuery")
+                    &optimization, newRbo), "TraceBeginOptimizeQuery");
+            if (!TransformCtx->NativeQuery) {
+                nativePipeline
                 .Add(CreateCompileTraceBegin(getTrace, TCompileTraceLevels::Step, "Annotate KQL query",
                     &passes), "TraceBeginAnnotateKqlQuery")
                 .AddPreTypeAnnotation()
@@ -510,7 +547,9 @@ private:
                 //.AddCommonOptimization()
 
                 .Add(traced(CreateKqpRewriteSelectTransformer(OptimizeCtx, *typesCtx), "Rewrite select",
-                    TCompileTraceLevels::Step), "RewriteSelect")
+                    TCompileTraceLevels::Step), "RewriteSelect");
+            }
+            auto newRBOPhysicalOptimizeTransformer = nativePipeline
                 .Add(traced(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, std::move(rboKqpTypeAnnTransformer),
                     SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem, funcRegistry, TransformCtx),
                     "Run new RBO", TCompileTraceLevels::Step), "NewRBOTransformer")

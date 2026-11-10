@@ -1,0 +1,132 @@
+#include "kqp_new_parser.h"
+#include "kqp_ast_builder.h"
+
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
+#include <ydb/core/kqp/host/new_parser/grammar/default/SQLv1Antlr4Lexer.h>
+#include <ydb/core/kqp/host/new_parser/grammar/default/SQLv1Antlr4Parser.h>
+#include <ydb/core/kqp/host/new_parser/grammar/ansi/SQLv1Antlr4Lexer.h>
+#include <ydb/core/kqp/host/new_parser/grammar/ansi/SQLv1Antlr4Parser.h>
+#include <yql/essentials/parser/common/antlr4/depth_limiting_listener.h>
+#include <yql/essentials/parser/common/antlr4/error_listener.h>
+#include <yql/essentials/parser/common/issue.h>
+
+#include <util/generic/scope.h>
+
+#include <optional>
+
+namespace NKikimr::NKqp {
+
+namespace {
+
+// Own the complete ANTLR lifetime chain for one parse. The parser owns the CST;
+// tokens and character input must remain alive until the builder has copied it.
+template <typename TLexer, typename TParser, bool AnsiLexer>
+class TParseTree {
+public:
+    explicit TParseTree(const TString& queryText)
+        : Text(queryText)
+        , Input(Text)
+        , Lexer(&Input)
+        , Tokens(&Lexer)
+        , Parser(&Tokens)
+    {}
+
+    bool Parse(const NSQLTranslation::TTranslationSettings& settings, bool isAmbiguityError, NYql::TIssues& issues) {
+        NSQLTranslation::TErrorCollectorOverIssues collector(issues, settings.MaxErrors, settings.File);
+        bool hasErrors = false;
+        antlr4::YqlErrorListener errorListener(&collector, &hasErrors, isAmbiguityError);
+        NAntlrAST::TDepthLimitingListener depthLimiter(4096);
+        Lexer.removeErrorListeners();
+        Lexer.addErrorListener(&errorListener);
+        Parser.removeErrorListeners();
+        Parser.addErrorListener(&errorListener);
+        Parser.addParseListener(&depthLimiter);
+        Parser.setBuildParseTree(true);
+        // Listeners are stack objects, while Lexer and Parser survive this call.
+        // Detach them on every exit, including diagnostic/depth-limit exceptions.
+        Y_DEFER {
+            Lexer.removeErrorListeners();
+            Parser.removeErrorListeners();
+            Parser.removeParseListener(&depthLimiter);
+        };
+
+        try {
+            Root = Parser.sql_query();
+            return !hasErrors && Root;
+        } catch (const NAST::TTooManyErrors&) {
+            // The collector already holds the parser diagnostics.
+            return false;
+        }
+    }
+
+    antlr4::ParserRuleContext* GetRoot() const {
+        return Root;
+    }
+
+private:
+    // Declaration order matters: dependencies are constructed first and destroyed
+    // last. Root is borrowed from Parser and must never escape this wrapper.
+    TString Text;
+    antlr4::ANTLRInputStream Input;
+    TLexer Lexer;
+    antlr4::CommonTokenStream Tokens;
+    TParser Parser;
+    antlr4::ParserRuleContext* Root = nullptr;
+};
+
+template <typename TLexer, typename TParser, bool AnsiLexer>
+std::unique_ptr<NNewYql::TScript> ParseQuery(const TString& queryText,
+    const NSQLTranslation::TTranslationSettings& settings, bool isAmbiguityError, NYql::TIssues& issues,
+    TCompileTrace* trace)
+{
+    std::optional<TParseTree<TLexer, TParser, AnsiLexer>> tree;
+    {
+        TCompileTraceScope phase(trace, TCompileTraceLevels::Detail, "Initialize native parser");
+        tree.emplace(queryText);
+    }
+    {
+        TCompileTraceScope phase(trace, TCompileTraceLevels::Detail, "Parse native ANTLR CST");
+        const bool success = tree->Parse(settings, isAmbiguityError, issues);
+        phase.SetSuccess(success);
+        if (!success) { return nullptr; }
+    }
+    // Build while the CST and token text are valid; only the owning AST escapes.
+    std::unique_ptr<NNewYql::TScript> ast;
+    {
+        TCompileTraceScope phase(trace, TCompileTraceLevels::Detail, "Build native syntax AST");
+        ast = BuildNewYqlAst(*tree->GetRoot(), AnsiLexer, settings.File);
+    }
+    {
+        TCompileTraceScope phase(trace, TCompileTraceLevels::Detail, "Release native CST");
+        tree.reset();
+    }
+    return ast;
+}
+
+} // namespace
+
+TNewYqlParseResult ParseQueryWithNewParser(const TString& queryText,
+    NSQLTranslation::TTranslationSettings settings, bool isAmbiguityError, TCompileTrace* trace)
+{
+    TNewYqlParseResult result;
+    // Honor SQL comment directives before choosing a lexer. A directive error
+    // is a user diagnostic, while an unsupported dialect requests fallback.
+    if (!NSQLTranslation::ParseTranslationSettings(queryText, settings, result.Issues)) {
+        return result;
+    }
+
+    if (settings.PgParser || settings.SyntaxVersion != 1 || settings.Syntax) {
+        ythrow TNewYqlParserFallback() << "The new YQL parser path only supports YQL v1 syntax";
+    }
+
+    if (settings.AnsiLexer) {
+        result.Ast = ParseQuery<NKqpAnsiAntlr4::SQLv1Antlr4Lexer, NKqpAnsiAntlr4::SQLv1Antlr4Parser, true>(
+            queryText, settings, isAmbiguityError, result.Issues, trace);
+    } else {
+        result.Ast = ParseQuery<NKqpDefaultAntlr4::SQLv1Antlr4Lexer, NKqpDefaultAntlr4::SQLv1Antlr4Parser, false>(
+            queryText, settings, isAmbiguityError, result.Issues, trace);
+    }
+    return result;
+}
+
+} // namespace NKikimr::NKqp

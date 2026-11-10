@@ -589,6 +589,27 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         AssertRboCpuValues(fullScan, 7, 7, simplifiedPlan);
     }
 
+    Y_UNIT_TEST(ExplainAnalyzeQueryStatistics) {
+        const TString txPlan = R"({"Plans": [{"Node Type": "ResultSet"}], "SimplifiedPlan": {}})";
+        NKqpProto::TKqpStatsQuery queryStats;
+        queryStats.MutableCompilation()->SetFromCache(true);
+        queryStats.MutableCompilation()->SetDurationUs(12);
+        queryStats.MutableCompilation()->SetCpuTimeUs(7);
+        queryStats.SetWorkerCpuTimeUs(40);
+        queryStats.SetDurationUs(100);
+        queryStats.SetQueuedTimeUs(20);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(SerializeRBOAnalyzePlan({txPlan}, queryStats, "pool"), &json, true);
+        const auto& stats = json["Plan"]["Stats"];
+        UNIT_ASSERT(stats["Compilation"]["FromCache"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(stats["Compilation"]["DurationUs"].GetUIntegerSafe(), 12);
+        UNIT_ASSERT_VALUES_EQUAL(stats["Compilation"]["CpuTimeUs"].GetUIntegerSafe(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(stats["ProcessCpuTimeUs"].GetUIntegerSafe(), 40);
+        UNIT_ASSERT_VALUES_EQUAL(stats["TotalDurationUs"].GetUIntegerSafe(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(stats["QueuedTimeUs"].GetUIntegerSafe(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(stats["ResourcePoolId"].GetStringSafe(), "pool");
+    }
+
     Y_UNIT_TEST(ExplainAnalyzeDuplicateOperatorIdUsesFirstMatch) {
         const TString txPlan = R"({
             "Plans": [{

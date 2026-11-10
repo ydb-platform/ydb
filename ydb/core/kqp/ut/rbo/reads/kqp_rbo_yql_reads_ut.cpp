@@ -426,6 +426,45 @@ void TestOlapProjectionPushdown(bool explain) {
     }
 }
 
+// The names of the operators in the plan stage that reads `table`, or nothing if no stage reads it.
+TVector<TString> GetReadStageOperators(const NJson::TJsonValue& node, const TString& table) {
+    if (node.IsArray()) {
+        for (const auto& child : node.GetArraySafe()) {
+            if (auto operators = GetReadStageOperators(child, table); !operators.empty()) {
+                return operators;
+            }
+        }
+        return {};
+    }
+    if (!node.IsMap()) {
+        return {};
+    }
+
+    const auto& map = node.GetMapSafe();
+    if (const auto operators = map.find("Operators"); operators != map.end() && operators->second.IsArray()) {
+        TVector<TString> names;
+        bool reads = false;
+        for (const auto& op : operators->second.GetArraySafe()) {
+            const auto& opMap = op.GetMapSafe();
+            if (const auto name = opMap.find("Name"); name != opMap.end() && name->second.IsString()) {
+                names.push_back(name->second.GetStringSafe());
+            }
+            if (const auto path = opMap.find("Path"); path != opMap.end() && path->second.IsString()) {
+                reads |= path->second.GetStringSafe() == table;
+            }
+        }
+        if (reads) {
+            return names;
+        }
+    }
+    for (const auto& [_, child] : map) {
+        if (auto operators = GetReadStageOperators(child, table); !operators.empty()) {
+            return operators;
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 using namespace NYdb;
@@ -1287,6 +1326,100 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(0).GetOptionalJsonDocument(), R"({"x":"value"})");
         UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(1).GetOptionalUtf8(), "value");
         UNIT_ASSERT(!parser.TryNextRow());
+    }
+
+    Y_UNIT_TEST(RowReadStageRunsFiltersAndMaps) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Several shards, so that the read has several tasks, and each of them filters its own rows.
+        const auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64 NOT NULL,
+                PRIMARY KEY (a, b)
+            ) WITH (PARTITION_AT_KEYS = (1, 2));
+
+            CREATE TABLE `/Root/dim` (
+                a Int64 NOT NULL,
+                d Int64 NOT NULL,
+                PRIMARY KEY (a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, b, c] : std::vector<std::tuple<i64, i64, i64>>{{0, 9, 1}, {1, 1, 7}, {1, 2, 5}, {2, 1, 3}, {2, 2, 4}}) {
+            rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("b").Int64(b).AddMember("c").Int64(c).EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder dimRows;
+        dimRows.BeginList();
+        for (const auto& [a, d] : std::vector<std::pair<i64, i64>>{{1, 100}, {2, 200}}) {
+            dimRows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("d").Int64(d).EndStruct();
+        }
+        dimRows.EndList();
+        const auto dimResult = db.BulkUpsert("/Root/dim", dimRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(dimResult.IsSuccess(), dimResult.GetIssues().ToString());
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // Whether the stage that reads `/Root/t` filters its rows, as in the old optimizer.
+            bool Filtered;
+            // Whether the ranges of the read are computed in a separate transaction.
+            bool ComputedRanges;
+        };
+
+        const std::vector<TCase> cases = {
+            {"select a, b from `/Root/t` where c > 3", "[[1;1];[1;2];[2;2]]", true, false},
+            // A map runs in the read stage too.
+            {"select a, b, c * 10 as d from `/Root/t` where c > 3", "[[1;1;70];[1;2;50];[2;2;40]]", true, false},
+            {"select a + b as s from `/Root/t`", "[[9];[2];[3];[3];[4]]", false, false},
+            // A filter on a non-key column over a literal key range and over computed ones.
+            {"select a, b from `/Root/t` where a = 1 and c > 5", "[[1;1]]", true, false},
+            {"select a, b from `/Root/t` where a in (0, 2) and c > 3", "[[2;2]]", true, true},
+            // The filtered read is the input of an aggregate and of a join.
+            {"select count(*) from `/Root/t` where c > 3", "[[3u]]", true, false},
+            {"select t.a, t.b, d.d from `/Root/t` as t join `/Root/dim` as d on t.a = d.a where t.c > 3",
+                "[[1;1;100];[1;2;100];[2;2;200]]", true, false},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; " + testCase.Query + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString plan{*explain.GetStats()->GetPlan()};
+            NJson::TJsonValue planJson;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+            const auto operators = GetReadStageOperators(planJson.GetMapSafe().at("Plan"), "/Root/t");
+            UNIT_ASSERT_C(!operators.empty(), query << ": no stage reads /Root/t, plan: " << plan);
+            const bool filtered = std::find(operators.begin(), operators.end(), "Filter") != operators.end();
+            UNIT_ASSERT_VALUES_EQUAL_C(filtered, testCase.Filtered, query << ", plan: " << plan);
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("RangeFinalize"), testCase.ComputedRanges, query << ", ast: " << ast);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYsonUnordered(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)), query);
+        }
+
+        // A system view is read by a row source as well.
+        const TString sysViewQuery = R"(PRAGMA YqlSelect = 'force'; select count(*) from `/Root/.sys/nodes` where Host = "::1"u;)";
+        auto sysViewResult = querySession.ExecuteQuery(sysViewQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(sysViewResult.IsSuccess(), sysViewResult.GetIssues().ToString());
+        CompareYson("[[1u]]", FormatResultSetYson(sysViewResult.GetResultSet(0)));
     }
 
 }

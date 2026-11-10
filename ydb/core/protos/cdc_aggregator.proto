@@ -19,7 +19,7 @@ option java_package = "ru.yandex.kikimr.proto";
 // opaque serialized NKikimrPQClient::TDataChunk of the heartbeat record in the
 // stream format; it is written to the topic as is when H becomes the barrier.
 message TBarrier {
-    optional NKikimrProto::TRowVersion Version = 1;
+    optional NKikimrProto.TRowVersion Version = 1;
     optional bytes Payload = 2;
 }
 
@@ -30,7 +30,7 @@ message TPartition {
 }
 
 message TStreamConfig {
-    optional NKikimrProto::TPathID StreamPathId = 1;
+    optional NKikimrProto.TPathID StreamPathId = 1;
     // SchemeShard that owns the stream and the aggregator tablet.
     optional fixed64 SchemeShardId = 2;
     optional uint64 ConfigVersion = 3;
@@ -65,7 +65,7 @@ message TEvConfigureResult {
 // SchemeShard -> CdcAggregator: all participants are configured, the barrier
 // may be published. Reports are accepted before activation as well.
 message TEvActivate {
-    optional NKikimrProto::TPathID StreamPathId = 1;
+    optional NKikimrProto.TPathID StreamPathId = 1;
     optional uint64 ConfigVersion = 2;
 }
 
@@ -91,7 +91,7 @@ message TSourceReport {
 // CdcAggregatorService -> CdcAggregator: reports of several sources.
 // The batch is committed atomically.
 message TEvReportDeliveredBatch {
-    optional NKikimrProto::TPathID StreamPathId = 1;
+    optional NKikimrProto.TPathID StreamPathId = 1;
     repeated TSourceReport Reports = 2;
 }
 
@@ -120,7 +120,7 @@ message TEvReportDeliveredBatchResult {
 
         optional fixed64 SourceTabletId = 1;
         optional EStatus Status = 2;
-        optional NKikimrProto::TRowVersion PersistedVersion = 3;
+        optional NKikimrProto.TRowVersion PersistedVersion = 3;
     }
 
     optional EStatus Status = 1;
@@ -134,7 +134,7 @@ message TEvReportDeliveredBatchResult {
 // source with its children. Children start without progress. Repeating the
 // same replacement is safe; the parent never returns to the set.
 message TEvReplaceSource {
-    optional NKikimrProto::TPathID StreamPathId = 1;
+    optional NKikimrProto.TPathID StreamPathId = 1;
     optional fixed64 ParentTabletId = 2;
     repeated fixed64 ChildTabletIds = 3;
     // Split/merge operation that caused the replacement, for diagnostics.
@@ -155,4 +155,28 @@ message TEvReplaceSourceResult {
     optional EStatus Status = 1;
     optional string Error = 2;
     optional fixed64 Origin = 3;
+}
+
+// Diagnostics: committed state of the stream, e.g. which sources hold the
+// barrier back.
+message TEvDescribeStream {
+}
+
+message TEvDescribeStreamResult {
+    message TSource {
+        optional fixed64 SourceTabletId = 1;
+        // Absent until the first report; such a source blocks the barrier.
+        optional NKikimrProto.TRowVersion Delivered = 2;
+    }
+
+    optional fixed64 Origin = 1;
+    // Absent until the tablet is configured.
+    optional TStreamConfig Config = 2;
+    optional bool Active = 3;
+    // Absent until every source has reported.
+    optional TBarrier ReadyBarrier = 4;
+    // Current set of sources.
+    repeated TSource Sources = 5;
+    // Sources replaced by split/merge.
+    repeated fixed64 RetiredSourceTabletIds = 6;
 }

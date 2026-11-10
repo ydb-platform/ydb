@@ -22,6 +22,8 @@ namespace TEvCdcAggregator {
         EvReportDeliveredBatchResult,
         EvReplaceSource,
         EvReplaceSourceResult,
+        EvDescribeStream,
+        EvDescribeStreamResult,
 
         // CdcAggregatorService protocol, local to a node.
         EvReportDelivered = EvConfigure + 512,
@@ -63,6 +65,14 @@ namespace TEvCdcAggregator {
 
     struct TEvReplaceSourceResult
         : public TEventPB<TEvReplaceSourceResult, NKikimrCdcAggregator::TEvReplaceSourceResult, EvReplaceSourceResult>
+    {};
+
+    struct TEvDescribeStream
+        : public TEventPB<TEvDescribeStream, NKikimrCdcAggregator::TEvDescribeStream, EvDescribeStream>
+    {};
+
+    struct TEvDescribeStreamResult
+        : public TEventPB<TEvDescribeStreamResult, NKikimrCdcAggregator::TEvDescribeStreamResult, EvDescribeStreamResult>
     {};
 
     // CDC sender -> local CdcAggregatorService.

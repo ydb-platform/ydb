@@ -40,6 +40,7 @@ edge actor in tests.
 | SchemeShard → CdcAggregator | `TEvConfigure`, `TEvActivate` (`public/events.h`, `protos/cdc_aggregator.proto`) | 1, 5.1, 5.2 |
 | Service → CdcAggregator | `TEvReportDeliveredBatch` | 1, 2 |
 | Split/merge → CdcAggregator | `TEvReplaceSource` | 1, 5.1, 5.2 |
+| Diagnostics → CdcAggregator | `TEvDescribeStream`: configuration, barrier, sources without progress | 1, 5.1, 5.2 |
 | Sender → Service | `TEvReportDelivered`, `MakeCdcAggregatorServiceId` (local events) | 2, 3 |
 | CdcAggregator → PersQueue | `TPersQueuePartitionRequest.CmdPublishCdcBarrier` | 4 |
 | SchemeShard → DataShard | `TCdcStreamDescription.BarrierMode`, `AggregatorTabletId` | 3, 5.1 |

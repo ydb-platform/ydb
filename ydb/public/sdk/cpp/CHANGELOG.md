@@ -1,3 +1,5 @@
+* Added `TSecretClient::ExportSecret()` with `NScheme::TExportSecretSettings` to export a secret into a topic in the same database, returning only the operation status.
+
 * Topic and PersQueue writers now schedule RAW and pre-encoded messages on the configured compression executor, reducing request construction on the caller thread.
 
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.

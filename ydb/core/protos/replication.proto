@@ -50,6 +50,11 @@ message TOAuthToken {
     optional string TokenSecretName = 2;
 }
 
+message TSecretRecord {
+    optional string SourcePath = 1;
+    optional bytes Value = 2 [(Ydb.sensitive) = true];
+}
+
 message TIamCredentials {
     optional string ServiceAccountId = 1;
     optional TOAuthToken InitialToken = 2 [(Ydb.sensitive) = true]; // Initial token used to check rights & to resolve ResourceId

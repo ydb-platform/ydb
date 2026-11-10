@@ -17,6 +17,18 @@ public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings) {}
 
+    TAsyncStatus ExportSecret(const std::string& secretPath, const std::string& topicPath,
+        const NScheme::TExportSecretSettings& settings)
+    {
+        auto request = MakeOperationRequest<::Ydb::Secret::ExportSecretRequest>(settings);
+        request.set_secret_path(TStringType{secretPath});
+        request.set_topic_path(TStringType{topicPath});
+        return RunSimple<::Ydb::Secret::V1::SecretService,
+            ::Ydb::Secret::ExportSecretRequest, ::Ydb::Secret::ExportSecretResponse>(
+            std::move(request), &::Ydb::Secret::V1::SecretService::Stub::AsyncExportSecret,
+            TRpcRequestSettings::Make(settings));
+    }
+
     TAsyncDescribeSecretResult DescribeSecret(const std::string& path, const NScheme::TDescribePathSettings& settings) {
         auto request = MakeOperationRequest<::Ydb::Secret::DescribeSecretRequest>(settings);
         request.set_path(TStringType{path});
@@ -83,6 +95,12 @@ void TDescribeSecretResult::SerializeTo(::Ydb::Scheme::Entry* proto) const {
 TSecretClient::TSecretClient(const TDriver& driver, const TCommonClientSettings& settings)
     : Impl_(new TImpl(CreateInternalInterface(driver), settings))
 {}
+
+TAsyncStatus TSecretClient::ExportSecret(const std::string& secretPath, const std::string& topicPath,
+    const NScheme::TExportSecretSettings& settings)
+{
+    return Impl_->ExportSecret(secretPath, topicPath, settings);
+}
 
 TAsyncDescribeSecretResult TSecretClient::DescribeSecret(const std::string& path, const NScheme::TDescribePathSettings& settings) {
     return Impl_->DescribeSecret(path, settings);

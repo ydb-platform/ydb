@@ -43,6 +43,7 @@ SRCS(
     rpc_explain_data_query.cpp
     rpc_explain_yql_script.cpp
     rpc_export.cpp
+    rpc_export_secret.cpp
     rpc_fq.cpp
     rpc_fq_internal.cpp
     rpc_keep_alive.cpp
@@ -185,6 +186,7 @@ PEERDIR(
     contrib/libs/xxhash
     library/cpp/cgiparam
     library/cpp/digest/old_crc
+    library/cpp/retry
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/backup/common
@@ -211,6 +213,8 @@ PEERDIR(
     ydb/core/kqp/script_executions/common
     ydb/core/local_indexes/bloom
     ydb/core/persqueue/deferred_publish
+    ydb/core/persqueue/public/schema
+    ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
     ydb/core/security
@@ -280,5 +284,6 @@ RECURSE_FOR_TESTS(
     grpc_request_check_actor_ut
     grpc_request_tracing_ut
     ut
+    ut_export_secret
     ut_read_rows_bench
 )

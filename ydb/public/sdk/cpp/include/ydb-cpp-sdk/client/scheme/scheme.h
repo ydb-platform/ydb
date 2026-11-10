@@ -94,6 +94,8 @@ struct TRemoveDirectorySettings : public TOperationRequestSettings<TRemoveDirect
 
 struct TDescribePathSettings : public TOperationRequestSettings<TDescribePathSettings> {};
 
+struct TExportSecretSettings : public TOperationRequestSettings<TExportSecretSettings> {};
+
 struct TListDirectorySettings : public TOperationRequestSettings<TListDirectorySettings> {};
 
 enum class EModifyPermissionsAction {

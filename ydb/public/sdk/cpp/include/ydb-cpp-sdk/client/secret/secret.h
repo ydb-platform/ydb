@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NYdb::inline Dev {
 namespace NSecret {
@@ -14,6 +16,9 @@ class TSecretClient {
 
 public:
     TSecretClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
+
+    TAsyncStatus ExportSecret(const std::string& secretPath, const std::string& topicPath,
+        const NScheme::TExportSecretSettings& settings = NScheme::TExportSecretSettings());
 
     TAsyncDescribeSecretResult DescribeSecret(const std::string& path,
         const NScheme::TDescribePathSettings& settings = NScheme::TDescribePathSettings());

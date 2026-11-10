@@ -2,6 +2,7 @@
 
 #include "ydb_command.h"
 #include "ydb_common.h"
+#include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
 
 #include <util/generic/string.h>
@@ -24,7 +25,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    TString TargetDatabase;
+    TString DatabasePath;
     bool Bridged = false;
     TString RetainPile;
 };
@@ -46,17 +47,25 @@ private:
     std::vector<NYdb::NBridge::TPileStateUpdate> Updates;
 };
 
-class TCommandBridgeList : public TClientCommandTree {
+class TCommandBridgeList : public TYdbReadOnlyCommand, public TCommandWithOutput {
 public:
     TCommandBridgeList(bool allowEmptyDatabase);
-    void Prepare(TConfig& config) override;
-
-private:
     void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
 
-    class TView;
-    TView* Piles;
+private:
+    enum class EView { Piles, Databases, Groups };
+
+    const bool AllowEmptyDatabase;
+    EView View = EView::Piles;
+    bool Detailed = false;
+    bool NotSynced = false;
+    TString DatabasePath;
+    TString StoragePool;
+    std::optional<NBridge::TStoragePoolId> StoragePoolId;
+    std::optional<TString> PileName;
+    std::optional<NBridge::EStorageMode> StorageModeFilter;
 };
 
 class TCommandBridgeRollbackStatus : public TYdbReadOnlyCommand, public TCommandWithOutput {

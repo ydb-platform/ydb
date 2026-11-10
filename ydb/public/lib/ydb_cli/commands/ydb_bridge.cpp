@@ -78,9 +78,9 @@ void TCommandBridgeSetDatabaseMode::Config(TConfig& config) {
     config.Opts->GetOpts().GetFreeArgSpec(0)
         .Completer(NLastGetopt::NComp::Choice({{"bridged", "Enable bridge replication"},
                                              {"ordinary", "Disable bridge replication"}}));
-    config.Opts->AddLongOption("target-database", "Absolute path of the database to change. "
-            "Does not change the connection or authentication database set by global --database.")
-        .Required().RequiredArgument("PATH").StoreResult(&TargetDatabase);
+    config.Opts->AddLongOption("database-path", "Absolute path of the database to change. "
+            "The global --database option selects the connection database.")
+        .Required().RequiredArgument("PATH").StoreResult(&DatabasePath);
     config.Opts->AddLongOption("retain-pile", "With mode ordinary, keep data in this pile, which must already have synchronized copies. "
             "By default, select copies automatically; they may be in different piles. Does not relocate existing ordinary data.")
         .RequiredArgument("PILE_NAME").StoreResult(&RetainPile);
@@ -101,7 +101,7 @@ void TCommandBridgeSetDatabaseMode::Parse(TConfig& config) {
 int TCommandBridgeSetDatabaseMode::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     NBridge::TBridgeClient client(driver);
-    auto result = client.SetDatabaseBridgeMode(TargetDatabase, Bridged, NBridge::TSetDatabaseBridgeModeSettings()
+    auto result = client.SetDatabaseBridgeMode(DatabasePath, Bridged, NBridge::TSetDatabaseBridgeModeSettings()
         .RetainPileName(RetainPile)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     Cout << "Database bridge mode updated successfully. Data synchronization and cleanup continue in the background." << Endl;
@@ -488,7 +488,7 @@ void TCommandBridgeConvert::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
     config.Opts->AddLongOption("skip-storage-pool-conversion",
             "Leave existing storage pools and their groups non-bridged. They will not be replicated to added piles "
-            "until converted separately (ydb admin cluster bridge set-database-mode bridged --target-database PATH). "
+            "until converted separately (ydb admin cluster bridge set-database-mode bridged --database-path PATH). "
             "Static storage groups are still converted to bridge mode. Requires bridge_config.enable_non_uniform_storage=true.")
         .StoreTrue(&SkipStoragePoolConversion);
 }

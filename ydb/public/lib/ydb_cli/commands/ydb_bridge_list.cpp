@@ -1,7 +1,6 @@
 #include "ydb_bridge.h"
 
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
-#include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 
 #include <library/cpp/json/json_value.h>
@@ -12,29 +11,6 @@
 #include <algorithm>
 
 namespace NYdb::NConsoleClient {
-
-    class TCommandBridgeList::TView : public TYdbReadOnlyCommand, public TCommandWithOutput {
-    public:
-        enum class EView { Piles, Databases, Groups };
-
-        TView(const TString& name, const TString& description, bool allowEmptyDatabase, EView view);
-        void AddCommonOptions(TConfig& config);
-        void Config(TConfig& config) override;
-        void Parse(TConfig& config) override;
-        int Run(TConfig& config) override;
-
-    private:
-        const bool AllowEmptyDatabase;
-        const EView View;
-        bool Detailed = false;
-        bool NotSynced = false;
-        TString DatabasePath;
-        TString StoragePool;
-        std::optional<NBridge::TStoragePoolId> StoragePoolId;
-        std::optional<TString> PileName;
-        std::optional<NBridge::EStorageMode> StorageModeFilter;
-    };
-
     namespace {
 
         TString PileStateToString(NBridge::EPileState state) {
@@ -539,123 +515,102 @@ namespace NYdb::NConsoleClient {
     } // namespace
 
     TCommandBridgeList::TCommandBridgeList(bool allowEmptyDatabase)
-        : TClientCommandTree("list", {}, "List bridge state and storage synchronization.")
+        : TYdbReadOnlyCommand("list", {}, "List bridge state and storage synchronization.")
+        , AllowEmptyDatabase(allowEmptyDatabase)
     {
-        using EView = TView::EView;
-        auto piles = std::make_unique<TView>("piles", "List the state of each pile", allowEmptyDatabase, EView::Piles);
-        Piles = piles.get();
-        AddCommand(std::move(piles));
-        AddCommand(std::make_unique<TView>("databases",
-            "List database synchronization by pile. Serverless databases use their shared storage.",
-            allowEmptyDatabase, EView::Databases));
-        AddCommand(std::make_unique<TView>("groups", "List storage group synchronization by pile",
-            allowEmptyDatabase, EView::Groups));
     }
 
     void TCommandBridgeList::Config(TConfig& config) {
-        TClientCommandTree::Config(config);
-        config.SetFreeArgsMin(0);
-        SetFreeArgTitle(0, "[<subcommand>]", "Defaults to piles.");
-        Piles->AddCommonOptions(config);
-    }
-
-    void TCommandBridgeList::Prepare(TConfig& config) {
-        TClientCommand::Prepare(config);
-        if (!SelectedCommand) {
-            Piles->Parse(config);
-            return;
-        }
-
-        if (config.ParseResult->Has("detailed") || config.ParseResult->Has("format") || config.ParseResult->Has("pile")) {
-            throw TMisuseException() << "Specify list options after the subcommand.";
-        }
-        // The common options are also registered on each subcommand.
-        config.ParentCommands.push_back({Name, nullptr});
-        SelectedCommand->Prepare(config);
-    }
-
-    int TCommandBridgeList::Run(TConfig& config) {
-        return SelectedCommand ? TClientCommandTree::Run(config) : Piles->Run(config);
-    }
-
-    TCommandBridgeList::TView::TView(const TString& name, const TString& description, bool allowEmptyDatabase, EView view)
-        : TYdbReadOnlyCommand(name, {}, description)
-        , AllowEmptyDatabase(allowEmptyDatabase)
-        , View(view)
-    {
-    }
-
-    void TCommandBridgeList::TView::AddCommonOptions(TConfig& config) {
+        TYdbReadOnlyCommand::Config(config);
         config.AllowEmptyDatabase = AllowEmptyDatabase;
+        config.SetFreeArgsNum(0, 1);
+        SetFreeArgTitle(0, "[piles|databases|groups]", "What to list. Defaults to piles.");
+        config.Opts->GetOpts().GetFreeArgSpec(0).Completer(NLastGetopt::NComp::Choice({
+            {"piles", "Pile state"},
+            {"databases", "Database synchronization by pile"},
+            {"groups", "Storage group synchronization by pile"},
+        }));
+
         AddOutputFormats(config, {EDataFormat::Pretty, EDataFormat::Json, EDataFormat::Csv});
-        const char* details = "Show database synchronization counts.";
-        if (View == EView::Databases) {
-            details = "Add group synchronization counts and the last error to table and CSV output.";
-        } else if (View == EView::Groups) {
-            details = "Add physical group IDs, synchronization phases and the last error to table and CSV output.";
-        }
-        config.Opts->AddLongOption("detailed", details)
+        config.Opts->AddLongOption("detailed", "Show database counts for piles, group counts and the last error for databases, "
+            "or physical group IDs, synchronization phases and the last error for groups. "
+            "Database and group JSON includes available details by default.")
             .StoreTrue(&Detailed);
         config.Opts->AddLongOption("pile", "Show only this pile. An empty name is valid.")
             .RequiredArgument("NAME")
             .Handler([this](const TString& name) { PileName = name; });
+        config.Opts->AddLongOption("database-path", "For databases and groups, filter by absolute database path. "
+            "Serverless paths select shared storage.")
+            .RequiredArgument("PATH")
+            .StoreResult(&DatabasePath);
+        config.Opts->AddLongOption("not-synced", "For databases and groups, show incomplete required synchronization, including unknown states.")
+            .StoreTrue(&NotSynced);
+        config.Opts->AddLongOption("pool", "For groups, select a uniquely named storage pool.")
+            .RequiredArgument("NAME")
+            .StoreResult(&StoragePool);
+        config.Opts->AddLongOption("pool-id", "For groups, select a storage pool by BOX:POOL ID. BOX may be zero and POOL must be nonzero.")
+            .RequiredArgument("BOX:POOL")
+            .Handler([this](const TString& value) { StoragePoolId = ParseStoragePoolId(value); });
+        config.Opts->AddLongOption("mode", "For databases, filter by the mode of all database pools (bridged, ordinary or mixed).")
+            .RequiredArgument("MODE")
+            .ChoicesWithCompletion({{"bridged", "Bridge synchronization enabled"},
+                                    {"ordinary", "Bridge synchronization disabled"},
+                                    {"mixed", "Database has both bridged and ordinary pools"}})
+            .Handler([this](const TString& value) {
+                if (value == "bridged") {
+                    StorageModeFilter = NBridge::EStorageMode::Bridged;
+                } else if (value == "ordinary") {
+                    StorageModeFilter = NBridge::EStorageMode::Ordinary;
+                } else if (value == "mixed") {
+                    StorageModeFilter = NBridge::EStorageMode::Mixed;
+                } else {
+                    throw TMisuseException() << "--mode must be bridged, ordinary or mixed.";
+                }
+            });
+        config.Opts->MutuallyExclusive("database-path", "pool");
+        config.Opts->MutuallyExclusive("database-path", "pool-id");
+        config.Opts->MutuallyExclusive("pool", "pool-id");
     }
 
-    void TCommandBridgeList::TView::Config(TConfig& config) {
-        TYdbReadOnlyCommand::Config(config);
-        config.SetFreeArgsNum(0);
-        AddCommonOptions(config);
-
-        if (View != EView::Piles) {
-            config.Opts->AddLongOption("database-path", "Filter by absolute database path. Serverless paths select shared storage.")
-                .RequiredArgument("PATH")
-                .StoreResult(&DatabasePath);
-            config.Opts->AddLongOption("not-synced", "Show rows with incomplete required synchronization, including unknown states.")
-                .StoreTrue(&NotSynced);
-        }
-        if (View == EView::Groups) {
-            config.Opts->AddLongOption("pool", "Select a uniquely named storage pool.")
-                .RequiredArgument("NAME")
-                .StoreResult(&StoragePool);
-            config.Opts->AddLongOption("pool-id", "Select a storage pool by BOX:POOL ID. BOX may be zero and POOL must be nonzero.")
-                .RequiredArgument("BOX:POOL")
-                .Handler([this](const TString& value) { StoragePoolId = ParseStoragePoolId(value); });
-            config.Opts->MutuallyExclusive("database-path", "pool");
-            config.Opts->MutuallyExclusive("database-path", "pool-id");
-            config.Opts->MutuallyExclusive("pool", "pool-id");
-        }
-        if (View == EView::Databases) {
-            config.Opts->AddLongOption("mode", "Filter by the mode of all database pools (bridged, ordinary or mixed).")
-                .RequiredArgument("MODE")
-                .ChoicesWithCompletion({{"bridged", "Bridge synchronization enabled"},
-                                        {"ordinary", "Bridge synchronization disabled"},
-                                        {"mixed", "Database has both bridged and ordinary pools"}})
-                .Handler([this](const TString& value) {
-                    if (value == "bridged") {
-                        StorageModeFilter = NBridge::EStorageMode::Bridged;
-                    } else if (value == "ordinary") {
-                        StorageModeFilter = NBridge::EStorageMode::Ordinary;
-                    } else if (value == "mixed") {
-                        StorageModeFilter = NBridge::EStorageMode::Mixed;
-                    } else {
-                        throw TMisuseException() << "--mode must be bridged, ordinary or mixed.";
-                    }
-                });
-        }
-    }
-
-    void TCommandBridgeList::TView::Parse(TConfig& config) {
+    void TCommandBridgeList::Parse(TConfig& config) {
         TClientCommand::Parse(config);
         ParseOutputFormats();
-        if (config.ParseResult->Has("database-path") && (DatabasePath.empty() || !DatabasePath.StartsWith('/'))) {
-            throw TMisuseException() << "--database-path must be an absolute database path.";
+
+        const auto args = config.ParseResult->GetFreeArgs();
+        if (args.empty() || args.front() == "piles") {
+            View = EView::Piles;
+        } else if (args.front() == "databases") {
+            View = EView::Databases;
+        } else if (args.front() == "groups") {
+            View = EView::Groups;
+        } else {
+            throw TMisuseException() << "Unknown view \"" << args.front() << "\". Use piles, databases or groups.";
         }
-        if (config.ParseResult->Has("pool") && StoragePool.empty()) {
+
+        if (config.ParseResult->Has("database-path")) {
+            if (View == EView::Piles) {
+                throw TMisuseException() << "--database-path requires databases or groups.";
+            }
+            if (DatabasePath.empty() || !DatabasePath.StartsWith('/')) {
+                throw TMisuseException() << "--database-path must be an absolute database path.";
+            }
+        }
+        const bool hasPool = config.ParseResult->Has("pool");
+        if (View != EView::Groups && (hasPool || StoragePoolId)) {
+            throw TMisuseException() << "--pool and --pool-id require groups.";
+        }
+        if (hasPool && StoragePool.empty()) {
             throw TMisuseException() << "--pool requires a non-empty pool name.";
+        }
+        if (View == EView::Piles && NotSynced) {
+            throw TMisuseException() << "--not-synced requires databases or groups.";
+        }
+        if (View != EView::Databases && StorageModeFilter) {
+            throw TMisuseException() << "--mode requires databases.";
         }
     }
 
-    int TCommandBridgeList::TView::Run(TConfig& config) {
+    int TCommandBridgeList::Run(TConfig& config) {
         auto driver = CreateDriver(config);
         NBridge::TBridgeClient client(driver);
         const bool csv = OutputFormat == EDataFormat::Csv;

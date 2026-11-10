@@ -288,20 +288,19 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().Summary.Calls.load(), 0);
     }
 
-    Y_UNIT_TEST_F(ListHelpShowsSubcommandsAndPileOptions, TBridgeCliFixture) {
+    Y_UNIT_TEST_F(ListHelpShowsViewsAndOptions, TBridgeCliFixture) {
         for (const auto* option : {"--help", "-hh"}) {
             const auto help = RunList({option});
-            for (const auto* item : {"Subcommands", "piles", "databases", "groups", "--detailed", "--pile", "--format"}) {
+            for (const auto* item : {"piles|databases|groups", "--detailed", "--pile", "--format", "--database-path"}) {
                 UNIT_ASSERT_STRING_CONTAINS(help, item);
             }
-            UNIT_ASSERT(!help.Contains("--database-path"));
         }
     }
 
     Y_UNIT_TEST_F(InvalidListOptionsAreRejectedBeforeRpc, TBridgeCliFixture) {
         const TVector<TList<TString>> invalid = {
-            {"databases", "groups"}, {"--database-path", "/Root/app"}, {"--pool", "pool"},
-            {"piles", "--database-path", "/Root/app"}, {"--detailed", "databases"},
+            {"unknown"}, {"databases", "groups"}, {"--database-path", "/Root/app"}, {"--pool", "pool"},
+            {"piles", "--database-path", "/Root/app"},
             {"databases", "--pool", "pool"}, {"groups", "--database-path", "/Root/app", "--pool", "pool"},
             {"--not-synced"}, {"--detailed", "--not-synced"},
             {"--mode", "ordinary"}, {"groups", "--database-path", "/Root/app", "--mode", "ordinary"},
@@ -420,8 +419,8 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         row->mutable_last_sync_error()->set_message("retrying");
         row->mutable_last_sync_error()->mutable_occurred_at()->set_nanos(500000000);
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"databases", "--database-path", "/Root/serverless", "--pile", "secondary",
-            "--not-synced", "--mode", "mixed", "--format", "json"}), &json));
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--format", "json", "databases", "--database-path", "/Root/serverless",
+            "--pile", "secondary", "--not-synced", "--mode", "mixed"}), &json));
         UNIT_ASSERT_VALUES_EQUAL(json["storage_owner_database_path"].GetString(), "/Root/shared");
         UNIT_ASSERT(!json.Has("next_page_token"));
         UNIT_ASSERT_VALUES_EQUAL(json["observed_at"].GetString(), "1970-01-01T00:00:01.000000Z");
@@ -670,7 +669,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         ExpectLogin();
         const auto password = EnvFile("password");
         RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "-y", "--user", "bridge-admin", "--password-file", password,
-                "admin", "cluster", "bridge", "set-database-mode", "bridged", "--target-database", "/Root/app"});
+                "admin", "cluster", "bridge", "set-database-mode", "bridged", "--database-path", "/Root/app"});
         UNIT_ASSERT(Service<TBridgeLogin>().Calls.load() >= 1);
         UNIT_ASSERT(Service<TBridgeDiscovery>().Calls.load() >= 1);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 1);
@@ -683,7 +682,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         Service<TBridgeService>().Database.clear();
         const auto password = EnvFile("password");
         RunCli({"-e", GetEndpoint(), "-y", "--user", "bridge-admin", "--password-file", password,
-                "admin", "cluster", "bridge", "set-database-mode", "bridged", "--target-database", "/Root/app"});
+                "admin", "cluster", "bridge", "set-database-mode", "bridged", "--database-path", "/Root/app"});
         UNIT_ASSERT(Service<TBridgeLogin>().Calls.load() >= 1);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 1);
     }
@@ -698,7 +697,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
 
     Y_UNIT_TEST_F(DatabaseModeIsRequired, TBridgeCliFixture) {
         ExpectFail();
-        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "--target-database", "/Root/app"});
+        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "--database-path", "/Root/app"});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeLogin>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeDiscovery>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 0);
@@ -707,7 +706,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
     Y_UNIT_TEST_F(RetainPileRequiresOrdinaryMode, TBridgeCliFixture) {
         ExpectFail();
         RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "bridged",
-                "--target-database", "/Root/app", "--retain-pile", "secondary"});
+                "--database-path", "/Root/app", "--retain-pile", "secondary"});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeLogin>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeDiscovery>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 0);
@@ -719,7 +718,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         Service<TBridgeService>().Bridged = false;
         Service<TBridgeService>().RetainPile = "secondary";
         RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "ordinary",
-                "--target-database", "/Root/app", "--retain-pile", "secondary"},
+                "--database-path", "/Root/app", "--retain-pile", "secondary"},
                {{"YDB_TOKEN", "bridge-admin-token"}});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 1);
     }
@@ -727,7 +726,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
     Y_UNIT_TEST_F(UnknownDatabaseModeIsRejected, TBridgeCliFixture) {
         ExpectFail();
         RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "unknown",
-                "--target-database", "/Root/app"});
+                "--database-path", "/Root/app"});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeLogin>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeDiscovery>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 0);

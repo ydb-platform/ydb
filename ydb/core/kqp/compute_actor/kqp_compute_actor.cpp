@@ -304,10 +304,10 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
     const NYql::NDq::TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena, NScheduler::TSchedulableOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database)
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, NMonitoring::TDynamicCounterPtr counters)
 {
     return new NScanPrivate::TKqpScanComputeActor(std::move(schedulableOptions), executerId, txId, task, std::move(asyncIoFactory),
-        settings, memoryLimits, std::move(traceId), std::move(arena), mode, std::move(userToken), database);
+        settings, memoryLimits, std::move(traceId), std::move(arena), mode, std::move(userToken), database, counters);
 }
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,

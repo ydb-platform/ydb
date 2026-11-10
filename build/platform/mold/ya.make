@@ -10,4 +10,9 @@ LDFLAGS(
     --ld-path=${MOLD_ROOT_RESOURCE_GLOBAL}/bin/ld.mold
 )
 
+# Match the Linux LLD output settings for this comparison.
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--no-rosegment -Wl,--build-id=sha1)
+ENDIF()
+
 END()

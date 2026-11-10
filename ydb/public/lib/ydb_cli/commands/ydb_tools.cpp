@@ -151,6 +151,14 @@ void TCommandRestore::Config(TConfig& config) {
 
     NDump::TRestoreSettings defaults;
 
+    config.Opts->AddLongOption("external-table-source-mapping",
+            "Map external table data-source paths from database-root (legacy) or backup-root. "
+            "backup-root rejects dependencies outside a moved backup root and cannot be used with --replace. "
+            "An existing data source at the mapped path can be reused without checking its identity.")
+        .DefaultValue("database-root").StoreResult(&ExternalTableSourceMapping)
+        .ChoicesWithCompletion({{"database-root", "Map from the source database root"},
+            {"backup-root", "Map from the selected backup root"}});
+
     config.Opts->AddLongOption("restore-data", "Whether to restore data or not.")
         .DefaultValue(defaults.RestoreData_).StoreResult(&RestoreData);
 
@@ -259,6 +267,10 @@ int TCommandRestore::Run(TConfig& config) {
         .Replace(Replace)
         .VerifyExistence(VerifyExistence)
         .MaxRetries(Retries);
+
+    if (ExternalTableSourceMapping == "backup-root") {
+        settings.ExternalTableSourceMapping(NDump::EExternalTableSourceMapping::BackupRoot);
+    }
 
     if (InFlight) {
         settings.MaxInFlight(InFlight);

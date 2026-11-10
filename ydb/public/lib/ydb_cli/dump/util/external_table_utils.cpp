@@ -3,14 +3,19 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/json/json_reader.h>
 
+#include <util/folder/pathsplit.h>
 #include <util/string/join.h>
 #include <util/string/strip.h>
 
+#include <algorithm>
+#include <cctype>
 #include <format>
 #include <ranges>
+#include <utility>
 
 namespace NYdb::NDump {
 
@@ -89,17 +94,72 @@ TString GetDataSourcePath(TStringInput query) {
     return "";
 }
 
+bool ResolveBackupRootDataSourcePath(
+    TString& dataSourcePath,
+    const TString& database,
+    const TString& backupRoot,
+    const TString& restoreRoot,
+    NYql::TIssues& issues)
+{
+    const auto unsafeSqlPath = [](const TString& path) {
+        return std::any_of(path.begin(), path.end(), [](unsigned char ch) {
+            return ch == 0 || ch == '\\' || ch == '\'' || std::isspace(ch);
+        });
+    };
+    if (unsafeSqlPath(dataSourcePath) || unsafeSqlPath(restoreRoot)) {
+        issues.AddIssue("Cannot map external table data source containing unsupported SQL path characters");
+        return false;
+    }
+    const TPathSplitUnix source(dataSourcePath);
+    const TPathSplitUnix sourceDatabase(database);
+    const TPathSplitUnix backup(backupRoot);
+    TPathSplitUnix restore(restoreRoot);
+    if (!source.IsAbsolute || !sourceDatabase.IsAbsolute || !backup.IsAbsolute || !restore.IsAbsolute
+        || sourceDatabase.empty() || backup.size() < sourceDatabase.size()
+        || !std::equal(sourceDatabase.begin(), sourceDatabase.end(), backup.begin())) {
+        issues.AddIssue("Cannot map external table data source: the backup has no valid source database and backup root");
+        return false;
+    }
+
+    if (source.size() >= backup.size() && std::equal(backup.begin(), backup.end(), source.begin())) {
+        dataSourcePath = restore.AppendMany(source.begin() + backup.size(), source.end()).Reconstruct();
+        return true;
+    }
+
+    if (backup == restore) {
+        // An external dependency outside the selection stays at its original path only
+        // when the backup is restored to the same root.
+        return true;
+    }
+
+    issues.AddIssue("Cannot map external table data source outside a moved backup root");
+    return false;
+}
+
 bool RewriteDataSourcePath(
     TString& query,
     const TString& dbRestoreRoot,
-    NYql::TIssues& issues)
+    NYql::TIssues& issues,
+    EExternalTableSourceMapping mapping)
 {
     TString dataSourcePath = GetDataSourcePath(query);
     if (dataSourcePath.empty()) {
         return false;
     }
 
-    dataSourcePath = RewriteAbsolutePath(dataSourcePath, GetDatabase(query), dbRestoreRoot);
+    switch (mapping) {
+        case EExternalTableSourceMapping::DatabaseRoot:
+            dataSourcePath = RewriteAbsolutePath(dataSourcePath, GetDatabase(query), dbRestoreRoot);
+            break;
+        case EExternalTableSourceMapping::BackupRoot:
+            if (!ResolveBackupRootDataSourcePath(dataSourcePath, GetDatabase(query), GetBackupRoot(query), dbRestoreRoot, issues)) {
+                return false;
+            }
+            break;
+        default:
+            issues.AddIssue("Unknown external table data-source mapping");
+            return false;
+    }
     return RewriteCreateQuery(query, "DATA_SOURCE = '{}'", dataSourcePath, issues);
 }
 
@@ -109,12 +169,38 @@ bool RewriteCreateExternalTableQuery(
     TString& query,
     const TString& dbRestoreRoot,
     const TString& dbPath,
-    NYql::TIssues& issues)
+    NYql::TIssues& issues,
+    EExternalTableSourceMapping mapping)
 {
-    if (!RewriteDataSourcePath(query, dbRestoreRoot, issues)) {
+    if (mapping == EExternalTableSourceMapping::BackupRoot) {
+        if (std::any_of(dbPath.begin(), dbPath.end(), [](unsigned char ch) {
+                return ch == 0 || ch == '`' || ch == '\\' || std::isspace(ch);
+            })) {
+            issues.AddIssue("Cannot restore external table at a path with unsupported SQL identifier characters");
+            return false;
+        }
+        // Leave the caller's query unchanged when a mapping or destination rewrite fails.
+        TString rewritten = query;
+        if (!RewriteDataSourcePath(rewritten, dbRestoreRoot, issues, mapping)
+            || !RewriteCreateQuery(rewritten, "CREATE EXTERNAL TABLE IF NOT EXISTS `{}`", dbPath, issues)) {
+            return false;
+        }
+        query = std::move(rewritten);
+        return true;
+    }
+    if (!RewriteDataSourcePath(query, dbRestoreRoot, issues, mapping)) {
         return false;
     }
     return RewriteCreateQuery(query, "CREATE EXTERNAL TABLE IF NOT EXISTS `{}`", dbPath, issues);
+}
+
+bool RewriteCreateExternalTableQuery(
+    TString& query,
+    const TString& dbRestoreRoot,
+    const TString& dbPath,
+    NYql::TIssues& issues)
+{
+    return RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues, EExternalTableSourceMapping::DatabaseRoot);
 }
 
 }

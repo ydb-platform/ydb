@@ -20,6 +20,7 @@ SRCS(
     export.cpp
     import.cpp
     mock_env.cpp
+    restore_external_table.cpp
     run_ydb.cpp
     sql_resource_pool.cpp
     supported_codecs.cpp

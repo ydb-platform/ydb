@@ -445,6 +445,10 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
 }
 
 TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
+    if (settings.Replace_ && settings.ExternalTableSourceMapping_ == EExternalTableSourceMapping::BackupRoot) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            "External table backup-root mapping cannot be used with replace");
+    }
     LOG_I("Restore " << fsPath.Quote() << " to " << dbPath.Quote());
 
     // Find first existing path on the way from the dbPath to the root of the cluster.
@@ -1745,7 +1749,7 @@ TRestoreResult TRestoreClient::RestoreExternalTable(
     TString query = ReadExternalTableQuery(fsPath, Log.get());
 
     NYql::TIssues issues;
-    if (!RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues)) {
+    if (!RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues, settings.ExternalTableSourceMapping_)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 

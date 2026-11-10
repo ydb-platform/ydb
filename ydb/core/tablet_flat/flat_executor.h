@@ -591,6 +591,7 @@ class TExecutor
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);
+    void ReleaseScanLocks(THolder<TScanSnapshot>);
     void StartScan(ui64 serial, ui32 table);
     void StartScan(ui64 task, TResource*);
     void StartSeat(ui64 task, TResource*);

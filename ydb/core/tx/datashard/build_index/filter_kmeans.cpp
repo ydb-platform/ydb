@@ -59,7 +59,7 @@ using namespace NKMeans;
  *   - Selected rows are copied to the output table
  */
 
-class TFilterKMeansScan: public TActor<TFilterKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TFilterKMeansScan: public TActor<TFilterKMeansScan>, public IActorExceptionHandler, public TVectorIndexScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -276,6 +276,10 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
+        if (!CheckRowBytes(Response->Record, key, *row)) {
+            return EScan::Final;
+        }
+
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 

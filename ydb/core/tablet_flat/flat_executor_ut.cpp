@@ -7,6 +7,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
+#include <ydb/library/testlib/helpers.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -1180,6 +1181,108 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         env.SendSync(new TEvTestFlatTablet::TEvQueueScan(111, true, true, NTable::EStatus::Term));
         env.SendSync(new TEvTestFlatTablet::TEvCancelScan);
 //        env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
+    }
+
+    class TThrowingDescriptionScan : public NTable::IScan {
+    public:
+        explicit TThrowingDescriptionScan(bool& destroyed)
+            : Destroyed(destroyed)
+        {}
+
+        ~TThrowingDescriptionScan() override {
+            Destroyed = true;
+        }
+
+        void Describe(IOutputStream&) const override {
+            ythrow yexception() << "Cannot describe test scan";
+        }
+
+        TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) override {
+            return {EScan::Final, {}};
+        }
+
+        EScan Seek(TLead&, ui64) override { return EScan::Final; }
+        EScan Feed(TArrayRef<const TCell>, const TRow&) override { return EScan::Final; }
+
+        TAutoPtr<IDestructable> Finish(EStatus) override {
+            delete this;
+            return nullptr;
+        }
+
+    private:
+        bool& Destroyed;
+    };
+
+    Y_UNIT_TEST_TWIN(ScanStartFailureReleasesPreparedSnapshot, Deferred) {
+        TMyEnvScans env;
+        env.SendSync(env.Rows.MakeRows(1));
+        bool failed = false;
+        bool destroyed = false;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto& ctx) {
+            TScanOptions options;
+            options.SetSnapshotId(executor->MakeScanSnapshot(TRowsModel::TableId));
+            if (Deferred) {
+                options.SetResourceBroker("build_index", 10, 1_MB);
+                options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                    return new TThrowingDescriptionScan(destroyed);
+                };
+                options.OnAdmissionFailure = [&](const TString& reason, bool retry) {
+                    UNIT_ASSERT(retry);
+                    UNIT_ASSERT_STRING_CONTAINS(reason, "Cannot describe test scan");
+                    failed = true;
+                    TActivationContext::Send(new IEventHandle(env.Edge, {}, new TEvents::TEvWakeup));
+                };
+                executor->QueueScan(TRowsModel::TableId, {}, 0, options);
+            } else {
+                options.DisableResourceBroker();
+                try {
+                    executor->QueueScan(TRowsModel::TableId, new TThrowingDescriptionScan(destroyed), 0, options);
+                } catch (const std::exception& exc) {
+                    UNIT_ASSERT_STRING_CONTAINS(exc.what(), "Cannot describe test scan");
+                    failed = true;
+                    ctx.Send(env.Edge, new TEvents::TEvWakeup);
+                }
+            }
+        }));
+        env.WaitForWakeUp();
+        UNIT_ASSERT(failed);
+        UNIT_ASSERT(destroyed);
+        env.SendAsync(new NFake::TEvExecute([](auto* executor, const auto&) {
+            executor->StartVacuum(123ull);
+        }));
+        env.WaitFor<NFake::TEvDataCleaned>();
+    }
+
+    Y_UNIT_TEST_TWIN(DeferredScanFailureReleasesPreparedSnapshot, ThrowFactory) {
+        TMyEnvScans env;
+        env.SendSync(env.Rows.MakeRows(1));
+        bool failed = false;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            const ui64 snapshot = executor->MakeScanSnapshot(TRowsModel::TableId);
+            TScanOptions options;
+            options.SetSnapshotId(snapshot);
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.Factory = [](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                if (ThrowFactory) {
+                    ythrow yexception() << "Cannot construct test scan";
+                }
+                return {};
+            };
+            options.OnAdmissionFailure = [&](const TString&, bool retry) {
+                UNIT_ASSERT(retry);
+                failed = true;
+                TActivationContext::Send(new IEventHandle(env.Edge, {}, new TEvents::TEvWakeup));
+            };
+            executor->QueueScan(TRowsModel::TableId, {}, 0, options);
+        }));
+        env.WaitForWakeUp();
+        UNIT_ASSERT(failed);
+        // A missing ReleaseScanLocks leaves the prepared snapshot's GC barrier
+        // behind even after its pointers die, and vacuum cannot complete.
+        env.SendAsync(new NFake::TEvExecute([](auto* executor, const auto&) {
+            executor->StartVacuum(123ull);
+        }));
+        env.WaitFor<NFake::TEvDataCleaned>();
     }
 
     Y_UNIT_TEST(TestPostponedScanSnapshotMVCC) {

@@ -151,17 +151,6 @@ namespace NTable {
                     switch (VersionState) {
                         case EVersionState::BeginKey:
                             if (!VersionScan) {
-                                if (const ui64 limit = Scan->GetRowBytesLimit()) {
-                                    ui64 bytes = 0;
-                                    auto check = [&](auto cells) {
-                                        for (const auto& cell : cells) {
-                                            Y_ENSURE(cell.Size() <= limit - bytes, "Index scan row exceeds BuildIndexRowBytesLimit");
-                                            bytes += cell.Size();
-                                        }
-                                    };
-                                    check(Iter->GetKey().Cells());
-                                    check(*Iter->Row());
-                                }
                                 Seen++;
                                 op = Scan->Feed(Iter->GetKey().Cells(), Iter->Row());
                             } else {

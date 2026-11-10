@@ -42,7 +42,7 @@ using namespace NKMeans;
  *   - Contains up to K sampled rows (serialized), with associated probabilities
  */
 
-class TSampleKScan final: public TActor<TSampleKScan>, public IActorExceptionHandler, public NTable::IScan {
+class TSampleKScan final: public TActor<TSampleKScan>, public IActorExceptionHandler, public TVectorIndexScan {
 protected:
     const TTags ScanTags;
     const TVector<NScheme::TTypeInfo> KeyTypes;
@@ -50,7 +50,8 @@ protected:
     const TSerializedTableRange TableRange;
     const TSerializedTableRange RequestedRange;
     const ui64 K;
-    const ui64 SampleRowBytesLimit;
+    ui64 SampleRowBytesLimit;
+    const bool HasSettings;
     bool SkipForeign = false;
     bool SkipEmptyColumns = false;
     NTable::TPos IsForeignPos = 0;
@@ -88,8 +89,9 @@ public:
         , TableRange(table.Range)
         , RequestedRange(range)
         , K(request.GetK())
-        , SampleRowBytesLimit((request.HasSettings() ? ui64(request.GetSettings().vector_dimension()) * 4
-            : AppData()->DataShardConfig.GetBuildIndexRowBytesLimit()) + 256 + ui64(request.ColumnsSize()) * 32)
+        , SampleRowBytesLimit(Max<ui64>(request.GetRequiredRowBytes(), (request.HasSettings() ? ui64(request.GetSettings().vector_dimension()) * 4
+            : 0) + 256 + ui64(request.ColumnsSize()) * 32))
+        , HasSettings(request.HasSettings())
         , SkipEmptyColumns(request.GetSkipEmptyColumns())
         , TabletId(tabletId)
         , BuildId(request.GetId())
@@ -122,6 +124,13 @@ public:
 
         if (scanRange.To) {
             Lead.Until(scanRange.To, scanRange.InclusiveTo);
+        }
+    }
+
+    void SetRowBytesLimit(ui64 limit) final {
+        TVectorIndexScan::SetRowBytesLimit(limit);
+        if (!HasSettings) {
+            SampleRowBytesLimit = Max(SampleRowBytesLimit, limit + 256 + ui64(ScanTags.size()) * 32);
         }
     }
 
@@ -166,9 +175,10 @@ public:
         if (GetRowBytesLimit()) {
             ui64 bytes = 2 + ui64(row.Size()) * 4;
             for (const auto& cell : *row) {
-                Y_ENSURE(bytes <= SampleRowBytesLimit && cell.Size() <= SampleRowBytesLimit - bytes,
-                    "Sample row exceeds the memory reservation");
                 bytes += cell.Size();
+            }
+            if (!CheckRowBytes(Response->Record, bytes, SampleRowBytesLimit)) {
+                return EScan::Final;
             }
         }
         if (SkipForeign) {
@@ -222,7 +232,9 @@ public:
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
-        if (status == EStatus::Exception) {
+        if (record.GetRequiredRowBytes()) {
+            record.SetStatus(NKikimrIndexBuilder::ABORTED);
+        } else if (status == EStatus::Exception) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         } else if (status != NTable::EStatus::Done) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);

@@ -1189,6 +1189,7 @@ private:
 
         if constexpr (requires { request.SetAllowMemoryAdmission(true); }) {
             request.SetAllowMemoryAdmission(true);
+            request.SetRequiredRowBytes(shardStatus.RequiredRowBytes);
         }
         request.SetSeqNoGeneration(Self->Generation());
         request.SetSeqNoRound(++shardStatus.SeqNoRound);
@@ -2182,15 +2183,18 @@ private:
     }
 
     template<typename Send>
-    bool SendToShards(TIndexBuildInfo& buildInfo, Send&& send) {
+    bool SendToShards(TIndexBuildInfo& buildInfo, Send&& send, size_t maxInFlight = Max<size_t>()) {
         const bool bounded = buildInfo.IsBuildVectorIndex();
         const auto& config = AppData()->SchemeShardConfig;
         const ui64 bytesLimit = config.GetIndexBuildRequestBytesLimit();
         const ui32 countLimit = config.GetIndexBuildRequestCountLimit();
-        const size_t perBuild = bounded
+        const size_t configuredPerBuild = bounded
             ? Min<ui64>(buildInfo.MaxInProgressShards, Max<ui64>(1, config.GetIndexBuildRequestsPerBuild()))
             : buildInfo.MaxInProgressShards;
-        size_t attempts = Min(buildInfo.ToUploadShards.size(), perBuild);
+        const size_t perBuild = Min(configuredPerBuild, maxInFlight);
+        // Visit waiting shards at most once, including all backoff entries, so
+        // a delayed prefix cannot strand ready work behind it.
+        size_t attempts = buildInfo.ToUploadShards.size();
         while (attempts-- && !buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < perBuild) {
             auto shardIdx = buildInfo.ToUploadShards.front();
             buildInfo.ToUploadShards.pop_front();
@@ -2210,25 +2214,28 @@ private:
                     Self->IndexBuildRequestAdmission = std::make_shared<TScanAdmissionControl>();
                     Self->IndexBuildRequestAdmission->SetTotalLimit(Max<ui64>());
                 }
-                ui64 buildBytes = 0;
-                for (const auto& [_, shard] : buildInfo.Shards) {
-                    if (shard.RequestReservation) {
-                        buildBytes += shard.RequestBytes;
-                    }
+                if (!buildInfo.RequestAdmission) {
+                    buildInfo.RequestAdmission = std::make_shared<TScanAdmissionControl>();
+                    buildInfo.RequestAdmission->SetTotalLimit(Max<ui64>());
                 }
                 // Leave byte credits for other builds; a single large request
                 // may use more than one share, but still fits the global window.
-                auto lease = (buildBytes && LastRequestBytes > bytesLimit / 4 - Min(buildBytes, bytesLimit / 4))
-                    ? nullptr : Self->IndexBuildRequestAdmission->TryAcquire(LastRequestBytes, countLimit, bytesLimit);
+                const ui64 buildBytes = buildInfo.RequestAdmission->GetUsage().Bytes;
+                auto buildLease = buildInfo.RequestAdmission->TryAcquire(LastRequestBytes, perBuild,
+                    buildBytes ? bytesLimit / 4 : bytesLimit);
+                auto lease = buildLease
+                    ? Self->IndexBuildRequestAdmission->TryAcquire(LastRequestBytes, countLimit, bytesLimit) : nullptr;
                 if (!lease) {
                     ToTabletSend.erase(Self->ShardInfos.at(shardIdx).TabletID);
                     buildInfo.InProgressShards.erase(shardIdx);
                     buildInfo.ToUploadShards.push_back(shardIdx);
                     ScheduleProgress(buildInfo, now + TDuration::MilliSeconds(500));
-                    continue;
+                    // Credits are exhausted; avoid constructing a request for
+                    // every shard during each progress transaction.
+                    break;
                 }
-                status.RequestBytes = LastRequestBytes;
-                status.RequestReservation = std::move(lease);
+                status.RequestReservation = std::make_shared<TIndexBuildShardStatus::TRequestReservation>(
+                    TIndexBuildShardStatus::TRequestReservation{std::move(lease), std::move(buildLease)});
             }
         }
 
@@ -2551,13 +2558,16 @@ private:
 
     bool DoVectorAutodetect(TTransactionContext& txc, TIndexBuildInfo& buildInfo, bool isPrefixed = false) {
         if (buildInfo.Sample.Rows.empty()) {
+            if (!buildInfo.InProgressShards.empty()) {
+                return false;
+            }
             if (isPrefixed) {
                 if (NoShardsAdded(buildInfo)) {
                     AddNextShardForAutodetect(buildInfo);
                 }
             }
             if (!buildInfo.ToUploadShards.empty()) {
-                SendToShards(buildInfo, [&](TShardIdx idx) { SendVectorAutodetectRequest(idx, buildInfo); });
+                SendToShards(buildInfo, [&](TShardIdx idx) { SendVectorAutodetectRequest(idx, buildInfo); }, 1);
                 return false;
             }
             YDB_LOG_ERROR(LogPrefix << "FillPrefixedVectorIndex Autodetect: no shards available");
@@ -2569,10 +2579,10 @@ private:
             Progress(BuildId);
             return false;
         } else {
-            AutoSelectVectorSettings(txc, buildInfo);
+            const bool selected = AutoSelectVectorSettings(txc, buildInfo);
             ClearDoneShards(txc, buildInfo);
-            buildInfo.InProgressShards.clear();
-            buildInfo.ToUploadShards.clear();
+            ClearAfterFill(Self->ActorContext(), buildInfo);
+            return selected;
         }
         return true;
     }
@@ -4233,6 +4243,10 @@ public:
         }
         case NKikimrIndexBuilder::EBuildStatus::ABORTED: {
             if constexpr (requires { record.GetRetryAfterMs(); }) {
+                if (record.GetRequiredRowBytes() > shardStatus.RequiredRowBytes) {
+                    shardStatus.RequiredRowBytes = record.GetRequiredRowBytes();
+                    shardStatus.AdmissionRetries = 0;
+                }
                 if (record.GetRetryAfterMs()) {
                     const ui64 hint = ClampVal<ui64>(record.GetRetryAfterMs(), 100, 30000);
                     const ui64 backoff = Min<ui64>(30000, hint << Min<ui32>(shardStatus.AdmissionRetries++, 5));

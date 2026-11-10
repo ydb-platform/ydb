@@ -48,7 +48,7 @@ using namespace NKMeans;
  *   - The row and any specified data columns are written to the output table
  */
 
-class TReshuffleKMeansScan: public TActor<TReshuffleKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TReshuffleKMeansScan: public TActor<TReshuffleKMeansScan>, public IActorExceptionHandler, public TVectorIndexScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -260,6 +260,10 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
+        if (!CheckRowBytes(Response->Record, key, *row)) {
+            return EScan::Final;
+        }
+
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 

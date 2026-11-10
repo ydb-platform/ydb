@@ -718,8 +718,12 @@ private:
         const ui64 pendingLimit = Min(AppData()->DataShardConfig.GetBuildIndexPendingBytesLimit(), indexBuildLimit / 8);
         AppData()->BuildIndexScanAdmission->SetTotalLimit(indexBuildLimit);
         Counters->GetCounter("Consumer/IndexBuild/Limit")->Set(indexBuildLimit);
+        const ui64 pendingBytes = AppData()->BuildIndexScanAdmission->GetUsage().Bytes;
+        Counters->GetCounter("Consumer/IndexBuildPending/Consumption")->Set(pendingBytes);
         TResourceBrokerConfig config{
-            .LimitBytes = activitiesLimitBytes - pendingLimit,
+            // Account only retained descriptors; idle index builds must not
+            // withhold their entire pending allowance from every other queue.
+            .LimitBytes = activitiesLimitBytes - Min(activitiesLimitBytes, pendingBytes),
             .QueueLimits = {
                 {"queue_build_index", indexBuildLimit - pendingLimit},
                 {NLocalDb::KqpResourceManagerQueue, GetQueryExecutionLimitBytes(Config, hardLimitBytes)},
@@ -732,9 +736,12 @@ private:
 
         for (auto &[name, limitBytes] : ResourceBrokerSelfConfig.QueueLimits) {
             if (config.QueueLimits.contains(name)) {
-                config.QueueLimits[name] = name == "queue_build_index" ? Min(config.QueueLimits[name], limitBytes) : limitBytes; // for backward compatibility
+                config.QueueLimits[name] = limitBytes; // for backward compatibility
             }
         }
+        // The index budget is a combined bound on active and pending scans.
+        auto& activeIndexLimit = config.QueueLimits["queue_build_index"];
+        activeIndexLimit = Min(activeIndexLimit, indexBuildLimit - pendingLimit);
 
         // TODO: counters and logs for all column table queues
         if (Collections.contains(EMemoryConsumerKind::QueryExecution)) {

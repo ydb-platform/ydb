@@ -133,6 +133,7 @@ namespace NTabletFlatExecutor {
         struct TCancelled {
             ui64 Serial = 0;
             ui32 Table = Max<ui32>();
+            std::shared_ptr<TTaskLease> Lease;
             TScanOptions Options;
             THolder<TScanSnapshot> Snapshot;
 
@@ -270,28 +271,32 @@ namespace NTabletFlatExecutor {
             Lookup(serial, true)->Snapshot = std::move(snapshot);
         }
 
-        void AdmissionFailed(ui64 serial, const TString& reason, bool submitted = true) {
+        TCancelled AdmissionFailed(ui64 serial, const TString& reason, bool submitted = true) {
             auto* one = Lookup(serial, false);
             if (!one || one->State > EState::Ready) {
-                return;
+                return {};
             }
             if (!submitted && one->Lease) {
                 one->Lease->Armed = false;
             }
             auto callback = std::move(one->Options.OnAdmissionFailure);
-            Cancel(*one, EState::Forget);
+            auto cancelled = Cancel(serial);
             if (callback) {
-                callback(reason, submitted);
+                // Submission failure and retryability are independent: the
+                // broker's memory limit may change before the next attempt.
+                callback(reason, true);
             }
+            return cancelled;
         }
 
-        void Rejected(const TEvResourceBroker::TEvTaskOperationError& error) {
-            if (error.Cookie) {
+        TCancelled Rejected(const TEvResourceBroker::TEvTaskOperationError& error) {
+            if (error.Status.Code == TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED && error.Cookie) {
                 const auto* resource = CheckedCast<TResource*>(error.Cookie.Get());
                 if (resource->Source == TResource::ESource::Scan) {
-                    AdmissionFailed(CheckedCast<const TCookie*>(resource)->Serial, error.Status.Message, false);
+                    return AdmissionFailed(CheckedCast<const TCookie*>(resource)->Serial, error.Status.Message, false);
                 }
             }
+            return {};
         }
 
         void Start(ui64 serial)
@@ -346,7 +351,7 @@ namespace NTabletFlatExecutor {
                 return { };
             }
 
-            TCancelled cancelled{ one->Serial, one->Table, std::move(one->Options), std::move(one->Snapshot) };
+            TCancelled cancelled{ one->Serial, one->Table, one->Lease, std::move(one->Options), std::move(one->Snapshot) };
 
             if (!Cancel(*one, EState::Forget)) {
                 return { };
@@ -441,19 +446,24 @@ namespace NTabletFlatExecutor {
             if (one.Lease) {
                 one.Scan->HoldResourceReservation(one.Lease);
             }
-            auto *actor = new NOps::TDriver(one.Serial, one.Scan, conf, std::move(one.Snapshot));
+            auto actor = MakeHolder<NOps::TDriver>(one.Serial, one.Scan, conf, one.Snapshot);
 
-            if (auto logl = Logger->Log(NUtil::ELnLev::Info))
-                logl << NFmt::Do(*Ops) << " starting " << NFmt::Do(*actor);
+            try {
+                if (auto logl = Logger->Log(NUtil::ELnLev::Info))
+                    logl << NFmt::Do(*Ops) << " starting " << NFmt::Do(*actor);
+            } catch (...) {
+                actor->RestoreUnstartedScan(one.Scan, one.Snapshot);
+                throw;
+            }
 
             ui32 pool = AppData()->BatchPoolId;
             if (const auto* overrides = std::get_if<TScanOptions::TActorPoolById>(&one.Options.ActorPool)) {
                 pool = overrides->PoolId;
             }
 
-            CounterAlive += 1;
+            one.Actor = Ops->Register(actor.Release(), TMailboxType::HTSwap, pool);
             one.State = EState::Scan;
-            one.Actor = Ops->Register(actor, TMailboxType::HTSwap, pool);
+            CounterAlive += 1;
 
             return one.Serial;
         }

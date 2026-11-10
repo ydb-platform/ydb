@@ -41,7 +41,7 @@ using namespace NKMeans;
  * - Mean value is calculated for each centroid and returned in the response
  */
 
-class TRecomputeKMeansScan: public TActor<TRecomputeKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TRecomputeKMeansScan: public TActor<TRecomputeKMeansScan>, public IActorExceptionHandler, public TVectorIndexScan {
 protected:
     const ui64 TabletId = 0;
     const ui64 BuildId = 0;
@@ -119,7 +119,9 @@ public:
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
-        if (status == EStatus::Exception) {
+        if (record.GetRequiredRowBytes()) {
+            record.SetStatus(NKikimrIndexBuilder::ABORTED);
+        } else if (status == EStatus::Exception) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         } else if (status != NTable::EStatus::Done) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
@@ -179,6 +181,10 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
+        if (!CheckRowBytes(Response->Record, key, *row)) {
+            return EScan::Final;
+        }
+
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 

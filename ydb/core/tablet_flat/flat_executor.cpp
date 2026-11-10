@@ -3669,13 +3669,13 @@ void TExecutor::Handle(TEvResourceBroker::TEvResourceAllocated::TPtr &ev) {
 
 void TExecutor::Handle(TEvResourceBroker::TEvTaskOperationError::TPtr& ev) {
     if (Scans) {
-        Scans->Rejected(*ev->Get());
+        ReleaseScanLocks(Scans->Rejected(*ev->Get()).Snapshot);
     }
 }
 
 void TExecutor::Handle(NOps::TEvAdmissionTimeout::TPtr& ev) {
     if (Scans) {
-        Scans->AdmissionFailed(ev->Get()->Serial, "Timed out waiting for scan admission");
+        ReleaseScanLocks(Scans->AdmissionFailed(ev->Get()->Serial, "Timed out waiting for scan admission").Snapshot);
     }
 }
 
@@ -3747,9 +3747,19 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
 
 void TExecutor::StartScan(ui64 serial, ui32 table)
 {
+    if (!Scans->GetOptions(serial).Factory) {
+        // Legacy scan failures must still propagate to their caller.
+        try {
+            Scans->Start(serial);
+        } catch (...) {
+            CancelScan(table, serial);
+            throw;
+        }
+        return;
+    }
     try {
         if (!Scans->Initialize(serial)) {
-            Scans->Cancel(serial);
+            ReleaseScanLocks(Scans->AdmissionFailed(serial, "Deferred scan factory returned no scan").Snapshot);
             return;
         }
         if (Scans->NeedsSnapshot(serial)) {
@@ -3760,7 +3770,8 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
         }
         Scans->Start(serial);
     } catch (const std::exception& exc) {
-        Scans->AdmissionFailed(serial, TStringBuilder() << "Cannot initialize admitted scan: " << exc.what());
+        ReleaseScanLocks(Scans->AdmissionFailed(serial,
+            TStringBuilder() << "Cannot initialize admitted scan: " << exc.what()).Snapshot);
     }
 }
 
@@ -3947,6 +3958,13 @@ void TExecutor::ReleaseScanLocks(TIntrusivePtr<TBarrier> barrier, const NTable::
     Y_UNUSED(subset);
 
     CheckCollectionBarrier(barrier);
+}
+
+void TExecutor::ReleaseScanLocks(THolder<TScanSnapshot> snapshot)
+{
+    if (snapshot) {
+        ReleaseScanLocks(std::move(snapshot->Barrier), *snapshot->Subset);
+    }
 }
 
 void TExecutor::Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx) {

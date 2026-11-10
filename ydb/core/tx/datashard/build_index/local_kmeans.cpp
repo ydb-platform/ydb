@@ -48,7 +48,7 @@ using namespace NKMeans;
  *     - Output: rows annotated with cluster IDs and optional data columns
  */
 
-class TLocalKMeansScan: public TActor<TLocalKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TLocalKMeansScan: public TActor<TLocalKMeansScan>, public IActorExceptionHandler, public TVectorIndexScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -277,6 +277,10 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
+        if (!CheckRowBytes(Response->Record, key, *row)) {
+            return EScan::Final;
+        }
+
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 

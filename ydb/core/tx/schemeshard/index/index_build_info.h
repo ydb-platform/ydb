@@ -16,8 +16,12 @@ struct TIndexBuildShardStatus {
     TString LastKeyAck;
     ui64 SeqNoRound = 0;
     // Ephemeral credits: destruction also returns them on reset/cancellation.
-    std::shared_ptr<TScanAdmissionControl::TLease> RequestReservation;
-    ui64 RequestBytes = 0;
+    struct TRequestReservation {
+        std::shared_ptr<TScanAdmissionControl::TLease> Global;
+        std::shared_ptr<TScanAdmissionControl::TLease> Build;
+    };
+    std::shared_ptr<TRequestReservation> RequestReservation;
+    ui64 RequiredRowBytes = 0;
     TInstant AdmissionRetryAt;
     ui32 AdmissionRetries = 0;
     size_t Index = 0; // used only in prefixed vector index: a unique number of shard in the list
@@ -390,6 +394,7 @@ public:
     THashSet<TShardIdx> InProgressShards;
     std::vector<TShardIdx> DoneShards;
     ui32 MaxInProgressShards = 32;
+    std::shared_ptr<TScanAdmissionControl> RequestAdmission;
 
     THashSet<TTxId> DependencyTxIds; // volatile set of concurrent tx(s)
 

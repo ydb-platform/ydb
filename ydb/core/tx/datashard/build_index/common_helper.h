@@ -260,6 +260,11 @@ public:
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         }
 
+        if constexpr (requires { response.GetRequiredRowBytes(); }) {
+            if (response.GetRequiredRowBytes()) {
+                response.SetStatus(NKikimrIndexBuilder::ABORTED);
+            }
+        }
         NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
     }
 
@@ -514,10 +519,38 @@ inline ui64 CheckedScanMemoryMul(ui64 a, ui64 b) {
     return a * b;
 }
 
+class TVectorIndexScan : public NTable::IScan {
+public:
+    virtual void SetRowBytesLimit(ui64 limit) { RowBytesLimit = limit; }
+    ui64 GetRowBytesLimit() const { return RowBytesLimit; }
+
+protected:
+    template<class TResponse>
+    bool CheckRowBytes(TResponse& response, TArrayRef<const TCell> key, TArrayRef<const TCell> row) const {
+        return !RowBytesLimit || CheckRowBytes(response, CountRowCellBytes(key, row), RowBytesLimit);
+    }
+
+    template<class TResponse>
+    bool CheckRowBytes(TResponse& response, ui64 bytes, ui64 limit) const {
+        if (!RowBytesLimit || bytes <= limit) {
+            return true;
+        }
+        // Stop before buffering this row. The sender retries with a larger
+        // reservation, so a legal source row is not a permanent build error.
+        response.SetRequiredRowBytes(bytes);
+        response.SetRetryAfterMs(100);
+        response.AddIssues()->set_message("Index scan needs a larger row memory reservation");
+        return false;
+    }
+
+private:
+    ui64 RowBytesLimit = 0;
+};
+
 template<class TRequest>
 ui64 EstimateBuildIndexScanMemory(const TRequest& request, const TUserTable& table) {
     const auto& config = AppData()->DataShardConfig;
-    const ui64 rowLimit = config.GetBuildIndexRowBytesLimit();
+    const ui64 rowLimit = Max(config.GetBuildIndexRowBytesLimit(), request.GetRequiredRowBytes());
     ui64 memory = CheckedScanMemoryAdd(4_MB, CheckedScanMemoryMul(request.SpaceUsedLong(), 2));
     ui64 clusters = 1;
     if constexpr (requires { request.ClustersSize(); }) {
@@ -530,6 +563,8 @@ ui64 EstimateBuildIndexScanMemory(const TRequest& request, const TUserTable& tab
         ui64 vectorBytes = CheckedScanMemoryAdd(dimensions ? CheckedScanMemoryMul(dimensions, 4) : rowLimit, 256);
         if constexpr (requires { request.ColumnsSize(); }) {
             vectorBytes = CheckedScanMemoryAdd(vectorBytes, CheckedScanMemoryMul(request.ColumnsSize(), 32));
+            // Covering-column samples need allocation/response-copy headroom.
+            vectorBytes = Max(vectorBytes, CheckedScanMemoryMul(request.GetRequiredRowBytes(), 2));
         }
         memory = CheckedScanMemoryAdd(memory, CheckedScanMemoryMul(clusters, vectorBytes));
         if constexpr (!std::is_same_v<TRequest, NKikimrTxDataShard::TEvReshuffleKMeansRequest> &&
@@ -621,7 +656,7 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
         response->Record.AddIssues()->set_message(reason);
         TlsActivationContext->Send(new IEventHandle(ev->Sender, self->SelfId(), response.Release()));
     };
-    const ui64 rowLimit = config.GetBuildIndexRowBytesLimit();
+    const ui64 rowLimit = Max(config.GetBuildIndexRowBytesLimit(), request.GetRequiredRowBytes());
     if (!rowLimit) {
         reject("BuildIndexRowBytesLimit must be nonzero for memory admission", false);
         return;
@@ -633,14 +668,14 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
     }
     const ui64 memory = EstimateBuildIndexScanMemory(request, table);
     if (memory > config.GetBuildIndexScanMemoryLimit()) {
-        reject("Index scan exceeds BuildIndexScanMemoryLimit; reduce batch/row limits or vector settings", false);
+        reject("Index scan exceeds the current BuildIndexScanMemoryLimit", true);
         return;
     }
     const ui64 pendingBytes = CheckedScanMemoryAdd(requestBytes, 4_KB);
     auto& admission = *AppData()->BuildIndexScanAdmission;
     const ui64 pendingLimit = admission.GetByteLimit(config.GetBuildIndexPendingBytesLimit());
     if (pendingLimit && pendingBytes > pendingLimit) {
-        reject("Index scan request exceeds the node pending byte budget", false);
+        reject("Index scan request exceeds the current node pending byte budget", true);
         return;
     }
     auto counters = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "build_index_admission");
@@ -726,7 +761,7 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
                 return {};
             }
             auto scan = makeScan(*found->second, req, pending->Event->Sender, std::move(pending->Response));
-            scan->SetRowBytesLimit(rowLimit);
+            CheckedCast<TVectorIndexScan*>(scan.Get())->SetRowBytesLimit(rowLimit);
             return scan;
         } catch (const std::exception& exc) {
             fail(TStringBuilder() << "Cannot initialize admitted index scan: " << exc.what(), false);

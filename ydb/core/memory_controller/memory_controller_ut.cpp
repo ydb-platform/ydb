@@ -526,7 +526,9 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
         NResourceBroker::MakeDefaultConfig(), MakeIntrusive<::NMonitoring::TDynamicCounters>()));
     fixture.Runtime.RegisterService(NResourceBroker::MakeResourceBrokerID(), broker);
     ui64 activeLimit = 0;
+    ui64 brokerLimit = 0;
     auto observer = fixture.Runtime.AddObserver<NResourceBroker::TEvResourceBroker::TEvConfigure>([&](auto& event) {
+        brokerLimit = event->Get()->Record.GetResourceLimit().GetMemory();
         for (const auto& queue : event->Get()->Record.GetQueues()) {
             if (queue.GetName() == "queue_build_index") {
                 activeLimit = queue.GetLimit().GetMemory();
@@ -540,6 +542,16 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
     UNIT_ASSERT_GT(activeLimit, 0);
     UNIT_ASSERT_VALUES_EQUAL(activeLimit + 32_MB, total);
     UNIT_ASSERT_VALUES_EQUAL(quota.GetUsage().Bytes, 0);
+    const ui64 activities = GetResourceBrokerLimitBytes(config, 16_GB, false);
+    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities);
+    lease = quota.TryAcquire(1_MB, 128, 32_MB);
+    UNIT_ASSERT(lease);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities - 1_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Consumption"), 1_MB);
+    lease.reset();
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities);
 }
 
 Y_UNIT_TEST_TWIN(ResourceBroker, EnableComputeSchedulerMemory) {

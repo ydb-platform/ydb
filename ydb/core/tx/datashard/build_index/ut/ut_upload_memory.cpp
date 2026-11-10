@@ -209,28 +209,131 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Bytes, 0);
     }
 
-    Y_UNIT_TEST(RequestLargerThanPendingPoolIsPermanentError) {
+    Y_UNIT_TEST(RequestLargerThanPendingPoolRetriesAfterLimitIncreases) {
         TAdmissionFixture fixture;
         fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(1);
         fixture.Send(fixture.Shards[0]);
-        auto reply = fixture.Reply(NKikimrIndexBuilder::BAD_REQUEST);
-        UNIT_ASSERT(!reply->Get()->Record.HasRetryAfterMs());
+        auto reply = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(reply->Get()->Record.GetRetryAfterMs(), 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Bytes, 0);
+        fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(64_MB);
+        fixture.Send(fixture.Shards[0]);
+        fixture.Reply(NKikimrIndexBuilder::DONE);
     }
 
-    Y_UNIT_TEST(IndividualRequestAndScanLimitsArePermanentErrors) {
+    Y_UNIT_TEST(InvalidRequestIsPermanentButScanMemoryLimitIsRetryable) {
         TAdmissionFixture fixture;
         auto& config = fixture.Runtime.GetAppData().DataShardConfig;
         config.SetBuildIndexRequestBytesLimit(1);
         fixture.Send(fixture.Shards[0]);
         auto first = fixture.Reply(NKikimrIndexBuilder::BAD_REQUEST);
         UNIT_ASSERT(!first->Get()->Record.HasRetryAfterMs());
-        config.SetBuildIndexRequestBytesLimit(16_MB);
+        config.SetBuildIndexRequestBytesLimit(32_MB);
         config.SetBuildIndexScanMemoryLimit(1);
         fixture.Send(fixture.Shards[1]);
-        auto second = fixture.Reply(NKikimrIndexBuilder::BAD_REQUEST);
-        UNIT_ASSERT(!second->Get()->Record.HasRetryAfterMs());
+        auto second = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(second->Get()->Record.GetRetryAfterMs(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+        config.SetBuildIndexScanMemoryLimit(1_GB);
+        fixture.Send(fixture.Shards[1]);
+        fixture.Reply(NKikimrIndexBuilder::DONE);
+    }
+
+    Y_UNIT_TEST(BrokerMemoryRejectionRetriesAfterLimitIncreases) {
+        TAdmissionFixture fixture;
+        using TBroker = NResourceBroker::TEvResourceBroker;
+        auto configure = [&](ui64 memory) {
+            auto event = MakeHolder<TBroker::TEvConfigure>();
+            event->Merge = true;
+            auto* queue = event->Record.AddQueues();
+            queue->SetName("queue_build_index");
+            queue->MutableLimit()->SetMemory(memory);
+            fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender, event.Release()));
+            const auto reply = fixture.Runtime.GrabEdgeEventRethrow<TBroker::TEvConfigureResult>(fixture.Sender);
+            UNIT_ASSERT(reply->Get()->Record.GetSuccess());
+        };
+        configure(1);
+        fixture.Send(fixture.Shards[0]);
+        const auto rejected = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(rejected->Get()->Record.GetRetryAfterMs(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+        configure(448_MB);
+        fixture.Send(fixture.Shards[0]);
+        fixture.Reply(NKikimrIndexBuilder::DONE);
+    }
+
+    Y_UNIT_TEST(UnrelatedBrokerErrorsDoNotCancelGrantedScan) {
+        TAdmissionFixture fixture;
+        using TBroker = NResourceBroker::TEvResourceBroker;
+        TBlockEvents<TBroker::TEvResourceAllocated> grants(fixture.Runtime, [](const auto& event) {
+            auto* resource = dynamic_cast<NTabletFlatExecutor::TResource*>(event->Get()->Cookie.Get());
+            return resource && resource->Source == NTabletFlatExecutor::TResource::ESource::Scan;
+        });
+        fixture.Send(fixture.Shards[0]);
+        fixture.Runtime.WaitFor("grant held for unrelated error", [&] { return grants.size() == 1; });
+        const auto& grant = *grants.begin();
+        const auto client = grant->Recipient;
+        const auto task = grant->Get()->TaskId;
+        ui32 finishes = 0;
+        auto observer = fixture.Runtime.AddObserver<TBroker::TEvFinishTask>([&](auto& event) {
+            if (event->Sender == client && event->Get()->TaskId == task) {
+                ++finishes;
+            }
+        });
+        for (auto code : {TBroker::TStatus::ALREADY_EXISTS, TBroker::TStatus::TASK_IN_FLY, TBroker::TStatus::TASK_IN_QUEUE}) {
+            auto error = MakeHolder<TBroker::TEvTaskOperationError>();
+            error->TaskId = task;
+            error->Cookie = grant->Get()->Cookie;
+            error->Status.Code = code;
+            fixture.Runtime.Send(new IEventHandle(client, fixture.Sender, error.Release()));
+        }
+        fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 1);
+        UNIT_ASSERT_VALUES_EQUAL(finishes, 0);
+        grants.Stop().Unblock();
+        fixture.Reply(NKikimrIndexBuilder::DONE);
+        fixture.Runtime.WaitFor("successful scan releases reservation", [&] { return finishes == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+    }
+
+    Y_UNIT_TEST(LargestValidCentroidPayloadFitsDefaultRequestLimit) {
+        TAdmissionFixture fixture;
+        auto event = fixture.Request(fixture.Shards[0]);
+        auto& rec = event->Record;
+        rec.MutableSettings()->set_vector_dimension(2048);
+        rec.MutableSettings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        rec.ClearClusters();
+        TString centroid(2048 * sizeof(float) + 1, '\0');
+        centroid.back() = 1; // FloatVector format byte.
+        for (ui32 i = 0; i < 2048; ++i) {
+            rec.AddClusters(centroid);
+        }
+        UNIT_ASSERT_GT(rec.ByteSizeLong(), 16_MB);
+        UNIT_ASSERT_LE(rec.ByteSizeLong(), fixture.Runtime.GetAppData().DataShardConfig.GetBuildIndexRequestBytesLimit());
+        auto retry = MakeHolder<TEvDataShard::TEvReshuffleKMeansRequest>();
+        retry->Record.CopyFrom(rec);
+        fixture.Runtime.GetAppData().BuildIndexScanAdmission->SetTotalLimit(2_GB * 3 / 100);
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, event.Release(), 0, GetPipeConfigWithRetries());
+        auto rejected = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(rejected->Get()->Record.GetRetryAfterMs(), 0);
+        fixture.Runtime.GetAppData().BuildIndexScanAdmission->SetTotalLimit(512_MB);
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, retry.Release(), 0, GetPipeConfigWithRetries());
+        fixture.Reply(NKikimrIndexBuilder::DONE);
+    }
+
+    Y_UNIT_TEST(LargeValidRowRetriesWithLargerReservation) {
+        TAdmissionFixture fixture;
+        fixture.InsertRow(TString(10_MB, 'x'));
+        fixture.Send(fixture.Shards[0]);
+        const auto reply = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(reply->Get()->Record.GetRequiredRowBytes(), 10_MB);
+        auto event = fixture.Request(fixture.Shards[0]);
+        event->Record.SetRequiredRowBytes(reply->Get()->Record.GetRequiredRowBytes());
+        event->Record.SetSeqNoRound(2);
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, event.Release(), 0, GetPipeConfigWithRetries());
+        const auto done = fixture.Reply(NKikimrIndexBuilder::DONE);
+        UNIT_ASSERT_VALUES_EQUAL(done->Get()->Record.GetMeteringStats().GetUploadRows(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
     }
 
@@ -342,8 +445,9 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         fixture.Runtime.WaitFor("scan row limit chosen", [&] { return grants.size() == 1; });
         fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexRowBytesLimit(8_MB);
         grants.Stop().Unblock();
-        auto reply = fixture.Reply(NKikimrIndexBuilder::BUILD_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(reply->Get()->Record.ShortDebugString(), "BuildIndexRowBytesLimit");
+        auto reply = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(reply->Get()->Record.GetRequiredRowBytes(), 64);
+        UNIT_ASSERT_GT(reply->Get()->Record.GetRetryAfterMs(), 0);
     }
 
     Y_UNIT_TEST(RetryWaitsForPreviousUploadPayloadCleanup) {
@@ -449,10 +553,18 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         rec.MutableSettings()->set_vector_dimension(2);
         rec.MutableSettings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
         rec.MutableSettings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        auto retry = MakeHolder<TEvDataShard::TEvSampleKRequest>();
+        retry->Record.CopyFrom(rec);
         fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, event.Release(), 0, GetPipeConfigWithRetries());
         const auto reply = fixture.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(fixture.Sender);
-        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetStatus(), NKikimrIndexBuilder::BUILD_ERROR, reply->Get()->Record.ShortDebugString());
-        UNIT_ASSERT_STRING_CONTAINS(reply->Get()->Record.ShortDebugString(), "Sample row exceeds");
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetStatus(), NKikimrIndexBuilder::ABORTED, reply->Get()->Record.ShortDebugString());
+        UNIT_ASSERT_GT(reply->Get()->Record.GetRequiredRowBytes(), 16_KB);
+        retry->Record.SetRequiredRowBytes(reply->Get()->Record.GetRequiredRowBytes());
+        retry->Record.SetSeqNoRound(2);
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, retry.Release(), 0, GetPipeConfigWithRetries());
+        const auto done = fixture.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(fixture.Sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(done->Get()->Record.GetStatus(), NKikimrIndexBuilder::DONE, done->Get()->Record.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(done->Get()->Record.RowsSize(), 1);
     }
 
     Y_UNIT_TEST(RowLimitStopsBufferGrowth) {
@@ -460,8 +572,9 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         fixture.InsertRow();
         fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexRowBytesLimit(1);
         fixture.Send(fixture.Shards[0]);
-        auto reply = fixture.Reply(NKikimrIndexBuilder::BUILD_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(reply->Get()->Record.ShortDebugString(), "BuildIndexRowBytesLimit");
+        auto reply = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(reply->Get()->Record.GetRequiredRowBytes(), 16_KB);
+        UNIT_ASSERT_GT(reply->Get()->Record.GetRetryAfterMs(), 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
     }
 

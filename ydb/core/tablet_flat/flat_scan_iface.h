@@ -91,7 +91,6 @@ namespace NTable {
         // Declared in the base so derived scan data is destroyed before the
         // reservation. Upload children may retain their own shared reference.
         std::shared_ptr<void> ResourceReservation;
-        ui64 RowBytesLimit = 0;
     public:
         void HoldResourceReservation(std::shared_ptr<void> reservation) {
             ResourceReservation = std::move(reservation);
@@ -100,9 +99,6 @@ namespace NTable {
         const std::shared_ptr<void>& GetResourceReservation() const {
             return ResourceReservation;
         }
-
-        void SetRowBytesLimit(ui64 limit) { RowBytesLimit = limit; }
-        ui64 GetRowBytesLimit() const { return RowBytesLimit; }
 
         using TRow = NTable::TRowState;
         using IDriver = NTable::IDriver;

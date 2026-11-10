@@ -2,6 +2,7 @@
 
 #include <yt/yt/core/actions/bind.h>
 #include <yt/yt/core/actions/callback.h>
+#include <yt/yt/core/actions/current_invoker.h>
 #include <yt/yt/core/actions/invoker_detail.h>
 
 #include <library/cpp/yt/system/spin_lock.h>
@@ -150,12 +151,22 @@ public:
 
     void Invoke(TClosure callback) override
     {
-        return UnderlyingInvoker_->Invoke(std::move(callback), Priority_);
+        UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
+            &TFixedPriorityInvoker::RunCallback,
+            MakeStrong(this),
+            Passed(std::move(callback))),
+            Priority_);
     }
 
 private:
     const IPrioritizedInvokerPtr UnderlyingInvoker_;
     const i64 Priority_;
+
+    void RunCallback(TClosure callback)
+    {
+        TCurrentInvokerGuard currentInvokerGuard(this);
+        callback();
+    }
 };
 
 IInvokerPtr CreateFixedPriorityInvoker(

@@ -1,9 +1,24 @@
-/* syntax version 1 */
-USE plato;
+$input = [
+    <|key: "1", subkey: "1", value: "a"|>,
+    <|key: "1", subkey: "1", value: "b"|>,
+    <|key: "1", subkey: "1", value: "c"|>,
+    <|key: "1", subkey: "2", value: "a"|>,
+    <|key: "1", subkey: "1", value: "e"|>,
+    <|key: "1", subkey: "1", value: "b"|>,
+    <|key: "2", subkey: "2", value: "x"|>,
+    <|key: "2", subkey: "3", value: "y"|>,
+    <|key: "2", subkey: "4", value: "x"|>,
+    <|key: "2", subkey: "5", value: "u"|>,
+    <|key: "2", subkey: "6", value: "v"|>,
+    <|key: "2", subkey: "7", value: "w"|>,
+    <|key: "2", subkey: "8", value: "x"|>,
+    <|key: "2", subkey: "9", value: "w"|>,
+    <|key: "3", subkey: "0", value: "m"|>,
+];
 
 SELECT
     key,
     AGGREGATE_LIST_DISTINCT(AsTuple(subkey, value))
-FROM Input
+FROM AS_TABLE($input)
 GROUP BY key
 ORDER BY key

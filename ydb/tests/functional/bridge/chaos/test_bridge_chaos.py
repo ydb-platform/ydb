@@ -81,7 +81,7 @@ RPC_TIMEOUT = 10
 RECOVERY_TIMEOUT = 300  # for the cluster to serve again once the failures are healed
 SYNC_TIMEOUT = 600  # for the pile to get synchronized
 TRANSIENT_STATUSES = (StatusIds.INTERNAL_ERROR, StatusIds.UNAVAILABLE, StatusIds.TIMEOUT, StatusIds.OVERLOADED,
-                      StatusIds.UNDETERMINED, StatusIds.SESSION_EXPIRED)
+                      StatusIds.UNDETERMINED, StatusIds.SESSION_EXPIRED, StatusIds.ABORTED)
 GRPC_OPTIONS = [
     ('grpc.max_receive_message_length', 64 * 10 ** 6),
     ('grpc.max_send_message_length', 64 * 10 ** 6),

@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 
 using namespace NBridgeTest;
 
@@ -19,10 +20,10 @@ namespace {
         return env.Invoke(request);
     }
 
-    // two piles of 9 nodes, each pile being a datacenter of its own; non-uniform storage is enabled
-    TEnvironmentSetup::TSettings MakeTwoPileSettings() {
+    // piles of 9 nodes, each pile being a datacenter of its own; non-uniform storage is enabled
+    TEnvironmentSetup::TSettings MakePileSettings(ui32 numPiles, bool enableDeepScrubbing = false) {
         return {
-            .NodeCount = 18,
+            .NodeCount = 9 * numPiles,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .PrepareRuntime = [](TTestActorSystem& runtime) {
                 runtime.GetAppDataBridgeConfig().SetEnableNonUniformStorage(true);
@@ -37,15 +38,21 @@ namespace {
                 return TNodeLocation(location);
             },
             .SelfManagementConfig = true,
-            .NumPiles = 2,
+            .EnableDeepScrubbing = enableDeepScrubbing,
+            .NumPiles = numPiles,
             .AutomaticBootstrap = true,
         };
+    }
+
+    TEnvironmentSetup::TSettings MakeTwoPileSettings() {
+        return MakePileSettings(2);
     }
 
     constexpr ui32 FirstNodeOfPile[] = {1, 10};
 
     // ordinary pool with the settings of pool 1, its groups reside in the datacenter of the designated pile
-    void CreateOrdinaryPool(TEnvironmentSetup& env, ui64 storagePoolId, ui32 numGroups, ui32 pileIndex) {
+    void CreateOrdinaryPool(TEnvironmentSetup& env, ui64 storagePoolId, ui32 numGroups, ui32 pileIndex,
+            ui32 numFailDomains = 0) {
         auto pool = ReadStoragePool(env, 1);
         pool.SetStoragePoolId(storagePoolId);
         pool.SetName(TStringBuilder() << "pool_" << storagePoolId);
@@ -53,6 +60,12 @@ namespace {
         pool.ClearItemConfigGeneration();
         pool.SetBridgeMode(false);
         pool.SetNumGroups(numGroups);
+        if (numFailDomains) {
+            auto *geometry = pool.MutableGeometry();
+            geometry->SetNumFailRealms(1);
+            geometry->SetNumFailDomainsPerFailRealm(numFailDomains);
+            geometry->SetNumVDisksPerFailDomain(1);
+        }
         UNIT_ASSERT(pool.PDiskFilterSize());
         pool.MutablePDiskFilter(0)->AddProperty()->MutableLocation()->SetDataCenter(TStringBuilder() << "dc_"
             << pileIndex + 1);
@@ -117,6 +130,24 @@ namespace {
         return false;
     }
 
+    // wait for a full scrub cycle of every VDisk
+    void WaitForScrubCycles(TEnvironmentSetup& env, const std::vector<TActorId>& vdiskActorIds) {
+        for (const TActorId& vdiskActorId : vdiskActorIds) {
+            const ui32 nodeId = vdiskActorId.NodeId();
+            const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            const TInstant deadline = env.Runtime->GetClock() + TDuration::Minutes(5);
+            for (;;) {
+                env.Runtime->Send(new IEventHandle(TEvBlobStorage::EvScrubAwait, 0, vdiskActorId, edge, nullptr,
+                    RandomNumber<ui64>()), nodeId);
+                auto ev = env.WaitForEdgeActorEvent<TEvScrubNotify>(edge, false, deadline);
+                UNIT_ASSERT_C(ev, "no successful scrub cycle of the VDisk with ActorId# " << vdiskActorId);
+                if (ev->Get()->Success) {
+                    break;
+                }
+            }
+        }
+    }
+
     // the group has synced parts in both piles and relies on none of them in particular
     bool IsFullyBridged(const NKikimrBlobStorage::TGroupInfo& info) {
         const auto& state = info.GetBridgeGroupState();
@@ -175,12 +206,204 @@ namespace {
         return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false)->Get()->Status;
     }
 
+    void SetPoolPileOverride(TEnvironmentSetup& env, const TString& erasure, ui32 numFailDomains) {
+        const auto result = ReplaceMainConfig(env, [&](YAML::Node& config) {
+            YAML::Node rule;
+            rule["pile_name"].push_back("pile_2");
+            rule["kind"].push_back("pool_2");
+            rule["static_group_override"] = false;
+            rule["erasure_species"] = erasure;
+            rule["geometry"] = YAML::Node(YAML::NodeType::Map);
+            if (numFailDomains) {
+                auto geometry = rule["geometry"];
+                geometry["num_fail_realms"] = 1;
+                geometry["num_fail_domains_per_fail_realm"] = numFailDomains;
+                geometry["num_vdisks_per_fail_domain"] = 1;
+            }
+            config["blob_storage_config"]["storage_pool_pile_overrides"].push_back(rule);
+        });
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            result.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+    }
+
+    void CheckIncompatiblePoolPileOverride(const TString& erasure, ui32 baseNumFailDomains,
+            ui32 overrideNumFailDomains) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 1, 0, baseNumFailDomains);
+        CreateOrdinaryPool(env, 3, 1, 1, baseNumFailDomains);
+        const ui32 firstGroupId = GetLogicalPoolGroups(env, 2).front();
+        const ui32 secondGroupId = GetLogicalPoolGroups(env, 3).front();
+        UNIT_ASSERT_LT(firstGroupId, secondGroupId);
+        DropLocationFilter(env, 2);
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *move = request.AddCommand()->MutableMoveGroups();
+        move->SetBoxId(1);
+        move->SetOriginStoragePoolId(3);
+        move->SetTargetStoragePoolId(2);
+        move->SetOriginStoragePoolGeneration(ReadStoragePool(env, 3).GetItemConfigGeneration());
+        move->SetTargetStoragePoolGeneration(ReadStoragePool(env, 2).GetItemConfigGeneration());
+        const auto moved = env.Invoke(request);
+        UNIT_ASSERT_C(moved.GetSuccess(), moved.GetErrorDescription());
+
+        TDataChecker checker(env);
+        checker.Write(firstGroupId);
+        checker.Write(secondGroupId);
+        SetPoolPileOverride(env, erasure, overrideNumFailDomains);
+
+        const auto poolBefore = ReadStoragePool(env, 2);
+        const auto baseBefore = env.FetchBaseConfig();
+        const auto firstBefore = GetGroupInfo(env, firstGroupId);
+        const auto secondBefore = GetGroupInfo(env, secondGroupId);
+        const auto response = ChangeStoragePoolBridgeMode(env, 2, true);
+        UNIT_ASSERT_C(!response.GetSuccess(), "conversion accepted an incompatible pile override");
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "erasure or topology");
+        UNIT_ASSERT_VALUES_EQUAL(ReadStoragePool(env, 2).SerializeAsString(), poolBefore.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, firstGroupId).SerializeAsString(), firstBefore.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, secondGroupId).SerializeAsString(), secondBefore.SerializeAsString());
+
+        const auto baseAfter = env.FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(baseAfter.GroupSize(), baseBefore.GroupSize());
+        UNIT_ASSERT_VALUES_EQUAL(baseAfter.VSlotSize(), baseBefore.VSlotSize());
+        for (const auto& before : baseBefore.GetGroup()) {
+            const auto& after = FindGroup(baseAfter, before.GetGroupId());
+            UNIT_ASSERT_VALUES_EQUAL(after.GetGroupGeneration(), before.GetGroupGeneration());
+            UNIT_ASSERT_VALUES_EQUAL(after.GetIsProxyGroup(), before.GetIsProxyGroup());
+            UNIT_ASSERT_VALUES_EQUAL(after.VSlotIdSize(), before.VSlotIdSize());
+            for (size_t i = 0; i < before.VSlotIdSize(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(after.GetVSlotId(i).SerializeAsString(), before.GetVSlotId(i).SerializeAsString());
+            }
+        }
+        checker.CheckAll();
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(BridgePoolMode) {
 
+    Y_UNIT_TEST(RejectIncompatiblePileOverrideErasure) {
+        CheckIncompatiblePoolPileOverride("none", 8, 0);
+    }
+
+    Y_UNIT_TEST(RejectIncompatiblePileOverrideLargerTopology) {
+        CheckIncompatiblePoolPileOverride("block-4-2", 8, 9);
+    }
+
+    Y_UNIT_TEST(RejectIncompatiblePileOverrideSmallerTopology) {
+        CheckIncompatiblePoolPileOverride("block-4-2", 9, 8);
+    }
+
+    Y_UNIT_TEST(CompatiblePileOverrideAllowsConversionAndRepair) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 1, 1);
+        const ui32 groupId = GetLogicalPoolGroups(env, 2).front();
+        DropLocationFilter(env, 2);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        SetPoolPileOverride(env, "block-4-2", 8);
+
+        const auto poolBefore = ReadStoragePool(env, 2);
+        const auto response = ChangeStoragePoolBridgeMode(env, 2, true);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitUntil(env, [&] { return IsFullyBridged(GetGroupInfo(env, groupId)); }, "group fully bridged");
+        const auto info = GetGroupInfo(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetBridgeProxyGroupId(), groupId);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetErasureSpecies(), TBlobStorageGroupType::Erasure4Plus2Block);
+        UNIT_ASSERT_C(TBridgePileId::FromProto(&info, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId) ==
+            TBridgePileId::FromPileIndex(1), info.ShortDebugString());
+
+        auto expectedPool = poolBefore;
+        expectedPool.SetBridgeMode(true);
+        expectedPool.SetItemConfigGeneration(poolBefore.GetItemConfigGeneration() + 1);
+        UNIT_ASSERT_VALUES_EQUAL(ReadStoragePool(env, 2).SerializeAsString(), expectedPool.SerializeAsString());
+        NKikimrBlobStorage::TConfigRequest redefine;
+        redefine.AddCommand()->MutableDefineStoragePool()->CopyFrom(ReadStoragePool(env, 2));
+        const auto redefined = env.Invoke(redefine);
+        UNIT_ASSERT_C(redefined.GetSuccess(), redefined.GetErrorDescription());
+
+        ReassignOneDisk(env, groupId);
+        env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, groupId).GetErasureSpecies(),
+            TBlobStorageGroupType::Erasure4Plus2Block);
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
+
     // ordinary groups residing in single piles become inline piles, get their parts in the other pile, which are synced
     // while the groups are written to, and then the groups don't rely on their original parts anymore
+    Y_UNIT_TEST(SyncersAreLimited) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 4, 1);
+        const auto groups = GetLogicalPoolGroups(env, 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 4);
+        SetBridgeSyncMaxSyncers(env, 2);
+
+        TSyncerTracker tracker;
+        tracker.Hold = true;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            return tracker.OnEvent(nodeId, ev);
+        };
+        MakeLocatedPoolBridged(env, 2, groups);
+        WaitUntil(env, [&] { return tracker.GetNumRunning() >= 2; }, "syncers running");
+        env.Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 2);
+        tracker.RunUntil(env, 2, "groups fully bridged", [&] {
+            return std::ranges::all_of(groups, [&](ui32 groupId) {
+                return IsFullyBridged(GetGroupInfo(env, groupId));
+            });
+        });
+        env.Runtime->FilterFunction = {};
+    }
+
+    // the pool is being made bridged in synchronized pile 1, and its syncers wait for the only slot; when pile 2 gets back,
+    // the slot goes to it
+    Y_UNIT_TEST(RejoiningPileGoesAheadOfWaitingSyncers) {
+        TSyncerTracker tracker;
+        TEnvironmentSetup env(MakePileSettings(3));
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 4, 0);
+        const auto groups = GetLogicalPoolGroups(env, 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 4);
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
+        WaitForPileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
+        SetBridgeSyncMaxSyncers(env, 1);
+
+        tracker.Hold = true;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            return tracker.OnEvent(nodeId, ev);
+        };
+        MakeLocatedPoolBridged(env, 2, groups);
+        WaitUntil(env, [&] { return tracker.GetNumRunning() >= 1; }, "syncer running");
+        env.Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 1);
+        constexpr ui32 firstNodeOfPile2 = 19;
+        UNIT_ASSERT_LT(tracker.Started.back().first, firstNodeOfPile2);
+
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        env.Sim(TDuration::Seconds(10)); // parts of pile 2 are reset by now, and the static group is synced
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 1);
+
+        // the part of the group next in the queue may be the one of pile 2 anyway, so the check is that no syncer of pile 1
+        // starts while any part of pile 2 is left
+        const size_t numStarted = tracker.Started.size();
+        tracker.RunUntil(env, 1, "syncer of pile 1 started", [&] {
+            return std::any_of(tracker.Started.begin() + numStarted, tracker.Started.end(), [&](const auto& started) {
+                return started.first < firstNodeOfPile2;
+            });
+        });
+        for (ui32 groupId : groups) {
+            const auto info = GetGroupInfo(env, groupId);
+            const auto *pile = NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(2));
+            UNIT_ASSERT_C(pile && pile->GetStage() == NKikimrBridge::TGroupState::SYNCED, info.ShortDebugString());
+        }
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(MakeBridgedInTwoPileCluster) {
         TEnvironmentSetup env(MakeTwoPileSettings());
         env.CreatePool();
@@ -228,6 +451,54 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
             env.Sim(TDuration::Seconds(30));
             checker.CheckAll(nodeId);
         }
+    }
+
+    // the VDisks of a group made bridged keep running as its inline pile; their deep scrubbing checks this part from
+    // then on, fenced with its generation, instead of checking every part of the group through its bridge proxy
+    Y_UNIT_TEST(DeepScrubbingAfterMakingBridged) {
+        TEnvironmentSetup env(MakePileSettings(2, true));
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 1, 1);
+        const auto groups = GetLogicalPoolGroups(env, 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+        TDataChecker checker(env);
+        for (ui32 i = 0; i < 10; ++i) {
+            checker.Write(groupId);
+        }
+        std::vector<TActorId> vdiskActorIds;
+        const auto info = env.GetGroupInfo(groupId);
+        for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+            vdiskActorIds.push_back(info->GetActorId(i));
+            env.CompactVDisk(info->GetActorId(i)); // the scrub checks the blobs it finds in SSTs
+        }
+
+        env.SetScrubPeriodicity(TDuration::Seconds(1));
+
+        MakeLocatedPoolBridged(env, 2, groups);
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, groupId).GetBridgeProxyGroupId(), groupId);
+        WaitForScrubCycles(env, vdiskActorIds); // the cycles that have started before the change finish
+
+        // checks of the blobs written to the group: the bridge proxy fences the checks it sends to the parts, so an
+        // unfenced one can come only from the scrub of the inline pile itself
+        const ui64 tabletId = std::get<1>(checker.GetWritten().front()).TabletID();
+        ui32 numFenced = 0;
+        ui32 numUnfenced = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCheckIntegrity) {
+                const auto *msg = ev->Get<TEvBlobStorage::TEvCheckIntegrity>();
+                if (msg->Id.TabletID() == tabletId) {
+                    ++(msg->ForceGroupGeneration ? numFenced : numUnfenced);
+                }
+            }
+            return true;
+        };
+        WaitForScrubCycles(env, vdiskActorIds);
+        env.Runtime->FilterFunction = {};
+
+        UNIT_ASSERT_VALUES_EQUAL(numUnfenced, 0);
+        UNIT_ASSERT_C(numFenced, "no blob checked by deep scrubbing");
+        checker.CheckAll();
     }
 
     // the group being made bridged one relies on its original part solely: when the pile of the part goes out, the
@@ -557,14 +828,17 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         std::optional<ui32> newGroupId;
         {
             const auto current = env.FetchBaseConfig();
-            for (const auto *group : GetPoolGroups(current, 1)) {
-                if (group->GetIsProxyGroup()) {
+            const auto poolGroups = GetPoolGroups(current, 1);
+            UNIT_ASSERT_VALUES_EQUAL(poolGroups.size(), 2); // new group is born inline pile, without separate parts
+            for (const auto *group : poolGroups) {
+                if (group->GetGroupId() != groupId) {
                     UNIT_ASSERT(!newGroupId);
                     newGroupId = group->GetGroupId();
                 }
             }
         }
         UNIT_ASSERT(newGroupId);
+        CheckInlinePileGroup(env, *newGroupId);
         checker.Write(*newGroupId);
 
         auto checkAll = [&](ui32 nodeId) {

@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    topic_client_settings.cpp
+    topic_client_settings.h
     yql_pq_gateway_factory.cpp
     yql_pq_gateway_services.cpp
     yql_pq_gateway.cpp
@@ -14,6 +16,7 @@ PEERDIR(
     ydb/library/yql/providers/pq/gateway/clients/external
     ydb/library/yql/providers/pq/gateway/clients/local
     ydb/library/yverify_stream
+    ydb/public/sdk/cpp/adapters/executor
     ydb/public/sdk/cpp/src/client/datastreams
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/topic

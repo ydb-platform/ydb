@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test CPU, disk I/O and binary size by area</title>
+  <style>
+    body { font: 12px Arial, sans-serif; margin: 8px; color: #222; background: #fff; }
+    a, .metric-link, .area-toggle { color: #175a97; }
+    header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 6px; }
+    h1 { font-size: 17px; margin: 0; }
+    h2 { font-size: 13px; margin: 8px 0 4px; }
+    .totals { margin: 5px 0 8px; display: flex; flex-wrap: wrap; gap: 5px 20px; }
+    .totals strong { font-variant-numeric: tabular-nums; }
+    .scroll { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    th, td { padding: 4px 6px; border-bottom: 1px solid #ddd; text-align: right; white-space: nowrap; }
+    th { background: #eee; }
+    td:first-child, th:first-child { text-align: left; }
+    tr:hover { background: #f6f6f6; }
+    th button { border: 0; background: none; font: inherit; font-weight: bold; cursor: pointer; color: inherit; padding: 0; }
+    .suite { white-space: normal; overflow-wrap: anywhere; min-width: 240px; }
+    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 3px 0 5px; }
+    select, input { font: inherit; padding: 2px 4px; }
+    .area-toggle, .metric-link { border: 0; background: none; cursor: pointer; font: inherit; padding: 0; }
+    .area-toggle .arrow { display: inline-block; margin-right: 5px; font-size: 10px; }
+    .area-toggle[aria-expanded="true"] .arrow { transform: rotate(90deg); }
+    .area-details > td { padding: 5px 6px 8px 16px; text-align: left; background: #fafafa; white-space: normal; }
+    .area-details .scroll { max-height: 360px; overflow: auto; border: 1px solid #ccc; }
+    .area-details th { position: sticky; top: 0; }
+    .area-suites th:nth-child(2), .area-suites td:nth-child(2),
+    .area-suites th:nth-child(3), .area-suites td:nth-child(3) { display: none; }
+    .muted { color: #666; }
+    details { margin-top: 7px; }
+    summary { cursor: pointer; width: fit-content; }
+    .notes { line-height: 1.45; }
+    .notes p { margin: 4px 0; max-width: 1100px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<header><h1>Test resources</h1><nav><a href="../ya-test.html">Tests</a> · CSV: <a href="suites.csv">suites</a> / <a href="areas.csv">areas</a> · <a href="usage.json">JSON</a></nav></header>
+<div class="totals">
+  <span>Suites <strong>{{ totals.suites }}</strong></span>
+  <span>CPU <strong>{{ format_usage(totals, 'cpu_seconds') }} h</strong></span>
+  <span>Read <strong>{{ format_usage(totals, 'read_bytes') }} GiB</strong></span>
+  <span>Written <strong>{{ format_usage(totals, 'write_bytes') }} GiB</strong></span>
+  <span>Binaries <strong>{{ format_usage(totals, 'binary_bytes') }} GiB</strong></span>
+</div>
+{% macro pct(value) -%}{{ '%.1f%%'|format(value) if value is not none else '—' }}{%- endmacro %}
+{% macro metric_cells(row, key, suite=false) %}
+  <td data-sort="{{ row[key] if row[key] is not none else '' }}" title="Measured {{ 'suites' if key == 'binary_bytes' else 'chunks' }}: {{ row[coverage_key(key)] }} / {{ row.get('suites', 1) if key == 'binary_bytes' else row.chunks }}">{% if not suite %}<button type="button" class="metric-link" data-metric="{{ key }}" title="Show suites ranked by this resource">{% endif %}{{ format_usage(row, key) }}{% if not suite %}</button>{% endif %}</td>
+  <td data-sort="{{ row[key + '_pct_total'] if row[key + '_pct_total'] is not none else '' }}">{% if not suite %}<button type="button" class="metric-link" data-metric="{{ key }}" title="Show suites ranked by this resource">{% endif %}{{ pct(row[key + '_pct_total']) }}{% if suite %} / {{ pct(row[key + '_pct_area']) }}{% else %}</button>{% endif %}</td>
+{% endmacro %}
+{% macro suite_headers() %}
+  <thead><tr>
+    <th><button type="button" data-text>Suite ↕</button></th><th><button type="button" data-text>Area ↕</button></th>
+    <th><button type="button">Chunks ↕</button></th>
+    <th><button type="button" data-metric="cpu_seconds">CPU · h ↕</button></th><th><button type="button">% all / area ↕</button></th>
+    <th><button type="button" data-metric="read_bytes">Read · GiB ↕</button></th><th><button type="button">% all / area ↕</button></th>
+    <th><button type="button" data-metric="write_bytes">Written · GiB ↕</button></th><th><button type="button">% all / area ↕</button></th>
+    <th><button type="button" data-metric="binary_bytes">Binaries · GiB ↕</button></th><th><button type="button">% all / area ↕</button></th>
+  </tr></thead>
+{% endmacro %}
+
+<div class="scroll"><table id="areas">
+  <thead><tr>
+    <th><button type="button" data-text>Area ↕</button></th><th><button type="button">Suites ↕</button></th>
+    <th><button type="button">CPU · h ↕</button></th><th><button type="button">% of CPU ↕</button></th>
+    <th><button type="button">Read · GiB ↕</button></th><th><button type="button">% of reads ↕</button></th>
+    <th><button type="button">Written · GiB ↕</button></th><th><button type="button">% of writes ↕</button></th>
+    <th><button type="button">Binaries · GiB ↕</button></th><th><button type="button">% of binaries ↕</button></th>
+  </tr></thead>
+  {% for row in areas %}<tbody class="area-group" data-area="{{ row.area }}"><tr>
+    <td><button type="button" class="area-toggle" aria-expanded="false" aria-controls="area-details-{{ loop.index }}"><span class="arrow" aria-hidden="true">▶</span>{{ row.area }}</button></td><td data-sort="{{ row.suites }}">{{ row.suites }}</td>
+    {{ metric_cells(row, 'cpu_seconds') }}{{ metric_cells(row, 'read_bytes') }}{{ metric_cells(row, 'write_bytes') }}
+    {{ metric_cells(row, 'binary_bytes') }}
+  </tr><tr class="area-details" id="area-details-{{ loop.index }}" hidden><td colspan="10">
+
+    <div class="controls">
+      <label>Sort <select class="rank-metric">
+        <option value="cpu_seconds">CPU</option><option value="read_bytes">Read</option>
+        <option value="write_bytes">Written</option><option value="binary_bytes">Binaries</option>
+      </select></label>
+      <label>Suite <input class="area-search" type="search" placeholder="Suite path"></label>
+      <span class="area-count muted"></span>
+    </div>
+
+    <div class="scroll"><table class="area-suites">{{ suite_headers() }}<tbody></tbody></table></div>
+  </td></tr></tbody>{% endfor %}
+</table></div>
+<details id="all-suites"><summary>All suites ({{ suites|length }})</summary>
+<div class="controls">
+  <label>Area <select id="area"><option value="">All areas</option>{% for row in areas|sort(attribute='area') %}<option>{{ row.area }}</option>{% endfor %}</select></label>
+  <label>Suite <input id="search" type="search" placeholder="Suite path"></label>
+  <span id="count" class="muted">{{ suites|length }} suites</span>
+</div>
+
+<div class="scroll"><table id="suites">
+  {{ suite_headers() }}
+  <tbody>{% for row in suites %}<tr data-area="{{ row.area }}" data-path="{{ row.suite_folder }}">
+    <td class="suite">{{ row.suite_folder }}</td><td>{{ row.area }}</td><td data-sort="{{ row.chunks }}">{{ row.chunks }}</td>
+    {{ metric_cells(row, 'cpu_seconds', true) }}{{ metric_cells(row, 'read_bytes', true) }}{{ metric_cells(row, 'write_bytes', true) }}
+    {{ metric_cells(row, 'binary_bytes', true) }}
+  </tr>{% endfor %}</tbody>
+</table></div>
+</details>
+<details class="notes"><summary>Metrics · coverage</summary>
+  <p>CPU = user + system time; I/O = Linux block accounting (512 bytes/block). Summed over chunks in this try, including failures; not total host activity.</p>
+  <p>Binaries = own ELF file sizes with debug info, once per suite. Dependencies excluded. Areas: TESTOWNERS. Shares: all suites / own area.</p>
+  <p>— no measurement. CPU/read/write: {{ totals.cpu_seconds_chunks }}/{{ totals.read_bytes_chunks }}/{{ totals.write_bytes_chunks }} of {{ totals.chunks }} chunks. Binaries: {{ totals.binary_bytes_suites }}/{{ totals.suites }} suites.</p>
+</details>
+{% if not suites %}<p>No test chunk resource records in this try.</p>{% endif %}
+<script>
+  const area = document.getElementById('area');
+  const search = document.getElementById('search');
+  const suiteRows = Array.from(document.querySelectorAll('#suites tbody tr'));
+  function filterSuites() {
+    const query = search.value.trim().toLowerCase();
+    let count = 0;
+    for (const row of suiteRows) {
+      row.hidden = (area.value && row.dataset.area !== area.value) || !row.dataset.path.toLowerCase().includes(query);
+      if (!row.hidden) count++;
+    }
+    document.getElementById('count').textContent = `${count} suites`;
+  }
+  area.addEventListener('change', filterSuites);
+  search.addEventListener('input', filterSuites);
+  function sortTable(table, column, text, direction) {
+    // Keep each area's summary and expanded details together when sorting areas.
+    const grouped = table.id === 'areas';
+    const items = Array.from(grouped ? table.tBodies : table.tBodies[0].rows);
+    const cell = item => (grouped ? item.rows[0] : item).cells[column];
+    items.sort((a, b) => {
+      const x = cell(a), y = cell(b);
+      if (text) return direction * x.textContent.localeCompare(y.textContent);
+      if (x.dataset.sort === '') return y.dataset.sort === '' ? 0 : 1;
+      if (y.dataset.sort === '') return -1;
+      return direction * (Number(x.dataset.sort) - Number(y.dataset.sort));
+    });
+    const parent = grouped ? table : table.tBodies[0];
+    for (const item of items) parent.appendChild(item);
+    for (const th of table.tHead.rows[0].cells) th.removeAttribute('aria-sort');
+    table.tHead.rows[0].cells[column].setAttribute('aria-sort', direction === 1 ? 'ascending' : 'descending');
+  }
+  document.querySelectorAll('th button').forEach(button => button.addEventListener('click', () => {
+    const table = button.closest('table');
+    const text = button.hasAttribute('data-text');
+    const direction = button.dataset.direction ? -Number(button.dataset.direction) : (text ? 1 : -1);
+    button.dataset.direction = String(direction);
+    sortTable(table, button.closest('th').cellIndex, text, direction);
+  }));
+  document.querySelectorAll('.area-group').forEach(group => {
+    const details = group.querySelector('.area-details');
+    const toggle = group.querySelector('.area-toggle');
+    const table = group.querySelector('.area-suites');
+    const rank = group.querySelector('.rank-metric');
+    const search = group.querySelector('.area-search');
+    function filter() {
+      const query = search.value.trim().toLowerCase();
+      let visible = 0;
+      for (const row of table.tBodies[0].rows) {
+        row.hidden = !row.dataset.path.toLowerCase().includes(query);
+        if (!row.hidden) visible++;
+      }
+      group.querySelector('.area-count').textContent = `${visible} / ${table.tBodies[0].rows.length} suites`;
+    }
+    function sortByResource() {
+      const button = table.tHead.querySelector(`button[data-metric="${rank.value}"]`);
+      button.dataset.direction = '-1';
+      sortTable(table, button.closest('th').cellIndex, false, -1);
+    }
+    function expand(metric) {
+      if (!group.dataset.loaded) {
+        for (const row of suiteRows) {
+          if (row.dataset.area === group.dataset.area) table.tBodies[0].appendChild(row.cloneNode(true));
+        }
+        group.dataset.loaded = 'true';
+      }
+      if (metric) rank.value = metric;
+      details.hidden = false;
+      toggle.setAttribute('aria-expanded', 'true');
+      filter();
+      sortByResource();
+    }
+    toggle.addEventListener('click', () => {
+      if (details.hidden) expand();
+      else {
+        details.hidden = true;
+        toggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+    group.querySelectorAll('.metric-link').forEach(button => button.addEventListener('click', () => expand(button.dataset.metric)));
+    rank.addEventListener('change', sortByResource);
+    search.addEventListener('input', filter);
+  });
+</script>
+</body>
+</html>

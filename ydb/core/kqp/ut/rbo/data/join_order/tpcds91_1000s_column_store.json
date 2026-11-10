@@ -1,0 +1,76 @@
+{
+  "op_name":"HashShuffle",
+  "args":
+    [
+      {
+        "op_name":"InnerJoin (BlockHash)",
+        "args":
+          [
+            {
+              "op_name":"InnerJoin (BlockHash)",
+              "args":
+                [
+                  {
+                    "op_name":"HashShuffle",
+                    "args":
+                      [
+                        {
+                          "op_name":"InnerJoin (BlockHash)",
+                          "args":
+                            [
+                              {
+                                "op_name":"InnerJoin (BlockHash)",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"catalog_returns"
+                                    },
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"date_dim"
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"InnerJoin (BlockHash)",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"InnerJoin (BlockHash)",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"customer"
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"customer_demographics"
+                                          }
+                                        ]
+                                    },
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"household_demographics"
+                                    }
+                                  ]
+                              }
+                            ]
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"customer_address"
+                  }
+                ]
+            },
+            {
+              "op_name":"TableFullScan",
+              "table":"call_center"
+            }
+          ]
+      }
+    ]
+}

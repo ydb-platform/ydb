@@ -2,11 +2,15 @@
 
 #include <yt/yt/core/concurrency/action_queue.h>
 
+#include <yt/yt/core/test_framework/framework.h>
+
 #include <yt/yt/library/profiling/solomon/config.h>
 #include <yt/yt/library/profiling/solomon/exporter.h>
 #include <yt/yt/library/profiling/solomon/registry.h>
 
 #include <library/cpp/json/yson/json2yson.h>
+
+#include <library/cpp/monlib/encode/json/json.h>
 
 namespace NYT::NProfiling {
 namespace {
@@ -410,6 +414,83 @@ TEST(TSolomonExporterTest, ReadSensorsSolomonAggregates)
         EXPECT_NE("", GetLabel(GetSensorByName(sensors, "summary.sum"sv), "host"));
         EXPECT_EQ("", GetLabel(GetSensorByName(sensors, "sum_global.sum"sv), "host"));
     }
+
+    exporter->Stop();
+}
+
+TEST(TSolomonExporterTest, ParseSolomonFetchArgs)
+{
+    auto args = ParseSolomonFetchArgs("now=2026-10-23T10:00:15Z&period=15s", /*gridHeader*/ "15");
+    EXPECT_EQ(TInstant::ParseIso8601("2026-10-23T10:00:15Z"), args.Now);
+    EXPECT_EQ(TDuration::Seconds(15), args.Period);
+    EXPECT_EQ(TDuration::Seconds(15), args.Grid);
+
+    args = ParseSolomonFetchArgs("", /*gridHeader*/ std::nullopt);
+    EXPECT_FALSE(args.Now);
+    EXPECT_FALSE(args.Period);
+    EXPECT_FALSE(args.Grid);
+
+    EXPECT_THROW(ParseSolomonFetchArgs("", /*gridHeader*/ "15s"), TErrorException);
+}
+
+TEST(TSolomonExporterTest, ReadSensorsForFetch)
+{
+    auto registry = New<TSolomonRegistry>();
+    auto counter = TProfiler{registry, "/fetch"}.Counter("/count");
+
+    auto config = New<TSolomonExporterConfig>();
+    config->GridStep = TDuration::Seconds(1);
+    config->ReadDelay = TDuration::MilliSeconds(100);
+    config->EnableSelfProfiling = false;
+    config->ReportBuildInfo = false;
+    config->ReportKernelVersion = false;
+    config->ReportRestart = false;
+
+    auto exporter = New<TSolomonExporter>(config, registry);
+
+    auto readCounter = [&] (const TSolomonFetchArgs& args) {
+        TStringStream output;
+        auto encoder = ::NMonitoring::BufferedEncoderJson(&output);
+        encoder->OnStreamBegin();
+        exporter->ReadSensorsForFetch(args, encoder.Get());
+        encoder->OnStreamEnd();
+        encoder->Close();
+        return GetSensorByName(GetSensors(output.Str()), "yt.fetch.count.rate");
+    };
+
+    EXPECT_THROW_WITH_SUBSTRING(readCounter({}), "Window is empty");
+
+    exporter->Start();
+
+    Sleep(TDuration::Seconds(2));
+    counter.Increment(6);
+
+    // The increment lands in one of the two steps ending after it, so the last step
+    // of the period below does not hold it.
+    auto now = TInstant::Seconds(TInstant::Now().Seconds() + 4);
+    auto period = TDuration::Seconds(4);
+    SleepUntil(now + TDuration::MilliSeconds(500));
+
+    auto sensor = readCounter({.Now = now, .Period = period, .Grid = period});
+    EXPECT_DOUBLE_EQ(6.0 / 4.0, sensor->AsMap()->GetChildValueOrThrow<double>("value"));
+
+    sensor = readCounter({.Now = now, .Period = period});
+    auto points = sensor->AsMap()->GetChildOrThrow("timeseries")->AsList()->GetChildren();
+    EXPECT_EQ(4, std::ssize(points));
+
+    double sum = 0;
+    for (const auto& point : points) {
+        sum += point->AsMap()->GetChildValueOrThrow<double>("value");
+    }
+    EXPECT_DOUBLE_EQ(6.0, sum);
+
+    EXPECT_THROW(readCounter({.Now = now + TDuration::Hours(1), .Period = period}), TErrorException);
+    EXPECT_THROW_WITH_SUBSTRING(readCounter({.Now = now}), "must be present");
+    EXPECT_THROW_WITH_SUBSTRING(readCounter({.Period = period}), "must be present");
+
+    TStringStream output;
+    auto encoder = ::NMonitoring::BufferedEncoderJson(&output);
+    EXPECT_THROW(exporter->ReadSensorsForFetch(/*args*/ {}, encoder.Get(), /*shard*/ "unknown"), TErrorException);
 
     exporter->Stop();
 }

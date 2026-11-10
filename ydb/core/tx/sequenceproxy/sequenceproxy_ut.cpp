@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
         }
 
-        TPathId DescribeSequence(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
+        TPathId DescribeSequence(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui64* sequenceShardId = nullptr) {
             TAutoPtr<IEventHandle> handle;
 
             auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
@@ -138,7 +138,23 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
 
             const auto& sequenceDescription = reply->GetRecord().GetPathDescription().GetSequenceDescription();
 
+            if (sequenceShardId) {
+                *sequenceShardId = sequenceDescription.GetSequenceShard();
+            }
+
             return TPathId::FromProto(sequenceDescription.GetPathId());
+        }
+
+        void FreezeSequence(TTestActorRuntime& runtime, ui64 sequenceShardId, const TPathId& pathId) {
+            auto sender = runtime.AllocateEdgeActor(0);
+            auto clientId = runtime.ConnectToPipe(sequenceShardId, sender, 0, GetPipeConfigWithRetries());
+            runtime.SendToPipe(clientId, sender, new TEvSequenceShard::TEvFreezeSequence(pathId), 0, 0);
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvSequenceShard::TEvFreezeSequenceResult>(sender);
+            runtime.ClosePipe(clientId, sender, 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(),
+                NKikimrTxSequenceShard::TEvFreezeSequenceResult::SUCCESS);
         }
 
         void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
@@ -161,10 +177,10 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
         i64 WaitGetSequenceResult(TTestActorRuntime& runtime, const TActorId& sender, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
             auto ev = runtime.GrabEdgeEventRethrow<TEvSequenceProxy::TEvGetSequenceResult>(sender);
             auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, expectedStatus);
             if (msg->Status != Ydb::StatusIds::SUCCESS) {
                 return 0;
             }
-            UNIT_ASSERT_VALUES_EQUAL(msg->Status, expectedStatus);
             UNIT_ASSERT_VALUES_EQUAL(msg->MinValue, 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->MaxValue, 9223372036854775807LL);
             UNIT_ASSERT_VALUES_EQUAL(msg->StartValue, 1);
@@ -186,6 +202,43 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             auto pathId = DescribeSequence(runtime, sender, path);
             SendGetSequenceRequest(runtime, sender, pathId);
             return WaitGetSequenceResult(runtime, sender, expectedStatus);
+        }
+
+        struct TAdvanceResult {
+            Ydb::StatusIds::StatusCode Status;
+            TPathId PathId;
+            i64 NextValue = 0;
+            bool NextUsed = false;
+        };
+
+        void SendAdvanceRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path,
+                i64 observedMin, i64 observedMax) {
+            auto request = MakeHolder<TEvSequenceProxy::TEvAdvanceSequence>(DOMAIN1_NAME, path, observedMin, observedMax);
+            runtime.Send(new IEventHandle(MakeSequenceProxyServiceID(), sender, request.Release()));
+        }
+
+        void SendAdvanceRequest(TTestActorRuntime& runtime, const TActorId& sender, const TPathId& pathId,
+                i64 observedMin, i64 observedMax) {
+            auto request = MakeHolder<TEvSequenceProxy::TEvAdvanceSequence>(DOMAIN1_NAME, pathId, observedMin, observedMax);
+            runtime.Send(new IEventHandle(MakeSequenceProxyServiceID(), sender, request.Release()));
+        }
+
+        TAdvanceResult WaitAdvanceResult(TTestActorRuntime& runtime, const TActorId& sender) {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvSequenceProxy::TEvAdvanceSequenceResult>(sender);
+            const auto* msg = ev->Get();
+            return { msg->Status, msg->PathId, msg->NextValue, msg->NextUsed };
+        }
+
+        TAdvanceResult DoAdvance(TTestActorRuntime& runtime, const TString& path, i64 observedMin, i64 observedMax) {
+            auto sender = runtime.AllocateEdgeActor(0);
+            SendAdvanceRequest(runtime, sender, path, observedMin, observedMax);
+            return WaitAdvanceResult(runtime, sender);
+        }
+
+        TAdvanceResult DoAdvance(TTestActorRuntime& runtime, const TPathId& pathId, i64 observedMin, i64 observedMax) {
+            auto sender = runtime.AllocateEdgeActor(0);
+            SendAdvanceRequest(runtime, sender, pathId, observedMin, observedMax);
+            return WaitAdvanceResult(runtime, sender);
         }
 
     } // namespace
@@ -289,6 +342,118 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
 
         value = DoNextVal(runtime, "/dc-1/seq");
         UNIT_ASSERT_VALUES_EQUAL(value, 1);
+    }
+
+    Y_UNIT_TEST(PipeOutdated) {
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false));
+        StartSchemeCache(runtime);
+        auto sender = runtime.AllocateEdgeActor(0);
+
+        CreateSequence(runtime, "/dc-1", R"(
+            Name: "seq"
+        )");
+
+        auto pathId = DescribeSequence(runtime, sender, "/dc-1/seq");
+
+        // The shard answers PIPE_OUTDATED when the request came through a pipe that is already
+        // gone. That is a transient condition, so the proxy reports it as retriable.
+        auto observerFunc = [&](auto& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvSequenceShard::TEvAllocateSequence::EventType: {
+                    auto response = MakeHolder<TEvSequenceShard::TEvAllocateSequenceResult>();
+                    response->Record.SetStatus(NKikimrTxSequenceShard::TEvAllocateSequenceResult::PIPE_OUTDATED);
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.Release()));
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                case TEvSequenceShard::TEvGetSequence::EventType: {
+                    auto response = MakeHolder<TEvSequenceShard::TEvGetSequenceResult>();
+                    response->Record.SetStatus(NKikimrTxSequenceShard::TEvGetSequenceResult::PIPE_OUTDATED);
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.Release()));
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                case TEvSequenceShard::TEvAdvanceSequence::EventType: {
+                    auto response = MakeHolder<TEvSequenceShard::TEvAdvanceSequenceResult>();
+                    response->Record.SetStatus(NKikimrTxSequenceShard::TEvAdvanceSequenceResult::PIPE_OUTDATED);
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.Release()));
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                default:
+                    return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        SendNextValRequest(runtime, sender, "/dc-1/seq");
+        WaitNextValResult(runtime, sender, Ydb::StatusIds::UNAVAILABLE);
+
+        SendGetSequenceRequest(runtime, sender, pathId);
+        WaitGetSequenceResult(runtime, sender, Ydb::StatusIds::UNAVAILABLE);
+
+        SendAdvanceRequest(runtime, sender, pathId, 1, 10);
+        UNIT_ASSERT_VALUES_EQUAL(WaitAdvanceResult(runtime, sender).Status, Ydb::StatusIds::UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(Advance) {
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false));
+        StartSchemeCache(runtime);
+        auto sender = runtime.AllocateEdgeActor(0);
+
+        CreateSequence(runtime, "/dc-1", R"(
+            Name: "seq"
+        )");
+
+        ui64 sequenceShardId = 0;
+        auto pathId = DescribeSequence(runtime, sender, "/dc-1/seq", &sequenceShardId);
+        UNIT_ASSERT(sequenceShardId != 0);
+
+        // The proxy resolves the sequence by name, like it does for TEvNextVal.
+        auto result = DoAdvance(runtime, "/dc-1/seq", 1, 10);
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(result.PathId == pathId);
+        UNIT_ASSERT_VALUES_EQUAL(result.NextValue, 10);
+        UNIT_ASSERT(result.NextUsed);
+
+        // Resolving by path id goes straight to the shard and skips the name lookup.
+        result = DoAdvance(runtime, pathId, 1, 20);
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(result.PathId == pathId);
+        UNIT_ASSERT_VALUES_EQUAL(result.NextValue, 20);
+        UNIT_ASSERT(result.NextUsed);
+
+        // An unknown name and a null path id are reported as resolve errors.
+        result = DoAdvance(runtime, "/dc-1/noseq", 1, 10);
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::SCHEME_ERROR);
+
+        SendAdvanceRequest(runtime, sender, TPathId(), 1, 10);
+        result = WaitAdvanceResult(runtime, sender);
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(AdvanceFrozen) {
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false));
+        StartSchemeCache(runtime);
+        auto sender = runtime.AllocateEdgeActor(0);
+
+        CreateSequence(runtime, "/dc-1", R"(
+            Name: "seq"
+        )");
+
+        ui64 sequenceShardId = 0;
+        auto pathId = DescribeSequence(runtime, sender, "/dc-1/seq", &sequenceShardId);
+        UNIT_ASSERT(sequenceShardId != 0);
+
+        // Sequences are frozen on tablet move until they are restored at the destination.
+        // The proxy must report that as a retriable error instead of applying nothing.
+        FreezeSequence(runtime, sequenceShardId, pathId);
+
+        auto result = DoAdvance(runtime, "/dc-1/seq", 1, 10);
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAVAILABLE);
+
+        result = DoAdvance(runtime, pathId, 1, 20);
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAVAILABLE);
     }
 
 } // Y_UNIT_TEST_SUITE(SequenceProxy)

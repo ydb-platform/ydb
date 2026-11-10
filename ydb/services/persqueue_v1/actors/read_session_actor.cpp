@@ -4,6 +4,7 @@
 #include "read_init_auth_actor.h"
 
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
@@ -65,6 +66,9 @@ TReadSessionActor<Protocol>::TReadSessionActor(
     }
     if (auto value = Request->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER)) {
         SdkBuildInfo = *value;
+    }
+    if (auto value = Request->GetPeerMetaValues("x-ydb-supports-replication-messages")) {
+        SupportsReplicationMessages = *value == "true";
     }
 }
 
@@ -731,7 +735,7 @@ void TReadSessionActor<Protocol>::NotifyChildren(const TPartitionActorInfo& part
         if (!directChildren.empty()) {
             for (auto& [_, actorInfo]: Partitions) {
                 for (auto& child: directChildren) {
-                    if (actorInfo.Partition.Partition == child->Id) {
+                    if (actorInfo.Partition.Partition == child->Id && actorInfo.Topic->GetInternalName() == topicName) {
                         ctx.Send(actorInfo.Actor, new TEvPQProxy::TEvParentCommitedToFinish(partition.Partition.Partition));
                     }
                 }
@@ -971,7 +975,7 @@ void TReadSessionActor<Protocol>::SetupBytesReadByUserAgentCounter() {
     BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", protocol)
-        ->GetSubgroup("consumer", ClientPath)
+        ->GetSubgroup("consumer", ReadWithoutConsumer ? ClientPath : NPQ::MetricsConsumerName(ClientId))
         ->GetSubgroup("sdk_build_info", CleanupCounterValueString(SdkBuildInfo))
         ->GetSubgroup("user_agent", DropUserAgentSuffix(CleanupCounterValueString(UserAgent)))
         ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
@@ -985,7 +989,7 @@ void TReadSessionActor<Protocol>::SetupCounters() {
 
     auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
     if (!ReadWithoutConsumer) {
-        subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", ClientPath);
+        subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", NPQ::MetricsConsumerName(ClientId));
     }
     const TString name = "sensor";
 
@@ -1017,7 +1021,7 @@ void TReadSessionActor<Protocol>::SetupTopicCounters(const NPersQueue::TTopicCon
     auto aggr = NPersQueue::GetLabels(topic);
     TVector<std::pair<TString, TString>> cons;
     if (!ReadWithoutConsumer) {
-        cons = {{"Client", ClientId}, {"ConsumerPath", ClientPath}};
+        cons = {{"Client", ClientId}, {"ConsumerPath", NPQ::MetricsConsumerName(ClientId)}};
     }
 
     topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, aggr, cons, {"PartitionsLocked"}, true);
@@ -1044,7 +1048,7 @@ void TReadSessionActor<Protocol>::SetupTopicCounters(const NPersQueue::TTopicCon
     auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
     auto subgroups = NPersQueue::GetSubgroupsForTopic(topic, cloudId, dbId, dbPath, folderId);
     if (!ReadWithoutConsumer)
-        subgroups.push_back({"consumer", ClientPath});
+        subgroups.push_back({"consumer", NPQ::MetricsConsumerName(ClientId)});
 
     topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.started"}, true, "name");
     topicCounters.PartitionsReleased     = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.stopped"}, true, "name");
@@ -1345,7 +1349,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
     std::unordered_set<ui64> notCommitedToFinishParents;
     for (auto& parent: partitionNode->DirectParents) {
         for (auto& [_, actorInfo]: Partitions) { // TODO: map
-            if (actorInfo.Partition.Partition == parent->Id && !actorInfo.IsLastOffsetCommitted()) {
+            if (actorInfo.Partition.Partition == parent->Id && actorInfo.Topic->GetInternalName() == name && !actorInfo.IsLastOffsetCommitted()) {
                 notCommitedToFinishParents.emplace(actorInfo.Partition.Partition);
             }
         }
@@ -1430,7 +1434,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
             auto alias = AliasedTopicPaths.find(topicName);
             if (alias != AliasedTopicPaths.end() && !alias->second.empty() && it->second.Topic->GetClientsideName().StartsWith("/")) {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(alias->second);
-            } else if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetDatabase() || database == AppData(ctx)->PQConfig.GetTestDatabaseRoot()) {
+            } else if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetDatabase() || database == AppData(ctx)->PQConfig.GetTestDatabaseRoot() || database == "/Root") {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetFederationPathWithDC());
             } else {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetModernName());
@@ -1447,6 +1451,9 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
 
             result.mutable_start_partition_session_request()->mutable_partition_offsets()->set_start(ev->Get()->Offset);
             result.mutable_start_partition_session_request()->mutable_partition_offsets()->set_end(ev->Get()->EndOffset);
+            if (ev->Get()->RetainedStartOffset) {
+                result.mutable_start_partition_session_request()->set_retained_start_offset(*ev->Get()->RetainedStartOffset);
+            }
 
             if (DirectRead) {
                 result.mutable_start_partition_session_request()->mutable_partition_location()->set_node_id(ev->Get()->NodeId);
@@ -1930,6 +1937,35 @@ i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEv
     i64 diff = DirectReadByteSize - ByteSize;
     ByteSize = DirectReadByteSize;
     return diff;
+}
+
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    if (!SupportsReplicationMessages) {
+        return;
+    }
+    const auto& record = ev->Get()->Record;
+    if (!ActualPartitionActors.contains(ev->Sender) || !Partitions.contains(record.GetPartitionSessionId())) {
+        return;
+    }
+    if constexpr (Protocol == EProtocol::Topic) {
+        TServerMessage response;
+        response.set_status(Ydb::StatusIds::SUCCESS);
+        auto* partitionData = response.mutable_read_response()->add_partition_data();
+        partitionData->set_partition_session_id(record.GetPartitionSessionId());
+        auto* batch = partitionData->add_batches();
+        batch->set_codec(Ydb::Topic::CODEC_RAW);
+        auto* message = batch->add_message_data();
+        message->set_offset(0);
+        message->set_data(record.GetPayload());
+        message->set_uncompressed_size(record.GetPayload().size());
+        auto* metadata = message->add_metadata_items();
+        metadata->set_key("_ydb_service_replication_message");
+        metadata->set_value("true");
+        if (!WriteToStreamOrDie(ctx, std::move(response))) {
+            return;
+        }
+    }
 }
 
 template <EProtocol Protocol>
@@ -2489,7 +2525,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
 
     TPartitionActorInfo* partitionInfo = nullptr;
     for (auto& [_, p] : Partitions) {
-        if (p.Partition.Partition == msg->PartitionId) {
+        if (p.Actor == ev->Sender) {
             partitionInfo = &p;
             break;
         }

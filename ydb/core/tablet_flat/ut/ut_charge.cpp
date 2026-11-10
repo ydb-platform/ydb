@@ -55,15 +55,32 @@ namespace {
 
         const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
-            auto pageId = ResolvePageId(part, location, groupId);
+            if (Touch(groupId, ResolvePageId(part, location, part->DataSlot(groupId)))) {
+                return NTest::TTestEnv::TryGetPage(part, location, groupId);
+            }
+            return nullptr;
+        }
+
+        const TSharedData* TryGetIndexPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
+        {
+            // index pages are tracked as pages of their page collection
+            const ui32 slot = part->IndexSlot(groupId);
+            if (Touch(TGroupId(slot), ResolvePageId(part, location, slot))) {
+                return NTest::TTestEnv::TryGetIndexPage(part, location, groupId);
+            }
+            return nullptr;
+        }
+
+        bool Touch(TGroupId groupId, TPageId pageId)
+        {
             Touched[groupId].insert(pageId);
 
             if (!Fail || Sticky.contains({groupId, pageId})) {
-                return NTest::TTestEnv::TryGetPage(part, location, groupId);
+                return true;
             }
 
             ToLoad[groupId].insert(pageId);
-            return nullptr;
+            return false;
         }
 
         const bool Fail = false;

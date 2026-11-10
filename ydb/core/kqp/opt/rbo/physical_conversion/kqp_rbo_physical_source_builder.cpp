@@ -184,7 +184,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildOlapAverageState(const TOlapAggrega
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
+NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
     TExprNode::TPtr source;
     TVector<TString> storageColumns;
     TVector<std::pair<TString, TString>> renames;
@@ -344,6 +344,27 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             .Done().Ptr();
             // clang-format on
 
+            // When each program field holds exactly one output, the block read already is the
+            // wide body: its slots are the outputs, in program field order.
+            // A DISTINCT program yields only its key column, so it qualifies only when the key
+            // is the only output.
+            const THashMap<TString, TString> outputNames(renames.begin(), renames.end());
+            bool wide = !OlapAggregate && renames.size() == outputFields.size();
+            TVector<TString> layout;
+            layout.reserve(outputFields.size());
+            for (const auto& field : outputFields) {
+                const auto* name = outputNames.FindPtr(field);
+                if (!wide || !name) {
+                    wide = false;
+                    break;
+                }
+                layout.push_back(*name);
+            }
+            if (wide) {
+                YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical source] " << KqpExprToPrettyString(TExprBase(flowNonBlockRead), Ctx);
+                return NPhysicalConvertionUtils::TStageBody::Wide(flowNonBlockRead, std::move(layout));
+            }
+
             TExprNode::TListType args;
             TProgramFields fieldArgs;
             for (ui32 i = 0; i < outputFields.size(); ++i) {
@@ -380,5 +401,5 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
 
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical source] " << KqpExprToPrettyString(TExprBase(source), Ctx);
 
-    return source;
+    return NPhysicalConvertionUtils::TStageBody::Narrow(source);
 }

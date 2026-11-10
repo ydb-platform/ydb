@@ -9,7 +9,7 @@ GITHUB_JOB_NAMES = ("job", "queue")
 # github_step names are the GitHub step names, so they cannot be enumerated.
 DYNAMIC_NAME_SOURCES = ("github_step",)
 
-# Written inside a job by test_ya.
+# Written inside a job by build_and_test_ya.
 YA_PHASE_SOURCE = "ya_phase"
 YA_PHASE_NAMES = (
     "init",
@@ -30,6 +30,7 @@ YA_PHASE_NAMES = (
     "s3_sync_try",
     "upload_tests_results",
     "runner_info",
+    "github_proxy",
 )
 
 # Phases derived from ya_evlog.jsonl by ya_evlog_phases.py.

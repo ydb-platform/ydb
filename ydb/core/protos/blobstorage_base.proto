@@ -89,6 +89,17 @@ enum EEntityStatus {
     RESTART = 4; // entity has changed config or changed environment and should be restarted by warden
 }
 
+message TFailRealmStates {
+    repeated TDataCenterState.EState State = 1;
+    optional TGroupState.EState GroupState = 2;
+}
+
+message TFailRealmInfo {
+    optional TDataCenterState.EState State = 1 [default = INCLUDED];
+    // Empty if the location is unknown or the realm spans several data centers.
+    optional string DataCenter = 2;
+}
+
 message TVDiskLocation {
     optional uint32 NodeID = 1;
     optional uint32 PDiskID = 2;
@@ -98,20 +109,11 @@ message TVDiskLocation {
 
 message TGroupInfo {
     message TFailRealm {
-        // Internal state; N states describe minimum copies of every confirmed blob.
-        // N0 makes no per-realm copy guarantee and does not imply an empty realm.
-        enum EState {
-            N0 = 0;
-            N1 = 1;
-            N2 = 2;
-            F = 3; // Failure.
-            R = 4; // Recovery.
-        }
-        optional EState State = 2 [default = N0];
         message TFailDomain {
             repeated TVDiskLocation VDiskLocations = 1;
         }
         repeated TFailDomain FailDomains = 1;
+        optional TDataCenterState.EState State = 2 [default = INCLUDED];
     }
 
     optional uint32 GroupID = 1;
@@ -135,6 +137,7 @@ message TGroupInfo {
     optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
+    optional TGroupState.EState Mirror3dcState = 22;
 }
 
 // VDiskStatus ordering is assumed to be lower for bad statuses and higher for good ones

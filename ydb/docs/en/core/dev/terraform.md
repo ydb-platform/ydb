@@ -298,7 +298,7 @@ family {
 
 #### partitioning_settings {#partitioning-settings}
 
-The `partitioning_settings` argument describes [partitioning settings](../concepts/datamodel/table.md#partitioning).
+The `partitioning_settings` argument describes [partitioning settings](../concepts/datamodel/table.md#partitioning_row_table).
 
 Example:
 

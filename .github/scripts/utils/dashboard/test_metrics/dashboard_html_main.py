@@ -3151,6 +3151,8 @@ def build_html_dashboard(
       || 'resources_tests';
     const measuredOverviewUrl = (data.resources_overlay && data.resources_overlay.measured_series_overview_url)
       || (measuredSeriesDir + '/overview.json');
+    const measuredTotalsUrl = (data.resources_overlay && data.resources_overlay.measured_series_totals_url)
+      || (measuredSeriesDir + '/totals.json');
     const measuredSuiteUrlTemplate = (data.resources_overlay && data.resources_overlay.measured_series_suite_url_template)
       || (measuredSeriesDir + '/suites/{{suite}}.json');
     const measuredWrap = document.getElementById('measuredWrap');
@@ -3158,10 +3160,15 @@ def build_html_dashboard(
     const MEASURED_CHART_TOP_N = 40;
     const MEASURED_PRESSURE_MAX_ROWS = 8;
     const MEASURED_AXIS_MAX_POINTS = 2500;
+    const MEASURED_HOLD_SEC = 8;
+    const MEASURED_EDGE_PAD_SEC = 0.05;
+    const MEASURED_OTHER_TOTALS = 'other (all cgroups)';
     const _measuredColors = {{}};
     const _measuredSeriesByKey = {{}};
     const _measuredLoadedSuites = new Set();
     let _measuredOverviewPromise = null;
+    let _measuredTotalsPromise = null;
+    let _measuredTotals = null;
     let _measuredPlotXs = [];
     const _origColorForTrack = colorForTrack;
     colorForTrack = function(trackName) {{
@@ -3214,6 +3221,24 @@ def build_html_dashboard(
         }});
       return _measuredOverviewPromise;
     }}
+    function loadMeasuredTotals() {{
+      if (_measuredTotals) return Promise.resolve(_measuredTotals);
+      if (_measuredTotalsPromise) return _measuredTotalsPromise;
+      _measuredTotalsPromise = fetch(measuredTotalsUrl)
+        .then(resp => {{
+          if (!resp.ok) throw new Error(measuredTotalsUrl + ': ' + resp.status + ' ' + resp.statusText);
+          return resp.json();
+        }})
+        .then(obj => {{
+          _measuredTotals = obj || null;
+          return _measuredTotals;
+        }})
+        .catch(err => {{
+          _measuredTotalsPromise = null;
+          throw err;
+        }});
+      return _measuredTotalsPromise;
+    }}
     function loadMeasuredSuiteShard(suite) {{
       const name = String(suite || 'unknown');
       if (_measuredLoadedSuites.has(name)) return Promise.resolve();
@@ -3232,8 +3257,15 @@ def build_html_dashboard(
       const picked = measuredRowsForChart(rows).rows;
       const missing = () => picked.filter(row => row && row.key && !_measuredSeriesByKey[row.key]);
       const status = (msg) => {{ if (onStatus) onStatus(msg); }};
+      const wantTotals = !sel || sel.kind === 'all';
       let chain = Promise.resolve();
-      if ((!sel || sel.kind === 'all') && missing().length) {{
+      if (wantTotals) {{
+        chain = chain.then(() => {{
+          status('Fetching measured totals…');
+          return loadMeasuredTotals();
+        }});
+      }}
+      if (wantTotals && missing().length) {{
         chain = chain.then(() => {{
           status('Fetching measured overview…');
           return loadMeasuredOverview();
@@ -3266,10 +3298,27 @@ def build_html_dashboard(
           continue;
         }}
         while (j + 1 < xsSrc.length && Number(xsSrc[j + 1]) <= t) j += 1;
+        const sampleT = Number(xsSrc[j]);
+        // Do not hold a sample across multi-minute axis gaps — that becomes a
+        // Plotly triangle when the next point finally drops to zero.
+        if (!Number.isFinite(sampleT) || (t - sampleT) > MEASURED_HOLD_SEC) {{
+          out.push(fillZero ? 0 : null);
+          continue;
+        }}
         const value = ysSrc[j];
         out.push(value == null ? (fillZero ? 0 : null) : Number(value) || 0);
       }}
       return out;
+    }}
+    function addMeasuredEdgeGuards(keep, sxs) {{
+      if (!sxs || !sxs.length) return;
+      const t0 = Number(sxs[0]);
+      const t1 = Number(sxs[sxs.length - 1]);
+      if (!Number.isFinite(t0) || !Number.isFinite(t1)) return;
+      keep.add(t0);
+      keep.add(t1);
+      keep.add(t0 - MEASURED_EDGE_PAD_SEC);
+      keep.add(t1 + MEASURED_EDGE_PAD_SEC);
     }}
     function downsampleMeasuredXs(xs, maxPoints) {{
       if (!maxPoints || xs.length <= maxPoints) return xs.slice();
@@ -3283,7 +3332,7 @@ def build_html_dashboard(
       if (src.length <= MEASURED_CHART_TOP_N) return {{ rows: src, truncated: false }};
       return {{ rows: src.slice(0, MEASURED_CHART_TOP_N), truncated: true, total: src.length }};
     }}
-    function buildMeasuredTracksFromSeries(rows, field, fillZero) {{
+    function buildMeasuredTracksFromSeries(rows, field, fillZero, useTotals) {{
       const seriesList = [];
       (rows || []).forEach(row => {{
         const series = (_measuredSeriesByKey || {{}})[row.key];
@@ -3296,15 +3345,22 @@ def build_html_dashboard(
       }});
       let xs = [];
       const seen = new Set();
+      const addX = (x) => {{
+        const n = Number(x);
+        if (!Number.isFinite(n) || seen.has(n)) return;
+        seen.add(n);
+        xs.push(n);
+      }};
       seriesList.forEach(s => {{
-        (s.xs || []).forEach(x => {{
-          const n = Number(x);
-          if (!Number.isFinite(n) || seen.has(n)) return;
-          seen.add(n);
-          xs.push(n);
-        }});
+        (s.xs || []).forEach(addX);
+        addMeasuredEdgeGuards(seen, s.xs || []);
       }});
-      xs.sort((a, b) => a - b);
+      // Re-materialize xs from seen after edge guards (guards only mutated the set).
+      xs = [...seen].filter(Number.isFinite).sort((a, b) => a - b);
+      if (useTotals && _measuredTotals && Array.isArray(_measuredTotals.xs_evlog_sec)) {{
+        (_measuredTotals.xs_evlog_sec || []).forEach(addX);
+        xs = [...seen].filter(Number.isFinite).sort((a, b) => a - b);
+      }}
       // Keep native sample times for short selected windows; only thin a huge union.
       if (xs.length > MEASURED_AXIS_MAX_POINTS) {{
         const keep = new Set(downsampleMeasuredXs(xs, MEASURED_AXIS_MAX_POINTS));
@@ -3317,40 +3373,68 @@ def build_html_dashboard(
             keep.add(Number(sxs[0]));
             keep.add(Number(sxs[sxs.length - 1]));
           }}
+          addMeasuredEdgeGuards(keep, sxs);
         }});
+        if (useTotals && _measuredTotals && Array.isArray(_measuredTotals.xs_evlog_sec)) {{
+          downsampleMeasuredXs(_measuredTotals.xs_evlog_sec, Math.min(1200, MEASURED_AXIS_MAX_POINTS)).forEach(x => keep.add(Number(x)));
+        }}
         xs = [...keep].filter(Number.isFinite).sort((a, b) => a - b);
       }}
       const tracks = {{}};
       seriesList.forEach(s => {{
         tracks[s.label] = alignMeasuredSeries(xs, s.xs, s.ys, fillZero);
       }});
+      if (useTotals && _measuredTotals && Array.isArray(_measuredTotals.xs_evlog_sec) && Array.isArray(_measuredTotals[field])) {{
+        const totalAligned = alignMeasuredSeries(xs, _measuredTotals.xs_evlog_sec, _measuredTotals[field], true);
+        const namedSum = xs.map((_, i) => seriesList.reduce(
+          (sum, s) => sum + (Number(tracks[s.label][i]) || 0), 0
+        ));
+        const other = totalAligned.map((v, i) => Math.max(0, (Number(v) || 0) - namedSum[i]));
+        if (other.some(v => v > 1e-6)) tracks[MEASURED_OTHER_TOTALS] = other;
+      }}
       return {{ xs: xs, tracks: tracks }};
     }}
     function topMeasuredTracks(tracks, limit) {{
-      const names = Object.keys(tracks || {{}}).sort((a, b) => measuredPeak(tracks[b]) - measuredPeak(tracks[a]));
+      const names = Object.keys(tracks || {{}}).sort((a, b) => {{
+        if (a === MEASURED_OTHER_TOTALS) return 1;
+        if (b === MEASURED_OTHER_TOTALS) return -1;
+        return measuredPeak(tracks[b]) - measuredPeak(tracks[a]);
+      }});
       const ordered = {{}};
-      if (names.length <= limit) {{
-        names.slice().reverse().forEach(n => {{ ordered[n] = tracks[n]; }});
+      const named = names.filter(n => n !== MEASURED_OTHER_TOTALS && n !== 'other');
+      const reserved = names.filter(n => n === MEASURED_OTHER_TOTALS || n === 'other');
+      if (named.length <= limit) {{
+        reserved.forEach(n => {{ ordered[n] = tracks[n]; }});
+        named.slice().reverse().forEach(n => {{ ordered[n] = tracks[n]; }});
         return ordered;
       }}
-      const top = names.slice(0, limit);
-      const rest = names.slice(limit);
-      const other = tracks[rest[0]].map((_, i) => rest.reduce((s, n) => s + (Number(tracks[n][i]) || 0), 0));
-      ordered.other = other;
+      const top = named.slice(0, limit);
+      const rest = named.slice(limit);
+      const otherNamed = tracks[rest[0]].map((_, i) => rest.reduce((s, n) => s + (Number(tracks[n][i]) || 0), 0));
+      if (tracks[MEASURED_OTHER_TOTALS]) {{
+        ordered[MEASURED_OTHER_TOTALS] = tracks[MEASURED_OTHER_TOTALS].map((v, i) => (Number(v) || 0) + otherNamed[i]);
+      }} else {{
+        ordered.other = otherNamed;
+      }}
       top.slice().reverse().forEach(n => {{ ordered[n] = tracks[n]; }});
       return ordered;
     }}
-    function plotMeasuredLayersFromRows(rows, titleSuffix) {{
+    function plotMeasuredLayersFromRows(rows, titleSuffix, useTotals) {{
       if (!window.Plotly) return;
       const picked = measuredRowsForChart(rows);
+      const withTotals = !!(useTotals && _measuredTotals);
       const built = {{
-        cpu: buildMeasuredTracksFromSeries(picked.rows, 'cpu_cores', true),
-        ram: buildMeasuredTracksFromSeries(picked.rows, 'ram_gb', true),
-        write: buildMeasuredTracksFromSeries(picked.rows, 'disk_write_mbps', true),
-        read: buildMeasuredTracksFromSeries(picked.rows, 'disk_read_mbps', true),
+        cpu: buildMeasuredTracksFromSeries(picked.rows, 'cpu_cores', true, withTotals),
+        ram: buildMeasuredTracksFromSeries(picked.rows, 'ram_gb', true, withTotals),
+        write: buildMeasuredTracksFromSeries(picked.rows, 'disk_write_mbps', true, withTotals),
+        read: buildMeasuredTracksFromSeries(picked.rows, 'disk_read_mbps', true, withTotals),
       }};
       _measuredPlotXs = built.cpu.xs || [];
-      const suffix = titleSuffix + (picked.truncated ? (' · top ' + picked.rows.length + '/' + picked.total + ' by max CPU') : '');
+      let suffix = titleSuffix;
+      if (picked.truncated) suffix += ' · top ' + picked.rows.length + '/' + picked.total + ' by max CPU';
+      if (withTotals && built.cpu.tracks[MEASURED_OTHER_TOTALS]) {{
+        suffix += ' · + residual of all ' + ((_measuredTotals && _measuredTotals.series_count) || '') + ' cgroups';
+      }}
       const charts = [
         ['measuredCpu', built.cpu, 'Layered measured CPU' + suffix, 'cores'],
         ['measuredRam', built.ram, 'Layered measured RAM' + suffix, 'GB'],
@@ -3360,9 +3444,12 @@ def build_html_dashboard(
       const pending = charts.map(([divId, layer, title, unit]) => {{
         const tracks = topMeasuredTracks(layer.tracks, 50);
         Object.keys(tracks).forEach((name, i) => {{
-          _measuredColors[name] = name === 'other' ? '#bdbdbd' : MEASURED_PALETTE[i % MEASURED_PALETTE.length];
+          _measuredColors[name] = (name === 'other' || name === MEASURED_OTHER_TOTALS)
+            ? '#bdbdbd'
+            : MEASURED_PALETTE[i % MEASURED_PALETTE.length];
         }});
-        return Promise.resolve(stackedArea(divId, layer.xs || [], tracks, title, unit, false, true));
+        // Step lines avoid multi-minute Plotly triangles across sparse gaps.
+        return Promise.resolve(stackedArea(divId, layer.xs || [], tracks, title, unit, true, true));
       }});
       return Promise.all(pending).then(() => {{
         attachMeasuredHover('measuredCpu', 'measuredCpuHover', 'cores');
@@ -3881,7 +3968,8 @@ def build_html_dashboard(
       }}).then(() => {{
         if (window._measuredSelectToken !== token) return null;
         setMeasuredLoading(true, 'Drawing measured charts…');
-        return Promise.resolve(plotMeasuredLayersFromRows(rows, suffix))
+        const useTotals = !sel || sel.kind === 'all';
+        return Promise.resolve(plotMeasuredLayersFromRows(rows, suffix, useTotals))
           .then(() => plotMeasuredPressureFromRows(rows, suffix))
           .then(() => plotMeasuredTestLane(chunkTests))
           .then(() => applyMeasuredTestBands(chunkTests));
@@ -3894,7 +3982,7 @@ def build_html_dashboard(
         const msg = (err && err.message) ? err.message : String(err);
         // Fetch failures mention the URL/status; Plotly races (e.g. `_guiEditing`)
         // should not look like a missing series payload.
-        const isFetch = /overview\\.json|suites\\/|Failed to fetch|NetworkError|status|HTTP/i.test(msg);
+        const isFetch = /overview\\.json|totals\\.json|suites\\/|Failed to fetch|NetworkError|status|HTTP/i.test(msg);
         console.error(isFetch ? 'Failed to load measured series' : 'Measured plot failed', err);
         if (!isFetch) {{
           setMeasuredLoading(false);

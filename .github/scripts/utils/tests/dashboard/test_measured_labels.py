@@ -171,6 +171,7 @@ class MeasuredLabelTest(unittest.TestCase):
         self.assertNotIn("measured_layers", overlay)
         self.assertEqual(overlay.get("measured_series_dir"), "resources_tests")
         self.assertEqual(overlay.get("measured_series_overview_url"), "resources_tests/overview.json")
+        self.assertEqual(overlay.get("measured_series_totals_url"), "resources_tests/totals.json")
         self.assertEqual(
             overlay.get("measured_series_suite_url_template"),
             "resources_tests/suites/{suite}.json",
@@ -204,6 +205,11 @@ class MeasuredLabelTest(unittest.TestCase):
             self.assertEqual(len(foo), 1)
             self.assertEqual(len(bar), 1)
             self.assertEqual(next(iter(foo.values()))["suite"], "ydb/core/foo")
+            totals = json.loads((Path(tmp) / "resources_tests" / "totals.json").read_text(encoding="utf-8"))
+            self.assertEqual(totals.get("series_count"), 2)
+            self.assertTrue(totals.get("xs_evlog_sec"))
+            self.assertEqual(len(totals["cpu_cores"]), len(totals["xs_evlog_sec"]))
+            self.assertGreater(max(totals["cpu_cores"]), 0)
 
     def test_places_named_tests_end_to_end(self):
         placed = place_chunk_tests(

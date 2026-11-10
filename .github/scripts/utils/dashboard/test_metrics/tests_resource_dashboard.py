@@ -1457,17 +1457,21 @@ def _build_measured_tests(
     """Per-cgroup ticks from monitor_resources.py kind=test records."""
     try:
         from ..resources_loader import (
+            align_series,
             is_host_record,
             match_measured_to_runs,
             measured_chunk_tests_by_label,
+            measured_layers_xs,
             measured_test_key,
             measured_test_label,
         )
     except ImportError:
         from resources_loader import (  # type: ignore[no-redef]
+            align_series,
             is_host_record,
             match_measured_to_runs,
             measured_chunk_tests_by_label,
+            measured_layers_xs,
             measured_test_key,
             measured_test_label,
         )
@@ -1541,6 +1545,7 @@ def _build_measured_tests(
     overlay.pop("measured_series_url", None)
     overlay["measured_series_dir"] = "resources_tests"
     overlay["measured_series_overview_url"] = "resources_tests/overview.json"
+    overlay["measured_series_totals_url"] = "resources_tests/totals.json"
     overlay["measured_series_suite_url_template"] = "resources_tests/suites/{suite}.json"
     overlay["measured_chunk_tests"] = measured_chunk_tests_by_label(
         grouped, runs or [], chunk_tests or {}, chunks
@@ -1637,6 +1642,33 @@ def _build_measured_tests(
                 overview[key] = series_out[key]
         (series_root / "overview.json").write_text(
             json.dumps(overview, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        # Coarse sum of every cgroup — charts for "all" only name top-N peaks, so
+        # without this residual the stack under-counts concurrent load and the
+        # sparse top-N axis gets long Plotly triangles across empty gaps.
+        totals_xs = measured_layers_xs(grouped, max_points=2000)
+        totals = {
+            "xs_evlog_sec": totals_xs,
+            "cpu_cores": [0.0] * len(totals_xs),
+            "ram_gb": [0.0] * len(totals_xs),
+            "disk_read_mbps": [0.0] * len(totals_xs),
+            "disk_write_mbps": [0.0] * len(totals_xs),
+            "series_count": len(grouped),
+        }
+        for bucket in grouped.values():
+            bxs = [float(x) for x in (bucket.get("xs") or [])]
+            if not bxs:
+                continue
+            for field in ("cpu_cores", "ram_gb", "disk_read_mbps", "disk_write_mbps"):
+                aligned = align_series(totals_xs, bxs, [float(v or 0.0) for v in (bucket.get(field) or [])])
+                dst = totals[field]
+                for i, value in enumerate(aligned):
+                    dst[i] += value
+        for field in ("cpu_cores", "ram_gb", "disk_read_mbps", "disk_write_mbps"):
+            totals[field] = [round(float(v), 4) for v in totals[field]]
+        (series_root / "totals.json").write_text(
+            json.dumps(totals, ensure_ascii=False),
             encoding="utf-8",
         )
     return summary

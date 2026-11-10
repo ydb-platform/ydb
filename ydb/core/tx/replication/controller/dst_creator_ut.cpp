@@ -662,9 +662,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType, bool enableAsyncIndexReplication = false) {
         TFeatureFlags featureFlags;
         featureFlags.SetEnableChangefeedsOnIndexTables(true);
-        if (enableAsyncIndexReplication) {
-            featureFlags.SetEnableAsyncIndexReplication(true);
-        }
+        featureFlags.SetEnableAsyncIndexReplication(enableAsyncIndexReplication);
         TEnv env(featureFlags);
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 

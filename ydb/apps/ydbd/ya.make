@@ -3,7 +3,7 @@ PROGRAM(ydbd)
 IF (OS_LINUX)
     # Force a fresh link and retain a trace for the comparison.
     LDFLAGS(
-        -Wl,--gdb-index
+        -Wl,--no-gdb-index
         -Wl,--time-trace=${BINDIR}/ydbd.time_trace.json
         -Wl,--time-trace-granularity=500
     )

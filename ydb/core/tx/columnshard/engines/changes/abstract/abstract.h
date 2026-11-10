@@ -48,13 +48,23 @@ private:
     std::optional<TString> TargetTierName;
     const TString CurrentTierName;
     std::optional<NActualizer::TRWAddress> RWAddress;
+    // MoveData rewrites blobs even when tier and schema stay the same.
+    bool ForcedMove = false;
 
 public:
-    TPortionEvictionFeatures(const std::shared_ptr<ISnapshotSchema>& currentScheme, const std::shared_ptr<ISnapshotSchema>& targetScheme,
-        const TString& currentTierName)
-        : CurrentScheme(currentScheme)
-        , TargetScheme(targetScheme)
-        , CurrentTierName(currentTierName)
+    bool GetForcedMove() const noexcept {
+        return ForcedMove;
+    }
+
+    void SetForcedMove() noexcept {
+        ForcedMove = true;
+    }
+
+    TPortionEvictionFeatures(
+        std::shared_ptr<ISnapshotSchema> currentScheme, std::shared_ptr<ISnapshotSchema> targetScheme, TString currentTierName)
+        : CurrentScheme(std::move(currentScheme))
+        , TargetScheme(std::move(targetScheme))
+        , CurrentTierName(std::move(currentTierName))
     {
         AFL_VERIFY(CurrentTierName);
     }
@@ -64,9 +74,9 @@ public:
         return *TargetTierName;
     }
 
-    void SetTargetTierName(const TString& value) {
+    void SetTargetTierName(TString value) {
         AFL_VERIFY(!TargetTierName);
-        TargetTierName = value;
+        TargetTierName = std::move(value);
     }
 
     void OnSkipPortionWithProcessMemory(const NColumnShard::TEngineLogsCounters& counters, const TDuration dWait) const {
@@ -102,6 +112,9 @@ public:
             return true;
         }
         if (CurrentScheme->GetVersion() != TargetScheme->GetVersion()) {
+            return true;
+        }
+        if (ForcedMove) {
             return true;
         }
         AFL_VERIFY(false);

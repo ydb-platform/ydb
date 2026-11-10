@@ -7,6 +7,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/storage/actualizer/scheme
     ydb/core/tx/columnshard/engines/storage/actualizer/tiering
     ydb/core/tx/columnshard/engines/storage/actualizer/counters
+    ydb/core/tx/columnshard/engines/storage/actualizer/move
 )
 
 END()

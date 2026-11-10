@@ -96,6 +96,9 @@ struct TEvPrivate {
         EvRetryConfigSubscription,
         EvUpdateChannelApproximateFreeSpace,
 
+        EvMoveDataWakeup,
+        EvMoveDataPoke,
+
         EvPrefetchPortionsMetadata,
         EvSetLoadedKeyRanges,
 
@@ -564,6 +567,12 @@ struct TEvPrivate {
     };
 
     struct TEvRetryConfigSubscription: public TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
+
+    // The move's own cadence, so it no longer rides the tablet's periodic wakeup.
+    struct TEvMoveDataWakeup: public TEventLocal<TEvMoveDataWakeup, EvMoveDataWakeup> {};
+
+    // Run one driver turn now instead of waiting for the cadence tick.
+    struct TEvMoveDataPoke: public TEventLocal<TEvMoveDataPoke, EvMoveDataPoke> {};
 };
 
 }   // namespace NKikimr::NColumnShard

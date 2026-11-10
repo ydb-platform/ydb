@@ -42,7 +42,6 @@ ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStaleRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStrictSerializableRW
 ydb/core/mind/bscontroller/ut_bscontroller BsControllerGroupState.DurabilityTargets
 ydb/core/mind/bscontroller/ut_bscontroller BsControllerGroupState.RecoveryTargetCountsTheReturningRealm
-ydb/core/mind/hive/ut THiveTest.TestHiveBalancerWithPreferredDC3
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut ArenaAllocatorTest.Multithreaded
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge

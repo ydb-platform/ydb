@@ -29,12 +29,8 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
         auto *domains = AppData()->DomainsInfo.Get();
         auto domainName = ExtractDomain(database);
         auto *domainInfo = domains->GetDomainByName(domainName);
-        if (!domainInfo) {
-            YDB_LOG_DEBUG("Delay publishing endpoints until domain information is available",
-                {"database", database});
-            Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
+        if (!domainInfo)
             return;
-        }
 
         auto assignedPath = MakeEndpointsBoardPath(database);
         TString payload;
@@ -117,7 +113,6 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TSystem::Wakeup, CreatePublishActor);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }

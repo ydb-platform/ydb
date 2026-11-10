@@ -1054,6 +1054,13 @@ message TKqpFullTextSourceSettings {
             optional bytes Value = 2;
         }
         repeated TPrefixColumn PrefixColumns = 4;
+
+        message TPatternQuery {
+            optional bytes Pattern = 1;
+            optional bytes Escape = 2;
+            optional NKqpProto.TKqpFullTextSource.TKqpQuerySettings.TPatternQuery.EMatchMode Mode = 3;
+        }
+        repeated TPatternQuery PatternQueries = 5;
     }
 
     message TIndexTable {

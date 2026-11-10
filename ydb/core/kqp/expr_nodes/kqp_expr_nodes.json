@@ -861,9 +861,11 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "FulltextAnalyze"},
             "Children": [
-                {"Index": 0, "Name": "Text", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Settings", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "Mode", "Type": "TCoAtom"}
+                {"Index": 0, "Name": "Text", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Settings", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Mode", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "PatternMode", "Type": "TCoAtom", "Optional": true},
+                {"Index": 4, "Name": "Escape", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

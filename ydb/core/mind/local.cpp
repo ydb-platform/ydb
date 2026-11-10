@@ -17,11 +17,8 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <util/system/info.h>
-<<<<<<< HEAD
-=======
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
->>>>>>> 98f71206dce (Avoid linear tablet actor lookups in Local (#58497))
 #include <util/string/vector.h>
 
 #include <unordered_map>
@@ -894,14 +891,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     EraseTablet(InbootTablets, InbootTabletsByActor, inbootIt);
                 }
             }
-<<<<<<< HEAD
-            OnlineTablets.erase(onlineIt);
-=======
-            if (onlineIt->first.second == 0) { // leader
-                RetainedCutHistory.erase(onlineIt->first.first);
-            }
             EraseTablet(OnlineTablets, OnlineTabletsByActor, onlineIt);
->>>>>>> 98f71206dce (Avoid linear tablet actor lookups in Local (#58497))
             UpdateEstimate();
             return;
         }
@@ -909,14 +899,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         auto inbootIt = FindTabletByActor(InbootTablets, InbootTabletsByActor, ev->Sender);
         if (inbootIt != InbootTablets.end() && inbootIt->second.Generation <= generation) {
             MarkDeadTablet(inbootIt->first, generation, TEvLocal::TEvTabletStatus::StatusBootFailed, msg->Reason, ctx);
-<<<<<<< HEAD
-            InbootTablets.erase(inbootIt);
-=======
-            if (inbootIt->first.second == 0) { // leader
-                RetainedCutHistory.erase(inbootIt->first.first);
-            }
             EraseTablet(InbootTablets, InbootTabletsByActor, inbootIt);
->>>>>>> 98f71206dce (Avoid linear tablet actor lookups in Local (#58497))
             return;
         }
 

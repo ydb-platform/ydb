@@ -3641,6 +3641,162 @@ partitioning_settings {
         ShouldCheckQuotas(TSchemeLimits{.MaxExports = 0}, Ydb::StatusIds::PRECONDITION_FAILED);
     }
 
+    Y_UNIT_TEST(ShouldCheckQuotasWithSuccessfulHistory) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+        ui64 txId = 100;
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto request = [&](ui32 index) {
+            return Sprintf(R"(
+                OperationParams { labels { key: "uid" value: "quota-%u" } }
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items { source_path: "/MyRoot/Table" destination_prefix: "quota-%u" }
+                }
+            )", index, S3Port(), index);
+        };
+        TVector<ui64> ids;
+        for (ui32 i = 0; i < 100; ++i) {
+            ids.push_back(++txId);
+            TestExport(Runtime(), ids.back(), "/MyRoot", request(i));
+            Env().TestWaitNotification(Runtime(), ids.back());
+            UNIT_ASSERT_VALUES_EQUAL(TestGetExport(Runtime(), ids.back(), "/MyRoot")
+                .GetResponse().GetEntry().GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+        }
+
+        TBlockEvents<NKikimr::NWrappers::NExternalStorage::TEvPutObjectRequest> markers(Runtime(), [](const auto& ev) {
+            return TString(ev->Get()->Request.GetKey()).EndsWith("/data_complete.json");
+        });
+        for (ui32 i = 100; i < 110; ++i) {
+            ids.push_back(++txId);
+            TestExport(Runtime(), ids.back(), "/MyRoot", request(i));
+        }
+        Runtime().WaitFor("ten active exports", [&] { return markers.size() == 10; });
+        TestExport(Runtime(), ++txId, "/MyRoot", request(110), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+        // An idempotent retry must still find the original operation at capacity.
+        TestExport(Runtime(), ++txId, "/MyRoot", request(0));
+
+        markers.Stop().Unblock();
+        for (ui32 i = 100; i < 110; ++i) {
+            Env().TestWaitNotification(Runtime(), ids[i]);
+        }
+        TestExport(Runtime(), ++txId, "/MyRoot", request(110), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        TestGetExport(Runtime(), ids.front(), "/MyRoot");
+        TestGetExport(Runtime(), ids.back(), "/MyRoot");
+        TestExport(Runtime(), ++txId, "/MyRoot", request(110), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+        TestExport(Runtime(), ++txId, "/MyRoot", request(0));
+        auto list = [&](const TString& pageToken) {
+            AsyncSend(Runtime(), TTestTxConfig::SchemeShard,
+                new TEvExport::TEvListExportsRequest("/MyRoot", 100, pageToken, "export/s3"));
+            TAutoPtr<IEventHandle> handle;
+            const auto response = Runtime().GrabEdgeEvent<TEvExport::TEvListExportsResponse>(handle)->Record.GetResponse();
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::SUCCESS);
+            return response;
+        };
+        const auto firstPage = list("");
+        UNIT_ASSERT_VALUES_EQUAL(firstPage.EntriesSize(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(list(firstPage.GetNextPageToken()).EntriesSize(), 10);
+
+        TestForgetExport(Runtime(), ++txId, "/MyRoot", ids.front());
+        Env().TestWaitNotification(Runtime(), ids.front());
+        TestGetExport(Runtime(), ids.front(), "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        const ui64 replacement = ++txId;
+        TestExport(Runtime(), replacement, "/MyRoot", request(110));
+        Env().TestWaitNotification(Runtime(), replacement);
+        TestExport(Runtime(), ++txId, "/MyRoot", request(111), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(ShouldCheckQuotasForCancelledAndDroppingExports) {
+        Env();
+        SetSchemeshardSchemaLimits(Runtime(), TSchemeLimits{.MaxExports = 2});
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+        ui64 txId = 100;
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+        auto request = [&](ui32 index) {
+            return Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items { source_path: "/MyRoot/Table" destination_prefix: "quota-%u" }
+                }
+            )", S3Port(), index);
+        };
+
+        TBlockEvents<NKikimr::NWrappers::NExternalStorage::TEvPutObjectRequest> markers(Runtime(), [](const auto& ev) {
+            return TString(ev->Get()->Request.GetKey()).EndsWith("/data_complete.json");
+        });
+        const ui64 first = ++txId;
+        TestExport(Runtime(), first, "/MyRoot", request(0));
+        const ui64 second = ++txId;
+        TestExport(Runtime(), second, "/MyRoot", request(1));
+        Runtime().WaitFor("two active exports", [&] { return markers.size() == 2; });
+        TestExport(Runtime(), ++txId, "/MyRoot", request(2), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+        for (ui64 id : {first, second}) {
+            TestCancelExport(Runtime(), ++txId, "/MyRoot", id);
+            Env().TestWaitNotification(Runtime(), id);
+            TestGetExport(Runtime(), id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        }
+        markers.Stop().Unblock();
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        TestExport(Runtime(), ++txId, "/MyRoot", request(2), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> drops(Runtime(), [](const auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTable;
+        });
+        TestForgetExport(Runtime(), ++txId, "/MyRoot", first);
+        Runtime().WaitFor("export cleanup", [&] { return !drops.empty(); });
+        TestExport(Runtime(), ++txId, "/MyRoot", request(2), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+        drops.Stop().Unblock();
+        Env().TestWaitNotification(Runtime(), first);
+        TestGetExport(Runtime(), first, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+
+        for (ui32 i = 0; i < 2; ++i) {
+            const ui64 id = ++txId;
+            TestExport(Runtime(), id, "/MyRoot", request(2 + i));
+            Env().TestWaitNotification(Runtime(), id);
+            TestGetExport(Runtime(), id, "/MyRoot");
+        }
+        // Setting the ordinary quota to zero still disables new exports.
+        SetSchemeshardSchemaLimits(Runtime(), TSchemeLimits{.MaxExports = 0});
+        TestExport(Runtime(), ++txId, "/MyRoot", request(2), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(ShouldCheckQuotasWhileAutoDropping) {
+        Env();
+        SetSchemeshardSchemaLimits(Runtime(), TSchemeLimits{.MaxExports = 1});
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> drops(Runtime(), [](const auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTable;
+        });
+        const ui64 id = StartCompletionMarkerExport();
+        Runtime().WaitFor("automatic export cleanup", [&] { return !drops.empty(); });
+        const auto request = Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_path: "/MyRoot/Table" destination_prefix: "next" }
+            }
+        )", S3Port());
+        TestExport(Runtime(), 102, "/MyRoot", request, "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+        drops.Stop().Unblock();
+        Env().TestWaitNotification(Runtime(), id);
+        TestExport(Runtime(), 103, "/MyRoot", request);
+        Env().TestWaitNotification(Runtime(), 103);
+    }
+
     Y_UNIT_TEST(ShouldCheckQuotasChildrenLimited) {
         ShouldCheckQuotas(TSchemeLimits{.MaxChildrenInDir = 2}, Ydb::StatusIds::CANCELLED);
     }

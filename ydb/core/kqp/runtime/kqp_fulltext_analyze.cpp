@@ -1,6 +1,7 @@
 #include "kqp_fulltext_analyze.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/fulltext_query.h>
 
 #include <ydb/library/json_index/json_index.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -43,14 +44,22 @@ public:
         }
 
         TVector<TString> tokens;
-        switch (GetMode(ctx)) {
-            case NFulltext::EIndexMode::Fulltext: {
+        const auto mode = GetMode(ctx);
+        switch (mode) {
+            case NFulltext::EIndexMode::Fulltext:
+            case NFulltext::EIndexMode::FulltextQuery: {
                 auto& settings = GetSettings(ctx);
                 if (!settings.IsValid) {
                     // Failed to parse settings, return empty list
                     return ctx.HolderFactory.GetEmptyContainerLazy();
                 }
-                tokens = Analyze(TString(text.AsStringRef()), settings.Analyzers);
+                if (mode == NFulltext::EIndexMode::FulltextQuery) {
+                    for (auto& term : BuildSearchTermsStructured(TString(text.AsStringRef()), settings.Analyzers)) {
+                        tokens.push_back(std::move(term.Token));
+                    }
+                } else {
+                    tokens = Analyze(TString(text.AsStringRef()), settings.Analyzers);
+                }
                 break;
             }
 
@@ -116,7 +125,7 @@ public:
 
     NFulltext::EIndexMode GetMode(TComputationContext& ctx) const {
         auto mode = ModeArg->GetValue(ctx).Get<ui32>();
-        if (mode < 1 || mode > 3) {
+        if (mode < 1 || mode > static_cast<ui32>(NFulltext::EIndexMode::FulltextQuery)) {
             return NFulltext::EIndexMode::Invalid;
         }
         return static_cast<NFulltext::EIndexMode>(mode);

@@ -1226,6 +1226,11 @@ public:
 
     virtual bool Done() const = 0;
 
+    bool NeedsInput(ui64 tokenIndex) const {
+        YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
+        return Streams[tokenIndex]->GetUnprocessedDocumentCount() == 0;
+    }
+
     std::pair<ui64, ui64> GetStats() const {
         std::pair<ui64, ui64> total = {0, 0};
         for(const auto& stream: Streams) {
@@ -1247,7 +1252,7 @@ public:
         return TokenCount;
     }
 
-    virtual std::vector<TDocInfoPtr> FindMatches() = 0;
+    virtual std::vector<TDocInfoPtr> FindMatches(size_t maxMatches) = 0;
     virtual ~IMergeAlgorithm() = default;
 };
 
@@ -1391,14 +1396,14 @@ public:
         } while (true);
     }
 
-    std::vector<TDocInfoPtr> FindMatches() override {
+    std::vector<TDocInfoPtr> FindMatches(size_t maxMatches) override {
         if (FinishedTokens > 0) {
             ConsumeRest();
             return std::vector<TDocInfoPtr>();
         }
 
         std::vector<TDocInfoPtr> matches;
-        while (MatchedTokens.size() + ReadyStreams.size() == TokenCount) {
+        while (matches.size() < maxMatches && MatchedTokens.size() + ReadyStreams.size() == TokenCount) {
             YQL_ENSURE(ReadyStreams.size() > 0, "ReadyStreams must be non-empty");
             if (MatchedTokens.empty()) {
                 MatchedTokens.push_back(ReadyStreams.front());
@@ -1518,11 +1523,11 @@ public:
         return FinishedTokens == TokenCount;
     }
 
-    std::vector<TDocInfoPtr> FindMatches() override {
+    std::vector<TDocInfoPtr> FindMatches(size_t maxMatches) override {
         std::vector<TDocInfoPtr> matches;
         std::vector<size_t> matchedTokens;
         size_t matchedRequired = 0;
-        while(!MergeQueue.empty() && MergeQueue.size() + FinishedTokens == TokenCount) {
+        while(matches.size() < maxMatches && !MergeQueue.empty() && MergeQueue.size() + FinishedTokens == TokenCount) {
             THeapEntry doc = std::move(MergeQueue.top());
             matchedTokens.clear();
             matchedTokens.push_back(doc.WordIndex);
@@ -1812,7 +1817,9 @@ struct TReadInfo {
     ui64 ReadKind;
     ui64 Cookie;
     ui64 ShardId;
-    ui64 LastSeqNo = 0;  // Last acknowledged sequence number (for flow control)
+    ui64 LastSeqNo = 0;  // Last received sequence number (for flow control)
+    bool PendingAck = false;
+    bool RetryScheduled = false;
 };
 
 /**
@@ -2002,6 +2009,7 @@ class TReadsState {
     };
 
     absl::flat_hash_map<ui64, TReadInfo> Reads;
+    // Entries are never erased, so retry counters and pending shard timers survive read replacement.
     absl::flat_hash_map<ui64, TShardInfo> ReadsByShardId;
     absl::flat_hash_set<ui64> PipesCreated;
     const TIntrusivePtr<TKqpCounters> Counters;
@@ -2037,14 +2045,15 @@ public:
     }
 
     // Send a TEvReadAck to the datashard to replenish the read's row/byte quota.
-    // Called when a non-final TEvReadResult arrives (i.e., more data is expected).
+    // Posting reads wait until their buffered documents have been consumed.
     // Also reduces the retry counter on successful ack (halves if > 3).
     void AckRead(ui64 readId) {
         auto readIt = FindPtr(readId);
-        if (readIt == nullptr) {
+        if (readIt == nullptr || readIt->RetryScheduled) {
             return;
         }
         auto& readInfo = *readIt;
+        readInfo.PendingAck = false;
         ui64 shardId = readInfo.ShardId;
         auto request = GetDefaultReadAckSettings();
         request->Record.SetReadId(readId);
@@ -2157,10 +2166,6 @@ public:
             shardReads.ReadIds.erase(readId);
             if (reduceRetries && shardReads.Retries > 3) {
                 shardReads.Retries = std::max(shardReads.Retries >> 1, (ui64)1);
-            }
-
-            if (shardReads.ReadIds.empty()) {
-                ReadsByShardId.erase(shardId);
             }
         }
     }
@@ -2493,6 +2498,8 @@ private:
     bool PendingNotify = false;      // True when a TEvNewAsyncInputDataArrived is in flight
 
     ui64 ProducedItemsCount = 0;                           // Rows already delivered to compute actor
+    ui64 MatchedItemsCount = 0;                            // Includes pending lookups and buffered rows
+    static constexpr ui64 MatchBatchSize = 256;
     std::deque<TDocInfoPtr> ResultQueue;                   // Ready-to-deliver document rows
     bool IsNgram = false;                                  // True if the index uses n-gram tokenization
 
@@ -2551,8 +2558,8 @@ private:
     // Parse the search query string and tokenize it using the analyzer
     // configured on the fulltext index (same analyzer used at index build time).
     // Each resulting token becomes a TWordReadState entry in Words[].
-    // Returns false if no tokens were extracted. JSON sources finish with an empty
-    // result; full-text sources report a BAD_REQUEST error.
+    // Returns false if no tokens were extracted. JSON and n-gram sources finish with an
+    // empty result; other full-text sources report a BAD_REQUEST error.
     bool ExtractAndTokenizeExpression() {
         YQL_ENSURE(Settings->GetQuerySettings().GetColumns().size() == 1);
         const bool isJsonIndex = Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson
@@ -2567,7 +2574,6 @@ private:
                 Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells));
             }
         } else {
-            YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
             const auto& expr = Settings->GetQuerySettings().GetQuery();
 
             THashMap<TStringBuf, TWordStatePtr> seen;
@@ -2598,7 +2604,7 @@ private:
         }
 
         if (Words.empty()) {
-            if (isJsonIndex) {
+            if (isJsonIndex || IsNgram) {
                 NotifyCA();
             } else {
                 RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
@@ -2609,13 +2615,56 @@ private:
         return true;
     }
 
+    void FetchNextMatches() {
+        if (!MergeAlgo) {
+            return;
+        }
+        // Relevance cannot emit rows until all streams are consumed and IDF is known.
+        size_t maxMatches = std::numeric_limits<size_t>::max();
+        if (!MainTableReader->GetWithRelevance()) {
+            // LIMIT may sit above a wildcard postfilter. Bound lookups even when the
+            // source has no pushed limit, and resume as the consumer drains rows.
+            YQL_ENSURE(ProducedItemsCount <= MatchedItemsCount);
+            const ui64 inFlight = MatchedItemsCount - ProducedItemsCount;
+            YQL_ENSURE(inFlight <= MatchBatchSize);
+            maxMatches = MatchBatchSize - inFlight;
+            if (Limit > 0) {
+                YQL_ENSURE(MatchedItemsCount <= static_cast<ui64>(Limit));
+                maxMatches = std::min<ui64>(maxMatches, Limit - MatchedItemsCount);
+            }
+            if (maxMatches == 0) {
+                return;
+            }
+        }
+        auto matches = MergeAlgo->FindMatches(maxMatches);
+        const bool needsMore = matches.size() < maxMatches;
+        MatchedItemsCount += matches.size();
+        // An empty batch can finalize relevance scoring after the last posting read.
+        FetchDocumentDetails(matches);
+
+        if (needsMore) {
+            // Replenish only exhausted token streams while the consumer has capacity.
+            for (const auto& [readId, readInfo] : ReadsState.GetReads()) {
+                if (readInfo.ReadKind == EReadKind_Word && readInfo.PendingAck && MergeAlgo->NeedsInput(readInfo.Cookie)) {
+                    ReadsState.AckRead(readId);
+                }
+            }
+            for (const auto& word : Words) {
+                if (!word->PendingRead && !word->RangesToRead.empty() && MergeAlgo->NeedsInput(word->WordIndex)) {
+                    ContinueWordRead(word);
+                }
+            }
+        }
+    }
+
     // Check whether all merge streams have finished and, if so, compute IDF
     // values from the accumulated total frequencies.  Returns true when IDF is ready.
     bool TryComputeIDF() {
         if (IDFComputed) {
             return true;
         }
-        if (!MergeAlgo->Done()) {
+        // Document lengths must also be ready before the global TopK is finalized.
+        if (!MergeAlgo->Done() || !ReadsState.Empty()) {
             return false;
         }
 
@@ -2758,6 +2807,7 @@ private:
         ui64 readId = ReadsState.GetNextReadId();
         auto [shardId, ev] = word->ScheduleNextRead(readId);
         if (ev) {
+            word->PendingRead = true;
             ReadsState.SendEvRead(shardId, ev, TReadInfo{EReadKind_Word, word->WordIndex, shardId});
             return true;
         }
@@ -2890,6 +2940,11 @@ private:
         this->Send(MakeSchemeCacheID(), resolveRequest.release(), 0, 0, ReadSpan.GetTraceId());
     }
 
+    void CancelRead(ui64 readId, ui64 shardId) {
+        auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+        cancel->Record.SetReadId(readId);
+        this->Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), shardId, false));
+    }
 
 public:
     TFullTextSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
@@ -3030,6 +3085,7 @@ public:
             }
         }
 
+        FetchNextMatches();
         if (!ResultQueue.empty()) {
             NotifyCA();
         }
@@ -3050,12 +3106,8 @@ public:
 
     // Cancel all in-flight reads and disconnect all pipes on actor destruction.
     void PassAway() override {
-        {
-            for (auto& [id, state] : ReadsState.GetReads()) {
-                auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
-                cancel->Record.SetReadId(id);
-                this->Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
-            }
+        for (const auto& [id, state] : ReadsState.GetReads()) {
+            CancelRead(id, state.ShardId);
         }
         this->Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         if (ReadSpan) {
@@ -3085,7 +3137,9 @@ public:
     }
 
     bool IsFinished() {
-        return (ReadsState.Empty() && !ResolveInProgress && ResultQueue.empty() && TopKQueue.empty() && RowIdResolvePendingQueue.empty()) || (Limit > 0 && ProducedItemsCount >= static_cast<ui64>(Limit));
+        return (ReadsState.Empty() && !ResolveInProgress && (!MergeAlgo || MergeAlgo->Done())
+            && ResultQueue.empty() && TopKQueue.empty() && RowIdResolvePendingQueue.empty())
+            || (Limit > 0 && ProducedItemsCount >= static_cast<ui64>(Limit));
     }
 
     // Send TEvNewAsyncInputDataArrived to the compute actor so it calls
@@ -3143,7 +3197,8 @@ public:
         auto& word = Words[wordIndex];
         word->BuildRangesToRead();
         ReadsState.RemoveRead(readId);
-        ContinueWordRead(word);
+        word->PendingRead = false;
+        FetchNextMatches();
     }
 
     void RetryTotalStatsRead(ui64 readId) {
@@ -3155,11 +3210,13 @@ public:
     // retry path based on the read's EReadKind.
     void DoRetrySingleRead(ui64 readId) {
         auto readIt = ReadsState.FindPtr(readId);
-        if (readIt == nullptr) {
+        if (readIt == nullptr || !readIt->RetryScheduled || ReadsState.FindShardPtr(readIt->ShardId)->IsScheduledRetry) {
+            // A pending shard retry also handles individually scheduled retries.
             return;
         }
 
         auto readInfo = *readIt;
+        CancelRead(readId, readInfo.ShardId);
 
         switch (readInfo.ReadKind) {
             case EReadKind_DocumentStats:
@@ -3207,8 +3264,14 @@ public:
     // immediately or schedules a TEvRetryRead timer event.
     bool ScheduleShardRetry(ui64 shardId, bool allowInstantRetry, NYql::NDqProto::StatusIds::StatusCode errorStatus) {
         auto shardIt = ReadsState.FindShardPtr(shardId);
-        if (shardIt == nullptr) {
+        if (shardIt == nullptr || shardIt->ReadIds.empty()) {
             return false;
+        }
+
+        for (ui64 readId : shardIt->ReadIds) {
+            auto* read = ReadsState.FindPtr(readId);
+            YQL_ENSURE(read);
+            read->RetryScheduled = true;
         }
 
         if (shardIt->IsScheduledRetry) {
@@ -3505,8 +3568,8 @@ public:
 
     // Process posting list read results for a token.
     // Feeds data into MergeAlgo, updates the resume key (StartReadKeyFrom),
-    // and when the current shard is exhausted, tries to continue from the next
-    // shard partition. Runs merge and routes matches to FetchDocumentDetails.
+    // and marks EOF after the last shard partition. Further reads wait until
+    // FetchNextMatches consumes the buffered documents.
     void WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 wordIndex, bool finished) {
         YQL_ENSURE(wordIndex < Words.size());
         auto& incomingWordInfo = Words[wordIndex];
@@ -3519,19 +3582,13 @@ public:
         }
 
         if (finished) {
-            if (!ContinueWordRead(incomingWordInfo)) {
+            incomingWordInfo->PendingRead = false;
+            if (incomingWordInfo->RangesToRead.empty()) {
                 MergeAlgo->FinishTokenStream(wordIndex);
             }
         }
 
-        std::vector<TDocInfoPtr> matches = MergeAlgo->FindMatches();
-        FetchDocumentDetails(matches);
-
-        // When the last stream finishes but FindMatches produces no new docs,
-        // we still need to compute IDF and flush any buffered documents.
-        if (!IDFComputed && TryComputeIDF()) {
-            FlushPendingBM25Documents();
-        }
+        FetchNextMatches();
     }
 
     template<typename TReader>
@@ -3579,6 +3636,9 @@ public:
     void ScheduleReadRetry(ui64 readId, ui64 shardId, bool allowInstantRetry, NYql::NDqProto::StatusIds::StatusCode errorStatus,
         std::optional<TDuration> throttleDelay = std::nullopt)
     {
+        auto* read = ReadsState.FindPtr(readId);
+        YQL_ENSURE(read);
+        read->RetryScheduled = true;
         auto maxRetries = MaxShardRetries();
         TDuration delay;
         if (!throttleDelay) {
@@ -3686,6 +3746,10 @@ public:
         if (it == nullptr) {
             return;
         }
+        // Keep successful in-flight data while retrying; AckRead still suppresses ACKs.
+        if (it->RetryScheduled && record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
+            return;
+        }
 
         auto& readInfo = *it;
 
@@ -3716,6 +3780,7 @@ public:
             {"brokenTxLocks", brokenTxLocks});
 
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
+            readInfo.PendingAck = false;
             HandleReadResultError(readId, readInfo, record);
             return;
         }
@@ -3728,6 +3793,8 @@ public:
 
         if (record.GetFinished()) {
             ReadsState.RemoveRead(readId, true);
+        } else if (readKind == EReadKind_Word) {
+            readInfo.PendingAck = true;
         } else {
             ReadsState.AckRead(readId);
         }

@@ -430,7 +430,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteFlatMapOverFullTextMatch(TExprBase node, TExprContext& ctx) {
-        auto output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx);
+        auto output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx, TypesCtx);
         if (!output.IsValid()) {
             return {};
         }

@@ -206,6 +206,7 @@ bool CopyToConfigRequest(const Ydb::Config::ReplaceConfigRequest &from, NKikimrB
     auto shim = ConvertConfigReplaceRequest(from);
 
     to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(shim.MainConfig.value_or(TString{})));
+    to->SetRollback(from.dry_run()); // the dry run only checks the commands
     return true;
 }
 

@@ -1446,6 +1446,167 @@ def _downsample_series(xs: list[float], series: list[list[Any]], max_points: int
     return [xs[i] for i in idxs], [[col[i] for i in idxs] for col in series]
 
 
+def _nearest_sample_index(xs: list[float], t: float, tol_sec: float = 4.0) -> int | None:
+    """Index of xs closest to t, or None if farther than tol_sec."""
+    if not xs:
+        return None
+    best_i = 0
+    best_d = abs(float(xs[0]) - t)
+    for i in range(1, len(xs)):
+        d = abs(float(xs[i]) - t)
+        if d < best_d:
+            best_d = d
+            best_i = i
+    return best_i if best_d <= tol_sec else None
+
+
+def _peak_signal_index(values: list[Any]) -> tuple[float, int] | None:
+    best: tuple[float, int] | None = None
+    for i, raw in enumerate(values or []):
+        if raw is None:
+            continue
+        value = float(raw)
+        if best is None or value > best[0]:
+            best = (value, i)
+    return best
+
+
+def _measured_contention_for_bucket(
+    victim_key: str,
+    bucket: dict[str, Any],
+    grouped: dict[str, dict[str, Any]],
+    *,
+    psi_field: str,
+    score_fields: tuple[str, ...],
+    score_names: tuple[str, ...],
+    psi_threshold: float = 5.0,
+    top_k: int = 5,
+    tol_sec: float = 4.0,
+) -> dict[str, Any] | None:
+    """Who used the contended resource while this cgroup waited (high PSI).
+
+    High PSI some = this cgroup stalled. Neighbors are ranked by their own
+    throughput/usage at the victim's peak-PSI sample (not by their PSI).
+    """
+    peak = _peak_signal_index(bucket.get("cgroup_signals", {}).get(psi_field, []))
+    if peak is None or peak[0] < psi_threshold:
+        return None
+    psi_pct, peak_i = peak
+    xs = [float(x) for x in (bucket.get("xs") or [])]
+    if peak_i >= len(xs):
+        return None
+    at_sec = xs[peak_i]
+
+    def _at(values: list[Any], idx: int) -> float:
+        if idx < 0 or idx >= len(values):
+            return 0.0
+        raw = values[idx]
+        return float(raw or 0.0) if raw is not None else 0.0
+
+    self_scores = {_name: round(_at(bucket.get(_field) or [], peak_i), 3) for _field, _name in zip(score_fields, score_names)}
+    # Several cgroups can share a suite+chunk label after rematch; merge by label
+    # so the Delayed-by list does not repeat the same name.
+    by_label: dict[str, dict[str, Any]] = {}
+    for other_key, other in grouped.items():
+        if other_key == victim_key:
+            continue
+        other_xs = [float(x) for x in (other.get("xs") or [])]
+        j = _nearest_sample_index(other_xs, at_sec, tol_sec=tol_sec)
+        if j is None:
+            continue
+        parts = {name: _at(other.get(field) or [], j) for field, name in zip(score_fields, score_names)}
+        score = sum(parts.values())
+        if score <= 0:
+            continue
+        label = str(other.get("label") or other_key)
+        cur = by_label.get(label)
+        other_psi = other.get("cgroup_signals", {}).get(psi_field) or []
+        peer_psi = float(other_psi[j]) if j < len(other_psi) and other_psi[j] is not None else None
+        if cur is None:
+            entry: dict[str, Any] = {
+                "key": other_key,
+                "label": label,
+                "suite": other.get("suite"),
+                "score": score,
+                "chunks": 1,
+                "_best_score": score,
+            }
+            entry.update(parts)
+            if peer_psi is not None:
+                entry["psi_pct"] = peer_psi
+            by_label[label] = entry
+            continue
+        cur["score"] = float(cur["score"]) + score
+        cur["chunks"] = int(cur.get("chunks") or 1) + 1
+        for name, value in parts.items():
+            cur[name] = float(cur.get(name) or 0.0) + value
+        if peer_psi is not None:
+            prev = cur.get("psi_pct")
+            cur["psi_pct"] = peer_psi if prev is None else max(float(prev), peer_psi)
+        if score > float(cur.get("_best_score") or 0.0):
+            cur["key"] = other_key
+            cur["suite"] = other.get("suite")
+            cur["_best_score"] = score
+    ranked: list[dict[str, Any]] = []
+    for entry in by_label.values():
+        entry.pop("_best_score", None)
+        entry["score"] = round(float(entry["score"]), 3)
+        for name in score_names:
+            entry[name] = round(float(entry.get(name) or 0.0), 3)
+        if entry.get("psi_pct") is not None:
+            entry["psi_pct"] = round(float(entry["psi_pct"]), 2)
+        ranked.append(entry)
+    ranked.sort(key=lambda row: (-float(row["score"]), str(row.get("label") or "")))
+    out: dict[str, Any] = {
+        "psi_pct": round(psi_pct, 2),
+        "at_evlog_sec": round(at_sec, 3),
+        "self": self_scores,
+        "top": ranked[:top_k],
+    }
+    return out
+
+
+def _attach_measured_contention(grouped: dict[str, dict[str, Any]], summary_row: dict[str, Any]) -> None:
+    key = str(summary_row.get("key") or "")
+    bucket = grouped.get(key)
+    if not key or not bucket:
+        return
+    dims = (
+        (
+            "io",
+            "io_psi_some_pct",
+            ("disk_write_mbps", "disk_read_mbps"),
+            ("write_mbps", "read_mbps"),
+        ),
+        (
+            "cpu",
+            "cpu_psi_some_pct",
+            ("cpu_cores",),
+            ("cpu_cores",),
+        ),
+        (
+            "memory",
+            "memory_psi_some_pct",
+            ("ram_gb",),
+            ("ram_gb",),
+        ),
+    )
+    contention: dict[str, Any] = {}
+    for dim, psi_field, score_fields, score_names in dims:
+        block = _measured_contention_for_bucket(
+            key,
+            bucket,
+            grouped,
+            psi_field=psi_field,
+            score_fields=score_fields,
+            score_names=score_names,
+        )
+        if block is not None:
+            contention[dim] = block
+    if contention:
+        summary_row["contention"] = contention
+
+
 def _build_measured_tests(
     records: list[dict[str, Any]],
     overlay: dict[str, Any],
@@ -1605,6 +1766,7 @@ def _build_measured_tests(
             "memory_oom_kill_events_delta": _signal_sum("memory_oom_kill_events_delta"),
         }
         summary_row.update({name: round(value, 3) if name.startswith("max_") else value for name, value in optional_summary_fields.items() if value is not None})
+        _attach_measured_contention(grouped, summary_row)
         summary.append(summary_row)
     summary.sort(key=lambda row: (-float(row["max_cpu"]), str(row["label"])))
     if out_json is not None:

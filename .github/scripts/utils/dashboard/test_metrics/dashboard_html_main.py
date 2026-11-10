@@ -254,6 +254,44 @@ def build_html_dashboard(
     #measuredMeta .measured-meta-note {{
       color: #656d76; font-size: 11px;
     }}
+    #measuredMeta .measured-contention {{
+      margin-top: 2px; padding: 8px 10px; border: 1px solid #e6e8eb; border-radius: 8px;
+      background: #fff; color: var(--fg); font-size: 12px; line-height: 1.45;
+    }}
+    #measuredMeta .measured-contention-title {{
+      font-weight: 650; font-size: 12px; margin-bottom: 4px;
+    }}
+    #measuredMeta .measured-contention-dim {{
+      margin-top: 8px;
+    }}
+    #measuredMeta .measured-contention-dim:first-of-type {{ margin-top: 4px; }}
+    #measuredMeta .measured-contention-head {{
+      color: #656d76; font-size: 11px; margin-bottom: 4px;
+    }}
+    #measuredMeta .measured-contention-list {{
+      margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px;
+    }}
+    #measuredMeta .measured-contention-list button {{
+      display: flex; gap: 8px; align-items: baseline; width: 100%;
+      border: 0; background: transparent; padding: 3px 6px; border-radius: 4px;
+      text-align: left; cursor: pointer; font: inherit; color: inherit;
+    }}
+    #measuredMeta .measured-contention-list button:hover {{ background: #e7f3ff; }}
+    #measuredMeta .measured-contention-list .rank {{
+      color: #8c959f; font-variant-numeric: tabular-nums; min-width: 1.2em; text-align: right;
+    }}
+    #measuredMeta .measured-contention-list .val {{
+      font-variant-numeric: tabular-nums; font-weight: 650; white-space: nowrap; min-width: 7em;
+    }}
+    #measuredMeta .measured-contention-list .name {{
+      min-width: 0; word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+    }}
+    #measuredMeta .measured-contention-list .sub {{
+      display: block; color: #6b7280; font-weight: 400; font-size: 11px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }}
+    #measuredMeta .measured-contention-empty {{ color: #656d76; font-size: 11px; }}
     #measuredMeta .outcomes {{ display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }}
     .measured-charts {{ flex: 1; min-width: 0; }}
     .measured-test-list {{ margin: 0 0 10px 0; padding: 0; list-style: none; font-size: 12px; line-height: 1.45; }}
@@ -775,7 +813,7 @@ def build_html_dashboard(
           <ul>
             <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
             <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
-            <li><b>Measured per test:</b> stacked layers from <code>ya-test-*</code> cgroups (CPU/RAM/disk every 3s), plus cgroup CPU throttling/PSI when available. Select a suite/chunk in the measured panel. Ticks: <code>resources_monitor.jsonl</code> (<code>kind=test</code>).</li>
+            <li><b>Measured per test:</b> stacked layers from <code>ya-test-*</code> cgroups (CPU/RAM/disk every 3s), plus cgroup CPU throttling/PSI when available. Select a suite/chunk in the measured panel. Ticks: <code>resources_monitor.jsonl</code> (<code>kind=test</code>). High PSI some = this chunk waited; open a PSI Top row to see <b>Delayed by</b> neighbors ranked by disk/CPU/RAM use at the peak-PSI moment.</li>
             <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
             <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
             <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
@@ -4126,6 +4164,67 @@ def build_html_dashboard(
         '<span class="measured-meta-item"><em>mem events high/max/oom/kill</em> <strong>' + memEvents + '</strong></span>' +
         '</div>';
     }}
+    function measuredContentionSelfText(dim, selfScores) {{
+      const s = selfScores || {{}};
+      if (dim === 'io') {{
+        return 'self w' + Number(s.write_mbps || 0).toFixed(1) +
+          ' r' + Number(s.read_mbps || 0).toFixed(1) + ' MB/s';
+      }}
+      if (dim === 'cpu') return 'self ' + Number(s.cpu_cores || 0).toFixed(2) + ' cores';
+      if (dim === 'memory') return 'self ' + Number(s.ram_gb || 0).toFixed(2) + ' GB';
+      return '';
+    }}
+    function measuredContentionValText(dim, row) {{
+      if (dim === 'io') {{
+        return 'w' + Number(row.write_mbps || 0).toFixed(1) +
+          ' r' + Number(row.read_mbps || 0).toFixed(1) + ' MB/s';
+      }}
+      if (dim === 'cpu') return Number(row.cpu_cores || 0).toFixed(2) + ' cores';
+      if (dim === 'memory') return Number(row.ram_gb || 0).toFixed(2) + ' GB';
+      return Number(row.score || 0).toFixed(1);
+    }}
+    function measuredContentionHtml(row) {{
+      const c = row && row.contention;
+      if (!c) return '';
+      const dims = [
+        ['io', 'PSI I/O'],
+        ['cpu', 'PSI CPU'],
+        ['memory', 'PSI mem'],
+      ];
+      let body = '';
+      dims.forEach(([dim, title]) => {{
+        const block = c[dim];
+        if (!block) return;
+        const top = block.top || [];
+        const head = title + ' peak ' + Number(block.psi_pct || 0).toFixed(1) + '% · ' +
+          measuredContentionSelfText(dim, block.self) +
+          ' · neighbors ranked by use at that moment (not by their PSI)';
+        let list = '';
+        if (!top.length) {{
+          list = '<div class="measured-contention-empty">No other measured cgroups with significant use nearby — host/device or unmeasured load.</div>';
+        }} else {{
+          list = '<ol class="measured-contention-list">' + top.map((peer, i) => {{
+            const bits = [];
+            if (peer.psi_pct != null) bits.push('their PSI ' + Number(peer.psi_pct).toFixed(1) + '%');
+            if (Number(peer.chunks || 1) > 1) bits.push(Number(peer.chunks) + ' cgroups');
+            const sub = bits.length ? ('<span class="sub">' + escapeHtml(bits.join(' · ')) + '</span>') : '';
+            return '<li><button type="button" data-contend-key="' + escapeHtml(peer.key || '') +
+              '" data-contend-suite="' + escapeHtml(peer.suite || '') + '">' +
+              '<span class="rank">' + (i + 1) + '</span>' +
+              '<span class="val">' + escapeHtml(measuredContentionValText(dim, peer)) + '</span>' +
+              '<span class="name">' + escapeHtml(peer.label || peer.key || '') + sub + '</span>' +
+              '</button></li>';
+          }}).join('') + '</ol>';
+        }}
+        body += '<div class="measured-contention-dim"><div class="measured-contention-head">' +
+          escapeHtml(head) + '</div>' + list + '</div>';
+      }});
+      if (!body) return '';
+      return '<div class="measured-contention">' +
+        '<div class="measured-contention-title">Delayed by (at peak PSI)</div>' +
+        '<div class="measured-meta-note">High PSI means this chunk waited. Click a neighbor to inspect it.</div>' +
+        body + '</div>';
+    }}
     function measuredStatsText(agg, hideCount) {{
       // Compact form for the tree; header uses measuredMetaHtml.
       const body = agg.cpu.toFixed(2) + 'c · ' + agg.ram_gb.toFixed(2) + 'G · w' +
@@ -4243,7 +4342,10 @@ def build_html_dashboard(
         : (sel.kind === 'chunk' ? ((measuredList.find(r => r.key === sel.key) || {{}}).label || sel.key) : (sel.path || sel.suite));
       const outcomes = outcomesForRows(rows);
       if (meta) {{
-        meta.innerHTML = measuredMetaHtml(title, agg, outcomes, rows) +
+        const contention = (sel && sel.kind === 'chunk' && rows.length === 1)
+          ? measuredContentionHtml(rows[0])
+          : '';
+        meta.innerHTML = measuredMetaHtml(title, agg, outcomes, rows) + contention +
           '<div id="measuredLoadStatus" class="load-inline"></div>';
       }}
       const suffix = (!sel || sel.kind === 'all') ? ' (all)' : (sel.kind === 'chunk' ? ' (one chunk)' : ' / ' + (sel.path || sel.suite));
@@ -4407,6 +4509,9 @@ def build_html_dashboard(
         measuredTopRawValue(b, meta) - measuredTopRawValue(a, meta)
       ).slice(0, limit);
       const selectedKey = sel && sel.kind === 'chunk' ? sel.key : null;
+      const contendDim = metricEl.value === 'max_io_psi_pct' ? 'io'
+        : (metricEl.value === 'max_cpu_psi_pct' ? 'cpu'
+          : (metricEl.value === 'max_memory_psi_pct' ? 'memory' : null));
       list.innerHTML = ranked.map((row, i) => {{
         const on = selectedKey && row.key === selectedKey ? ' on' : '';
         const extras = [
@@ -4414,13 +4519,16 @@ def build_html_dashboard(
           Number(row.max_ram_gb || 0).toFixed(2) + ' GB',
           'write ' + Number(row.max_write_mbps || 0).toFixed(1) + ' MB/s',
           'read ' + Number(row.max_read_mbps || 0).toFixed(1) + ' MB/s',
-        ].join(' · ');
+        ];
+        const peer = contendDim && row.contention && row.contention[contendDim] &&
+          (row.contention[contendDim].top || [])[0];
+        if (peer && peer.label) extras.push('delayed by ' + peer.label);
         return '<li class="' + on.trim() + '" data-key="' + escapeHtml(row.key || '') +
           '" data-suite="' + escapeHtml(row.suite || '') + '">' +
           '<span class="rank">' + (i + 1) + '</span>' +
           '<span class="val">' + escapeHtml(formatMeasuredTopValue(row, meta)) + '</span>' +
           '<span class="name">' + escapeHtml(row.label || row.key || '') +
-          '<span class="sub">' + escapeHtml(extras) + '</span></span></li>';
+          '<span class="sub">' + escapeHtml(extras.join(' · ')) + '</span></span></li>';
       }}).join('') || '<li class="muted" style="display:block;padding:8px;cursor:default">No measured chunks</li>';
       list._rows = ranked;
     }}
@@ -4497,6 +4605,16 @@ def build_html_dashboard(
         const suite = li.dataset.suite || '';
         if (suite) openMeasuredPath(suite, true);
         selectMeasured({{kind: 'chunk', key: li.dataset.key, path: suite, suite: suite}});
+      }});
+    }}
+    const measuredMetaEl = document.getElementById('measuredMeta');
+    if (measuredMetaEl) {{
+      measuredMetaEl.addEventListener('click', (ev) => {{
+        const btn = ev.target.closest('button[data-contend-key]');
+        if (!btn || !btn.dataset.contendKey) return;
+        const suite = btn.dataset.contendSuite || '';
+        if (suite) openMeasuredPath(suite, true);
+        selectMeasured({{kind: 'chunk', key: btn.dataset.contendKey, path: suite, suite: suite}});
       }});
     }}
     if (measuredWrap && measuredList.length) {{

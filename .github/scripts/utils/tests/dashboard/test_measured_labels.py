@@ -168,6 +168,11 @@ class MeasuredLabelTest(unittest.TestCase):
         self.assertEqual(rows[0]["max_io_psi_pct"], 5.0)
         self.assertEqual(rows[0]["cpu_nr_throttled_delta"], 3)
         self.assertEqual(rows[0]["memory_high_events_delta"], 1)
+        # Alone on the host: contention blocks exist for PSI≥5, but neighbor lists are empty.
+        self.assertIn("cpu", rows[0]["contention"])
+        self.assertIn("io", rows[0]["contention"])
+        self.assertEqual(rows[0]["contention"]["cpu"]["top"], [])
+        self.assertNotIn("memory", rows[0]["contention"])  # peak 2% < threshold
         self.assertNotIn("measured_layers", overlay)
         self.assertEqual(overlay.get("measured_series_dir"), "resources_tests")
         self.assertEqual(overlay.get("measured_series_overview_url"), "resources_tests/overview.json")
@@ -176,6 +181,70 @@ class MeasuredLabelTest(unittest.TestCase):
             overlay.get("measured_series_suite_url_template"),
             "resources_tests/suites/{suite}.json",
         )
+
+    def test_measured_contention_ranks_disk_hogs_at_peak_io_psi(self):
+        """Victim with high I/O PSI + low own disk; hog with low PSI + high write → delayed-by."""
+        overlay = {
+            "ref_start_ev": 1000.0,
+            "ref_report_ts": 1000.0,
+            "evlog_range_sec": [990.0, 1040.0],
+        }
+        records = [
+            # victim: waits on I/O at t=1010 (PSI 41.9), almost no disk
+            {
+                "kind": "test", "ts": 1005.0, "cgroup": "ya-test-victim", "suite": "ydb/core/blobstorage/ddisk", "chunk": 1,
+                "cpu_used_cores": 0.5, "ram_kb": 1024, "disk_read_mbps": 0, "disk_write_mbps": 2.0,
+                "io_psi_some_pct": 5.0, "cpu_psi_some_pct": 1.0,
+            },
+            {
+                "kind": "test", "ts": 1010.0, "cgroup": "ya-test-victim", "suite": "ydb/core/blobstorage/ddisk", "chunk": 1,
+                "cpu_used_cores": 0.4, "ram_kb": 1024, "disk_read_mbps": 0, "disk_write_mbps": 0.5,
+                "io_psi_some_pct": 41.9, "cpu_psi_some_pct": 1.0,
+            },
+            {
+                "kind": "test", "ts": 1015.0, "cgroup": "ya-test-victim", "suite": "ydb/core/blobstorage/ddisk", "chunk": 1,
+                "cpu_used_cores": 0.4, "ram_kb": 1024, "disk_read_mbps": 0, "disk_write_mbps": 1.0,
+                "io_psi_some_pct": 12.0, "cpu_psi_some_pct": 1.0,
+            },
+            # hog: saturated disk, low PSI
+            {
+                "kind": "test", "ts": 1005.0, "cgroup": "ya-test-hog", "suite": "ydb/core/blobstorage/incrhuge", "chunk": 0,
+                "cpu_used_cores": 2.0, "ram_kb": 2048, "disk_read_mbps": 10.0, "disk_write_mbps": 400.0,
+                "io_psi_some_pct": 2.0, "cpu_psi_some_pct": 0.5,
+            },
+            {
+                "kind": "test", "ts": 1010.0, "cgroup": "ya-test-hog", "suite": "ydb/core/blobstorage/incrhuge", "chunk": 0,
+                "cpu_used_cores": 2.0, "ram_kb": 2048, "disk_read_mbps": 12.0, "disk_write_mbps": 262.0,
+                "io_psi_some_pct": 3.0, "cpu_psi_some_pct": 0.5,
+            },
+            {
+                "kind": "test", "ts": 1015.0, "cgroup": "ya-test-hog", "suite": "ydb/core/blobstorage/incrhuge", "chunk": 0,
+                "cpu_used_cores": 2.0, "ram_kb": 2048, "disk_read_mbps": 8.0, "disk_write_mbps": 300.0,
+                "io_psi_some_pct": 2.5, "cpu_psi_some_pct": 0.5,
+            },
+            # secondary peer with less disk at peak
+            {
+                "kind": "test", "ts": 1010.0, "cgroup": "ya-test-peer", "suite": "ydb/core/blobstorage/ddisk", "chunk": 0,
+                "cpu_used_cores": 1.0, "ram_kb": 1024, "disk_read_mbps": 0, "disk_write_mbps": 80.0,
+                "io_psi_some_pct": 4.0, "cpu_psi_some_pct": 0.0,
+            },
+        ]
+        rows = _build_measured_tests(records, overlay, runs=[], chunk_tests={}, chunks={})
+        by_label = {row["label"]: row for row in rows}
+        victim = by_label["ydb/core/blobstorage/ddisk [1]"]
+        self.assertAlmostEqual(victim["max_io_psi_pct"], 41.9)
+        io = victim["contention"]["io"]
+        self.assertAlmostEqual(io["psi_pct"], 41.9)
+        self.assertAlmostEqual(io["self"]["write_mbps"], 0.5)
+        self.assertEqual(
+            [peer["label"] for peer in io["top"]],
+            ["ydb/core/blobstorage/incrhuge [0]", "ydb/core/blobstorage/ddisk [0]"],
+        )
+        self.assertAlmostEqual(io["top"][0]["write_mbps"], 262.0)
+        self.assertAlmostEqual(io["top"][0]["psi_pct"], 3.0)
+        # Hog itself has low PSI → no I/O contention block
+        hog = by_label["ydb/core/blobstorage/incrhuge [0]"]
+        self.assertNotIn("io", (hog.get("contention") or {}))
 
     def test_measured_series_written_as_suite_shards(self):
         overlay = {

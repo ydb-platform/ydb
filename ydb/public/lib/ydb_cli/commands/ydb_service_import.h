@@ -54,6 +54,7 @@ protected:
     TString CommonSourcePrefix;
     TString CommonDestinationPath;
     bool ListObjectsInExistingExport = false;
+    bool IncludeExternalTables = false;
 
     // Encryption params
     TString EncryptionKey;

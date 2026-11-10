@@ -41,6 +41,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers
     ydb/public/lib/ydb_cli/commands/topic_workload
+    ydb/public/lib/ydb_cli/dump/files
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

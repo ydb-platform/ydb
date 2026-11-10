@@ -3021,10 +3021,14 @@ message TDatabaseFreezeState {
 // already accepted scheme operations, and fix the participating shard set before
 // FENCE_WRITES. Keep this fence until OPEN. Freeze is not inherited by split/merge
 // destinations. CDC scan finalization and a pure legacy table Unfreeze remain
-// allowed locally; neither may remove the database fence. Keep CDC streams
-// and asynchronous indexes intact, and finish cleanup from earlier removals
-// before FENCE_WRITES. DRAIN_CDC emits final resolved timestamps for streams
-// that enable them, and waits for their delivery along with other change records.
+// allowed locally; neither may remove the database fence. Keep CDC streams and
+// asynchronous indexes present at FENCE_WRITES intact until OPEN.
+// Cleanup of queued records for CDC streams or asynchronous indexes removed by
+// earlier scheme operations may remain pending when FENCE_WRITES is acknowledged.
+// Delivery to those removed destinations is not required, but record removal
+// transactions must commit before DRAIN_CDC acknowledges readiness.
+// DRAIN_CDC emits final resolved timestamps for surviving streams that enable
+// them, and waits for their delivery along with other change records.
 message TEvDatabaseFreeze {
     optional uint64 Epoch = 1;
     optional uint64 SchemeShardId = 2;

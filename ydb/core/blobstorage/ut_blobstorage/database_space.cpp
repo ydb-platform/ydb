@@ -419,7 +419,7 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
             .AutomaticBootstrap = true,
         });
         ctx.SetThresholds(TColor::YELLOW, TColor::YELLOW);
-        const TSubscriber subscriber = ctx.Subscribe(1);
+        const TSubscriber subscriber = ctx.Subscribe(ctx.Env.Settings.ControllerNodeId + 1);
         ctx.WaitState(subscriber, false, TDuration::Seconds(10));
 
         const auto groups = ctx.Env.GetGroups();
@@ -439,10 +439,20 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
         ctx.Env.Sim(TDuration::Seconds(20));
         reportPart(parts[1], TColor::YELLOW);
         ctx.WaitState(subscriber, true, TDuration::Seconds(9));
+        ctx.Env.Sim(TDuration::Seconds(20)); // let BSC persist the colors
+
+        // Stable colors and the exhaustion latch must survive a controller restart.
+        size_t numStates = subscriber.States->size();
+        ctx.Env.RestartNode(ctx.Env.Settings.ControllerNodeId);
+        ctx.WaitState(subscriber, true, TDuration::Seconds(60), numStates);
+        ctx.Env.Sim(TDuration::Seconds(20));
+        for (size_t i = numStates; i < subscriber.States->size(); ++i) {
+            UNIT_ASSERT_C((*subscriber.States)[i].GetExhausted(), "database got unblocked after BS_CONTROLLER restart");
+        }
 
         // Removing the full part from the data quorum unblocks the pool without waiting for new metrics.
         NBridgeTest::SwitchPileState(ctx.Env, 1, NKikimrBridge::TClusterState::SUSPENDED);
-        const size_t numStates = subscriber.States->size();
+        numStates = subscriber.States->size();
         ctx.WaitState(subscriber, false, TDuration::Seconds(10), numStates);
 
         // A healthy part outside the data quorum must not keep the remaining full part unblocked.

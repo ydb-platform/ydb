@@ -36,6 +36,8 @@ The export to S3 command requires specifying [S3 connection parameters](../auth-
 
 {% include [export-root-include-exclude-params.md](export-root-include-exclude-params.md) %}
 
+`--include-external`: Include and validate external data source and external table definitions from the selected paths. Requires server support with external-object export enabled. Disabled by default.
+
 {% cut "Alternative method" %}
 
 An alternative way to specify the list of objects is supported:

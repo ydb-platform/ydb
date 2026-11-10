@@ -226,6 +226,35 @@ def build_html_dashboard(
     .measured-tree .st-nl, #measuredMeta .st-nl {{ color: #fff; background: #6c757d; }}
     .measured-tree .st-other, #measuredMeta .st-other {{ color: #374151; background: #e5e7eb; }}
     .measured-tree .odur, #measuredMeta .odur {{ color: #6b7280; font-variant-numeric: tabular-nums; }}
+    .measured-meta-wrap {{
+      display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;
+    }}
+    #measuredMeta {{
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 8px 10px; border: 1px solid #e6e8eb; border-radius: 8px;
+      background: #f6f8fa; color: var(--fg); font-size: 12px; line-height: 1.45;
+      min-width: 0; flex: 1;
+    }}
+    #measuredMeta .measured-meta-title {{
+      font-weight: 650; font-size: 13px; word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }}
+    #measuredMeta .measured-meta-grid {{
+      display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline;
+    }}
+    #measuredMeta .measured-meta-item {{
+      display: inline-flex; gap: 6px; align-items: baseline;
+      font-variant-numeric: tabular-nums;
+    }}
+    #measuredMeta .measured-meta-item em {{
+      font-style: normal; color: #656d76; font-weight: 500; font-size: 11px;
+    }}
+    #measuredMeta .measured-meta-item strong {{ font-weight: 650; }}
+    #measuredMeta .measured-meta-signals,
+    #measuredMeta .measured-meta-note {{
+      color: #656d76; font-size: 11px;
+    }}
+    #measuredMeta .outcomes {{ display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }}
     .measured-charts {{ flex: 1; min-width: 0; }}
     .measured-test-list {{ margin: 0 0 10px 0; padding: 0; list-style: none; font-size: 12px; line-height: 1.45; }}
     .measured-test-list li {{ display: flex; gap: 8px; align-items: flex-start; padding: 3px 6px; border-radius: 4px; }}
@@ -494,9 +523,9 @@ def build_html_dashboard(
     </span>
   </div>
   <div id="measuredWrap" style="display:none;margin:12px 0 16px 0;padding:10px 12px;border:1px solid #d0d7de;border-radius:8px;background:#fff;">
-    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+    <div class="measured-meta-wrap">
       <b>Measured per test (cgroup layers)</b>
-      <span id="measuredMeta" class="muted"></span>
+      <div id="measuredMeta"></div>
     </div>
     <div class="measured-body">
       <div class="measured-nav">
@@ -505,10 +534,10 @@ def build_html_dashboard(
             <b>Top chunks</b>
             <label>by
               <select id="measuredTopMetric">
-                <option value="max_cpu" selected>CPU (c)</option>
-                <option value="max_ram_gb">RAM (G)</option>
-                <option value="max_write_mbps">disk write (w)</option>
-                <option value="max_read_mbps">disk read (r)</option>
+                <option value="max_cpu" selected>CPU cores</option>
+                <option value="max_ram_gb">RAM GB</option>
+                <option value="max_write_mbps">disk write MB/s</option>
+                <option value="max_read_mbps">disk read MB/s</option>
               </select>
             </label>
             <label>N
@@ -4017,12 +4046,66 @@ def build_html_dashboard(
       const haveEvents = events.some(v => v != null);
       return text + (haveEvents ? ' · mem high/max/oom/kill ' + events.map(v => v == null ? '—' : String(Math.round(v))).join('/') : '');
     }}
+    function measuredSignalsHtml(rows) {{
+      const src = rows || [];
+      const max = key => {{
+        const vals = src.map(r => Number(r[key])).filter(Number.isFinite);
+        return vals.length ? Math.max(...vals) : null;
+      }};
+      const sum = key => {{
+        const vals = src.map(r => Number(r[key])).filter(Number.isFinite);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+      }};
+      const fields = ['max_cpu_throttled_pct','max_cpu_psi_pct','max_memory_psi_pct','max_io_psi_pct'];
+      if (!src.some(r => fields.some(k => r[k] != null))) {{
+        return '<div class="measured-meta-signals">Cgroup pressure: n/a</div>';
+      }}
+      const pct = value => value == null ? '—' : Number(value).toFixed(1) + '%';
+      const throttledPeriods = sum('cpu_nr_throttled_delta');
+      const throttledUsec = sum('cpu_throttled_usec_delta');
+      const throttleExtra = (throttledPeriods != null || throttledUsec != null)
+        ? ' (' + (throttledPeriods == null ? '—' : Math.round(throttledPeriods)) + ' periods, ' +
+          (throttledUsec == null ? '—' : (throttledUsec / 1000000).toFixed(2) + 's') + ')'
+        : '';
+      const memEvents = [
+        sum('memory_high_events_delta'),
+        sum('memory_max_events_delta'),
+        sum('memory_oom_events_delta'),
+        sum('memory_oom_kill_events_delta'),
+      ].map(v => v == null ? '—' : String(Math.round(v))).join(' / ');
+      return '<div class="measured-meta-signals">' +
+        '<span class="measured-meta-item"><em>CPU throttle</em> <strong>' + pct(max('max_cpu_throttled_pct')) + throttleExtra + '</strong></span> · ' +
+        '<span class="measured-meta-item"><em>PSI CPU</em> <strong>' + pct(max('max_cpu_psi_pct')) + '</strong></span> · ' +
+        '<span class="measured-meta-item"><em>PSI mem</em> <strong>' + pct(max('max_memory_psi_pct')) + '</strong></span> · ' +
+        '<span class="measured-meta-item"><em>PSI I/O</em> <strong>' + pct(max('max_io_psi_pct')) + '</strong></span> · ' +
+        '<span class="measured-meta-item"><em>mem events high/max/oom/kill</em> <strong>' + memEvents + '</strong></span>' +
+        '</div>';
+    }}
     function measuredStatsText(agg, hideCount) {{
-      // Sum of per-chunk peaks — not concurrent load on the charts.
+      // Compact form for the tree; header uses measuredMetaHtml.
       const body = agg.cpu.toFixed(2) + 'c · ' + agg.ram_gb.toFixed(2) + 'G · w' +
         agg.write_mbps.toFixed(1) + ' r' + agg.read_mbps.toFixed(1);
       if (hideCount) return body;
       return agg.n + (agg.n > 1 ? ' · Σpeaks ' : ' · ') + body;
+    }}
+    function measuredMetaItem(label, value) {{
+      return '<span class="measured-meta-item"><em>' + escapeHtml(label) + '</em> <strong>' + value + '</strong></span>';
+    }}
+    function measuredMetaHtml(title, agg, outcomes, rows) {{
+      const multi = agg.n > 1;
+      const cpuLabel = multi ? 'sum of CPU peaks' : 'CPU peak';
+      const ramLabel = multi ? 'sum of RAM peaks' : 'RAM peak';
+      const grid = [
+        measuredMetaItem('chunks', String(agg.n)),
+        measuredMetaItem(cpuLabel, agg.cpu.toFixed(2) + ' cores'),
+        measuredMetaItem(ramLabel, agg.ram_gb.toFixed(2) + ' GB'),
+        measuredMetaItem('disk write peak', agg.write_mbps.toFixed(1) + ' MB/s'),
+        measuredMetaItem('disk read peak', agg.read_mbps.toFixed(1) + ' MB/s'),
+      ].join('');
+      return '<div class="measured-meta-title">' + escapeHtml(title) + '</div>' +
+        '<div class="measured-meta-grid">' + grid +
+        '<span class="outcomes">' + measuredOutcomesHtml(outcomes) + '</span></div>' +
+        measuredSignalsHtml(rows);
     }}
     function measuredAggExtremes(aggs) {{
       const ext = {{ cpu: 0, ram_gb: 0, write_mbps: 0, read_mbps: 0 }};
@@ -4115,9 +4198,8 @@ def build_html_dashboard(
         : (sel.kind === 'chunk' ? ((measuredList.find(r => r.key === sel.key) || {{}}).label || sel.key) : (sel.path || sel.suite));
       const outcomes = outcomesForRows(rows);
       if (meta) {{
-        meta.innerHTML = escapeHtml(title + ': ' + measuredStatsText(agg)) +
-          ' · ' + measuredOutcomesHtml(outcomes) +
-          '<div class="muted" style="margin-top:3px">' + escapeHtml(measuredSignalsText(rows)) + '</div>';
+        meta.innerHTML = measuredMetaHtml(title, agg, outcomes, rows) +
+          '<div id="measuredLoadStatus" class="load-inline"></div>';
       }}
       const suffix = (!sel || sel.kind === 'all') ? ' (all)' : (sel.kind === 'chunk' ? ' (one chunk)' : ' / ' + (sel.path || sel.suite));
       if (sel && (sel.path || sel.suite)) openMeasuredPath(sel.path || sel.suite, false);
@@ -4126,9 +4208,6 @@ def build_html_dashboard(
       const chunkTests = testsForMeasuredSelection(sel);
       const token = {{}};
       window._measuredSelectToken = token;
-      if (meta && !document.getElementById('measuredLoadStatus')) {{
-        meta.innerHTML += '<div id="measuredLoadStatus" class="load-inline"></div>';
-      }}
       _measuredLastSel = sel || {{kind: 'all'}};
       setMeasuredLoading(true, 'Loading measured series…');
       ensureMeasuredSeriesForRows(rows, sel, (msg) => {{
@@ -4148,12 +4227,11 @@ def build_html_dashboard(
         hideBoot();
         if (meta && peaks && (peaks.cpuPeak > 0 || peaks.ramPeak > 0)) {{
           const note = document.createElement('div');
-          note.className = 'muted';
-          note.style.marginTop = '3px';
-          note.textContent = 'Charts show concurrent cgroup load (peak ' +
-            Number(peaks.cpuPeak || 0).toFixed(1) + 'c / ' +
+          note.className = 'measured-meta-note';
+          note.textContent = 'Charts: concurrent cgroup load (peak ' +
+            Number(peaks.cpuPeak || 0).toFixed(1) + ' cores / ' +
             Number(peaks.ramPeak || 0).toFixed(1) +
-            'G). Tree Σpeaks is the sum of per-chunk maxima, not concurrent usage.';
+            ' GB). Numbers above for multi-chunk nodes are sums of per-chunk peaks, not concurrent usage.';
           meta.appendChild(note);
         }}
       }}).catch((err) => {{
@@ -4249,15 +4327,14 @@ def build_html_dashboard(
       renderMeasuredTop();
     }};
     function measuredTopMetricMeta(metric) {{
-      if (metric === 'max_ram_gb') return {{ key: 'max_ram_gb', suffix: 'G', digits: 2 }};
-      if (metric === 'max_write_mbps') return {{ key: 'max_write_mbps', suffix: 'w', digits: 1, prefix: 'w' }};
-      if (metric === 'max_read_mbps') return {{ key: 'max_read_mbps', suffix: 'r', digits: 1, prefix: 'r' }};
-      return {{ key: 'max_cpu', suffix: 'c', digits: 2 }};
+      if (metric === 'max_ram_gb') return {{ key: 'max_ram_gb', unit: ' GB', digits: 2 }};
+      if (metric === 'max_write_mbps') return {{ key: 'max_write_mbps', unit: ' MB/s write', digits: 1 }};
+      if (metric === 'max_read_mbps') return {{ key: 'max_read_mbps', unit: ' MB/s read', digits: 1 }};
+      return {{ key: 'max_cpu', unit: ' cores', digits: 2 }};
     }}
     function formatMeasuredTopValue(row, meta) {{
       const n = Number(row && row[meta.key]) || 0;
-      const body = n.toFixed(meta.digits) + (meta.prefix ? '' : meta.suffix);
-      return meta.prefix ? (meta.prefix + n.toFixed(meta.digits)) : body;
+      return n.toFixed(meta.digits) + meta.unit;
     }}
     function renderMeasuredTop() {{
       const list = document.getElementById('measuredTopList');
@@ -4277,10 +4354,10 @@ def build_html_dashboard(
       list.innerHTML = ranked.map((row, i) => {{
         const on = selectedKey && row.key === selectedKey ? ' on' : '';
         const extras = [
-          Number(row.max_cpu || 0).toFixed(2) + 'c',
-          Number(row.max_ram_gb || 0).toFixed(2) + 'G',
-          'w' + Number(row.max_write_mbps || 0).toFixed(1),
-          'r' + Number(row.max_read_mbps || 0).toFixed(1),
+          Number(row.max_cpu || 0).toFixed(2) + ' cores',
+          Number(row.max_ram_gb || 0).toFixed(2) + ' GB',
+          'write ' + Number(row.max_write_mbps || 0).toFixed(1) + ' MB/s',
+          'read ' + Number(row.max_read_mbps || 0).toFixed(1) + ' MB/s',
         ].join(' · ');
         return '<li class="' + on.trim() + '" data-key="' + escapeHtml(row.key || '') +
           '" data-suite="' + escapeHtml(row.suite || '') + '">' +

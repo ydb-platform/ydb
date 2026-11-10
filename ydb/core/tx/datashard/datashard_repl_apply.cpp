@@ -138,7 +138,10 @@ public:
         TDataShardChangeGroupProvider groupProvider(*Self, txc.DB);
         THolder<IDataShardChangeCollector> collector;
         if (userTable.HasAsyncIndexes()) {
-            collector.Reset(CreateChangeCollector(*Self, userDb, groupProvider, txc.DB, userTable));
+            const auto indexKeySizePolicy = userTable.IsReplicated()
+                ? EAsyncIndexKeySizePolicy::SkipOversizedIntermediateKeys
+                : EAsyncIndexKeySizePolicy::Reject;
+            collector.Reset(CreateChangeCollector(*Self, userDb, groupProvider, txc.DB, userTable, indexKeySizePolicy));
             // Previously staged base writes are the logical pre-image for new
             // global-consistency stream records, including after a shard reboot.
             for (ui64 openTxId : txc.DB.GetOpenTxs(userTable.LocalTid)) {

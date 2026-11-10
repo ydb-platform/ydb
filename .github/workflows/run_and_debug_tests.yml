@@ -23,6 +23,11 @@ on:
         required: false
         type: boolean
         default: false
+      shard_count:
+        description: '1 (default), auto, or 2-16 — passed through to run_tests'
+        required: false
+        type: string
+        default: '1'
 
 jobs:
   prepare:
@@ -35,18 +40,15 @@ jobs:
         id: format-branches
         run: |
           if [ -z "${{ inputs.branches }}" ]; then
-            # Empty - will use branches_config_path or default
             echo "branches_json=" >> $GITHUB_OUTPUT
           elif [[ "${{ inputs.branches }}" == \[* ]]; then
-            # Already JSON array
             echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
           else
-            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
             IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
             JSON_BRANCHES="["
             FIRST=true
             for branch in "${BRANCHES[@]}"; do
-              branch=$(echo "$branch" | xargs)  # trim whitespace
+              branch=$(echo "$branch" | xargs)
               if [ -n "$branch" ]; then
                 if [ "$FIRST" = true ]; then
                   FIRST=false
@@ -58,7 +60,6 @@ jobs:
             done
             JSON_BRANCHES+="]"
             echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
-            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
           fi
 
       - name: Format build presets
@@ -68,17 +69,14 @@ jobs:
           if [ -z "$BUILD_PRESET_INPUT" ]; then
             BUILD_PRESET_INPUT="relwithdebinfo"
           fi
-          
-          # Check if already JSON array
           if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
             echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
           else
-            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
             IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
             JSON_PRESETS="["
             FIRST=true
             for preset in "${PRESETS[@]}"; do
-              preset=$(echo "$preset" | xargs)  # trim whitespace
+              preset=$(echo "$preset" | xargs)
               if [ -n "$preset" ]; then
                 if [ "$FIRST" = true ]; then
                   FIRST=false
@@ -90,7 +88,6 @@ jobs:
             done
             JSON_PRESETS+="]"
             echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
-            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
           fi
 
   main:
@@ -108,6 +105,7 @@ jobs:
       build_preset: ${{ matrix.build_preset }}
       branches: ${{ needs.prepare.outputs.branches_json || '' }}
       branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
+      shard_count: ${{ inputs.shard_count }}
 
   collect_combined_summary:
     needs: main

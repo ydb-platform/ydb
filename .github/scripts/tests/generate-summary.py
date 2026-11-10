@@ -10,6 +10,7 @@ import traceback
 from enum import Enum
 from operator import attrgetter
 from typing import List, Dict
+from urllib.parse import quote, urlsplit, urlunsplit
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
 from error_type_utils import (
@@ -304,9 +305,21 @@ class TestSummary:
         return result
 
 
+def href_url(url):
+    """Encode the path so spaces in github.workflow survive markdown links."""
+    if not url:
+        return url
+    parts = urlsplit(url)
+    if not parts.scheme:
+        return url
+    return urlunsplit(
+        (parts.scheme, parts.netloc, quote(parts.path, safe="/%"), parts.query, parts.fragment)
+    )
+
+
 def render_pm(value, url, diff=None):
     if value:
-        text = f"[{value}]({url})"
+        text = f"[{value}]({href_url(url)})"
     else:
         text = str(value)
 
@@ -456,10 +469,6 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
 
     dashboard_rel = "tests_metrics/dashboard.html"
     dashboard_url = dashboard_rel if os.path.isfile(os.path.join(os.path.dirname(fn), dashboard_rel)) else None
-    test_bloat_rel = "test_bloat/tree_map.html"
-    test_bloat_url = test_bloat_rel if os.path.isfile(os.path.join(os.path.dirname(fn), test_bloat_rel)) else None
-    resource_usage_rel = "test_resources/report.html"
-    resource_usage_url = resource_usage_rel if os.path.isfile(os.path.join(os.path.dirname(fn), resource_usage_rel)) else None
     
     # Load owner to area mapping
     owner_area_mapping = load_owner_area_mapping()
@@ -536,8 +545,6 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         workflow_run_id=workflow_run_id,
         workflow_url=workflow_url,
         dashboard_url=dashboard_url,
-        test_bloat_url=test_bloat_url,
-        resource_usage_url=resource_usage_url,
         owner_area_mapping=owner_area_mapping,
         commit_sha=github_sha
     )
@@ -552,6 +559,14 @@ def write_summary(summary: TestSummary):
         fp = open(summary_fn, "at")
     else:
         fp = sys.stdout
+
+    shard = os.environ.get("S3_SUBDIR") or ""
+    if shard:
+        fp.write(f"### This shard only (`{shard}`)\n\n")
+        fp.write(
+            "These tables are this job's tries. The combined TESTS table is "
+            "the PR comment and the `shard_result` job after every shard finishes.\n\n"
+        )
 
     for line in summary.render(add_footnote=True):
         fp.write(f"{line}\n")

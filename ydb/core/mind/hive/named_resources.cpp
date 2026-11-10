@@ -172,6 +172,12 @@ TNamedResourceRegistry::TConfig TNamedResourceRegistry::GetBuiltInDefaults() {
         settings->SetName(NResourceBroker::MakeQueueResourceName("queue_cdc_initial_scan"));
         settings->SetBalanceMode(NKikimrConfig::THiveConfig::TNamedResourceSettings::SATURATION);
     }
+    {
+        // backups (exports) of datashards wait in this queue
+        auto* settings = defaults.Add();
+        settings->SetName(NResourceBroker::MakeQueueResourceName("queue_backup"));
+        settings->SetBalanceMode(NKikimrConfig::THiveConfig::TNamedResourceSettings::SATURATION);
+    }
     return defaults;
 }
 

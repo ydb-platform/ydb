@@ -60,3 +60,49 @@ message RestartTabletResponse {
     Ydb.StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
 }
+
+message ReassignTabletsRequest {
+    // Database path used to resolve Hive.
+    string database = 1;
+
+    // Optional storage pool filter. At least storage_pool or a non-zero group is required.
+    string storage_pool = 2;
+
+    // Current storage group to filter by. Zero means all groups, as in Hive HTTP.
+    uint32 group = 3;
+
+    // Maximum number of tablets being reassigned concurrently. Defaults to 1; must be positive.
+    optional uint32 max_in_flight = 4;
+
+    // Percentage of matching tablets, starting with the oldest channel assignments.
+    // Defaults to 100. Valid values are 0 through 100.
+    optional uint32 percent = 5;
+
+    // Mark channels for reassignment on a subsequent restart instead of starting it immediately.
+    // This does not control whether the RPC waits: the RPC always acknowledges the start only.
+    bool async = 6;
+}
+
+message ReassignTabletsResponse {
+    Ydb.StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+
+    // Number selected by Hive.
+    // SUCCESS means the job was started, not that these tablets have finished reassignment.
+    uint64 selected_tablets = 3;
+
+    // Opaque identifier for StopReassignTablets. Valid for the current Hive incarnation.
+    string id = 4;
+}
+
+message StopReassignTabletsRequest {
+    string id = 1;
+}
+
+message StopReassignTabletsResponse {
+    // SUCCESS means no further tablets will be scheduled by this job.
+    // Reassignments already dispatched continue; completed changes are not rolled back.
+    // NOT_FOUND means the job is no longer running, including after a Hive restart.
+    Ydb.StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+}

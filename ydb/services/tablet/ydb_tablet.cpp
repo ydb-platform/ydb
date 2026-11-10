@@ -53,6 +53,8 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_TABLET_METHOD(ExecuteTabletMiniKQL, DoExecuteTabletMiniKQLRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_TABLET_METHOD(ChangeTabletSchema, DoChangeTabletSchemaRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_TABLET_METHOD(RestartTablet, DoRestartTabletRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_TABLET_METHOD(ReassignTablets, DoReassignTabletsRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_TABLET_METHOD(StopReassignTablets, DoStopReassignTabletsRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
 #undef SETUP_TABLET_METHOD
 }

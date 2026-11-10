@@ -10401,6 +10401,222 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(blockStorageRequests.size(), 1);
     }
 
+    Y_UNIT_TEST(TestReassignTabletsByPool) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 3);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 owner = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        auto create = [&](ui64 index, const TVector<TChannelBind>& channels) {
+            auto request = MakeHolder<TEvHive::TEvCreateTablet>(owner, index, TTabletTypes::Dummy, channels);
+            const ui64 tablet = SendCreateTestTablet(runtime, hiveTablet, owner, std::move(request), 0, true);
+            MakeSureTabletIsUp(runtime, tablet, 0);
+            return tablet;
+        };
+        const ui64 first = create(1, {GetChannelBind("def1"), GetChannelBind("def2"), GetChannelBind("def1")});
+        const ui64 second = create(2, {GetChannelBind("def2"), GetChannelBind("def1"), GetChannelBind("def2")});
+        const ui64 excluded = create(3, {GetChannelBind("def2"), GetChannelBind("def2"), GetChannelBind("def2")});
+
+        auto info = [&](ui64 tablet) {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo({
+                .TabletId = tablet,
+                .ReturnChannelHistory = true,
+            }));
+            TAutoPtr<IEventHandle> handle;
+            return runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle)->Record.GetTablets(0);
+        };
+        const auto excludedBefore = info(excluded);
+
+        TBlockEvents<TEvHive::TEvReassignTablet> blocked(runtime);
+        auto request = std::make_unique<TEvHive::TEvReassignTablets>();
+        request->Record.SetStoragePool("def1");
+        request->Record.SetMaxInFlight(1);
+        runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSelectedTablets(), 2);
+
+        THashSet<ui64> seen;
+        for (ui32 i = 0; i < 2; ++i) {
+            runtime.WaitFor("next pool reassign", [&] { return !blocked.empty(); });
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1); // max_in_flight applies to the whole job
+            const auto& reassign = blocked.front()->Get()->Record;
+            const ui64 tablet = reassign.GetTabletID();
+            UNIT_ASSERT(seen.insert(tablet).second);
+            const TVector<ui32> channels(reassign.GetChannels().begin(), reassign.GetChannels().end());
+            if (tablet == first) {
+                UNIT_ASSERT_VALUES_EQUAL(channels, (TVector<ui32>{0, 2}));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(tablet, second);
+                UNIT_ASSERT_VALUES_EQUAL(channels, (TVector<ui32>{1}));
+            }
+            blocked.Unblock(1);
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(blocked.empty());
+        for (ui32 channel = 0; channel < 3; ++channel) {
+            UNIT_ASSERT_VALUES_EQUAL(info(excluded).GetTabletChannels(channel).SerializeAsString(),
+                excludedBefore.GetTabletChannels(channel).SerializeAsString());
+        }
+
+        // Pool and group filters are intersected, just as in the HTTP handler.
+        request = std::make_unique<TEvHive::TEvReassignTablets>();
+        request->Record.SetStoragePool("def1");
+        request->Record.SetGroupId(excludedBefore.GetTabletChannels(0).GetHistory().rbegin()->GetGroup());
+        runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
+        response = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSelectedTablets(), 0);
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT(blocked.empty());
+
+        const ui32 group = info(first).GetTabletChannels(0).GetHistory().rbegin()->GetGroup();
+        THashMap<ui64, TVector<ui32>> expected;
+        for (const ui64 tablet : {first, second}) {
+            const auto tabletInfo = info(tablet);
+            const TVector<ui32> poolChannels = tablet == first ? TVector<ui32>{0, 2} : TVector<ui32>{1};
+            for (const ui32 channel : poolChannels) {
+                const auto& channelInfo = tabletInfo.GetTabletChannels(channel);
+                if (channelInfo.GetHistory().rbegin()->GetGroup() == group) {
+                    expected[tablet].push_back(channel);
+                }
+            }
+        }
+        UNIT_ASSERT(!expected.empty());
+        request = std::make_unique<TEvHive::TEvReassignTablets>();
+        request->Record.SetStoragePool("def1");
+        request->Record.SetGroupId(group);
+        request->Record.SetMaxInFlight(2);
+        runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
+        response = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSelectedTablets(), expected.size());
+        runtime.WaitFor("pool and group reassign", [&] { return blocked.size() == expected.size(); });
+        for (const auto& event : blocked) {
+            const auto& reassign = event->Get()->Record;
+            const TVector<ui32> channels(reassign.GetChannels().begin(), reassign.GetChannels().end());
+            UNIT_ASSERT_VALUES_EQUAL(channels, expected.at(reassign.GetTabletID()));
+            expected.erase(reassign.GetTabletID());
+        }
+        UNIT_ASSERT(expected.empty());
+        blocked.Unblock();
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(blocked.empty());
+
+        request = std::make_unique<TEvHive::TEvReassignTablets>();
+        request->Record.SetStoragePool("def1");
+        request->Record.SetPercent(50);
+        request->Record.SetAsync(true);
+        runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
+        response = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSelectedTablets(), 1);
+        runtime.WaitFor("partial pool reassign", [&] { return !blocked.empty(); });
+        UNIT_ASSERT(blocked.front()->Get()->Record.GetAsync());
+        blocked.Stop().Unblock();
+    }
+
+    Y_UNIT_TEST(TestStopReassignTablets) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 3);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 owner = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        const auto sender = runtime.AllocateEdgeActor();
+        THashSet<ui64> secondPool;
+        for (ui64 i = 0; i < 4; ++i) {
+            auto create = MakeHolder<TEvHive::TEvCreateTablet>(owner, i, TTabletTypes::Dummy,
+                TVector<TChannelBind>(3, GetChannelBind(i < 2 ? "def1" : "def2")));
+            const ui64 tablet = SendCreateTestTablet(runtime, hiveTablet, owner, std::move(create), 0, true);
+            MakeSureTabletIsUp(runtime, tablet, 0);
+            if (i >= 2) {
+                secondPool.insert(tablet);
+            }
+        }
+
+        TBlockEvents<TEvHive::TEvReassignTablet> blocked(runtime);
+        auto start = [&](const TString& pool) {
+            auto request = std::make_unique<TEvHive::TEvReassignTablets>();
+            request->Record.SetStoragePool(pool);
+            request->Record.SetMaxInFlight(1);
+            runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            const auto reply = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle)->Record;
+            UNIT_ASSERT_VALUES_EQUAL(reply.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(reply.GetSelectedTablets(), 2);
+            UNIT_ASSERT(reply.GetReassignId());
+            return reply;
+        };
+        auto stop = [&](ui64 id, ui64 generation) {
+            auto request = std::make_unique<TEvHive::TEvStopReassignTablets>();
+            request->Record.SetReassignId(id);
+            request->Record.SetHiveGeneration(generation);
+            runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            return runtime.GrabEdgeEventRethrow<TEvHive::TEvStopReassignTabletsReply>(handle)->Record.GetStatus();
+        };
+
+        const auto first = start("def1");
+        runtime.WaitFor("first reassign dispatched", [&] { return blocked.size() == 1; });
+        const auto second = start("def2");
+        runtime.WaitFor("second reassign dispatched", [&] { return blocked.size() == 2; });
+        UNIT_ASSERT_VALUES_UNEQUAL(first.GetReassignId(), second.GetReassignId());
+        const ui64 secondStartedTablet = blocked.back()->Get()->Record.GetTabletID();
+        UNIT_ASSERT(secondPool.contains(secondStartedTablet));
+
+        UNIT_ASSERT_VALUES_EQUAL(stop(first.GetReassignId(), first.GetHiveGeneration() + 1), NKikimrProto::NODATA);
+        UNIT_ASSERT_VALUES_EQUAL(stop(first.GetReassignId(), first.GetHiveGeneration()), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(stop(first.GetReassignId(), first.GetHiveGeneration()), NKikimrProto::NODATA);
+
+        // Both requests already dispatched are allowed to finish; only the second job continues.
+        blocked.Unblock();
+        runtime.WaitFor("second job continues", [&] { return !blocked.empty(); });
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1);
+        const ui64 nextTablet = blocked.front()->Get()->Record.GetTabletID();
+        UNIT_ASSERT(secondPool.contains(nextTablet));
+        UNIT_ASSERT_VALUES_UNEQUAL(nextTablet, secondStartedTablet);
+        UNIT_ASSERT_VALUES_EQUAL(stop(second.GetReassignId(), second.GetHiveGeneration()), NKikimrProto::OK);
+        blocked.Unblock();
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(blocked.empty());
+    }
+
+    Y_UNIT_TEST(TestReassignTabletsWithoutCountConfirmation) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 1);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 owner = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        const auto sender = runtime.AllocateEdgeActor();
+        constexpr ui32 tabletCount = 1011; // Exceeds the HTTP threshold including its tolerance.
+        for (ui32 i = 0; i < tabletCount; ++i) {
+            auto create = MakeHolder<TEvHive::TEvCreateTablet>(owner, i, TTabletTypes::Dummy,
+                TVector<TChannelBind>(3, GetChannelBind("def1")));
+            SendCreateTestTablet(runtime, hiveTablet, owner, std::move(create), 0, true);
+        }
+        TBlockEvents<TEvHive::TEvReassignTablet> blocked(runtime);
+        auto request = std::make_unique<TEvHive::TEvReassignTablets>();
+        request->Record.SetStoragePool("def1");
+        runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        const auto response = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle)->Record;
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetSelectedTablets(), tabletCount);
+
+        auto stop = std::make_unique<TEvHive::TEvStopReassignTablets>();
+        stop->Record.SetReassignId(response.GetReassignId());
+        stop->Record.SetHiveGeneration(response.GetHiveGeneration());
+        runtime.SendToPipe(hiveTablet, sender, stop.release(), 0, GetPipeConfigWithRetries());
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEventRethrow<TEvHive::TEvStopReassignTabletsReply>(handle)->Record.GetStatus(), NKikimrProto::OK);
+    }
+
     Y_UNIT_TEST(TestMonReassignFilters) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true, 3);

@@ -15,6 +15,7 @@ private:
 
 protected:
     TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& evi, THive* self);
+    TLoggedMonTransaction(TString user, THive* self);
 
     void WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op, TStringBuf description);
 

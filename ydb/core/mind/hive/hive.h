@@ -1,5 +1,6 @@
 #pragma once
 #include <bitset>
+#include <optional>
 #include <ranges>
 
 #include <util/generic/queue.h>

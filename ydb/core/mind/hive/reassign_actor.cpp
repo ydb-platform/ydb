@@ -184,10 +184,33 @@ public:
     }
 };
 
-void THive::StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback) {
+TSubActorId THive::StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback) {
     auto* actor = new TReassignTabletsActor(std::move(operations), source, maxInFlight, std::move(description), std::move(callback), this);
     SubActors.emplace_back(actor);
-    RegisterWithSameMailbox(actor);
+    return RegisterWithSameMailbox(actor).LocalId();
+}
+
+void THive::Handle(TEvHive::TEvStopReassignTablets::TPtr& ev) {
+    const auto& request = ev->Get()->Record;
+    auto reply = std::make_unique<TEvHive::TEvStopReassignTabletsReply>();
+    reply->Record.SetStatus(NKikimrProto::NODATA);
+    if (request.GetHiveGeneration() == HiveGeneration) {
+        for (auto* subActor : SubActors) {
+            if (subActor->GetId() != request.GetReassignId()) {
+                continue;
+            }
+            if (auto* reassign = dynamic_cast<TReassignTabletsActor*>(subActor)) {
+                reassign->Cleanup();
+                reply->Record.SetStatus(NKikimrProto::OK);
+                YDB_LOG_INFO("Hive API: reassign stopped",
+                    {"logPrefix", GetLogPrefix()},
+                    {"user", request.GetUserSID()},
+                    {"reassignId", request.GetReassignId()});
+            }
+            break;
+        }
+    }
+    Send(ev->Sender, reply.release(), 0, ev->Cookie);
 }
 
 void THive::ContinueInterruptedReassigns(std::vector<TReassignOperation> operations) {

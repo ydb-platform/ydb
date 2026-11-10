@@ -11,5 +11,7 @@ class IFacilityProvider;
 void DoExecuteTabletMiniKQLRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoChangeTabletSchemaRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoRestartTabletRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+void DoReassignTabletsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+void DoStopReassignTabletsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 } // namespace NKikimr::NGRpcService

@@ -10,15 +10,13 @@
 #include "hive_schema.h"
 #include "hive_log.h"
 #include "monitoring.h"
+#include "reassign.h"
 #include "tx__set_down.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
-
-static constexpr ui64 MAX_REASSIGNS_WITHOUT_CONFIRMATION = 1000;
-static constexpr i64 REASSIGN_CONFIRMATION_ERROR_MARGIN = 10;
 
 TString GetMonUser(const NMon::TEvRemoteHttpInfo* ev) {
     const auto& query = ev->ExtendedQuery;
@@ -35,8 +33,12 @@ TString GetMonUserForLog(const NMon::TEvRemoteHttpInfo* ev) {
 }
 
 TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self)
+    : TLoggedMonTransaction(GetMonUser(ev->Get()), self)
+{}
+
+TLoggedMonTransaction::TLoggedMonTransaction(TString user, THive* self)
     : Index(++self->OperationsLogIndex)
-    , User(GetMonUser(ev->Get()))
+    , User(std::move(user))
     , LogPrefix(self->GetLogPrefix())
 {}
 
@@ -3580,41 +3582,12 @@ public:
             TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(cgi.Get("type"), TabletType);
         }
 
-        bool CheckTabletId(const TLeaderTabletInfo* tablet) const {
-            if (auto* tabletId = std::get_if<TTabletId>(&TabletId)) {
-                return tablet->Id == *tabletId;
-            }
-            return true;
-        }
-
-        bool CheckTabletType(const TLeaderTabletInfo* tablet) const {
-            return TabletType == TTabletTypes::TypeInvalid || TabletType == tablet->Type;
-        }
-
-        bool operator()(const TLeaderTabletInfo* tablet) const {
-            return CheckTabletId(tablet) && CheckTabletType(tablet);
-        }
-
         bool IsValidFilter(TString& error) const {
             if (std::holds_alternative<std::monostate>(TabletId)) {
                 error = "must specify tablet";
                 return false;
             }
             return true;
-        }
-
-        bool AllowsEverything() const {
-            return std::holds_alternative<TAllTablets>(TabletId) && TabletType == TTabletTypes::TypeInvalid;
-        }
-
-        template <typename TStream>
-        void ToString(TStream& out) const {
-            if (std::holds_alternative<TTabletId>(TabletId)) {
-                out << std::get<TTabletId>(TabletId) << ", ";
-            }
-            if (TabletType != TTabletTypes::TypeInvalid) {
-                out << TTabletTypes::EType_Name(TabletType) << ", ";
-            }
         }
 
     };
@@ -3662,27 +3635,6 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
 
-    TInstant GetMaxTimestamp(const TReassignOperation& operation) const {
-        TInstant max;
-        const auto* tablet = Self->FindTablet(operation.TabletId);
-        for (const auto& channel : tablet->TabletStorageInfo->Channels) {
-            if (operation.TabletChannels.empty()
-                    || std::find(
-                        operation.TabletChannels.begin(),
-                        operation.TabletChannels.end(),
-                        channel.Channel) != operation.TabletChannels.end()) {
-                if (tablet->ChannelProfileNewGroup.test(channel.Channel)) {
-                    return TInstant::Max();
-                }
-                const auto* latest = channel.LatestEntry();
-                if (latest != nullptr && latest->Timestamp > max) {
-                    max = latest->Timestamp;
-                }
-            }
-        }
-        return max;
-    }
-
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Error = "Must use POST request";
@@ -3699,74 +3651,33 @@ public:
         if (!TabletFilter.IsValidFilter(Error)) {
             return true;
         }
-        auto tablets = Self->Tablets
-            | std::views::transform([](auto&& p) -> TLeaderTabletInfo* { return &p.second; })
-            | std::views::filter(TabletFilter);
-
-        std::vector<TReassignOperation> operations;
-        for (TLeaderTabletInfo* tablet : tablets) {
-            TVector<ui32> channels;
-            TVector<ui32> forcedGroupIds;
-            bool skip = false;
-            if (GroupId != 0 || StoragePool != "") {
-                skip = true;
-                for (const auto& channel : tablet->TabletStorageInfo->Channels) {
-                    if (StoragePool && channel.StoragePool != StoragePool) {
-                        continue;
-                    }
-                    if (TabletChannels.empty() || Find(TabletChannels, channel.Channel) != TabletChannels.end()) {
-                        const auto* latest = channel.LatestEntry();
-                        if (latest != nullptr && (GroupId == 0 || latest->GroupID == GroupId)) {
-                            skip = false;
-                            channels.push_back(channel.Channel);
-                            if (!ForcedGroupIds.empty()) {
-                                auto itTabletChannel = Find(TabletChannels, channel.Channel);
-                                forcedGroupIds.push_back(ForcedGroupIds[std::distance(TabletChannels.begin(), itTabletChannel)]);
-                            }
-                        }
-                    }
-                }
-            } else {
-                channels = TabletChannels;
-                forcedGroupIds = ForcedGroupIds;
-            }
-            if (skip) {
-                continue;
-            }
-            operations.emplace_back(tablet->Id, channels, forcedGroupIds, Async);
+        TReassignTabletsSettings settings;
+        if (const auto* tabletId = std::get_if<TTabletId>(&TabletFilter.TabletId)) {
+            settings.TabletId = *tabletId;
         }
-
-        TStringBuilder description;
-        if (TabletPercent != 100) {
-            description << TabletPercent << "% of ";
-        }
-        TabletFilter.ToString(description);
-        if (StoragePool) {
-            description << StoragePool << ", ";
-        }
-        description << (GroupId ? ToString(GroupId) : "all groups");
-        if (TabletPercent != 100) {
-            std::sort(operations.begin(), operations.end(), [this](const auto& lhs, const auto& rhs) -> bool {
-                return GetMaxTimestamp(lhs) < GetMaxTimestamp(rhs);
-            });
-            auto it = operations.begin() + operations.size() * TabletPercent / 100;
-            operations.erase(it, operations.end());
-        }
-
-        if (operations.size() > MAX_REASSIGNS_WITHOUT_CONFIRMATION && std::abs(static_cast<i64>(operations.size()) - NumTablets) > REASSIGN_CONFIRMATION_ERROR_MARGIN) {
-            Error = "must confirm number of tablets";
+        settings.TabletType = TabletFilter.TabletType;
+        settings.TabletChannels = TabletChannels;
+        settings.GroupId = GroupId;
+        settings.StoragePool = StoragePool;
+        settings.ForcedGroupIds = ForcedGroupIds;
+        settings.Async = Async;
+        settings.TabletPercent = TabletPercent;
+        settings.NumTablets = NumTablets;
+        auto plan = Self->PrepareReassignTablets(settings);
+        if (!plan.Error.empty()) {
+            Error = std::move(plan.Error);
             return true;
         }
 
         NIceDb::TNiceDb db(txc.DB);
         NJson::TJsonValue jsonOperation;
-        jsonOperation["Reassign"] = description;
-        jsonOperation["TabletsCount"] = operations.size();
+        jsonOperation["Reassign"] = plan.Description;
+        jsonOperation["TabletsCount"] = plan.Operations.size();
         jsonOperation["MaxInFlight"] = MaxInFlight;
         jsonOperation["Async"] = Async;
         WriteOperation(db, jsonOperation, "Hive UI: reassign requested");
 
-        Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringReassignCallback>());
+        Self->StartReassignActor(std::move(plan.Operations), Wait ? Source : TActorId(), MaxInFlight, plan.Description, std::make_unique<TMonitoringReassignCallback>());
         return true;
     }
 

@@ -54,6 +54,8 @@ namespace NKikimr {
             EvRequestDrainInfo,
             EvSetDown,
             EvShrinkStoragePool,
+            EvReassignTablets,
+            EvStopReassignTablets,
 
             // replies
             EvBootTabletReply = EvBootTablet + 512,
@@ -96,6 +98,8 @@ namespace NKikimr {
             EvSetDownReply,
             EvShrinkStoragePoolReply,
             EvShrinkStoragePoolDone,
+            EvReassignTabletsReply,
+            EvStopReassignTabletsReply,
 
             EvEnd
         };
@@ -959,6 +963,14 @@ namespace NKikimr {
         struct TEvShrinkStoragePoolReply : TEventPB<TEvShrinkStoragePoolReply, NKikimrHive::TEvShrinkStoragePoolReply, EvShrinkStoragePoolReply> {};
 
         struct TEvShrinkStoragePoolDone : TEventPB<TEvShrinkStoragePoolDone, NKikimrHive::TEvShrinkStoragePoolDone, EvShrinkStoragePoolDone> {};
+
+        struct TEvReassignTablets : TEventPB<TEvReassignTablets, NKikimrHive::TEvReassignTablets, EvReassignTablets> {};
+
+        struct TEvReassignTabletsReply : TEventPB<TEvReassignTabletsReply, NKikimrHive::TEvReassignTabletsReply, EvReassignTabletsReply> {};
+
+        struct TEvStopReassignTablets : TEventPB<TEvStopReassignTablets, NKikimrHive::TEvStopReassignTablets, EvStopReassignTablets> {};
+
+        struct TEvStopReassignTabletsReply : TEventPB<TEvStopReassignTabletsReply, NKikimrHive::TEvStopReassignTabletsReply, EvStopReassignTabletsReply> {};
     };
 
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);

@@ -10,7 +10,10 @@ ELSE()
 ENDIF()
 
 IF (OS_LINUX)
-    LINKER_SCRIPT(strip_debug.ld)
+    # mold 2.34.1 cannot parse SECTIONS; retain .debug_aranges in this experiment.
+    IF (NOT USE_MOLD_LINKER)
+        LINKER_SCRIPT(strip_debug.ld)
+    ENDIF()
 ENDIF()
 
 SRCS(

@@ -93,15 +93,9 @@ class TController::TTxInit: public TTxBase {
             const auto dstPath = rowset.GetValue<Schema::Targets::DstPath>();
             const auto dstState = rowset.GetValue<Schema::Targets::DstState>();
             const auto issue = rowset.GetValue<Schema::Targets::Issue>();
-            const auto workerSetComplete =
-                rowset.GetValueOrDefault<Schema::Targets::WorkerSetComplete>(false);
             const auto dstPathId = TPathId(
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
-            );
-            const auto pendingDstPathId = TPathId(
-                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathOwnerId>(InvalidOwnerId),
-                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathLocalId>(InvalidLocalPathId)
             );
 
             auto replication = Self->Find(rid);
@@ -123,13 +117,12 @@ class TController::TTxInit: public TTxBase {
             auto* target = replication->AddTarget(tid, kind, config);
             Y_ABORT_UNLESS(target);
 
-            target->SetDstState(dstState);
+            // Resume legacy attachment through the current destination validation path.
+            target->SetDstState(dstState == TReplication::EDstState::Attaching
+                ? TReplication::EDstState::Alter
+                : dstState);
             target->SetDstPathId(dstPathId);
-            target->SetPendingDstPathId(pendingDstPathId);
             target->SetIssue(issue);
-            if (workerSetComplete) {
-                Self->CompleteWorkerSets.insert({rid, tid});
-            }
 
             if (!rowset.Next()) {
                 return false;
@@ -232,13 +225,9 @@ class TController::TTxInit: public TTxBase {
             );
 
             auto* worker = Self->GetOrCreateWorker(id);
-            // Zero denotes a registered worker that has not reported a
-            // heartbeat yet and must not join a recovered heartbeat quorum.
-            if (version != TRowVersion::Min()) {
-                worker->SetHeartbeat(version);
-                Self->WorkersWithHeartbeat.insert(id);
-                Self->WorkersByHeartbeat[version].insert(id);
-            }
+            worker->SetHeartbeat(version);
+            Self->WorkersWithHeartbeat.insert(id);
+            Self->WorkersByHeartbeat[version].insert(id);
 
             if (!rowset.Next()) {
                 return false;

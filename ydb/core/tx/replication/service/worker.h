@@ -97,6 +97,7 @@ struct TEvWorker {
             UNAVAILABLE,
             OVERLOAD,
             DATA_LOSS,
+            DATA_ERROR,
         };
 
         EStatus Status;

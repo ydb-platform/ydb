@@ -10,12 +10,15 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
+    library/cpp/testing/common
+    ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/tests/unit/client/draft/helpers
 )
 
 SRCS(
     bridge_connectivity_ut.cpp
+    ydb_bridge_ut.cpp
     ydb_scripting_response_headers_ut.cpp
     ydb_view_ut.cpp
 )

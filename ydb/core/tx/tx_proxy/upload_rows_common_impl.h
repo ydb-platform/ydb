@@ -379,6 +379,14 @@ private:
             allColumnsLeft.erase(name);
         }
 
+        if (HasAppData() && AppDataVerified().FeatureFlags.GetEnableColumnTableDefaults() && entry.ColumnTableInfo) {
+            for (const auto& col : entry.ColumnTableInfo->Description.GetSchema().GetColumns()) {
+                if (col.HasDefaultValue()) {
+                    allColumnsLeft.erase(col.GetName());
+                }
+            }
+        }
+
         if (!allColumnsLeft.empty()) {
             return TConclusionStatus::Fail(Sprintf("All columns are required during BulkUpsert for column table. Missing columns: %s", JoinSeq(", ", allColumnsLeft).c_str()));
         }

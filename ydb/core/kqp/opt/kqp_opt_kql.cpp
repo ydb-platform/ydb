@@ -444,8 +444,11 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
 
         for (const auto& colAtom : autoIncrement) {
             const auto* colMeta = table.Metadata->Columns.FindPtr(TString(colAtom.Value()));
-            if (colMeta && colMeta->IsDefaultFromLiteral() && !colMeta->DefaultFromLiteral.type().has_pg_type()
-                && table.Metadata->Kind != EKikimrTableKind::Olap) {
+            const bool olapLiteral = table.Metadata->Kind == EKikimrTableKind::Olap && colMeta && colMeta->IsDefaultFromLiteral();
+            if (olapLiteral) {
+                continue;
+            }
+            if (colMeta && colMeta->IsDefaultFromLiteral() && !colMeta->DefaultFromLiteral.type().has_pg_type()) {
                 literalDefaultColNodes.push_back(colAtom.Ptr());
             } else {
                 sequenceColNodes.push_back(colAtom.Ptr());
@@ -464,9 +467,18 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
         std::tie(input, inputCols) = ExtendInputRowsWithDefaultLiteralColumns(input, inputColsAfterSequencer,
             literalDefaultCols, table, pos, ctx);
     } else {
-        inputCols = BuildUpsertInputColumns(inputColumns, autoIncrement, pos, ctx);
-        if (autoIncrement.Ref().ChildrenSize() > 0) {
-            input = BuildKqlSequencer(input, table, inputCols.value(), autoIncrement, pos, ctx);
+        TVector<TExprNode::TPtr> columnsToGenerate;
+        for (const auto& colAtom : autoIncrement) {
+            const auto* colMeta = table.Metadata->Columns.FindPtr(TString(colAtom.Value()));
+            if (table.Metadata->Kind == EKikimrTableKind::Olap && colMeta && colMeta->IsDefaultFromLiteral()) {
+                continue;
+            }
+            columnsToGenerate.push_back(colAtom.Ptr());
+        }
+        auto generateColumns = Build<TCoAtomList>(ctx, pos).Add(columnsToGenerate).Done();
+        inputCols = BuildUpsertInputColumns(inputColumns, generateColumns, pos, ctx);
+        if (generateColumns.Ref().ChildrenSize() > 0) {
+            input = BuildKqlSequencer(input, table, inputCols.value(), generateColumns, pos, ctx);
         }
     }
 

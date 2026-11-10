@@ -1061,7 +1061,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     template <typename T>
     void ExistingDstFamily(const TString& error, T&& modify,
             NKikimrSchemeOp::EColumnCodec codec = NKikimrSchemeOp::ColumnCodecLZ4,
-            TMaybe<i32> compressionLevel = Nothing()) {
+            TMaybe<i32> compressionLevel = Nothing())
+    {
         TFeatureFlags flags;
         flags.FeatureFlags.SetEnableRowTableZstdCompression(codec == NKikimrSchemeOp::ColumnCodecZSTD);
         TEnv env(flags);

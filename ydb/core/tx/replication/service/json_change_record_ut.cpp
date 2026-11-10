@@ -854,7 +854,8 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         UNIT_ASSERT_VALUES_EQUAL(schema.FamiliesSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).GetName(), "archive");
         UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).GetMedia(), "ssd");
-        UNIT_ASSERT(schema.GetFamilies(0).GetCompression() == (zstd ? TFamily::COMPRESSION_ZSTD : TFamily::COMPRESSION_LZ4));
+        UNIT_ASSERT(schema.GetFamilies(0).GetCompression()
+            == (zstd ? TFamily::COMPRESSION_ZSTD : TFamily::COMPRESSION_LZ4));
         UNIT_ASSERT(schema.GetFamilies(0).GetCacheMode() == TFamily::CACHE_MODE_IN_MEMORY);
         UNIT_ASSERT(schema.GetFamilies(1).GetCompression() == TFamily::COMPRESSION_OFF);
         UNIT_ASSERT(schema.GetFamilies(1).GetCacheMode() == TFamily::CACHE_MODE_REGULAR);
@@ -894,7 +895,8 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         const std::pair<TStringBuf, TStringBuf> cases[] = {
             {R"("compression":"zstd","compressionLevel":-1)", "must be between 0 and 22: -1"},
             {R"("compression":"zstd","compressionLevel":23)", "must be between 0 and 22: 23"},
-            {R"("compression":"zstd","compressionLevel":18446744073709551615)", "must be between 0 and 22: 18446744073709551615"},
+            {R"("compression":"zstd","compressionLevel":18446744073709551615)",
+                "must be between 0 and 22: 18446744073709551615"},
             {R"("compression":"zstd","compressionLevel":"1")", "must be an integer"},
             {R"("compression":"zstd","compressionLevel":1.5)", "must be an integer"},
             {R"("compression":"lz4","compressionLevel":1)", "is only supported for ZSTD"},

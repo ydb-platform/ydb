@@ -35,7 +35,7 @@ namespace NKikimr::NTable::NPage {
 
     public:
         void SetCompressionLevel(ui32 level) {
-            Y_ENSURE(level <= 22, "Invalid page compression level " << level);
+            Y_ENSURE(level <= static_cast<ui32>(ZSTD_maxCLevel()), "Invalid page compression level " << level);
             CompressionLevel = level;
         }
 

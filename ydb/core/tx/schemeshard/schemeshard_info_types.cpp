@@ -24,6 +24,8 @@
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #include <util/generic/algorithm.h>
 
 namespace {
@@ -1263,7 +1265,8 @@ bool TPartitionConfigMerger::ApplyChanges(
 {
     for (const auto& family : changes.GetColumnFamilies()) {
         if (family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecZSTD
-            && !appData->FeatureFlags.GetEnableRowTableZstdCompression()) {
+            && !appData->FeatureFlags.GetEnableRowTableZstdCompression())
+        {
             errDescr = "ZSTD compression for row tables is disabled";
             return false;
         }
@@ -1610,8 +1613,9 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
                 errDescr = "COMPRESSION_LEVEL is supported only for ZSTD compression";
                 return false;
             }
-            if (dstFamily.GetColumnCodecLevel() < 0 || dstFamily.GetColumnCodecLevel() > 22) {
-                errDescr = "COMPRESSION_LEVEL for ZSTD must be in range [0, 22]";
+            const auto maxLevel = ZSTD_maxCLevel();
+            if (dstFamily.GetColumnCodecLevel() < 0 || dstFamily.GetColumnCodecLevel() > maxLevel) {
+                errDescr = TStringBuilder() << "COMPRESSION_LEVEL for ZSTD must be in range [0, " << maxLevel << "]";
                 return false;
             }
         }

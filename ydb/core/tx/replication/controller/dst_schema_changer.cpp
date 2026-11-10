@@ -32,8 +32,10 @@ using TFamily = NKikimrReplication::TSchemaChange::TFamily;
 bool HasSupportedFamilySettings(const NKikimrSchemeOp::TFamilyDescription& family) {
     if (family.HasColumnCodec()) {
         const auto codec = family.GetColumnCodec();
-        if (codec != NKikimrSchemeOp::ColumnCodecPlain && codec != NKikimrSchemeOp::ColumnCodecLZ4
-                && codec != NKikimrSchemeOp::ColumnCodecZSTD) {
+        if (codec != NKikimrSchemeOp::ColumnCodecPlain
+                && codec != NKikimrSchemeOp::ColumnCodecLZ4
+                && codec != NKikimrSchemeOp::ColumnCodecZSTD)
+        {
             return false;
         }
     } else if (family.GetCodec() > 1) {
@@ -157,7 +159,8 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             .Compression = desired.GetCompression(),
             .CacheMode = desired.GetCacheMode(),
             .CompressionLevel = desired.GetCompression() == TFamily::COMPRESSION_ZSTD
-                ? std::make_optional(desired.GetCompressionLevel()) : std::nullopt,
+                ? std::make_optional(desired.GetCompressionLevel())
+                : std::nullopt,
         };
         const auto actualSettings = TFamilySettings::FromProto(actual);
         if (actual && expectedSettings == actualSettings) {
@@ -186,13 +189,15 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
                     changed->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);
                     break;
                 default:
-                    error = TStringBuilder() << "unsupported compression for column family '" << desired.GetName() << "'";
+                    error = TStringBuilder() << "unsupported compression for column family '"
+                        << desired.GetName() << "'";
                     return false;
             }
         }
 
-        if (expectedSettings.CompressionLevel && (!actual
-                || actualSettings.CompressionLevel != expectedSettings.CompressionLevel)) {
+        if (expectedSettings.CompressionLevel
+                && (!actual || actualSettings.CompressionLevel != expectedSettings.CompressionLevel))
+        {
             changed->SetColumnCodecLevel(*expectedSettings.CompressionLevel);
         }
 

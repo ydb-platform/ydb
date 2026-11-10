@@ -8,6 +8,8 @@
 #include <ydb/core/tx/replication/common/schema_change.h>
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
@@ -34,8 +36,10 @@ bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
                 return false;
             }
 
-            if (family.HasCompressionLevel() && (family.GetCompression() !=
-                    NKikimrReplication::TSchemaChange::TFamily::COMPRESSION_ZSTD || family.GetCompressionLevel() > 22)) {
+            if (family.HasCompressionLevel()
+                && (family.GetCompression() != NKikimrReplication::TSchemaChange::TFamily::COMPRESSION_ZSTD
+                    || family.GetCompressionLevel() > static_cast<ui32>(ZSTD_maxCLevel())))
+            {
                 return false;
             }
 

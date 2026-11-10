@@ -2911,7 +2911,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         describeOptions.SetReturnPartitioningInfo(false);
         const auto describeTable = [&](const TString& path) {
             auto result = DescribePath(runtime, path, describeOptions);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetPathDescription().GetTable().GetPartitionConfig().ColumnFamiliesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                result.GetPathDescription().GetTable().GetPartitionConfig().ColumnFamiliesSize(), 1);
             return result;
         };
 
@@ -2987,7 +2988,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             env.TestWaitNotification(runtime, txId);
             const auto described = describeTable("/MyRoot/Table1");
             const auto& family = described.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0);
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(family.GetColumnCodec()), static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(family.GetColumnCodec()),
+                static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
             UNIT_ASSERT(family.HasColumnCodecLevel());
             UNIT_ASSERT_VALUES_EQUAL(family.GetColumnCodecLevel(), level);
             RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
@@ -3013,7 +3015,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         auto t3 = describeTable("/MyRoot/Table1");
         UNIT_ASSERT(t2.DebugString() != t3.DebugString());
-        UNIT_ASSERT(!t3.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0).HasColumnCodecLevel());
+        UNIT_ASSERT(
+            !t3.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0).HasColumnCodecLevel());
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
             Name: "Table1"

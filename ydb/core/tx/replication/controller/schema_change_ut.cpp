@@ -3716,10 +3716,13 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
             levelOnly.MutableFamilies(1)->SetCompressionLevel(9);
             env.SendAsync(controllerId, MakeSchemaChangeReport(worker, levelOnly));
             const auto release = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
-            UNIT_ASSERT_VALUES_EQUAL(release->Get()->Record.GetSchema().SerializeAsString(), levelOnly.SerializeAsString());
+            UNIT_ASSERT_VALUES_EQUAL(
+                release->Get()->Record.GetSchema().SerializeAsString(), levelOnly.SerializeAsString());
             const auto updated = env.GetDescription("/Root/replica1");
             bool found = false;
-            for (const auto& family : updated.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies()) {
+            for (const auto& family :
+                    updated.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies())
+            {
                 if (family.GetName() == "archive") {
                     found = true;
                     UNIT_ASSERT_VALUES_EQUAL(family.GetColumnCodecLevel(), 9);

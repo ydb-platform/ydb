@@ -7,6 +7,8 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -190,9 +192,10 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         auto &family = tableInfo.Families[delta.GetFamilyId()];
 
         auto codec = delta.HasCodec() ? CodecFromProto(delta.GetCodec()) : family.Codec;
-        const ui32 codecLevel = delta.HasCodecLevel() ? delta.GetCodecLevel()
+        const ui32 codecLevel = delta.HasCodecLevel()
+            ? delta.GetCodecLevel()
             : delta.HasCodec() ? 1 : family.CodecLevel;
-        Y_ENSURE(codecLevel <= 22, "Invalid page compression level " << codecLevel);
+        Y_ENSURE(codecLevel <= static_cast<ui32>(ZSTD_maxCLevel()), "Invalid page compression level " << codecLevel);
         Y_ENSURE(codec == NPage::ECodec::ZSTD || codecLevel == 1,
             "Compression level is only supported for ZSTD");
 

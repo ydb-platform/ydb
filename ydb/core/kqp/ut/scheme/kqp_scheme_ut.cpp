@@ -3952,7 +3952,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         for (const auto level : {-1, 23}) {
             auto invalid = ExecuteGeneric<UseQueryService>(queryClient, session, TStringBuilder()
-                << "ALTER TABLE `/Root/ZstdCompressionLevels` ALTER FAMILY archive SET COMPRESSION_LEVEL " << level << ";");
+                << "ALTER TABLE `/Root/ZstdCompressionLevels` ALTER FAMILY archive SET COMPRESSION_LEVEL "
+                << level << ";");
             UNIT_ASSERT_C(!invalid.IsSuccess(), invalid.GetIssues().ToString());
         }
         checkLevels({{"default", 5}, {"archive", 22}, {"cold", 1}});
@@ -3971,7 +3972,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST_TWIN(ZstdColumnFamiliesFeatureDisabled, UseQueryService) {
         TKikimrRunner kikimr;
-        UNIT_ASSERT(!kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableRowTableZstdCompression());
+        UNIT_ASSERT(
+            !kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableRowTableZstdCompression());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -3993,7 +3995,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         for (const auto* change : {
             "ALTER FAMILY default SET COMPRESSION 'zstd'",
             "ADD FAMILY archive (COMPRESSION = 'zstd', COMPRESSION_LEVEL = 7)",
-        }) {
+        })
+        {
             auto result = ExecuteGeneric<UseQueryService>(queryClient, session, TStringBuilder()
                 << "ALTER TABLE `/Root/DisabledZstd` " << change << ";");
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());

@@ -5,6 +5,8 @@
 #include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_wreck.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/resource/resource.h>
 #include <util/generic/xrange.h>
@@ -64,7 +66,8 @@ namespace {
                 if (codec == NPage::ECodec::ZSTD) {
                     const NPage::TDataPage decoded(raw);
                     const TStringBuf plain(decoded.GetData().data() + 16, decoded.GetData().size() - 16);
-                    const TString expected = NBlockCodecs::Codec("zstd_" + ToString(codecLevel ? codecLevel : 3))->Encode(plain);
+                    const TString expected = NBlockCodecs::Codec(
+                        "zstd_" + ToString(codecLevel ? codecLevel : ZSTD_defaultCLevel()))->Encode(plain);
                     UNIT_ASSERT_VALUES_EQUAL(TStringBuf(got.Page.data(), got.Page.size()), expected);
                 }
             }
@@ -101,7 +104,8 @@ Y_UNIT_TEST_SUITE(NPage) {
         const auto* decoder = NPage::GetBlockCodec(NPage::ECodec::ZSTD);
         for (ui32 level : {0u, 22u, 1u, 7u}) {
             encoder.SetCompressionLevel(level);
-            const auto* originalCodec = NBlockCodecs::Codec("zstd_" + ToString(level ? level : 3));
+            const auto* originalCodec = NBlockCodecs::Codec(
+                "zstd_" + ToString(level ? level : ZSTD_defaultCLevel()));
             for (size_t size : {0u, 32u, 4096u, 65536u, 128u}) {
                 TString value(size, 'a');
                 for (size_t i = 0; i < size; ++i) {

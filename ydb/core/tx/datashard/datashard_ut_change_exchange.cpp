@@ -7124,7 +7124,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
         WaitTxNotification(server, edgeActor, AsyncSetColumnFamily(server, "/Root", "Table", "value",
-            {.Name = "archive", .ColumnCodec = Zstd ? NKikimrSchemeOp::ColumnCodecZSTD : NKikimrSchemeOp::ColumnCodecLZ4,
+            {.Name = "archive",
+                .ColumnCodec = Zstd ? NKikimrSchemeOp::ColumnCodecZSTD : NKikimrSchemeOp::ColumnCodecLZ4,
                 .ColumnCodecLevel = Zstd ? TMaybe<i32>(7) : TMaybe<i32>(),
                 .DataPoolKind = "hdd"}));
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);");

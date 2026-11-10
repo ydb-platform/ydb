@@ -263,12 +263,14 @@ Y_UNIT_TEST_SUITE(TScheme) {
             TAlter cache;
             cache.SetFamilyCache(TModel::TableId, TModel::GroupId2, NPage::ECache::Ever);
             TSchemeModifier(restored).Apply(*cache.Flush());
-            UNIT_ASSERT_VALUES_EQUAL(restored.GetTableInfo(TModel::TableId)->Families.at(TModel::GroupId2).CodecLevel, level);
+            UNIT_ASSERT_VALUES_EQUAL(
+                restored.GetTableInfo(TModel::TableId)->Families.at(TModel::GroupId2).CodecLevel, level);
 
             TAlter compression;
             compression.SetFamilyCompression(TModel::TableId, TModel::GroupId2, NPage::ECodec::LZ4);
             TSchemeModifier(restored).Apply(*compression.Flush());
-            UNIT_ASSERT_VALUES_EQUAL(restored.GetTableInfo(TModel::TableId)->Families.at(TModel::GroupId2).CodecLevel, 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                restored.GetTableInfo(TModel::TableId)->Families.at(TModel::GroupId2).CodecLevel, 1);
         }
     }
 

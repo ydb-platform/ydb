@@ -484,14 +484,16 @@ storage_settings {
         const auto& table = scheme.GetCreateTable();
         UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionConfig().ColumnFamiliesSize(), 2);
         for (const auto& family : table.GetPartitionConfig().GetColumnFamilies()) {
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(family.GetColumnCodec()), static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(family.GetColumnCodec()),
+                static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
         }
 
         Ydb::Table::DescribeTableResult described;
         FillColumnFamilies(described, table);
         UNIT_ASSERT_VALUES_EQUAL(described.column_families_size(), 2);
         for (const auto& family : described.column_families()) {
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(family.compression()), static_cast<int>(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(family.compression()),
+                static_cast<int>(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD));
             UNIT_ASSERT(!family.has_compression_level());
         }
 
@@ -503,11 +505,13 @@ storage_settings {
             family.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
             family.set_compression_level(7);
             NKikimrSchemeOp::TModifyScheme altered;
-            UNIT_ASSERT_C(BuildAlterTableModifyScheme(&alter, &altered, TTableProfiles{}, TPathId{}, status, error), error);
+            UNIT_ASSERT_C(
+                BuildAlterTableModifyScheme(&alter, &altered, TTableProfiles{}, TPathId{}, status, error), error);
             const auto& families = altered.GetAlterTable().GetPartitionConfig().GetColumnFamilies();
             UNIT_ASSERT_VALUES_EQUAL(families.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "archive");
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(families[0].GetColumnCodec()), static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(families[0].GetColumnCodec()),
+                static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetColumnCodecLevel(), 7);
         }
     }

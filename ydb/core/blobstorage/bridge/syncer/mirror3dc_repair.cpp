@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 #include <map>
 
@@ -24,6 +25,20 @@ class TMirror3dcRepairSyncer : public TActorBootstrapped<TMirror3dcRepairSyncer>
     std::deque<TBlob> Blobs;
     ui32 PendingDisk = 0;
     ui32 PendingPart = 0;
+    std::optional<TActorId> RestoreTarget;
+    ui64 RestoreCookie = 0;
+
+    void ClearRestoreTarget() {
+        if (RestoreTarget && RestoreTarget->NodeId() != SelfId().NodeId()) {
+            Send(TActivationContext::InterconnectProxy(RestoreTarget->NodeId()), new TEvents::TEvUnsubscribe);
+        }
+        RestoreTarget.reset();
+    }
+
+    void PassAway() override {
+        ClearRestoreTarget();
+        TActorBootstrapped::PassAway();
+    }
 
     void Finish(NKikimrProto::EReplyStatus status) {
         Send(NotifyId, new TEvMirror3dcRepairScanResult(status));
@@ -114,10 +129,19 @@ class TMirror3dcRepairSyncer : public TActorBootstrapped<TMirror3dcRepairSyncer>
         LogoBlobIDFromLogoBlobID(TLogoBlobID(blobId, PendingPart + 1), request->Record.MutableBlobID());
         TInstant deadline = TActivationContext::Now() + RestorePartTimeout;
         request->Record.SetDeadline(deadline.GetValue());
-        Send(Info->GetActorId(TVDiskIdShort(diskId)), request.release(), IEventHandle::FlagTrackDelivery);
+        RestoreTarget = Info->GetActorId(TVDiskIdShort(diskId));
+        ui32 flags = IEventHandle::FlagTrackDelivery;
+        if (RestoreTarget->NodeId() != SelfId().NodeId()) {
+            flags |= IEventHandle::FlagSubscribeOnSession;
+        }
+        Send(*RestoreTarget, request.release(), flags, ++RestoreCookie);
     }
 
     void Handle(TEvVRestorePartResult::TPtr& ev) {
+        if (!RestoreTarget || ev->Cookie != RestoreCookie) {
+            return;
+        }
+        ClearRestoreTarget();
         NKikimrProto::EReplyStatus status = ev->Get()->Record.GetStatus();
         if (status != NKikimrProto::OK && status != NKikimrProto::ALREADY) {
             return Finish(status);
@@ -126,14 +150,24 @@ class TMirror3dcRepairSyncer : public TActorBootstrapped<TMirror3dcRepairSyncer>
         RepairNext();
     }
 
-    void HandleUndelivered() {
-        Finish(NKikimrProto::ERROR);
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        if (RestoreTarget && ev->Cookie == RestoreCookie && ev->Get()->SourceType == TEvVRestorePart::EventType) {
+            Finish(NKikimrProto::ERROR);
+        }
+    }
+
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        if (RestoreTarget && ev->Cookie == RestoreCookie && ev->Get()->NodeId == RestoreTarget->NodeId()) {
+            Finish(NKikimrProto::ERROR);
+        }
     }
 
     STRICT_STFUNC(StateWork,
         hFunc(TEvBlobStorage::TEvAssimilateResult, Handle)
         hFunc(TEvVRestorePartResult, Handle)
-        cFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
+        hFunc(TEvents::TEvUndelivered, Handle)
+        hFunc(TEvInterconnect::TEvNodeDisconnected, Handle)
+        IgnoreFunc(TEvInterconnect::TEvNodeConnected)
         cFunc(TEvents::TSystem::Poison, PassAway)
     )
 

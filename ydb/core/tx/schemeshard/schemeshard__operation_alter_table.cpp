@@ -810,7 +810,7 @@ public:
             }
             if (newReplicationPathId && replicationConfig.GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
                 && !replicationConfig.HasOwnerPathId()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot claim a legacy replica without an owner");
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot attach a replication to a table that is already read-only");
                 return result;
             }
         }

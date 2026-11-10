@@ -334,7 +334,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         }
     }
 
-    TMergingContext mergingContext(Batches);
+    TMergingContext mergingContext(Batches, PortionSchemas);
 
     for (auto&& [columnId, columnData] : columnsData) {
         if (columnId == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID &&

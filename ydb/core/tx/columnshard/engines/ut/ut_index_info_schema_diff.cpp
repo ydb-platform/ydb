@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/hash.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap::NTest {
@@ -346,6 +347,47 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         UNIT_ASSERT(created);
         UNIT_ASSERT(created->GetValue());
         UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt64Scalar&>(*created->GetValue()).value, 42);
+    }
+
+    // One input whose own default matches itself still differs from the result after SET DEFAULT.
+    Y_UNIT_TEST(DifferentDefaultsIncludeSingleInput) {
+        TSchemaHistory history;
+        history.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64).SetDefault(4, 42).SetCreatedDefault(4, 42);
+        history.NextVersion().SetDefault(4, 7);
+        const auto& versions = history.GetVersions();
+        auto cache = std::make_shared<TSchemaObjectsCache>();
+        auto born =
+            std::make_shared<TSnapshotSchema>(cache->GetOrInsertIndexInfo(BuildFromSchema(versions[1])), TSnapshot(versions[1].GetVersion(), 1));
+        auto current = std::make_shared<TSnapshotSchema>(
+            cache->GetOrInsertIndexInfo(BuildFromSchema(versions.back())), TSnapshot(versions.back().GetVersion(), 1));
+        auto before = std::make_shared<TSnapshotSchema>(
+            cache->GetOrInsertIndexInfo(BuildFromSchema(versions.front())), TSnapshot(versions.front().GetVersion(), 1));
+
+        THashMap<ui64, ISnapshotSchema::TPtr> onlyBirth{ { 2, born } };
+        UNIT_ASSERT(ISnapshotSchema::GetColumnsWithDifferentDefaults(onlyBirth, current).contains(4));
+
+        THashMap<ui64, ISnapshotSchema::TPtr> mixed{ { 1, before }, { 2, born } };
+        UNIT_ASSERT(ISnapshotSchema::GetColumnsWithDifferentDefaults(mixed, current).contains(4));
+
+        THashMap<ui64, ISnapshotSchema::TPtr> onlyCurrent{ { 3, current } };
+        UNIT_ASSERT(!ISnapshotSchema::GetColumnsWithDifferentDefaults(onlyCurrent, current).contains(4));
+    }
+
+    // A version that only adds a column can be dropped when its creation fill equals the write default.
+    Y_UNIT_TEST(CreatedDefaultBlocksSchemaGc) {
+        TSchemaHistory mismatched;
+        mismatched.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64).SetDefault(4, 7).SetCreatedDefault(4, 5);
+        const auto mismatchDiff = TSchemaDiffView::MakeSchemasDiff(mismatched.GetVersions()[0], mismatched.GetVersions()[1]);
+        TSchemaDiffView mismatchView;
+        mismatchView.DeserializeFromProto(mismatchDiff).Validate();
+        UNIT_ASSERT(!mismatchView.IsCorrectToIgnorePreviouse(BuildFromSchema(mismatched.GetVersions()[0])));
+
+        TSchemaHistory matched;
+        matched.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64).SetDefault(4, 5).SetCreatedDefault(4, 5);
+        const auto matchDiff = TSchemaDiffView::MakeSchemasDiff(matched.GetVersions()[0], matched.GetVersions()[1]);
+        TSchemaDiffView matchView;
+        matchView.DeserializeFromProto(matchDiff).Validate();
+        UNIT_ASSERT(matchView.IsCorrectToIgnorePreviouse(BuildFromSchema(matched.GetVersions()[0])));
     }
 
     Y_UNIT_TEST(ChangeColumnToSparsed) {

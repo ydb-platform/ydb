@@ -120,7 +120,8 @@ private:
             } else {
                 ColumnChunks.emplace_back(
                     c->GetMeta().GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
-                                                        source.GetSourceSchema()->GetExternalDefaultValueVerified(c->GetEntityId())));
+                                                        ISnapshotSchema::GetAbsentColumnFill(*source.GetSourceSchema(),
+                                                            *source.GetContext()->GetReadMetadata()->GetResultSchema(), c->GetEntityId())));
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }

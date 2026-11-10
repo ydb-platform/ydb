@@ -209,6 +209,34 @@ bool IsMemoryTierAvailable() {
     return TTestStoragesManager::GetInstance()->GetOperatorOptional(IStoragesManager::MemoryStorageId) != nullptr;
 }
 
+ISnapshotSchema::TPtr MakeSchemaWithExtraColumn(
+    const ui64 version, const std::optional<ui64> writeDefault, const std::optional<ui64> createdDefault) {
+    auto storages = TTestStoragesManager::GetInstance();
+    auto cache = std::make_shared<TSchemaObjectsCache>();
+    NKikimrSchemeOp::TColumnTableSchema proto;
+    FillDefaultSchemaProto(proto, version);
+    auto* extra = proto.AddColumns();
+    *extra = NArrow::NTest::TTestColumn("extra", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(3);
+    if (writeDefault) {
+        extra->MutableDefaultValue()->MutableScalar()->SetUint64(*writeDefault);
+    }
+    if (createdDefault) {
+        extra->MutableCreatedDefaultValue()->MutableScalar()->SetUint64(*createdDefault);
+    }
+    auto indexInfoOpt = TIndexInfo::BuildFromProto(version, proto, storages, cache);
+    UNIT_ASSERT(indexInfoOpt);
+    return std::make_shared<TSnapshotSchema>(cache->GetOrInsertIndexInfo(std::move(*indexInfoOpt)), TSnapshot(1, 1));
+}
+
+bool PortionHasColumn(const TWritePortionInfoWithBlobsResult& portion, const ui32 columnId) {
+    for (const auto& record : portion.GetPortionResult().GetRecordsVerified()) {
+        if (record.GetColumnId() == columnId) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TReuseIndexChunksTests) {
@@ -349,6 +377,27 @@ Y_UNIT_TEST_SUITE(TSyncPortionIndexReuseTests) {
         UNIT_ASSERT_VALUES_UNEQUAL(maxIndexData, MaxIndexMarker);
         UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, maxIndexData), ExpectedMaxColumnValue);
         UNIT_ASSERT_VALUES_EQUAL(GetInplaceIndexData(*syncResult, BloomIndexId), BloomIndexMarker);
+    }
+
+    // A column missing from the portion is written only when its historical fill differs from the target fill.
+    Y_UNIT_TEST(AbsentColumnMaterializedOnlyWhenFillDiffers) {
+        const auto source = MakeTestSchema(1, {});
+        const auto sameFill = MakeSchemaWithExtraColumn(2, 5, 5);
+        const auto changedFill = MakeSchemaWithExtraColumn(3, 9, 5);
+        const auto batch = MakeTestBatch();
+        const auto splitterCounters = MakeSplitterCounters();
+        auto writePortion = BuildTestPortion(source, batch, {}, splitterCounters);
+        FinalizeWritePortion(writePortion);
+
+        auto same = RunSyncPortion(writePortion, source, sameFill, IStoragesManager::DefaultStorageId, splitterCounters);
+        UNIT_ASSERT(same);
+        FinalizeWritePortion(*same);
+        UNIT_ASSERT(!PortionHasColumn(*same, 3));
+
+        auto changed = RunSyncPortion(writePortion, source, changedFill, IStoragesManager::DefaultStorageId, splitterCounters);
+        UNIT_ASSERT(changed);
+        FinalizeWritePortion(*changed);
+        UNIT_ASSERT(PortionHasColumn(*changed, 3));
     }
 }
 

@@ -60,18 +60,18 @@ public:
         return false;
     }
 
-    std::optional<TWeightedPick> Pick(const ui64 sourceLimit) {
+    std::optional<TWeightedPick> Pick(const ui64 sourceLimit) const {
         std::vector<TWeightedQueueState> waiting;
         for (const auto& [queueId, queue] : Queues) {
             if (!queue.Requests.empty()) {
                 waiting.push_back(TWeightedQueueState{ queueId, queue.Weight, queue.Inflight, queue.LastServed });
             }
         }
-        const auto pick = PickWeightedQueue(waiting, sourceLimit);
-        if (pick) {
-            Queues[pick->QueueId].LastServed = ++ServeClock;
-        }
-        return pick;
+        return PickWeightedQueue(waiting, sourceLimit);
+    }
+
+    void MarkServed(const ui64 queueId) {
+        Queues[queueId].LastServed = ++ServeClock;
     }
 
     std::deque<TRequestPtr>& MutableRequests(const ui64 queueId) {

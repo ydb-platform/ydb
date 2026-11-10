@@ -103,6 +103,21 @@ Y_UNIT_TEST_SUITE(TGeneralCacheConsumers) {
         UNIT_ASSERT_VALUES_EQUAL(WeightOf(config, EConsumer::TTL), 1);
     }
 
+    Y_UNIT_TEST(PartialConfigWithoutDefaultsKeepsOthersWeighted) {
+        const auto config = NGeneralCache::BuildCacheConfig("ut", WithConsumer("SCAN", 4), true, false);
+        UNIT_ASSERT_VALUES_EQUAL(WeightOf(config, EConsumer::SCAN), 4);
+        UNIT_ASSERT_VALUES_EQUAL(WeightOf(config, EConsumer::DUPLICATE_FILTERING), 1);
+        UNIT_ASSERT_VALUES_EQUAL(WeightOf(config, EConsumer::GENERAL_COMPACTION), 1);
+
+        auto proto = WithConsumer("SCAN", 4);
+        auto& any = *proto.AddConsumers();
+        any.SetName("*");
+        any.SetWeight(0);
+        const auto explicitZero = NGeneralCache::BuildCacheConfig("ut", proto, true, false);
+        UNIT_ASSERT_VALUES_EQUAL(WeightOf(explicitZero, EConsumer::SCAN), 4);
+        UNIT_ASSERT_VALUES_EQUAL(WeightOf(explicitZero, EConsumer::DUPLICATE_FILTERING), 0);
+    }
+
     Y_UNIT_TEST(InvalidConsumersKeepTheLimits) {
         const auto config = NGeneralCache::BuildCacheConfig("ut", WithConsumer("NOT_A_CONSUMER", 4), true, false);
         UNIT_ASSERT(!config.GetHasWeights());

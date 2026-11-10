@@ -29,28 +29,27 @@ NKikimrConfig::TGeneralCacheConfig ApplyCacheConsumerWeights(
         config.ClearConsumers();
         return config;
     }
-    if (!useDefaultConsumers) {
-        return config;
-    }
-    using EConsumer = NBlobOperations::EConsumer;
-    const std::pair<TString, ui32> defaults[] = {
-        { ::ToString(EConsumer::SCAN), 8 },
-        { ::ToString(EConsumer::SYS_VIEW_SCAN), 8 },
-        { ::ToString(EConsumer::DUPLICATE_FILTERING), 8 },
-        { ::ToString(EConsumer::GENERAL_COMPACTION), 2 },
-        { "*", 1 },
-    };
     THashSet<TString> configured;
     for (const auto& consumer : config.GetConsumers()) {
         configured.emplace(consumer.GetName());
     }
-    for (const auto& [name, weight] : defaults) {
-        if (configured.contains(name)) {
-            continue;
+    const auto addMissing = [&](const TString& name, const ui32 weight) {
+        if (configured.emplace(name).second) {
+            auto& item = *config.AddConsumers();
+            item.SetName(name);
+            item.SetWeight(weight);
         }
-        auto& item = *config.AddConsumers();
-        item.SetName(name);
-        item.SetWeight(weight);
+    };
+    if (useDefaultConsumers) {
+        using EConsumer = NBlobOperations::EConsumer;
+        addMissing(::ToString(EConsumer::SCAN), 8);
+        addMissing(::ToString(EConsumer::SYS_VIEW_SCAN), 8);
+        addMissing(::ToString(EConsumer::DUPLICATE_FILTERING), 8);
+        addMissing(::ToString(EConsumer::GENERAL_COMPACTION), 2);
+    }
+    // An unlisted consumer gets weight 0 only when "*" is set to 0 explicitly.
+    if (config.ConsumersSize()) {
+        addMissing("*", 1);
     }
     return config;
 }
@@ -67,11 +66,8 @@ NKikimrConfig::TGeneralCacheConfig ApplyCacheConsumerWeights(
     Cerr << "Error: cannot parse " << cacheName << " consumers, they are ignored: " << parsed.GetErrorMessage() << Endl;
     withWeights.ClearConsumers();
     auto withoutConsumers = TConfig::BuildFromProto(withWeights, allowed);
-    if (withoutConsumers.IsSuccess()) {
-        return withoutConsumers.DetachResult();
-    }
-    Cerr << "Error: cannot parse " << cacheName << " config, the default is used: " << withoutConsumers.GetErrorMessage() << Endl;
-    return TConfig::BuildDefault();
+    Y_ABORT_UNLESS(withoutConsumers.IsSuccess(), "%s", withoutConsumers.GetErrorMessage().c_str());
+    return withoutConsumers.DetachResult();
 }
 
 }   // namespace NKikimr::NOlap::NGeneralCache

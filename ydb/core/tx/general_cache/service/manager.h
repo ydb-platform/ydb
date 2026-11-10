@@ -403,7 +403,7 @@ public:
         const ui64 sourceLimit = Counters->GetConfig().GetDirectInflightSourceLimit();
         const TMonotonic now = TMonotonic::Now();
 
-        // Without weights a request is sent whole and the limit is checked between requests only.
+        // Without weights in the config a request is sent whole and the limit is checked between requests only.
         const bool chunked = Counters->GetConfig().GetHasWeights();
 
         while (RequestedObjects.size() < sourceLimit && Counters->CheckTotalLimit()) {
@@ -411,6 +411,9 @@ public:
                 const ui64 budget = std::min(chosen->Budget, sourceLimit - RequestedObjects.size());
                 const auto dispatched =
                     DispatchFront(WeightedQueues.MutableRequests(chosen->QueueId), budget, chosen->QueueId, requestedAddresses, now);
+                if (dispatched.NewAddresses) {
+                    WeightedQueues.MarkServed(chosen->QueueId);
+                }
                 if (dispatched.PutBack && dispatched.NewAddresses == 0) {
                     break;
                 }

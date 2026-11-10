@@ -36,15 +36,19 @@ public:
             return true;
         }
 
+        const TString authRevision = replication->CanRecoverAuthenticationError()
+            ? replication->GetSecretRevision() : TString();
         FailedReplication = replication;
         target->SetDstState(TReplication::EDstState::Error);
         target->SetIssue(result.GetIssue());
         Self->SetReplicationError(*replication, *target);
+        replication->SetAuthenticationErrorRevision(authRevision);
         YDB_LOG_ERROR_CTX(ctx, "Worker registration failed", {"ev", result.ToString()});
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(result.ReplicationId).Update(
             NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(replication->GetAuthenticationErrorRevision()),
             NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue()));
         db.Table<Schema::Targets>().Key(result.ReplicationId, result.TargetId).Update(
             NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
@@ -52,7 +56,10 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext& ctx) override {
+        if (FailedReplication) {
+            FailedReplication->Progress(ctx);
+        }
         if (!FailedReplication || !FailedReplication->GetConfig().HasTransferSpecific()) {
             return;
         }

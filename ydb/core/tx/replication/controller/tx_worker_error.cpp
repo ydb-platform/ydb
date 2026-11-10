@@ -8,6 +8,9 @@ class TController::TTxWorkerError: public TTxBase {
     const TWorkerId WorkerId;
     const TString Error;
     const bool SourceOffsetMismatch;
+    const NKikimrReplication::TEvWorkerStatus::EErrorKind ErrorKind;
+    TReplication::TPtr AuthenticationFailure;
+    const TString CredentialGeneration;
     const TMaybe<ui64> SourceCommittedOffset;
     TMaybe<ui32> RestartWorkerNode;
     bool StopWorkers = false;
@@ -15,11 +18,13 @@ class TController::TTxWorkerError: public TTxBase {
     bool StopReplicationWorkers = false;
 
 public:
-    explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset)
+    explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset, NKikimrReplication::TEvWorkerStatus::EErrorKind errorKind, const TString& credentialGeneration)
         : TTxBase("TxWorkerError", self)
         , WorkerId(id)
         , Error(error)
         , SourceOffsetMismatch(sourceOffsetMismatch)
+        , ErrorKind(errorKind)
+        , CredentialGeneration(credentialGeneration)
         , SourceCommittedOffset(sourceCommittedOffset)
     {
     }
@@ -49,6 +54,17 @@ public:
             return true;
         }
 
+        if (ErrorKind == NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION
+            && CredentialGeneration != replication->GetConfig().GetSrcConnectionParams().GetCredentialGeneration())
+        {
+            // An ALTER can run between event acceptance and this transaction.
+            // Retire the assigned worker without attributing its old failure to
+            // the new credentials, even when the service has already erased it.
+            if (const auto* worker = Self->Workers.FindPtr(WorkerId); worker && worker->HasSession()) {
+                RestartWorkerNode = worker->GetSession();
+            }
+            return true;
+        }
         auto* target = replication->FindTarget(WorkerId.TargetId());
         if (!target) {
             YDB_LOG_WARN_CTX(ctx, "Unknown target",
@@ -82,6 +98,7 @@ public:
             Self->ReplicationsWithSourceOffsetMismatch.insert(WorkerId.ReplicationId());
             db.Table<Schema::Replications>().Key(WorkerId.ReplicationId()).Update(
                 NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
+                NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(replication->GetAuthenticationErrorRevision()),
                 NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue()),
                 NIceDb::TUpdate<Schema::Replications::SourceOffsetMismatch>(true));
             YDB_LOG_ERROR_CTX(ctx, "Destination source offset mismatch", {"worker", WorkerId}, {"issue", replication->GetIssue()});
@@ -94,16 +111,24 @@ public:
             {"tid", WorkerId.TargetId()},
             {"error", Error});
 
+        const TString authRevision = ErrorKind == NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION
+                && replication->CanRecoverAuthenticationError()
+            ? replication->GetSecretRevision() : TString();
         StopReplicationWorkers = replication->GetConfig().HasTransferSpecific();
         target->SetDstState(TReplication::EDstState::Error);
         target->SetIssue(Error);
 
         replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
             << ": " << target->GetIssue());
+        replication->SetAuthenticationErrorRevision(authRevision);
+        if (!authRevision.empty()) {
+            AuthenticationFailure = replication;
+        }
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(WorkerId.ReplicationId()).Update(
             NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(replication->GetAuthenticationErrorRevision()),
             NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(WorkerId.ReplicationId(), WorkerId.TargetId()).Update(
@@ -118,6 +143,9 @@ public:
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
+        if (AuthenticationFailure) {
+            AuthenticationFailure->Progress(ctx);
+        }
         if (RestartWorkerNode && Self->HasWorkerSession(WorkerId, *RestartWorkerNode)) {
             Self->StopQueue.emplace(WorkerId, *RestartWorkerNode);
             Self->ScheduleProcessQueues();
@@ -172,8 +200,8 @@ public:
 
 }; // TTxWorkerError
 
-void TController::RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset) {
-    Execute(new TTxWorkerError(this, id, error, sourceOffsetMismatch, sourceCommittedOffset), ctx);
+void TController::RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset, NKikimrReplication::TEvWorkerStatus::EErrorKind errorKind, const TString& credentialGeneration) {
+    Execute(new TTxWorkerError(this, id, error, sourceOffsetMismatch, sourceCommittedOffset, errorKind, credentialGeneration), ctx);
 }
 
 }

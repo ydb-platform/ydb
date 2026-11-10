@@ -21,6 +21,7 @@ public:
 class TSysParams {
     enum class ESysParam: ui32 {
         NextReplicationId = 1,
+        AuthenticationRecoveryGeneration = 2,
     };
 
 public:
@@ -29,10 +30,14 @@ public:
     void Load(ESysParam type, ISysParamLoader* loader);
     void Load(ui32 type, ISysParamLoader* loader);
 
+    ui64 GetAuthenticationRecoveryGeneration() const { return AuthenticationRecoveryGeneration; }
+    void SetAuthenticationRecoveryGeneration(ui64 generation, NIceDb::TNiceDb& db);
+
     ui64 AllocateReplicationId(NIceDb::TNiceDb& db);
 
 private:
     ui64 NextReplicationId;
+    ui64 AuthenticationRecoveryGeneration = 0;
 
 }; // TSysParams
 

@@ -49,6 +49,7 @@ struct TEvPrivate {
         EvCancelDropStream,
         EvExpireWorkerLag,
         EvWorkerRegistrationError,
+        EvRefreshCredentials,
 
         EvEnd,
     };
@@ -251,7 +252,16 @@ struct TEvPrivate {
         , public TResolveValueResult
     {
         using TResolveValueResult::TResolveValueResult;
+        TString Revision;
         TString ToString() const override;
+    };
+
+    struct TEvRefreshCredentials: public TEventLocal<TEvRefreshCredentials, EvRefreshCredentials> {
+        const ui64 ReplicationId;
+        const TString Value;
+        const TString Revision;
+        TEvRefreshCredentials(ui64 rid, TString value, TString revision)
+            : ReplicationId(rid), Value(std::move(value)), Revision(std::move(revision)) {}
     };
 
     struct TEvResolveResourceIdResult

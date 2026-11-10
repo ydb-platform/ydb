@@ -101,6 +101,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
         HFunc(TEvPrivate::TEvCompleteWorkerSet, Handle);
         HFunc(TEvPrivate::TEvWorkerRegistrationError, Handle);
+        HFunc(TEvPrivate::TEvRefreshCredentials, Handle);
         HFunc(TEvPrivate::TEvResumeDeferredAlter, Handle);
         HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvPrivate::TEvRequestCreateStream, Handle);
@@ -640,6 +641,20 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
         }
         break;
     case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
+        if (record.GetErrorKind() == NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION) {
+            const auto replication = Find(id.ReplicationId());
+            if (!replication || record.GetCredentialGeneration()
+                != replication->GetConfig().GetSrcConnectionParams().GetCredentialGeneration())
+            {
+                // A controller restart can adopt a worker using the previous
+                // credentials. Retire its ownership through the stop handshake:
+                // ignoring its report would leave a dead worker assigned forever.
+                if (HasWorkerSession(id, nodeId)) {
+                    StopQueue.emplace(id, nodeId);
+                }
+                break;
+            }
+        }
         if (!HasWorkerSession(id, nodeId)) {
             session.DetachWorker(id);
             break;
@@ -650,7 +665,7 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
         UpdateStats(id, record.GetStatus());
         if (!MaybeRemoveWorker(id, ctx)) {
             if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR && !ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())) {
-                RunTxWorkerError(id, record.GetErrorDescription(), ctx);
+                RunTxWorkerError(id, record.GetErrorDescription(), ctx, false, Nothing(), record.GetErrorKind(), record.GetCredentialGeneration());
             } else {
                 session.DetachWorker(id);
                 const auto worker = Workers.find(id);

@@ -107,6 +107,7 @@ public:
         Replication->SetState(TReplication::EState::Removing);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(Replication->GetAuthenticationErrorRevision()),
             NIceDb::TUpdate<Schema::Replications::DeferredAlter>(false)
         );
 

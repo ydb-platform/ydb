@@ -409,7 +409,9 @@ private:
             if (it->second.IsEmpty()) {
                 ResetConsumerCounters(it->first);
                 Collections.erase(it++);
-            } else { ++it; }
+            } else {
+                ++it;
+            }
         }
 
         auto processMemoryInfo = ProcessMemoryInfoProvider->Get();

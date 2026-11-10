@@ -5,10 +5,12 @@
 #include "blobstorage_pdisk_params.h"
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_ut_env.h"
+#include "blobstorage_pdisk_ut_http_request.h"
 
 #include <type_traits>
 #include <library/cpp/logger/record.h>
 #include <library/cpp/logger/stream.h>
+#include <library/cpp/monlib/service/mon_service_http_request.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -1135,6 +1137,148 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::ChunkQuotaError == 12);
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::DeviceIoError == 13);
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::Stopped == 14);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::Slow == 18);
+    }
+
+    Y_UNIT_TEST(SysLogDiskStateCompatibility) {
+        TTestActorRuntime runtime(1, 1, true);
+        auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
+        runtime.Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}, {}});
+        const auto recipient = runtime.AllocateEdgeActor();
+        auto pCtx = std::make_shared<NPDisk::TPDiskCtx>(runtime.GetActorSystem(0), 12345, recipient);
+        auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
+            TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+
+        auto checkRecord = [&](ui64 version, bool slow, bool includeDiskState, bool expectedSuccess) {
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            auto pdisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
+            pdisk->Format.ChunkSize = 32_MB;
+            pdisk->Format.DiskSize = 128 * ui64(pdisk->Format.ChunkSize);
+            pdisk->Format.SectorSize = NPDisk::DefaultSectorSize;
+            pdisk->Format.SysLogSectorCount = 64;
+            pdisk->Format.SystemChunkCount = 1;
+
+            auto header = pdisk->SysLogRecord;
+            header.Version = version;
+            header.Reserved1 = Max<ui32>();
+            header.LogHeadChunkIdx = 1;
+            header.OwnerVDisks[2] = TVDiskID(1, 1, 0, 0, 0);
+            TVector<NPDisk::TChunkInfo> chunks(pdisk->Format.DiskSizeChunks());
+            chunks[1].OwnerId = NPDisk::OwnerSystem;
+            chunks[3].OwnerId = 2;
+            chunks[3].Nonce = 27;
+            NPDisk::TSysLogFirstNoncesToKeep firstNonces;
+            firstNonces.FirstNonceToKeep[2] = 42;
+            const TString trimInfo(NPDisk::TChunkTrimInfo::SizeForChunkCount(chunks.size()), '\0');
+            const ui64 trimInfoSize = trimInfo.size();
+            const ui32 firstLogChunk = 1;
+            TString compatibilityInfo;
+            UNIT_ASSERT(CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::PDisk)
+                .SerializeToString(&compatibilityInfo));
+            const ui32 compatibilityInfoSize = compatibilityInfo.size();
+            const ui8 ownerSizes[] = {2, 7};
+            const ui32 ownerSizesSize = sizeof(ownerSizes);
+            NPDisk::TSysLogDiskState diskState;
+            diskState.SetSlow(slow);
+
+            // Version 8 ends after owner sizes; version 9 appends disk state.
+            TString data;
+            auto append = [&](const auto& value) {
+                data.append(reinterpret_cast<const char*>(&value), sizeof(value));
+            };
+            append(header);
+            data.append(reinterpret_cast<const char*>(chunks.data()), chunks.size() * sizeof(chunks[0]));
+            append(firstNonces);
+            append(trimInfoSize);
+            data.append(trimInfo);
+            append(firstLogChunk);
+            append(compatibilityInfoSize);
+            data.append(compatibilityInfo);
+            append(ownerSizesSize);
+            append(ownerSizes);
+            if (includeDiskState) {
+                append(diskState);
+            }
+
+            NPDisk::TLogPosition position{0, ui32(pdisk->Format.FirstSysLogSectorIdx() * pdisk->Format.SectorSize)};
+            NPDisk::TEvReadLogResult result(NKikimrProto::OK, position, position, true, 0, "", NPDisk::OwnerSystem);
+            result.Results.emplace_back(TLogSignature(0), TRcBuf(data), 1);
+            pdisk->SysLogDiskState.SetSlow(true); // Legacy recovery must explicitly clear the latch.
+            TString errorReason;
+            UNIT_ASSERT_VALUES_EQUAL_C(pdisk->ProcessChunk0(result, errorReason), expectedSuccess, errorReason);
+            if (expectedSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->SysLogRecord.Reserved1, Max<ui32>());
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->SysLogRecord.Version, PDISK_SYS_LOG_RECORD_VERSION_9);
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->SysLogDiskState.IsSlow(), version >= PDISK_SYS_LOG_RECORD_VERSION_9 && slow);
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->ChunkState[3].OwnerId, 2u);
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->ChunkState[3].Nonce, 27);
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->SysLogFirstNoncesToKeep.FirstNonceToKeep[2], 42);
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->OwnerData[2].GroupSizeInUnits, 7);
+            }
+        };
+
+        checkRecord(PDISK_SYS_LOG_RECORD_VERSION_8, true, false, true);
+        checkRecord(PDISK_SYS_LOG_RECORD_VERSION_8, true, true, true);
+        checkRecord(PDISK_SYS_LOG_RECORD_VERSION_9, false, true, true);
+        checkRecord(PDISK_SYS_LOG_RECORD_VERSION_9, true, true, true);
+        checkRecord(PDISK_SYS_LOG_RECORD_VERSION_9, true, false, false);
+    }
+
+    Y_UNIT_TEST(SlowDiskLatchIsPersistentAndCanBeResetOverHttp) {
+        TActorTestContext testCtx({
+            .OverestimationSlowDurationMs = 0,
+        });
+        auto* pdisk = testCtx.GetPDisk();
+        testCtx.SafeRunOnPDisk([](auto* p) {
+            p->SysLogRecord.Reserved1 = Max<ui32>();
+        });
+
+        const ui32 nodeId = testCtx.GetRuntime()->GetFirstNodeId();
+        testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), testCtx.Sender);
+        testCtx.GetRuntime()->RegisterService(MakeBlobStorageNodeWardenID(nodeId), testCtx.Sender);
+
+        *pdisk->Mon.DeviceOverestimationRatio = NPDisk::OverestimationSlowLimit + 1;
+        testCtx.Send(new TEvents::TEvWakeup());
+
+        bool slowReported = false;
+        for (ui32 i = 0; i < 10 && !slowReported; ++i) {
+            const auto ev = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+            slowReported = ev->Record.GetState() == NKikimrBlobStorage::TPDiskState::Slow;
+        }
+        UNIT_ASSERT_C(slowReported, "PDisk did not publish the Slow state to whiteboard");
+
+        const auto metrics = testCtx.Recv<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
+        UNIT_ASSERT_VALUES_EQUAL(metrics->Record.PDisksMetricsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics->Record.GetPDisksMetrics(0).GetState(),
+            NKikimrBlobStorage::TPDiskState::Normal);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.SlowPDisk->Val(), 1);
+        UNIT_ASSERT(pdisk->SysLogDiskState.IsSlow());
+
+        testCtx.RestartPDiskSync();
+        pdisk = testCtx.GetPDisk();
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.PDiskState->Val(), NKikimrBlobStorage::TPDiskState::Slow);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.SlowPDisk->Val(), 1);
+        UNIT_ASSERT(pdisk->SysLogDiskState.IsSlow());
+
+        // Keep the metric healthy while resetting, otherwise the zero-duration
+        // test setting would immediately set the latch again.
+        *pdisk->Mon.DeviceOverestimationRatio = NPDisk::OverestimationRatioScale;
+        THttpRequestMock httpRequest;
+        httpRequest.CgiParameters.emplace("resetSlowPDisk", "");
+        NMonitoring::TMonService2HttpRequest monRequest(nullptr, &httpRequest, nullptr, nullptr, "", nullptr);
+        testCtx.Send(new NMon::TEvHttpInfo(monRequest));
+        testCtx.Recv<NMon::TEvHttpInfoRes>();
+
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.PDiskState->Val(), NKikimrBlobStorage::TPDiskState::Normal);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.SlowPDisk->Val(), 0);
+        UNIT_ASSERT(!pdisk->SysLogDiskState.IsSlow());
+
+        testCtx.RestartPDiskSync();
+        pdisk = testCtx.GetPDisk();
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.PDiskState->Val(), NKikimrBlobStorage::TPDiskState::Normal);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.SlowPDisk->Val(), 0);
+        UNIT_ASSERT(!pdisk->SysLogDiskState.IsSlow());
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->SysLogRecord.Reserved1, Max<ui32>());
     }
 
     Y_UNIT_TEST(TestPDiskActorErrorState) {

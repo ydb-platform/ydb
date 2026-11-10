@@ -883,10 +883,11 @@ public:
     TString FairSchedulerStr;
     TString ErrorStr;
     bool DoGetSchedule;
+    bool ResetSlowDisk;
 
     THttpInfo(const TActorId &sender, const TActorId &endCustomer, TStringStream outputString,
             TString deviceFlagStr, TString realtimeFlagStr, TString fairSchedulerStr, TString errorStr,
-            bool doGetSchedule, TAtomicBase reqIdx)
+            bool doGetSchedule, bool resetSlowDisk, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::HttpInfo, reqIdx), 0u, 0u, NPriInternal::Other)
         , EndCustomer(endCustomer)
         , OutputString(outputString)
@@ -895,6 +896,7 @@ public:
         , FairSchedulerStr(fairSchedulerStr)
         , ErrorStr(errorStr)
         , DoGetSchedule(doGetSchedule)
+        , ResetSlowDisk(resetSlowDisk)
     {}
 
     ERequestType GetType() const override {

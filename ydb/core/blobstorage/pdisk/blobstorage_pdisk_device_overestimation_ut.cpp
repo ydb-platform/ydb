@@ -195,5 +195,40 @@ Y_UNIT_TEST_SUITE(TSelectPublishedOverestimationResultTest) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TDeviceSlowdownDetectorTest) {
+
+    Y_UNIT_TEST(RequiresStrictlyAboveLimitForWholeDuration) {
+        TDeviceSlowdownDetector detector;
+
+        UNIT_ASSERT(!detector.Update(OverestimationSlowLimit, 0));
+        UNIT_ASSERT(!detector.Update(OverestimationSlowLimit + 1, 100));
+        UNIT_ASSERT(!detector.Update(OverestimationSlowLimit + 1,
+            100 + OverestimationSlowDurationMs - 1));
+        UNIT_ASSERT(detector.Update(OverestimationSlowLimit + 1,
+            100 + OverestimationSlowDurationMs));
+    }
+
+    Y_UNIT_TEST(NormalWindowRestartsDuration) {
+        TDeviceSlowdownDetector detector;
+
+        UNIT_ASSERT(!detector.Update(OverestimationSlowLimit + 1, 10));
+        UNIT_ASSERT(!detector.Update(OverestimationSlowLimit, 10 + OverestimationSlowDurationMs));
+        UNIT_ASSERT(!detector.Update(OverestimationSlowLimit + 1, 20 + OverestimationSlowDurationMs));
+        UNIT_ASSERT(!detector.Update(OverestimationSlowLimit + 1,
+            20 + 2 * OverestimationSlowDurationMs - 1));
+        UNIT_ASSERT(detector.Update(OverestimationSlowLimit + 1,
+            20 + 2 * OverestimationSlowDurationMs));
+    }
+
+    Y_UNIT_TEST(ExplicitResetStartsNewDuration) {
+        TDeviceSlowdownDetector detector;
+
+        UNIT_ASSERT(!detector.Update(OverestimationSlowLimit + 1, 0));
+        UNIT_ASSERT(detector.Update(OverestimationSlowLimit + 1, OverestimationSlowDurationMs));
+        detector.Reset();
+        UNIT_ASSERT(!detector.Update(OverestimationSlowLimit + 1, OverestimationSlowDurationMs + 1));
+    }
+}
+
 } // namespace NPDisk
 } // namespace NKikimr

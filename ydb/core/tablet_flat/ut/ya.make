@@ -68,6 +68,7 @@ SRCS(
     ut_vacuum.cpp
     ut_versions.cpp
     ut_scan_delta.cpp
+    ut_scan_source.cpp
     ut_backup.cpp
 )
 

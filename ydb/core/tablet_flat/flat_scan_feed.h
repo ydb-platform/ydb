@@ -175,6 +175,7 @@ namespace NTable {
                                 !Subset.RemovedTransactions.Contains(lockTxId) &&
                                 !Subset.CommittedTransactions.Contains(lockTxId))
                             {
+                                NotifySource();
                                 op = VersionScan->Feed(lockMode, lockTxId);
                                 if (op != EScan::Feed) {
                                     VersionState = EVersionState::FeedDelta;
@@ -190,6 +191,7 @@ namespace NTable {
                             Y_DEBUG_ABORT_UNLESS(Iter->IsUncommitted());
                             ui64 txId = Iter->GetUncommittedTxId();
                             if (Iter->Row() != ERowOp::Absent && !Subset.RemovedTransactions.Contains(txId)) {
+                                NotifySource();
                                 op = VersionScan->Feed(Iter->Row(), txId);
                             } else {
                                 op = EScan::Feed;
@@ -215,6 +217,7 @@ namespace NTable {
                                 !Subset.RemovedTransactions.Contains(lockTxId) &&
                                 !Subset.CommittedTransactions.Contains(lockTxId))
                             {
+                                NotifySource();
                                 op = VersionScan->Feed(lockMode, lockTxId);
                                 if (op != EScan::Feed) {
                                     VersionState = EVersionState::Feed;
@@ -228,6 +231,7 @@ namespace NTable {
                         case EVersionState::Feed: {
                             Seen++;
                             TRowVersion rowVersion = Iter->GetRowVersion();
+                            NotifySource();
                             op = VersionScan->Feed(Iter->Row(), rowVersion);
                             if (rowVersion) {
                                 VersionState = EVersionState::SkipVersion;
@@ -520,6 +524,12 @@ namespace NTable {
         const TRowVersion SnapshotVersion;
 
     private:
+        void NotifySource()
+        {
+            const auto source = Iter->GetSource();
+            VersionScan->SetSource({source.MemTable, source.Part});
+        }
+
         enum class ESeekState {
             LoadColdParts,
             PrepareBoots,

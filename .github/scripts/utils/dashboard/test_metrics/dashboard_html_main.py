@@ -450,10 +450,16 @@ def build_html_dashboard(
     <span class="dash-spinner" aria-hidden="true"
           style="display:inline-block;width:28px;height:28px;border:3px solid #d0d7de;border-top-color:#0969da;border-radius:50%;animation:dash-spin .7s linear infinite;"></span>
     <span id="dashboardBootText">Loading dashboard…</span>
-    <span class="dash-boot-sub" id="dashboardBootSub">Fetching data and preparing charts. Large runs can take a while.</span>
+    <span class="dash-boot-sub" id="dashboardBootSub">Preparing first paint…</span>
   </div>
-  <!-- After the overlay so the first paint shows a spinner before this CDN fetch blocks. -->
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script>
+    // Let the boot overlay paint before any heavy sync work (Plotly CDN / JSON).
+    window.__dashBootPaint = new Promise(function(resolve) {{
+      requestAnimationFrame(function() {{
+        requestAnimationFrame(resolve);
+      }});
+    }});
+  </script>
   <div id="dashboardLoadError"></div>
   <div id="chartTip"></div>
   <div id="dashboardHeader" class="dash-header">
@@ -845,6 +851,40 @@ def build_html_dashboard(
       if (n < 1024) return n + ' B';
       if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
       return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    }}
+    function loadScript(src) {{
+      return new Promise((resolve, reject) => {{
+        const existing = document.querySelector('script[data-dash-src="' + src + '"]');
+        if (window.Plotly && src.indexOf('plotly') !== -1) {{
+          resolve();
+          return;
+        }}
+        if (existing) {{
+          existing.addEventListener('load', () => resolve());
+          existing.addEventListener('error', () => reject(new Error('Failed to load ' + src)));
+          return;
+        }}
+        const s = document.createElement('script');
+        s.src = src;
+        s.async = true;
+        s.dataset.dashSrc = src;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Failed to load ' + src));
+        document.head.appendChild(s);
+      }});
+    }}
+    try {{
+      await (window.__dashBootPaint || Promise.resolve());
+      setBootText('Loading chart library…', 'Plotly from CDN');
+      await loadScript('https://cdn.plot.ly/plotly-2.35.2.min.js');
+    }} catch (err) {{
+      hideBoot();
+      const el = document.getElementById('dashboardLoadError');
+      if (el) {{
+        el.style.display = 'block';
+        el.textContent = 'Failed to load Plotly: ' + err;
+      }}
+      return;
     }}
     async function fetchJsonWithProgress(url, onProgress) {{
       const resp = await fetch(url);

@@ -93,9 +93,8 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
         exprt.SetCancelRequestedBy(*exportInfo.CancelRequestedBy);
     }
     if (exportInfo.CancelRequestTime) {
-        auto& timestamp = *exprt.MutableCancelRequestTime();
-        timestamp.set_seconds(exportInfo.CancelRequestTime->Seconds());
-        timestamp.set_nanos(exportInfo.CancelRequestTime->NanoSecondsOfSecond());
+        // Match EndTime precision so same-second cancellations preserve timestamp order.
+        *exprt.MutableCancelRequestTime() = SecondsToProtoTimeStamp(exportInfo.CancelRequestTime->Seconds());
     }
 
     switch (exportInfo.State) {

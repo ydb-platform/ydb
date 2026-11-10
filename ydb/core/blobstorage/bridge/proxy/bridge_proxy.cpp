@@ -980,17 +980,22 @@ namespace NKikimr {
 
         void RetryPending(TPendingQueue& queue) {
             for (auto& [deadline, ev] : std::exchange(queue, {})) {
-                switch (ev->GetTypeRewrite()) {
-#define RETRY_REQUEST(TYPE) \
-                    case TYPE::EventType: { \
-                        TYPE::TPtr request(static_cast<TEventHandle<TYPE>*>(ev.release())); \
-                        HandleProxyRequest(request, deadline - TActivationContext::Monotonic()); \
-                        break; \
-                    }
-                    DSPROXY_ENUM_EVENTS(RETRY_REQUEST)
-#undef RETRY_REQUEST
-                    default: Y_ABORT();
+                Redispatch(std::move(ev), deadline - TActivationContext::Monotonic());
+            }
+        }
+
+        // route the request held by this proxy (waiting or restarted one) anew, with the routing wait it has left
+        void Redispatch(std::unique_ptr<IEventHandle> ev, std::optional<TDuration> routingBudget) {
+            switch (ev->GetTypeRewrite()) {
+#define REDISPATCH_REQUEST(TYPE) \
+                case TYPE::EventType: { \
+                    TYPE::TPtr request(static_cast<TEventHandle<TYPE>*>(ev.release())); \
+                    HandleProxyRequest(request, routingBudget); \
+                    break; \
                 }
+                DSPROXY_ENUM_EVENTS(REDISPATCH_REQUEST)
+#undef REDISPATCH_REQUEST
+                default: Y_ABORT();
             }
         }
 
@@ -1007,8 +1012,8 @@ namespace NKikimr {
         void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             StorageConfig = std::move(ev->Get()->Config);
             BridgeInfo = std::move(ev->Get()->BridgeInfo);
-            RestartRequestsWaitingForPilesOut();
             RetryPending(PendingForClusterState);
+            RestartRequestsWaitingForPilesOut();
         }
 
         // the handle restarting the request with its original sender and cookie, and its restart counter advanced
@@ -1023,7 +1028,9 @@ namespace NKikimr {
         // The request waiting for the pile which takes no part in data quorum by the new cluster state is restarted with
         // it, as the one admitted now: the pile may never answer, or answer with an error (e.g. when its nodes are gone and
         // that is why it is out), which would fail the request, while the piles staying in data quorum are enough. What
-        // the pile does with the subrequest doesn't matter then, it gets synced when it is back.
+        // the pile does with the subrequest doesn't matter then, it gets synced when it is back. The request is routed
+        // right here, with the routing wait it has left, so that it is never out of sight of this proxy (and so is
+        // answered when the proxy stops).
         void RestartRequestsWaitingForPilesOut() {
             if (!BridgeInfo) {
                 return;
@@ -1048,7 +1055,7 @@ namespace NKikimr {
                 if (common->RestartCounter >= 100) {
                     ReplyWithError(*handle, "too many restarts of the request racing with cluster state");
                 } else {
-                    TActivationContext::Send(handle.release());
+                    Redispatch(std::move(handle), request->RoutingBudget);
                 }
             }
         }
@@ -1358,6 +1365,7 @@ namespace NKikimr {
             auto& item = it->second;
             auto& pile = *item.Pile;
             std::shared_ptr<TRequest> request = item.Request;
+            std::unique_ptr<IEventHandle> redispatch; // the request restarted right here, once the bookkeeping is done
 
             const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA;
 
@@ -1427,7 +1435,7 @@ namespace NKikimr {
                         // now generation is correct)
                         Y_DEBUG_ABORT_UNLESS(NBridge::GetGroupPile(request->Info->Group->GetBridgeGroupState(),
                             pile.BridgePileId)->GetGroupGeneration() < myGeneration);
-                        TActivationContext::Send(handle.release());
+                        redispatch = std::move(handle);
                     }
                     request->Finished = true;
                 } else {
@@ -1481,6 +1489,12 @@ namespace NKikimr {
                 for (ui64 cookie : request->CookiesInFlight) {
                     RequestsInFlight.erase(cookie);
                 }
+            }
+
+            if (redispatch) {
+                // routed right away rather than sent to self, so that it is never out of sight of this proxy, and with the
+                // routing wait it has left
+                Redispatch(std::move(redispatch), request->RoutingBudget);
             }
         }
 

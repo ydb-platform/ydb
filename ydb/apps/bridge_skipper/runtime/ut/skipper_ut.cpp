@@ -471,8 +471,14 @@ void VerifyPileLessReplyRetainsCandidateVeto(bool fallback) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(B).SelfCheck->SentAt, cachedSend);
     UNIT_ASSERT(fixture.Endpoint(B).SelfCheck->ResponderPile == TString("b"));
     // Keeping the observation never refreshes its send time. Once it expires,
-    // current connectivity may qualify the no-BSC policy as before.
+    // node quorum alone cannot qualify b without its own usable reply.
     fixture.Run(31);
+    UNIT_ASSERT(fixture.Clients->Updates.empty());
+    UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoCandidate);
+    fixture.PileLess.erase(B);
+    fixture.Fallback = true;
+    fixture.Failed.clear();
+    fixture.Run(3);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
     UNIT_ASSERT(fixture.Clients->Updates.front().Plan.Update == TExactUpdate({
         {"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));

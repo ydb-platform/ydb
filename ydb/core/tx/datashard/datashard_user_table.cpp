@@ -283,6 +283,17 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         column.Family = col.GetFamily();
         column.NotNull = col.GetNotNull();
         column.SetNotNullInProgress = col.GetSetNotNullInProgress();
+        switch (col.GetDefaultValueCase()) {
+            case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence:
+                column.DefaultFromSequence = col.GetDefaultFromSequence();
+                break;
+            case NKikimrSchemeOp::TColumnDescription::kEmptyDefault:
+                column.DefaultFromSequence.clear();
+                break;
+            default:
+                // The default is not part of this (delta) description: keep what we have.
+                break;
+        }
     }
 
     for (const auto& col : descr.GetDropColumns()) {
@@ -419,6 +430,9 @@ void TUserTable::AlterSchema() {
         }
         descr->SetFamily(column.Family);
         descr->SetNotNull(column.NotNull);
+        if (column.DefaultFromSequence) {
+            descr->SetDefaultFromSequence(column.DefaultFromSequence);
+        }
     }
 
     schema.SetPartitionRangeBegin(Range.From.GetBuffer());

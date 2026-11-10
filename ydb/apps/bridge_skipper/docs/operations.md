@@ -218,6 +218,19 @@ restart resynchronization. No public resync percentage or ETA exists. A lost
 SUSPENDED pile yields `SUSPENDED_PILE_LOST`; public update cannot disconnect it,
 so restore its quorum or follow a separate server recovery procedure.
 
+When BSC is unavailable and outside connectivity stays binding, Auto can
+confirm failure of the BSC host (PROMOTED, otherwise PRIMARY) from fresh
+agreeing fallback RED static parts with complete VDisk reasons, provided
+the host has no own node-quorum claim. GREY, missing, truncated and
+replication-only data remain insufficient. After a role change this evidence
+starts only after BSC warm-up, then spans `confirm_seconds` within one
+generation. A replacement needs own node quorum and an own fresh
+non-truncated fallback reply without any attributed fallback RED/GREY veto;
+it has no separate candidate confirmation timer. A `NO_CANDIDATE` decision
+can therefore persist while connectivity works but own SelfCheck is missing.
+These observations do not fence an isolated primary or prove full disk health;
+keep exactly one active controller and qualify the policy for the server build.
+
 Membership and conversion use separate existing RPCs. Their CLI commands have
 no `expected_generation` guard. Keep exclusive operator control and Skipper
 Observe/stopped; the mode is not a server fence:

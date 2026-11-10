@@ -4,8 +4,10 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_user_table.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <util/string/strip.h>
@@ -16,6 +18,44 @@ using namespace NKikimr::NDataShard;
 using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
+
+namespace {
+
+    // A single-row batch applying `value` to the column with the given tag of a replicated table.
+    template <typename T>
+    THolder<TEvDataShard::TEvApplyReplicationChanges> MakeApplyRequest(
+            const TTableId& tableId, ui64 sourceOffset, ui32 tag, T value)
+    {
+        auto request = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+        request->Record.SetSource("source");
+        request->Record.SetDatabaseName("/Root");
+
+        auto* change = request->Record.AddChanges();
+        change->SetSourceOffset(sourceOffset);
+        TCell keyCell = TCell::Make<ui32>(1);
+        change->SetKey(TSerializedCellVec::Serialize({&keyCell, 1}));
+
+        auto* upsert = change->MutableUpsert();
+        upsert->AddTags(tag);
+        TCell valueCell = TCell::Make<T>(value);
+        upsert->SetData(TSerializedCellVec::Serialize({&valueCell, 1}));
+
+        return request;
+    }
+
+    // Table with `value` defaulting from the table-local sequence `seq`.
+    TShardedTableOptions SequenceTableOptions(const TString& valueType = "Uint32") {
+        return TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", valueType, false, false, {}, "seq"},
+            })
+            .Sequences(true)
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row);
+    }
+
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(DataShardReplication) {
 
@@ -889,6 +929,174 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
             TChange{.Offset = 1, .WriteTxId = 0, .Key = 1, .Value = 22},
         });
         WaitForContent(server, indexPath, "value = 22, key = 1");
+    }
+
+    // The batch must not be applied until the sequence has been advanced past its values: the
+    // data shard sends the advance first and waits for the result.
+    Y_UNIT_TEST(ApplyWaitsForSequenceAdvance) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", SequenceTableOptions());
+
+        TBlockEvents<NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequence> blocked(runtime);
+
+        const auto requester = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(shards.at(0), requester,
+            MakeApplyRequest(tableId, 1, 2, ui32(42)).Release(), 0, GetPipeConfigWithRetries());
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1u);
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvApplyReplicationChangesResult>(
+            requester, TDuration::Seconds(1)));
+
+        const auto advance = blocked.front();
+        const auto advancePath = std::get<TString>(advance->Get()->Path);
+        UNIT_ASSERT_VALUES_EQUAL(advancePath, "/Root/table-1/seq");
+        UNIT_ASSERT_VALUES_EQUAL(advance->Get()->ObservedMin, 42);
+        UNIT_ASSERT_VALUES_EQUAL(advance->Get()->ObservedMax, 42);
+
+        const auto advanceSender = advance->Sender;
+        const auto advanceCookie = advance->Cookie;
+
+        blocked.Stop();
+        blocked.clear();
+
+        runtime.Send(new IEventHandle(advanceSender, requester,
+            new NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequenceResult(tableId.PathId, 42, true),
+            0, advanceCookie));
+
+        auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(requester);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(result->Get()->Record.GetStatus()),
+            static_cast<ui32>(NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK));
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 42\n");
+    }
+
+    void DoTestApplyAdvancesSequence(const TString& type) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", SequenceTableOptions(type));
+
+        const auto requester = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(shards.at(0), requester, (type == "Uint32"
+            ? MakeApplyRequest(tableId, 1, 2, ui32(42)).Release()
+            : MakeApplyRequest(tableId, 1, 2, i16(42)).Release()), 0, GetPipeConfigWithRetries());
+
+        auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(requester);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(result->Get()->Record.GetStatus()),
+            static_cast<ui32>(NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK));
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 42\n");
+
+        const auto nextValSender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(NSequenceProxy::MakeSequenceProxyServiceID(0), nextValSender,
+            new NSequenceProxy::TEvSequenceProxy::TEvNextVal("/Root", "/Root/table-1/seq")));
+
+        auto nextVal = runtime.GrabEdgeEventRethrow<NSequenceProxy::TEvSequenceProxy::TEvNextValResult>(nextValSender);
+        UNIT_ASSERT_VALUES_EQUAL(nextVal->Get()->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(nextVal->Get()->Value, 43);
+    }
+
+    Y_UNIT_TEST(ApplyAdvancesSequence) {
+        DoTestApplyAdvancesSequence("Uint32");
+    }
+
+    Y_UNIT_TEST(ApplyAdvancesSmallSerialSequence) {
+        DoTestApplyAdvancesSequence("Int16");
+    }
+
+    // If the advance does not complete in time, the batch is rejected (and retried by the
+    // replication service later) instead of being applied with a lagging sequence.
+    Y_UNIT_TEST(ApplyFailsOnSequenceAdvanceTimeout) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", SequenceTableOptions());
+
+        TBlockEvents<NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequence> blocked(runtime);
+
+        const auto requester = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(shards.at(0), requester,
+            MakeApplyRequest(tableId, 1, 2, ui32(42)).Release(), 0, GetPipeConfigWithRetries());
+
+        SimulateSleep(server, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1u);
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvApplyReplicationChangesResult>(
+            requester, TDuration::Seconds(1)));
+
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(requester);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(result->Get()->Record.GetStatus()),
+            static_cast<ui32>(NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(result->Get()->Record.GetReason()),
+            static_cast<ui32>(NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_OVERLOADED));
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "");
+    }
+
+    // `__ydb_row_id` is always stored with the spread layout (the query compiler applies it by column
+    // name), so the backing sequence must be advanced in the dense seq space rather than in the row-id
+    // space.
+    Y_UNIT_TEST(ApplyAdvancesRowIdSequenceInSeqSpace) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"__ydb_row_id", "Uint64", false, false, {}, "_seq___ydb_row_id"},
+            })
+            .Sequences(true)
+            .AllowSystemColumnNames(true)
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row);
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        TBlockEvents<NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequence> blocked(runtime);
+
+        const ui64 seq = 7;
+        const auto rowId = NTableIndex::NFulltext::RowIdFromSeq(seq);
+
+        const auto requester = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(shards.at(0), requester,
+            MakeApplyRequest(tableId, 1, /*tag=*/2, ui64(rowId)).Release(), 0, GetPipeConfigWithRetries());
+
+        SimulateSleep(server, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1u);
+
+        const auto advance = blocked.front();
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(advance->Get()->Path), "/Root/table-1/_seq___ydb_row_id");
+        UNIT_ASSERT_VALUES_EQUAL(advance->Get()->ObservedMin, static_cast<i64>(seq));
+        UNIT_ASSERT_VALUES_EQUAL(advance->Get()->ObservedMax, static_cast<i64>(seq));
+
+        blocked.Stop();
+        blocked.clear();
     }
 
 }

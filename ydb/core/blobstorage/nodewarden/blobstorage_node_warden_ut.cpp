@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_test_peer.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/crypto/default.h>
@@ -347,6 +348,92 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         return MakeBSControllerID();
     }
 
+    void AssertReplQuoterRate(const TReplQuoter::TPtr& quoter, ui64 expectedBytesPerSecond) {
+        UNIT_ASSERT(quoter);
+        const ui64 expectedMaxPacketSize = expectedBytesPerSecond
+            * TReplQuoter::GetCapacity().MicroSeconds()
+            / TDuration::Seconds(1).MicroSeconds();
+        UNIT_ASSERT_VALUES_EQUAL(quoter->GetMaxPacketSize(), expectedMaxPacketSize);
+    }
+
+    CUSTOM_UNIT_TEST(ApplyReplBrokerConfigUpdatesAllQuoters) {
+        auto nodeWardenConfig = MakeIntrusive<TNodeWardenConfig>();
+        NStorage::TNodeWarden warden(nodeWardenConfig);
+        NStorage::TNodeWardenTestPeer::InitializeReplQuoters(warden, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 1, NPDisk::DEVICE_TYPE_ROT, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 2, NPDisk::DEVICE_TYPE_SSD, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 3, NPDisk::DEVICE_TYPE_NVME, 10);
+
+        NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig config;
+        config.SetTotalRequestBytesPerSecond(1'100);
+        config.SetTotalResponseBytesPerSecond(1'200);
+
+        const auto addMediaQuota = [&](NKikimrBlobStorage::EPDiskType type, ui64 read, ui64 write) {
+            auto *quota = config.AddMediaTypeQuota();
+            quota->SetType(type);
+            quota->SetReadBytesPerSecond(read);
+            quota->SetWriteBytesPerSecond(write);
+        };
+        addMediaQuota(NKikimrBlobStorage::EPDiskType::ROT, 2'100, 2'200);
+        addMediaQuota(NKikimrBlobStorage::EPDiskType::SSD, 3'100, 3'200);
+        addMediaQuota(NKikimrBlobStorage::EPDiskType::NVME, 4'100, 4'200);
+
+        NStorage::TNodeWardenTestPeer::ApplyReplBrokerConfig(warden, config);
+
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeRequestQuoter(warden), 1'100);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeResponseQuoter(warden), 1'200);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 1), 2'100);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 1), 2'200);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 2), 3'100);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 2), 3'200);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 3), 4'100);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 3), 4'200);
+    }
+
+    CUSTOM_UNIT_TEST(ApplyReplBrokerConfigDecreasesRatesAndRestoresDefaults) {
+        auto nodeWardenConfig = MakeIntrusive<TNodeWardenConfig>();
+        NStorage::TNodeWarden warden(nodeWardenConfig);
+        NStorage::TNodeWardenTestPeer::InitializeReplQuoters(warden, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 1, NPDisk::DEVICE_TYPE_ROT, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 2, NPDisk::DEVICE_TYPE_SSD, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 3, NPDisk::DEVICE_TYPE_NVME, 10);
+
+        NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig highConfig;
+        highConfig.SetTotalRequestBytesPerSecond(900'000'000);
+        highConfig.SetTotalResponseBytesPerSecond(800'000'000);
+        auto *highQuota = highConfig.AddMediaTypeQuota();
+        highQuota->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+        highQuota->SetReadBytesPerSecond(700'000'000);
+        highQuota->SetWriteBytesPerSecond(600'000'000);
+        NStorage::TNodeWardenTestPeer::ApplyReplBrokerConfig(warden, highConfig);
+
+        NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig lowConfig;
+        lowConfig.SetTotalRequestBytesPerSecond(90'000'000);
+        lowConfig.SetTotalResponseBytesPerSecond(80'000'000);
+        auto *lowQuota = lowConfig.AddMediaTypeQuota();
+        lowQuota->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+        lowQuota->SetReadBytesPerSecond(70'000'000);
+        lowQuota->SetWriteBytesPerSecond(60'000'000);
+        NStorage::TNodeWardenTestPeer::ApplyReplBrokerConfig(warden, lowConfig);
+
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeRequestQuoter(warden), 90'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeResponseQuoter(warden), 80'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 1), 70'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 1), 60'000'000);
+
+        NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig defaultConfig;
+        NStorage::TNodeWardenTestPeer::ApplyReplBrokerConfig(warden, defaultConfig);
+
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeRequestQuoter(warden), 500'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeResponseQuoter(warden), 500'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 1), 100'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 1), 100'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 2), 200'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 2), 200'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 3), 300'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 3), 300'000'000);
+    }
+
     ui32 CreatePDisk(TTestActorRuntime &runtime, ui32 nodeIdx, TString path, ui64 guid, ui32 pdiskId, ui64 pDiskCategory,
             const NKikimrBlobStorage::TPDiskConfig* pdiskConfig = nullptr, TActorId nodeWarden = {}) {
         VERBOSE_COUT(" Creating pdisk");
@@ -473,6 +560,54 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 Put(runtime, sender, groupId, TLogoBlobID(1234, 1, 2, 0, payloads[1].size(), 0), payloads[1]);
             }
         }
+    }
+
+    CUSTOM_UNIT_TEST(VDiskChunkReadErrorKeepsNodeAlive) {
+        // TPDisk::Stop answers the chunk reads that are still in its queue with ERROR. Here the PDisk's answer to
+        // a VDisk chunk read is replaced with such an ERROR. The VDisk must switch to the PDisk error state instead
+        // of aborting the whole process.
+        const ui32 groupId = TGroupID(EGroupConfigurationType::Static, DOMAIN_ID, 0).GetRaw();
+        TTestBasicRuntime runtime(1, false);
+        const ui32 nodeId = runtime.GetNodeId(0);
+        bool inject = false;
+        ui32 readErrors = 0;
+        ui32 vdiskErrors = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NPDisk::TEvChunkReadResult::EventType:
+                    if (std::exchange(inject, false)) {
+                        auto *msg = ev->Get<NPDisk::TEvChunkReadResult>();
+                        msg->Status = NKikimrProto::ERROR;
+                        msg->ErrorReason = "PDisk is stopped";
+                        ++readErrors;
+                    }
+                    break;
+                case TEvStatusUpdate::EventType:
+                    if (ev->Get<TEvStatusUpdate>()->Status == NKikimrBlobStorage::EVDiskStatus::ERROR) {
+                        ++vdiskErrors;
+                    }
+                    break;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Setup(runtime, "", nullptr, {}, {}, false /* setupController: only the static group is needed */);
+
+        auto sender = runtime.AllocateEdgeActor();
+        // Huge parts go straight to chunks, so the get below needs chunk reads.
+        const TString data(4_MB, 'h');
+        const TLogoBlobID id(1234, 1, 1, 0, data.size(), 0);
+        Put(runtime, sender, groupId, id, data);
+
+        inject = true;
+        const auto nodeWarden = MakeBlobStorageNodeWardenID(nodeId);
+        runtime.Send(new IEventHandle(MakeBlobStorageProxyID(groupId), sender,
+            new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead),
+            IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden));
+        TDispatchOptions waitForError;
+        waitForError.CustomFinalCondition = [&] { return vdiskErrors > 0; };
+        runtime.DispatchEvents(waitForError, TDuration::Seconds(10));
+        UNIT_ASSERT_C(readErrors > 0, "no chunk read was answered");
+        UNIT_ASSERT_C(vdiskErrors > 0, "no VDisk switched to the error state");
     }
 
     void CreateStoragePool(TTestBasicRuntime& runtime, TString name, TString kind) {

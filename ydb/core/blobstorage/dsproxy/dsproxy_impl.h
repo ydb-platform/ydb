@@ -229,8 +229,23 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Put to init queue
 
+    // The request was sent to the group's service id before the bridge proxy of the inline pile was put in front of us
+    // (requests of the bridge proxy have ForceGroupGeneration set); it has to be routed through the bridge proxy whatever
+    // state we are in, as the inline pile may stay unreachable while other piles serve the group.
+    template<typename TPtr>
+    bool ForwardToInlinePileBridgeProxy(TPtr& ev) {
+        if (InlinePileBridgeProxyId && !ev->Get()->ForceGroupGeneration) {
+            TActivationContext::Send(ev->Forward(InlinePileBridgeProxyId));
+            return true;
+        }
+        return false;
+    }
+
     template<typename TEvent>
     void HandleEnqueue(TAutoPtr<TEventHandle<TEvent>> ev) {
+        if (ForwardToInlinePileBridgeProxy(ev)) {
+            return;
+        }
         YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PROXY, "Dump group, handleEnqueue, marker",
             {"group", GroupId},
             {"handleEnqueue", ev->Get()->Print(false)},
@@ -336,6 +351,9 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     template<typename TEvent>
     void HandleError(TAutoPtr<TEventHandle<TEvent>> ev) {
+        if (ForwardToInlinePileBridgeProxy(ev)) {
+            return; // other piles may serve it
+        }
         bool full = false;
         if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvBlock> || std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
             full = ev->Get()->IsMonitored;
@@ -475,10 +493,7 @@ public:
 
     template<typename TPtr>
     void HandleWork(TPtr& ev) {
-        if (InlinePileBridgeProxyId && !ev->Get()->ForceGroupGeneration) {
-            // this request was sent to the group's service id before the bridge proxy was put in front of us; route it
-            // through the bridge proxy now
-            TActivationContext::Send(ev->Forward(InlinePileBridgeProxyId));
+        if (ForwardToInlinePileBridgeProxy(ev)) {
             return;
         }
         HandleNormal(ev);

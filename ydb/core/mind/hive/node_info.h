@@ -55,10 +55,8 @@ public:
         }
 
         void RemoveRestriction() {
-            // We set IsSet to true if we are removing a restriction that does not exist anyway
-            // This way, it takes priority over DefaultTabletCount from HiveConfig
-            IsSet = (EffectiveMaxCount == FromLocal.GetMaxCount() || FromLocal.GetMaxCount() != MAX_TABLET_COUNT_DEFAULT_VALUE);
             EffectiveMaxCount = FromLocal.GetMaxCount();
+            IsSet = (EffectiveMaxCount != MAX_TABLET_COUNT_DEFAULT_VALUE);
         }
     };
 
@@ -195,6 +193,12 @@ public:
     i32 GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const;
     ui64 GetMaxTabletsScheduled() const;
     ui64 GetMaxCountForTabletType(TTabletTypes::EType tabletType) const;
+    void SetTabletAvailabilityRestriction(TTabletTypes::EType tabletType, ui64 maxCount);
+    // Cycles restricted -> default -> explicitly allowed (overriding DefaultTabletLimit).
+    // Explicit allow is stored as a MAX_TABLET_COUNT_DEFAULT_VALUE restriction, so it survives node re-registration.
+    // Returns true if the type is now explicitly allowed.
+    // Callers should only use it for types present in TabletAvailability.
+    bool ResetTabletAvailabilityRestriction(TTabletTypes::EType tabletType);
 
     bool IsAbleToScheduleTablet() const {
         return GetTabletsScheduled() < GetMaxTabletsScheduled();

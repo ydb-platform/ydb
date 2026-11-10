@@ -9919,6 +9919,66 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, tabletId, 0);
     }
 
+    Y_UNIT_TEST(TestTabletAvailabilityExplicitAllowSurvivesNodeRestart) {
+        // Dummy is banned by default, then explicitly allowed on the node via the UI.
+        // The explicit allow must survive the node re-registering in hive.
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            auto* limit = app.HiveConfig.AddDefaultTabletLimit();
+            limit->SetType(TTabletTypes::Dummy);
+            limit->SetMaxCount(0);
+        });
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TActorId sender = runtime.AllocateEdgeActor(0);
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets);
+            runtime.DispatchEvents(options);
+        }
+
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, TTabletTypes::Dummy, BINDED_CHANNELS));
+        auto tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("TabletAvailability");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("resettype");
+            p3->SetValue(TStringBuilder() << (ui32)TTabletTypes::Dummy);
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("node");
+            p4->SetValue(TStringBuilder() << runtime.GetNodeId(0));
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+        }
+
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        // restart the node's local
+        SendKillLocal(runtime, 0);
+        WaitForEvServerDisconnected(runtime);
+        CreateLocal(runtime, 0);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        // restart hive
+        runtime.Register(CreateTabletKiller(hiveTablet));
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+    }
+
     Y_UNIT_TEST(TestSetDomain) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);

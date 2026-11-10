@@ -120,7 +120,8 @@
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 3, "Name": "Query", "Type": "TExprList"},
                 {"Index": 4, "Name": "QueryColumns", "Type": "TCoAtomList"},
-                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 6, "Name": "MainTableCovered", "Type": "TCoAtom"}
             ]
         },
         {

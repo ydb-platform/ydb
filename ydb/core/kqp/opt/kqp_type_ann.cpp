@@ -377,7 +377,7 @@ const TTypeAnnotationNode* GetReadTableRowTypeFullText(TExprContext& ctx, const 
 }
 
 TStatus AnnotateReadTableFullTextIndexSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster, const TKikimrTablesData& tablesData) {
-    if (!EnsureArgsCount(*node, 6, ctx)) {
+    if (!EnsureArgsCount(*node, 7, ctx)) {
         return TStatus::Error;
     }
 

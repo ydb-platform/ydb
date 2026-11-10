@@ -528,7 +528,9 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
     fixture.Runtime.RegisterService(NResourceBroker::MakeResourceBrokerID(), broker);
     ui64 activeLimit = 0;
     ui64 brokerLimit = 0;
+    ui32 configurations = 0;
     auto observer = fixture.Runtime.AddObserver<NResourceBroker::TEvResourceBroker::TEvConfigure>([&](auto& event) {
+        ++configurations;
         brokerLimit = event->Get()->Record.GetResourceLimit().GetMemory();
         for (const auto& queue : event->Get()->Record.GetQueues()) {
             if (queue.GetName() == "queue_build_index") {
@@ -549,11 +551,21 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
     lease = quota.TryAcquire(1_MB, 128, 32_MB);
     UNIT_ASSERT(lease);
     fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities - 1_MB);
+    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities - 8_MB);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Consumption"), 1_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Reserved"), 8_MB);
+    const ui32 initialConfigurations = configurations;
+    auto secondLease = quota.TryAcquire(2_MB, 128, 32_MB);
+    UNIT_ASSERT(secondLease);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(configurations, initialConfigurations);
+    secondLease.reset();
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(configurations, initialConfigurations);
     lease.reset();
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Reserved"), 0);
 }
 
 Y_UNIT_TEST(IndexBuildBudgetOnSmallNodes) {

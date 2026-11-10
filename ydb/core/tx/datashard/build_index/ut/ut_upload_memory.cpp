@@ -12,6 +12,7 @@
 
 #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
 #include <library/cpp/testing/common/env.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <util/generic/size_literals.h>
 #include <util/stream/file.h>
@@ -131,6 +132,33 @@ public:
         return event;
     }
 
+    auto LocalRequest(ui64 shard) {
+        auto request = MakeHolder<TEvDataShard::TEvLocalKMeansRequest>();
+        auto& rec = request->Record;
+        rec.SetAllowMemoryAdmission(true);
+        rec.SetId(1);
+        rec.SetSeqNoGeneration(1);
+        rec.SetSeqNoRound(1);
+        rec.SetTabletId(shard);
+        Table.PathId.ToProto(rec.MutablePathId());
+        rec.MutableSettings()->set_vector_dimension(2);
+        rec.MutableSettings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
+        rec.MutableSettings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        rec.SetK(2);
+        rec.SetSeed(1337);
+        rec.SetNeedsRounds(3);
+        rec.SetUpload(NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING);
+        rec.SetParentFrom(0);
+        rec.SetParentTo(0);
+        rec.SetChild(1);
+        rec.SetEmbeddingColumn("embedding");
+        rec.AddDataColumns("data");
+        rec.SetDatabaseName("/Root");
+        rec.SetLevelName("/Root/table-level");
+        rec.SetOutputName("/Root/table-posting");
+        return request;
+    }
+
     void Send(ui64 shard) {
         Runtime.SendToPipe(shard, Sender, Request(shard).Release(), 0, GetPipeConfigWithRetries());
     }
@@ -222,20 +250,22 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Bytes, 0);
     }
 
-    Y_UNIT_TEST(RequestLargerThanPendingPoolRetriesAfterLimitIncreases) {
+    Y_UNIT_TEST(OversizePendingRequestFailsWithoutRetryHint) {
         TAdmissionFixture fixture;
-        fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(1);
-        fixture.Send(fixture.Shards[0]);
-        auto reply = fixture.Reply(NKikimrIndexBuilder::ABORTED);
-        UNIT_ASSERT_GT(reply->Get()->Record.GetRetryAfterMs(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Bytes, 0);
+        for (ui64 limit : {0, 1}) {
+            fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(limit);
+            fixture.Send(fixture.Shards[0]);
+            auto reply = fixture.Reply(NKikimrIndexBuilder::BAD_REQUEST);
+            UNIT_ASSERT(!reply->Get()->Record.HasRetryAfterMs());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Bytes, 0);
+        }
         fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(64_MB);
         fixture.Send(fixture.Shards[0]);
         fixture.Reply(NKikimrIndexBuilder::DONE);
     }
 
-    Y_UNIT_TEST(InvalidRequestIsPermanentButScanMemoryLimitIsRetryable) {
+    Y_UNIT_TEST(InvalidRequestAndImpossibleScanReservationArePermanent) {
         TAdmissionFixture fixture;
         auto& config = fixture.Runtime.GetAppData().DataShardConfig;
         config.SetBuildIndexRequestBytesLimit(1);
@@ -245,15 +275,15 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         config.SetBuildIndexRequestBytesLimit(32_MB);
         config.SetBuildIndexScanMemoryLimit(1);
         fixture.Send(fixture.Shards[1]);
-        auto second = fixture.Reply(NKikimrIndexBuilder::ABORTED);
-        UNIT_ASSERT_GT(second->Get()->Record.GetRetryAfterMs(), 0);
+        auto second = fixture.Reply(NKikimrIndexBuilder::BAD_REQUEST);
+        UNIT_ASSERT(!second->Get()->Record.HasRetryAfterMs());
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
         config.SetBuildIndexScanMemoryLimit(1_GB);
         fixture.Send(fixture.Shards[1]);
         fixture.Reply(NKikimrIndexBuilder::DONE);
     }
 
-    Y_UNIT_TEST(BrokerMemoryRejectionRetriesAfterLimitIncreases) {
+    Y_UNIT_TEST(BrokerCapacityRejectionIsPermanent) {
         TAdmissionFixture fixture;
         using TBroker = NResourceBroker::TEvResourceBroker;
         auto configure = [&](ui64 memory) {
@@ -268,12 +298,23 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         };
         configure(1);
         fixture.Send(fixture.Shards[0]);
-        const auto rejected = fixture.Reply(NKikimrIndexBuilder::ABORTED);
-        UNIT_ASSERT_GT(rejected->Get()->Record.GetRetryAfterMs(), 0);
+        const auto rejected = fixture.Reply(NKikimrIndexBuilder::BAD_REQUEST);
+        UNIT_ASSERT(!rejected->Get()->Record.HasRetryAfterMs());
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
         configure(448_MB);
         fixture.Send(fixture.Shards[0]);
         fixture.Reply(NKikimrIndexBuilder::DONE);
+    }
+
+    Y_UNIT_TEST(RequiredRowCannotRetryBeyondScanCapacity) {
+        TAdmissionFixture fixture;
+        auto request = fixture.Request(fixture.Shards[0]);
+        request->Record.SetRequiredRowBytes(1_GB);
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, request.Release(), 0, GetPipeConfigWithRetries());
+        const auto reply = fixture.Reply(NKikimrIndexBuilder::BAD_REQUEST);
+        UNIT_ASSERT(!reply->Get()->Record.HasRetryAfterMs());
+        UNIT_ASSERT_STRING_CONTAINS(reply->Get()->Record.ShortDebugString(), "Minimum index scan reservation");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
     }
 
     Y_UNIT_TEST(UnrelatedBrokerErrorsDoNotCancelGrantedScan) {
@@ -375,29 +416,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
                 reservation = event->Get()->Task.RequiredResources[NKikimrResourceBroker::MEMORY];
             }
         });
-        auto request = MakeHolder<TEvDataShard::TEvLocalKMeansRequest>();
-        auto& rec = request->Record;
-        rec.SetAllowMemoryAdmission(true);
-        rec.SetId(1);
-        rec.SetSeqNoGeneration(1);
-        rec.SetSeqNoRound(1);
-        rec.SetTabletId(fixture.Shards[0]);
-        fixture.Table.PathId.ToProto(rec.MutablePathId());
-        rec.MutableSettings()->set_vector_dimension(2);
-        rec.MutableSettings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
-        rec.MutableSettings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
-        rec.SetK(2);
-        rec.SetSeed(1337);
-        rec.SetNeedsRounds(3);
-        rec.SetUpload(NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING);
-        rec.SetParentFrom(0);
-        rec.SetParentTo(0);
-        rec.SetChild(1);
-        rec.SetEmbeddingColumn("embedding");
-        rec.AddDataColumns("data");
-        rec.SetDatabaseName("/Root");
-        rec.SetLevelName("/Root/table-level");
-        rec.SetOutputName("/Root/table-posting");
+        auto request = fixture.LocalRequest(fixture.Shards[0]);
         fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, request.Release(), 0, GetPipeConfigWithRetries());
         auto reply = fixture.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvLocalKMeansResponse>(fixture.Sender);
         UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetStatus(), NKikimrIndexBuilder::DONE,
@@ -406,6 +425,23 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         UNIT_ASSERT_LE(reservation, 96_MB);
         UNIT_ASSERT_GT(reply->Get()->Record.GetMeteringStats().GetUploadRows(), 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Bytes, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(LocalEmptyResumeRangeCompletes, Admission) {
+        TAdmissionFixture fixture;
+        fixture.InsertRow();
+        CreateLevelTable(fixture.Server, fixture.Sender, TShardedTableOptions().Shards(1));
+        auto request = fixture.LocalRequest(fixture.Shards[0]);
+        request->Record.SetAllowMemoryAdmission(Admission);
+        const TCell key = TCell::Make(ui32(1));
+        TSerializedTableRange resume{{&key, 1}, false, {&key, 1}, true};
+        resume.Serialize(*request->Record.MutableKeyRange());
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, request.Release(), 0, GetPipeConfigWithRetries());
+        const auto reply = fixture.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvLocalKMeansResponse>(fixture.Sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetStatus(), NKikimrIndexBuilder::DONE,
+            reply->Get()->Record.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetUploadRows(), 0);
+        UNIT_ASSERT(reply->Get()->Record.GetIsEmpty());
     }
 
     Y_UNIT_TEST(ScanShrinksBuffersToFitExplicitScanLimit) {
@@ -436,10 +472,14 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         });
         fixture.InsertRow(TString(10_MB, 'x'));
         fixture.Send(fixture.Shards[0]);
-        const auto reply = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        auto reply = fixture.Reply(NKikimrIndexBuilder::ABORTED);
         UNIT_ASSERT_GT(reply->Get()->Record.GetRequiredRowBytes(), 10_MB);
+        const ui64 requiredRowBytes = reply->Get()->Record.GetRequiredRowBytes();
+        // The reply owns the old broker reservation until the receiver has
+        // processed it. Release it before asking the tight budget for a retry.
+        reply.Reset();
         auto event = fixture.Request(fixture.Shards[0]);
-        event->Record.SetRequiredRowBytes(reply->Get()->Record.GetRequiredRowBytes());
+        event->Record.SetRequiredRowBytes(requiredRowBytes);
         event->Record.SetSeqNoRound(2);
         fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, event.Release(), 0, GetPipeConfigWithRetries());
         const auto done = fixture.Reply(NKikimrIndexBuilder::DONE);
@@ -522,6 +562,29 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
     }
 
+    Y_UNIT_TEST(StaleSequenceGetsReplyWithoutCancellingNewerScan) {
+        TAdmissionFixture fixture;
+        using TGrant = NResourceBroker::TEvResourceBroker::TEvResourceAllocated;
+        TBlockEvents<TGrant> grants(fixture.Runtime, [](const TGrant::TPtr& event) {
+            auto* resource = dynamic_cast<NTabletFlatExecutor::TResource*>(event->Get()->Cookie.Get());
+            return resource && resource->Source == NTabletFlatExecutor::TResource::ESource::Scan;
+        });
+        auto request = fixture.Request(fixture.Shards[0]);
+        request->Record.SetSeqNoRound(2);
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, request.Release(), 0, GetPipeConfigWithRetries());
+        fixture.Runtime.WaitFor("newer scan grant held", [&] { return grants.size() == 1; });
+        fixture.Send(fixture.Shards[0]);
+        const auto stale = fixture.Reply(NKikimrIndexBuilder::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(stale->Get()->Record.GetRequestSeqNoRound(), 1);
+        UNIT_ASSERT(!stale->Get()->Record.HasRetryAfterMs());
+        UNIT_ASSERT_STRING_CONTAINS(stale->Get()->Record.ShortDebugString(), "Stale index scan");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 1);
+        grants.Stop().Unblock();
+        const auto done = fixture.Reply(NKikimrIndexBuilder::DONE);
+        UNIT_ASSERT_VALUES_EQUAL(done->Get()->Record.GetRequestSeqNoRound(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+    }
+
     Y_UNIT_TEST(QueuedScanKeepsRequestedMvccVersion) {
         TAdmissionFixture fixture;
         fixture.InsertRow("old");
@@ -574,12 +637,30 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         });
         // The upload actor times out at five minutes. Its protobuf remains
         // held here, so a retry must wait instead of retaining a second copy.
-        fixture.Runtime.SimulateSleep(TDuration::Minutes(6));
+        fixture.Runtime.SimulateSleep(TDuration::Minutes(5) + TDuration::Seconds(15));
         UNIT_ASSERT_VALUES_EQUAL(timeouts, 1);
         UNIT_ASSERT_VALUES_EQUAL(uploads.size(), 1);
         uploads.Stop().Unblock();
         fixture.Reply(NKikimrIndexBuilder::DONE);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+    }
+
+    Y_UNIT_TEST(RetainedUploadFailsAfterBoundedCleanupWait) {
+        TAdmissionFixture fixture;
+        fixture.InsertRow();
+        TBlockEvents<TEvDataShard::TEvUploadRowsRequest> uploads(fixture.Runtime);
+        fixture.Send(fixture.Shards[0]);
+        fixture.Runtime.WaitFor("upload retained beyond timeout", [&] { return uploads.size() == 1; });
+        std::weak_ptr<void> reservation = (*uploads.begin())->Get()->MemoryReservation;
+        fixture.Runtime.SimulateSleep(TDuration::Minutes(7));
+        auto reply = fixture.Reply(NKikimrIndexBuilder::BUILD_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(reply->Get()->Record.ShortDebugString(), "previous upload payload cleanup");
+        reply.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(uploads.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+        UNIT_ASSERT(!reservation.expired());
+        uploads.Stop().Unblock();
+        fixture.Runtime.WaitFor("retained payload releases broker reservation", [&] { return reservation.expired(); });
     }
 
     Y_UNIT_TEST(BlockedUploadKeepsReservationAfterSourceReboot) {

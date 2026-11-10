@@ -857,7 +857,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
                     resume.Load(req.GetKeyRange());
                     const auto range = Intersect(table.KeyColumnTypes, resume.ToTableRange(),
                         Intersect(table.KeyColumnTypes, parentRange, table.Range.ToTableRange()));
-                    Y_ENSURE(!range.IsEmptyRange(table.KeyColumnTypes), "Scan range changed during admission");
                     lead = CreateLeadFrom(range);
                 } else if (!req.GetParentFrom()) {
                     lead.To({}, NTable::ESeek::Lower);

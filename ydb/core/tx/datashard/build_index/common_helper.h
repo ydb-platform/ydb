@@ -192,8 +192,7 @@ public:
             return;
         }
 
-        if (!PreviousAttempt.expired()) {
-            TActivationContext::ActorContextFor(Owner).Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
+        if (WaitForPreviousAttempt()) {
             return;
         }
         if (!UploadStatus.IsNone() && !UploadStatus.IsSuccess()) {
@@ -441,8 +440,7 @@ private:
         Y_ENSURE(Owner);
         // A timed-out child may leave a protobuf request in a local mailbox.
         // Wait for its allocation owners before making another payload copy.
-        if (!PreviousAttempt.expired()) {
-            TActivationContext::ActorContextFor(Owner).Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup());
+        if (WaitForPreviousAttempt()) {
             return;
         }
         std::shared_ptr<void> attempt;
@@ -460,10 +458,27 @@ private:
         UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
     }
 
+    bool WaitForPreviousAttempt() {
+        if (PreviousAttempt.expired()) {
+            CleanupWaitStarted.reset();
+            return false;
+        }
+        const auto now = TActivationContext::Now();
+        if (!CleanupWaitStarted) {
+            CleanupWaitStarted = now;
+        }
+        // Keep the retained payload charged, but do not leave its scan waiting
+        // forever for a disconnected pipe or a stalled destination mailbox.
+        Y_ENSURE(now < *CleanupWaitStarted + TDuration::Minutes(1),
+            "Timed out waiting for previous upload payload cleanup");
+        TActivationContext::ActorContextFor(Owner).Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
+        return true;
+    }
 
 private:
     std::shared_ptr<void> ResourceReservation;
     std::weak_ptr<TUploadAttempt> PreviousAttempt;
+    std::optional<TInstant> CleanupWaitStarted;
     const TString Database;
     const TIndexBuildScanSettings ScanSettings;
     TActorId Owner;
@@ -548,8 +563,8 @@ private:
 };
 
 template<class TRequest>
-ui64 EstimateBuildIndexScanMemory(const TRequest& request, const TUserTable& table, ui64 rowLimit) {
-    ui64 memory = CheckedScanMemoryAdd(4_MB, CheckedScanMemoryMul(request.SpaceUsedLong(), 2));
+ui64 EstimateBuildIndexScanMemory(const TRequest& request, const TUserTable& table, ui64 rowLimit, ui64 requestMemory) {
+    ui64 memory = CheckedScanMemoryAdd(4_MB, CheckedScanMemoryMul(requestMemory, 2));
     ui64 clusters = 1;
     if constexpr (requires { request.ClustersSize(); }) {
         clusters = request.ClustersSize();
@@ -608,13 +623,13 @@ ui64 EstimateBuildIndexScanMemory(const TRequest& request, const TUserTable& tab
 }
 
 template<class TRequest>
-ui64 FitBuildIndexScanMemory(TRequest& request, const TUserTable& table, ui64 limit, ui64& rowLimit) {
+ui64 FitBuildIndexScanMemory(TRequest& request, const TUserTable& table, ui64 limit, ui64& rowLimit, ui64 requestMemory) {
     if (!limit) {
         return 0;
     }
     const ui64 minimumRow = Max<ui64>(1, request.GetRequiredRowBytes());
     for (;;) {
-        const ui64 memory = EstimateBuildIndexScanMemory(request, table, rowLimit);
+        const ui64 memory = EstimateBuildIndexScanMemory(request, table, rowLimit, requestMemory);
         if (memory <= limit) {
             return memory;
         }
@@ -641,6 +656,27 @@ ui64 FitBuildIndexScanMemory(TRequest& request, const TUserTable& table, ui64 li
     }
 }
 
+template<class TRequest, class TResponse>
+void ReplyBuildIndexScanFailure(TDataShard* self, TActorId recipient, const TRequest& request,
+    THolder<TResponse>& response, const TString& reason, bool retry)
+{
+    if (!response) {
+        response = MakeHolder<TResponse>();
+    }
+    auto& record = response->Record;
+    record.SetId(request.GetId());
+    record.SetTabletId(self->TabletID());
+    record.SetRequestSeqNoGeneration(request.GetSeqNoGeneration());
+    record.SetRequestSeqNoRound(request.GetSeqNoRound());
+    record.SetStatus(retry ? NKikimrIndexBuilder::ABORTED : NKikimrIndexBuilder::BAD_REQUEST);
+    record.ClearRetryAfterMs();
+    if (retry) {
+        record.SetRetryAfterMs(1000);
+    }
+    record.AddIssues()->set_message(reason);
+    TlsActivationContext->Send(new IEventHandle(recipient, self->SelfId(), response.Release()));
+}
+
 // The request and response are moved, never copied into an unbounded closure.
 // Only admission-aware senders may receive the new retry hint; old nodes keep
 // their existing protocol while rolling upgrades are in progress.
@@ -654,6 +690,9 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
             auto* settings = request.MutableScanSettings();
             const ui64 cap = AppData()->DataShardConfig.GetBuildIndexBatchRowsLimit();
             settings->SetMaxBatchRows(Min<ui64>(Max<ui64>(1, settings->GetMaxBatchRows()), Max<ui64>(1, cap)));
+            // Materialize the default before sizing the protobuf. Fitting may
+            // reduce these scalar values, but cannot increase their encoding.
+            settings->SetMaxBatchBytes(settings->GetMaxBatchBytes());
         }
     }
     const ui64 id = request.GetId();
@@ -668,9 +707,16 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
         return;
     }
 
+    auto reject = [&](const TString& reason, bool retry) {
+        ReplyBuildIndexScanFailure(self, ev->Sender, request, response, reason, retry);
+    };
     auto& manager = self->GetScanManager();
     if (const auto* previous = manager.Get(id)) {
-        if (previous->SeqNo >= seqNo) {
+        if (previous->SeqNo == seqNo) {
+            return;
+        }
+        if (previous->SeqNo > seqNo) {
+            reject("Stale index scan request sequence number", false);
             return;
         }
         for (ui64 serial : previous->ScanIds) {
@@ -680,20 +726,14 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
     }
 
     const auto& config = AppData()->DataShardConfig;
-    auto reject = [&](const TString& reason, bool retry) {
-        response->Record.SetStatus(retry ? NKikimrIndexBuilder::ABORTED : NKikimrIndexBuilder::BAD_REQUEST);
-        if (retry) {
-            response->Record.SetRetryAfterMs(1000);
-        }
-        response->Record.AddIssues()->set_message(reason);
-        TlsActivationContext->Send(new IEventHandle(ev->Sender, self->SelfId(), response.Release()));
-    };
     ui64 rowLimit = Max(config.GetBuildIndexRowBytesLimit(), request.GetRequiredRowBytes());
     if (!rowLimit) {
         reject("BuildIndexRowBytesLimit must be nonzero for memory admission", false);
         return;
     }
-    if (request.ByteSizeLong() > config.GetBuildIndexRequestBytesLimit()) {
+    const ui64 serializedBytes = request.ByteSizeLong();
+    const ui64 requestMemory = request.SpaceUsedLong();
+    if (serializedBytes > config.GetBuildIndexRequestBytesLimit()) {
         reject("Index scan request exceeds BuildIndexRequestBytesLimit", false);
         return;
     }
@@ -703,16 +743,20 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
     // Batch sizes and the initial row allowance are upper bounds, not a reason
     // to retry forever when a smaller scan fits. Actual larger rows retain the
     // RequiredRowBytes floor discovered by the existing row-reservation retry.
-    const ui64 memory = FitBuildIndexScanMemory(request, table, scanLimit, rowLimit);
+    const ui64 memory = FitBuildIndexScanMemory(request, table, scanLimit, rowLimit, requestMemory);
     if (!memory) {
-        reject("Minimum index scan reservation exceeds the current memory budget", true);
+        reject("Minimum index scan reservation exceeds the current memory budget", false);
         return;
     }
-    const ui64 requestBytes = CheckedScanMemoryAdd(request.SpaceUsedLong(), request.ByteSizeLong());
+    const ui64 requestBytes = CheckedScanMemoryAdd(requestMemory, serializedBytes);
     const ui64 pendingBytes = CheckedScanMemoryAdd(requestBytes, 4_KB);
     const ui64 pendingLimit = admission.GetByteLimit(config.GetBuildIndexPendingBytesLimit());
-    if (pendingLimit && pendingBytes > pendingLimit) {
-        reject("Index scan request exceeds the current node pending byte budget", true);
+    if (pendingBytes > pendingLimit) {
+        reject("Index scan request exceeds the current node pending byte budget", false);
+        return;
+    }
+    if (!config.GetBuildIndexPendingScansLimit()) {
+        reject("Node index scan pending queue capacity is zero", false);
         return;
     }
     auto counters = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "build_index_admission");
@@ -740,21 +784,8 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
             return;
         }
         pending->Replied = true;
-        if (!pending->Response) {
-            pending->Response = MakeHolder<TResponse>();
-            auto& rec = pending->Response->Record;
-            rec.SetId(id);
-            rec.SetTabletId(self->TabletID());
-            rec.SetRequestSeqNoGeneration(seqNo.Generation);
-            rec.SetRequestSeqNoRound(seqNo.Round);
-        }
-        auto& rec = pending->Response->Record;
-        rec.SetStatus(retry ? NKikimrIndexBuilder::ABORTED : NKikimrIndexBuilder::BAD_REQUEST);
-        if (retry) {
-            rec.SetRetryAfterMs(1000);
-        }
-        rec.AddIssues()->set_message(reason);
-        TlsActivationContext->Send(new IEventHandle(pending->Event->Sender, self->SelfId(), pending->Response.Release()));
+        ReplyBuildIndexScanFailure(self, pending->Event->Sender, pending->Event->Get()->Record,
+            pending->Response, reason, retry);
         if (const auto* scan = self->GetScanManager().Get(id); scan && scan->SeqNo == seqNo) {
             self->GetScanManager().Drop(id);
         }

@@ -1151,6 +1151,7 @@ struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuil
 private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
     ui64 LastRequestBytes = 0;
+    TString RequestAdmissionError;
 
     template<class TEvent>
     void QueueScanRequest(TTabletId tablet, THolder<TEvent> event) {
@@ -2209,7 +2210,17 @@ private:
             LastRequestBytes = 0;
             send(shardIdx);
             if (LastRequestBytes) {
-                Y_ENSURE(LastRequestBytes <= bytesLimit, "Vector scan request exceeds SchemeShard request window");
+                if (!countLimit) {
+                    RequestAdmissionError = "SchemeShard IndexBuildRequestCountLimit is zero";
+                    ToTabletSend.erase(Self->ShardInfos.at(shardIdx).TabletID);
+                    return false;
+                }
+                if (LastRequestBytes > bytesLimit) {
+                    RequestAdmissionError = TStringBuilder() << "Vector scan request needs " << LastRequestBytes
+                        << " bytes, exceeding SchemeShard IndexBuildRequestBytesLimit=" << bytesLimit;
+                    ToTabletSend.erase(Self->ShardInfos.at(shardIdx).TabletID);
+                    return false;
+                }
                 if (!Self->IndexBuildRequestAdmission) {
                     Self->IndexBuildRequestAdmission = std::make_shared<TScanAdmissionControl>();
                     Self->IndexBuildRequestAdmission->SetTotalLimit(Max<ui64>());
@@ -3547,9 +3558,13 @@ public:
             if (canProgress && !cancel) {
                 fillRes = FillIndex(txc, buildInfo);
             }
-            if (!canProgress || cancel || fillRes) {
+            if (!canProgress || cancel || fillRes || RequestAdmissionError) {
                 auto nextState = TIndexBuildInfo::EState::Applying;
-                if (!canProgress) {
+                if (RequestAdmissionError) {
+                    NIceDb::TNiceDb db(txc.DB);
+                    Self->PersistBuildIndexAddIssue(db, buildInfo, RequestAdmissionError);
+                    nextState = TIndexBuildInfo::EState::Rejection_Applying;
+                } else if (!canProgress) {
                     Y_ENSURE(buildInfo.IsBuildColumns());
                     buildInfo.AddIssue(TStringBuilder() << "Adding columns with defaults is disabled");
                     nextState = TIndexBuildInfo::EState::Rejection_DroppingColumns;

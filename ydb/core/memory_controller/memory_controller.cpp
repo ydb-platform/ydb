@@ -720,10 +720,21 @@ private:
         Counters->GetCounter("Consumer/IndexBuild/Limit")->Set(indexBuildLimit);
         const ui64 pendingBytes = AppData()->BuildIndexScanAdmission->GetUsage().Bytes;
         Counters->GetCounter("Consumer/IndexBuildPending/Consumption")->Set(pendingBytes);
+        if (!pendingBytes) {
+            PendingIndexBuildCharge = 0;
+        } else {
+            // Charge in 8 MiB increments and retain the high-water mark until
+            // the pending pool drains. Descriptor churn below that mark must
+            // not reconfigure every broker queue on every controller tick.
+            const ui64 bytes = Min(pendingBytes, activitiesLimitBytes);
+            const ui64 rounded = bytes + Min(activitiesLimitBytes - bytes, (8_MB - bytes % 8_MB) % 8_MB);
+            PendingIndexBuildCharge = Min(activitiesLimitBytes,
+                Max(PendingIndexBuildCharge, Max(bytes, Min(pendingLimit, rounded))));
+        }
+        Counters->GetCounter("Consumer/IndexBuildPending/Reserved")->Set(PendingIndexBuildCharge);
         TResourceBrokerConfig config{
-            // Account only retained descriptors; idle index builds must not
-            // withhold their entire pending allowance from every other queue.
-            .LimitBytes = activitiesLimitBytes - Min(activitiesLimitBytes, pendingBytes),
+            // Idle index builds return the entire charge to other queues.
+            .LimitBytes = activitiesLimitBytes - PendingIndexBuildCharge,
             .QueueLimits = {
                 {"queue_build_index", indexBuildLimit - pendingLimit},
                 {NLocalDb::KqpResourceManagerQueue, GetQueryExecutionLimitBytes(Config, hardLimitBytes)},
@@ -845,6 +856,7 @@ private:
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TMap<EMemoryConsumerKind, TConsumerCounters> ConsumerCounters;
     std::optional<TResourceBrokerConfig> CurrentResourceBrokerConfig;
+    ui64 PendingIndexBuildCharge = 0;
 };
 
 }

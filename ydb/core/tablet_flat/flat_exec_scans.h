@@ -282,9 +282,9 @@ namespace NTabletFlatExecutor {
             auto callback = std::move(one->Options.OnAdmissionFailure);
             auto cancelled = Cancel(serial);
             if (callback) {
-                // Submission failure and retryability are independent: the
-                // broker's memory limit may change before the next attempt.
-                callback(reason, true);
+                // A rejected submission exceeds capacity, rather than waiting
+                // for resources held by another task. Queue timeouts may retry.
+                callback(reason, submitted);
             }
             return cancelled;
         }

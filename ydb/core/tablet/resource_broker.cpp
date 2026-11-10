@@ -684,9 +684,19 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         // and the whole broker are idle. Preserve legacy progress exceptions
         // for the other queues.
         const bool strictMemory = queue->StrictMemoryLimit && task->RequiredResources[NKikimrResourceBroker::MEMORY];
-        if (strictMemory &&
-            (!queue->QueueLimit.HasResources({{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}}) ||
-             !ResourceLimit->HasResources({{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}}))) {
+        const TResourceValues memory{{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}};
+        if (strictMemory && !queue->QueueLimit.HasResources(memory)) {
+            continue;
+        }
+        if (strictMemory && !ResourceLimit->HasResources(memory)) {
+            // Preserve the scheduler's ordering across queues: later memory
+            // tasks must let this task accumulate enough global headroom.
+            // A later reconfiguration can make an already queued task larger
+            // than the entire budget. It cannot accumulate enough headroom,
+            // so let other queues run while its owner cancels or times out.
+            if (task->RequiredResources[NKikimrResourceBroker::MEMORY] <= ResourceLimit->Limit[NKikimrResourceBroker::MEMORY]) {
+                blockedResources |= ui64(1) << NKikimrResourceBroker::MEMORY;
+            }
             continue;
         }
 

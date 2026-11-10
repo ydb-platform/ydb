@@ -2,6 +2,7 @@
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/scan_admission.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -208,7 +209,9 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, schemeShard);
         WriteVectorTableRows(runtime, schemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
         runtime.GetAppData().SchemeShardConfig.SetIndexBuildRequestCountLimit(1);
-        runtime.GetAppData().DataShardConfig.SetBuildIndexPendingScansLimit(0);
+        runtime.GetAppData().DataShardConfig.SetBuildIndexPendingScansLimit(1);
+        auto occupied = runtime.GetAppData().BuildIndexScanAdmission->TryAcquire(1, 1, 64_MB);
+        UNIT_ASSERT(occupied);
         TInstant rejectedAt;
         ui32 rejections = 0;
         ui32 retries = 0;
@@ -228,7 +231,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrIndexBuilder::ABORTED);
                 ++rejections;
                 rejectedAt = runtime.GetCurrentTime();
-                runtime.GetAppData().DataShardConfig.SetBuildIndexPendingScansLimit(128);
+                occupied.reset();
             }
             return false;
         };
@@ -242,6 +245,93 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         const auto result = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
         UNIT_ASSERT_VALUES_EQUAL(result.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
         UNIT_ASSERT_VALUES_EQUAL(runtime.GetAppData().BuildIndexScanAdmission->GetUsage().Count, 0);
+    }
+
+    Y_UNIT_TEST(LargestValidCentroidRequestFitsDefaultSenderWindow) {
+        Ydb::Table::KMeansTreeSettings settings;
+        settings.set_clusters(2048);
+        settings.set_levels(1);
+        settings.mutable_settings()->set_vector_dimension(2048);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        TString error;
+        UNIT_ASSERT_C(NKikimr::NKMeans::ValidateSettings(settings, error), error);
+        NKikimrTxDataShard::TEvRecomputeKMeansRequest request;
+        *request.MutableSettings() = settings.settings();
+        TString centroid(2048 * sizeof(float) + 1, '\0');
+        centroid.back() = 1;
+        for (ui32 i = 0; i < settings.clusters(); ++i) {
+            request.AddClusters(centroid);
+        }
+        const ui64 bytes = request.SpaceUsedLong() + request.ByteSizeLong() + 4_KB;
+        NKikimrConfig::TSchemeShardConfig config;
+        NKikimrConfig::TDataShardConfig dataShardConfig;
+        UNIT_ASSERT_LE(request.ByteSizeLong(), dataShardConfig.GetBuildIndexRequestBytesLimit());
+        TScanAdmissionControl quota;
+        quota.SetTotalLimit(Max<ui64>());
+        const auto lease = quota.TryAcquire(bytes, config.GetIndexBuildRequestCountLimit(), config.GetIndexBuildRequestBytesLimit());
+        UNIT_ASSERT_C(lease, "Maximum valid centroid request exceeds the default sender window: " << bytes);
+        // A 32 MiB centroid payload is outside the supported settings envelope.
+        settings.mutable_settings()->set_vector_dimension(4096);
+        UNIT_ASSERT(!NKikimr::NKMeans::ValidateSettings(settings, error));
+    }
+
+    Y_UNIT_TEST_TWIN(SenderCapacityFailureIsExplicit, ByBytes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        ui64 schemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, schemeShard);
+        TestCreateTable(runtime, schemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, schemeShard);
+        auto& config = runtime.GetAppData().SchemeShardConfig;
+        if (ByBytes) {
+            config.SetIndexBuildRequestBytesLimit(1);
+        } else {
+            config.SetIndexBuildRequestCountLimit(0);
+        }
+        ui32 requests = 0;
+        auto samples = runtime.AddObserver<TEvDataShard::TEvSampleKRequest>([&](auto&) { ++requests; });
+        auto locals = runtime.AddObserver<TEvDataShard::TEvLocalKMeansRequest>([&](auto&) { ++requests; });
+        const ui64 build = ++txId;
+        TestBuildVectorIndex(runtime, build, schemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, build, schemeShard);
+        const auto result = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED);
+        UNIT_ASSERT_STRING_CONTAINS(result.DebugString(), ByBytes ? "IndexBuildRequestBytesLimit" : "IndexBuildRequestCountLimit");
+        UNIT_ASSERT(!result.DebugString().Contains("Unhandled exception"));
+        UNIT_ASSERT_VALUES_EQUAL(requests, 0);
+    }
+
+    Y_UNIT_TEST(ImpossibleScanCapacityRejectsBuildWithoutRetryLoop) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        ui64 schemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, schemeShard);
+        TestCreateTable(runtime, schemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, schemeShard);
+        runtime.GetAppData().DataShardConfig.SetBuildIndexScanMemoryLimit(1);
+        ui32 requests = 0;
+        auto samples = runtime.AddObserver<TEvDataShard::TEvSampleKRequest>([&](auto&) { ++requests; });
+        auto locals = runtime.AddObserver<TEvDataShard::TEvLocalKMeansRequest>([&](auto&) { ++requests; });
+        const ui64 build = ++txId;
+        TestBuildVectorIndex(runtime, build, schemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, build, schemeShard);
+        const auto result = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED);
+        UNIT_ASSERT_STRING_CONTAINS(result.DebugString(), "Minimum index scan reservation");
+        UNIT_ASSERT_VALUES_EQUAL(requests, 1);
     }
 
     Y_UNIT_TEST(AutodetectKeepsOneProbeAndReturnsSenderCredits) {

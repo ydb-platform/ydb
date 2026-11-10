@@ -176,7 +176,37 @@ def build_html_dashboard(
     .measured-test-hits li:hover, .measured-test-hits li.on {{ background: #e7f3ff; }}
     .measured-test-hits .hit-name {{ word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
     .measured-test-hits .hit-chunk {{ color: #6b7280; }}
-    .measured-tree {{ max-height: 720px; overflow: auto; border: 1px solid #d0d7de; border-radius: 8px; background: #fafbfc; font-size: 12px; }}
+    .measured-top {{
+      margin: 0 0 8px; padding: 8px; border: 1px solid #d0d7de; border-radius: 8px;
+      background: #fff; font-size: 12px;
+    }}
+    .measured-top-head {{
+      display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 6px;
+    }}
+    .measured-top-head b {{ font-size: 12px; }}
+    .measured-top-head label {{ color: #656d76; display: inline-flex; align-items: center; gap: 4px; }}
+    .measured-top-head select {{ font: inherit; padding: 2px 6px; }}
+    .measured-top-list {{
+      max-height: 220px; overflow: auto; margin: 0; padding: 0; list-style: none;
+      border-top: 1px solid #eef1f4;
+    }}
+    .measured-top-list li {{
+      display: grid; grid-template-columns: 28px minmax(72px, auto) 1fr;
+      gap: 8px; align-items: baseline; padding: 5px 4px;
+      border-bottom: 1px solid #f0f2f4; cursor: pointer;
+    }}
+    .measured-top-list li:hover, .measured-top-list li.on {{ background: #e7f3ff; }}
+    .measured-top-list .rank {{ color: #8c959f; font-variant-numeric: tabular-nums; text-align: right; }}
+    .measured-top-list .val {{
+      font-weight: 700; font-variant-numeric: tabular-nums; color: #9a3412;
+      white-space: nowrap;
+    }}
+    .measured-top-list .name {{
+      min-width: 0; word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }}
+    .measured-top-list .sub {{ display: block; color: #6b7280; font-weight: 400; font-size: 11px; }}
+    .measured-tree {{ max-height: 520px; overflow: auto; border: 1px solid #d0d7de; border-radius: 8px; background: #fafbfc; font-size: 12px; }}
     .measured-tree button {{ border: 0; background: transparent; cursor: pointer; font: inherit; text-align: left; }}
     .measured-tree .mt-row {{ display: flex; align-items: flex-start; gap: 2px; }}
     .measured-tree .mt-twist, .measured-tree .mt-spacer {{ flex: 0 0 16px; width: 16px; padding: 4px 0; color: #57606a; }}
@@ -470,6 +500,30 @@ def build_html_dashboard(
     </div>
     <div class="measured-body">
       <div class="measured-nav">
+        <div class="measured-top" id="measuredTop">
+          <div class="measured-top-head">
+            <b>Top chunks</b>
+            <label>by
+              <select id="measuredTopMetric">
+                <option value="max_cpu" selected>CPU (c)</option>
+                <option value="max_ram_gb">RAM (G)</option>
+                <option value="max_write_mbps">disk write (w)</option>
+                <option value="max_read_mbps">disk read (r)</option>
+              </select>
+            </label>
+            <label>N
+              <select id="measuredTopN">
+                <option value="20">20</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+            <label title="When checked, rank only chunks under the current tree selection">
+              <input type="checkbox" id="measuredTopInSelection" /> in selection
+            </label>
+          </div>
+          <ol id="measuredTopList" class="measured-top-list"></ol>
+        </div>
         <input id="measuredTestSearch" type="search" placeholder="Find test by name…" />
         <ol id="measuredTestHits" class="measured-test-hits" style="display:none;"></ol>
         <div id="measuredTree" class="measured-tree"></div>
@@ -4192,7 +4246,51 @@ def build_html_dashboard(
     selectMeasured = function(sel) {{
       window._measuredSel = sel || {{kind: 'all'}};
       _selectMeasured(sel || {{kind: 'all'}});
+      renderMeasuredTop();
     }};
+    function measuredTopMetricMeta(metric) {{
+      if (metric === 'max_ram_gb') return {{ key: 'max_ram_gb', suffix: 'G', digits: 2 }};
+      if (metric === 'max_write_mbps') return {{ key: 'max_write_mbps', suffix: 'w', digits: 1, prefix: 'w' }};
+      if (metric === 'max_read_mbps') return {{ key: 'max_read_mbps', suffix: 'r', digits: 1, prefix: 'r' }};
+      return {{ key: 'max_cpu', suffix: 'c', digits: 2 }};
+    }}
+    function formatMeasuredTopValue(row, meta) {{
+      const n = Number(row && row[meta.key]) || 0;
+      const body = n.toFixed(meta.digits) + (meta.prefix ? '' : meta.suffix);
+      return meta.prefix ? (meta.prefix + n.toFixed(meta.digits)) : body;
+    }}
+    function renderMeasuredTop() {{
+      const list = document.getElementById('measuredTopList');
+      const metricEl = document.getElementById('measuredTopMetric');
+      const nEl = document.getElementById('measuredTopN');
+      const scopeEl = document.getElementById('measuredTopInSelection');
+      if (!list || !metricEl || !nEl) return;
+      const meta = measuredTopMetricMeta(metricEl.value);
+      const limit = Math.max(1, Number(nEl.value) || 50);
+      const sel = window._measuredSel || {{kind: 'all'}};
+      const inSelection = !!(scopeEl && scopeEl.checked && sel && sel.kind !== 'all');
+      const src = inSelection ? measuredRowsForSelection(sel) : measuredList;
+      const ranked = (src || []).slice().sort((a, b) =>
+        (Number(b[meta.key]) || 0) - (Number(a[meta.key]) || 0)
+      ).slice(0, limit);
+      const selectedKey = sel && sel.kind === 'chunk' ? sel.key : null;
+      list.innerHTML = ranked.map((row, i) => {{
+        const on = selectedKey && row.key === selectedKey ? ' on' : '';
+        const extras = [
+          Number(row.max_cpu || 0).toFixed(2) + 'c',
+          Number(row.max_ram_gb || 0).toFixed(2) + 'G',
+          'w' + Number(row.max_write_mbps || 0).toFixed(1),
+          'r' + Number(row.max_read_mbps || 0).toFixed(1),
+        ].join(' · ');
+        return '<li class="' + on.trim() + '" data-key="' + escapeHtml(row.key || '') +
+          '" data-suite="' + escapeHtml(row.suite || '') + '">' +
+          '<span class="rank">' + (i + 1) + '</span>' +
+          '<span class="val">' + escapeHtml(formatMeasuredTopValue(row, meta)) + '</span>' +
+          '<span class="name">' + escapeHtml(row.label || row.key || '') +
+          '<span class="sub">' + escapeHtml(extras) + '</span></span></li>';
+      }}).join('') || '<li class="muted" style="display:block;padding:8px;cursor:default">No measured chunks</li>';
+      list._rows = ranked;
+    }}
     function buildMeasuredTestIndex() {{
       const out = [];
       const seen = new Set();
@@ -4254,8 +4352,23 @@ def build_html_dashboard(
         jumpToMeasuredTest(hit);
       }});
     }}
+    ['measuredTopMetric', 'measuredTopN', 'measuredTopInSelection'].forEach(id => {{
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', renderMeasuredTop);
+    }});
+    const measuredTopListEl = document.getElementById('measuredTopList');
+    if (measuredTopListEl) {{
+      measuredTopListEl.addEventListener('click', (ev) => {{
+        const li = ev.target.closest('li[data-key]');
+        if (!li || !li.dataset.key) return;
+        const suite = li.dataset.suite || '';
+        if (suite) openMeasuredPath(suite, true);
+        selectMeasured({{kind: 'chunk', key: li.dataset.key, path: suite, suite: suite}});
+      }});
+    }}
     if (measuredWrap && measuredList.length) {{
       measuredWrap.style.display = '';
+      renderMeasuredTop();
       setBootText('Loading measured cgroup series…', 'Fetching totals / overview and drawing measured charts');
       const suites = [...new Set(measuredList.map(row => row.suite).filter(Boolean))];
       if (suites.length === 1) {{

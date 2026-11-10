@@ -28,6 +28,8 @@ void AssertMonitoringAuditIdentity(const std::string& line, const TString& subje
     UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "sanitized_token=" << sanitizedToken);
     UNIT_ASSERT_VALUES_EQUAL(line.find("subject="), line.rfind("subject="));
     UNIT_ASSERT_VALUES_EQUAL(line.find("sanitized_token="), line.rfind("sanitized_token="));
+    UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=");
+    UNIT_ASSERT(line.find("remote_address={none}") == std::string::npos);
     UNIT_ASSERT(line.find(VALID_TOKEN) == std::string::npos);
 }
 
@@ -93,12 +95,17 @@ public:
         return *HttpClient;
     }
 
+    std::string GetAuditLine(const TString& reason) const {
+        std::string line;
+        UNIT_ASSERT_C(WaitAndFindAuditLine(*AuditLogLines, reason.c_str(), line),
+            "Audit log line did not appear: " << reason);
+        return line;
+    }
+
     void AssertAuditIdentity(const TString& completedReason, const TString& subject, const TString& sanitizedToken,
             const TString& rawToken = VALID_TOKEN) const {
         for (const TString& reason : {TString("reason=Execute"), completedReason}) {
-            std::string line;
-            UNIT_ASSERT_C(WaitAndFindAuditLine(*AuditLogLines, reason.c_str(), line),
-                "Audit log line did not appear: " << reason);
+            const auto line = GetAuditLine(reason);
             AssertMonitoringAuditIdentity(line, subject, sanitizedToken);
             UNIT_ASSERT(line.find(rawToken.c_str()) == std::string::npos);
         }
@@ -128,6 +135,11 @@ Y_UNIT_TEST_SUITE(MonitoringAudit) {
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
 
         env.AssertAuditIdentity("reason=200 Ok", "username", ExpectedSanitizedToken());
+        const auto line = env.GetAuditLine("reason=200 Ok");
+        UNIT_ASSERT_STRING_CONTAINS(line, "folder_id=test_folder_id");
+        UNIT_ASSERT_STRING_CONTAINS(line, "resource_id=test_database_id");
+        UNIT_ASSERT(line.find("cloud_id=") == std::string::npos);
+        UNIT_ASSERT(line.find("body=") == std::string::npos);
     }
 
     Y_UNIT_TEST(AuditLogContainsIdentityWhenAccessDenied) {
@@ -169,6 +181,29 @@ Y_UNIT_TEST_SUITE(MonitoringAudit) {
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
 
         env.AssertAuditIdentity("reason=200 Ok", "{none}", "{none}");
+    }
+
+    Y_UNIT_TEST(AuditLogContainsRequestFieldsWithoutAuthorizer) {
+        THttpMonAuditTestEnv env;
+
+        TStringStream responseStream;
+        const TString body = "audit request body";
+        const auto status = env.GetHttpClient().DoRequest(
+            "POST", "/audit-no-auth?audit_test=value", body, &responseStream);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+
+        for (const TString& reason : {TString("reason=Execute"), TString("reason=200 Ok")}) {
+            const auto line = env.GetAuditLine(reason);
+            AssertMonitoringAuditIdentity(line, "{none}", "{none}");
+            UNIT_ASSERT_STRING_CONTAINS(line, "operation=HTTP REQUEST");
+            UNIT_ASSERT_STRING_CONTAINS(line, "method=POST");
+            UNIT_ASSERT_STRING_CONTAINS(line, "url=/audit-no-auth");
+            UNIT_ASSERT_STRING_CONTAINS(line, "params=audit_test=value");
+            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "body=" << body);
+            UNIT_ASSERT(line.find("cloud_id=") == std::string::npos);
+            UNIT_ASSERT(line.find("folder_id=") == std::string::npos);
+            UNIT_ASSERT(line.find("resource_id=") == std::string::npos);
+        }
     }
 }
 

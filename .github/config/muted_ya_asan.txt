@@ -143,12 +143,14 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part10 test.py.test[aggregate-group_by_rollup
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part11 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part11 test.py.test[aggregate-group_by_gs_grouping-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part11 test.py.test[aggregate-group_by_mul_gb_ru-]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part11 test.py.test[aggregate-group_by_ru_join_qualified-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part12 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part12 test.py.test[aggr_factory-multi-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part12 test.py.test[aggregate-aggregate_key_column-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 test.py.test[aggregate-group_by_gs_few_empty-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 test.py.test[aggregate-group_by_gs_subselect-default.txt]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 test.py.test[aggregate-group_by_session_aliases-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part14 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part14 test.py.test[aggregate-group_by_tablerow_column-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part14 test.py.test[blocks-combine_hashed_count_filter-]
@@ -164,15 +166,18 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part17 test.py.test[aggregate-aggregate_udf_n
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part18 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part18 test.py.test[aggregate-count_distinct_with_filter-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part18 test.py.test[aggregate-group_by_ru_join_simple-]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part18 test.py.test[aggregate-percentile_and_avg_grouped-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-dedup_state_keys-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-group_by_column_alias_reuse-default.txt]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-group_by_expr_with_where-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 test.py.test[aggregate-group_by_gs_alt_duo-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 test.py.test[aggregate-group_by_gs_flatten_columns-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_mul_ru_ru-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_rollup_duo-]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_rollup_udf-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 test.py.test[aggregate-aggrs_no_grouping_via_map-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 test.py.test[aggregate-compare_by_tuple-]

@@ -166,10 +166,8 @@ class MeasuredLabelTest(unittest.TestCase):
         self.assertEqual(rows[0]["max_io_psi_pct"], 5.0)
         self.assertEqual(rows[0]["cpu_nr_throttled_delta"], 3)
         self.assertEqual(rows[0]["memory_high_events_delta"], 1)
-        self.assertEqual(
-            overlay["measured_layers"]["pressure_tracks"]["ydb/core/foo [2] · CPU throttled"],
-            [25.0],
-        )
+        self.assertNotIn("measured_layers", overlay)
+        self.assertEqual(overlay.get("measured_series_url"), "resources_tests.json")
 
     def test_places_named_tests_end_to_end(self):
         placed = place_chunk_tests(

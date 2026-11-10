@@ -3046,11 +3046,18 @@ def build_html_dashboard(
     window.applyLayerToggles = applyLayerToggles;
 
     const measuredList = (data.resources_overlay && data.resources_overlay.measured_tests) || [];
-    const measuredLayers = (data.resources_overlay && data.resources_overlay.measured_layers) || {{}};
     const measuredChunkTests = (data.resources_overlay && data.resources_overlay.measured_chunk_tests) || {{}};
+    const measuredSeriesUrl = (data.resources_overlay && data.resources_overlay.measured_series_url)
+      || String(dataUrl || '').replace(/[^/]+$/, 'resources_tests.json');
     const measuredWrap = document.getElementById('measuredWrap');
     const MEASURED_PALETTE = ['#d97706','#7c3aed','#0284c7','#65a30d','#dc2626','#0f766e','#c026d3','#1d4ed8','#b45309','#15803d','#be123c','#4338ca'];
+    const MEASURED_CHART_TOP_N = 40;
+    const MEASURED_PRESSURE_MAX_ROWS = 8;
+    const MEASURED_AXIS_MAX_POINTS = 2500;
     const _measuredColors = {{}};
+    let _measuredSeriesByKey = null;
+    let _measuredSeriesPromise = null;
+    let _measuredPlotXs = [];
     const _origColorForTrack = colorForTrack;
     colorForTrack = function(trackName) {{
       if (_measuredColors[trackName]) return _measuredColors[trackName];
@@ -3059,15 +3066,100 @@ def build_html_dashboard(
     function measuredPeak(track) {{
       return (track || []).reduce((m, v) => Math.max(m, Number(v) || 0), 0);
     }}
-    function filterMeasuredTracks(allTracks, labels) {{
-      const out = {{}};
-      const selected = new Set(labels || []);
-      Object.keys(allTracks || {{}}).forEach(name => {{
-        const separator = name.lastIndexOf(' · ');
-        const label = separator >= 0 ? name.slice(0, separator) : name;
-        if (selected.has(label)) out[name] = allTracks[name];
-      }});
+    function ensureMeasuredSeries() {{
+      if (_measuredSeriesByKey) return Promise.resolve(_measuredSeriesByKey);
+      if (_measuredSeriesPromise) return _measuredSeriesPromise;
+      _measuredSeriesPromise = fetch(measuredSeriesUrl)
+        .then(resp => {{
+          if (!resp.ok) throw new Error(resp.status + ' ' + resp.statusText);
+          return resp.json();
+        }})
+        .then(obj => {{
+          _measuredSeriesByKey = obj || {{}};
+          return _measuredSeriesByKey;
+        }})
+        .catch(err => {{
+          _measuredSeriesPromise = null;
+          console.error('Failed to load measured series', measuredSeriesUrl, err);
+          throw err;
+        }});
+      return _measuredSeriesPromise;
+    }}
+    function alignMeasuredSeries(xsOut, xsSrc, ysSrc, fillZero) {{
+      if (!xsOut.length) return [];
+      if (!xsSrc || !xsSrc.length || !ysSrc || !ysSrc.length) {{
+        return xsOut.map(() => (fillZero ? 0 : null));
+      }}
+      const out = [];
+      let j = 0;
+      const t0 = Number(xsSrc[0]);
+      const t1 = Number(xsSrc[xsSrc.length - 1]);
+      for (let i = 0; i < xsOut.length; i += 1) {{
+        const t = Number(xsOut[i]);
+        if (!(t >= t0 && t <= t1)) {{
+          out.push(fillZero ? 0 : null);
+          continue;
+        }}
+        while (j + 1 < xsSrc.length && Number(xsSrc[j + 1]) <= t) j += 1;
+        const value = ysSrc[j];
+        out.push(value == null ? (fillZero ? 0 : null) : Number(value) || 0);
+      }}
       return out;
+    }}
+    function downsampleMeasuredXs(xs, maxPoints) {{
+      if (!maxPoints || xs.length <= maxPoints) return xs.slice();
+      const last = xs.length - 1;
+      const out = [];
+      for (let i = 0; i < maxPoints; i += 1) out.push(xs[Math.round(i * last / (maxPoints - 1))]);
+      return out;
+    }}
+    function measuredRowsForChart(rows) {{
+      const src = (rows || []).slice().sort((a, b) => (Number(b.max_cpu) || 0) - (Number(a.max_cpu) || 0));
+      if (src.length <= MEASURED_CHART_TOP_N) return {{ rows: src, truncated: false }};
+      return {{ rows: src.slice(0, MEASURED_CHART_TOP_N), truncated: true, total: src.length }};
+    }}
+    function buildMeasuredTracksFromSeries(rows, field, fillZero) {{
+      const seriesList = [];
+      (rows || []).forEach(row => {{
+        const series = (_measuredSeriesByKey || {{}})[row.key];
+        if (!series) return;
+        seriesList.push({{
+          label: row.label || series.label || row.key,
+          xs: series.xs_evlog_sec || [],
+          ys: series[field] || [],
+        }});
+      }});
+      let xs = [];
+      const seen = new Set();
+      seriesList.forEach(s => {{
+        (s.xs || []).forEach(x => {{
+          const n = Number(x);
+          if (!Number.isFinite(n) || seen.has(n)) return;
+          seen.add(n);
+          xs.push(n);
+        }});
+      }});
+      xs.sort((a, b) => a - b);
+      // Keep native sample times for short selected windows; only thin a huge union.
+      if (xs.length > MEASURED_AXIS_MAX_POINTS) {{
+        const keep = new Set(downsampleMeasuredXs(xs, MEASURED_AXIS_MAX_POINTS));
+        seriesList.forEach(s => {{
+          const sxs = s.xs || [];
+          if (!sxs.length) return;
+          if (sxs.length <= 16 || (Number(sxs[sxs.length - 1]) - Number(sxs[0])) <= 120) {{
+            sxs.forEach(x => keep.add(Number(x)));
+          }} else {{
+            keep.add(Number(sxs[0]));
+            keep.add(Number(sxs[sxs.length - 1]));
+          }}
+        }});
+        xs = [...keep].filter(Number.isFinite).sort((a, b) => a - b);
+      }}
+      const tracks = {{}};
+      seriesList.forEach(s => {{
+        tracks[s.label] = alignMeasuredSeries(xs, s.xs, s.ys, fillZero);
+      }});
+      return {{ xs: xs, tracks: tracks }};
     }}
     function topMeasuredTracks(tracks, limit) {{
       const names = Object.keys(tracks || {{}}).sort((a, b) => measuredPeak(tracks[b]) - measuredPeak(tracks[a]));
@@ -3083,54 +3175,97 @@ def build_html_dashboard(
       top.slice().reverse().forEach(n => {{ ordered[n] = tracks[n]; }});
       return ordered;
     }}
-    function plotMeasuredLayers(labels, titleSuffix) {{
-      if (!window.Plotly || !measuredLayers.xs_evlog_sec) return;
+    function plotMeasuredLayersFromRows(rows, titleSuffix) {{
+      if (!window.Plotly) return;
+      const picked = measuredRowsForChart(rows);
+      const built = {{
+        cpu: buildMeasuredTracksFromSeries(picked.rows, 'cpu_cores', true),
+        ram: buildMeasuredTracksFromSeries(picked.rows, 'ram_gb', true),
+        write: buildMeasuredTracksFromSeries(picked.rows, 'disk_write_mbps', true),
+        read: buildMeasuredTracksFromSeries(picked.rows, 'disk_read_mbps', true),
+      }};
+      _measuredPlotXs = built.cpu.xs || [];
+      const suffix = titleSuffix + (picked.truncated ? (' · top ' + picked.rows.length + '/' + picked.total + ' by max CPU') : '');
       const charts = [
-        ['measuredCpu', measuredLayers.cpu_tracks, 'Layered measured CPU' + titleSuffix, 'cores'],
-        ['measuredRam', measuredLayers.ram_tracks, 'Layered measured RAM' + titleSuffix, 'GB'],
-        ['measuredWrite', measuredLayers.write_tracks, 'Layered measured disk write' + titleSuffix, 'MB/s'],
-        ['measuredRead', measuredLayers.read_tracks, 'Layered measured disk read' + titleSuffix, 'MB/s'],
+        ['measuredCpu', built.cpu, 'Layered measured CPU' + suffix, 'cores'],
+        ['measuredRam', built.ram, 'Layered measured RAM' + suffix, 'GB'],
+        ['measuredWrite', built.write, 'Layered measured disk write' + suffix, 'MB/s'],
+        ['measuredRead', built.read, 'Layered measured disk read' + suffix, 'MB/s'],
       ];
-      charts.forEach(([divId, allTracks, title, unit]) => {{
-        const tracks = topMeasuredTracks(filterMeasuredTracks(allTracks, labels), 50);
+      charts.forEach(([divId, layer, title, unit]) => {{
+        const tracks = topMeasuredTracks(layer.tracks, 50);
         Object.keys(tracks).forEach((name, i) => {{
           _measuredColors[name] = name === 'other' ? '#bdbdbd' : MEASURED_PALETTE[i % MEASURED_PALETTE.length];
         }});
-        stackedArea(divId, measuredLayers.xs_evlog_sec, tracks, title, unit);
+        stackedArea(divId, layer.xs || [], tracks, title, unit);
       }});
       attachMeasuredHover('measuredCpu', 'measuredCpuHover', 'cores');
       attachMeasuredHover('measuredRam', 'measuredRamHover', 'GB');
       attachMeasuredHover('measuredWrite', 'measuredWriteHover', 'MB/s');
       attachMeasuredHover('measuredRead', 'measuredReadHover', 'MB/s');
     }}
-    function plotMeasuredPressure(labels, titleSuffix) {{
+    function plotMeasuredPressureFromRows(rows, titleSuffix) {{
       const el = document.getElementById('measuredPressure');
       const panel = document.getElementById('measuredPressureHover');
       if (!el || !window.Plotly) return;
-      const allTracks = measuredLayers.pressure_tracks || {{}};
-      const tracks = topMeasuredTracks(filterMeasuredTracks(allTracks, labels), 50);
+      if ((rows || []).length === 0 || (rows || []).length > MEASURED_PRESSURE_MAX_ROWS) {{
+        el.style.display = 'none';
+        if (panel) {{
+          panel.style.display = (rows || []).length > MEASURED_PRESSURE_MAX_ROWS ? '' : 'none';
+          panel.textContent = (rows || []).length > MEASURED_PRESSURE_MAX_ROWS
+            ? 'Select one chunk (or a small suite) to inspect cgroup throttling / PSI'
+            : 'Hover to inspect per-chunk throttling and PSI';
+        }}
+        return;
+      }}
+      const pressureFields = [
+        ['cpu_throttled_pct', 'CPU throttled'],
+        ['cpu_psi_some_pct', 'CPU PSI some'],
+        ['cpu_psi_full_pct', 'CPU PSI full'],
+        ['memory_psi_some_pct', 'Memory PSI some'],
+        ['memory_psi_full_pct', 'Memory PSI full'],
+        ['io_psi_some_pct', 'I/O PSI some'],
+        ['io_psi_full_pct', 'I/O PSI full'],
+      ];
+      const union = new Set();
+      rows.forEach(row => {{
+        const series = (_measuredSeriesByKey || {{}})[row.key];
+        (series && series.xs_evlog_sec || []).forEach(x => union.add(Number(x)));
+      }});
+      const xs = [...union].filter(Number.isFinite).sort((a, b) => a - b);
+      const tracks = {{}};
+      rows.forEach(row => {{
+        const series = (_measuredSeriesByKey || {{}})[row.key];
+        if (!series) return;
+        pressureFields.forEach(([field, name]) => {{
+          const ys = series[field];
+          if (!ys || !ys.some(v => v != null)) return;
+          tracks[(row.label || series.label || row.key) + ' · ' + name] =
+            alignMeasuredSeries(xs, series.xs_evlog_sec || [], ys, false);
+        }});
+      }});
       const names = Object.keys(tracks);
-      if (!names.length) {{
+      if (!names.length || !xs.length) {{
         el.style.display = 'none';
         if (panel) panel.style.display = 'none';
         return;
       }}
       el.style.display = '';
       if (panel) panel.style.display = '';
-      const xs = (measuredLayers.xs_evlog_sec || []).map(xToDisplay);
+      const xDisp = xs.map(xToDisplay);
       const traces = names.map((name, i) => ({{
-        x: xs,
+        x: xDisp,
         y: tracks[name],
         type: 'scatter',
         mode: 'lines',
         name: name,
         connectgaps: false,
-        line: {{ width: 2, color: name === 'other' ? '#bdbdbd' : MEASURED_PALETTE[i % MEASURED_PALETTE.length] }},
+        line: {{ width: 2, color: MEASURED_PALETTE[i % MEASURED_PALETTE.length] }},
         hovertemplate: '%{{fullData.name}}: %{{y:.2f}}%<extra></extra>',
       }}));
       Plotly.newPlot(el, traces, {{
         title: 'Cgroup throttling and pressure' + titleSuffix,
-        xaxis: axisLayout(xs),
+        xaxis: axisLayout(xDisp),
         yaxis: {{ title: 'Interval time (%)', rangemode: 'tozero' }},
         hovermode: 'x unified',
         hoverlabel: {{ namelength: -1 }},
@@ -3325,7 +3460,9 @@ def build_html_dashboard(
       el.style.display = '';
       el.style.height = '90px';
       _measuredActiveTests = tests;
-      const xs = measuredLayers.xs_evlog_sec || [];
+      const xs = _measuredPlotXs.length
+        ? _measuredPlotXs
+        : tests.flatMap(t => [Number(t.start_sec), Number(t.end_sec)]).filter(Number.isFinite).sort((a, b) => a - b);
       const traces = tests.map((t, i) => {{
         const color = MEASURED_PALETTE[i % MEASURED_PALETTE.length];
         return {{
@@ -3529,7 +3666,6 @@ def build_html_dashboard(
     }}
     function selectMeasured(sel) {{
       const rows = measuredRowsForSelection(sel);
-      const labels = rows.map(row => row.label);
       const agg = measuredAgg(rows);
       const meta = document.getElementById('measuredMeta');
       const title = (!sel || sel.kind === 'all')
@@ -3542,14 +3678,25 @@ def build_html_dashboard(
           '<div class="muted" style="margin-top:3px">' + escapeHtml(measuredSignalsText(rows)) + '</div>';
       }}
       const suffix = (!sel || sel.kind === 'all') ? ' (all)' : (sel.kind === 'chunk' ? ' (one chunk)' : ' / ' + (sel.path || sel.suite));
-      plotMeasuredLayers(labels, suffix);
-      plotMeasuredPressure(labels, suffix);
-      const chunkTests = testsForMeasuredSelection(sel);
-      plotMeasuredTestLane(chunkTests);
-      applyMeasuredTestBands(chunkTests);
       if (sel && (sel.path || sel.suite)) openMeasuredPath(sel.path || sel.suite, false);
       if (sel && sel.kind === 'chunk' && (sel.path || sel.suite)) openMeasuredPath(sel.path || sel.suite, true);
       renderMeasuredTree(sel);
+      const chunkTests = testsForMeasuredSelection(sel);
+      const token = {{}};
+      window._measuredSelectToken = token;
+      ensureMeasuredSeries().then(() => {{
+        if (window._measuredSelectToken !== token) return;
+        plotMeasuredLayersFromRows(rows, suffix);
+        plotMeasuredPressureFromRows(rows, suffix);
+        plotMeasuredTestLane(chunkTests);
+        applyMeasuredTestBands(chunkTests);
+      }}).catch(() => {{
+        if (window._measuredSelectToken !== token) return;
+        if (meta) {{
+          meta.innerHTML += '<div class="muted" style="margin-top:3px;color:#b42318">Failed to load ' +
+            escapeHtml(measuredSeriesUrl) + '</div>';
+        }}
+      }});
     }}
     function renderMeasuredNode(node, depth, sel, siblingExtremes, siblingCount) {{
       const childNames = Object.keys(node.children).sort();
@@ -3687,7 +3834,7 @@ def build_html_dashboard(
         jumpToMeasuredTest(hit);
       }});
     }}
-    if (measuredWrap && measuredList.length && measuredLayers.xs_evlog_sec) {{
+    if (measuredWrap && measuredList.length) {{
       measuredWrap.style.display = '';
       const suites = [...new Set(measuredList.map(row => row.suite).filter(Boolean))];
       if (suites.length === 1) {{

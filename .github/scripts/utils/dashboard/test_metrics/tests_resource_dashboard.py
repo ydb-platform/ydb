@@ -1457,7 +1457,6 @@ def _build_measured_tests(
     """Per-cgroup ticks from monitor_resources.py kind=test records."""
     try:
         from ..resources_loader import (
-            build_measured_layers,
             is_host_record,
             match_measured_to_runs,
             measured_chunk_tests_by_label,
@@ -1466,7 +1465,6 @@ def _build_measured_tests(
         )
     except ImportError:
         from resources_loader import (  # type: ignore[no-redef]
-            build_measured_layers,
             is_host_record,
             match_measured_to_runs,
             measured_chunk_tests_by_label,
@@ -1534,7 +1532,11 @@ def _build_measured_tests(
                 bucket["cgroup_signals"][field] = values
             values.append(float(rec[field]) if rec.get(field) is not None else None)
     match_measured_to_runs(grouped, runs or [])
-    overlay["measured_layers"] = build_measured_layers(grouped)
+    # Dense measured_layers (all cgroups × common axis × pressure) used to inflate
+    # dashboard_data.json to hundreds of MB. Charts lazy-load sparse series from
+    # resources_tests.json instead; only the summary tree stays in the main payload.
+    overlay.pop("measured_layers", None)
+    overlay["measured_series_url"] = out_json.name if out_json is not None else "resources_tests.json"
     overlay["measured_chunk_tests"] = measured_chunk_tests_by_label(
         grouped, runs or [], chunk_tests or {}, chunks
     )

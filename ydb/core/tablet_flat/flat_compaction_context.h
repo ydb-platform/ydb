@@ -103,6 +103,8 @@ namespace NKikimr::NTable {
 
     // Each call creates an independent cursor, pinning the selected metadata.
     // Missing bounds/bloom and unloaded parts conservatively mean "maybe".
+    // Bloom prefixes containing PG columns are ignored because equal PG values
+    // may have different binary encodings.
     THolder<NPage::IKeySpace> MakeCompactionKeySpace(
         TIntrusiveConstPtr<TKeyCellDefaults> keys,
         TConstArrayRef<TCompactionPartInfo> parts,

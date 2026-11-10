@@ -522,6 +522,9 @@ class Test(TestBase):
             self._trace('cluster', 'set', '--database-space-unblock-color', 'CYAN'),
             self._trace('cluster', 'set', '--database-space-block-color', 'YELLOW', '--database-space-unblock-color', 'ORANGE'),
             self._trace('--dry-run', 'cluster', 'set', '--disable-self-heal'),
+
+            self._trace('cluster', 'set', '--bridge-sync-total-rate', '1000000', with_grpc_calls=True),
+            self._trace('cluster', 'set', '--bridge-sync-max-syncers', '32', with_grpc_calls=True),
         ]
 
     def test_group_take_snapshot(self):

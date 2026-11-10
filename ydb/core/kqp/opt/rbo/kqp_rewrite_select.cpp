@@ -1589,13 +1589,12 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
                 .Done().Ptr();
             // clang-format on
         } else if (sublinkType == "any") {
-            // clang-format off
-            newNode = Build<TKqpInSublink>(ctx, node->Pos())
-                .Subquery(newSubquery)
-                .OuterType(sublink->Child(2))
-                .InLambda(sublink->Child(3))
-                .Done().Ptr();
-            // clang-format on
+            TExprNode::TListType children{newSubquery, sublink->ChildPtr(2), sublink->ChildPtr(3)};
+            // The YqlSubLink settings say whether IN is ANSI, which decides the type of its result.
+            if (sublink->ChildrenSize() > 5) {
+                children.push_back(sublink->ChildPtr(5));
+            }
+            newNode = ctx.NewCallable(node->Pos(), TKqpInSublink::CallableName(), std::move(children));
         } else if (sublinkType == "exists") {
             // clang-format off
             newNode = Build<TKqpExistsSublink>(ctx, node->Pos())
@@ -1671,7 +1670,7 @@ TExprNode::TPtr RewriteReadOrEffectInput(const TExprNode::TPtr& node, TExprConte
     auto newInput = RewriteReadOrEffectInput(map.Input().Ptr(), ctx, kqpCtx, uniqueSourceIdCounter);
     auto lambda = map.Lambda();
     auto asStruct = lambda.Body().Maybe<TCoAsStruct>();
-    Y_ENSURE(asStruct);
+    Y_ENSURE(asStruct, "New RBO cannot import a table-effect Map whose body is not AsStruct");
 
     TVector<TExprNode::TPtr> mapElements;
 

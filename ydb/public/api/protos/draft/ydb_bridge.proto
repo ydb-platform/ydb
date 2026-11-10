@@ -93,6 +93,8 @@ message PendingPileOperation {
         ADD = 1;
         // The pile is being removed from the cluster: its storage groups are being deleted
         REMOVE = 2;
+        // The cluster is being rolled back to ordinary one: its storage groups are being made ordinary ones
+        ROLLBACK = 3;
     }
     string pile_name = 1;
     Kind kind = 2;
@@ -175,6 +177,54 @@ message RemovePileResponse {
 }
 
 message RemovePileResult {
+}
+
+// Report how far the rollback of a cluster prepared for bridge mode has gone. Such cluster (its nodes run with a
+// single-pile bridge config, but it has not been converted into a bridged one) gets back to ordinary mode when the bridge
+// config, along with the pile names of hosts, is removed from the cluster configuration in a single change, and every
+// node is restarted without them (dynamic nodes without their pile names too); Hive and NodeBroker drop the piles of
+// nodes by themselves then. Dynamic nodes not connected to the cluster are not reported. Administrator privileges are
+// required.
+message GetRollbackStatusRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message GetRollbackStatusResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetRollbackStatusResult {
+    // The cluster is a bridged one; see Rollback, the cluster state goes away when it finishes.
+    bool bridged = 1;
+    // Connected nodes still running with a bridge config; they have to be restarted without one.
+    repeated uint32 bridge_config_node_ids = 2;
+    // Static nodes that have not reported their config, as they are not running or not connected.
+    repeated uint32 unreported_static_node_ids = 3;
+    // The cluster is not bridged, and every node has reported running without a bridge config.
+    bool complete = 4;
+    // The rollback of the bridged cluster is in progress: storage groups are being made ordinary ones.
+    bool rollback_in_progress = 5;
+    // Why the last attempt to make storage groups ordinary ones has failed; it is retried meanwhile.
+    string error_reason = 6;
+}
+
+// Roll a cluster converted from an ordinary one back to it, while it has the only pile, the original one, and every
+// storage group is inline in that pile (has its own VDisks there and no parts elsewhere). Static storage groups become
+// ordinary ones by the call, the storage controller does the same to its groups afterwards, then the cluster state is
+// removed; see GetRollbackStatusResult. The cluster is prepared for bridge mode then, and gets back to ordinary mode
+// as GetRollbackStatusRequest describes.
+message RollbackRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Don't ask the storage controller whether it can make its groups ordinary ones before static groups are made such.
+    // This is for the case when it can't start, as it relies on static groups; it reports what blocks it then.
+    bool skip_bsc_validation = 2;
+}
+
+message RollbackResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message RollbackResult {
 }
 
 message BridgeHistoryEvent {

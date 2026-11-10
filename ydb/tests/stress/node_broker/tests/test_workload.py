@@ -4,7 +4,6 @@ import yatest
 import pytest
 
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.harness.util import LogLevels
 
 
 from ydb.tests.library.stress.fixtures import StressFixture
@@ -15,10 +14,6 @@ class TestYdbWorkload(StressFixture):
     def setup(self):
         yield from self.setup_cluster(
             erasure=Erasure.MIRROR_3_DC,
-            additional_log_configs={
-                "NODE_BROKER": LogLevels.TRACE,
-                "NAMESERVICE": LogLevels.TRACE,
-            },
         )
 
     def test(self):
@@ -37,10 +32,6 @@ class TestDeltaProtocol(StressFixture):
     def setup(self):
         yield from self.setup_cluster(
             erasure=Erasure.MIRROR_3_DC,
-            additional_log_configs={
-                "NODE_BROKER": LogLevels.TRACE,
-                "NAMESERVICE": LogLevels.TRACE,
-            },
             extra_feature_flags={
                 "enable_node_broker_delta_protocol": True
             }

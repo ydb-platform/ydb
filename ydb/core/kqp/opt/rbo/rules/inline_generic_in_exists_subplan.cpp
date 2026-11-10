@@ -25,7 +25,7 @@ namespace NKikimr {
 namespace NKqp {
 
 bool TInlineGenericInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const {
-    if (input->Kind != EOperator::Filter || props.Subplans.Empty()) {
+    if ((input->Kind != EOperator::Filter && input->Kind != EOperator::Map) || props.Subplans.Empty()) {
         return false;
     }
 
@@ -40,19 +40,20 @@ bool TInlineGenericInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator
 }
 
 bool TInlineGenericInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::Filter;
+    return input->Kind == EOperator::Filter || input->Kind == EOperator::Map;
 }
 
 TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    if (input->Kind != EOperator::Filter) {
+    if (input->Kind != EOperator::Filter && input->Kind != EOperator::Map) {
         return input;
     }
 
-    // Check that the filter lambda contains at least one in/exists subplan
-    auto filter = CastOperator<TOpFilter>(input);
+    // The consumer is a filter (the subplan is in WHERE) or a map (the subplan is in the projection).
+    // Check that it reads at least one in/exists subplan.
+    auto consumer = CastOperator<IUnaryOperator>(input);
     TVector<TInfoUnitId> inOrExistsSubplans;
 
-    for (const auto& subplanIU : filter->GetSubplanIUs(props.Subplans)) {
+    for (const auto& subplanIU : consumer->GetSubplanIUs(props.Subplans)) {
         const auto type = props.Subplans.At(subplanIU).Type;
         if (type == ESubplanType::IN_SUBPLAN || type == ESubplanType::EXISTS) {
             inOrExistsSubplans.push_back(subplanIU);
@@ -63,18 +64,18 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         return input;
     }
 
-    // Now we will pick the first subplan IU and join its subplan before filter
-    // Then we'll remove the subplan from subplans list and rebuild the filter expression
-    // so the current iu is no longer marked as SubplanIU
+    // Now we will pick the first subplan IU and join its subplan below the consumer.
+    // Then we'll remove the subplan from subplans list and rebuild the consumer,
+    // so the current iu is read as an ordinary column of its new input.
 
     auto subplanIU = inOrExistsSubplans[0];
     const auto& subplanEntry = props.Subplans.At(subplanIU);
-    TIntrusivePtr<IOperator> newFilterInput;
+    TIntrusivePtr<IOperator> newInput;
     auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
 
     const bool useDependentJoin = HasFreeCorrelation(subplan, subplanEntry.DependentIUs);
     if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || useDependentJoin) {
-        TIntrusivePtr<IOperator> leftInput = filter->GetInput();
+        TIntrusivePtr<IOperator> leftInput = consumer->GetInput();
         auto rightInput = subplan;
         const auto outerIUs = leftInput->GetOutputIUs();
         TVector<TInfoUnitId> originalPlanIUs;
@@ -99,12 +100,22 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
                      TStringBuilder() << "Correlation column " << props.InfoUnitRegistry.GetDebugName(iu) << " is not produced by the outer plan");
         }
 
-        // For exists we can emulate a mkrk join with 2 values output(true, false).
+        // For exists we can emulate a mark join with 2 values output (true, false).
         bool markMissingAsFalse = subplanEntry.Type == ESubplanType::EXISTS;
         if (!markMissingAsFalse) {
-            markMissingAsFalse = true;
-            for (size_t i = 0; i < subplanEntry.Tuple.Items().size() && markMissingAsFalse; i++) {
-                markMissingAsFalse = !IsNullableIU(leftInput, subplanEntry.Tuple.Items()[i], ctx.ExprCtx) && !IsNullableIU(rightInput, originalPlanIUs[i], ctx.ExprCtx);
+            bool nullableLookup = false;
+            bool nullableValue = false;
+            for (size_t i = 0; i < subplanEntry.Tuple.Items().size(); i++) {
+                nullableLookup |= IsNullableIU(leftInput, subplanEntry.Tuple.Items()[i], ctx.ExprCtx);
+                nullableValue |= IsNullableIU(rightInput, originalPlanIUs[i], ctx.ExprCtx);
+            }
+            if (input->Kind == EOperator::Map) {
+                // A projection returns the result, so it keeps the type the query gave the IN. Without ANSI IN that
+                // is Bool for a non-null lookup, and NULLs in the collection do not make the result NULL.
+                markMissingAsFalse = !subplanEntry.OptionalResult;
+            } else {
+                // A filter keeps the three-valued result whenever either side is nullable.
+                markMissingAsFalse = !nullableLookup && !nullableValue;
             }
         }
 
@@ -113,7 +124,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         const bool threeValued = !markMissingAsFalse && subplanEntry.Type == ESubplanType::IN_SUBPLAN && subplanEntry.Tuple.Items().size() == 1;
 
         // The mark join and the domain read leftInput through a Replicate, the domain under fresh IDs.
-        auto subplanDomain = MakeSubplanDomain(leftInput, domain, filter->Pos, props);
+        auto subplanDomain = MakeSubplanDomain(leftInput, domain, consumer->Pos, props);
         const TSubstitutions domainColumns(subplanDomain.Keys.Items().begin(), subplanDomain.Keys.Items().end());
 
         TUnorderedIUs markColumns = subplanDomain.Keys.Right();
@@ -127,7 +138,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
 
         TIntrusivePtr<IOperator> matchSource;
         if (useDependentJoin) {
-            matchSource = std::move(subplanDomain).Bind(rightInput, filter->Pos);
+            matchSource = std::move(subplanDomain).Bind(rightInput, consumer->Pos);
 
             for (size_t i = 0; i < subplanEntry.Tuple.Items().size(); i++) {
                 AddDomainColumn(markColumns, originalPlanIUs[i]);
@@ -140,7 +151,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         } else {
             // The match join and the statistics read the subplan through a Replicate.
             if (threeValued) {
-                auto hub = TReplicate::Create(rightInput, filter->Pos, props.InfoUnitRegistry);
+                auto hub = TReplicate::Create(rightInput, consumer->Pos, props.InfoUnitRegistry);
                 rightInput = hub->AddOutput();
                 statsSource = hub->AddOutput();
             }
@@ -157,10 +168,10 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
             }
         }
 
-        TIntrusivePtr<IOperator> matchedDomain = MakeDomainProjection(matchSource, markColumns, filter->Pos);
+        TIntrusivePtr<IOperator> matchedDomain = MakeDomainProjection(matchSource, markColumns, consumer->Pos);
         if (!statsSource && threeValued) {
             // The mark join and the statistics read the matched domain through a Replicate.
-            auto hub = TReplicate::Create(matchedDomain, filter->Pos, props.InfoUnitRegistry);
+            auto hub = TReplicate::Create(matchedDomain, consumer->Pos, props.InfoUnitRegistry);
             matchedDomain = hub->AddOutput();
             auto stats = hub->AddOutput();
             compareResultIU = stats->GetRebindings().At(compareResultIU);
@@ -176,19 +187,19 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         // So as result we will get true for columns which survive dependent join and false for rest.
         auto markIU = props.InfoUnitRegistry.AddGenerated("in_mark");
         TMapIUs markElements;
-        markElements.Add(markIU, MakeConstant("Bool", "true", filter->Pos, &ctx.ExprCtx));
-        auto markMap = MakeIntrusive<TOpMap>(matchedDomain, filter->Pos, markElements);
+        markElements.Add(markIU, MakeConstant("Bool", "true", consumer->Pos, &ctx.ExprCtx));
+        auto markMap = MakeIntrusive<TOpMap>(matchedDomain, consumer->Pos, markElements);
         TIntrusivePtr<IOperator> markRight = markMap;
-        auto markJoinKeys = useDependentJoin ? MakeNullSafeJoinKeys(leftInput, markRight, domainJoinKeys, filter->Pos, ctx, props) : domainJoinKeys;
+        auto markJoinKeys = useDependentJoin ? MakeNullSafeJoinKeys(leftInput, markRight, domainJoinKeys, consumer->Pos, ctx, props) : domainJoinKeys;
         for (const auto& key : tupleJoinKeys.Items()) {
             markJoinKeys.Add(key);
         }
 
         TIntrusivePtr<IOperator> markJoin =
-            MakeIntrusive<TOpJoin>(leftInput, markRight, filter->Pos, "Left", markJoinKeys);
+            MakeIntrusive<TOpJoin>(leftInput, markRight, consumer->Pos, "Left", markJoinKeys);
 
-        auto column = [&](TInfoUnitId iu) { return MakeColumnAccess(iu, filter->Pos, &ctx.ExprCtx, &props); };
-        auto falseConst = MakeConstant("Bool", "false", filter->Pos, &ctx.ExprCtx);
+        auto column = [&](TInfoUnitId iu) { return MakeColumnAccess(iu, consumer->Pos, &ctx.ExprCtx, &props); };
+        auto falseConst = MakeConstant("Bool", "false", consumer->Pos, &ctx.ExprCtx);
         auto matched = MakeBinaryPredicate("Coalesce", column(markIU), falseConst);
 
         TIntrusivePtr<IOperator> resultInput = markJoin;
@@ -202,8 +213,8 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
             // Has null if (num_rows > num_rows_not_null).
             auto rowIU = props.InfoUnitRegistry.AddGenerated("row");
             TMapIUs rowElements;
-            rowElements.Add(rowIU, MakeConstant("Uint64", "1", filter->Pos, &ctx.ExprCtx));
-            auto rowMap = MakeIntrusive<TOpMap>(statsSource, filter->Pos, rowElements);
+            rowElements.Add(rowIU, MakeConstant("Uint64", "1", consumer->Pos, &ctx.ExprCtx));
+            auto rowMap = MakeIntrusive<TOpMap>(statsSource, consumer->Pos, rowElements);
 
             auto valueCountIU = props.InfoUnitRegistry.AddGenerated("value_count");
             auto rowCountIU = props.InfoUnitRegistry.AddGenerated("row_count");
@@ -212,7 +223,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
             TAggregationIUs statsTraits;
             statsTraits.Add(valueCountIU, TOpAggregationTraits{compareResultIU, "count"});
             statsTraits.Add(rowCountIU, TOpAggregationTraits{rowIU, "count"});
-            auto statsAggregate = MakeIntrusive<TOpAggregate>(rowMap, statsTraits, TOrderedIUs<>(statsKeys.begin(), statsKeys.end()), EOpPhase::Undefined, /*distinctAll=*/false, filter->Pos);
+            auto statsAggregate = MakeIntrusive<TOpAggregate>(rowMap, statsTraits, TOrderedIUs<>(statsKeys.begin(), statsKeys.end()), EOpPhase::Undefined, /*distinctAll=*/false, consumer->Pos);
 
             auto hasNullIU = props.InfoUnitRegistry.AddGenerated("in_has_null");
             auto nonEmptyIU = props.InfoUnitRegistry.AddGenerated("in_non_empty");
@@ -220,18 +231,18 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
             // Does it have null columns?.
             statsElements.Add(hasNullIU, MakeBinaryPredicate(">", column(rowCountIU), column(valueCountIU)));
             if (statsKeys.Empty()) {
-                statsElements.Add(nonEmptyIU, MakeBinaryPredicate(">", column(rowCountIU), MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx)));
+                statsElements.Add(nonEmptyIU, MakeBinaryPredicate(">", column(rowCountIU), MakeConstant("Uint64", "0", consumer->Pos, &ctx.ExprCtx)));
             } else {
                 // Always has some rows.
-                statsElements.Add(nonEmptyIU, MakeConstant("Bool", "true", filter->Pos, &ctx.ExprCtx));
+                statsElements.Add(nonEmptyIU, MakeConstant("Bool", "true", consumer->Pos, &ctx.ExprCtx));
             }
-            auto statsMap = MakeIntrusive<TOpMap>(statsAggregate, filter->Pos, statsElements);
+            auto statsMap = MakeIntrusive<TOpMap>(statsAggregate, consumer->Pos, statsElements);
 
             TIntrusivePtr<IOperator> statsLeft = markJoin;
             TIntrusivePtr<IOperator> statsRight = statsMap;
-            statsJoinKeys = MakeNullSafeJoinKeys(statsLeft, statsRight, statsJoinKeys, filter->Pos, ctx, props);
+            statsJoinKeys = MakeNullSafeJoinKeys(statsLeft, statsRight, statsJoinKeys, consumer->Pos, ctx, props);
 
-            resultInput = MakeIntrusive<TOpJoin>(statsLeft, statsRight, filter->Pos, statsKeys.Empty() ? "Cross" : "Left", statsJoinKeys);
+            resultInput = MakeIntrusive<TOpJoin>(statsLeft, statsRight, consumer->Pos, statsKeys.Empty() ? "Cross" : "Left", statsJoinKeys);
 
             TVector<TExpression> unknownTerms;
             unknownTerms.push_back(MakeBinaryPredicate("Coalesce", column(hasNullIU), falseConst));
@@ -248,46 +259,53 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
                 unknown = MakeBinaryPredicate("Or", unknown, unknownTerms[i]);
             }
 
-            auto nullBool = TExpression(MakeNullBoolNode(filter->Pos, ctx.ExprCtx), &ctx.ExprCtx, &props);
+            auto nullBool = TExpression(MakeNullBoolNode(consumer->Pos, ctx.ExprCtx), &ctx.ExprCtx, &props);
             resultElements.Add(subplanIU, MakeBinaryPredicate("Or", matched, MakeBinaryPredicate("And", unknown, nullBool)));
         } else {
             resultElements.Add(subplanIU, column(markIU));
         }
 
-        newFilterInput = MakeIntrusive<TOpMap>(resultInput, filter->Pos, resultElements);
+        newInput = MakeIntrusive<TOpMap>(resultInput, consumer->Pos, resultElements);
     }
     // uncorrelated EXISTS
     else {
-        auto zero = MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx);
-        auto limit = MakeIntrusive<TOpLimit>(subplan, filter->Pos, MakeConstant("Uint64", "1", filter->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
+        auto zero = MakeConstant("Uint64", "0", consumer->Pos, &ctx.ExprCtx);
+        auto limit = MakeIntrusive<TOpLimit>(subplan, consumer->Pos, MakeConstant("Uint64", "1", consumer->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
 
         // The counted rows and their count are distinct IUs.
         auto countInput = props.InfoUnitRegistry.AddGenerated("row");
         auto countResult = props.InfoUnitRegistry.AddGenerated("row_count");
         TMapIUs countMapElements;
         countMapElements.Add(countInput, zero);
-        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements);
+        auto countMap = MakeIntrusive<TOpMap>(limit, consumer->Pos, countMapElements);
 
         TAggregationIUs aggs;
         aggs.Add(countResult, TOpAggregationTraits{countInput, "count"});
         TOrderedIUs<> keyColumns;
 
-        auto agg = MakeIntrusive<TOpAggregate>(countMap, aggs, keyColumns, EOpPhase::Final, false, filter->Pos);
+        auto agg = MakeIntrusive<TOpAggregate>(countMap, aggs, keyColumns, EOpPhase::Final, false, consumer->Pos);
 
-        auto comparePredicate = MakeBinaryPredicate("!=", MakeColumnAccess(countResult, filter->Pos, &ctx.ExprCtx, &props), zero);
+        auto comparePredicate = MakeBinaryPredicate("!=", MakeColumnAccess(countResult, consumer->Pos, &ctx.ExprCtx, &props), zero);
         TMapIUs mapElements;
         mapElements.Add(subplanIU, comparePredicate);
 
-        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements);
+        auto map = MakeIntrusive<TOpMap>(agg, consumer->Pos, mapElements);
 
         TJoinIUs joinKeys;
-        newFilterInput = MakeIntrusive<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys);
+        newInput = MakeIntrusive<TOpJoin>(consumer->GetInput(), map, consumer->Pos, "Cross", joinKeys);
     }
 
     props.Subplans.Remove(subplanIU);
 
-    // Otherwise, we need to pack the remaining conjuncts back into the filter
-    return MakeIntrusive<TOpFilter>(newFilterInput, filter->Pos, TExpression(filter->GetFilterExpression().GetLambda(), &ctx.ExprCtx, &props));
+    // Rebuild the consumer over the new input. The rule framework treats returning the same operator
+    // as "not applied", so even the map is a new operator.
+    if (input->Kind == EOperator::Map) {
+        auto map = CastOperator<TOpMap>(input);
+        return MakeIntrusive<TOpMap>(newInput, map->Pos, map->GetMapElements(), map->NeedToPush);
+    }
+
+    auto filter = CastOperator<TOpFilter>(input);
+    return MakeIntrusive<TOpFilter>(newInput, filter->Pos, TExpression(filter->GetFilterExpression().GetLambda(), &ctx.ExprCtx, &props));
 }
 }
 }

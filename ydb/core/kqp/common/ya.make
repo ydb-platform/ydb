@@ -8,6 +8,8 @@ SRCS(
     kqp_batch_operations.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
+    kqp_expr_helpers.cpp
+    kqp_expr_helpers.h
     kqp_lwtrace_probes.cpp
     kqp_lwtrace_probes.h
     kqp_resolve.cpp

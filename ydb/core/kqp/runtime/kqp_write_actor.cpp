@@ -3709,6 +3709,7 @@ struct TWriteSettings {
     bool SkipMissingRows = false;
     enum class EInputRowFormat { Flat, StructOfRows };
     EInputRowFormat InputRowFormat = EInputRowFormat::Flat;
+    bool IsIndexImplTable = false;
 
     struct TIndex {
         TTableId TableId;
@@ -4607,6 +4608,49 @@ public:
     std::optional<TWriteToken> InitializeWriteActors(const TWriteSettings& settings) {
         // Can't have CTAS here
         AFL_ENSURE(settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+
+        // Indexes of a table may be maintained in two ways: through the table sink
+        // (index stream write, used for GlobalSync/GlobalSyncUnique when index stream
+        // write is enabled and always for compact indexes), or through direct writes
+        // to the index implementation tables (used for the remaining index types, and
+        // for GlobalSync/GlobalSyncUnique when index stream write is disabled).
+        //
+        // Both modes are valid and may legitimately coexist in one transaction --
+        // even within a single statement a table may mix sink-written and directly
+        // written indexes. The only incompatible case is maintaining the same index
+        // implementation table both ways, which makes its contents ambiguous. That
+        // can happen if EnableIndexStreamWrite is changed between statements of the
+        // transaction. Track the maintenance mode per implementation table instead
+        // of per statement.
+        auto replyIndexMaintenanceConflict = [this](const TString& implTablePath) {
+            ReplyError(
+                NYql::NDqProto::StatusIds::ABORTED,
+                NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+                TStringBuilder()
+                    << "Cannot maintain index implementation table `" << implTablePath
+                    << "` both through the index stream write and through direct writes "
+                       "in a single transaction",
+                {});
+        };
+
+        if (settings.IsIndexImplTable
+                && StreamWrittenIndexImplTables.contains(settings.TableId.PathId)) {
+            replyIndexMaintenanceConflict(settings.TablePath);
+            return std::nullopt;
+        }
+        for (const auto& index : settings.Indexes) {
+            if (DirectWrittenIndexImplTables.contains(index.TableId.PathId)) {
+                replyIndexMaintenanceConflict(index.TablePath);
+                return std::nullopt;
+            }
+        }
+
+        if (settings.IsIndexImplTable) {
+            DirectWrittenIndexImplTables.insert(settings.TableId.PathId);
+        }
+        for (const auto& index : settings.Indexes) {
+            StreamWrittenIndexImplTables.insert(index.TableId.PathId);
+        }
 
         auto& writeInfo = WriteInfos[settings.TableId.PathId];
 
@@ -6798,6 +6842,11 @@ private:
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;
     bool EnableStreamWrite = true;
+    // Index implementation tables maintained by the table sink (index stream write)
+    // and by direct writes to the implementation tables within the current transaction.
+    // The same table must not appear in both sets.
+    THashSet<TPathId> StreamWrittenIndexImplTables;
+    THashSet<TPathId> DirectWrittenIndexImplTables;
 
     bool IsImmediateCommit = false;
     bool TxPlanned = false;
@@ -7162,6 +7211,7 @@ private:
                 .InputRowFormat = Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS
                     ? TWriteSettings::EInputRowFormat::StructOfRows
                     : TWriteSettings::EInputRowFormat::Flat,
+                .IsIndexImplTable = Settings.GetIsIndexImplTable(),
 
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
                 .QuerySpanId = Settings.GetQuerySpanId(),

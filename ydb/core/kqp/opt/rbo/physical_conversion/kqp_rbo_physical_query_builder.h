@@ -48,7 +48,9 @@ private:
     bool NeedFinalNarrowing(int rootIdx);
     NYql::TExprNode::TPtr BuildFinalNarrowStage(int rootIdx, const NYql::TExprNode::TPtr& stage) const;
     TVector<NYql::NNodes::TKqpParamBinding> CollectParamBindings(int rootIdx, const NYql::TExprNode::TPtr& rootStage);
-    NYql::TExprNode::TPtr BuildMaterialize(int rootIdx, NYql::TExprNode::TPtr ranges);
+    // Computes `node` in a separate transaction and returns the parameter holding its result:
+    // read ranges are bound as a tuple, a scalar as a plain value.
+    NYql::TExprNode::TPtr BuildMaterialize(int rootIdx, NYql::TExprNode::TPtr node, bool asTuple = true);
     bool IsSingleTaskConnection(const NYql::NNodes::TExprBase& input) const;
 
     const TVector<TIntrusivePtr<TOpRoot>>& Roots;

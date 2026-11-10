@@ -34,9 +34,150 @@ namespace {
         config.set_attach_consistency_mode(Ydb::Coordination::CONSISTENCY_MODE_RELAXED);
         ctx.SetConfig(12345, config, 42);
     }
+
+    NKikimrKesus::TEvDescribeSemaphoresResult DescribeSemaphoresForBackup(TTestContext& ctx) {
+        const auto edge = ctx.Runtime->AllocateEdgeActor();
+        ctx.SendFromEdge(edge, new TEvKesus::TEvDescribeSemaphores(), 123);
+        return ctx.ExpectEdgeEvent<TEvKesus::TEvDescribeSemaphoresResult>(edge, 123)->Record;
+    }
 }
 
 Y_UNIT_TEST_SUITE(TKesusTest) {
+    Y_UNIT_TEST(TestSemaphoresBackupDefinitions) {
+        TTestContext ctx;
+        ctx.Setup();
+        UNIT_ASSERT_VALUES_EQUAL(DescribeSemaphoresForBackup(ctx).SemaphoresSize(), 0);
+        const TString data("a\0\xffz", 4);
+        ctx.CreateSemaphore("../persistent", 2, data);
+        const auto proxy = ctx.Runtime->AllocateEdgeActor();
+        ctx.MustRegisterProxy(proxy, 1);
+        ctx.MustAttachSession(proxy, 1, 0, 30000);
+        ctx.MustAttachSession(proxy, 1, 0, 30000);
+        ctx.SendAcquireSemaphore(1, proxy, 1, 1, "../persistent", 2);
+        ctx.ExpectAcquireSemaphoreResult(1, proxy, 1);
+        ctx.SendAcquireSemaphore(2, proxy, 1, 2, "../persistent", 1, 60000);
+        ctx.ExpectAcquireSemaphorePending(2, proxy, 1);
+        ctx.SendAcquireLock(3, proxy, 1, 1, "ephemeral", LOCK_MODE_EXCLUSIVE);
+        ctx.ExpectAcquireLockResult(3, proxy, 1);
+
+        const auto result = DescribeSemaphoresForBackup(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), 1);
+        const auto& semaphore = result.GetSemaphores(0);
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetName(), "../persistent");
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetLimit(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetData(), data);
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetCount(), 2);
+        UNIT_ASSERT(!semaphore.GetEphemeral());
+
+        // Replaying a definition creates a free semaphore, despite active owners/waiters at the source.
+        ctx.CreateSemaphore("restored", semaphore.GetLimit(), semaphore.GetData());
+        const auto restored = ctx.DescribeSemaphore("restored", true);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Data, data);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Limit, 2);
+        UNIT_ASSERT(!restored.Ephemeral);
+        UNIT_ASSERT(restored.Owners.empty());
+        UNIT_ASSERT(restored.Waiters.empty());
+    }
+
+    Y_UNIT_TEST(TestSemaphoresBackupAllDefinitions) {
+        TTestContext ctx;
+        ctx.Setup();
+        // Exceed both former page limits: 128 entries and 4 MiB.
+        const TString data(32 * 1024, 'x');
+        constexpr ui32 count = 160;
+        for (ui32 i = 0; i < count; ++i) {
+            ctx.CreateSemaphore(ToString(i), i + 1, data);
+        }
+        const auto result = DescribeSemaphoresForBackup(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), count);
+        THashSet<TString> names;
+        for (const auto& semaphore : result.GetSemaphores()) {
+            UNIT_ASSERT(names.insert(semaphore.GetName()).second);
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.GetName(), ToString(semaphore.GetLimit() - 1));
+            UNIT_ASSERT(semaphore.GetLimit() >= 1 && semaphore.GetLimit() <= count);
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.GetData(), data);
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.GetCount(), 0);
+            UNIT_ASSERT(!semaphore.GetEphemeral());
+        }
+    }
+
+    Y_UNIT_TEST(TestSemaphoresBackupResponseSizeLimit) {
+        TTestContext ctx;
+        ctx.Setup();
+        const TString data(1024 * 1024, 'x');
+        const ui32 count = NActors::EventMaxByteSize / data.size();
+        TString boundaryData;
+        {
+            TEvKesus::TEvDescribeSemaphoresResult expected;
+            expected.Record.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
+            for (ui32 i = 0; i + 1 < count; ++i) {
+                const TString name = ToString(i);
+                ctx.CreateSemaphore(name, 1, data);
+                auto* semaphore = expected.Record.AddSemaphores();
+                semaphore->SetName(name);
+                semaphore->SetLimit(1);
+                semaphore->SetData(data);
+            }
+
+            auto* boundary = expected.Record.AddSemaphores();
+            boundary->SetName("boundary");
+            boundary->SetLimit(Max<ui64>());
+            boundary->SetData(data);
+            const size_t size = expected.CalculateSerializedSize();
+            UNIT_ASSERT(size > NActors::EventMaxByteSize);
+            const size_t excess = size - NActors::EventMaxByteSize;
+            UNIT_ASSERT(excess < data.size());
+            boundaryData = data.substr(0, data.size() - excess);
+            boundary->SetData(boundaryData);
+            UNIT_ASSERT_VALUES_EQUAL(expected.CalculateSerializedSize(), NActors::EventMaxByteSize);
+        }
+
+        ctx.CreateSemaphore("boundary", Max<ui64>(), boundaryData);
+        {
+            TEvKesus::TEvDescribeSemaphoresResult response;
+            response.Record = DescribeSemaphoresForBackup(ctx);
+            UNIT_ASSERT_VALUES_EQUAL(response.Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.Record.SemaphoresSize(), count);
+            UNIT_ASSERT_VALUES_EQUAL(response.CalculateSerializedSize(), NActors::EventMaxByteSize);
+        }
+
+        boundaryData += 'x';
+        ctx.UpdateSemaphore("boundary", boundaryData);
+        const auto result = DescribeSemaphoresForBackup(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), 0);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetError().ShortDebugString(), "response size limit");
+    }
+
+    Y_UNIT_TEST(TestSemaphoresBackupLatestDefinitions) {
+        TTestContext ctx;
+        ctx.Setup();
+        ctx.CreateSemaphore("A", 1);
+        ctx.CreateSemaphore("B", 2, "old");
+        UNIT_ASSERT_VALUES_EQUAL(DescribeSemaphoresForBackup(ctx).SemaphoresSize(), 2);
+        ctx.DeleteSemaphore("A");
+        ctx.UpdateSemaphore("B", "changed");
+        ctx.CreateSemaphore("C", 3, "new");
+
+        for (bool reboot : {false, true}) {
+            if (reboot) {
+                ctx.RebootTablet();
+            }
+            const auto result = DescribeSemaphoresForBackup(ctx);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), 2);
+            THashSet<TString> names;
+            for (const auto& semaphore : result.GetSemaphores()) {
+                UNIT_ASSERT(names.insert(semaphore.GetName()).second);
+                UNIT_ASSERT(semaphore.GetName() == "B" || semaphore.GetName() == "C");
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.GetLimit(), semaphore.GetName() == "B" ? 2 : 3);
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.GetData(), semaphore.GetName() == "B" ? "changed" : "new");
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestKesusConfig) {
         TTestContext ctx;
         ctx.Setup();

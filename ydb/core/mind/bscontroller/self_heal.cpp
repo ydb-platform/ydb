@@ -1,7 +1,6 @@
 #include "self_heal.h"
 #include "impl.h"
 #include "config.h"
-#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include "group_geometry_info.h"
 #include "group_layout_checker.h"
 #include "layout_helpers.h"
@@ -1189,17 +1188,11 @@ namespace NKikimr::NBsController {
                 prevStaticGroups.erase(groupId);
                 auto& content = sh->GroupsToUpdate[groupId];
                 const TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()));
-                auto smConfig = StorageConfig->GetSelfManagementConfig();
                 const auto pileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
-                if (const auto *pile = BridgeInfo ? BridgeInfo->FindPile(pileId) : nullptr) {
-                    if (const auto *rule = FindStoragePoolPileOverride(bsConfig, pile->Name, std::nullopt)) {
-                        ApplyStoragePoolPileOverride(smConfig, *rule);
-                    }
-                }
                 content = TEvControllerUpdateSelfHealInfo::TGroupContent{
                     .Generation = group.GetGroupGeneration(),
                     .Type = gtype,
-                    .Geometry = std::make_shared<TGroupGeometryInfo>(gtype, smConfig.GetGeometry()),
+                    .Geometry = std::make_shared<TGroupGeometryInfo>(GetStaticGroupGeometry(gtype, pileId)),
                 };
 
                 const TVDiskID vdiskId(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), group.GetGroupGeneration(), 0, 0, 0);

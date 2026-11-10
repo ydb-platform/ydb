@@ -59,7 +59,7 @@ protected:
     }
 
     TString NormalizeTopicPath(TStringBuf path) const {
-        return AppData()->PQConfig.GetTopicsAreFirstClassCitizen()
+        return AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && !path.StartsWith("sqs://")
             ? this->Request_->NormalizePath(path)
             : TString(path);
     }

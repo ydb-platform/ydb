@@ -388,11 +388,14 @@ namespace NInternal {
         const TDriver& driver,
         const TRemoveDirectoryRecursiveSettings& settings
     ) {
+        // Every removing thread holds at most one session at a time.
         return [
             schemeClient = TSchemeClient(driver),
-            tableClient = TTableClient(driver),
+            tableClient = TTableClient(driver, NTable::TClientSettings()
+                .SessionPoolSettings(NTable::TSessionPoolSettings().MaxActiveSessions(settings.Threads_))),
             topicClient = TTopicClient(driver),
-            queryClient = NQuery::TQueryClient(driver),
+            queryClient = NQuery::TQueryClient(driver, NQuery::TClientSettings()
+                .SessionPoolSettings(NQuery::TSessionPoolSettings().MaxActiveSessions(settings.Threads_))),
             coordinationClient = NCoordination::TClient(driver),
             keyValueClient = NKeyValue::TKeyValueClient(driver),
             settings

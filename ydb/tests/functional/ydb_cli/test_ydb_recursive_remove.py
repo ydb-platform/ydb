@@ -258,7 +258,7 @@ class TestRecursiveRemove:
                 only_contains(".metadata", ".sys"),
             )
 
-    @pytest.mark.parametrize("in_flight", [1, 16])
+    @pytest.mark.parametrize("in_flight", [1, 16, 64])
     def test_nested_directories(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session, in_flight):
         database_path = ydb_database
         driver = ydb_client(database_path)

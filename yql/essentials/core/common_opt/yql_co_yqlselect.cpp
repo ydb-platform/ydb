@@ -109,7 +109,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> PrepareYqlLambdaSubLinkInput(
 
 std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteYqlLambdaSubLinks(
     TPositionHandle pos,
-    TExprNode::TPtr list,
+    TExprNode::TPtr inputList,
     TExprNode::TPtr lambda,
     const TString& inputAlias,
     const TExprNode::TPtr& inputLambda,
@@ -121,12 +121,11 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteYqlLambdaSubLinks(
         return node->IsCallable({"PgSubLink", "YqlSubLink"});
     });
     if (!sublink) {
-        return {AdaptYqlLambdaInput(pos, std::move(lambda), inputLambda, ctx), std::move(list)};
+        return {AdaptYqlLambdaInput(pos, std::move(lambda), inputLambda, ctx), std::move(inputList)};
     }
 
     auto row = ctx.NewArgument(pos, "row");
-    TExprNode::TPtr body;
-    std::tie(body, list) = PrepareYqlLambdaSubLinkInput(pos, std::move(list), lambda, row, inputAlias, inputLambda, ctx);
+    auto [body, list] = PrepareYqlLambdaSubLinkInput(pos, std::move(inputList), lambda, row, inputAlias, inputLambda, ctx);
 
     auto [sublinks, originalSublinks] = GatherSubLinksWithOriginal(body, originalBody);
     if (!sublinks.empty()) {

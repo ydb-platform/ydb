@@ -277,6 +277,9 @@ public:
     TFuture<T> WithDeadline(
         TInstant deadline,
         TFutureTimeoutOptions options = {}) const;
+    TFuture<T> WithDeadline(
+        std::optional<TInstant> deadline,
+        TFutureTimeoutOptions options = {}) const;
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case of timeout).

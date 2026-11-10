@@ -2347,6 +2347,7 @@ public:
             auto itVDiskStateResponse = VDiskStateResponse.find(nodeId);
             if (itVDiskStateResponse != VDiskStateResponse.end()) {
                 if (itVDiskStateResponse->second.Error("NodeDisconnected")) {
+                    AddWhiteboardDisksProblemOnFallback();
                     VDiskRequestDone();
                 }
             }
@@ -2355,6 +2356,7 @@ public:
             auto itPDiskStateResponse = PDiskStateResponse.find(nodeId);
             if (itPDiskStateResponse != PDiskStateResponse.end()) {
                 if (itPDiskStateResponse->second.Error("NodeDisconnected")) {
+                    AddWhiteboardDisksProblemOnFallback();
                     PDiskRequestDone();
                 }
             }
@@ -2363,9 +2365,20 @@ public:
             auto itBSGroupStateResponse = BSGroupStateResponse.find(nodeId);
             if (itBSGroupStateResponse != BSGroupStateResponse.end()) {
                 if (itBSGroupStateResponse->second.Error("NodeDisconnected")) {
+                    // groups are requested from whiteboard only when BSC data is not available,
+                    // so the groups known only to this node are missing from the response
+                    AddProblem("wb-incomplete-groups");
                     BSGroupRequestDone();
                 }
             }
+        }
+    }
+
+    void AddWhiteboardDisksProblemOnFallback() {
+        // with BSC data the disks of a disconnected node are still listed from BSC,
+        // without it the whiteboard is the only source and they are lost
+        if (FallbackToWhiteboard) {
+            AddProblem("wb-incomplete-disks");
         }
     }
 

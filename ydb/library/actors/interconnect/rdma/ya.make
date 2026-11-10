@@ -14,6 +14,8 @@ IF (OS_LINUX)
         ydb/library/actors/interconnect/address
         contrib/libs/ibdrv
         contrib/libs/protobuf
+        library/cpp/monlib/dynamic_counters
+        library/cpp/threading/queue
     )
 
 ELSE()

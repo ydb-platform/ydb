@@ -1078,7 +1078,7 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
 
             YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Error",
                 {"error", error},
-                {"selfId", ctx.SelfID},
+                {"tabletId", ctx.SelfID},
                 {"txId", TxId},
                 {"shardId", shardData.ShardId});
 
@@ -1974,7 +1974,7 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
             ReportStatus(errorCode, NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx);
             TxProxyMon->TxResultAborted->Inc();
             YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Handle Prepare TEvProposeTransactionResult TDataReq all DataShards are prepared successful, but we unable to choose coordinator neither by resolved keys nor by TEvProposeTransactionResult from datashard, tx canceled",
-                {"selfId", ctx.SelfID},
+                {"tabletId", ctx.SelfID},
                 {"txId", TxId},
                 {"selectedCoordinator", SelectedCoordinator},
                 {"privateCoordinator", privateCoordinator});
@@ -2414,7 +2414,7 @@ void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TAct
             case TPerTablet::ETabletStatus::StatusWait:
                 // should be impossible, just handle as if it's an error
                 YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "Shard has unexpected state on delivery problem in planning state",
-                    {"selfId", ctx.SelfID},
+                    {"tabletId", ctx.SelfID},
                     {"txId", TxId},
                     {"tabletId", msg->TabletId},
                     {"tabletStatus", perTablet->TabletStatus});
@@ -2874,7 +2874,7 @@ ui64 TDataReq::SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest
     // no tablets keys are found in requests keys
     // it take place when a transaction have only checks locks
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_PROXY, "SelectCoordinator unable to choose coordinator from resolved keys, will try to pick it from TEvProposeTransactionResult from datashard",
-        {"selfId", ctx.SelfID},
+        {"tabletId", ctx.SelfID},
         {"txId", TxId});
     return 0;
 }

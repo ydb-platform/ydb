@@ -512,7 +512,7 @@ public:
 
                     YDB_LOG_ERROR_CTX(ctx, "Handle Prepare TEvProposeTransactionResult TCreateSnapshotReq",
                         {"error", explanation},
-                        {"selfId", ctx.SelfID},
+                        {"tabletId", ctx.SelfID},
                         {"selectedCoordinator", SelectedCoordinator},
                         {"privateCoordinator", privateCoordinator});
 
@@ -947,7 +947,7 @@ public:
         // no tablets keys are found in requests keys
         // it take place when a transaction have only checks locks
         YDB_LOG_DEBUG_CTX(ctx, "SelectCoordinator unable to choose coordinator from resolved keys, will try to pick it from TEvProposeTransactionResult from datashard",
-            {"selfId", ctx.SelfID},
+            {"tabletId", ctx.SelfID},
             {"txId", TxId});
         return 0;
     }

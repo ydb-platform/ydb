@@ -461,7 +461,17 @@ namespace NActors {
         const TString& str,
         NActors::NStructuredLog::TStructuredMessage&& structuredMessage = {}) {
 
-        MemLogWrite(str.data(), str.size(), true);
+        TStringBuilder memLogText;
+        memLogText << str;
+        if (structuredMessage.GetValuesCount() > 0) {
+            memLogText << " (";
+            NActors::NStructuredLog::TTextWriter textWriter;
+            textWriter.Write(memLogText, structuredMessage);
+            memLogText << ')';
+        }
+        const TString memLogRecord(memLogText);
+
+        MemLogWrite(memLogRecord.data(), memLogRecord.size(), true);
         DeliverLogMessage(
             actorCtxOrSystem,
             mPriority,

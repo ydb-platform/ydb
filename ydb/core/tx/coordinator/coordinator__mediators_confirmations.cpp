@@ -38,7 +38,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
                 for (TTabletId tabletId : confirmed) {
                     auto removed = unconfirmed.erase(tabletId);
                     FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "",
-                        {"selfId", Self->TabletID()},
+                        {"tabletId", Self->TabletID()},
                         {"internalTxGen", internalTxGen},
                         {"internalTxStep", internalTxStep},
                         {"volatileTx", txid},
@@ -49,7 +49,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
 
                 if (unconfirmed.empty()) {
                     FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged for mediator",
-                        {"selfId", Self->TabletID()},
+                        {"tabletId", Self->TabletID()},
                         {"internalTxGen", internalTxGen},
                         {"internalTxStep", internalTxStep},
                         {"volatileTx", txid},
@@ -59,7 +59,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
 
                 if (it->second.UnconfirmedAffectedSet.empty()) {
                     FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged fully",
-                        {"selfId", Self->TabletID()},
+                        {"tabletId", Self->TabletID()},
                         {"internalTxGen", internalTxGen},
                         {"internalTxStep", internalTxStep},
                         {"volatileTx", txid});
@@ -73,7 +73,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
             auto it = Self->Transactions.find(txid);
             if (it == Self->Transactions.end()) {
                 FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Transaction not found",
-                    {"selfId", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"internalTxGen", internalTxGen},
                     {"internalTxStep", internalTxStep},
                     {"persistentTx", txid},
@@ -88,7 +88,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
                     db.Table<Schema::AffectedSet>().Key(mediatorId, txid, tabletId).Delete();
                 }
                 FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "",
-                        {"selfId", Self->TabletID()},
+                        {"tabletId", Self->TabletID()},
                         {"internalTxGen", internalTxGen},
                         {"internalTxStep", internalTxStep},
                         {"persistentTx", txid},
@@ -99,7 +99,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
 
             if (unconfirmed.empty()) {
                 FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged for mediator",
-                    {"selfId", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"internalTxGen", internalTxGen},
                     {"internalTxStep", internalTxStep},
                     {"persistentTx", txid},
@@ -109,7 +109,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
 
             if (it->second.UnconfirmedAffectedSet.empty()) {
                 FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged fully",
-                    {"selfId", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"internalTxGen", internalTxGen},
                     {"internalTxStep", internalTxStep},
                     {"persistentTx", txid});

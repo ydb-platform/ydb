@@ -787,32 +787,38 @@ namespace NActors {
 #define YDB_LOG_DEBUG_FAIL(T, ...) YDB_LOG_COMP_FAIL(PRI_DEBUG, YDB_LOG_THIS_FILE_COMPONENT, T, __VA_ARGS__)
 #define YDB_LOG_TRACE(T, ...) YDB_LOG(PRI_TRACE, T, __VA_ARGS__)
 
-#define YDB_LOG_VERIFY(condition, ...)                                                                                          \
-    if (condition) {                                                                                                            \
-        static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
-    } else [[unlikely]] {                                                                                                       \
-        NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
-        YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
-        NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
-    }
+#define YDB_LOG_VERIFY(condition, ...)                                                                                              \
+    do {                                                                                                                            \
+        if (condition) {                                                                                                            \
+            static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+        } else [[unlikely]] {                                                                                                       \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+            NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+        }                                                                                                                           \
+    } while (false)
 
-#define YDB_LOG_ENSURE(condition, ...)                                                                                          \
-    if (condition) {                                                                                                            \
-        static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
-    } else [[unlikely]] {                                                                                                       \
-        NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
-        YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
-        NActors::LogEnsureFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
-    }
+#define YDB_LOG_ENSURE(condition, ...)                                                                                              \
+    do {                                                                                                                            \
+        if (condition) {                                                                                                            \
+            static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+        } else [[unlikely]] {                                                                                                       \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+            NActors::LogEnsureFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+        }                                                                                                                           \
+    } while (false)
 
 /// Assert that depends on NDEBUG macro; the message is built from structured key/value pairs.
 #ifndef NDEBUG
 #define YDB_LOG_VERIFY_DEBUG YDB_LOG_VERIFY
 #else
-#define YDB_LOG_VERIFY_DEBUG(condition, ...)                                                                                    \
-    if (true); else [[unlikely]] {                                                                                                       \
-        NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
-        YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
-        NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
-    }
+#define YDB_LOG_VERIFY_DEBUG(condition, ...)                                                                                        \
+    do {                                                                                                                            \
+        if (true); else [[unlikely]] {                                                                                              \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+            NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+        }                                                                                                                           \
+    } while (false)
 #endif

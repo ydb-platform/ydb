@@ -177,6 +177,7 @@ protected:
     friend class TDrainNodeWaitActor;
     friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
+    friend struct TTabletInfo;
     friend struct TLeaderTabletInfo;
     friend class TReassignTabletsActor;
     friend class TMoveDataActor;
@@ -292,6 +293,10 @@ protected:
     ITransaction* CreateRestartTablet(TFullTabletId tabletId);
     ITransaction* CreateRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId);
     ITransaction* CreateForceRestartTablet(TFullTabletId tabletId);
+    ITransaction* CreateRestartTabletAfterBootUndelivered(TFullTabletId tabletId, ui64 bootAttemptId);
+    ui64 TrackBootAttempt(TTabletInfo& tablet, const TActorId& local);
+    void ClearBootAttempt(TTabletInfo& tablet);
+    TTabletInfo* FindStartingBootAttempt(ui64 bootAttemptId);
     ITransaction* CreateInitScheme();
     ITransaction* CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie);
     ITransaction* CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie);
@@ -367,6 +372,12 @@ protected:
     std::unordered_map<TNodeId, TNodeInfo> Nodes;
     std::unordered_map<TSegmentId, TIntrusiveList<TNodeInfo, TSegmentNodesTag>> NodeSegments;
     std::unordered_map<TTabletId, TLeaderTabletInfo> Tablets;
+    struct TBootAttempt {
+        TFullTabletId TabletId;
+        TActorId Local;
+    };
+    ui64 LastBootAttemptId = 0;
+    std::unordered_map<ui64, TBootAttempt> BootAttempts;
     std::unordered_map<TOwnerIdxType::TValueType, TTabletId> OwnerToTablet;
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetrics;
@@ -794,7 +805,7 @@ public:
             NKikimr::NHive::TResourceNormalizedValues deltaNormalized);
     void ResetTotalResourceValues();
     void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
-    void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
+    void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local);
     ui32 GetDataCenters();
     void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);

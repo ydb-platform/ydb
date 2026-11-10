@@ -11272,6 +11272,90 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_TABLETS_STARTING), 0);
     }
 
+    Y_UNIT_TEST(TestStaleBootUndeliveredOnSameLocal) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 ownerTablet = MakeTabletID(false, 1);
+        const TActorId sender = runtime.AllocateEdgeActor(0);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        const TActorId hiveActor = GetHiveActor(runtime, hiveTablet);
+        runtime.EnableScheduleForActor(hiveActor);
+
+        TBlockEvents<TEvLocal::TEvBootTablet> boots(runtime, [&](const auto& ev) {
+            return ev->Get()->Record.GetInfo().GetTabletID() != hiveTablet;
+        });
+        auto create = MakeHolder<TEvHive::TEvCreateTablet>(ownerTablet, 0, TTabletTypes::Dummy, BINDED_CHANNELS);
+        create->Record.SetBalancerPolicy(NKikimrHive::POLICY_IGNORE);
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, ownerTablet, std::move(create), 0, false);
+        runtime.WaitFor("first tablet boot", [&] { return !boots.empty(); }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(boots.size(), 1);
+        auto firstBoot = std::move(boots.front());
+        boots.pop_front();
+        const TActorId local = firstBoot->GetRecipientRewrite();
+        const ui32 firstGeneration = firstBoot->Get()->Record.GetSuggestedGeneration();
+
+        // Restart on the same Local while the first boot is still waiting to be delivered.
+        NActorsProto::TRemoteHttpInfo request;
+        request.SetMethod(HTTP_METHOD_POST);
+        request.SetPath("/app");
+        auto* page = request.AddQueryParams();
+        page->SetKey("page");
+        page->SetValue("MoveTablet");
+        auto* tablet = request.AddQueryParams();
+        tablet->SetKey("tablet");
+        tablet->SetValue(ToString(tabletId));
+        auto* node = request.AddQueryParams();
+        node->SetKey("node");
+        node->SetValue(ToString(local.NodeId()));
+        auto* wait = request.AddQueryParams();
+        wait->SetKey("wait");
+        wait->SetValue("0");
+        runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(request)), 0, GetPipeConfigWithRetries());
+        runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(sender, TDuration::Seconds(30));
+
+        runtime.WaitFor("replacement tablet boot", [&] { return !boots.empty(); }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(boots.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(boots.front()->GetRecipientRewrite(), local);
+        const ui32 secondGeneration = boots.front()->Get()->Record.GetSuggestedGeneration();
+        UNIT_ASSERT_VALUES_EQUAL(secondGeneration, firstGeneration + 1);
+
+        auto sendUndelivered = [&](TEvLocal::TEvBootTablet::TPtr boot) {
+            auto failure = IEventHandle::ForwardOnNondelivery(
+                std::unique_ptr<IEventHandle>(boot.Release()), TEvents::TEvUndelivered::ReasonActorUnknown);
+            UNIT_ASSERT(failure);
+            runtime.Send(failure.release());
+        };
+        sendUndelivered(std::move(firstBoot));
+
+        // A no-op transaction confirms Hive has processed the failure and any restart it queued.
+        runtime.Send(new IEventHandle(hiveActor, sender, new TEvHive::TEvSetDown(Max<ui32>(), false)));
+        const auto fence = runtime.GrabEdgeEventRethrow<TEvHive::TEvSetDownReply>(sender, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(fence->Get()->Record.GetStatus(), NKikimrProto::OK);
+        const auto current = GetHiveTabletInfo(runtime, hiveTablet, tabletId, sender);
+        UNIT_ASSERT_VALUES_EQUAL(current.GetVolatileState(), NKikimrHive::TABLET_VOLATILE_STATE_STARTING);
+        UNIT_ASSERT_VALUES_EQUAL(current.GetGeneration(), secondGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(boots.size(), 1);
+
+        // The failure of the current boot still causes a retry.
+        auto secondBoot = std::move(boots.front());
+        boots.pop_front();
+        sendUndelivered(std::move(secondBoot));
+        runtime.WaitFor("retry after current boot failed", [&] { return !boots.empty(); }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(boots.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(boots.front()->GetRecipientRewrite(), local);
+        const ui32 retryGeneration = boots.front()->Get()->Record.GetSuggestedGeneration();
+        UNIT_ASSERT_VALUES_EQUAL(retryGeneration, secondGeneration + 1);
+        boots.Stop().Unblock();
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] {
+            const auto info = GetHiveTabletInfo(runtime, hiveTablet, tabletId, sender);
+            return info.GetVolatileState() == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING &&
+                info.GetNodeID() == local.NodeId() && info.GetGeneration() == retryGeneration;
+        }), "the retry did not complete on the same Local");
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_TABLETS_STARTING), 0);
+    }
+
     Y_UNIT_TEST(TestBridgeDrainAfterLateStartingStatus) {
         TBridgeDrainTest test;
         auto& runtime = test.Runtime;

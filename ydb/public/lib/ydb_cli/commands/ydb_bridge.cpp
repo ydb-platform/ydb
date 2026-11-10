@@ -195,7 +195,8 @@ TCommandBridgeRollback::TCommandBridgeRollback(bool allowEmptyDatabase)
         "Requires the original pile to be the only pile and all bridged storage groups to be inline in it. "
         "Storage groups retain their IDs and data. Monitor progress with \"ydb admin cluster bridge list piles\". "
         "Wait for storage rollback to finish before removing bridge_config and hosts' bridge_pile_name in one configuration change. "
-        "Then restart all nodes without bridge configuration. Start dynamic nodes without --bridge-pile-name.")
+        "Then restart all nodes without bridge configuration. Start dynamic nodes without --bridge-pile-name. "
+        "The report covers static and connected dynamic nodes.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
     CompletionDescription = "Roll a converted cluster back to ordinary mode";

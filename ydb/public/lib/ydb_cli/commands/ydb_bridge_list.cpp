@@ -388,6 +388,7 @@ namespace NYdb::NConsoleClient {
             }
             if (format == EDataFormat::Csv) {
                 WriteCsvRow(PileCsvHeaders(detailed));
+                Cerr << "Node configuration status is available with --format json." << Endl;
                 return;
             }
 
@@ -396,11 +397,11 @@ namespace NYdb::NConsoleClient {
                 return;
             }
             Cout << (bridgeNodes.empty() ? "Bridge configuration status incomplete" : "Bridge configuration still in use") << Endl;
-            const auto printNodes = [detailed](TStringBuf label, const std::vector<uint32_t>& nodes) {
+            const auto printNodes = [detailed](TStringBuf countLabel, TStringBuf idsLabel, const std::vector<uint32_t>& nodes) {
                 if (nodes.empty()) {
                     return;
                 }
-                Cout << label << ": ";
+                Cout << (detailed ? idsLabel : countLabel) << ": ";
                 if (detailed) {
                     Cout << MakeRangeJoiner(", ", nodes);
                 } else {
@@ -408,8 +409,11 @@ namespace NYdb::NConsoleClient {
                 }
                 Cout << Endl;
             };
-            printNodes("Nodes with bridge config", bridgeNodes);
-            printNodes("Unreported static nodes", unreportedNodes);
+            printNodes("Nodes with bridge config", "Node IDs with bridge config", bridgeNodes);
+            printNodes("Unreported static nodes", "Unreported static node IDs", unreportedNodes);
+            if (!bridgeNodes.empty()) {
+                Cout << "To return to ordinary mode, remove bridge configuration and restart the nodes." << Endl;
+            }
         }
 
         void PrintDatabaseRows(const std::vector<NBridge::TDatabaseSynchronization>& databases, bool detailed, bool csv) {
@@ -583,7 +587,7 @@ namespace NYdb::NConsoleClient {
         TYdbReadOnlyCommand::Config(config);
         config.AllowEmptyDatabase = AllowEmptyDatabase;
         config.SetFreeArgsNum(0, 1);
-        SetFreeArgTitle(0, "[piles|databases|groups]", "Use piles for the cluster overview and rollback status. Omitting the view is deprecated.");
+        SetFreeArgTitle(0, "[piles|databases|groups]", "What to list. Defaults to piles.");
         config.Opts->GetOpts().GetFreeArgSpec(0).Completer(NLastGetopt::NComp::Choice({
             {"piles", "Pile state"},
             {"databases", "Database synchronization by pile"},

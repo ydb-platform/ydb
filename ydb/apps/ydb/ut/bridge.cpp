@@ -342,6 +342,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
             for (const auto* item : {"[piles|databases|groups]", "--detailed", "--pile", "--format", "--database-path"}) {
                 UNIT_ASSERT_STRING_CONTAINS(help, item);
             }
+            UNIT_ASSERT_STRING_CONTAINS(help, "Defaults to piles.");
         }
     }
 
@@ -826,6 +827,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
     Y_UNIT_TEST_F(RollbackRequiresConfirmation, TBridgeCliFixture) {
         const auto help = RunCli({"admin", "cluster", "bridge", "rollback", "--help"});
         UNIT_ASSERT_STRING_CONTAINS(help, "\"ydb admin cluster bridge list piles\"");
+        UNIT_ASSERT_STRING_CONTAINS(help, "The report covers static and connected dynamic nodes.");
 
         ExpectFail();
         RunCliWithInput({"-e", GetEndpoint(), "-d", GetDatabase(), "admin", "cluster", "bridge", "rollback"},
@@ -856,11 +858,13 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_VALUES_EQUAL(RunList(),
             "Bridge configuration still in use\n"
             "Nodes with bridge config: 2\n"
-            "Unreported static nodes: 1\n");
+            "Unreported static nodes: 1\n"
+            "To return to ordinary mode, remove bridge configuration and restart the nodes.\n");
         UNIT_ASSERT_VALUES_EQUAL(RunList({"piles", "--detailed"}),
             "Bridge configuration still in use\n"
-            "Nodes with bridge config: 3, 5\n"
-            "Unreported static nodes: 7\n");
+            "Node IDs with bridge config: 3, 5\n"
+            "Unreported static node IDs: 7\n"
+            "To return to ordinary mode, remove bridge configuration and restart the nodes.\n");
 
         NJson::TJsonValue json;
         UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--format", "json"}), &json));
@@ -875,10 +879,13 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_VALUES_EQUAL(unreported.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(unreported[0].GetUInteger(), 7);
 
-        UNIT_ASSERT_VALUES_EQUAL(RunList({"--format", "csv"}), "pile_name,state,generation\n");
-        UNIT_ASSERT_VALUES_EQUAL(RunList({"--detailed", "--format", "csv"}),
+        TString error;
+        UNIT_ASSERT_VALUES_EQUAL(RunList({"--format", "csv"}, &error), "pile_name,state,generation\n");
+        UNIT_ASSERT_VALUES_EQUAL(error, "Node configuration status is available with --format json.\n");
+        UNIT_ASSERT_VALUES_EQUAL(RunList({"--detailed", "--format", "csv"}, &error),
             "pile_name,pile_name_present,state,databases_synced,databases_total,databases_syncing,databases_pending,"
             "databases_not_required,databases_unknown,cluster_unattributed_storage_pools,generation\n");
+        UNIT_ASSERT_VALUES_EQUAL(error, "Node configuration status is available with --format json.\n");
         const auto& service = Service<TBridgeService>();
         UNIT_ASSERT_VALUES_EQUAL(service.ClusterCalls.load(), 5);
         UNIT_ASSERT_VALUES_EQUAL(service.UnbridgedStatusRequests.load(), 5);

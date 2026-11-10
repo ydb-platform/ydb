@@ -10543,9 +10543,9 @@
     ],
     "test_sql2yql.test[select_yql-join_implicit_using_case_sensitivity_corr]": [
         {
-            "checksum": "6b536be507ae7e52614788b4d38d858f",
-            "size": 1181,
-            "uri": "https://{canondata_backend}/1597364/0708bf0a59aa5c50e839b0d9716b35cb28f86476/resource.tar.gz#test_sql2yql.test_select_yql-join_implicit_using_case_sensitivity_corr_/sql.yql"
+            "checksum": "c758d8a9aeb36ff7ea90883a8944753e",
+            "size": 1138,
+            "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_yql-join_implicit_using_case_sensitivity_corr_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-join_implicit_using_case_sensitivity_key]": [
@@ -10805,20 +10805,6 @@
             "checksum": "9d6110ecd257fddc341b63f33e67ab2e",
             "size": 2283,
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_yql-named_node_subquery_scalar_chain_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[select_yql-nested_column_access]": [
-        {
-            "checksum": "dbbc10043640f481793e339249d3f63d",
-            "size": 5453,
-            "uri": "https://{canondata_backend}/1871182/395cdcd2d9c89cde1e28fc5072d24271aeff9085/resource.tar.gz#test_sql2yql.test_select_yql-nested_column_access_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[select_yql-nested_column_access_from_scope]": [
-        {
-            "checksum": "90299e3cbca3f3df010c85a2b40649e4",
-            "size": 1236,
-            "uri": "https://{canondata_backend}/1931696/d2d4b5cd69236de11a344d73bbb84c4a27d69ce8/resource.tar.gz#test_sql2yql.test_select_yql-nested_column_access_from_scope_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-nullable_in_nested]": [
@@ -19844,16 +19830,6 @@
     "test_sql_format.test[select_yql-named_node_subquery_scalar_chain]": [
         {
             "uri": "file://test_sql_format.test_select_yql-named_node_subquery_scalar_chain_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[select_yql-nested_column_access]": [
-        {
-            "uri": "file://test_sql_format.test_select_yql-nested_column_access_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[select_yql-nested_column_access_from_scope]": [
-        {
-            "uri": "file://test_sql_format.test_select_yql-nested_column_access_from_scope_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-nullable_in_nested]": [

@@ -16,7 +16,7 @@ from collections import defaultdict
 from typing import List, Dict, Optional, Self
 
 from ydb.tests.library.common.wait_for import wait_for
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator, PARALLEL_ACTOR_SYSTEM_CONFIG
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.tools.datastreams_helpers.data_plane import read_stream
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
@@ -151,6 +151,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         pq_client_service_types=["yandex-query"],
         extra_feature_flags=extra_feature_flags,
         disabled_feature_flags=disabled_feature_flags,
+        overrided_actor_system_config=PARALLEL_ACTOR_SYSTEM_CONFIG,
         query_service_config={
             "available_external_data_sources": ["ObjectStorage", "Ydb"],
             "enable_match_recognize": True,

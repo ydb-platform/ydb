@@ -43,6 +43,24 @@ KNOWN_STATIC_YQL_UDFS = set([
     "yql/udfs/common/compress",
 ])
 
+# Suites that assert KQP/PQ task parallelism or high topic throughput keep the
+# pre-cut pool sizes. Default harness yaml uses 1 thread per pool.
+PARALLEL_ACTOR_SYSTEM_CONFIG = {
+    "executor": [
+        {"type": "BASIC", "threads": 2, "spin_threshold": 0, "name": "System"},
+        {"type": "BASIC", "threads": 3, "spin_threshold": 0, "name": "User"},
+        {"type": "BASIC", "threads": 2, "spin_threshold": 0, "name": "Batch"},
+        {"type": "IO", "threads": 1, "name": "IO", "time_per_mailbox_micro_secs": 100},
+        {"type": "BASIC", "threads": 1, "spin_threshold": 10, "name": "IC", "time_per_mailbox_micro_secs": 100},
+    ],
+    "scheduler": {"resolution": 1024, "spin_threshold": 0, "progress_threshold": 10000},
+    "sys_executor": 0,
+    "user_executor": 1,
+    "io_executor": 3,
+    "batch_executor": 2,
+    "service_executor": [{"service_name": "Interconnect", "executor_id": 4}],
+}
+
 
 def _get_fqdn():
     hostname = socket.gethostname()
@@ -356,7 +374,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["cms_config"] = self.cms_config
 
         if overrided_actor_system_config:
-            self.yaml_config["actor_system_config"] = overrided_actor_system_config
+            self.yaml_config["actor_system_config"] = copy.deepcopy(overrided_actor_system_config)
 
         if "table_service_config" not in self.yaml_config:
             self.yaml_config["table_service_config"] = {}

@@ -423,17 +423,20 @@ THealthEvaluation EvaluatePiles(
             verdict.Verdict = EPileVerdict::Failed;
             verdict.NewestEvidenceSentAt = newestBsc;
             verdict.Reasons.push_back("Every BSC-mode reply reports a RED group part");
-        } else if (outside && outsideLost && !verdict.SelfQuorum) {
-            verdict.Verdict = EPileVerdict::Lost;
-            verdict.NewestEvidenceSentAt = newestLost;
-            verdict.Reasons.push_back("Outside reports lack node quorum and no inside report claims quorum");
         } else if (bscHost && pile == *bscHost && bsc.empty() && !verdict.SelfQuorum
             && outsideFallback && allFallbackRed)
         {
+            // A retained settled report can keep Lost evidence frozen while
+            // newer reports are binding. Prefer the independently qualified
+            // fallback failure so fresh samples can advance its confirmation.
             verdict.Verdict = EPileVerdict::Failed;
             verdict.FallbackFailure = true;
             verdict.NewestEvidenceSentAt = newestFallback;
             verdict.Reasons.push_back("Every current outside fallback reply reports a decisive RED static group part");
+        } else if (outside && outsideLost && !verdict.SelfQuorum) {
+            verdict.Verdict = EPileVerdict::Lost;
+            verdict.NewestEvidenceSentAt = newestLost;
+            verdict.Reasons.push_back("Outside reports lack node quorum and no inside report claims quorum");
         } else if (participating && allRedOrReplicating && anyReplicating) {
             verdict.Verdict = EPileVerdict::Replicating;
             verdict.NewestEvidenceSentAt = newestBsc;

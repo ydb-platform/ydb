@@ -10602,10 +10602,28 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             SendCreateTestTablet(runtime, hiveTablet, owner, std::move(create), 0, true);
         }
         TBlockEvents<TEvHive::TEvReassignTablet> blocked(runtime);
+        auto sendHttp = [&](const TString& confirmedCount) {
+            NActorsProto::TRemoteHttpInfo request;
+            request.SetMethod(HTTP_METHOD_POST);
+            request.SetPath("/app");
+            for (const auto& [key, value] : TVector<std::pair<TString, TString>>{
+                    {"page", "ReassignTablet"}, {"tablet", "all"}, {"storagePool", "def1"},
+                    {"wait", "0"}, {"numTablets", confirmedCount}}) {
+                auto* param = request.AddQueryParams();
+                param->SetKey(key);
+                param->SetValue(value);
+            }
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(request)), 0, GetPipeConfigWithRetries());
+        };
+        TAutoPtr<IEventHandle> handle;
+        sendHttp({});
+        const auto* rejected = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteBinaryInfoRes>(handle);
+        UNIT_ASSERT_STRING_CONTAINS(rejected->Blob, "400 Bad Request");
+        UNIT_ASSERT_STRING_CONTAINS(rejected->Blob, "must confirm number of tablets");
+
         auto request = std::make_unique<TEvHive::TEvReassignTablets>();
         request->Record.SetStoragePool("def1");
         runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
-        TAutoPtr<IEventHandle> handle;
         const auto response = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle)->Record;
         UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(response.GetSelectedTablets(), tabletCount);
@@ -10615,6 +10633,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         stop->Record.SetHiveGeneration(response.GetHiveGeneration());
         runtime.SendToPipe(hiveTablet, sender, stop.release(), 0, GetPipeConfigWithRetries());
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEventRethrow<TEvHive::TEvStopReassignTabletsReply>(handle)->Record.GetStatus(), NKikimrProto::OK);
+
+        sendHttp(ToString(tabletCount));
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle)->Json, "{}");
     }
 
     Y_UNIT_TEST(TestMonReassignFilters) {

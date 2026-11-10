@@ -224,7 +224,7 @@ protected:
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;
     friend class TTxLockTabletExecution;
-    friend class TTxMonEvent_ReassignTablet;
+    friend class TTxReassignTablets;
     friend class TTxRegisterNode;
     friend class TTxSyncTablets;
     friend class TTxRequestTabletSequence;
@@ -248,7 +248,7 @@ protected:
     friend class TTxUpdateTabletsObject;
     friend class TTxUpdateTabletGroups;
     friend class TTxMonEvent_TabletAvailability;
-    friend class TLoggedMonTransaction;
+    friend class TLoggedTransaction;
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
     friend class TTxUpdatePiles;

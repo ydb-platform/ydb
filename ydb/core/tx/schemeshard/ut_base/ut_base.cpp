@@ -11275,6 +11275,65 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             { NKikimrScheme::StatusInvalidParameter });
     }
 
+    Y_UNIT_TEST(CreateTableRejectsZeroCompactionCountWithoutExplicitSizes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        for (const auto* sizes : {"", "ExtraCompactionExpMaxSize: 200", "UpliftPartSize: 200"}) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint32" }
+                KeyColumnNames: [ "key" ]
+                PartitionConfig {
+                    CompactionPolicy {
+                        Generation {
+                            GenerationId: 0
+                            SizeToCompact: 1000
+                            CountToCompact: 0
+                            %s
+                        }
+                    }
+                }
+            )", sizes), {{NKikimrScheme::StatusInvalidParameter,
+                          "CountToCompact must be nonzero"}});
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableAcceptsZeroCompactionCountWithExplicitSizes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: [ "key" ]
+            PartitionConfig {
+                CompactionPolicy {
+                    Generation {
+                        GenerationId: 0
+                        SizeToCompact: 1000
+                        CountToCompact: 0
+                        ForceSizeToCompact: 20000
+                        ExtraCompactionExpMaxSize: 200
+                        UpliftPartSize: 200
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::IsTable, NLs::Finished});
+        const auto policy = GetCompactionPolicy(runtime, TTestTxConfig::FakeHiveTablets, 1001);
+        UNIT_ASSERT_VALUES_EQUAL(policy->Generations.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(policy->Generations[0].CountToCompact, 0);
+        UNIT_ASSERT_VALUES_EQUAL(policy->Generations[0].ExtraCompactionExpMaxSize, 200);
+        UNIT_ASSERT_VALUES_EQUAL(policy->Generations[0].UpliftPartSize, 200);
+    }
+
     Y_UNIT_TEST(CreateTableRejectsInterleavedGenerationTiers) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -11286,9 +11345,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             KeyColumnNames: [ "key" ]
             PartitionConfig {
                 CompactionPolicy {
-                    Generation { SizeToCompact: 1000 CountToCompact: 5 TierId: 42 }
-                    Generation { SizeToCompact: 10000 CountToCompact: 5 TierId: 7 }
-                    Generation { SizeToCompact: 100000 CountToCompact: 5 TierId: 42 }
+                    Generation { GenerationId: 0 SizeToCompact: 1000 CountToCompact: 5 TierId: 42 }
+                    Generation { GenerationId: 1 SizeToCompact: 10000 CountToCompact: 5 TierId: 7 }
+                    Generation { GenerationId: 2 SizeToCompact: 100000 CountToCompact: 5 TierId: 42 }
                 }
             }
         )", {{NKikimrScheme::StatusInvalidParameter,
@@ -11308,9 +11367,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             KeyColumnNames: [ "key" ]
             PartitionConfig {
                 CompactionPolicy {
-                    Generation { SizeToCompact: 1000 CountToCompact: 5 }
-                    Generation { SizeToCompact: 10000 CountToCompact: 5 TierId: 0 }
-                    Generation { SizeToCompact: 100000 CountToCompact: 5 TierId: 0 }
+                    Generation { GenerationId: 0 SizeToCompact: 1000 ForceSizeToCompact: 20000 }
+                    Generation { GenerationId: 1 SizeToCompact: 10000 CountToCompact: 5 ForceSizeToCompact: 200000 TierId: 0 }
+                    Generation { GenerationId: 2 SizeToCompact: 100000 CountToCompact: 5 ForceSizeToCompact: 2000000 TierId: 0 }
                 }
             }
         )");
@@ -11319,6 +11378,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::IsTable, NLs::Finished});
         const auto policy = GetCompactionPolicy(runtime, TTestTxConfig::FakeHiveTablets, 1001);
         UNIT_ASSERT_VALUES_EQUAL(policy->Generations.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(policy->Generations[0].CountToCompact, 5);
         UNIT_ASSERT(!policy->Generations[0].TierId);
         UNIT_ASSERT(policy->Generations[1].TierId);
         UNIT_ASSERT_VALUES_EQUAL(*policy->Generations[1].TierId, 0);

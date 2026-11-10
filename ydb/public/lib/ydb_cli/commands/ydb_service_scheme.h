@@ -40,7 +40,7 @@ public:
 private:
     bool Recursive = false;
     TMaybe<ERecursiveRemovePrompt> Prompt;
-    ui32 Threads = TRemoveDirectoryRecursiveSettings().Threads_;
+    ui32 InFlight = TRemoveDirectoryRecursiveSettings().Threads_;
 };
 
 // Pretty print consumer info ('scheme describe' and 'topic consumer describe' commands)

@@ -7652,6 +7652,82 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         fixture.WarmAll();
     }
 
+    Y_UNIT_TEST(HnswDisabledQueuedIndexDoesNotBlockSiblingBuilds) {
+        THnswMultiFixture fixture(4);
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto* shard = fixture.Shard();
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        shard->InvalidateHnswTable(tid);
+        runtime.RunCall([&] {
+            const auto base = shard->GetHnswBuildVersion();
+            auto start = [&](ui32 index) {
+                return shard->TryStartHnswIndexBuild(tid, fixture.Column(index), fixture.SettingsAt(index), base, fixture.Id(index));
+            };
+            UNIT_ASSERT(start(0));
+            UNIT_ASSERT(start(1));
+            UNIT_ASSERT(!start(2));
+            UNIT_ASSERT(!start(3));
+            shard->DisableHnswIndexBuild(tid, fixture.Id(2));
+            // Complete one admitted job. The disabled queue head must not keep
+            // the remaining sibling out of the newly available build slot.
+            shard->SetHnswIndex(tid, {}, {}, 0, fixture.Column(0), fixture.SettingsAt(0), base,
+                shard->GetHnswBuildToken(tid, fixture.Id(0)), fixture.Id(0));
+            UNIT_ASSERT(start(3));
+            return true;
+        });
+    }
+
+    Y_UNIT_TEST(HnswMemoryLimitEvictsOnlyRequiredIndexes) {
+        THnswMultiFixture fixture(3);
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto* shard = fixture.Shard();
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
+        std::vector<std::shared_ptr<THnswIndex>> pinned;
+        ui64 used = 0;
+        for (ui32 i = 0; i < fixture.Count; ++i) {
+            pinned.push_back(fixture.Graph(i));
+            used += shard->GetHnswIndexStats(tid, fixture.Id(i))->MemoryBytes;
+        }
+        UNIT_ASSERT_GT(used, 0u);
+        std::optional<ui64> limit = used - 1;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (limit && ev->Recipient == actor && ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType) {
+                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = *limit;
+            }
+        });
+        auto ready = [&] {
+            ui32 count = 0;
+            for (ui32 i = 0; i < fixture.Count; ++i) { count += bool(fixture.Graph(i)); }
+            return count;
+        };
+        auto setLimit = [&] {
+            runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(*limit)));
+        };
+        setLimit();
+        runtime.WaitFor("one HNSW graph evicted", [&] { return ready() != fixture.Count; });
+        UNIT_ASSERT_VALUES_EQUAL(ready(), 2u);
+        // Pin the retired graph to make deferred reclamation deterministic.
+        // Repeated grants and reads must neither evict siblings nor start a
+        // replacement build while the old reservation still exceeds the limit.
+        setLimit();
+        for (ui32 i = 0; i < fixture.Count; ++i) { fixture.ReadAt(i); }
+        runtime.SimulateSleep(TDuration::Seconds(6));
+        UNIT_ASSERT_VALUES_EQUAL(ready(), 2u);
+        for (ui32 i = 0; i < fixture.Count; ++i) {
+            const auto stats = shard->GetHnswIndexStats(tid, fixture.Id(i));
+            UNIT_ASSERT(!stats->Building);
+            UNIT_ASSERT_VALUES_EQUAL(stats->Builds, 1u);
+            if (fixture.Graph(i)) { UNIT_ASSERT(fixture.Graph(i) == pinned[i]); }
+        }
+        pinned.clear();
+        limit = 64_MB;
+        setLimit();
+        fixture.WarmAll();
+    }
+
     Y_UNIT_TEST(HnswMultipleIndexesSurviveSplitRecovery) {
         THnswMultiFixture fixture;
         fixture.WarmAll();
@@ -7875,6 +7951,43 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Read(2)->Record.GetStats().GetRows(), 1u);
     }
 
+    Y_UNIT_TEST_TWIN(HnswExactRangeDoesNotWaitForUnrelatedVolatileTransaction, ReadyGraph) {
+        THnswLifecycleFixture fixture;
+        if (ReadyGraph) { fixture.Warm(); }
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto* shard = fixture.Shard();
+        if (!ReadyGraph) {
+            shard->InvalidateHnswIndexes();
+            shard->DisableHnswIndexBuild(shard->GetUserTables().begin()->second->LocalTid);
+        }
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(true);
+        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
+        std::vector<TEvTxProcessing::TEvReadSet::TPtr> blocked;
+        auto capture = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+            if (ev->GetRecipientRewrite() == actor) { blocked.push_back(std::move(ev)); }
+        });
+        auto write = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (2, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            UPSERT INTO `/Root/movies` (id, title, rating) VALUES (99, "participant", 1);
+        )");
+        runtime.WaitFor("unrelated volatile transaction", [&] {
+            return !blocked.empty() && shard->GetVolatileTxManager().GetTxInFlight();
+        });
+        auto request = fixture.Request();
+        request->Ranges.clear();
+        AddRangeQuery<ui32>(*request, {1}, true, {1}, true);
+        auto result = fixture.Helper.SendRead("hnsw-lifecycle", request.release(), 0, {}, TDuration::Seconds(5));
+        UNIT_ASSERT(result);
+        fixture.Check(*result, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1u);
+        UNIT_ASSERT(shard->GetVolatileTxManager().GetTxInFlight());
+        capture.Remove();
+        for (auto& ev : blocked) { runtime.Send(ev.Release(), 0, true); }
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(write))), "<empty>");
+    }
+
     Y_UNIT_TEST(HnswLockOnlyCommitPreservesGraph) {
         THnswLifecycleFixture fixture;
         fixture.Warm();
@@ -7981,6 +8094,31 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT(stats);
         UNIT_ASSERT(!stats->Building);
         UNIT_ASSERT_VALUES_EQUAL(stats->MemoryBytes, 0u);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswTabletShutdownWithSnapshotScan, TabletDead) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        constexpr ui32 snapshotFinished = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 38;
+        TVector<TAutoPtr<IEventHandle>> snapshots;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == snapshotFinished) {
+                snapshots.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        fixture.Read();
+        runtime.WaitFor("registered HNSW snapshot scan", [&] { return !snapshots.empty(); });
+        const auto tablet = fixture.Helper.Tables.at("hnsw-lifecycle").TabletId;
+        const auto actor = ResolveTablet(runtime, tablet);
+        if (TabletDead) {
+            runtime.Send(new IEventHandle(actor, fixture.Helper.Sender,
+                new TEvTablet::TEvTabletDead(tablet, TEvTablet::TEvTabletDead::ReasonPill, 0)));
+        } else {
+            runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new TEvents::TEvPoison()));
+        }
+        runtime.WaitFor("DataShard shutdown with a registered scan", [&] { return !runtime.FindActor(actor); });
     }
 
     Y_UNIT_TEST_TWIN(HnswPendingWritesPublishOnlyOnCommit, Commit) {

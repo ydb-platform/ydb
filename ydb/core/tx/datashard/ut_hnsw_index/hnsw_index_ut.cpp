@@ -891,6 +891,37 @@ namespace NKikimr::NDataShard {
             UNIT_ASSERT(!index->CanRead({20, 0}));
         }
 
+        Y_UNIT_TEST(MvccBatchedRetentionPreservesWritesAndPinnedSnapshots) {
+            auto changes = std::make_shared<THnswIndexChanges>();
+            const auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                                               Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+            TString error;
+            auto index = THnswIndex::Build(settings, {{"hot", SerializeFloatVector({0, 0})}}, 0, error);
+            UNIT_ASSERT_C(index, error);
+            index->SetSnapshot({10, 0}, changes);
+            changes->Set("hot", {11, 0}, SerializeFloatVector({11, 0}));
+            changes->Compact({20, 0}, {{11, 0}});
+            for (ui64 step = 21; step <= 1000; ++step) {
+                changes->Set("hot", {step, 0}, SerializeFloatVector({float(step), 0}));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(changes->GetVersionCount(), 981u);
+            for (ui64 step : {11, 21, 400, 1000}) {
+                const auto result = index->Search(SerializeFloatVector({0, 0}), 1, {step, 0});
+                UNIT_ASSERT(result.Covered);
+                UNIT_ASSERT_DOUBLES_EQUAL(result.Results.front().second, step, 1e-5);
+            }
+            changes->Compact({1000, 0}, {{11, 0}, {400, 0}});
+            UNIT_ASSERT_VALUES_EQUAL(changes->GetVersionCount(), 3u);
+            changes->Set("hot", {900, 0}, SerializeFloatVector({900, 0}));
+            UNIT_ASSERT_VALUES_EQUAL(changes->GetVersionCount(), 3u);
+            for (ui64 step : {11, 400, 1000}) {
+                const auto result = index->Search(SerializeFloatVector({0, 0}), 1, {step, 0});
+                UNIT_ASSERT(result.Covered);
+                UNIT_ASSERT_DOUBLES_EQUAL(result.Results.front().second, step, 1e-5);
+            }
+            UNIT_ASSERT(!index->CanRead({900, 0}));
+        }
+
         Y_UNIT_TEST(BoundedOverfetchDeclaresUncoveredWhenShadowsHideLiveRows) {
             const auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
                                                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);

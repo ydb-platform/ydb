@@ -56,6 +56,15 @@ namespace NKikimr::NDataShard {
         return account ? account->Used : 0;
     }
 
+    THashMap<ui64, ui64> THnswCacheMemoryTracker::GetUsageByOwner() const {
+        std::lock_guard guard(Mutex);
+        THashMap<ui64, ui64> usage;
+        for (const auto& [owner, account] : Accounts) {
+            usage.emplace(owner, account.Used);
+        }
+        return usage;
+    }
+
     bool THnswCacheMemoryTracker::TryAcquire(ui64 bytes, ui64 owner) {
         std::lock_guard guard(Mutex);
         auto& account = Accounts[owner];

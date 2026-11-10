@@ -2682,7 +2682,10 @@ private:
             }
         }
         YQL_ENSURE(indexDesc);
-        vectorTopK.MutableHnswIndexId()->SetOwnerId(indexDesc->PathOwnerId);
+        // Old schemas omit the index owner; use the same fallback as the
+        // metadata loader when resolving the index implementation tables.
+        vectorTopK.MutableHnswIndexId()->SetOwnerId(
+            indexDesc->PathOwnerId ? indexDesc->PathOwnerId : mainTable->Metadata->PathId.OwnerId());
         vectorTopK.MutableHnswIndexId()->SetLocalId(indexDesc->LocalPathId);
 
         // Index settings
@@ -3175,7 +3178,8 @@ private:
 
             const auto* indexDesc = tableMeta->GetIndex(vectorSearch.Index().Value()).second;
             YQL_ENSURE(indexDesc);
-            proto.MutableHnswIndexId()->SetOwnerId(indexDesc->PathOwnerId);
+            proto.MutableHnswIndexId()->SetOwnerId(
+                indexDesc->PathOwnerId ? indexDesc->PathOwnerId : tableMeta->PathId.OwnerId());
             proto.MutableHnswIndexId()->SetLocalId(indexDesc->LocalPathId);
 
             // Index settings

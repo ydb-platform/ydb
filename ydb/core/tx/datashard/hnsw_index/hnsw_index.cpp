@@ -154,7 +154,12 @@ namespace NKikimr::NDataShard {
         }
         EstimatedBytes += bytes;
         UpdateCounts(before, history.back().Version);
-        if (RetentionInitialized) { CompactHistory(key, history); }
+        // A full prune already compacted the older prefix. Appending above its
+        // floor cannot make any of that prefix obsolete, and walking the growing
+        // suffix on every write would be quadratic between periodic prunes.
+        if (RetentionInitialized && (RetentionNeedsCompaction || version <= LowerReadVersion)) {
+            CompactHistory(key, history);
+        }
     }
 
     void THnswIndexChanges::UpdateCounts(std::optional<TRowVersion> before, std::optional<TRowVersion> after) {
@@ -234,6 +239,7 @@ namespace NKikimr::NDataShard {
         PinnedVersions.swap(retained);
         LowerReadVersion = Max(LowerReadVersion, floor);
         RetentionInitialized = true;
+        RetentionNeedsCompaction = true;
     }
 
     void THnswIndexChanges::CompactHistory(TStringBuf key, THistory& history) {
@@ -270,6 +276,7 @@ namespace NKikimr::NDataShard {
     void THnswIndexChanges::Compact(TRowVersion floor, const std::vector<TRowVersion>& pins) {
         AdvanceRetention(floor, pins);
         for (auto& [key, history] : Rows) { CompactHistory(key, history); }
+        RetentionNeedsCompaction = false;
     }
 
     void THnswIndexChanges::Clear() {

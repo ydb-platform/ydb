@@ -82,6 +82,8 @@ struct TReadIteratorVectorTop {
     // if set, TReader::IterateRange uses it instead of the brute-force scan below.
     std::shared_ptr<NDataShard::THnswIndex> HnswIndex;
     TPathId HnswIndexId;
+    std::optional<THnswSearchResult> HnswCandidates;
+    TRowVersion HnswCandidatesVersion = TRowVersion::Max();
 
     std::unordered_set<TString> UniqueKeys;
     std::vector<TReadIteratorVectorTopItem> Rows;
@@ -280,15 +282,13 @@ struct TShortColumnInfo {
 struct TShortTableInfo {
     TShortTableInfo() = default;
 
-    TShortTableInfo(const TUserTable::TCPtr& tableInfo) {
+    TShortTableInfo(const TUserTable::TCPtr& tableInfo, bool vectorTopK = false) {
         LocalTid = tableInfo->LocalTid;
         SchemaVersion = tableInfo->GetTableSchemaVersion();
         KeyColumnTypes = tableInfo->KeyColumnTypes;
         KeyColumnCount = tableInfo->KeyColumnIds.size();
-        if (AppData()->FeatureFlags.GetEnableHnswIndex() && !tableInfo->HnswIndexes.empty()) {
-            KeyColumnIds.assign(tableInfo->KeyColumnIds.begin(), tableInfo->KeyColumnIds.end());
-            ShardRange = tableInfo->Range;
-            HnswIndexes = tableInfo->HnswIndexes;
+        if (vectorTopK && AppData()->FeatureFlags.GetEnableHnswIndex() && !tableInfo->HnswIndexes.empty()) {
+            HnswTable = tableInfo;
         }
 
         for (const auto& it: tableInfo->Columns) {
@@ -347,10 +347,10 @@ struct TShortTableInfo {
         if (range.IsFullRange(KeyColumnCount)) {
             return true;
         }
-        if (!ShardRange) {
+        if (!HnswTable) {
             return false;
         }
-        const auto shardRange = ShardRange->ToTableRange();
+        const auto shardRange = HnswTable->Range.ToTableRange();
         return CompareBorders<false, false>(range.From, shardRange.From,
                    range.InclusiveFrom, shardRange.InclusiveFrom, KeyColumnTypes) <= 0
             && CompareBorders<true, true>(range.To, shardRange.To,
@@ -361,10 +361,8 @@ struct TShortTableInfo {
     ui64 SchemaVersion = 0;
     size_t KeyColumnCount = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
-    TVector<NTable::TTag> KeyColumnIds;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
-    std::optional<TSerializedTableRange> ShardRange;
-    TMap<TPathId, TUserTable::THnswIndexInfo> HnswIndexes;
+    TUserTable::TCPtr HnswTable;
 };
 
 std::unique_ptr<IBlockBuilder> CreateBlockBuilder(
@@ -1382,14 +1380,15 @@ private:
     // Non-key distinct values require the exact table path.
     THnswSearchResult SearchHnswDistinct() const {
         const auto& topK = *State.VectorTopK;
+        const auto& keyColumnIds = TableInfo.HnswTable->KeyColumnIds;
         TVector<size_t> positions;
         for (ui32 columnIndex : topK.DistinctColumns) {
             const auto tag = State.Columns[columnIndex];
-            const auto it = Find(TableInfo.KeyColumnIds.begin(), TableInfo.KeyColumnIds.end(), tag);
-            if (it == TableInfo.KeyColumnIds.end()) {
+            const auto it = Find(keyColumnIds.begin(), keyColumnIds.end(), tag);
+            if (it == keyColumnIds.end()) {
                 return THnswSearchResult{.Covered = false};
             }
-            positions.push_back(it - TableInfo.KeyColumnIds.begin());
+            positions.push_back(it - keyColumnIds.begin());
         }
         const size_t available = topK.HnswIndex->Size() + topK.HnswIndex->ChangeCount();
         size_t requested = Min(available, static_cast<size_t>(topK.Limit));
@@ -1500,7 +1499,12 @@ private:
                 && CanUseHnsw(*Self, State, State.VectorTopK->HnswIndexId)
                 && State.VectorTopK->HnswIndex->CanRead(State.ReadVersion)) {
             if (TableInfo.CoversFullShard(tableRange)) {
-                auto results = SearchHnswDistinct();
+                auto& topK = *State.VectorTopK;
+                if (!topK.HnswCandidates || topK.HnswCandidatesVersion != State.ReadVersion) {
+                    topK.HnswCandidates = SearchHnswDistinct();
+                    topK.HnswCandidatesVersion = State.ReadVersion;
+                }
+                const auto& results = *topK.HnswCandidates;
                 // Filtering may exhaust NMSLIB's bounded candidate set. Preserve
                 // the exact path when it cannot supply enough visible neighbors.
                 if (results.Covered && results.Results.size() >= State.VectorTopK->Limit) {
@@ -2475,22 +2479,6 @@ public:
             }
         }
 
-        if (request->Record.HasVectorTopK() && !state.LockId
-                && !Self->IsFollower() && Self->IsUserTable(state.PathId)
-                && AppData()->FeatureFlags.GetEnableHnswIndex()
-                && !Self->GetUserTables().at(state.PathId.LocalPathId)->HnswIndexes.empty()
-                && Self->VolatileTxManager.HasVolatileTxsAtSnapshot(state.ReadVersion)) {
-            if (state.IsHeadRead) {
-                if (auto status = upgradeToRepeatableRead()) { return *status; }
-            }
-            if (Self->VolatileTxManager.HasVolatileTxsAtSnapshot(state.ReadVersion)) {
-                Self->Pipeline.RegisterWaitingReadIterator(state.ReadId, state.Ev->Get());
-                Self->VolatileTxManager.AttachWaitingSnapshotEvent(state.ReadVersion,
-                    std::unique_ptr<IEventHandle>(state.Ev.Release()));
-                return abortRescheduled();
-            }
-        }
-
         if (state.Sampling) {
             if (state.IsHeadRead) {
                 if (auto status = upgradeToRepeatableRead()) {
@@ -2727,7 +2715,7 @@ public:
             Y_ENSURE(it != Self->TableInfos.end());
 
             auto& userTableInfo = it->second;
-            TableInfo = TShortTableInfo(userTableInfo);
+            TableInfo = TShortTableInfo(userTableInfo, record.HasVectorTopK());
 
             Y_ENSURE(!userTableInfo->IsBackup);
 
@@ -2931,7 +2919,7 @@ public:
             topState->Limit = topK.GetLimit();
             topState->Target = topK.GetTargetVector();
 
-            if (AppData()->FeatureFlags.GetEnableHnswIndex() && !TableInfo.HnswIndexes.empty()) {
+            if (AppData()->FeatureFlags.GetEnableHnswIndex() && TableInfo.HnswTable) {
                 const ui32 localTid = TableInfo.LocalTid;
                 const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
                 auto requested = topK.GetSettings();
@@ -2940,7 +2928,7 @@ public:
                 }
                 TPathId selected;
                 Ydb::Table::VectorIndexSettings hnswSettings;
-                for (const auto& [id, metadata] : TableInfo.HnswIndexes) {
+                for (const auto& [id, metadata] : TableInfo.HnswTable->HnswIndexes) {
                     if (topK.HasHnswIndexId() && id != TPathId::FromProto(topK.GetHnswIndexId())) {
                         continue;
                     }
@@ -2966,7 +2954,6 @@ public:
                 if (selected && !canUseHnsw) {
                     Self->RegisterHnswFallback(localTid, TDataShard::EHnswFallback::UnsupportedRead, selected);
                 }
-                Self->PruneHnswIndexes();
                 if (canUseHnsw) {
                     topState->HnswIndex = Self->GetHnswIndex(localTid, vectorColumnTag,
                         hnswSettings, false, state.ReadVersion, selected);
@@ -3149,7 +3136,7 @@ private:
                 return true;
             }
             auto userTableInfo = it->second;
-            TableInfo = TShortTableInfo(userTableInfo);
+            TableInfo = TShortTableInfo(userTableInfo, state.Request->Record.HasVectorTopK());
             auto currentSchemaVersion = TableInfo.SchemaVersion;
             if (state.SchemaVersion != currentSchemaVersion) {
                 SetStatusError(
@@ -3949,7 +3936,7 @@ public:
                 return true;
             }
             auto userTableInfo = it->second;
-            TableInfo = TShortTableInfo(userTableInfo);
+            TableInfo = TShortTableInfo(userTableInfo, state.Request->Record.HasVectorTopK());
             auto currentSchemaVersion = TableInfo.SchemaVersion;
             if (state.SchemaVersion != currentSchemaVersion) {
                 SetStatusError(

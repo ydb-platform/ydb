@@ -22,6 +22,7 @@ namespace NKikimr::NDataShard {
         ui64 GetLimit() const noexcept;
         ui64 GetUsed() const noexcept;
         ui64 GetUsed(ui64 owner) const noexcept;
+        THashMap<ui64, ui64> GetUsageByOwner() const;
         bool TryAcquire(ui64 bytes, ui64 owner = 0);
         void Release(ui64 bytes, ui64 owner = 0) noexcept;
         void ResetDemand(ui64 owner = 0);

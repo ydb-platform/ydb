@@ -269,6 +269,14 @@ namespace NKikimr::NDataShard {
             if (AppData()->TimeProvider->Now() < entry.NextScanAttemptAt) { Retry = true; return true; }
             Self->GetHnswCacheMemoryLimit();
             Self->HnswCacheMemoryTracker->Request(entry.RetryMemoryBytes, entry.MemoryOwner);
+            if (entry.EvictedMemoryBytes) {
+                const ui64 used = Self->HnswCacheMemoryTracker->GetUsed();
+                const ui64 limit = Self->GetHnswCacheMemoryLimit();
+                if (used > limit || entry.EvictedMemoryBytes > limit - used) {
+                    Retry = true;
+                    return true;
+                }
+            }
             if (!Self->GetHnswCacheMemoryLimit()) {
                 if (entry.InitialBuildAttemptsLeft) { --entry.InitialBuildAttemptsLeft; }
                 if (!entry.InitialBuildAttemptsLeft && !entry.Index) {
@@ -396,6 +404,11 @@ namespace NKikimr::NDataShard {
         if (entry.Building) {
             return false;
         }
+        if (entry.EvictedMemoryBytes) {
+            const ui64 used = HnswCacheMemoryTracker->GetUsed();
+            const ui64 limit = GetHnswCacheMemoryLimit();
+            if (used > limit || entry.EvictedMemoryBytes > limit - used) { return false; }
+        }
         const bool compatible = entry.VectorColumnTag == vectorColumnTag && AreHnswIndexSettingsCompatible(entry.Settings, settings);
         if (!compatible || !entry.Changes->Valid) {
             InvalidateHnswIndex(localTid, indexId);
@@ -414,7 +427,9 @@ namespace NKikimr::NDataShard {
             }
             entry.Settings = settings;
         }
-        while (!HnswBuildQueue.empty() && !FindHnswIndexEntry(HnswBuildQueue.front().first, HnswBuildQueue.front().second)) {
+        while (!HnswBuildQueue.empty()) {
+            const auto* queued = FindHnswIndexEntry(HnswBuildQueue.front().first, HnswBuildQueue.front().second);
+            if (queued && queued->NextScanAttemptAt != TInstant::Max()) { break; }
             HnswBuildQueue.erase(HnswBuildQueue.begin());
         }
         const auto identity = std::make_pair(localTid, indexId);
@@ -436,6 +451,8 @@ namespace NKikimr::NDataShard {
         entry.IndexSchemaVersion = FindHnswIndexInfo(localTid, indexId)->SchemaVersion;
         entry.BuildToken = ++NextHnswBuildToken;
         entry.CancelBuild = std::make_shared<std::atomic<bool>>(false);
+        entry.EvictedMemoryBytes = 0;
+        HnswRetiringMemoryOwners.erase(entry.MemoryOwner);
         HnswBuildsInFlight.insert(entry.BuildToken);
         return true;
     }
@@ -506,14 +523,16 @@ namespace NKikimr::NDataShard {
     }
 
     void TDataShard::InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry) {
+        HnswRetiringMemoryOwners.insert(entry.MemoryOwner);
         if (entry.CancelBuild) { entry.CancelBuild->store(true, std::memory_order_relaxed); }
-        if (entry.ScanId) {
-            Executor()->CancelScan(entry.LocalTid, std::exchange(entry.ScanId, 0));
+        if (const ui64 scanId = std::exchange(entry.ScanId, 0)) {
+            if (auto* executor = Executor()) {
+                executor->CancelScan(entry.LocalTid, scanId);
+            }
         }
         if (entry.BuildActor) { Send(entry.BuildActor, new TEvents::TEvPoison()); entry.BuildActor = {}; }
         entry.Building = false;
         entry.OpenTransactionsTracked = false;
-        entry.LastRetentionVersion = TRowVersion::Min();
         if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetDemand(entry.MemoryOwner); }
         // Readers may still own a graph. They must stop using it if its journal
         // no longer receives every write (including eviction on memory pressure).
@@ -527,6 +546,7 @@ namespace NKikimr::NDataShard {
         entry.PendingReservations.clear();
         entry.UntrackedTransactions.clear();
         entry.RowCountAtBuild = 0;
+        entry.EvictedMemoryBytes = 0;
         entry.NextScanAttemptAt = TInstant::Zero();
     }
 
@@ -534,6 +554,34 @@ namespace NKikimr::NDataShard {
         if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetAllDemand(); }
         HnswBuildQueue.clear();
         ForEachHnswIndexEntry([&](ui32, const TPathId&, auto& entry) { InvalidateHnswIndexEntry(entry); });
+    }
+
+    void TDataShard::EvictHnswIndexesToLimit(ui64 limit) {
+        const auto usage = HnswCacheMemoryTracker->GetUsageByOwner();
+        for (auto it = HnswRetiringMemoryOwners.begin(); it != HnswRetiringMemoryOwners.end();) {
+            const auto* bytes = usage.FindPtr(*it);
+            if (!bytes || !*bytes) {
+                HnswRetiringMemoryOwners.erase(it++);
+            } else {
+                ++it;
+            }
+        }
+        ui64 projectedUsed = 0;
+        for (const auto& [owner, bytes] : usage) {
+            if (!HnswRetiringMemoryOwners.contains(owner)) { projectedUsed += bytes; }
+        }
+        ForEachHnswIndexEntry([&](ui32 localTid, const TPathId& indexId, auto& entry) {
+            if (projectedUsed <= limit || HnswRetiringMemoryOwners.contains(entry.MemoryOwner)) { return; }
+            const auto* bytes = usage.FindPtr(entry.MemoryOwner);
+            if (!bytes || !*bytes) { return; }
+            // Count the entire retired reservation now, while keeping the real
+            // memory charged until every reader and background worker releases it.
+            projectedUsed -= *bytes;
+            InvalidateHnswIndex(localTid, indexId);
+            entry.EvictedMemoryBytes = *bytes;
+            entry.InitialBuildAttemptsLeft = 30;
+            entry.NextScanAttemptAt = AppData()->TimeProvider->Now() + TDuration::Seconds(1);
+        });
     }
 
     void TDataShard::SetHnswIndex(ui32 localTid, std::shared_ptr<THnswIndex> index,
@@ -616,8 +664,11 @@ namespace NKikimr::NDataShard {
         }
         const auto low = SnapshotManager.GetLowWatermark();
         const auto floor = GetHnswBuildVersion();
+        THashMap<ui32, std::vector<TRowVersion>> readVersions;
         ForEachHnswIndexEntry([&](ui32 tid, const TPathId&, auto& entry) {
-            auto pins = GetHnswReadVersions(tid);
+            auto [versions, inserted] = readVersions.try_emplace(tid);
+            if (inserted) { versions->second = GetHnswReadVersions(tid); }
+            auto pins = versions->second;
             if (entry.Building) { pins.push_back(entry.BuildVersion); }
             TRowVersion nextBase = entry.Index ? entry.Index->GetBaseVersion() : TRowVersion::Max();
             for (size_t i = entry.Retained.size(); i-- > 0;) {
@@ -668,12 +719,8 @@ namespace NKikimr::NDataShard {
             return;
         }
         if (entry.Index || entry.Building) {
-            if (entry.LastRetentionVersion != change.Version) {
-                auto pins = GetHnswReadVersions(localTid);
-                if (entry.Building) { pins.push_back(entry.BuildVersion); }
-                entry.Changes->AdvanceRetention(GetHnswBuildVersion(), pins);
-                entry.LastRetentionVersion = change.Version;
-            }
+            // Periodic pruning advances retention and captures read pins once
+            // per table. The previous floor conservatively retains newer writes.
             entry.Changes->Set(std::move(key), change.Version, std::move(change.Vector), std::move(change.MemoryReservation));
         }
         if (entry.NextScanAttemptAt == TInstant::Max()) {

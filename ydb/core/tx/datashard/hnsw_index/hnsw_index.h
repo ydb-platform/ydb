@@ -76,6 +76,7 @@ namespace NKikimr::NDataShard {
         void CompactHistory(TStringBuf key, THistory& history);
         std::vector<TRowVersion> PinnedVersions;
         bool RetentionInitialized = false;
+        bool RetentionNeedsCompaction = false;
         size_t VersionCount = 0;
         size_t EstimatedBytes = 0;
     };

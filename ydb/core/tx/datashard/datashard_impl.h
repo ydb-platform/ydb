@@ -2009,6 +2009,8 @@ public:
     }
 
     void DisableHnswIndexBuild(ui32 localTid, TPathId indexId = {}) {
+        indexId = ResolveHnswIndexId(localTid, indexId);
+        EraseIf(HnswBuildQueue, [&](const auto& queued) { return queued.first == localTid && queued.second == indexId; });
         if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
             entry->Building = false;
             entry->NextScanAttemptAt = TInstant::Max();
@@ -2073,12 +2075,10 @@ public:
                 }
             });
         }
-        if (HnswCacheMemoryTracker->GetUsed() > limit) {
-            ForEachHnswIndexEntry([&](ui32 localTid, const TPathId& indexId, auto&) {
-                if (HnswCacheMemoryTracker->GetUsed() > limit) { InvalidateHnswIndex(localTid, indexId); }
-            });
-        }
+        EvictHnswIndexesToLimit(limit);
     }
+
+    void EvictHnswIndexesToLimit(ui64 limit);
 
     void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index,
         std::shared_ptr<void> memoryReservation, ui64 rowCountAtBuild = 0,
@@ -3250,8 +3250,8 @@ private:
         TActorId BuildActor;
         std::shared_ptr<std::atomic<bool>> CancelBuild;
         bool OpenTransactionsTracked = false;
-        TRowVersion LastRetentionVersion = TRowVersion::Min();
         ui64 RetryMemoryBytes = 4 * 1024 * 1024;
+        ui64 EvictedMemoryBytes = 0;
         ui32 InitialBuildAttemptsLeft = 0;
         bool RebuildScheduled = false;
         bool Building = false;
@@ -3269,6 +3269,8 @@ private:
     static constexpr size_t MaxConcurrentHnswBuilds = 2;
     THashSet<ui64> HnswBuildsInFlight;
     TVector<std::pair<ui32, TPathId>> HnswBuildQueue;
+    // Reservations remain charged while readers and the deletion pool own them.
+    THashSet<ui64> HnswRetiringMemoryOwners;
     using THnswTableIndexes = THashMap<TPathId, THnswIndexCacheEntry>;
     THashMap<ui32, THnswTableIndexes> HnswIndexCache;
 

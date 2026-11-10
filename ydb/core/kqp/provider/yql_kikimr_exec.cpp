@@ -159,6 +159,14 @@ namespace {
                 }
                 schemeLimits->SetMaxChildrenInDir(value);
             }
+            if (name == "MAX_ACL_BYTES_SIZE"sv) {
+                ui64 value;
+                YQL_ENSURE(ParseInteger(setting.Value(), value));
+                if (!schemeLimits) {
+                    schemeLimits.emplace();
+                }
+                schemeLimits->SetMaxAclBytesSize(value);
+            }
             if (name == "TABLES_METRICS_LEVEL") {
                 NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel;
                 TString error;

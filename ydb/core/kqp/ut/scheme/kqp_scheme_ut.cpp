@@ -7043,7 +7043,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const auto originalLimits = GetSchemeLimits(env.GetServer(), "/Root/Test");
         {
             auto result = session.ExecuteQuery(R"(
-                    ALTER DATABASE `/Root/Test` SET (MAX_PATHS = 10, MAX_SHARDS = 20);
+                    ALTER DATABASE `/Root/Test` SET (MAX_PATHS = 10, MAX_SHARDS = 20, MAX_ACL_BYTES_SIZE = 23000);
                 )", NQuery::TTxControl::NoTx()
             ).ExtractValueSync();
 
@@ -7060,6 +7060,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             if (EnableAlterDatabase) {
                 expectedLimits.SetMaxPaths(10);
                 expectedLimits.SetMaxShards(20);
+                expectedLimits.SetMaxAclBytesSize(23000);
             }
             UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(limits, expectedLimits),
                 "Scheme limits mismatch, expected: " << expectedLimits.ShortDebugString().Quote() << ", actual: " << limits.ShortDebugString().Quote()

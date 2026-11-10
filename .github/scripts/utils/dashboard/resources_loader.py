@@ -142,6 +142,42 @@ def downsample_xs(xs: list[float], max_points: int) -> list[float]:
     return [xs[int(i * last / (max_points - 1))] for i in range(max_points)]
 
 
+def measured_layers_xs(
+    grouped: dict[str, dict[str, Any]],
+    max_points: int = 400,
+) -> list[float]:
+    """Common x-axis for measured layers without dropping short-lived cgroups.
+
+    A uniform downsample of the global timeline (e.g. 400 points over hours) can
+    leave zero grid points inside a 10–20s chunk window. align_series then emits
+    an all-zero track while the tree summary still shows the raw max (e.g. 43c).
+    Keep every native sample time for short series, and always keep endpoints /
+    peak-CPU timestamps for longer ones.
+    """
+    native = sorted({float(x) for bucket in grouped.values() for x in (bucket.get("xs") or [])})
+    if not native or len(native) <= max_points:
+        return native
+
+    keep = set(downsample_xs(native, max_points))
+    for bucket in grouped.values():
+        bxs = [float(x) for x in (bucket.get("xs") or [])]
+        if not bxs:
+            continue
+        span = bxs[-1] - bxs[0]
+        # Short-lived cgroups: keep every sample (~3s ticks over tens of seconds).
+        if len(bxs) <= 16 or span <= 120.0:
+            keep.update(bxs)
+            continue
+        keep.add(bxs[0])
+        keep.add(bxs[-1])
+        cpus = bucket.get("cpu_cores") or []
+        if cpus:
+            peak_i = max(range(len(cpus)), key=lambda i: float(cpus[i] or 0.0))
+            if peak_i < len(bxs):
+                keep.add(bxs[peak_i])
+    return sorted(keep)
+
+
 def align_series(xs_out: list[float], xs_src: list[float], ys_src: list[float]) -> list[float]:
     """Step-hold ys_src onto xs_out; 0 outside the source window."""
     if not xs_out:
@@ -188,8 +224,7 @@ def build_measured_layers(
     max_points: int = 400,
 ) -> dict[str, Any]:
     """Common-axis stacked tracks for measured cgroup series."""
-    xs: list[float] = sorted({float(x) for bucket in grouped.values() for x in (bucket.get("xs") or [])})
-    xs = downsample_xs(xs, max_points)
+    xs = measured_layers_xs(grouped, max_points=max_points)
     cpu_tracks: dict[str, list[float]] = {}
     ram_tracks: dict[str, list[float]] = {}
     write_tracks: dict[str, list[float]] = {}

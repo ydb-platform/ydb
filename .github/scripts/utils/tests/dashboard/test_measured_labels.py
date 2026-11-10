@@ -92,6 +92,40 @@ class MeasuredLabelTest(unittest.TestCase):
         self.assertEqual(layers["cpu_tracks"]["s [0]"], [1.0, 1.0, 0.0])
         self.assertEqual(layers["write_tracks"]["s [1]"], [0.0, 8.0, 8.0])
 
+    def test_short_chunk_survives_global_downsample(self):
+        """Regression: groupinfo/ut [9] showed 43.87c in the tree but an empty CPU chart.
+
+        Uniform 400-point downsample over a multi-hour run left no grid points inside the
+        ~13s cgroup window, so align_series emitted an all-zero track.
+        """
+        t0 = 1_000_000.0
+        long_xs = [t0 + i * 3.0 for i in range(2500)]  # ~2.1h of 3s ticks
+        short_xs = [t0 + 160.0 + i * 3.0 for i in range(5)]  # 12s window between coarse grid points
+        grouped = {
+            "long": {
+                "label": "long [0]",
+                "xs": long_xs,
+                "cpu_cores": [0.1] * len(long_xs),
+                "ram_gb": [0.1] * len(long_xs),
+                "disk_write_mbps": [0.0] * len(long_xs),
+                "disk_read_mbps": [0.0] * len(long_xs),
+            },
+            "short": {
+                "label": "groupinfo/ut [9]",
+                "xs": short_xs,
+                "cpu_cores": [43.872, 43.236, 34.991, 39.445, 32.252],
+                "ram_gb": [0.06] * 5,
+                "disk_write_mbps": [0.0] * 5,
+                "disk_read_mbps": [0.0] * 5,
+            },
+        }
+        layers = build_measured_layers(grouped, max_points=400)
+        track = layers["cpu_tracks"]["groupinfo/ut [9]"]
+        self.assertGreater(max(track), 40.0)
+        for x, y in zip(short_xs, [43.872, 43.236, 34.991, 39.445, 32.252]):
+            self.assertIn(x, layers["xs_evlog_sec"])
+            self.assertEqual(track[layers["xs_evlog_sec"].index(x)], y)
+
     def test_pressure_tracks_preserve_missing_samples(self):
         self.assertEqual(align_optional_series([1, 2, 3, 4], [2, 3], [12.0, None]), [None, 12.0, None, None])
         grouped = {

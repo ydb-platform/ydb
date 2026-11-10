@@ -88,7 +88,6 @@ def build_html_dashboard(
   <meta charset="utf-8" />
   <title>Chunk Resource Dashboard</title>
   <link rel="icon" type="image/svg+xml" href="{favicon_href}" />
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
     :root {{
       --fg:#1f2328; --muted:#656d76; --line:#e6e8eb; --soft:#f6f8fa;
@@ -100,6 +99,7 @@ def build_html_dashboard(
       color: var(--fg); background: #fff;
       font: 14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
     }}
+    body.is-booting {{ overflow: hidden; }}
     a {{ color: var(--accent); text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     button, .tabbtn, .help-btn, select, input[type="text"] {{
@@ -346,13 +346,23 @@ def build_html_dashboard(
       border-radius: 50%; animation: dash-spin .7s linear infinite;
       vertical-align: -2px; flex: 0 0 auto;
     }}
-    .dash-loading-banner {{
-      display: flex; align-items: center; gap: 10px;
-      margin: 0 0 12px; padding: 10px 12px;
-      border: 1px solid #d0d7de; border-radius: 8px; background: #f6f8fa;
-      color: var(--muted); font-size: 13px;
+    .dash-boot-overlay {{
+      position: fixed; inset: 0; z-index: 99999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; padding: 24px;
+      background: rgba(255,255,255,0.94);
+      color: var(--fg); font-size: 15px; text-align: center;
     }}
-    .dash-loading-banner[hidden] {{ display: none !important; }}
+    .dash-boot-overlay[hidden] {{ display: none !important; }}
+    .dash-boot-overlay .dash-spinner {{
+      width: 28px; height: 28px; border-width: 3px;
+    }}
+    .dash-boot-overlay #dashboardBootText {{
+      max-width: 520px; line-height: 1.4; color: #424a53;
+    }}
+    .dash-boot-overlay .dash-boot-sub {{
+      font-size: 12px; color: var(--muted); max-width: 520px;
+    }}
     .measured-charts {{ position: relative; }}
     .measured-charts.is-loading .wide,
     .measured-charts.is-loading .measured-test-list {{
@@ -375,11 +385,16 @@ def build_html_dashboard(
     .measured-nav.is-busy {{ opacity: 0.65; pointer-events: none; }}
   </style>
 </head>
-<body>
-  <div id="dashboardBoot" class="dash-loading-banner" role="status" aria-live="polite">
-    <span class="dash-spinner" aria-hidden="true"></span>
+<body class="is-booting">
+  <div id="dashboardBoot" class="dash-boot-overlay" role="status" aria-live="polite"
+       style="position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;background:rgba(255,255,255,0.94);text-align:center;font:15px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1f2328;">
+    <span class="dash-spinner" aria-hidden="true"
+          style="display:inline-block;width:28px;height:28px;border:3px solid #d0d7de;border-top-color:#0969da;border-radius:50%;animation:dash-spin .7s linear infinite;"></span>
     <span id="dashboardBootText">Loading dashboard…</span>
+    <span class="dash-boot-sub" id="dashboardBootSub">Fetching data and preparing charts. Large runs can take a while.</span>
   </div>
+  <!-- After the overlay so the first paint shows a spinner before this CDN fetch blocks. -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <div id="dashboardLoadError"></div>
   <div id="chartTip"></div>
   <div id="dashboardHeader" class="dash-header">
@@ -720,11 +735,22 @@ def build_html_dashboard(
     const dataUrl = {data_url_js};
     const bootEl = document.getElementById('dashboardBoot');
     const bootText = document.getElementById('dashboardBootText');
-    function setBootText(msg) {{
+    const bootSub = document.getElementById('dashboardBootSub');
+    function setBootText(msg, sub) {{
       if (bootText) bootText.textContent = msg;
+      if (bootSub && sub != null) bootSub.textContent = sub;
+      if (bootEl) {{
+        bootEl.hidden = false;
+        bootEl.style.display = 'flex';
+      }}
+      document.body.classList.add('is-booting');
     }}
     function hideBoot() {{
-      if (bootEl) bootEl.hidden = true;
+      if (bootEl) {{
+        bootEl.hidden = true;
+        bootEl.style.display = 'none';
+      }}
+      document.body.classList.remove('is-booting');
     }}
     function formatBytes(n) {{
       if (!Number.isFinite(n) || n < 0) return '?';
@@ -761,16 +787,19 @@ def build_html_dashboard(
     }}
     let data;
     try {{
-      setBootText('Downloading ' + dataUrl + '…');
+      setBootText('Downloading dashboard data…', dataUrl);
       data = await fetchJsonWithProgress(dataUrl, (received, total) => {{
         if (total > 0) {{
           const pct = Math.min(100, Math.round(100 * received / total));
-          setBootText('Downloading dashboard data… ' + pct + '% (' + formatBytes(received) + ' / ' + formatBytes(total) + ')');
+          setBootText(
+            'Downloading dashboard data… ' + pct + '%',
+            formatBytes(received) + ' / ' + formatBytes(total)
+          );
         }} else {{
-          setBootText('Downloading dashboard data… ' + formatBytes(received));
+          setBootText('Downloading dashboard data…', formatBytes(received));
         }}
       }});
-      setBootText('Building charts…');
+      setBootText('Building charts…', 'Parsing payload and rendering Plotly layers');
     }} catch (err) {{
       hideBoot();
       const el = document.getElementById('dashboardLoadError');
@@ -4131,7 +4160,7 @@ def build_html_dashboard(
     }}
     if (measuredWrap && measuredList.length) {{
       measuredWrap.style.display = '';
-      setBootText('Loading measured cgroup series…');
+      setBootText('Loading measured cgroup series…', 'Fetching totals / overview and drawing measured charts');
       const suites = [...new Set(measuredList.map(row => row.suite).filter(Boolean))];
       if (suites.length === 1) {{
         openMeasuredPath(suites[0], false);

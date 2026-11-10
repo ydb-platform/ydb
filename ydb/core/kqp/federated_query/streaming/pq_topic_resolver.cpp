@@ -64,64 +64,6 @@ struct TEvTopicDescribeResult: public TEventLocal<TEvTopicDescribeResult, EvTopi
     }
 };
 
-// Description of a single PQ topic source that needs to be resolved.
-// Used only internally within the resolver.
-struct TPqTopicResolverSource {
-    TString Cluster;
-    TString Endpoint;
-    TString Database;   // real YDB database path for the describe RPC
-    TString TopicPath;
-    TString TokenName;   // key in SecureParams to look up the auth token
-    bool UseSsl = false;
-    TString DatabaseForClusterConfig;   // raw "database" field from the proto (may be cluster alias)
-};
-
-// Collect all PQ sources from a physical query.
-// Topics whose partition list was already fixed at compile time by a
-// __ydb_partition_id predicate are skipped — their ReadRanges are authoritative.
-TVector<TPqTopicResolverSource> CollectPqSources(const NKqpProto::TKqpPhyQuery& query, const TString& database)
-{
-    TVector<TPqTopicResolverSource> result;
-    for (const auto& tx : query.GetTransactions()) {
-        for (const auto& stage : tx.GetStages()) {
-            if (stage.SourcesSize() == 0) {
-                continue;
-            }
-            const auto& src = stage.GetSources(0);
-            if (!src.HasExternalSource()) {
-                continue;
-            }
-            const auto& extSrc = src.GetExternalSource();
-            if (extSrc.GetType() != "PqSource") {
-                continue;
-            }
-
-            // If the partition list was already fixed at compile time by a
-            // __ydb_partition_id predicate, the ReadRanges are authoritative
-            // and must not be overwritten with the current total partition count.
-            NYql::NPq::NProto::TDqPqTopicSource topicSourceProto;
-            const bool usedPartitionPredicate = extSrc.GetSettings().UnpackTo(&topicSourceProto) && topicSourceProto.GetUsedPartitionPredicate();
-            if (usedPartitionPredicate) {
-                continue;
-            }
-
-            NYql::NPq::NProto::TDqPqTopicSource ts;
-            extSrc.GetSettings().UnpackTo(&ts);
-
-            TPqTopicResolverSource resolverSrc;
-            resolverSrc.Cluster = extSrc.GetSourceName();
-            resolverSrc.Endpoint = ts.GetEndpoint();
-            resolverSrc.Database = ts.GetEndpoint().empty() ? database : ts.GetDatabase();
-            resolverSrc.TopicPath = ts.GetTopicPath();
-            resolverSrc.TokenName = ts.GetToken().GetName();
-            resolverSrc.UseSsl = ts.GetUseSsl();
-            resolverSrc.DatabaseForClusterConfig = ts.GetDatabase();
-            result.push_back(std::move(resolverSrc));
-        }
-    }
-    return result;
-}
-
 // ---------------------------------------------------------------------------
 // Actor
 // ---------------------------------------------------------------------------
@@ -383,11 +325,10 @@ private:
 
 }   // anonymous namespace
 
-NActors::IActor* CreateKqpPqTopicResolver(const NActors::TActorId& owner, ui64 txId, const TString& database,
+NActors::IActor* CreateKqpPqTopicResolver(const NActors::TActorId& owner, ui64 txId, TVector<TPqTopicResolverSource> sources,
     THashMap<TString, TString> secureParams, NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
     std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph)
 {
-    auto sources = CollectPqSources(queryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery(), database);
     return new TKqpPqTopicResolver(
         owner, txId, std::move(sources), std::move(secureParams), std::move(pqGatewayFactory), std::move(queryPhysicalGraph));
 }

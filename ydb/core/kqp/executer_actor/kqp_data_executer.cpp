@@ -1,6 +1,7 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_planner.h"
+#include "kqp_streaming_helper.h"
 #include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
@@ -1356,7 +1357,7 @@ private:
                 TasksGraph.FillExternalSourceSecureParams(secureParams, stage);
             }
         }
-        StreamingQuery->StartPrepare(std::move(secureParams));
+        StreamingQuery->StartPrepare(CollectPqSources(Request.Transactions, Database), std::move(secureParams));
     }
 
 private:

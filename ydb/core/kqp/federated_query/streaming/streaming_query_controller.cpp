@@ -76,8 +76,8 @@ public:
                PqGatewayFactory;
     }
 
-    void StartPrepare(THashMap<TString, TString> secureParams) override {
-        TActivationContext::RegisterWithSameMailbox(CreateKqpPqTopicResolver(Settings.ExecuterId, Settings.TxId, Settings.Database,
+    void StartPrepare(TVector<TPqTopicResolverSource> sources, THashMap<TString, TString> secureParams) override {
+        TActivationContext::RegisterWithSameMailbox(CreateKqpPqTopicResolver(Settings.ExecuterId, Settings.TxId, std::move(sources),
                                                         std::move(secureParams), PqGatewayFactory, MutableGraph()), Settings.ExecuterId);
     }
 

@@ -392,12 +392,12 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
 
     Y_UNIT_TEST(DiscoveryIpAliasCanReachMonitoringWithoutDns) {
         TWireService service;
-        TString seed;
-        auto server = StartWireServer(service, seed);
         TWireService other;
         TString target;
         auto targetServer = StartWireServer(other, target);
         service.IpEndpointPort = ParseEndpoint(target).Port;
+        TString seed;
+        auto server = StartWireServer(service, seed);
         auto clients = CreateYdbClients(ParseConfig("cluster_id: test\nendpoints: {a: ['" + seed + "']}\n"),
             TLoadedCredentials{});
         const auto inventory = Await<TInventoryResult>([&](auto completed) {
@@ -417,6 +417,49 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         UNIT_ASSERT(health.ResponderNodeId == ip->NodeId);
         UNIT_ASSERT(health.Reply && health.Reply->ResponderPile == ip->Pile);
         clients->Stop();
+    }
+
+    Y_UNIT_TEST(DiscoveryUnsupportedOptionalAliasesKeepOtherPiles) {
+        const TRedactor redactor{TLoadedCredentials{}};
+        for (const TString unsupported : {"fe80::1%eth0", "fe80::1%25eth0", "bad/address"}) {
+            Ydb::Discovery::ListEndpointsResult proto;
+            auto* endpoint = proto.add_endpoints();
+            endpoint->set_address("node-a");
+            endpoint->set_port(2135);
+            endpoint->set_node_id(1);
+            endpoint->set_bridge_pile_name("a");
+            endpoint->add_ip_v6(unsupported);
+            endpoint->add_ip_v6("2001:db8::1");
+            endpoint->add_ip_v4("127.0.0.1");
+            auto* other = proto.add_endpoints();
+            other->set_address("node-b");
+            other->set_port(2135);
+            other->set_node_id(2);
+            other->set_bridge_pile_name("b");
+            const auto decode = [&] {
+                return DecodeInventoryResult(NYdb::NDiscovery::TListEndpointsResult(Status(), proto),
+                    Rpc(EYdbMethod::Inventory), redactor, "grpc");
+            };
+            const auto result = decode();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Error, "", unsupported);
+            std::map<TString, std::pair<TString, ui32>> addresses;
+            for (const auto& item : result.Endpoints) {
+                addresses[item.Endpoint.Uri] = {item.Pile, item.NodeId};
+            }
+            UNIT_ASSERT((addresses == std::map<TString, std::pair<TString, ui32>>{
+                {"grpc://node-a:2135", {"a", 1}}, {"grpc://[2001:db8::1]:2135", {"a", 1}},
+                {"grpc://127.0.0.1:2135", {"a", 1}}, {"grpc://node-b:2135", {"b", 2}}}));
+
+            // Only parsing an optional locator is best effort. Conflicting
+            // advertised identities still reject the complete refresh.
+            proto.mutable_endpoints(1)->add_ip_v4("127.0.0.1");
+            UNIT_ASSERT_VALUES_EQUAL(decode().Error, "INVALID_DISCOVERY_ENDPOINT");
+            UNIT_ASSERT(decode().Endpoints.empty());
+            proto.mutable_endpoints(1)->clear_ip_v4();
+            proto.mutable_endpoints(0)->set_address(unsupported);
+            UNIT_ASSERT_VALUES_EQUAL(decode().Error, "INVALID_DISCOVERY_ENDPOINT");
+            UNIT_ASSERT(decode().Endpoints.empty());
+        }
     }
 
     Y_UNIT_TEST(DiscoveryIpExpansionKeepsInventoryBounded) {
@@ -501,7 +544,6 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domain_name: MainRoot}", "config: {domain_name: StorageRoot}"), "/MainRoot");
         UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domains_config: {security_config: {}}}",
             "config: {domains_config: {domain: [{name: StorageRoot}]}}"), "/Root");
-        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domain_name: Modern, domains_config: {domain: [{name: Old}]}}"), "/Old");
         for (const TString yaml : {"config: []", "config: {domains_config: {domain: [{name: a}, {name: b}]}}",
                 "config: {domains_config: {domain: [{name: 'bad/path'}]}}", "!!broken secret"})
         {

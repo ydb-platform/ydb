@@ -91,15 +91,21 @@ public:
 
     std::vector<TDiscoveredEndpoint> Inventory;
     std::vector<TString> Removed;
+    std::set<TString> FailedInventory;
+    std::vector<TString> InventoryCalls;
 
     void Discover(TRpcRequest request, std::function<void(TInventoryResult)> completed) override {
         TInventoryResult result;
+        InventoryCalls.push_back(request.Endpoint);
+        const bool failed = FailedInventory.contains(request.Endpoint);
         result.Rpc.Request = std::move(request);
         result.Rpc.Method = EYdbMethod::Inventory;
         result.Rpc.SentAt = result.Rpc.FinishedAt = Now();
-        result.Rpc.Success = true;
-        result.Rpc.Status = "SUCCESS";
-        result.Endpoints = Inventory;
+        result.Rpc.Success = !failed;
+        result.Rpc.Status = failed ? "UNSUPPORTED" : "SUCCESS";
+        if (!failed) {
+            result.Endpoints = Inventory;
+        }
         completed(std::move(result));
     }
 
@@ -189,7 +195,8 @@ struct THarness {
         EMode mode = EMode::Auto,
         std::optional<TPersistentState> restored = {},
         size_t survivorEndpoints = 1,
-        const TString& timing = FastRounds)
+        const TString& timing = FastRounds,
+        size_t healthEndpointsPerPile = 2)
     {
         Runtime.SetLogBackend(new TRecordLogBackend(Records));
         Runtime.Initialize();
@@ -207,6 +214,7 @@ struct THarness {
             UNIT_ASSERT_VALUES_EQUAL(File->Write(*restored), "");
         }
         Config = ParseConfig(TString("cluster_id: test\nendpoints: {a: [grpc://a:1], b: [grpc://b:1]}\ntiming: ") + timing + "\n");
+        Config.HealthEndpointsPerPile = healthEndpointsPerPile;
         auto state = File->GetState();
         state.Mode = mode;
         UNIT_ASSERT_VALUES_EQUAL(File->Write(state), "");
@@ -664,6 +672,108 @@ void VerifyDispatchAtTtlBoundary(EMode mode, bool slowPersistence) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSkipperActor) {
+    Y_UNIT_TEST(DiscoveryKeepsInventoryAccessAfterAllSeedsAreRemoved) {
+        THarness h;
+        h.Failed.clear();
+        h.Run(35);
+        h.Piles["c"] = EPileState::Synchronized;
+        const TString healthOnly = "grpc://c:2";
+        const TString rejectedProbe = "grpc://c:3";
+        const TString inventory = "grpc://c:4";
+        const TString addedLater = "grpc://d:1";
+        h.NodeIds[healthOnly] = 4;
+        h.NodeIds[rejectedProbe] = 6;
+        h.NodeIds[inventory] = 3; // full services on a different port of the first health node
+        h.NodeIds[addedLater] = 5;
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}, {ParseEndpoint(healthOnly), "c", 4},
+            {ParseEndpoint(rejectedProbe), "c", 6}, {ParseEndpoint(inventory), "c", 3}};
+        h.Clients->FailedInventory = {C, healthOnly, rejectedProbe};
+        h.Run(35);
+        UNIT_ASSERT(h.Endpoint(C).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(h.Endpoint(healthOnly).Identity == EEndpointIdentity::Verified);
+        h.Piles = {{"c", EPileState::Primary}};
+        ++h.Generation;
+        h.Clients->FailedInventory.insert(A);
+        h.Clients->FailedInventory.insert(B);
+        h.Run(40);
+        UNIT_ASSERT(h.Endpoint(inventory).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(std::ranges::find(h.Clients->InventoryCalls, rejectedProbe) != h.Clients->InventoryCalls.end());
+        UNIT_ASSERT(std::ranges::find(h.Clients->InventoryCalls, inventory) != h.Clients->InventoryCalls.end());
+        size_t retained = 0;
+        for (const auto& endpoint : h.Store->Read()->Endpoints) {
+            retained += endpoint.Pile == "c";
+        }
+        UNIT_ASSERT_VALUES_EQUAL(retained, h.Config.HealthEndpointsPerPile + 1);
+        // Only the retained full-service address can discover another pile now.
+        h.Piles["d"] = EPileState::Synchronized;
+        ++h.Generation;
+        h.Clients->Inventory.push_back({ParseEndpoint(addedLater), "d", 5});
+        h.Run(35);
+        UNIT_ASSERT(h.Endpoint(addedLater).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
+    Y_UNIT_TEST(DiscoveryPendingAliasReservesItsPhysicalNode) {
+        THarness h;
+        h.Failed.clear();
+        h.Piles["c"] = EPileState::Synchronized;
+        const TString alias = "grpc://192.0.2.3:1";
+        const TString neighbor = "grpc://c-neighbor:1";
+        h.NodeIds[alias] = 3;
+        h.NodeIds[neighbor] = 4;
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}};
+        h.Held.insert({C, EYdbMethod::SelfCheck});
+        h.Run(2);
+        h.Clients->Inventory.push_back({ParseEndpoint(alias), "c", 3});
+        h.Clients->Inventory.push_back({ParseEndpoint(neighbor), "c", 4});
+        h.Run(10); // a second inventory arrives before the first SelfCheck's deadline
+        UNIT_ASSERT(h.Endpoint(neighbor).Identity == EEndpointIdentity::Verified);
+        for (const auto& endpoint : h.Store->Read()->Endpoints) {
+            UNIT_ASSERT_VALUES_UNEQUAL(endpoint.Uri, alias);
+        }
+        h.Held.clear();
+        h.Run(3);
+        UNIT_ASSERT(h.Endpoint(C).Identity == EEndpointIdentity::Verified);
+        for (const auto& uri : {C, alias}) {
+            for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+                h.FailedMethods.insert({uri, method});
+            }
+        }
+        h.Run(40);
+        h.Piles["b"] = EPileState::Inactive;
+        ++h.Generation;
+        h.Failed.insert("a");
+        h.Run(3);
+        UNIT_ASSERT_VALUES_EQUAL(h.Clients->Updates.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(h.Clients->Updates.front().Plan.Endpoint, neighbor);
+    }
+
+    Y_UNIT_TEST(DiscoveryRetentionCoversTheFullHealthRotation) {
+        THarness h(EMode::Auto, {}, 2,
+            "{round_interval_seconds: 10, confirm_seconds: 1, bsc_warmup_seconds: 20, "
+            "read_timeout_seconds: 1, selfcheck_operation_timeout_seconds: 4, evidence_ttl_seconds: 17}", 1);
+        h.Failed.clear();
+        h.NodeIds[A2] = 3;
+        const TString learned = "grpc://a-learned:1";
+        h.NodeIds[learned] = 4;
+        h.Clients->Inventory = {{ParseEndpoint(learned), "a", 4}};
+        bool sawStaleHealth = false;
+        for (size_t i = 0; i < 120; ++i) {
+            h.Step();
+            for (const auto& endpoint : h.Store->Read()->Endpoints) {
+                if (endpoint.Uri == learned && endpoint.SelfCheck
+                    && h.Runtime.GetCurrentMonotonicTime() - endpoint.SelfCheck->SentAt >= h.Config.Timing.EvidenceTtl)
+                {
+                    sawStaleHealth = true;
+                }
+            }
+        }
+        UNIT_ASSERT(sawStaleHealth);
+        UNIT_ASSERT(h.Endpoint(learned).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(h.Clients->Removed.empty());
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
     Y_UNIT_TEST(DiscoveryRotatesPastPortsWithoutMonitoring) {
         THarness h;
         h.Failed.clear();

@@ -477,12 +477,22 @@ TInventoryResult DecodeInventoryResult(const NYdb::NDiscovery::TListEndpointsRes
             const std::pair<TString, ui32> identity{TString(item.BridgePileName), item.NodeId};
             const auto [node, newNode] = piles.emplace(item.NodeId, identity.first);
             Y_ENSURE(newNode || node->second == identity.first);
-            const auto addAddress = [&](TStringBuf address) {
-                TString host(address);
-                if (host.find(':') != TString::npos && !host.StartsWith('[')) {
-                    host = "[" + host + "]";
+            const auto addAddress = [&](TStringBuf address, bool optionalAlias = false) {
+                TEndpoint endpoint;
+                try {
+                    TString host(address);
+                    if (host.find(':') != TString::npos && !host.StartsWith('[')) {
+                        host = "[" + host + "]";
+                    }
+                    endpoint = ParseEndpoint(TString(scheme) + "://" + host + ":" + ::ToString(item.Port));
+                } catch (const yexception&) {
+                    // Unsupported optional locators must not discard usable
+                    // addresses. Identity conflicts below remain fatal.
+                    if (optionalAlias) {
+                        return;
+                    }
+                    throw;
                 }
-                auto endpoint = ParseEndpoint(TString(scheme) + "://" + host + ":" + ::ToString(item.Port));
                 const auto [it, inserted] = seen.emplace(endpoint.Uri, identity);
                 Y_ENSURE(inserted || it->second == identity);
                 if (inserted) {
@@ -502,7 +512,7 @@ TInventoryResult DecodeInventoryResult(const NYdb::NDiscovery::TListEndpointsRes
                         if (!decoded.Error.empty()) {
                             break;
                         }
-                        addAddress(address);
+                        addAddress(address, /*optionalAlias=*/true);
                     }
                 }
             }

@@ -71,15 +71,17 @@ callbacks never access an actor object.
 1. **Inventory.** Configured single-node endpoints bootstrap discovery. Every
    five seconds one verified current endpoint supplies ConfigService/FetchConfig
    (raw MainConfig and optional StorageConfig) and database-scoped Discovery/ListEndpoints.
-   Learned addresses are limited to `health_endpoints_per_pile` per pile and
-   16,384 total endpoints; their views, health and routing require their own
+   Learned health addresses are limited to `health_endpoints_per_pile` per pile;
+   one additional client may probe and retain a working Config/Discovery port.
+   The complete advertisement cache and total endpoint count stay capped at
+   16,384; their views, health and routing require their own
    SelfCheck to verify both the advertised node ID and pile. Seed views retain
    their original behavior before pile verification. GetClusterState determines
    membership and lifecycle; a Discovery omission never changes a pile state or
    discards fresh evidence. Learned endpoints in inactive, disconnected or absent
    piles retire after outstanding calls settle. The initial verification budget
-   covers RPC deadlines and scheduling. Afterwards both APIs must keep answering
-   within their evidence TTL plus RPC renewal deadline; retaining an address does
+   covers RPC deadlines and the full per-pile sampling rotation. Afterwards
+   client retention allows that rotation plus the RPC renewal deadline; it does
    not extend the evidence/routing TTL. Expired addresses can be replaced.
    Configured seeds stay as dormant bootstrap probes, hidden from the
    published endpoint list while their pile is absent/inactive/disconnected; a
@@ -88,7 +90,10 @@ callbacks never access an actor object.
    original TTL; a named mismatch excludes the endpoint until a matching reply.
    Discovery uses the seed TLS scheme and driver credentials; certificate-name
    overrides are skipped. Plaintext discovery also admits published IPv4/IPv6
-   aliases. Discovery is best effort and does not persist learned locators: restart requires a reachable configured seed. Neither matching pile
+   aliases. Pending learned health addresses reserve their advertised node ID;
+   the extra inventory port can belong to that same node without taking a health
+   slot. Cached advertisements allow probes to continue when the last inventory
+   source disappears. Discovery is best effort and does not persist learned locators: restart requires a reachable configured seed. Neither matching pile
    names nor the configured local `cluster_id` prove remote cluster identity.
 2. **View.** Plain `GetClusterState` polls run every state poll. The highest
    fresh generation among all endpoints is selected; same-generation

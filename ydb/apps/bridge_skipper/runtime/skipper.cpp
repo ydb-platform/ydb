@@ -54,6 +54,9 @@ using TSlot = std::pair<TString, EYdbMethod>;
 struct TEndpointData {
     TEndpointSnapshot Snapshot;
     bool Discovered = false;
+    // One extra client can search for Config/Discovery without consuming a
+    // health slot. Its node may also have a separate Bridge/Monitoring port.
+    bool InventoryOnly = false;
     bool Retiring = false;
     // A fresh Bridge reply alone cannot keep an unverified address forever.
     std::optional<TMonotonic> VerificationDeadline;
@@ -305,23 +308,38 @@ private:
         }
     }
 
+    bool IsVerifiedCurrentEndpoint(const TString& uri, const TEndpointData& endpoint) const {
+        return !endpoint.Retiring && !endpoint.Snapshot.Ignored
+            && endpoint.Snapshot.Identity == EEndpointIdentity::Verified
+            && Selection.CurrentEndpoints.contains(uri);
+    }
+
+    TDuration HealthSamplingPeriod(const TString& pile, size_t extra = 0) const {
+        const auto count = Options.Config.Endpoints.at(pile).size() + extra;
+        const auto limit = Options.Config.HealthEndpointsPerPile;
+        return Options.Config.Timing.RoundInterval * ((count + limit - 1) / limit);
+    }
+
     void ScheduleInventory(TMonotonic now) {
         if (now < NextInventory || InventoryInFlight || !Selection.View) {
             return;
         }
         std::vector<TString> eligible;
+        std::optional<TString> probe;
         for (const auto& [uri, endpoint] : Endpoints) {
-            if (!endpoint.Retiring && !endpoint.Snapshot.Ignored
-                && endpoint.Snapshot.Identity == EEndpointIdentity::Verified
-                && Selection.CurrentEndpoints.contains(uri))
-            {
+            if (IsVerifiedCurrentEndpoint(uri, endpoint)) {
                 eligible.push_back(uri);
+                if (endpoint.InventoryOnly) {
+                    probe = uri;
+                }
             }
         }
         if (eligible.empty()) {
             return;
         }
-        const auto& uri = eligible[InventoryRotation++ % eligible.size()];
+        // The independent probe must get a turn even when many usable health
+        // ports do not serve either Config or Discovery.
+        const TString uri = probe ? *probe : eligible[InventoryRotation++ % eligible.size()];
         TRpcRequest request{uri, Endpoints.at(uri).Snapshot.Pile, ++NextSequence};
         if (!Begin(request, EYdbMethod::Inventory)) {
             return;
@@ -335,25 +353,34 @@ private:
         });
     }
 
-    void HandleInventory(TEvSkipper::TEvInventoryReply::TPtr& ev) {
-        const auto& result = ev->Get()->Result;
-        if (!Settle(result.Rpc)) {
+    void AddDiscoveredEndpoint(const TDiscoveredEndpoint& item, bool inventoryOnly, TMonotonic now) {
+        Options.Clients->AddEndpoint(item.Endpoint, item.Pile);
+        auto& endpoint = Endpoints[item.Endpoint.Uri];
+        endpoint.Snapshot.Uri = item.Endpoint.Uri;
+        endpoint.Snapshot.Pile = item.Pile;
+        endpoint.Discovered = true;
+        endpoint.InventoryOnly = inventoryOnly;
+        endpoint.ExpectedNodeId = item.NodeId;
+        Options.Config.Endpoints[item.Pile].push_back(item.Endpoint);
+        const auto& timing = Options.Config.Timing;
+        // Reserve scheduling room for the independent inventory probe too;
+        // adding it later must not shorten this client's first attempt.
+        endpoint.VerificationDeadline = now + std::max(
+            timing.ReadTimeout + timing.StatePollInterval,
+            timing.SelfCheckClientTimeout + HealthSamplingPeriod(item.Pile, inventoryOnly ? 0 : 1));
+        NextStatePoll = TMonotonic::Zero();
+        NextHealthRound = TMonotonic::Zero();
+        YDB_LOG_INFO_CTX_COMP(*NActors::TlsActivationContext, SkipperLogComponent, "Endpoint discovered",
+            {"event", "endpoint_discovered"}, {"pile", item.Pile}, {"endpoint", item.Endpoint.Uri});
+    }
+
+    void RefreshEndpoints(TMonotonic now) {
+        if (now < NextEndpointRefresh || !Selection.View || now >= Selection.ValidUntil) {
             return;
         }
-        InventoryInFlight = false;
-        auto& source = Endpoints.at(result.Rpc.Request.Endpoint);
-        SetEndpointError(source, EYdbMethod::Inventory, !result.Rpc.Success
-            ? result.Rpc.Status + ": " + result.Rpc.Issues : result.Error);
-        if (IsStopping() || !result.Rpc.Success || !result.Error.empty() || !Selection.View
-            || source.Snapshot.Identity != EEndpointIdentity::Verified || source.Snapshot.Ignored
-            || source.Retiring || NActors::TActivationContext::Monotonic() >= Selection.ValidUntil
-            || !Selection.CurrentEndpoints.contains(result.Rpc.Request.Endpoint))
-        {
-            return;
-        }
-        const auto now = NActors::TActivationContext::Monotonic();
-        // Give initial verification its full scheduling/deadline budget. Keep
-        // known addresses during RPC renewal without extending evidence TTLs.
+        NextEndpointRefresh = now + TDuration::Seconds(5);
+        // Keep clients through their complete sampling/renewal period. This
+        // owns addresses only: observation and routing TTLs remain unchanged.
         for (auto& [uri, endpoint] : Endpoints) {
             (void)uri;
             if (!endpoint.Discovered) {
@@ -361,10 +388,11 @@ private:
             }
             const auto& snapshot = endpoint.Snapshot;
             const auto& timing = Options.Config.Timing;
+            const auto healthBudget = std::max(timing.EvidenceTtl, HealthSamplingPeriod(snapshot.Pile))
+                + timing.SelfCheckClientTimeout;
             const bool responsive = snapshot.View
-                && now - snapshot.View->SentAt < timing.EvidenceTtl + timing.ReadTimeout
-                && endpoint.VerifiedSelfCheckAt
-                && now - *endpoint.VerifiedSelfCheckAt < timing.EvidenceTtl + timing.SelfCheckClientTimeout;
+                && now - snapshot.View->SentAt < timing.EvidenceTtl + timing.ReadTimeout + timing.StatePollInterval
+                && endpoint.VerifiedSelfCheckAt && now - *endpoint.VerifiedSelfCheckAt < healthBudget;
             if (responsive) {
                 endpoint.VerificationDeadline.reset();
             } else if (!endpoint.VerificationDeadline || now >= *endpoint.VerificationDeadline) {
@@ -373,7 +401,7 @@ private:
         }
         // A URI can be reused by a new node or pile. Discovery supplies the
         // proposed identity; drain old calls, then verify it through SelfCheck.
-        for (const auto& item : result.Endpoints) {
+        for (const auto& item : InventoryCandidates) {
             const auto it = Endpoints.find(item.Endpoint.Uri);
             if (it == Endpoints.end() || !ShouldPollPile(*Selection.View, item.Pile)) {
                 continue;
@@ -387,20 +415,34 @@ private:
             }
         }
         ReapEndpoints();
-        bool added = false;
+        if (InventorySource) {
+            const auto it = Endpoints.find(*InventorySource);
+            if (it == Endpoints.end() || !IsVerifiedCurrentEndpoint(it->first, it->second)) {
+                InventorySource.reset();
+            }
+        }
+        bool hasProbe = false;
         std::map<TString, size_t> learned;
         std::set<ui32> nodes;
-        for (const auto& [uri, endpoint] : Endpoints) {
-            (void)uri;
+        for (auto& [uri, endpoint] : Endpoints) {
+            if (endpoint.InventoryOnly) {
+                hasProbe = true; // a retiring invocation still owns the extra slot
+                if (InventorySource && *InventorySource != uri) {
+                    endpoint.Retiring = true;
+                }
+                continue;
+            }
             learned[endpoint.Snapshot.Pile] += endpoint.Discovered;
-            if (!endpoint.Retiring && !endpoint.Snapshot.Ignored && endpoint.NodeId
-                && endpoint.Snapshot.Identity == EEndpointIdentity::Verified && Selection.CurrentEndpoints.contains(uri))
-            {
+            if (endpoint.Discovered && !endpoint.Retiring && !endpoint.Snapshot.Ignored) {
+                // Reserve the advertised node across refreshes, including the
+                // first pending verification. A failed locator retires above.
+                nodes.insert(*endpoint.ExpectedNodeId);
+            } else if (endpoint.NodeId && IsVerifiedCurrentEndpoint(uri, endpoint)) {
                 nodes.insert(*endpoint.NodeId);
             }
         }
         std::map<TString, std::vector<const TDiscoveredEndpoint*>> candidates;
-        for (const auto& item : result.Endpoints) {
+        for (const auto& item : InventoryCandidates) {
             if (ShouldPollPile(*Selection.View, item.Pile)) {
                 candidates[item.Pile].push_back(&item);
             }
@@ -416,37 +458,61 @@ private:
                 if (nodes.contains(item.NodeId) || Endpoints.contains(item.Endpoint.Uri)) {
                     continue;
                 }
-                Options.Clients->AddEndpoint(item.Endpoint, item.Pile);
-                auto& endpoint = Endpoints[item.Endpoint.Uri];
-                endpoint.Snapshot.Uri = item.Endpoint.Uri;
-                endpoint.Snapshot.Pile = item.Pile;
-                endpoint.Discovered = true;
-                endpoint.ExpectedNodeId = item.NodeId;
-                auto& pileEndpoints = Options.Config.Endpoints[item.Pile];
-                pileEndpoints.push_back(item.Endpoint);
-                const auto& timing = Options.Config.Timing;
-                const auto rounds = (pileEndpoints.size() + Options.Config.HealthEndpointsPerPile - 1)
-                    / Options.Config.HealthEndpointsPerPile;
-                endpoint.VerificationDeadline = now + std::max(
-                    timing.ReadTimeout + timing.StatePollInterval,
-                    timing.SelfCheckClientTimeout + timing.RoundInterval * rounds);
-                added = true;
+                AddDiscoveredEndpoint(item, false, now);
                 ++learned[pile];
                 nodes.insert(item.NodeId);
-                // A failed bounded sample must give later candidates a turn,
-                // even when the server keeps returning the same cached order.
                 rotation = (start + i + 1) % choices.size();
-                YDB_LOG_INFO_CTX_COMP(*NActors::TlsActivationContext, SkipperLogComponent, "Endpoint discovered",
-                    {"event", "endpoint_discovered"}, {"pile", item.Pile}, {"endpoint", item.Endpoint.Uri});
             }
         }
-        if (added) {
-            NextStatePoll = TMonotonic::Zero();
-            NextHealthRound = TMonotonic::Zero();
+        // Advertisements are bootstrap candidates, not evidence. Keep the last
+        // complete bounded list so a failed inventory API cannot prevent trying
+        // a different advertised port after every configured seed is removed.
+        if (!InventorySource && !hasProbe && !InventoryCandidates.empty() && Endpoints.size() < 16384) {
+            const size_t start = InventoryDiscoveryRotation % InventoryCandidates.size();
+            for (size_t i = 0; i < InventoryCandidates.size(); ++i) {
+                const auto& item = InventoryCandidates[(start + i) % InventoryCandidates.size()];
+                if (!ShouldPollPile(*Selection.View, item.Pile) || Endpoints.contains(item.Endpoint.Uri)) {
+                    continue;
+                }
+                AddDiscoveredEndpoint(item, true, now);
+                InventoryDiscoveryRotation = (start + i + 1) % InventoryCandidates.size();
+                break;
+            }
         }
     }
 
+    void HandleInventory(TEvSkipper::TEvInventoryReply::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        if (!Settle(result.Rpc)) {
+            return;
+        }
+        InventoryInFlight = false;
+        auto& source = Endpoints.at(result.Rpc.Request.Endpoint);
+        SetEndpointError(source, EYdbMethod::Inventory, !result.Rpc.Success
+            ? result.Rpc.Status + ": " + result.Rpc.Issues : result.Error);
+        if (!result.Rpc.Success || !result.Error.empty()) {
+            NextEndpointRefresh = TMonotonic::Zero();
+            if (InventorySource == result.Rpc.Request.Endpoint) {
+                InventorySource.reset();
+            }
+            if (source.InventoryOnly) {
+                source.Retiring = true;
+            }
+            return;
+        }
+        if (IsStopping() || !Selection.View || !IsVerifiedCurrentEndpoint(result.Rpc.Request.Endpoint, source)
+            || NActors::TActivationContext::Monotonic() >= Selection.ValidUntil)
+        {
+            return;
+        }
+        InventorySource = result.Rpc.Request.Endpoint;
+        InventoryCandidates = result.Endpoints;
+        NextEndpointRefresh = TMonotonic::Zero();
+        RefreshEndpoints(NActors::TActivationContext::Monotonic());
+    }
+
     void ScheduleCalls(TMonotonic now) {
+        RefreshEndpoints(now);
         ScheduleInventory(now);
         if (now >= NextStatePoll) {
             NextStatePoll = now + Options.Config.Timing.StatePollInterval;
@@ -727,7 +793,11 @@ private:
             for (auto& [uri, endpoint] : Endpoints) {
                 auto& snapshot = endpoint.Snapshot;
                 replies.Endpoints.push_back({uri, snapshot.Pile, snapshot.Identity, Selection.CurrentEndpoints.contains(uri)});
-                snapshot.Ignored = !ShouldPollPile(view, snapshot.Pile);
+                const bool ignored = !ShouldPollPile(view, snapshot.Pile);
+                if (ignored && !snapshot.Ignored && (endpoint.InventoryOnly || InventorySource == uri)) {
+                    NextEndpointRefresh = TMonotonic::Zero();
+                }
+                snapshot.Ignored = ignored;
                 if (snapshot.Ignored && endpoint.Discovered) {
                     endpoint.Retiring = true;
                 }
@@ -1395,6 +1465,10 @@ private:
     size_t InventoryRotation = 0;
     std::map<TString, size_t> DiscoveryRotation;
     bool InventoryInFlight = false;
+    std::optional<TString> InventorySource;
+    std::vector<TDiscoveredEndpoint> InventoryCandidates;
+    size_t InventoryDiscoveryRotation = 0;
+    TMonotonic NextEndpointRefresh;
     ui64 NextSequence = 0;
     std::map<TString, TEndpointData> Endpoints;
     std::map<TString, size_t> HealthRotation;

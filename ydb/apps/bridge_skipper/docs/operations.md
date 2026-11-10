@@ -52,16 +52,23 @@ scheme and driver credentials. Advertisements requiring `ssl_target_name_overrid
 are skipped because pinned clients do not support that override. Each learned
 address must pass SelfCheck with its advertised pile and node ID before its views,
 health or mutation routes count. At most `health_endpoints_per_pile` learned
-addresses per pile are kept. Discovery is not a storage inventory or a quorum:
+health addresses per pile are kept, plus at most one extra client for finding
+and retaining a port that successfully serves both Config and Discovery.
+Discovery is not a storage inventory or a quorum:
 omissions do not prove health/failure and do not discard fresh endpoint evidence.
 Candidate addresses rotate within each pile, so an unchanged Discovery ordering
 does not keep retrying only unreachable nodes. Only current verified endpoints
-deduplicate node IDs; a learned address advertising a changed identity is drained
+deduplicate configured node IDs. Pending learned health addresses also reserve
+their expected node ID, so aliases cannot consume another health slot; a learned
+address advertising a changed identity is drained
 and checked again before reuse. The first verification budget covers read/SelfCheck
 deadlines and polling rounds; Bridge-only ports cannot keep a slot indefinitely.
-After verification, each API must keep answering within its evidence TTL plus
-RPC renewal deadline. This address-retention grace does not extend evidence or
-routing freshness.
+After verification, address retention includes the complete per-pile sampling
+rotation and RPC renewal deadline. This grace does not extend evidence or routing
+freshness. The last complete advertisement list is cached in memory, so failure
+of Config or Discovery can trigger another bounded probe even after all seeds
+have been removed. An extra inventory port may be on a node whose health port
+was already learned; it does not consume another health slot.
 For `grpc://`, published IPv4/IPv6 addresses are also candidates and pass the same
 node ID and pile checks; TLS discovery retains certificate verification by hostname.
 `GetClusterState` supplies pile states, including Add/Remove progress; Auto never

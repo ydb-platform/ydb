@@ -1,12 +1,19 @@
 PROGRAM(ydbd)
 
 IF (OS_LINUX)
-    # Force a fresh link and retain a trace for the comparison.
+    # Compare mold with LLD without a GDB index on the same inputs.
+    SET(_LINKER_ID mold)
     LDFLAGS(
         -Wl,--no-gdb-index
-        -Wl,--time-trace=${BINDIR}/ydbd.time_trace.json
-        -Wl,--time-trace-granularity=500
+        -Wl,--no-rosegment
+        -Wl,--build-id=sha1
+        -Wl,--perf
     )
+    IF (NOT PIE)
+        IF (NOT PIC OR PIC_NO_PIE)
+            LDFLAGS(-Wl,-no-pie)
+        ENDIF()
+    ENDIF()
 ENDIF()
 
 IF (NOT SANITIZER_TYPE)  # for some reasons some tests with asan are failed, see comment in CPPCOM-32
@@ -22,7 +29,7 @@ ENDIF()
 
 IF (OS_LINUX)
     ALLOCATOR(TCMALLOC_256K)
-    LINKER_SCRIPT(strip_debug.ld)
+    # mold 2.34.1 cannot parse this script; retain .debug_aranges for this experiment.
 ENDIF()
 
 IF (OS_DARWIN)

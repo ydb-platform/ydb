@@ -1832,7 +1832,6 @@ class SwiftCompiler(object):
 class Linker(object):
     BFD = 'bfd'
     LLD = 'lld'
-    GOLD = 'gold'
     MOLD = 'mold'
 
     def __init__(self, tc, build):

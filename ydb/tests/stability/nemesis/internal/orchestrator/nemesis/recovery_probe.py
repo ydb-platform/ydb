@@ -335,8 +335,10 @@ class RecoveryProbe:
                     "held_sec": round(now - p.reserved_at, 1), "stuck": p.stuck_reported,
                     "toggle": p.recover_action is not None, "piles": list(p.piles),
                     "dispatching": p.dispatching, "extracting": p.extracting, "extract_ok": p.extract_ok,
-                    "pile_recovery": {str(pile): {"baseline": p.pile_baseline.get(pile),
-                                                "alive": alive.get(pile)} for pile in p.piles},
+                    "pile_recovery": {
+                        str(pile): {"baseline": p.pile_baseline.get(pile), "alive": alive.get(pile)}
+                        for pile in p.piles
+                    },
                 })
             faults.sort(key=lambda f: (-f["held_sec"], f["nemesis_type"], f["identity_key"]))
             piles = set(alive) | {pile for p in self._pending.values() for pile in p.piles}

@@ -212,6 +212,7 @@ def _initialize_app_body():
             metrics=metrics,
         )
         orchestrator_router.command_dispatcher = dispatcher
+
         class LocalAdmission:
             def check(self, plan):
                 if plan.nemesis_type not in definitions:
@@ -238,7 +239,6 @@ def _initialize_app_body():
             dispatch=lambda cmd: dispatcher.dispatch(cmd, track_history=True),
             recovery_probe=probe,
         )
-
 
 
 def _begin_shutdown():

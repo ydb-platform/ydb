@@ -18,8 +18,10 @@ class RuntimeNodePiles:
         # multiple piles can share localhost. Missing membership suppresses recovery.
         for endpoint in self._endpoints:
             try:
-                response = self._get(endpoint + "/viewer/json/nodes",
-                    params={"fields_required": "SystemState", "timeout": 2000}, timeout=3)
+                response = self._get(
+                    endpoint + "/viewer/json/nodes",
+                    params={"fields_required": "SystemState", "timeout": 2000}, timeout=3,
+                )
                 response.raise_for_status()
                 result = {}
                 for node in response.json().get("Nodes", []):

@@ -56,11 +56,13 @@ class ClusterInventory:
         if process_specs is not None:
             for spec in process_specs:
                 if spec.kind == "node":
-                    self.nodes[spec.node_id] = NodeInfo(spec.node_id, spec.host, spec.ic_port,
-                        spec.rack, spec.datacenter, spec.bridge_pile_id)
+                    self.nodes[spec.node_id] = NodeInfo(
+                        spec.node_id, spec.host, spec.ic_port, spec.rack, spec.datacenter, spec.bridge_pile_id,
+                    )
                 else:
-                    self.slots[spec.slot_idx] = SlotInfo(spec.slot_idx, spec.host, spec.ic_port,
-                        spec.node_id, spec.rack, spec.datacenter, spec.bridge_pile_id)
+                    self.slots[spec.slot_idx] = SlotInfo(
+                        spec.slot_idx, spec.host, spec.ic_port, spec.node_id, spec.rack, spec.datacenter, spec.bridge_pile_id,
+                    )
         else:
             self._load_from_harness()
 

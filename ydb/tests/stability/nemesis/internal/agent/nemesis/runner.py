@@ -80,7 +80,6 @@ class NemesisManager:
             return {"status": "error" if running or remaining else "ok",
                     "running": running, "unrestored": remaining}
 
-
     def start_process(
         self,
         type_name: str,

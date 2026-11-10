@@ -30,6 +30,7 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.hc_model import (
     needs_baseline,
 )
 
+
 class FaultRejected(RuntimeError):
     status_code = 409
 
@@ -136,7 +137,6 @@ class FaultEngine:
         if self._recovery_probe is None or not self._recovery_probe.restore_operation(operation_id):
             raise FaultRejected("Operation is no longer pending restoration")
 
-
     def begin_shutdown(self):
         self._stopping.set()
 
@@ -210,9 +210,13 @@ class FaultEngine:
                     raise
                 self._update_operation(operation_id, state="accepted", delivery="accepted")
                 return commands
-            predicates = [self._predicate_for(t, kind=t.kind, scope=scope,
-                inventory=self._inventory, baseline=baseline, nemesis_type=nemesis_type)
-                for t in targets.values()]
+            predicates = [
+                self._predicate_for(
+                    t, kind=t.kind, scope=scope, inventory=self._inventory,
+                    baseline=baseline, nemesis_type=nemesis_type,
+                )
+                for t in targets.values()
+            ]
 
             def recovered(snap):
                 return all(predicate(snap) for predicate in predicates)

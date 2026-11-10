@@ -151,10 +151,11 @@ class TestNemesisMetricsEmitter:
         assert ended[0]["held_sec"] == 42.5
         assert ended[0]["reason"] == "recovered"
 
-    def test_budget_acquired_always_has_nemesis_label(self, caplog):
+    def test_budget_acquired_always_has_nemesis_label(self, caplog, monkeypatch):
         """Monium legends use {{nemesis}}; missing label renders as literal {{nemesis}}."""
         import logging
 
+        monkeypatch.setattr(logging.getLogger("ydb.tests.stability.nemesis"), "propagate", True)
         m = _metrics()
         guard = FailureModelGuard(_topology(), metrics=m)
         target = ChaosTarget.for_node("h1", node_id=1)

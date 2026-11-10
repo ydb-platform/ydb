@@ -4,7 +4,6 @@ import shlex
 import subprocess
 import sys
 
-import requests
 import yaml
 
 from ydb.tests.stability.nemesis.internal.config import Settings, AgentSettings

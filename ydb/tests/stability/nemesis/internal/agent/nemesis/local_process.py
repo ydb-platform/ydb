@@ -58,8 +58,9 @@ def load_process_specs(path):
             raise ValueError("Local node_id / slot_idx is required")
         unit = restart.get("unit")
         if unit:
-            if not isinstance(unit, str) or not unit.endswith(".service") or any(c not in
-                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@_.:-" for c in unit):
+            if not isinstance(unit, str) or not unit.endswith(".service") or any(
+                c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@_.:-" for c in unit
+            ):
                 raise ValueError("Invalid restart unit")
         else:
             argv = restart.get("argv")

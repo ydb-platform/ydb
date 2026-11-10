@@ -84,5 +84,21 @@
         "type": "query",
         "version": "0.2"
     },
-    "tables": []
+    "tables": [
+        {
+            "name": "/local/base_fulltext_relevance_b_sql_plan/FullTextTable",
+            "reads": [
+                {
+                    "columns": [
+                        "Key",
+                        "Text"
+                    ],
+                    "lookup_by": [
+                        "Key"
+                    ],
+                    "type": "Lookup"
+                }
+            ]
+        }
+    ]
 }

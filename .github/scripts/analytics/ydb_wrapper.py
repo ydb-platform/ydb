@@ -33,6 +33,12 @@ _QUERY_CLIENT_SETTINGS = (
     .with_native_json_in_result_sets(False)
 )
 
+_DISABLE_YDB_QA_ENV = "CI_DISABLE_YDB_QA"  # keep in sync with collector.schema
+
+
+def is_ydb_qa_disabled() -> bool:
+    return os.environ.get(_DISABLE_YDB_QA_ENV, "").strip() == "1"
+
 
 class YDBWrapper:
     """Wrapper for YDB with statistics logging.
@@ -68,6 +74,33 @@ class YDBWrapper:
         self._verbose = verbose or os.environ.get("YDB_WRAPPER_DEBUG", "").lower() in (
             "true", "1", "yes"
         )
+        self._ydb_qa_disabled = is_ydb_qa_disabled()
+        self._driver = None
+        self._stats_driver = None
+        self._session_id = str(uuid.uuid4())
+        self._cluster_version = None
+        self._stats_available = None
+        self._flags = {}
+        self._main_db_tables = {}
+        self._stats_db_tables = {}
+        self.database_endpoint = ""
+        self.database_path = ""
+        self.stats_endpoint = ""
+        self.stats_path = ""
+        self.stats_table = ""
+        self._connection_timeout = 60
+        self._stats_connection_timeout = 60
+
+        if script_name is None:
+            script_name = self._get_caller_script_name()
+        self._script_name = script_name
+        self._github_info = self._get_github_action_info()
+
+        if self._ydb_qa_disabled:
+            self._config_source = f"disabled:{_DISABLE_YDB_QA_ENV}"
+            self._enable_statistics = False
+            self._log("info", f"YDB QA disabled via {_DISABLE_YDB_QA_ENV}")
+            return
 
         _explicit_local = use_local_config  # remember if caller forced the choice
         if use_local_config is None:
@@ -98,23 +131,8 @@ class YDBWrapper:
                     self._config_source = f"file:{resolved_path} (vars.YDB_QA_CONFIG not set)"
 
         self._log("info", f"YDB config source: {self._config_source}")
-        
-        # Statistics settings
         self._enable_statistics = enable_statistics
-        self._cluster_version = None
-        self._session_id = str(uuid.uuid4())
-        # One driver per endpoint for the whole wrapper lifetime
-        self._driver = None
-        self._stats_driver = None
-        
-        # Automatically determine script_name if not provided
-        if script_name is None:
-            script_name = self._get_caller_script_name()
-        self._script_name = script_name
-        
-        # GitHub Action info - get once
-        self._github_info = self._get_github_action_info()
-        
+
         # Get cluster version once during initialization (uses cached main driver)
         try:
             self._get_cluster_version(self._get_driver())
@@ -123,7 +141,6 @@ class YDBWrapper:
             self._cluster_version = "unknown"
 
         # Statistics: if stats and main use the same endpoint/path, reuse main driver (no extra connection)
-        self._stats_available = None
         if self._enable_statistics:
             stats_same_as_main = (
                 self.stats_endpoint == self.database_endpoint and self.stats_path == self.database_path
@@ -276,6 +293,12 @@ class YDBWrapper:
     
     def check_credentials(self):
         """Check for YDB credentials"""
+        if self._ydb_qa_disabled:
+            print(
+                f"YDB QA disabled via {_DISABLE_YDB_QA_ENV}, skipping",
+                file=self._log_stream,
+            )
+            return False
         if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
             print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping", file=self._log_stream)
             return False

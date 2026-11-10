@@ -44,6 +44,13 @@ CREDENTIAL_ENVS = (
     "ANALYTICS_YDB_CREDENTIALS",
     "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS",
 )
+DISABLE_YDB_QA_ENV = "CI_DISABLE_YDB_QA"  # keep in sync with analytics/ydb_wrapper.py
+
+
+def is_ydb_qa_disabled() -> bool:
+    return os.environ.get(DISABLE_YDB_QA_ENV, "").strip() == "1"
+
+
 INTERNAL_FIELD_KEYS = ("file", "attach", "enrich", "flush", "table_path")
 
 

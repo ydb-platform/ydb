@@ -12,7 +12,15 @@ inputs:
     description: "s3 bucket"
   s3_endpoint:
     required: true
-    description: "s3 endpoint"
+    description: "s3 endpoint (https://host); used for both s3cmd host_base and public URL prefixes"
+  s3_region:
+    required: false
+    description: "S3 bucket region (bucket_location)"
+    default: "ru-central1"
+  public_acl:
+    required: false
+    description: "false → no --acl-public (bucket policy); true or empty → --acl-public"
+    default: "true"
   folder_prefix:
     required: false
     description: "folder prefix"
@@ -24,36 +32,61 @@ runs:
   steps:
     - name: configure s3cmd
       shell: bash
+      env:
+        S3_KEY_ID: ${{ inputs.s3_key_id }}
+        S3_KEY_SECRET: ${{ inputs.s3_key_secret }}
+        S3_ENDPOINT: ${{ inputs.s3_endpoint }}
+        S3_REGION: ${{ inputs.s3_region }}
+        S3_PUBLIC_ACL: ${{ inputs.public_acl }}
       run: |
+        umask 077
         export S3CMD_CONFIG=$(mktemp)
-        echo "S3CMD_CONFIG=$S3CMD_CONFIG" >> $GITHUB_ENV
-        cat <<EOF > $S3CMD_CONFIG
+        echo "S3CMD_CONFIG=$S3CMD_CONFIG" >> "$GITHUB_ENV"
+        # Empty input must not disable ACL/region (callers often omit AWS_* from vars JSON).
+        S3_REGION="${S3_REGION:-ru-central1}"
+        case "$S3_PUBLIC_ACL" in
+          true|"")
+            echo "S3_PUBLIC_ACL_FLAG=--acl-public" >> "$GITHUB_ENV"
+            ;;
+          false)
+            echo "S3_PUBLIC_ACL_FLAG=" >> "$GITHUB_ENV"
+            ;;
+          *)
+            echo "::error::public_acl must be 'true' or 'false', got: ${S3_PUBLIC_ACL}"
+            exit 1
+            ;;
+        esac
+        host=${S3_ENDPOINT#https://}
+        host=${host#http://}
+        host=${host%/}
+        if [ -z "$host" ]; then
+          echo "::error::s3_endpoint is empty or invalid: ${S3_ENDPOINT}"
+          exit 1
+        fi
+        cat <<EOF > "$S3CMD_CONFIG"
         [default]
-        access_key = ${s3_key_id}
-        secret_key = ${s3_secret_access_key}
-        bucket_location = ru-central1
-        host_base = storage.yandexcloud.net
-        host_bucket = %(bucket)s.storage.yandexcloud.net
+        access_key = ${S3_KEY_ID}
+        secret_key = ${S3_KEY_SECRET}
+        bucket_location = ${S3_REGION}
+        host_base = ${host}
+        host_bucket = %(bucket)s.${host}
         EOF
 
-        # specify mime type for correct content-type in s3cmd sync 
+        # specify mime type for correct content-type in s3cmd sync
         # we want to .out/.err files treat as text
         MIME_TYPES_LINE="text/plain                                      out err log"
         MIME_TYPES_FILE='/etc/mime.types'
         # add if not exists
         sudo bash -c "grep -qF -- '$MIME_TYPES_LINE' '$MIME_TYPES_FILE' || echo '$MIME_TYPES_LINE' >> '$MIME_TYPES_FILE'"
-      env:
-        s3_key_id: ${{ inputs.s3_key_id }}
-        s3_secret_access_key: ${{ inputs.s3_key_secret }}
 
     - name: export s3 path variables
       shell: bash
       if: inputs.build_preset
       run: |
         folder="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
-        
+
         BUILD_PRESET="${{ inputs.build_preset }}"
-        
+
         case "$BUILD_PRESET" in
           relwithdebinfo)
             ;;
@@ -68,7 +101,14 @@ runs:
             exit 1
             ;;
         esac
-        echo "S3_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-        echo "S3_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-        echo "S3_TEST_ARTIFACTS_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/testing_out_stuff/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-        echo "S3_TEST_ARTIFACTS_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/testing_out_stuff/${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
+        # S3 object keys keep literal spaces; HTTP URL prefixes must be percent-encoded
+        # so Markdown links/tables survive workflow names like "Run and debug tests".
+        key_suffix="${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}"
+        echo "S3_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/${key_suffix}" >> $GITHUB_ENV
+        echo "S3_TEST_ARTIFACTS_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/testing_out_stuff/${key_suffix}" >> $GITHUB_ENV
+        export _S3_URL_RAW="${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/${key_suffix}"
+        export _S3_TEST_URL_RAW="${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/testing_out_stuff/${key_suffix}"
+        S3_URL_PREFIX="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["_S3_URL_RAW"], safe=":/%"))')"
+        S3_TEST_ARTIFACTS_URL_PREFIX="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["_S3_TEST_URL_RAW"], safe=":/%"))')"
+        echo "S3_URL_PREFIX=$S3_URL_PREFIX" >> $GITHUB_ENV
+        echo "S3_TEST_ARTIFACTS_URL_PREFIX=$S3_TEST_ARTIFACTS_URL_PREFIX" >> $GITHUB_ENV

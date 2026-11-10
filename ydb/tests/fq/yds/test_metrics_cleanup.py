@@ -1,56 +1,45 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import time
-
+from ydb.tests.fq.streaming_common.common import StreamingTestBase, counter_nodes, get_sensors
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-
-import ydb.public.api.protos.draft.fq_pb2 as fq
+from ydb.tests.library.common.wait_for import wait_for
 
 
-class TestCleanup(TestYdsBase):
-    @yq_v1
-    def test_cleanup(self, kikimr, client):
-        sql = "SELECT 1;"
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+class TestCleanup(StreamingTestBase):
+    def test_cleanup(self, ydb_topics):
+        io = ydb_topics('metrics_cleanup')
+        query = io.start(f"""
+            PRAGMA ydb.OptValidateStreamingCheckpoints = 'FALSE';
+            INSERT INTO {io.output} SELECT Data FROM {io.input} LIMIT 1;
+        """)
+        timeout = plain_or_under_sanitizer(120, 500)
 
-        assert kikimr.compute_plane.get_task_count(1, query_id) == 0
-        deadline = time.time() + plain_or_under_sanitizer(120, 500)
-        while True:
-            value = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"query_id": query_id, "subsystem": "task_controller", "Stage": "Total", "sensor": "Tasks"}
-            )
-            if value is None:
-                break
-            assert time.time() < deadline, "TaskCount was not cleaned"
-            time.sleep(0.5)
+        def query_metrics():
+            return {
+                node_id: get_sensors(io.kikimr.cluster, node_id, 'kqp').find_sensors(
+                    {'subsystem': 'streaming_queries', 'path': query}, key_label='sensor'
+                )
+                for node_id in counter_nodes(io.kikimr.cluster)
+            }
 
-    @yq_v1
-    def test_keep(self, kikimr, client):
-        self.init_topics("cleanup_keep", create_output=False)
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        # Metrics appear after periodic statistics updates. Observe them before
+        # finishing the query so the cleanup assertion cannot pass vacuously.
+        assert wait_for(
+            lambda: any(metrics.get('streaming.query.tasks.count', 0) > 0 for metrics in query_metrics().values()),
+            timeout_seconds=timeout,
+            step_seconds=0.5,
+        ), query_metrics()
 
-        query_id = client.create_query("simple", "SELECT 1;", type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-
-        sql = R'''
-            SELECT * FROM myyds.`{input_topic}`;
-            '''.format(
-            input_topic=self.input_topic,
-        )
-        client.modify_query(query_id, "simple", sql, type=fq.QueryContent.QueryType.STREAMING)
-
-        deadline = time.time() + 90  # x1.5 of 60 sec
-        while True:
-            value = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"query_id": query_id, "subsystem": "task_controller", "Stage": "Total", "sensor": "Tasks"}
-            )
-            assert value is not None, "Tasks was cleaned"
-            if time.time() > deadline:
-                break
-            else:
-                time.sleep(0.5)
+        io.write(['finish'])
+        assert io.read(1) == ['finish']
+        assert wait_for(
+            lambda: io.state(query)['Status'] == 'COMPLETED',
+            timeout_seconds=timeout,
+            step_seconds=0.5,
+        ), io.state(query)
+        assert wait_for(
+            lambda: all(not metrics for metrics in query_metrics().values()),
+            timeout_seconds=timeout,
+            step_seconds=0.5,
+        ), query_metrics()

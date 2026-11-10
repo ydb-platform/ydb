@@ -16,7 +16,6 @@ from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
 
-from ydb.tests.tools.datastreams_helpers.control_plane import list_read_rules
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule, delete_stream
 from ydb.tests.tools.datastreams_helpers.data_plane import read_stream, write_stream
 from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
@@ -27,6 +26,12 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 YDS_CONNECTION = "yds"
 COMPUTE_NODE_COUNT = 3
+ROW_DISPATCHER_CONSUMER = 'row_dispatcher_consumer'
+CONSUMER_PRAGMA = f'PRAGMA pq.Consumer="{ROW_DISPATCHER_CONSUMER}";\n'
+
+
+def create_input_consumer(io):
+    io.kikimr.external_ydb_client.query(f'ALTER TOPIC `{io.input_topic}` ADD CONSUMER `{ROW_DISPATCHER_CONSUMER}`;')
 
 
 class Param(object):
@@ -41,7 +46,7 @@ def kikimr(request):
     )
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True
-    kikimr.compute_plane.fq_config['row_dispatcher']['without_consumer'] = True
+    kikimr.compute_plane.fq_config['row_dispatcher']['without_consumer'] = False
     kikimr.compute_plane.fq_config['row_dispatcher']['json_parser'] = {}
     if hasattr(request, "param"):
         kikimr.compute_plane.fq_config['row_dispatcher']['coordinator'][
@@ -122,6 +127,7 @@ class TestPqRowDispatcher(TestYdsBase):
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics(topic_name_prefix, create_input=True, create_output=True, partitions_count=partitions)
+        create_read_rule(self.input_topic, ROW_DISPATCHER_CONSUMER)
 
     def run_and_check(self, kikimr, client, sql, input, output, expected_predicate):
         query_id = start_yds_query(kikimr, client, sql)
@@ -136,48 +142,44 @@ class TestPqRowDispatcher(TestYdsBase):
         issues = str(client.describe_query(query_id).result.query.transient_issue)
         assert expected_predicate in issues, "Incorrect Issues: " + issues
 
-    @yq_v1
-    def test_read_raw_format_with_row_dispatcher(self, kikimr, client):
-        self.init(client, "test_read_raw_format_with_row_dispatcher")
+    def test_read_raw_format_with_row_dispatcher(self, ydb_topics):
+        io = ydb_topics("test_read_raw_format_with_row_dispatcher", shared=True)
+        create_input_consumer(io)
 
-        connections = client.list_connections(fq.Acl.Visibility.PRIVATE).result.connection
-        assert len(connections) == 1
-        assert connections[0].content.setting.data_streams.shared_reading
+        sql1 = CONSUMER_PRAGMA + Rf'''INSERT INTO {io.output}
+                    SELECT * FROM {io.input} WITH (format=raw, SCHEMA (data String NOT NULL));'''
 
-        sql1 = Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-                    SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}` WITH (format=raw, SCHEMA (data String NOT NULL));'''
-
-        query_id = start_yds_query(kikimr, client, sql1)
+        query_id = io.start(sql1)
         data = ['{"time" = 101;}', '{"time" = 102;}']
 
-        self.write_stream(data)
-        assert self.read_stream(len(data), topic_path=self.output_topic) == data
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
-        stop_yds_query(client, query_id)
+        io.write(data)
+        assert io.read(len(data), topic_path=io.output_topic) == data
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 1)
+        io.stop(query_id)
 
-        sql2 = Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-                    SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}` WITH (format=raw, SCHEMA (data String NOT NULL))
+        sql2 = CONSUMER_PRAGMA + Rf'''INSERT INTO {io.output}
+                    SELECT * FROM {io.input} WITH (format=raw, SCHEMA (data String NOT NULL))
                     WHERE data != "romashka";'''
 
-        query_id = start_yds_query(kikimr, client, sql2)
+        query_id = io.start(sql2)
         data = ['{"time" = 103;}', '{"time" = 104;}']
 
-        self.write_stream(data)
-        assert self.read_stream(len(data), topic_path=self.output_topic) == data
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
-        stop_yds_query(client, query_id)
+        io.write(data)
+        assert io.read(len(data), topic_path=io.output_topic) == data
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 1)
+        io.stop(query_id)
 
-    @yq_v1
-    def test_simple_not_null(self, kikimr, client):
-        self.init(client, "test_simple_not_null")
+    def test_simple_not_null(self, ydb_topics):
+        io = ydb_topics("test_simple_not_null", shared=True)
+        create_input_consumer(io)
 
-        sql = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+        sql = CONSUMER_PRAGMA + Rf'''
+            INSERT INTO {io.output}
+            SELECT Cast(time as String) FROM {io.input}
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
 
-        query_id = start_yds_query(kikimr, client, sql)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        query_id = io.start(sql)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 1)
 
         data = [
             '{"time": 101, "data": "hello1", "event": "event1"}',
@@ -185,30 +187,27 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 103, "data": "hello3", "event": "event3"}',
         ]
 
-        self.write_stream(data)
+        io.write(data)
         expected = ['101', '102', '103']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        assert io.read(len(expected), topic_path=io.output_topic) == expected
 
-        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        io.wait_actor_count("DQ_PQ_READ_ACTOR", 1)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 1)
 
-        stop_yds_query(client, query_id)
-        # Assert that all read rules were removed after query stops
-        read_rules = list_read_rules(self.input_topic)
-        assert len(read_rules) == 0, read_rules
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+        io.stop(query_id)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
-    @yq_v1
-    def test_metadatafields(self, kikimr, client):
-        self.init(client, "test_metadatafields")
+    def test_metadatafields(self, ydb_topics):
+        io = ydb_topics('test_metadatafields', shared=True)
+        create_input_consumer(io)
 
         # Its not completely clear why metadatafields appear in this request(
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             PRAGMA FeatureR010="prototype";
             PRAGMA config.flags("TimeOrderRecoverDelay", "-10");
             PRAGMA config.flags("TimeOrderRecoverAhead", "10");
-            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) FROM {YDS_CONNECTION}.`{self.input_topic}`
+            INSERT INTO {io.output}
+            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) FROM {io.input}
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL))
                 MATCH_RECOGNIZE(
                     ORDER BY CAST(time as Timestamp)
@@ -217,49 +216,46 @@ class TestPqRowDispatcher(TestYdsBase):
                     DEFINE A as A.time > 4
                 );'''
 
-        query_id = start_yds_query(kikimr, client, sql)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        query_id = io.start(sql)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 1)
 
         data = [
             '{"time": 100}',
             '{"time": 109}',
             '{"time": 118}',
         ]
-        self.write_stream(data)
-        assert len(self.read_stream(1, topic_path=self.output_topic)) == 1
-        stop_yds_query(client, query_id)
+        io.write(data)
+        assert len(io.read(1, topic_path=io.output_topic)) == 1
+        io.stop(query_id)
 
-    @yq_v1
-    def test_simple_optional(self, kikimr, client):
-        self.init(client, "test_simple_optional")
+    def test_simple_optional(self, ydb_topics):
+        io = ydb_topics("test_simple_optional", shared=True)
+        create_input_consumer(io)
 
-        sql = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+        sql = CONSUMER_PRAGMA + Rf'''
+            INSERT INTO {io.output}
+            SELECT Cast(time as String) FROM {io.input}
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String));'''
 
-        query_id = start_yds_query(kikimr, client, sql)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        query_id = io.start(sql)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 1)
 
         data = ['{"time": 101, "data": "hello1", "event": "event1"}', '{"time": 102, "event": "event2"}']
 
-        self.write_stream(data)
+        io.write(data)
         expected = ['101', '102']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        assert io.read(len(expected), topic_path=io.output_topic) == expected
 
-        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
+        io.wait_actor_count("DQ_PQ_READ_ACTOR", 1)
 
-        stop_yds_query(client, query_id)
-        # Assert that all read rules were removed after query stops
-        read_rules = list_read_rules(self.input_topic)
-        assert len(read_rules) == 0, read_rules
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+        io.stop(query_id)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
     def test_scheme_error(self, kikimr, client):
         self.init(client, "test_scheme_error")
 
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
@@ -290,7 +286,7 @@ class TestPqRowDispatcher(TestYdsBase):
     def test_nested_types(self, kikimr, client):
         self.init(client, "test_nested_types")
 
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data Json NOT NULL, event String NOT NULL))
@@ -326,7 +322,7 @@ class TestPqRowDispatcher(TestYdsBase):
         self.init(client, "test_nested_structured_types")
 
         large_string = "abcdefghjkl1234567890+abcdefghjkl1234567890"
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(data))))
              FROM {YDS_CONNECTION}.`{self.input_topic}`
@@ -370,39 +366,45 @@ class TestPqRowDispatcher(TestYdsBase):
             "Incorrect Issues: " + issues
         )
 
-    @yq_v1
-    def test_nested_types_without_predicate(self, kikimr, client):
-        self.init(client, "test_nested_types_without_predicate")
+    def test_nested_types_without_predicate(self, ydb_topics):
+        io = ydb_topics('test_nested_types_without_predicate', shared=True)
+        create_input_consumer(io)
 
-        sql = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
+        sql = (
+            CONSUMER_PRAGMA
+            + Rf'''
+            INSERT INTO {io.output}
+            SELECT data FROM {io.input}
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data Json NOT NULL, event String NOT NULL));'''
+        )
 
-        query_id = start_yds_query(kikimr, client, sql)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        query_id = io.start(sql)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 1)
 
         data = [
             '{"time": 101, "data": {"key": "value"}, "event": "event1"}',
             '{"time": 102, "data": ["key1", "key2"], "event": "event2"}',
         ]
 
-        self.write_stream(data)
+        io.write(data)
         expected = ['{"key": "value"}', '["key1", "key2"]']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        assert io.read(len(expected), topic_path=io.output_topic) == expected
 
-        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
-        stop_yds_query(client, query_id)
+        io.wait_actor_count("DQ_PQ_READ_ACTOR", 1)
+        io.stop(query_id)
 
     @yq_v1
     def test_filters_non_optional_field(self, kikimr, client):
         self.init(client, "test_filters_non_optional_field")
 
-        sql = Rf'''
+        sql = (
+            CONSUMER_PRAGMA
+            + Rf'''
             PRAGMA AnsiLike;
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL, nested Json NOT NULL)) WHERE '''
+        )
         data = [
             '{"time": 101, "data": "hello1", "event": "event1", "nested": {"xyz": "key"}}',
             '{"time": 102, "data": "hello2", "event": "event2", "nested": ["abc", "key"]}',
@@ -548,11 +550,14 @@ class TestPqRowDispatcher(TestYdsBase):
     def test_filters_optional_field(self, kikimr, client):
         self.init(client, "test_filters_optional_field")
 
-        sql = Rf'''
+        sql = (
+            CONSUMER_PRAGMA
+            + Rf'''
             PRAGMA AnsiLike;
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String, flag Bool, field1 UInt8, field2 Int64, nested Json)) WHERE '''
+        )
         data = [
             '{"time": 101, "data": "hello1", "event": "event1", "flag": false, "field1": 5, "field2": 5, "nested": {"xyz": "key"}}',
             '{"time": 102, "data": "hello2", "event": "event2", "flag": true, "field1": 5, "field2": 1005, "nested": ["abc", "key"]}',
@@ -736,7 +741,7 @@ class TestPqRowDispatcher(TestYdsBase):
     def test_filter_missing_fields(self, kikimr, client):
         self.init(client, "test_filter_missing_fields")
 
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, `data@data` String, event String NOT NULL))
@@ -762,33 +767,33 @@ class TestPqRowDispatcher(TestYdsBase):
         issues = str(client.describe_query(query_id).result.query.transient_issue)
         assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
 
-    @yq_v1
-    def test_filter_use_unsupported_predicate(self, kikimr, client):
-        self.init(client, "test_filter_use_unsupported_predicate")
+    def test_filter_use_unsupported_predicate(self, ydb_topics):
+        io = ydb_topics('test_filter_use_unsupported_predicate', shared=True)
+        create_input_consumer(io)
 
-        sql = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+        sql = CONSUMER_PRAGMA + Rf'''
+            INSERT INTO {io.output}
+            SELECT Cast(time as String) FROM {io.input}
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL))
                 WHERE  event LIKE 'event2%';'''
 
-        query_id = start_yds_query(kikimr, client, sql)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        query_id = io.start(sql)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 1)
 
         data = [
             '{"time": 102, "data": "hello2", "event": "event2"}',
         ]
 
-        self.write_stream(data)
-        assert self.read_stream(1, topic_path=self.output_topic) == ['102']
-        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
-        stop_yds_query(client, query_id)
+        io.write(data)
+        assert io.read(1, topic_path=io.output_topic) == ['102']
+        io.wait_actor_count("DQ_PQ_READ_ACTOR", 1)
+        io.stop(query_id)
 
     @yq_v1
     def test_filter_with_mr(self, kikimr, client):
         self.init(client, "test_filter_with_mr")
 
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             pragma FeatureR010="prototype";
             pragma config.flags("TimeOrderRecoverDelay", "-10");
             pragma config.flags("TimeOrderRecoverAhead", "10");
@@ -834,91 +839,78 @@ class TestPqRowDispatcher(TestYdsBase):
         issues = str(client.describe_query(query_id).result.query.transient_issue)
         assert "Row dispatcher will use the predicate: (`event_class` =" in issues, "Incorrect Issues: " + issues
 
-    @yq_v1
-    def test_start_new_query(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_start_new_query", create_output=False)
+    def test_start_new_query(self, ydb_topics):
+        io = ydb_topics('test_start_new_query', shared=True)
+        create_input_consumer(io)
+        external = io.kikimr.external_ydb_client
+        output_topic1 = io.output_topic
+        output_topic2 = io.name + '_output2'
+        output_topic3 = io.name + '_output3'
+        extra_topics = [output_topic2, output_topic3]
+        try:
+            for topic in extra_topics:
+                external.query(f'CREATE TOPIC `{topic}`;')
+                external.query(f'ALTER TOPIC `{topic}` ADD CONSUMER `{io.consumer_name}`;')
 
-        output_topic1 = "pq_test_pq_read_write_output1"
-        output_topic2 = "pq_test_pq_read_write_output2"
-        output_topic3 = "pq_test_pq_read_write_output3"
-        create_stream(output_topic1, partitions_count=1)
-        create_read_rule(output_topic1, self.consumer_name)
+            sql1 = CONSUMER_PRAGMA + Rf'''
+                INSERT INTO `{io.name}`.`{output_topic1}`
+                SELECT Cast(time as String) FROM {io.input}
+                    WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+            sql2 = CONSUMER_PRAGMA + Rf'''
+                INSERT INTO `{io.name}`.`{output_topic2}`
+                SELECT Cast(time as String) FROM {io.input}
+                    WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+            query_id1 = io.start(sql1)
+            query_id2 = io.start(sql2)
+            io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 1)
 
-        create_stream(output_topic2, partitions_count=1)
-        create_read_rule(output_topic2, self.consumer_name)
+            data = [
+                '{"time": 101, "data": "hello1", "event": "event1"}',
+                '{"time": 102, "data": "hello2", "event": "event2"}',
+            ]
+            io.write(data)
+            expected = ['101', '102']
+            assert io.read(len(expected), topic_path=output_topic1) == expected
+            assert io.read(len(expected), topic_path=output_topic2) == expected
+            io.wait_actor_count('DQ_PQ_READ_ACTOR', 2)
+            assert not io.read(1, topic_path=output_topic1, timeout=1)
+            assert not io.read(1, topic_path=output_topic2, timeout=1)
 
-        create_stream(output_topic3, partitions_count=1)
-        create_read_rule(output_topic3, self.consumer_name)
+            sql3 = CONSUMER_PRAGMA + Rf'''
+                INSERT INTO `{io.name}`.`{output_topic3}`
+                SELECT event FROM {io.input}
+                    WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, event String NOT NULL));'''
+            query_id3 = io.start(sql3)
 
-        sql1 = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
-            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
-        sql2 = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{output_topic2}`
-            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
-        query_id1 = start_yds_query(kikimr, client, sql1)
-        query_id2 = start_yds_query(kikimr, client, sql2)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+            data = [
+                '{"time": 103, "data": "hello3", "event": "event3"}',
+                '{"time": 104, "data": "hello4", "event": "event4"}',
+            ]
+            io.write(data)
+            expected12 = ['103', '104']
+            expected3 = ['event3', 'event4']
+            assert io.read(len(expected12), topic_path=output_topic1) == expected12
+            assert io.read(len(expected12), topic_path=output_topic2) == expected12
+            assert io.read(len(expected3), topic_path=output_topic3) == expected3
+            io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 1)
+            for topic in [output_topic1, output_topic2, output_topic3]:
+                assert not io.read(1, topic_path=topic, timeout=1)
 
-        data = [
-            '{"time": 101, "data": "hello1", "event": "event1"}',
-            '{"time": 102, "data": "hello2", "event": "event2"}',
-        ]
-
-        self.write_stream(data)
-        expected = ['101', '102']
-        assert self.read_stream(len(expected), topic_path=output_topic1) == expected
-        assert self.read_stream(len(expected), topic_path=output_topic2) == expected
-
-        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 2)
-
-        # nothing unnecessary...
-        assert not read_stream(output_topic1, 1, True, self.consumer_name, timeout=1)
-        assert not read_stream(output_topic2, 1, True, self.consumer_name, timeout=1)
-
-        sql3 = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{output_topic3}`
-            SELECT event FROM {YDS_CONNECTION}.`{self.input_topic}`
-            WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, event String NOT NULL));'''
-        query_id3 = start_yds_query(kikimr, client, sql3)
-
-        data = [
-            '{"time": 103, "data": "hello3", "event": "event3"}',
-            '{"time": 104, "data": "hello4", "event": "event4"}',
-        ]
-
-        self.write_stream(data)
-        expected12 = ['103', '104']
-        expected3 = ['event3', 'event4']
-        assert self.read_stream(len(expected), topic_path=output_topic1) == expected12
-        assert self.read_stream(len(expected), topic_path=output_topic2) == expected12
-        assert self.read_stream(len(expected), topic_path=output_topic3) == expected3
-
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
-
-        assert not read_stream(output_topic1, 1, True, self.consumer_name, timeout=1)
-        assert not read_stream(output_topic2, 1, True, self.consumer_name, timeout=1)
-        assert not read_stream(output_topic3, 1, True, self.consumer_name, timeout=1)
-
-        stop_yds_query(client, query_id1)
-        stop_yds_query(client, query_id2)
-        stop_yds_query(client, query_id3)
-
-        # Assert that all read rules were removed after query stops
-        read_rules = list_read_rules(self.input_topic)
-        assert len(read_rules) == 0, read_rules
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+            io.stop(query_id1)
+            io.stop(query_id2)
+            io.stop(query_id3)
+            io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 0)
+        finally:
+            for query in reversed(io.queries):
+                io.kikimr.ydb_client.query(f'DROP STREAMING QUERY IF EXISTS `{query}`;')
+            for topic in extra_topics:
+                external.query(f'DROP TOPIC IF EXISTS `{topic}`;')
 
     @yq_v1
     def test_stop_start(self, kikimr, client):
         self.init(client, "test_stop_start", 10)
 
-        sql1 = Rf'''
+        sql1 = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
@@ -959,7 +951,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @yq_v1
     def test_stop_start2(self, kikimr, client):
         self.init(client, "test_stop_start")
-        sql1 = Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+        sql1 = CONSUMER_PRAGMA + Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
                     SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                         WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
         query_id1 = start_yds_query(kikimr, client, sql1)
@@ -1024,7 +1016,7 @@ class TestPqRowDispatcher(TestYdsBase):
     def test_stop_start_with_filter(self, kikimr, client):
         self.init(client, "test_stop_start_with_filter")
 
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL))
@@ -1044,7 +1036,7 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL));'''
@@ -1067,94 +1059,78 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
-    @yq_v1
-    def test_restart_compute_node(self, kikimr, client):
-        self.init(client, "test_restart_compute_node", partitions=4)
+    @pytest.mark.parametrize('ydb_cluster', [{'compute_nodes': 3}], indirect=True)
+    def test_restart_compute_node(self, ydb_topics):
+        io = ydb_topics('test_restart_compute_node', shared=True, partitions=4)
+        create_input_consumer(io)
+        node_ids = sorted(io.kikimr.cluster.slots)
 
-        sql = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+        sql = CONSUMER_PRAGMA + Rf'''
+            INSERT INTO {io.output}
+            SELECT Cast(time as String) FROM {io.input}
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
 
-        query_id = start_yds_query(kikimr, client, sql)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 4)
+        query_id = io.start(sql)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 4)
 
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(100, 102)], "partition_key1")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(102, 104)], "partition_key2")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(104, 106)], "partition_key3")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(106, 108)], "partition_key4")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(100, 102)], partition_key="partition_key1")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(102, 104)], partition_key="partition_key2")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(104, 106)], partition_key="partition_key3")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(106, 108)], partition_key="partition_key4")
 
         expected = [Rf'''{c}''' for c in range(100, 108)]
-        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
+        assert sorted(io.read(len(expected), topic_path=io.output_topic)) == expected
 
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
-        )
+        io.checkpoint(query_id, count=3)
 
         node_index = 2
         logging.debug("Restart compute node {}".format(node_index))
-        kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
-        kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
-        kikimr.compute_plane.wait_bootstrap(node_index)
+        io.restart_node(io.kikimr, node_ids[node_index - 1])
 
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
-        )
+        io.checkpoint(query_id, count=3)
 
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(108, 110)], "partition_key1")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(110, 112)], "partition_key2")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(112, 114)], "partition_key3")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(114, 116)], "partition_key4")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(108, 110)], partition_key="partition_key1")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(110, 112)], partition_key="partition_key2")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(112, 114)], partition_key="partition_key3")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(114, 116)], partition_key="partition_key4")
 
         expected = [Rf'''{c}''' for c in range(108, 116)]
-        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
+        assert sorted(io.read(len(expected), topic_path=io.output_topic)) == expected
 
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
-        )
+        io.checkpoint(query_id, count=3)
 
         node_index = 1
         logging.debug("Restart compute node {}".format(node_index))
-        kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
-        kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
-        kikimr.compute_plane.wait_bootstrap(node_index)
+        io.restart_node(io.kikimr, node_ids[node_index - 1])
 
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
-        )
+        io.checkpoint(query_id, count=3)
 
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(116, 118)], "partition_key1")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(118, 120)], "partition_key2")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(120, 122)], "partition_key3")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(122, 124)], "partition_key4")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(116, 118)], partition_key="partition_key1")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(118, 120)], partition_key="partition_key2")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(120, 122)], partition_key="partition_key3")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(122, 124)], partition_key="partition_key4")
 
         expected = [Rf'''{c}''' for c in range(116, 124)]
-        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
+        assert sorted(io.read(len(expected), topic_path=io.output_topic)) == expected
 
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
-        )
+        io.checkpoint(query_id, count=3)
 
         node_index = 3
         logging.debug("Restart compute node {}".format(node_index))
-        kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
-        kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
-        kikimr.compute_plane.wait_bootstrap(node_index)
+        io.restart_node(io.kikimr, node_ids[node_index - 1])
 
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
-        )
+        io.checkpoint(query_id, count=3)
 
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(124, 126)], "partition_key1")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(126, 128)], "partition_key2")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(128, 130)], "partition_key3")
-        write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(130, 132)], "partition_key4")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(124, 126)], partition_key="partition_key1")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(126, 128)], partition_key="partition_key2")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(128, 130)], partition_key="partition_key3")
+        io.write([Rf'''{{"time": {c}}}''' for c in range(130, 132)], partition_key="partition_key4")
 
         expected = [Rf'''{c}''' for c in range(124, 132)]
-        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
+        assert sorted(io.read(len(expected), topic_path=io.output_topic)) == expected
 
-        stop_yds_query(client, query_id)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+        io.stop(query_id)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
     def test_3_sessions(self, kikimr, client):
@@ -1162,6 +1138,7 @@ class TestPqRowDispatcher(TestYdsBase):
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics("test_3_session", create_output=False)
+        create_read_rule(self.input_topic, ROW_DISPATCHER_CONSUMER)
 
         output_topic1 = "test_3_session1"
         output_topic2 = "test_3_session2"
@@ -1175,16 +1152,16 @@ class TestPqRowDispatcher(TestYdsBase):
         create_stream(output_topic3, partitions_count=1)
         create_read_rule(output_topic3, self.consumer_name)
 
-        sql1 = Rf'''
+        sql1 = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
             SELECT Unwrap(Json::SerializeJson(Yson::From(TableRow()))) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
-        sql2 = Rf'''
+        sql2 = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic2}`
             SELECT Unwrap(Json::SerializeJson(Yson::From(TableRow()))) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
 
-        sql3 = Rf'''
+        sql3 = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic3}`
             SELECT Unwrap(Json::SerializeJson(Yson::From(TableRow()))) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
@@ -1240,49 +1217,56 @@ class TestPqRowDispatcher(TestYdsBase):
 
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
-    @yq_v1
-    def test_many_partitions(self, kikimr, client):
-        self.init(client, "test_many_partitions", partitions=4)
+    def test_many_partitions(self, ydb_topics):
+        io = ydb_topics('test_many_partitions', shared=True, partitions=4)
+        create_input_consumer(io)
 
-        sql = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+        sql = CONSUMER_PRAGMA + Rf'''
+            INSERT INTO {io.output}
+            SELECT Cast(time as String) FROM {io.input}
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
 
-        query_id = start_yds_query(kikimr, client, sql)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 4)
+        query_id = io.start(sql)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 4)
 
         input_messages1 = [Rf'''{{"time": {c}}}''' for c in range(100, 110)]
-        write_stream(self.input_topic, input_messages1, "partition_key1")
+        io.write(input_messages1, partition_key="partition_key1")
 
         input_messages2 = [Rf'''{{"time": {c}}}''' for c in range(110, 120)]
-        write_stream(self.input_topic, input_messages2, "partition_key2")
+        io.write(input_messages2, partition_key="partition_key2")
 
         input_messages3 = [Rf'''{{"time": {c}}}''' for c in range(120, 130)]
-        write_stream(self.input_topic, input_messages3, "partition_key3")
+        io.write(input_messages3, partition_key="partition_key3")
 
         input_messages4 = [Rf'''{{"time": {c}}}''' for c in range(130, 140)]
-        write_stream(self.input_topic, input_messages4, "partition_key4")
+        io.write(input_messages4, partition_key="partition_key4")
 
         expected = [Rf'''{c}''' for c in range(100, 140)]
-        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == expected
+        assert sorted(io.read(len(expected), topic_path=io.output_topic)) == expected
 
-        stop_yds_query(client, query_id)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+        io.stop(query_id)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
     def test_2_connection(self, kikimr, client):
         client.create_yds_connection("name1", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
         client.create_yds_connection("name2", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
         self.init_topics("test_2_connection", partitions_count=2)
-        create_read_rule(self.input_topic, "best")
+        create_read_rule(self.input_topic, ROW_DISPATCHER_CONSUMER + '_1')
+        create_read_rule(self.input_topic, ROW_DISPATCHER_CONSUMER + '_2')
 
-        sql1 = Rf'''
+        sql1 = (
+            f'PRAGMA pq.Consumer="{ROW_DISPATCHER_CONSUMER}_1";\n'
+            + Rf'''
             INSERT INTO `name1`.`{self.output_topic}`
             SELECT Cast(time as String) FROM `name1`.`{self.input_topic}` WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
-        sql2 = Rf'''
+        )
+        sql2 = (
+            f'PRAGMA pq.Consumer="{ROW_DISPATCHER_CONSUMER}_2";\n'
+            + Rf'''
             INSERT INTO `name2`.`{self.output_topic}`
             SELECT Cast(time as String) FROM `name2`.`{self.input_topic}` WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+        )
         query_id1 = start_yds_query(kikimr, client, sql1)
         query_id2 = start_yds_query(kikimr, client, sql2)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 4)
@@ -1306,7 +1290,7 @@ class TestPqRowDispatcher(TestYdsBase):
     def test_sensors(self, kikimr, client):
         self.init(client, "test_sensors")
 
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
@@ -1344,7 +1328,7 @@ class TestPqRowDispatcher(TestYdsBase):
     def test_group_by_hop_restart_query(self, kikimr, client):
         self.init(client, "test_group_by_hop_restart")
 
-        sql1 = Rf'''
+        sql1 = CONSUMER_PRAGMA + Rf'''
             $data = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time String NOT NULL, project String NOT NULL));
             $hop_data = SELECT
@@ -1403,12 +1387,12 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
-    @yq_v1
-    def test_group_by_hop_restart_node(self, kikimr, client):
-        self.init(client, "test_group_by_hop_restart_node")
+    def test_group_by_hop_restart_node(self, ydb_topics):
+        io = ydb_topics('test_group_by_hop_restart_node', shared=True)
+        create_input_consumer(io)
 
-        sql1 = Rf'''
-            $data = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
+        sql1 = CONSUMER_PRAGMA + Rf'''
+            $data = SELECT * FROM {io.input}
                 WITH (format=json_each_row, SCHEMA (time String NOT NULL, project String NOT NULL));
             $hop_data = SELECT
                     project,
@@ -1417,11 +1401,11 @@ class TestPqRowDispatcher(TestYdsBase):
                 FROM $data
                 GROUP BY
                     HOP(CAST(time as TimeStamp), "PT10S", "PT10S", "PT0S"), project;
-            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            INSERT INTO {io.output}
             SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $hop_data;'''
 
-        query_id = start_yds_query(kikimr, client, sql1)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        query_id = io.start(sql1)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 1)
 
         data = [
             '{"time": "2025-04-23T09:00:00.000000Z", "project": "project1"}',
@@ -1430,20 +1414,22 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": "2025-04-23T09:00:15.000000Z", "project": "project1"}',
             '{"time": "2025-04-23T09:00:16.000000Z", "project": "project2"}',
         ]
-        self.write_stream(data)
+        io.write(data)
         expected = [
             '{"count":2,"project":"project1","time":"2025-04-23T09:00:10Z"}',
             '{"count":1,"project":"project2","time":"2025-04-23T09:00:10Z"}',
         ]
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        assert io.read(len(expected), topic_path=io.output_topic) == expected
 
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
+        io.checkpoint(query_id, count=3)
+
+        node_id = next(
+            node_id
+            for node_id in io.kikimr.cluster.slots
+            if io.get_actor_count(io.kikimr, node_id, 'DQ_PQ_READ_ACTOR') > 0
         )
-
-        node_index = 1
-        logging.debug("Restart compute node {}".format(node_index))
-        kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
+        node = io.kikimr.cluster.slots[node_id]
+        node.stop()
 
         data = [
             '{"time": "2025-04-23T09:00:17.000000Z", "project": "project1"}',
@@ -1451,25 +1437,27 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": "2025-04-23T09:00:21.000000Z", "project": "project1"}',
             '{"time": "2025-04-23T09:00:25.000000Z", "project": "project2"}',
         ]
-        self.write_stream(data)
-
-        kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
-        kikimr.compute_plane.wait_bootstrap(node_index)
+        try:
+            io.write(data)
+        finally:
+            node.set_log_file_prefix('logfile_restarted_')
+            node.start()
+        io.checkpoint(query_id, count=3)
 
         expected = [
             '{"count":2,"project":"project1","time":"2025-04-23T09:00:20Z"}',
             '{"count":2,"project":"project2","time":"2025-04-23T09:00:20Z"}',
         ]
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        assert io.read(len(expected), topic_path=io.output_topic) == expected
 
-        stop_yds_query(client, query_id)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+        io.stop(query_id)
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
     def test_huge_messages(self, kikimr, client):
         self.init(client, "test_huge")
 
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             $data = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, sql String NOT NULL, event String NOT NULL))
                 WHERE event = "event1" or event = "event2";
@@ -1524,6 +1512,7 @@ class TestPqRowDispatcher(TestYdsBase):
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
         self.init_topics(f"test_json_errors_{use_binding}", create_input=True, create_output=True, partitions_count=1)
+        create_read_rule(self.input_topic, ROW_DISPATCHER_CONSUMER)
 
         time_type = ydb_value.Column(name="time", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.INT32))
         data_type = ydb_value.Column(name="data", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.STRING))
@@ -1545,14 +1534,17 @@ class TestPqRowDispatcher(TestYdsBase):
             )
 
         if use_binding:
-            sql = Rf'''
+            sql = CONSUMER_PRAGMA + Rf'''
                 INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
                 SELECT data || COALESCE(cast(null_field as String), "_null") FROM bindings.`my_binding`;'''
         else:
-            sql = Rf'''
+            sql = (
+                CONSUMER_PRAGMA
+                + Rf'''
                 INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
                 SELECT data || COALESCE(cast(null_field as String), "_null") FROM {YDS_CONNECTION}.`{self.input_topic}`
                     WITH (format=json_each_row, `skip.json.errors` = "true", SCHEMA (time Int32 NOT NULL, data String NOT NULL, null_field String));'''
+            )
 
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
@@ -1603,7 +1595,7 @@ class TestPqRowDispatcher(TestYdsBase):
     def test_delete_topic(self, kikimr, client):
         self.init(client, "test_delete_topic")
 
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
@@ -1627,6 +1619,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         delete_stream(self.input_topic)
         create_stream(self.input_topic)
+        create_read_rule(self.input_topic, ROW_DISPATCHER_CONSUMER)
 
         client.modify_query(
             query_id,
@@ -1658,7 +1651,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         single_node = R'''PRAGMA dq.Scheduler=@@{{"type": "single_node"}}@@;'''
 
-        sql = Rf'''
+        sql = CONSUMER_PRAGMA + Rf'''
             {single_node if single_node else ""}
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
@@ -1688,9 +1681,9 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", partitions_count)
 
-    @yq_v1
-    def test_big_text_query_size(self, kikimr, client):
-        self.init(client, "test_big_text_query_size")
+    def test_big_text_query_size(self, ydb_topics):
+        io = ydb_topics('test_big_text_query_size', shared=True)
+        create_input_consumer(io)
 
         text_size = 1000000
         element_size = 100
@@ -1701,17 +1694,17 @@ class TestPqRowDispatcher(TestYdsBase):
             ]
         )
 
-        sql = Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-                    SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
+        sql = CONSUMER_PRAGMA + Rf'''INSERT INTO {io.output}
+                    SELECT * FROM {io.input}
                     WITH (format=json_each_row, SCHEMA (data String NOT NULL))
                     WHERE data = "100" OR {filter};'''
 
         logging.debug(f"query text size: {str(len(sql))}")
-        query_id = start_yds_query(kikimr, client, sql, timeout=300)
+        query_id = io.start(sql, timeout=300)
         data = ['{"data": "100"}', '{"data": "101"}']
         expected = ["100"]
 
-        self.write_stream(data)
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
-        stop_yds_query(client, query_id)
+        io.write(data)
+        assert io.read(len(expected), topic_path=io.output_topic) == expected
+        io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 1)
+        io.stop(query_id)

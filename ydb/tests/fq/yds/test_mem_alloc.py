@@ -3,77 +3,73 @@
 
 import json
 import logging
-import os
-import pytest
-import time
 
-from ydb.tests.library.common.helpers import plain_or_under_sanitizer
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-
-from ydb.tests.tools.datastreams_helpers.control_plane import create_stream
-from ydb.tests.tools.datastreams_helpers.data_plane import write_stream
-
-import ydb.public.api.protos.draft.fq_pb2 as fq
+from ydb.tests.fq.streaming_common.common import StreamingTestBase
+from ydb.tests.library.common.wait_for import wait_for
 
 
-class TestMemAlloc(TestYdsBase):
-    @yq_v1
-    @pytest.mark.skip("This test is not ready yet")
-    def test_join_alloc(self, kikimr, client):
+class TestMemAlloc(StreamingTestBase):
+    def test_join_alloc(self, ydb_topics):
+        first = ydb_topics('select_join_alloc')
+        second = ydb_topics('select_join_alloc_right')
+        client = first.kikimr.ydb_client
+        query = first.kikimr.get_database_name() + '/' + first.name + '_query'
+        first.queries.append(query)
+        messages = ['A', 'B', 'C']
+        first.write(messages)
+        second.write(messages)
 
-        self.init_topics("select_join_alloc", create_output=False)
-        create_stream("joined_topic")
+        try:
+            client.query(f"""
+                CREATE STREAMING QUERY `{query}` WITH (
+                    STREAMING_DISPOSITION = OLDEST, CHECKPOINT_INTERVAL = 'PT1S'
+                ) AS DO BEGIN
+                    PRAGMA ydb.OptValidateStreamingCheckpoints = 'FALSE';
+                    $joined = (
+                        SELECT S1.Data AS Data1, S2.Data AS Data2,
+                            ListReplicate(S2.Data, 1000000) AS Data20
+                        FROM {first.input} AS S1
+                        INNER JOIN (SELECT * FROM {second.input} LIMIT 2) AS S2
+                        ON S1.Data = S2.Data
+                        LIMIT 2
+                    );
+                    -- Serialize the full list to exercise allocations, then send
+                    -- a compact summary that fits in a topic message.
+                    $summary = (
+                        SELECT Data1, Data2,
+                            Length(Unwrap(Yson::SerializeJson(Yson::From(Data20)))) AS ReplicatedBytes
+                        FROM $joined
+                    );
+                    INSERT INTO {first.output}
+                    SELECT Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) FROM $summary;
+                END DO;
+            """)
+            assert wait_for(
+                lambda: first.state(query)['Status'] == 'COMPLETED',
+                timeout_seconds=120,
+                step_seconds=0.5,
+            ), first.state(query)
 
-        sql = R'''
-            SELECT S1.Data as Data1, S2.Data as Data2, ListReplicate(S2.Data, 1000000) as Data20
-            FROM myyds.`{input_topic}` AS S1
-            INNER JOIN (SELECT * FROM myyds.`{joined_topic}` LIMIT 2) AS S2
-            ON S1.Data = S2.Data
-            LIMIT 2
-            '''.format(input_topic=self.input_topic, joined_topic="joined_topic")
+            rows = sorted((json.loads(message) for message in first.read(2)), key=lambda row: row['Data1'])
+            assert rows == [
+                {'Data1': 'A', 'Data2': 'A', 'ReplicatedBytes': 4000001},
+                {'Data1': 'B', 'Data2': 'B', 'ReplicatedBytes': 4000001},
+            ], rows
 
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+            result = client.query(f"""
+                SELECT Plan FROM `.sys/streaming_queries` WHERE Path = '{query}';
+            """)[0].rows
+            plan = json.loads(result[0]['Plan'])
 
-        time.sleep(2)  # Workaround race between write and read "from now". Remove when YQ-589 will be done.
-        messages = ["A", "B", "C"]
-        self.write_stream(messages)
-        write_stream("joined_topic", messages)
+            def stage_memory(node):
+                memory = node.get('Stats', {}).get('MaxMemoryUsage', {}).get('Max', 0)
+                if memory:
+                    yield memory
+                for child in node.get('Plans', []):
+                    yield from stage_memory(child)
 
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-
-        logging.debug(client.get_result_data(query_id))
-        st = json.loads(client.describe_query(query_id).result.query.statistics.json)
-        logging.debug(st["Graph=1"]["TaskRunner"]["Stage=Total"]["MkqlMaxMemoryUsage"]["count"])
-
-    @yq_v1
-    @pytest.mark.skip("This test is not ready yet")
-    def test_hop_alloc(self, kikimr, client):
-
-        self.init_topics("select_hop_alloc", create_output=False)
-
-        sql = R'''
-            --SELECT COUNT(*)
-            --FROM myyds.`{input_topic}`
-            --GROUP BY HOP(Just(CurrentUtcTimestamp()), "PT10S", "PT10S", "PT10S"), Data
-            --LIMIT 1
-            SELECT 1
-            '''.format(
-            input_topic=self.input_topic,
-        )
-
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-
-        time.sleep(2)  # Workaround race between write and read "from now". Remove when YQ-589 will be done.
-        for i in range(1):
-            self.write_stream([format(i, "0x")])
-        time.sleep(plain_or_under_sanitizer(15, 60))
-
-        client.abort_query(query_id)
-        client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
-
-        logging.debug(client.get_result_data(query_id))
-        st = json.loads(client.describe_query(query_id).result.query.statistics.json)
-        logging.debug(st["Graph=1"]["TaskRunner"]["Stage=Total"]["MkqlMaxMemoryUsage"]["count"])
+            memory = list(stage_memory(plan['Plan']))
+            assert memory, plan
+            logging.debug('Join peak stage memory usage: %s bytes', max(memory))
+        finally:
+            client.query(f'DROP STREAMING QUERY IF EXISTS `{query}`;')

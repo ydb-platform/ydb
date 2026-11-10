@@ -11,6 +11,7 @@ import random
 import yatest
 
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
+from ydb.tests.fq.streaming_common.common import get_checkpoint_coordinator_metric
 from ydb.tests.library.harness import param_constants
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
@@ -20,8 +21,6 @@ from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
-
-import library.python.retry as retry
 
 
 def run_with_sleep(args):
@@ -46,280 +45,75 @@ def kikimr():
 
 
 class TestRecovery(TestYdsBase):
-    @classmethod
-    def setup_class(cls):
-        # for retry
-        cls.retry_conf = retry.RetryConf().upto(seconds=30).waiting(0.1)
 
-    @retry.retry_intrusive
-    def get_graph_master_node_id(self, query_id):
-        for node_index in self.kikimr.compute_plane.kikimr_cluster.nodes:
-            if self.kikimr.compute_plane.get_task_count(node_index, query_id) > 0:
-                return node_index
-        assert False, "No active graphs found"
+    def test_delete(self, ydb_topics):
+        io = ydb_topics('recovery_delete', partitions=2)
+        query = io.start(f"""
+            PRAGMA ydb.MaxTasksPerStage = '2';
+            INSERT INTO {io.output} SELECT Data FROM {io.input};
+        """)
+        assert io.state(query)['Status'] == 'RUNNING', io.state(query)
+        io.stop(query)
+        assert io.state(query)['Status'] == 'STOPPED', io.state(query)
 
-    def dump_workers(self, worker_count, ca_count, wait_time=plain_or_under_sanitizer(30, 150)):
-        deadline = time.time() + wait_time
-        while True:
-            wcs = 0
-            ccs = 0
-            list = []
-            for node_index in self.kikimr.compute_plane.kikimr_cluster.nodes:
-                wc = self.kikimr.compute_plane.get_worker_count(node_index)
-                cc = self.kikimr.compute_plane.get_ca_count(node_index)
-                wcs += wc
-                ccs += cc
-                list.append([node_index, wc, cc])
-            if wcs == worker_count and ccs == ca_count:
-                for [s, w, c] in list:
-                    if w * 2 != c:
-                        continue
-                for [s, w, c] in list:
-                    logging.debug("Node {}, workers {}, ca {}".format(s, w, c))
-                return
-            if time.time() > deadline:
-                for [s, w, c] in list:
-                    logging.debug("Node {}, workers {}, ca {}".format(s, w, c))
-                assert False, "Workers={} and CAs={}, but {} and {} expected".format(wcs, ccs, worker_count, ca_count)
-
-    @yq_v1
-    def test_delete(self, client, kikimr):
-        kikimr.control_plane.wait_bootstrap()
-        kikimr.compute_plane.wait_bootstrap()
-
-        self.kikimr = kikimr
-        self.init_topics("recovery", partitions_count=2)
-
-        #  Consumer and topics to create are written in ya.make file.
-        sql = R'''
-            PRAGMA dq.MaxTasksPerStage="2";
-
-            INSERT INTO myyds.`{output_topic}`
-            SELECT STREAM
-                *
-            FROM myyds.`{input_topic}`;'''.format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
-        )
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        logging.debug("Uuid = {}".format(kikimr.uuid))
-
-        self.dump_workers(2, 4)
-
-        client.abort_query(query_id)
-        client.wait_query(query_id)
-
-        self.dump_workers(0, 0)
-
-    @yq_v1
-    def test_program_state_recovery(self, client, kikimr):
-        # 100  105   110   115   120   125   130   135   140   (ms)
-        #  [ Bucket1  )           |(emited)
-        #             [  Bucket2  )           |(emited)
-        #                   .<------------------------------------- restart
-        #                         [  Bucket3  )           |(emited)
-        kikimr.control_plane.wait_bootstrap()
-        kikimr.compute_plane.wait_bootstrap()
-        kikimr.compute_plane.wait_discovery()
-
-        self.kikimr = kikimr
-        self.init_topics("program_state_recovery", partitions_count=1)
-
-        #  Consumer and topics to create are written in ya.make file.
-        sql = f'''
-            PRAGMA dq.MaxTasksPerStage="1";
-            INSERT INTO myyds.`{self.output_topic}`
-            SELECT STREAM
-                Yson::SerializeText(Yson::From(TableRow()))
+    def test_program_state_recovery(self, ydb_topics):
+        # Keep the original windows and input split: the second window must
+        # combine values saved before the restart with values arriving after it.
+        io = ydb_topics('program_state_recovery')
+        query = io.start(f'''
+            PRAGMA ydb.MaxTasksPerStage="1";
+            INSERT INTO {io.output}
+            SELECT Yson::SerializeText(Yson::From(TableRow()))
             FROM (
-                SELECT STREAM
-                    Sum(t) as sum
+                SELECT Sum(t) as sum
                 FROM (
-                    SELECT STREAM
-                        Yson::LookupUint64(ys, "time") as t
+                    SELECT Yson::LookupUint64(ys, "time") as t
                     FROM (
-                        SELECT STREAM
-                            Yson::Parse(Data) AS ys
-                        FROM myyds.`{self.input_topic}`))
+                        SELECT Yson::Parse(Data) AS ys
+                        FROM {io.input}))
                 GROUP BY
-                    HOP(DateTime::FromMilliseconds(CAST(Unwrap(t) as Uint32)), "PT0.01S", "PT0.01S", "PT0.01S"));'''
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+                    HOP(DateTime::FromMilliseconds(CAST(Unwrap(t) as Uint32)), "PT0.01S", "PT0.01S", "PT0.01S"));
+        ''')
+        io.write([f'{{"time" = {i};}}' for i in range(100, 115, 2)])
+        io.checkpoint(query, count=3)
+        io.restart_compute_node()
+        io.checkpoint(query, count=3)
+        io.write([f'{{"time" = {i};}}' for i in range(116, 144, 2)])
 
-        query_id = client.create_query(
-            "test_program_state_recovery", sql, type=fq.QueryContent.QueryType.STREAMING
-        ).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        logging.debug("Uuid = {}".format(kikimr.uuid))
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
-
-        master_node_index = self.get_graph_master_node_id(query_id)
-        logging.debug("Master node {}".format(master_node_index))
-
-        self.write_stream([f'{{"time" = {i};}}' for i in range(100, 115, 2)])
-
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
-
-        # restart node with CA
-        node_to_restart = None
-        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            wc = kikimr.compute_plane.get_worker_count(node_index)
-            if wc is not None:
-                if wc > 0 and node_index != master_node_index and node_to_restart is None:
-                    node_to_restart = node_index
-        assert node_to_restart is not None, "Can't find any task on non master node"
-
-        logging.debug("Restart non-master node {}".format(node_to_restart))
-
-        kikimr.compute_plane.kikimr_cluster.nodes[node_to_restart].stop()
-        kikimr.compute_plane.kikimr_cluster.nodes[node_to_restart].start()
-        kikimr.compute_plane.wait_bootstrap(node_to_restart)
-
-        self.write_stream([f'{{"time" = {i};}}' for i in range(116, 144, 2)])
-
-        # wait aggregated
         expected = [
             '{"sum" = 520u}',
             '{"sum" = 570u}',
             '{"sum" = 620u}',
         ]
-        received = self.read_stream(3)
-        assert received == expected
+        assert io.read(3) == expected
+        assert get_checkpoint_coordinator_metric(io.kikimr.cluster, query, 'RestoredFromSavedCheckpoint') >= 1
+        io.stop(query)
 
-        client.abort_query(query_id)
-        client.wait_query(query_id)
+    def test_recovery(self, ydb_topics):
+        io = ydb_topics('recovery', partitions=2)
+        query = io.start(f"""
+            PRAGMA ydb.MaxTasksPerStage = '2';
+            INSERT INTO {io.output} SELECT Data FROM {io.input};
+        """)
+        seen = set()
+        for batch in range(3):
+            if batch:
+                # Re-evaluate placement before each of the two restarts.
+                io.restart_compute_node()
+                io.checkpoint(query, count=3)
+            expected = list(range(batch * 10 + 1, batch * 10 + 11))
+            io.write([str(value) for value in expected])
+            received = [int(value) for value in io.read(len(expected))]
+            assert sorted(received) == expected, received
+            seen.update(received)
+            assert len(seen) == (batch + 1) * 10, seen
+            io.checkpoint(query, count=3)
 
-        self.dump_workers(0, 0)
-
-    @yq_v1
-    # @pytest.mark.parametrize(
-    #     "restart_master",
-    #     [False, True],
-    #     ids=["not_master", "master"]
-    # )
-    def test_recovery(self, client, kikimr):
-        kikimr.control_plane.wait_bootstrap()
-        kikimr.compute_plane.wait_bootstrap()
-        kikimr.compute_plane.wait_discovery()
-
-        self.init_topics("recovery", partitions_count=2)
-
-        self.kikimr = kikimr
-
-        #  Consumer and topics to create are written in ya.make file.
-        sql = R'''
-            PRAGMA dq.MaxTasksPerStage="2";
-
-            INSERT INTO myyds.`{output_topic}`
-            SELECT STREAM
-                *
-            FROM myyds.`{input_topic}`;'''.format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
-        )
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
-
-        logging.debug("Uuid = {}".format(kikimr.uuid))
-        master_node_index = self.get_graph_master_node_id(query_id)
-        logging.debug("Master node {}".format(master_node_index))
-
-        self.write_stream([str(i) for i in range(1, 11)])
-
-        d = {}
-
-        read_data = self.read_stream(10)
-        assert len(read_data) == 10
-        for m in read_data:
-            n = int(m)
-            assert n >= 1 and n <= 10
-            assert n not in d
-            d[n] = 1
-
-        self.dump_workers(2, 4)
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
-
-        node_to_restart = None
-        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            wc = kikimr.compute_plane.get_worker_count(node_index)
-            if wc is not None:
-                if wc > 0 and node_index != master_node_index and node_to_restart is None:
-                    node_to_restart = node_index
-        assert node_to_restart is not None, "Can't find any task on non master node"
-
-        logging.debug("Restart non-master node {}".format(node_to_restart))
-
-        kikimr.compute_plane.kikimr_cluster.nodes[node_to_restart].stop()
-        kikimr.compute_plane.kikimr_cluster.nodes[node_to_restart].start()
-        kikimr.compute_plane.wait_bootstrap(node_to_restart)
-
-        self.dump_workers(2, 4)
-
-        self.write_stream([str(i) for i in range(11, 21)])
-
-        read_data = self.read_stream(10)
-        assert len(read_data) == 10
-        for m in read_data:
-            n = int(m)
-            assert n >= 1 and n <= 20
-            if n in d:
-                d[n] = d[n] + 1
-            else:
-                d[n] = 1
-
-        assert len(d) == 20
-
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
-
-        logging.debug("Restart Master node {}".format(master_node_index))
-
-        kikimr.compute_plane.kikimr_cluster.nodes[master_node_index].stop()
-        kikimr.compute_plane.kikimr_cluster.nodes[master_node_index].start()
-        kikimr.compute_plane.wait_bootstrap(master_node_index)
-
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
-        master_node_index = self.get_graph_master_node_id(query_id)
-
-        logging.debug("New master node {}".format(master_node_index))
-
-        self.dump_workers(2, 4)
-
-        self.write_stream([str(i) for i in range(21, 31)])
-
-        read_data = self.read_stream(10)
-        assert len(read_data) == 10
-        for m in read_data:
-            n = int(m)
-            assert n >= 1 and n <= 30
-            if n in d:
-                d[n] = d[n] + 1
-            else:
-                d[n] = 1
-        assert len(d) == 30
-
-        zero_checkpoints_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(
-            query_id, "StartedFromEmptyCheckpoint"
-        )
-        restored_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(
-            query_id, "RestoredFromSavedCheckpoint"
-        )
-        assert restored_metric >= 1, "RestoredFromSavedCheckpoint: {}, StartedFromEmptyCheckpoint: {}".format(
-            restored_metric, zero_checkpoints_metric
-        )
-
-        client.abort_query(query_id)
-        client.wait_query(query_id)
+        restored = get_checkpoint_coordinator_metric(io.kikimr.cluster, query, 'RestoredFromSavedCheckpoint')
+        started_empty = get_checkpoint_coordinator_metric(io.kikimr.cluster, query, 'StartedFromEmptyCheckpoint')
+        assert restored >= 1, (restored, started_empty)
+        assert io.state(query)['Status'] == 'RUNNING', io.state(query)
+        io.stop(query)
 
     def close_ic_session_args(self, node1, node2):
         s1 = self.kikimr.control_plane.kikimr_cluster.nodes[node1]

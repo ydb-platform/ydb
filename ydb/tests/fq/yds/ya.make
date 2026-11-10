@@ -9,6 +9,8 @@ SPLIT_FACTOR(50)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 PEERDIR(
+    ydb/public/sdk/python
+    ydb/tests/fq/streaming_common
     ydb/public/api/protos
     ydb/public/api/grpc
     ydb/tests/tools/datastreams_helpers
@@ -26,16 +28,12 @@ TEST_SRCS(
     test_bad_syntax.py
     test_big_state.py
     test_continue_mode.py
-    test_delete_read_rules_after_abort_by_system.py
     test_disposition.py
     test_eval.py
     test_invalid_consumer.py
-    test_kill_pq_bill.py
     test_mem_alloc.py
     test_metrics_cleanup.py
     test_pq_read_write.py
-    test_public_metrics.py
-    test_read_rules_deletion.py
     test_recovery.py
     test_recovery_match_recognize.py
     test_recovery_mz.py

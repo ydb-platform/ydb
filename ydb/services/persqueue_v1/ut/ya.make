@@ -34,11 +34,7 @@ SRCS(
     functions_executor_wrapper.cpp
     topic_service_ut.cpp
     topic_deferred_publish_ut.cpp
-<<<<<<< HEAD
-=======
-    persqueue_v1_gaps_ut.cpp
     read_session_multi_topic_ut.cpp
->>>>>>> 142ff557e91 (Match read session partitions by topic, not only by partition id (#57561))
     demo_tx.cpp
 
     partition_writer_cache_actor_ut.cpp

@@ -986,6 +986,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     Become(&TThis::StateBoot);
     Stats->IsActive = false;
     Stats->FollowerId = 0;
+    FollowerId = 0; // a follower promoted to leader, broker and scans owner must become the leader
 
     TEvTablet::TEvBoot *msg = ev->Get();
     Generation0 = msg->Generation;

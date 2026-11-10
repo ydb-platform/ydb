@@ -6611,7 +6611,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             TAutoPtr<IEventHandle> handle;
             runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
         }
-        UNIT_ASSERT(getUsage(tabletIds[0]));
+        usage = getUsage(tabletIds[0]);
+        UNIT_ASSERT_C(usage, "stale value was not accepted by hive");
+        UNIT_ASSERT_VALUES_EQUAL(usage->GetValue(), 3);
         for (int i = 0; i < 90 && usage; ++i) {
             runtime.SimulateSleep(TDuration::Seconds(1));
             usage = getUsage(tabletIds[0]);

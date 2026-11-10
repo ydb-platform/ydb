@@ -79,6 +79,16 @@ def test_rejects_oversized_output_schema():
         generate_header(source)
 
 
+def test_accepts_output_at_result_byte_limit():
+    source = manifest()
+    method = source['service_methods'][0]
+    # A 16-byte result header plus the 4-byte String length and 32748 bytes
+    # of data is exactly the 32768-byte service result limit.
+    method['output'] = [{'name': 'value', 'type': 'String', 'max_bytes': 32748}]
+    method['max_output_row_bytes'] = 32752
+    assert 'MethodEcho' in generate_header(source)
+
+
 def test_cli_outputs_only_header_and_preserves_manifest(tmp_path, monkeypatch):
     source = tmp_path / 'manifest.json'
     output = tmp_path / 'service_methods.h'
@@ -89,3 +99,17 @@ def test_cli_outputs_only_header_and_preserves_manifest(tmp_path, monkeypatch):
     assert source.read_text() == contents
     assert output.read_text() == generate_header(manifest())
     assert sorted(path.name for path in tmp_path.iterdir()) == ['manifest.json', 'service_methods.h']
+
+
+@pytest.mark.parametrize('direction,header_bytes', [('input', 32), ('output', 16)])
+@pytest.mark.parametrize('extra', [0, 1])
+def test_direction_specific_row_boundary(direction, header_bytes, extra):
+    source = manifest()
+    method = source['service_methods'][0]
+    method[direction] = [{'name': 'value', 'type': 'String', 'max_bytes': 32768 - header_bytes - 4 + extra}]
+    method['max_output_row_bytes'] = 32752
+    if extra:
+        with pytest.raises(ValueError, match='row exceeds byte limit'):
+            generate_header(source)
+    else:
+        assert 'MethodEcho' in generate_header(source)

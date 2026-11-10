@@ -27,7 +27,7 @@ ui32 Number(const NJson::TJsonValue& value, ui32 maximum) {
     return number;
 }
 
-TVector<TServiceField> Fields(const NJson::TJsonValue& json, ui32& minBytes, ui32& maxBytes) {
+TVector<TServiceField> Fields(const NJson::TJsonValue& json, ui32& minBytes, ui32& maxBytes, ui32 headerBytes) {
     const auto& array = json.GetArraySafe();
     Y_ENSURE(!array.empty() && array.size() <= 32, "Invalid WASM service field count");
     TVector<TServiceField> fields;
@@ -60,7 +60,7 @@ TVector<TServiceField> Fields(const NJson::TJsonValue& json, ui32& minBytes, ui3
         }
         minBytes += width;
         maxBytes += width + field.MaxBytes;
-        Y_ENSURE(maxBytes <= MaxServiceBatchBytes - sizeof(TServiceRequest), "WASM service row exceeds byte limit");
+        Y_ENSURE(maxBytes <= MaxServiceBatchBytes - headerBytes, "WASM service row exceeds byte limit");
         fields.push_back(std::move(field));
     }
     return fields;
@@ -91,9 +91,9 @@ TServiceManifest ParseServiceManifest(TStringBuf json) {
         method.Batch = item["batch"].GetBooleanSafe();
         method.MaxBatchRows = Number(item["max_batch_rows"], MaxServiceBatchRows);
         Y_ENSURE(method.MaxBatchRows && (method.Batch || method.MaxBatchRows == 1), "Invalid WASM service batch capability");
-        method.Input = Fields(item["input"], method.MinInputRowBytes, method.MaxInputRowBytes);
+        method.Input = Fields(item["input"], method.MinInputRowBytes, method.MaxInputRowBytes, sizeof(TServiceRequest));
         ui32 minOutput, maxOutput;
-        method.Output = Fields(item["output"], minOutput, maxOutput);
+        method.Output = Fields(item["output"], minOutput, maxOutput, sizeof(TServiceResult));
         method.MaxOutputRowBytes = Number(item["max_output_row_bytes"], MaxServiceBatchBytes - sizeof(TServiceResult));
         Y_ENSURE(method.MaxOutputRowBytes >= maxOutput, "WASM service output row reservation is too small");
         const auto name = method.Name;

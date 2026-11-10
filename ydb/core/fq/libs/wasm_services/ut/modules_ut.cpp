@@ -3,6 +3,71 @@
 using namespace NFq::NWasmServices::NTestHelpers;
 
 Y_UNIT_TEST_SUITE(TFqWasmModuleTest) {
+    Y_UNIT_TEST(ProfileBatchResponseMayExceedRowBufferLimit) {
+        using namespace NYdb::NWasm::NServices;
+        THttpMock http;
+        TGrpcMock grpc;
+        TLimits runtimeLimits;
+        runtimeLimits.CpuBudget = TDuration::Seconds(5);
+        TEnv env(Bindings(http, grpc), {}, "/fq_transport_coroutine.wasm", TestExecutor(), runtimeLimits);
+
+        TString escaped;
+        for (size_t i = 0; i < 100; ++i) {
+            escaped += "\\u0061";
+        }
+        const TString response = "[{\"id\":42,\"name\":\"" + escaped + "\",\"score\":97,\"version\":1}]";
+        UNIT_ASSERT(response.size() > 304);
+        size_t exchange = 0;
+
+        // Compare row budgets, then exercise the independent encoded-response
+        // limit and a successful call after rejecting an oversized response.
+        struct TCase {
+            ui32 MaxBytes;
+            size_t Padding;
+            bool Oversized;
+        };
+
+        for (const TCase test :
+            { TCase{ 32768, 0, false }, TCase{ 304, 0, false }, TCase{ 304, MaxProfileBatchResponseBytes - response.size(), false },
+                TCase{ 304, MaxProfileBatchResponseBytes - response.size() + 1, true }, TCase{ 304, 0, false } }) {
+            char arguments[64];
+            TRowWriter writer(arguments, sizeof(arguments));
+            UNIT_ASSERT(writer.Put(
+                TServiceRequest{ ServiceMagic, ServiceVersion, NGenerated::NModuleWASM_PROFILE::MethodProfile, 2, 0, 1, test.MaxBytes, 1 }));
+            UNIT_ASSERT(writer.Put(ui64(42)));
+            const auto call = env.Runtime->Start(TStringBuf(arguments, writer.Size()), TInstant::Now() + TDuration::Seconds(10));
+            UNIT_ASSERT(env.Runtime->Poll(call).Status == ECallStatus::Waiting);
+            const auto request = http.State->Wait(exchange);
+            UNIT_ASSERT(request->Method.StartsWith("POST /profile/batch "));
+            UNIT_ASSERT_VALUES_EQUAL(request->Payload, "{\"ids\":[42]}");
+            http.State->Reply(exchange++, response + TString(test.Padding, ' '), 200);
+
+            const auto result = env.AwaitTerminal(call);
+            UNIT_ASSERT(result.Status == ECallStatus::Completed);
+            TRowReader reader(View(result.Data));
+            TServiceResult reply;
+            UNIT_ASSERT(reader.Get(reply));
+            UNIT_ASSERT(!env.Runtime->IsPoisoned());
+            if (test.Oversized) {
+                UNIT_ASSERT_VALUES_EQUAL(reply.Error, static_cast<ui32>(EServiceError::Transport));
+                UNIT_ASSERT_VALUES_EQUAL(reply.Count, 0);
+                env.Clean(call);
+                continue;
+            }
+            UNIT_ASSERT_C(reply.Error == 0, "maxBytes=" << test.MaxBytes << ", service error=" << reply.Error);
+            UNIT_ASSERT_VALUES_EQUAL(reply.Count, 1);
+            ui64 id;
+            ui32 score;
+            std::string_view name;
+            UNIT_ASSERT(reader.Get(id) && reader.String(name, 256) && reader.Get(score));
+            UNIT_ASSERT_VALUES_EQUAL(id, 42);
+            UNIT_ASSERT_VALUES_EQUAL(TString(name.data(), name.size()), TString(100, 'a'));
+            UNIT_ASSERT_VALUES_EQUAL(score, 97);
+            UNIT_ASSERT(reader.Remaining().empty());
+            env.Clean(call);
+        }
+    }
+
     Y_UNIT_TEST(ProfileJsonStackHandlesLongStringsWithinResponseLimit) {
         using namespace NYdb::NWasm::NServices;
         THttpMock http;

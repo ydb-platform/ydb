@@ -6,6 +6,8 @@ from pathlib import Path
 
 SERVICE_VERSION = 2
 MAX_BYTES = 32768
+REQUEST_HEADER_BYTES = 32
+RESULT_HEADER_BYTES = 16
 WIDTHS = {'Uint64': 8, 'Uint32': 4, 'Int64': 8, 'Bool': 1, 'String': 4, 'Utf8': 4}
 
 
@@ -31,7 +33,7 @@ def number(value, maximum):
     return value
 
 
-def fields(items):
+def fields(items, header_bytes):
     require(isinstance(items, list) and 1 <= len(items) <= 32, 'Invalid service field count')
     seen = set()
     maximum = 0
@@ -46,7 +48,7 @@ def fields(items):
             limit = number(item['max_bytes'], MAX_BYTES)
             require(limit > 0, 'Service string limit must be positive')
             maximum += limit
-        require(maximum <= MAX_BYTES - 32, 'Service row exceeds byte limit')
+        require(maximum <= MAX_BYTES - header_bytes, 'Service row exceeds byte limit')
     return maximum
 
 
@@ -71,9 +73,9 @@ def generate_header(manifest):
         require(type(method['batch']) is bool, 'Invalid service batch capability')
         count = number(method['max_batch_rows'], 64)
         require(count > 0 and (method['batch'] or count == 1), 'Invalid service batch capability')
-        fields(method['input'])
-        output_size = fields(method['output'])
-        require(number(method['max_output_row_bytes'], MAX_BYTES - 16) >= output_size,
+        fields(method['input'], REQUEST_HEADER_BYTES)
+        output_size = fields(method['output'], RESULT_HEADER_BYTES)
+        require(number(method['max_output_row_bytes'], MAX_BYTES - RESULT_HEADER_BYTES) >= output_size,
                 'Service output row reservation is too small')
         constants.append(f'inline constexpr uint32_t Method{method_name} = {identifier}u;')
     return '\n'.join([

@@ -39,6 +39,9 @@ FQ reads it directly.
 
 JSON decoding reserves a parser scratch buffer bounded by the admitted response
 size plus one terminator byte. Oversized names and unknown keys return typed
-errors without corrupting the guest; batch responses remain capped at 32768 bytes.
+errors without corrupting the guest. Encoded batch responses are capped at
+32768 bytes independently of the caller's output-row buffer: JSON escaping and
+other wire overhead do not consume the row budget. Decoded results must still
+fit the caller's row buffer.
 
 The parser regression uses an explicit test CPU budget to cover the full 32 KiB memory boundary. Runtime CPU limits remain independent and unchanged.

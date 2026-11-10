@@ -276,9 +276,10 @@ void TWasmArtifactLoadActor::RegisterLoadedModule() {
             ReplyError("BuildWasmSoModule returned null");
             return;
         }
-        // A replacement may also remove the module's synchronous functions.
+        // A replacement may remove this WASM module's synchronous functions,
+        // but must preserve native/static registrations with the same name.
         if (auto* dynamicRegistry = NKqp::AsDynamicFunctionRegistry(FunctionRegistry_.Get())) {
-            dynamicRegistry->RemoveModule(Name_);
+            dynamicRegistry->RemoveModuleIfOwned(Name_, TStringBuilder() << "wasm:" << Name_);
         }
         if (module) {
             FunctionRegistry_->AddModule(TStringBuilder() << "wasm:" << Name_, Name_, std::move(module));

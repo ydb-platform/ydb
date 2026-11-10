@@ -374,7 +374,7 @@ struct TProfileBatchJsonHandler: TProfileJsonHandler {
 };
 
 EServiceError DecodeHttpBatch(std::string_view bytes, TProfileBatchResults& results) {
-    if (bytes.size() > MaxProfileBatchBytes) {
+    if (bytes.size() > MaxProfileBatchResponseBytes) {
         return EServiceError::Decode;
     }
     rapidjson::MemoryStream stream(bytes.data(), bytes.size());
@@ -489,7 +489,7 @@ TTask<TReply> RunBatch(TCallContext& context, const TArgumentsHeader* args) {
     const auto status = co_await operation.Wait(context);
     TReply reply{ status, {} };
     EServiceError error = EServiceError::Transport;
-    if (operation.Size() <= header.MaxBytes + sizeof(TResponseHeader)) {
+    if (operation.Size() <= MaxProfileBatchResponseBytes + sizeof(TResponseHeader)) {
         reply.Bytes = TBytes(operation.Size());
         operation.Read(reply.Bytes.Buffer.get(), reply.Bytes.Size);
         TResponseHeader response;

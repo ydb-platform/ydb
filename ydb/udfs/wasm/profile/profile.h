@@ -10,6 +10,8 @@ inline constexpr uint32_t MaxProfileNameBytes = 256;
 inline constexpr uint32_t MaxProfilePayloadBytes = 1024;
 inline constexpr uint32_t MaxProfileBatchRows = 64;
 inline constexpr uint32_t MaxProfileBatchBytes = 32768;
+// Encoded network response budget, independent of the caller's row buffer.
+inline constexpr uint32_t MaxProfileBatchResponseBytes = 32768;
 
 enum class EServiceError: uint32_t {
     None,

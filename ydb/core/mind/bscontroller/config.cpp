@@ -968,14 +968,22 @@ namespace NKikimr::NBsController {
         void TBlobStorageController::CommitDatabaseSpaceUpdates(TConfigState& state, NIceDb::TNiceDb& db) {
             {
                 TDatabaseSpaceTracker::TBatch batch(DatabaseSpace);
+                const TGroupInfo::TGroupFinder finder = [&state](TGroupId groupId) {
+                    return state.Groups.Find(groupId);
+                };
 
                 // created/changed/deleted groups (group may change its storage pool or stop being a physical one);
                 // done first, so that deleted pools have no groups left
                 for (const auto& [base, overlay] : state.Groups.Diff()) {
                     if (overlay->second) {
-                        UpdateDatabaseSpaceGroup(*overlay->second);
+                        UpdateDatabaseSpaceGroup(*overlay->second, finder, state.BridgeInfo.get());
                     } else {
                         DatabaseSpace.RemoveGroup(overlay->first);
+                        if (base && base->second->BridgeProxyGroupId) {
+                            if (const TGroupInfo *proxy = finder(*base->second->BridgeProxyGroupId)) {
+                                UpdateDatabaseSpaceGroup(*proxy, finder, state.BridgeInfo.get());
+                            }
+                        }
                     }
                 }
 

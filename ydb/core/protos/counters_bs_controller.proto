@@ -307,4 +307,5 @@ enum ETxTypes {
     TXTYPE_REMOVE_BRIDGE_PILE = 41 [(TxTypeOpts) = {Name: "TTxRemoveBridgePile"}];
     TXTYPE_UPDATE_BRIDGE_GROUP_MODES = 42 [(TxTypeOpts) = {Name: "TTxUpdateBridgeGroupModes"}];
     TXTYPE_BRIDGE_ROLLBACK = 43 [(TxTypeOpts) = {Name: "TTxBridgeRollback"}];
+    TXTYPE_UPDATE_DATABASE_SPACE = 44 [(TxTypeOpts) = {Name: "TTxUpdateDatabaseSpace"}];
 }

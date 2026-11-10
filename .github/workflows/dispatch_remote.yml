@@ -1,0 +1,125 @@
+name: Dispatch remote executor
+
+# enqueue remote-ticket Actions artifact → wait host claim → ingest.
+# Host gets launch context from that artifact only (never from platform S3).
+# See scripts/ci/dispatcher/REMOTE_PULL.md.
+on:
+  workflow_call:
+    inputs:
+      config:
+        description: JSON from resolve_remote_execution (repos, S3, inputs, …)
+        required: true
+        type: string
+
+jobs:
+  enqueue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      # Survives "Re-run failed jobs" when enqueue is not retried; wait pins to this.
+      ticket_attempt: ${{ steps.ticket.outputs.ticket_attempt }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/ci/dispatcher
+          sparse-checkout-cone-mode: false
+
+      - name: Write remote-ticket
+        id: ticket
+        env:
+          CONFIG_JSON: ${{ inputs.config }}
+          PLATFORM_RUN_ID: ${{ github.run_id }}
+          PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}
+          PLATFORM_REPOSITORY: ${{ github.repository }}
+          PLATFORM_WORKFLOW: ${{ github.workflow }}
+          PLATFORM_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py enqueue
+
+      - name: Upload remote-ticket artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-ticket
+          path: remote-ticket.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  wait:
+    needs: enqueue
+    runs-on: [self-hosted, runner-waiter]
+    # Claim poll ≤60 min; executor poll 2880×30s (24h). +60 min slack for HTTP/overhead
+    # so job timeout does not cancel the host on a full claim+day window.
+    timeout-minutes: 1560
+    outputs:
+      executor_run_id: ${{ steps.wait.outputs.executor_run_id }}
+      executor_run_url: ${{ steps.wait.outputs.executor_run_url }}
+      executor_conclusion: ${{ steps.wait.outputs.executor_conclusion }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/ci/dispatcher
+          sparse-checkout-cone-mode: false
+
+      - name: Wait for claim + executor
+        id: wait
+        env:
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          CONFIG_JSON: ${{ inputs.config }}
+          PLATFORM_RUN_ID: ${{ github.run_id }}
+          # Pin to the attempt that wrote the ticket (not live github.run_attempt).
+          PLATFORM_RUN_ATTEMPT: ${{ needs.enqueue.outputs.ticket_attempt }}
+        run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py wait
+
+      - name: Cancel on caller cancel
+        if: cancelled()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          CONFIG_JSON: ${{ inputs.config }}
+          PLATFORM_RUN_ID: ${{ github.run_id }}
+          EXECUTOR_RUN_ID: ${{ steps.wait.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ steps.wait.outputs.executor_run_url }}
+        run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py cancel
+
+  ingest:
+    if: >-
+      always() && !cancelled() &&
+      needs.wait.outputs.executor_run_id != ''
+    needs: [enqueue, wait]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github
+
+      - uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq s3cmd
+          python3 -m pip install --user ydb 'ydb[yc]' codeowners jinja2 pyyaml
+
+      - uses: ./.github/actions/s3cmd
+        with:
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+
+      - name: Ingest remote artifacts
+        env:
+          CONFIG_JSON: ${{ inputs.config }}
+          CALLER_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
+          CALLER_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
+          PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}
+          EXECUTOR_RUN_ID: ${{ needs.wait.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ needs.wait.outputs.executor_run_url }}
+          EXECUTOR_CONCLUSION: ${{ needs.wait.outputs.executor_conclusion }}
+        run: python3 .github/scripts/ci/dispatcher/ingest_remote_executor_results.py

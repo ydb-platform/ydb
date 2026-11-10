@@ -1,31 +1,104 @@
 name: Run and debug tests
+run-name: >-
+  ${{ inputs.executor == 'remote' && format('{0} · manual{1}{2}{3}{4}',
+      inputs.caller_workflow_label != '' && inputs.caller_workflow_label || 'Run and debug tests',
+      format(' · {0}', github.ref_name),
+      inputs.build_preset != '' && format(' · {0}', inputs.build_preset) || '',
+      inputs.pr_number != '' && format(' · #{0}', inputs.pr_number) || '',
+      inputs.pr_title != '' && format(' · {0}', inputs.pr_title) || '')
+    || 'Run and debug tests' }}
 
 on:
   workflow_dispatch:
     inputs:
+      executor:
+        description: 'ydb_yc = local runners; remote = dispatch via opaque remote JSON'
+        required: false
+        type: choice
+        options:
+          - ydb_yc
+          - remote
+        default: ydb_yc
+      remote:
+        description: 'remote only: JSON override for host/dispatch/job (empty = defaults)'
+        required: false
+        type: string
+        default: ''
       test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
+        description: 'ydb_yc: paths to tests; also default remote.job.build_target when remote JSON omits it'
         required: false
         type: string
         default: 'ydb/tests/olap/'
       build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
+        description: 'ydb_yc: presets (comma-separated). remote: one preset only (this input or remote.job.build_preset); commas are rejected'
         required: false
         type: string
         default: 'relwithdebinfo, release-asan'
       branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
+        description: 'Branches to test (comma-separated or JSON array); ydb_yc only'
         required: false
         type: string
         default: ''
       use_branches_config:
-        description: 'If true, use branches from .github/config/stable_tests_branches.json'
+        description: 'If true, use branches from .github/config/stable_tests_branches.json; ydb_yc only'
         required: false
         type: boolean
         default: false
+      pr_number:
+        description: 'remote only: optional PR number for host run title (e2e / PR-check-style display)'
+        required: false
+        type: string
+        default: ''
+      pr_title:
+        description: 'remote only: optional PR title for host run title'
+        required: false
+        type: string
+        default: ''
+      caller_workflow_label:
+        description: 'remote only: override caller workflow label on platform run (default Run and debug tests)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
+  resolve_remote:
+    if: inputs.executor == 'remote'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      config: ${{ steps.resolve.outputs.config }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/ci/dispatcher
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve remote execution config
+        id: resolve
+        env:
+          REMOTE_JSON: ${{ inputs.remote }}
+          CODE_REF: ${{ github.sha }}
+          ANALYTICS_BRANCH: ${{ github.ref_name }}
+          DEFAULT_BUILD_TARGET: ${{ inputs.test_targets }}
+          DEFAULT_BUILD_PRESET: ${{ inputs.build_preset }}
+          CALLER_PR_NUMBER: ${{ inputs.pr_number }}
+          CALLER_PR_TITLE: ${{ inputs.pr_title }}
+          CALLER_WORKFLOW: ${{ inputs.caller_workflow_label != '' && inputs.caller_workflow_label || 'Run and debug tests' }}
+          CALLER_EVENT: manual
+        run: python3 .github/scripts/ci/dispatcher/resolve_remote_execution.py
+
+  remote:
+    if: inputs.executor == 'remote'
+    needs: resolve_remote
+    uses: ./.github/workflows/dispatch_remote.yml
+    secrets: inherit
+    with:
+      config: ${{ needs.resolve_remote.outputs.config }}
+
   prepare:
+    if: inputs.executor == 'ydb_yc'
     runs-on: ubuntu-latest
     outputs:
       branches_json: ${{ steps.format-branches.outputs.branches_json }}
@@ -95,6 +168,7 @@ jobs:
 
   main:
     name: Run and debug tests
+    if: inputs.executor == 'ydb_yc'
     needs: prepare
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
@@ -111,5 +185,5 @@ jobs:
 
   collect_combined_summary:
     needs: main
-    if: always()
+    if: always() && inputs.executor == 'ydb_yc'
     uses: ./.github/workflows/collect_combined_summary.yml

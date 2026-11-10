@@ -21,7 +21,6 @@ ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDat
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert-UseDataQuery+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
-ydb/core/kqp/ut/query KqpLimits.DataShardReplySizeExceeded
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
@@ -111,11 +110,9 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK+EnableCompileTime
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultUnsupportedValue
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_AllTypes
-ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Insert-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalSyncUniqueIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalSyncUniqueIndex-EnableIndexStreamWrite
-ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Write_Upsert+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Write_Upsert-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNotNullColumn_InsertOrReplace-IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex+EnableIndexStreamWrite
@@ -127,7 +124,6 @@ ydb/core/kqp/ut/scheme KqpScheme.ParallelAlterStreamingQuery
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node
-ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
 ydb/core/kqp/ut/tli KqpTli.MultipleKeys
 ydb/core/kqp/ut/tli KqpTli.SeparateCommitDataQuery
 ydb/core/kqp/ut/tli KqpTli.TwoVictimsOneBreaker
@@ -161,7 +157,6 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootMu
 ydb/core/persqueue/public/fetcher/ut TFetchRequestTests.CheckAccess
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterAutoPartitioningAndCodecs
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterConsumerAttributesAndCodecs
-ydb/core/persqueue/public/schema/ut SchemaOps.AlterSharedConsumerDlqAndReadQuotas
 ydb/core/persqueue/public/schema/ut SchemaOps.ConsumerReadQuotaAndAvailabilityPeriod
 ydb/core/statistics/aggregator/ut AnalyzeSampling.CollectAndPersistStatistics+ColumnShard+SmallHistogramBudget
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
@@ -191,6 +186,7 @@ ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.Replace
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ReplacementRejectsOldResultsAndAcceptsNew-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCredentialsDuringDeferredDone+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCredentialsDuringDeferredDone-ResourceId
+ydb/core/tx/replication/controller/ut_schema_change IndexBuild.DoneCancelsSyncIndexAfterLateWorkerError
 ydb/core/tx/replication/controller/ut_schema_change ReplicationCreation.InitialScanDisabledDoesNotTouchMissingDestination
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropAsyncIndexWithRowConsistency
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError
@@ -223,6 +219,7 @@ ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.ChildWor
 ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.PersistedWorkerWaitsForSecret+SecretFirst
 ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.PersistedWorkerWaitsForSecret-SecretFirst
 ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.RecoveredWorkerAuthenticatesAndConsumesAfterDelayedSecret
+ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.LocalRetentionGapBeforeSessionStartWithoutLaterMessageReportsDataLoss
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/schemeshard/ut_full_backup unittest.sole chunk
 ydb/core/tx/schemeshard/ut_index_build unittest.[*/*] chunk
@@ -289,7 +286,6 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[7]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[8]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[9]
-ydb/tests/stress/kafka/tests py3test.sole chunk
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test

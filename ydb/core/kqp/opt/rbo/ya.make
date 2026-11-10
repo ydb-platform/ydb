@@ -22,6 +22,7 @@ SRCS(
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
     analysis/logical_liveness.cpp
+    analysis/null_rejection.cpp
     explain/kqp_connection_explain.cpp
     explain/kqp_expression_explain.cpp
     explain/kqp_operator_explain.cpp

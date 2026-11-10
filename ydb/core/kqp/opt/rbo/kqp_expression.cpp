@@ -23,6 +23,51 @@ bool IsRowMember(const TExprNode& node, const TExprNode& row) {
     return node.IsCallable("Member") && node.HeadPtr().Get() == &row;
 }
 
+// This is SQL null propagation, not NYql::IsStrict (which concerns errors).
+// Unknown functions, including null-safe equality, provide no proof.
+bool IsNullOn(const TExprNode& node, const TExprNode& row, const TUnorderedIUs& nulls) {
+    if (IsRowMember(node, row)) {
+        return nulls.Contains(GetMemberId(node));
+    }
+    if (node.IsCallable({"Nothing", "Null", "PgNull"})) {
+        return true;
+    }
+    if (node.IsCallable("Coalesce")) {
+        return AllOf(node.Children(), [&](const auto& child) { return IsNullOn(*child, row, nulls); });
+    }
+    if (node.IsCallable({"==", "!=", "<", "<=", ">", ">=", "+", "-", "*", "/", "%",
+                         "Cast", "SafeCast", "StrictCast", "Convert", "Not", "Minus", "Abs",
+                         "StringContains", "StartsWith", "EndsWith", "StringContainsIgnoreCase",
+                         "StartsWithIgnoreCase", "EndsWithIgnoreCase"})) {
+        return AnyOf(node.Children(), [&](const auto& child) { return IsNullOn(*child, row, nulls); });
+    }
+    return false;
+}
+
+// Prove that the predicate cannot be TRUE (or FALSE under NOT) when all
+// specified columns are NULL. In particular, every OR branch must reject them;
+// the branches need not reference the same column of the nullable input.
+bool RejectsNullsImpl(const TExprNode& node, const TExprNode& row, const TUnorderedIUs& nulls, bool negated = false) {
+    if (IsNullOn(node, row, nulls)) {
+        return true;
+    }
+    if (node.IsCallable("Bool")) {
+        return node.Head().Content() == (negated ? "true" : "false");
+    }
+    if (node.IsCallable("Not")) {
+        return RejectsNullsImpl(node.Head(), row, nulls, !negated);
+    }
+    if (node.IsCallable({"And", "Or", "Coalesce"})) {
+        const auto rejects = [&](const auto& child) { return RejectsNullsImpl(*child, row, nulls, negated); };
+        const bool any = (node.IsCallable("And") && !negated) || (node.IsCallable("Or") && negated);
+        return any ? AnyOf(node.Children(), rejects) : AllOf(node.Children(), rejects);
+    }
+    if (node.IsCallable("Exists") && IsNullOn(node.Head(), row, nulls)) {
+        return !negated;
+    }
+    return false;
+}
+
 // Replace free row arguments by identity. Members of nested structs and locally
 // bound lambda arguments are not column references and must retain their meaning.
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext& ctx) {
@@ -327,6 +372,14 @@ bool TExpression::IsLiteralOne() const {
         return TString(body->Content()) == "1";
     }
     return false;
+}
+
+bool TExpression::IsNullWhen(const TUnorderedIUs& nullIUs) const {
+    return IsNullOn(*GetExpressionBody(), Node->Head().Head(), nullIUs);
+}
+
+bool TExpression::RejectsNulls(const TUnorderedIUs& nullIUs) const {
+    return RejectsNullsImpl(*GetExpressionBody(), Node->Head().Head(), nullIUs);
 }
 
 TExprNode::TPtr TExpression::GetLambda() const {

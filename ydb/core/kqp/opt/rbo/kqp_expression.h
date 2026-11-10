@@ -67,6 +67,14 @@ class TExpression {
     // Check if the expression is a literal of one
     bool IsLiteralOne() const;
 
+    // Prove that the expression is NULL when all specified input columns are NULL.
+    // Other columns are unconstrained. False means the result is not proven.
+    bool IsNullWhen(const TUnorderedIUs& nullIUs) const;
+
+    // Prove that the predicate cannot be TRUE when all specified input columns
+    // are NULL. False means rejection is not proven, including unknown callables.
+    bool RejectsNulls(const TUnorderedIUs& nullIUs) const;
+
     // Return the full lambda ExprNode of this expression
     TExprNode::TPtr GetLambda() const;
 

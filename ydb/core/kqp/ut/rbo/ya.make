@@ -8,7 +8,9 @@ REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_rbo_copy_ut.cpp
+    kqp_rbo_expression_ut.cpp
     kqp_rbo_global_ut.cpp
+    kqp_rbo_reduce_outer_join_ut.cpp
 )
 
 PEERDIR(

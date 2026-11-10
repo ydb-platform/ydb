@@ -15,7 +15,8 @@ enum ERuleProperties: ui32 {
     RequireTypes           = 0x04 | RequireOutputIUs,
     RequireMetadata        = 0x08 | RequireOutputIUs,
     RequireStatistics      = 0x10 | RequireTypes | RequireMetadata,
-    RequireLiveness        = 0x20 | RequireOutputIUs
+    RequireLiveness        = 0x20 | RequireOutputIUs,
+    RequireNullRejection   = 0x40 | RequireOutputIUs
   };
 
 /**
@@ -148,6 +149,8 @@ public:
  */
 TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, TRBOContext& ctx);
 void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
+// Consumer-to-input analysis of whether unmatched outer-join rows can survive.
+void ComputePlanNullRejection(TOpRoot& root);
 // Global results may only drive coordinated pruning, never an isolated rewrite.
 // Disabling key pruning requires current metadata and seeds Map/Read keys only.
 void ComputePlanLiveness(TOpRoot& root, ELivenessMode mode = ELivenessMode::Local, bool pruneKeyColumns = true,

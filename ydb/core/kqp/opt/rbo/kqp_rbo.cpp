@@ -117,6 +117,12 @@ void EnsureRequiredProps(TOpRoot& root, ui32 props, ui32& computedProps, TRBOCon
         computedProps |= ERuleProperties::RequireLiveness;
     }
 
+    if (HasProperty(props, ERuleProperties::RequireNullRejection) && !HasProperty(computedProps, ERuleProperties::RequireNullRejection)) {
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Compute null rejection");
+        ComputePlanNullRejection(root);
+        computedProps |= ERuleProperties::RequireNullRejection;
+    }
+
 }
 
 void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName) {

@@ -67,6 +67,11 @@ struct TOrderEnforcer {
 
 enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
 
+struct TOuterJoinNullRejection {
+    bool RejectsUnmatchedLeft = false;
+    bool RejectsUnmatchedRight = false;
+};
+
 // Recomputable logical analysis state. std::nullopt means the analysis was not
 // computed for this operator; computed-but-empty state is represented by an
 // engaged empty value.
@@ -74,7 +79,11 @@ struct TOperatorAnalysisProps {
     void Clear() {
         LiveInByChild.reset();
         LiveOut.reset();
+        OuterJoinNullRejection.reset();
     }
+
+    // Proofs from all consumers of this outer join, valid for the current graph.
+    std::optional<TOuterJoinNullRejection> OuterJoinNullRejection;
 
     // Input requirements per child edge; output demand from all consumers.
     std::optional<TVector<TUnorderedIUs>> LiveInByChild;
@@ -203,6 +212,7 @@ private:
 
 class TOpRoot;
 class TLogicalCopyContext;
+class TNullRejectionContext;
 
 
 class IOperator: public TSimpleRefCount<IOperator> {
@@ -317,6 +327,8 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) = 0;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) = 0;
     virtual void PropagateLiveness(ILivenessContext& ctx);
+    // Derive input rejection conditions from consumers; default is a boundary.
+    virtual void PropagateNullRejection(TNullRejectionContext& ctx);
     // Coordinated global pruning only: remove owned definitions, not operators
     // or semantic keys. The stage invalidates properties after all nodes agree.
     virtual bool PruneOutputs(const TUnorderedIUs& liveOut, TExprContext& ctx);
@@ -734,6 +746,7 @@ public:
     const TUnorderedIUs& GetUniqueRawInputIUs() const override { return MapElements.MappedIUs(); }
     TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     void PropagateLiveness(ILivenessContext& ctx) override;
+    void PropagateNullRejection(TNullRejectionContext& ctx) override;
     bool PruneOutputs(const TUnorderedIUs& liveOut, TExprContext& ctx) override;
     void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 
@@ -1027,6 +1040,7 @@ public:
 
     virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    void PropagateNullRejection(TNullRejectionContext& ctx) override;
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 
     TUnorderedIUs GetFilterIUs(TPlanProps& props) const;
@@ -1079,6 +1093,7 @@ public:
     virtual TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    void PropagateNullRejection(TNullRejectionContext& ctx) override;
 
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
@@ -1227,6 +1242,7 @@ public:
     TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     void PropagateLiveness(ILivenessContext& ctx) override;
+    void PropagateNullRejection(TNullRejectionContext& ctx) override;
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
     NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;

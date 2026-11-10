@@ -200,9 +200,10 @@ class RealSkipperCluster(BridgeKiKiMRTest):
         self.rows[999] = "after-failover"
         self.check_data(pile)
 
-    def start_skipper(self):
+    def start_skipper(self, piles=None):
         binary = yatest.common.binary_path("ydb/apps/bridge_skipper/bridge_skipper")
-        self.skipper = Skipper(binary, self.output / "controller", self.pile_nodes, self.ports.get_port())
+        endpoints = self.pile_nodes if piles is None else {name: self.pile_nodes[name] for name in piles}
+        self.skipper = Skipper(binary, self.output / "controller", endpoints, self.ports.get_port())
         self.cleanup.callback(self.skipper.close)
         self.wait_snapshot(lambda s: len(s["cards"]) == len(self.pile_names)
                            and all(card["verdict"] == "HEALTHY" for card in s["cards"]),

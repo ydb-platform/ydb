@@ -22,6 +22,7 @@ const TString A = "grpc://a:1";
 const TString A2 = "grpc://a:2";
 const TString A3 = "grpc://a:3";
 const TString B = "grpc://b:1";
+const TString C = "grpc://c:1";
 const TString FastRounds = "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 20, read_timeout_seconds: 5, selfcheck_operation_timeout_seconds: 12, evidence_ttl_seconds: 30}";
 const TString SlowRounds = "{round_interval_seconds: 10, confirm_seconds: 10, bsc_warmup_seconds: 20, read_timeout_seconds: 5, selfcheck_operation_timeout_seconds: 12, evidence_ttl_seconds: 30}";
 
@@ -88,6 +89,23 @@ public:
         return true;
     }
 
+    std::vector<TDiscoveredEndpoint> Inventory;
+    std::vector<TString> Removed;
+
+    void Discover(TRpcRequest request, std::function<void(TInventoryResult)> completed) override {
+        TInventoryResult result;
+        result.Rpc.Request = std::move(request);
+        result.Rpc.Method = EYdbMethod::Inventory;
+        result.Rpc.SentAt = result.Rpc.FinishedAt = Now();
+        result.Rpc.Success = true;
+        result.Rpc.Status = "SUCCESS";
+        result.Endpoints = Inventory;
+        completed(std::move(result));
+    }
+
+    void AddEndpoint(const TEndpoint&, const TString&) override {}
+    void RemoveEndpoint(const TString& uri) override { Removed.push_back(uri); }
+
     void Stop() override {
     }
 };
@@ -138,6 +156,7 @@ struct THarness {
     TNamedPileStates Piles = {{"a", EPileState::Primary}, {"b", EPileState::Synchronized}};
     std::set<std::pair<TString, EYdbMethod>> Held;
     std::map<TString, TString> Identities;
+    std::map<TString, ui32> NodeIds;
     // SelfCheck replies from these endpoints omit location.pile.
     std::set<TString> PileLess;
     std::set<TString> Failed = {"b"};
@@ -385,7 +404,8 @@ struct THarness {
             }
             reply.Classification = ClassifySelfCheck(proto);
             result.Reply = std::move(reply);
-            result.ResponderNodeId = 42;
+            result.ResponderNodeId = NodeIds.contains(call.Request.Endpoint) ? NodeIds.at(call.Request.Endpoint)
+                : call.Request.Pile == "a" ? 1 : call.Request.Pile == "b" ? 2 : 3;
             call.Completed(std::move(result));
         }
     }
@@ -639,6 +659,145 @@ void VerifyDispatchAtTtlBoundary(EMode mode, bool slowPersistence) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSkipperActor) {
+    Y_UNIT_TEST(DiscoveryBoundsNewAddressesAndDeduplicatesVerifiedNodeAliases) {
+        THarness h;
+        h.Failed.clear();
+        h.Run(35);
+        h.Piles["c"] = EPileState::Synchronized;
+        h.Clients->Inventory = {{ParseEndpoint("grpc://alias-a:1"), "a", 1},
+            {ParseEndpoint(C), "c", 3}, {ParseEndpoint("grpc://c:2"), "c", 4},
+            {ParseEndpoint("grpc://c:3"), "c", 5}};
+        h.NodeIds["grpc://c:2"] = 4;
+        h.NodeIds["grpc://c:3"] = 5;
+        h.Run(35);
+        size_t learned = 0;
+        for (const auto& endpoint : h.Store->Read()->Endpoints) {
+            learned += endpoint.Pile == "c";
+            UNIT_ASSERT_VALUES_UNEQUAL(endpoint.Uri, "grpc://alias-a:1");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(learned, h.Config.HealthEndpointsPerPile);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
+    Y_UNIT_TEST(RemovedSeedsCanBeReusedByANewPileAtTheSameAddress) {
+        THarness h;
+        h.Failed.clear();
+        h.Run(35);
+        h.Piles["b"] = EPileState::Inactive;
+        ++h.Generation;
+        h.Run(3);
+        h.Piles.erase("b");
+        h.Piles["c"] = EPileState::Synchronized;
+        h.Clients->Inventory = {{ParseEndpoint(B), "c", 3}};
+        h.Run(35);
+        const auto endpoint = h.Endpoint(B);
+        UNIT_ASSERT_VALUES_EQUAL(endpoint.Pile, "c");
+        UNIT_ASSERT(endpoint.Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
+    Y_UNIT_TEST(NewPileIsDiscoveredAndCanReceiveGuardedFailover) {
+        THarness h;
+        h.Failed.clear();
+        h.Run(35);
+        h.Piles["c"] = EPileState::Synchronized;
+        ++h.Generation;
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}};
+        h.Run(35);
+        UNIT_ASSERT(h.Endpoint(C).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+        // The original secondary is removed; the new pile is the only survivor.
+        h.Piles["b"] = EPileState::Inactive;
+        ++h.Generation;
+        h.Run(2);
+        h.Piles.erase("b");
+        h.Run(2);
+        h.Held.insert({A, EYdbMethod::PlainState});
+        h.Held.insert({A, EYdbMethod::ConnectivityState});
+        h.Held.insert({A, EYdbMethod::SelfCheck});
+        h.NoQuorum.insert("a");
+        h.Fallback = true;
+        h.FallbackFailed.insert("a");
+        h.Run(35);
+        UNIT_ASSERT_VALUES_EQUAL(h.Clients->Updates.size(), 1);
+        const auto& plan = h.Clients->Updates.front().Plan;
+        UNIT_ASSERT_VALUES_EQUAL(plan.Endpoint, C);
+        UNIT_ASSERT_VALUES_EQUAL(plan.ExpectedGeneration, h.Generation);
+        UNIT_ASSERT((plan.Update == TExactUpdate{{"a", EPileState::Disconnected}, {"c", EPileState::Primary}}));
+    }
+
+    Y_UNIT_TEST(DiscoveryOmissionDoesNotRemoveFreshEvidence) {
+        THarness h;
+        h.Failed.clear();
+        h.Piles["c"] = EPileState::Synchronized;
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}};
+        h.Run(35);
+        h.Clients->Inventory.clear();
+        h.Run(40);
+        UNIT_ASSERT(h.Endpoint(C).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(h.Clients->Removed.empty());
+        UNIT_ASSERT(h.Clients->Updates.empty());
+        UNIT_ASSERT(h.Store->Read()->Decision.Kind == EDecisionKind::Stable);
+    }
+
+    Y_UNIT_TEST(UnverifiedDiscoveredViewCannotAdvanceHistory) {
+        THarness h;
+        h.Failed.clear();
+        h.Piles["c"] = EPileState::Synchronized;
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}};
+        h.NodeIds[C] = 99;
+        h.Run(35);
+        UNIT_ASSERT(h.Endpoint(C).Identity == EEndpointIdentity::Mismatch);
+        h.Generation = 1000;
+        for (const auto& uri : {A, B}) {
+            h.Held.insert({uri, EYdbMethod::PlainState});
+            h.Held.insert({uri, EYdbMethod::ConnectivityState});
+        }
+        h.Run(3);
+        UNIT_ASSERT_VALUES_EQUAL(h.File->GetState().GenerationHighWater, 7);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
+    Y_UNIT_TEST(RemovedLearnedEndpointDrainsLateRepliesBeforeClientDeletion) {
+        THarness h;
+        h.Failed.clear();
+        h.Piles["c"] = EPileState::Synchronized;
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}};
+        h.Run(35);
+        h.Held.insert({C, EYdbMethod::SelfCheck});
+        h.Run(1);
+        h.Piles["c"] = EPileState::Inactive;
+        ++h.Generation;
+        h.Run(2);
+        UNIT_ASSERT(h.Clients->Removed.empty());
+        h.Piles.erase("c");
+        h.Held.clear();
+        h.Run(3);
+        UNIT_ASSERT_VALUES_EQUAL(h.Clients->Removed.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(h.Clients->Removed.front(), C);
+        for (const auto& endpoint : h.Store->Read()->Endpoints) {
+            UNIT_ASSERT_VALUES_UNEQUAL(endpoint.Uri, C);
+        }
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
+    Y_UNIT_TEST(RemovedPileEndpointsAreRetiredWithoutRestart) {
+        THarness fixture(EMode::Auto);
+        fixture.Failed.clear();
+        fixture.Run(35);
+        fixture.Piles["b"] = EPileState::Inactive;
+        ++fixture.Generation;
+        fixture.Run(2);
+        for (const auto& endpoint : fixture.Store->Read()->Endpoints) {
+            UNIT_ASSERT(endpoint.Pile != "b");
+        }
+        fixture.Piles.erase("b");
+        fixture.Run(2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Selection.View->Piles.size(), 1);
+        UNIT_ASSERT(fixture.Store->Read()->Mode == EMode::Auto);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+    }
+
     Y_UNIT_TEST(DefaultTimingConfirmsLostPrimaryWithin20Seconds) {
         THarness fixture(EMode::Auto, {}, 1, "{}");
         fixture.Failed.clear();

@@ -1,6 +1,8 @@
 #include "ydb_clients.h"
 
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
+#include <yaml-cpp/yaml.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/yexception.h>
@@ -45,6 +47,13 @@ void Fail(TUpdateResult& result, TStringBuf status) {
     result.Outcome = EMutationOutcome::Ambiguous;
 }
 
+void Fail(TInventoryResult& result, TStringBuf status) {
+    result.Rpc.Success = false;
+    result.Rpc.Status = status;
+    result.Endpoints.clear();
+    result.Error = status;
+}
+
 struct TTokenFactory final : NYdb::ICredentialsProviderFactory {
     std::shared_ptr<TTokenSource> Source;
 
@@ -84,12 +93,12 @@ public:
         , Tokens(std::make_shared<TTokenSource>(config.Auth.TokenFile, credentials.Token, std::move(tokenLoader)))
         , Redactor(std::make_shared<const TRedactor>(Tokens))
         , Clock(std::move(clock))
-        , Driver(MakeDriverConfig(config, credentials, Tokens)) {
+        , Driver(std::make_shared<NYdb::TDriver>(MakeDriverConfig(config, credentials, Tokens))) {
         // Construct clients before actor registration; subsequent RPC starts do
         // not perform client discovery or mutate this endpoint inventory.
         for (const auto& [pile, endpoints] : config.Endpoints) {
             for (const auto& endpoint : endpoints) {
-                Clients.emplace(endpoint.Uri, std::make_unique<TClients>(Driver, endpoint, pile));
+                Clients.emplace(endpoint.Uri, std::make_unique<TClients>(*Driver, endpoint, pile));
             }
         }
     }
@@ -156,8 +165,89 @@ public:
         }, authorization.ValidUntil);
     }
 
+    void AddEndpoint(const TEndpoint& endpoint, const TString& pile) override {
+        Y_ENSURE(!Clients.contains(endpoint.Uri));
+        Clients.emplace(endpoint.Uri, std::make_unique<TClients>(*Driver, endpoint, pile));
+    }
+
+    void RemoveEndpoint(const TString& endpoint) override {
+        Clients.erase(endpoint);
+    }
+
+    void Discover(TRpcRequest request, std::function<void(TInventoryResult)> completed) override {
+        TInventoryResult base;
+        base.Rpc.Request = std::move(request);
+        base.Rpc.Method = EYdbMethod::Inventory;
+        auto* client = Find(base.Rpc.Request);
+        if (!client) {
+            CompleteInvalid(std::move(base), std::move(completed));
+            return;
+        }
+        const auto timeout = Timing.ReadTimeout + TDuration::Seconds(2);
+        // The chain owns its driver and completion; it never touches the actor
+        // or mutates the SDK endpoint map from an SDK callback.
+        base.Rpc.SentAt = Clock();
+        auto finish = [completed = std::move(completed), clock = Clock, tokens = Tokens](TInventoryResult result) mutable {
+            if (result.Rpc.SdkStatus == NYdb::EStatus::UNAUTHORIZED) {
+                tokens->Reload();
+            }
+            result.Rpc.FinishedAt = clock();
+            completed(std::move(result));
+        };
+        const auto settings = NYdb::NConfig::TFetchAllConfigsSettings()
+            .Transform(NYdb::NConfig::EFetchAllConfigsTransform::ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG)
+            .OperationTimeout(Timing.ReadTimeout).ClientTimeout(timeout);
+        try {
+            auto future = client->Config.FetchAllConfigs(settings);
+            future.Subscribe([base = std::move(base), finish, driver = Driver, redactor = Redactor,
+                    timeout](const auto& settled) mutable {
+                try {
+                    const auto& config = settled.GetValueSync();
+                    FillStatus(base.Rpc, config, *redactor);
+                    if (!base.Rpc.Success) {
+                        finish(std::move(base));
+                        return;
+                    }
+                    TString database;
+                    if (!config.Transient()) {
+                        for (const auto& entry : config.GetConfigs()) {
+                            if (std::holds_alternative<NYdb::NConfig::TMainConfigIdentity>(entry.Identity)) {
+                                Y_ENSURE(database.empty(), "ambiguous discovery config");
+                                database = DiscoveryDatabase(entry.Config);
+                            }
+                        }
+                    }
+                    if (database.empty()) {
+                        base.Error = "DISCOVERY_CONFIG_UNAVAILABLE";
+                        finish(std::move(base));
+                        return;
+                    }
+                    const auto endpoint = ParseEndpoint(base.Rpc.Request.Endpoint);
+                    auto discovery = std::make_shared<NYdb::NDiscovery::TDiscoveryClient>(*driver,
+                        MakePinnedClientSettings(endpoint).Database(Std(database)));
+                    auto listed = discovery->ListEndpoints(NYdb::NDiscovery::TListEndpointsSettings().ClientTimeout(timeout));
+                    listed.Subscribe([base = std::move(base), discovery, finish, redactor,
+                            scheme = endpoint.Scheme](const auto& settled) mutable {
+                        try {
+                            finish(DecodeInventoryResult(settled.GetValueSync(), std::move(base.Rpc), *redactor, scheme));
+                        } catch (...) {
+                            Fail(base, "SDK_RESULT_ERROR");
+                            finish(std::move(base));
+                        }
+                    });
+                } catch (...) {
+                    base.Error = "INVALID_DISCOVERY_CONFIG";
+                    finish(std::move(base));
+                }
+            });
+        } catch (...) {
+            Fail(base, "SDK_START_ERROR");
+            finish(std::move(base));
+        }
+    }
+
     void Stop() override {
-        Driver.Stop(true);
+        Driver->Stop(true);
     }
 
 private:
@@ -165,11 +255,13 @@ private:
         TString Pile;
         NYdb::NBridge::TBridgeClient Bridge;
         NYdb::NMonitoring::TMonitoringClient Monitoring;
+        NYdb::NConfig::TConfigClient Config;
 
         TClients(const NYdb::TDriver& driver, const TEndpoint& endpoint, const TString& pile)
             : Pile(pile)
             , Bridge(driver, MakePinnedClientSettings(endpoint))
-            , Monitoring(driver, MakePinnedClientSettings(endpoint)) {
+            , Monitoring(driver, MakePinnedClientSettings(endpoint))
+            , Config(driver, MakePinnedClientSettings(endpoint)) {
         }
     };
 
@@ -225,7 +317,7 @@ private:
     std::shared_ptr<TTokenSource> Tokens;
     std::shared_ptr<const TRedactor> Redactor;
     TYdbClock Clock;
-    NYdb::TDriver Driver;
+    std::shared_ptr<NYdb::TDriver> Driver;
     std::map<TString, std::unique_ptr<TClients>> Clients;
 };
 
@@ -302,6 +394,68 @@ NYdb::TCommonClientSettings MakePinnedClientSettings(const TEndpoint& endpoint) 
         .DiscoveryMode(NYdb::EDiscoveryMode::Off);
 }
 
+TString DiscoveryDatabase(TStringBuf yaml) {
+    Y_ENSURE(yaml.size() <= 4 * 1024 * 1024, "discovery config exceeds size limit");
+    try {
+        const auto docs = YAML::LoadAll(std::string(yaml.data(), yaml.size()));
+        Y_ENSURE(docs.size() == 1);
+        const auto domains = docs.front()["config"]["domains_config"]["domain"];
+        Y_ENSURE(domains.IsSequence() && domains.size() == 1);
+        const auto name = domains[0]["name"];
+        Y_ENSURE(name.IsScalar());
+        const TString value(name.Scalar());
+        Y_ENSURE(!value.empty() && value.find_first_of("/\\\r\n") == TString::npos && value.find('\0') == TString::npos);
+        return "/" + value;
+    } catch (...) {
+        throw yexception() << "INVALID_DISCOVERY_CONFIG";
+    }
+}
+
+TInventoryResult DecodeInventoryResult(const NYdb::NDiscovery::TListEndpointsResult& result,
+    TRpcResult rpc, const TRedactor& redactor, TStringBuf scheme)
+{
+    TInventoryResult decoded;
+    decoded.Rpc = std::move(rpc);
+    FillStatus(decoded.Rpc, result, redactor);
+    if (!decoded.Rpc.Success) {
+        return decoded;
+    }
+    if (result.GetEndpointsInfo().size() > 16384) {
+        decoded.Error = "DISCOVERY_INVENTORY_TOO_LARGE";
+        return decoded;
+    }
+    std::map<TString, std::pair<TString, ui32>> seen;
+    std::map<ui32, TString> piles;
+    for (const auto& item : result.GetEndpointsInfo()) {
+        // Preserve the seed transport and its TLS verification. Endpoint-specific
+        // certificate-name overrides are not supported by pinned SDK clients.
+        if (item.Ssl != (scheme == "grpcs") || !item.SslTargetNameOverride.empty()) {
+            continue;
+        }
+        try {
+            Y_ENSURE(item.NodeId != 0 && item.BridgePileName.find('\0') == std::string::npos);
+            TString host(item.Address);
+            if (host.find(':') != TString::npos && !host.StartsWith('[')) {
+                host = "[" + host + "]";
+            }
+            auto endpoint = ParseEndpoint(TString(scheme) + "://" + host + ":" + ::ToString(item.Port));
+            const std::pair<TString, ui32> identity{TString(item.BridgePileName), item.NodeId};
+            const auto [node, newNode] = piles.emplace(item.NodeId, identity.first);
+            Y_ENSURE(newNode || node->second == identity.first);
+            const auto [it, inserted] = seen.emplace(endpoint.Uri, identity);
+            Y_ENSURE(inserted || it->second == identity);
+            if (inserted) {
+                decoded.Endpoints.push_back({std::move(endpoint), identity.first, identity.second});
+            }
+        } catch (...) {
+            decoded.Endpoints.clear();
+            decoded.Error = "INVALID_DISCOVERY_ENDPOINT";
+            return decoded;
+        }
+    }
+    return decoded;
+}
+
 TString ToString(EYdbMethod method) {
     switch (method) {
         case EYdbMethod::PlainState:
@@ -310,6 +464,8 @@ TString ToString(EYdbMethod method) {
             return "get_cluster_state_connectivity";
         case EYdbMethod::SelfCheck:
             return "self_check";
+        case EYdbMethod::Inventory:
+            return "endpoint_inventory";
         case EYdbMethod::Update:
             return "update_cluster_state";
     }

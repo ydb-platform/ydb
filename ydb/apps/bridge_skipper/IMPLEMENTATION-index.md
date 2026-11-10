@@ -68,17 +68,25 @@ callbacks never access an actor object.
 
 ## Observation and policy invariants
 
-1. **Inventory.** Endpoints come from configuration, keyed by pile; there is
-   no discovery. Each endpoint must address exactly one node, because identity
-   is verified only from its own SelfCheck reply. A reply without a pile keeps
-   the earlier identity and last pile-named observation until its original TTL;
-   a mismatch excludes the endpoint's evidence until a
-   matching reply. Views are cluster-wide and count from every endpoint. Configured piles absent from the view are ignored;
-   view piles without endpoints stay visible.
-   This verifies pile attribution, not remote cluster identity. All endpoints
-   must be independently verified as nodes of the intended cluster; the
-   configured `cluster_id` only labels the local state directory. Unknown
-   endpoints' views can influence the high-water mark before SelfCheck returns.
+1. **Inventory.** Configured single-node endpoints bootstrap discovery. Every
+   five seconds one verified current endpoint supplies ConfigService/FetchConfig
+   (explicit domains transform) and database-scoped Discovery/ListEndpoints.
+   Learned addresses are limited to `health_endpoints_per_pile` per pile and
+   16,384 total endpoints; their views, health and routing require their own
+   SelfCheck to verify both the advertised node ID and pile. Seed views retain
+   their original behavior before pile verification. GetClusterState determines
+   membership and lifecycle; a Discovery omission never changes a pile state or
+   discards fresh evidence. Learned endpoints in inactive, disconnected or absent
+   piles retire after outstanding calls settle. Expired learned addresses can be
+   replaced. Configured seeds stay as dormant bootstrap probes, hidden from the
+   published endpoint list while their pile is absent/inactive/disconnected; a
+   reused address can be verified for a new pile after its old calls settle.
+   A reply without a pile keeps earlier identity and cached evidence at its
+   original TTL; a named mismatch excludes the endpoint until a matching reply.
+   Discovery uses the seed TLS scheme and driver credentials; certificate-name
+   overrides are skipped. Discovery is best effort and does not persist learned
+   locators: restart requires a reachable configured seed. Neither matching pile
+   names nor the configured local `cluster_id` prove remote cluster identity.
 2. **View.** Plain `GetClusterState` polls run every state poll. The highest
    fresh generation among all endpoints is selected; same-generation
    pile-state disagreement is
@@ -86,8 +94,8 @@ callbacks never access an actor object.
    `STALE_HISTORY`. A numeric maximum is not a quorum read or proof against
    divergent histories.
 3. **Sampling.** Each round rotates SelfCheck and connectivity independently
-   through each configured pile's endpoints, up to `health_endpoints_per_pile`
-   each, skipping piles absent from the last selected view; mismatched
+   through each observed pile's endpoints, up to `health_endpoints_per_pile`
+   each, skipping absent, inactive and disconnected piles; mismatched
    endpoints get separate SelfCheck recovery probes. A new generation starts a
    round at once. A SelfCheck or connectivity slot that is busy at the round
    boundary is sampled as soon as the call settles, within the per-pile budget.

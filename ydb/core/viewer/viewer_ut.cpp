@@ -5042,14 +5042,18 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const TString context = TStringBuilder() << query << ": " << result->Response->Body;
         UNIT_ASSERT_VALUES_EQUAL_C(vslotsResponses > 0, expectVSlots, context);
         bool hasVSlotsError = false;
+        bool hasBscTimeout = false;
         bool hasFilterNotApplied = false;
         bool hasGroupOrSortNotApplied = false;
         for (const auto& problem : json["Problems"].GetArray()) {
             hasVSlotsError |= problem.GetString() == "bsc-storage-slots-no-data";
+            hasBscTimeout |= problem.GetString() == "bsc-timeout";
             hasFilterNotApplied |= problem.GetString() == "filter-not-applied";
             hasGroupOrSortNotApplied |= problem.GetString() == "group-not-applied" || problem.GetString() == "sort-not-applied";
         }
         UNIT_ASSERT_VALUES_EQUAL_C(hasVSlotsError, expectVSlots && !vslotsAvailable, context);
+        // the reason is reported together with the missing data, even if the reply is sent while BSC requests are failed
+        UNIT_ASSERT_VALUES_EQUAL_C(hasBscTimeout, expectVSlots && !vslotsAvailable, context);
         // a group or pool filter that could not be resolved to nodes must not be dropped silently
         UNIT_ASSERT_VALUES_EQUAL_C(hasFilterNotApplied, storageFilter && !vslotsAvailable, context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(expectedNodeIds.size()), context);

@@ -3451,6 +3451,15 @@ public:
         FailViewerRequestsForNode(nodeId, error);
     }
 
+    bool HasPendingBscRequests() const {
+        return (StoragePoolsResponse && !StoragePoolsResponse->IsDone())
+            || (GroupsResponse && !GroupsResponse->IsDone())
+            || (VSlotsResponse && !VSlotsResponse->IsDone())
+            || (PDisksResponse && !PDisksResponse->IsDone());
+    }
+
+    // Fails the pending BSC requests. The reply can be sent from inside this call (when nothing else
+    // is awaited), so the reason of the failure has to be added to Problems before it, not after.
     bool OnBscError(const TString& error) {
         bool result = false;
         if (StoragePoolsResponse && StoragePoolsResponse->Error(error)) {
@@ -3489,9 +3498,10 @@ public:
                 }
             }
             if (ev->Get()->TabletId == GetBSControllerId()) {
-                if (OnBscError(error)) {
+                if (HasPendingBscRequests()) {
                     AddProblem("bsc-error");
                 }
+                OnBscError(error);
             }
             FailPipeConnect(ev->Get()->TabletId);
         }
@@ -3521,8 +3531,10 @@ public:
                 ProcessResponses();
                 RequestDone();
             }
-            if (OnBscError(error)) {
+            if (HasPendingBscRequests()) {
                 AddProblem("bsc-timeout");
+            }
+            if (OnBscError(error)) {
                 FailPipeConnect(GetBSControllerId());
             }
             for (auto& [hiveId, response] : HiveNodeStats) {

@@ -239,6 +239,7 @@ message TPQConfig {
 
     optional TCloudEventsConfig CloudEventsConfig = 61;
     optional uint64 MinOffset = 63;
+<<<<<<< HEAD
 
     // DC and federation account written into a CDC topic when topics are not first-class citizens.
     // Both must be set; SchemeShard rejects CDC creation when this block or either value is missing.
@@ -247,6 +248,9 @@ message TPQConfig {
         optional string FederationAccount = 2;
     }
     optional TCdcAttributes CdcAttributes = 64;
+=======
+    repeated string ClientIdsAllowCommitWhenTopicMutateDisabled = 64;
+>>>>>>> 69b37938f91 (allow commits for consumers with special names)
 }
 
 message TChannelProfile {

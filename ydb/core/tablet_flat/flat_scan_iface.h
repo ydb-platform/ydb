@@ -172,11 +172,13 @@ namespace NTable {
     };
 
     /**
-     * A versioned scan visits keys in scan order. During uninterrupted traversal,
-     * row, delta and lock callbacks for a key are enclosed by BeginKey/EndKey.
-     * Reset or Final may terminate that traversal without EndKey. The first
-     * committed row is the newest row reconstructed from the fixed subset,
-     * followed by strictly older versions.
+     * For each key, Feed(const TRow&, TRowVersion&) receives committed rows
+     * in strictly descending TRowVersion order: newest first, then older versions.
+     * The first committed row is the newest row reconstructed from the fixed subset.
+     *
+     * Keys are visited in scan order. During uninterrupted traversal, row, delta
+     * and lock callbacks for a key are enclosed by BeginKey/EndKey.
+     * Reset or Final may terminate that traversal without EndKey.
      * Uncommitted deltas and locks may precede that first committed row, and a
      * key may contain only such events. Feed(const TRow&, TRowVersion&) receives
      * reconstructed committed row states, not individual fragments from parts.

@@ -3637,9 +3637,24 @@ public:
         }
     }
 
+    void AddNotAppliedProblems() {
+        // a flag is still set here when the requested operation could not be applied, usually because
+        // the data it needs was not received, so the response is a page of unfiltered / ungrouped / unsorted data
+        if (NeedFilter) {
+            AddProblem("filter-not-applied");
+        }
+        if (NeedGroup) {
+            AddProblem("group-not-applied");
+        }
+        if (NeedSort) {
+            AddProblem("sort-not-applied");
+        }
+    }
+
     void ReplyAndPassAway() override {
         AddEvent("ReplyAndPassAway");
         ApplyEverything();
+        AddNotAppliedProblems();
         ApplyLimitForced(); // in case we had a problem and don't want to return too much data
         NKikimrViewer::TNodesInfo json;
         for (const auto& batch : OriginalNodeBatches) {

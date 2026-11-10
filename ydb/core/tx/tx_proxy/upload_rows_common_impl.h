@@ -651,6 +651,16 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing key columns: %s", JoinSeq(", ", keyColumnsLeft).c_str()));
         }
 
+        if (isColumnTable && HasAppData() && AppDataVerified().FeatureFlags.GetEnableColumnTableDefaults() && entry.ColumnTableInfo) {
+            for (const auto& col : entry.ColumnTableInfo->Description.GetSchema().GetColumns()) {
+                if (col.HasDefaultValue()) {
+                    defaultColumnsLeft.erase(col.GetName());
+                    notNullColumnsLeft.erase(col.GetName());
+                }
+            }
+            defaultColumnsLeft.clear();
+        }
+
         if (!notNullColumnsLeft.empty() && UpsertIfExists) {
             // columns are not specified but upsert is executed in update mode
             // and we will not change these not null columns.
@@ -667,22 +677,6 @@ private:
 
         if (!setNotNullInProgressColumnsLeft.empty()) {
             return TConclusionStatus::Fail(Sprintf("Missing columns under `SET NOT NULL` operation: %s. It is forbidden to insert NULL values.", JoinSeq(", ", setNotNullInProgressColumnsLeft).c_str()));
-        }
-
-        if (isColumnTable && HasAppData() && AppDataVerified().FeatureFlags.GetEnableColumnTableDefaults() && entry.ColumnTableInfo) {
-            THashSet<TString> defaultedNotNull;
-            for (const auto& col : entry.ColumnTableInfo->Description.GetSchema().GetColumns()) {
-                if (col.HasDefaultValue()) {
-                    defaultColumnsLeft.erase(col.GetName());
-                    if (col.GetNotNull()) {
-                        defaultedNotNull.insert(col.GetName());
-                    }
-                }
-            }
-            for (const auto& name : defaultedNotNull) {
-                notNullColumnsLeft.erase(name);
-            }
-            defaultColumnsLeft.clear();
         }
 
         if (!defaultColumnsLeft.empty() && UpsertIfExists) {

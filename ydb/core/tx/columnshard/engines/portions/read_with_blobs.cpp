@@ -125,11 +125,16 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
             const auto toFill = ISnapshotSchema::GetAbsentColumnFill(*to, *to, i);
             if (NArrow::ScalarCompareNullable(fromFill, toFill) != 0) {
                 const auto& features = to->GetIndexInfo().GetColumnFeaturesVerified(i);
+                auto loader = to->GetColumnLoaderVerified(i);
                 const ui32 rows = source.PortionInfo.GetPortionInfo().GetRecordsCount();
                 auto array = NArrow::TThreadSimpleArraysCache::Get(features.GetArrowField()->type(), fromFill, rows);
-                auto chunked = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
-                const TString blob = to->GetColumnSaver(i).Apply(array, features.GetArrowField());
-                newChunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(blob, chunked, TChunkAddress(i, 0), features));
+                auto trivial = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
+                const auto loadContext = loader->BuildAccessorContext(rows);
+                auto constructed = loader->GetAccessorConstructor()->Construct(trivial, loadContext);
+                AFL_VERIFY(constructed.IsSuccess())("reason", constructed.GetErrorMessage());
+                auto blobAndMeta = loader->GetAccessorConstructor()->SerializeToBlobAndMeta(*constructed, loadContext);
+                newChunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+                    std::move(blobAndMeta.Blob), *constructed, TChunkAddress(i, 0), features, std::move(blobAndMeta.Meta)));
                 AFL_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
             }
         }

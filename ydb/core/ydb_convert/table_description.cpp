@@ -1212,6 +1212,21 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
             }
         }
 
+        if (column.HasDefaultValue() && column.GetDefaultValue().HasScalar()) {
+            NOlap::TColumnDefaultScalarValue scalar;
+            if (scalar.DeserializeFromProto(column.GetDefaultValue()).IsSuccess()) {
+                NYql::NProto::TypeIds protoType;
+                NScheme::TTypeInfo typeInfo;
+                if (NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
+                    typeInfo = NScheme::TTypeInfo(static_cast<NScheme::TTypeId>(protoType));
+                }
+                auto typed = scalar.SerializeToTypedValue(typeInfo);
+                if (typed.IsSuccess()) {
+                    *newColumn->mutable_from_literal() = typed.DetachResult();
+                }
+            }
+        }
+
         if (column.HasDataAccessorConstructor()) {
             switch (column.GetDataAccessorConstructor().Implementation_case()) {
                 case NKikimrArrowAccessorProto::TConstructor::ImplementationCase::kDictionary:

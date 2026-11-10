@@ -72,12 +72,18 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
 {
     TVector<TString> maybeMissingColumnsToReplace;
     const auto op = GetTableOp(write);
+    THashSet<TStringBuf> inputColumnsSet;
+    for (const auto& name : inputColumns) {
+        inputColumnsSet.insert(name.Value());
+    }
     if (op == TYdbOperation::Replace) {
         for (const auto& [name, column] : tableDesc.Metadata->Columns) {
             if (column.IsDefaultFromExpression() && !column.DefaultExpression->Stored) {
                 continue;
             }
-            if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && column.IsDefaultFromLiteral()) {
+            // An omitted OLAP default column stays absent and is filled on read.
+            // An explicit value must still be written.
+            if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && column.IsDefaultFromLiteral() && !inputColumnsSet.contains(name)) {
                 continue;
             }
             maybeMissingColumnsToReplace.push_back(name);
@@ -95,11 +101,6 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
 
     if (maybeMissingColumnsToReplace.size() == 0) {
         return {input, inputColumns};
-    }
-
-    THashSet<TStringBuf> inputColumnsSet;
-    for (const auto& name : inputColumns) {
-        inputColumnsSet.insert(name.Value());
     }
 
     auto rowArg = Build<TCoArgument>(ctx, pos)

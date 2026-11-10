@@ -305,6 +305,34 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             ++batchIdx;
         }
     }
+    if (PortionSchemas.size() == Batches.size()) {
+        for (auto&& columnId : resultFiltered->GetIndexInfo().GetColumnIds(false)) {
+            if (columnsData.contains(columnId)) {
+                continue;
+            }
+            bool differs = false;
+            std::optional<std::shared_ptr<arrow::Scalar>> firstFill;
+            for (const auto& portionSchema : PortionSchemas) {
+                if (!portionSchema) {
+                    continue;
+                }
+                const auto fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchema, *resultFiltered, columnId);
+                if (!firstFill) {
+                    firstFill = fill;
+                } else if (NArrow::ScalarCompareNullable(fill, *firstFill) != 0) {
+                    differs = true;
+                    break;
+                }
+            }
+            const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
+            if (firstFill && NArrow::ScalarCompareNullable(*firstFill, resultFill) != 0) {
+                differs = true;
+            }
+            if (differs) {
+                columnsData.emplace(columnId, TColumnData(Batches.size()));
+            }
+        }
+    }
 
     TMergingContext mergingContext(Batches);
 

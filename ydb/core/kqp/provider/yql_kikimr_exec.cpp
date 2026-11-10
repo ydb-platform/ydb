@@ -2155,6 +2155,7 @@ public:
                                             ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), err.value()));
                                             return SyncError();
                                         }
+                                        add_column->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
                                         hasDefaultValue = true;
                                         continue;
                                     }
@@ -2396,6 +2397,16 @@ public:
                                 ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                     "Default values are not supported in column tables"));
                                 return SyncError();
+                            }
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                if (const auto* column = table.Metadata->Columns.FindPtr(TString(columnName))) {
+                                    alter_columns->SetType(column->Type);
+                                    auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(column->TypeInfo, column->TypeMod);
+                                    alter_columns->SetTypeId(columnType.TypeId);
+                                    if (columnType.TypeInfo) {
+                                        *alter_columns->MutableTypeInfo() = *columnType.TypeInfo;
+                                    }
+                                }
                             }
 
                             auto defaultExpr = TExprBase(alterColumnList.Item(1));

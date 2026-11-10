@@ -62,6 +62,11 @@ NKikimrColumnShardColumnDefaults::TColumnDefault TColumnDefaultScalarValue::Seri
             *resultScalar.MutableString() = buffer->ToString();
             break;
         }
+        case arrow::Type::BINARY: {
+            const auto& buffer = static_cast<const arrow::BinaryScalar&>(scalar).value;
+            resultScalar.SetBytes(buffer->ToString());
+            break;
+        }
         default:
             AFL_VERIFY(false)("problem", "incorrect type for statistics usage")("type", scalar.type->ToString());
     }
@@ -72,7 +77,7 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::DeserializeFromProto(const
     const auto& protoScalar = proto.GetScalar();
     Value = nullptr;
     if (protoScalar.HasBool()) {
-        Value = std::make_shared<arrow::BooleanScalar>(protoScalar.GetBool());
+        Value = std::make_shared<arrow::UInt8Scalar>(protoScalar.GetBool() ? static_cast<ui8>(1) : static_cast<ui8>(0));
     } else if (protoScalar.HasUint8()) {
         Value = std::make_shared<arrow::UInt8Scalar>(protoScalar.GetUint8());
     } else if (protoScalar.HasUint16()) {
@@ -98,6 +103,8 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::DeserializeFromProto(const
         Value = std::make_shared<arrow::TimestampScalar>(protoScalar.GetTimestamp().GetValue(), std::make_shared<arrow::TimestampType>(unit));
     } else if (protoScalar.HasString()) {
         Value = std::make_shared<arrow::StringScalar>(protoScalar.GetString());
+    } else if (protoScalar.HasBytes()) {
+        Value = std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(protoScalar.GetBytes())));
     }
     return TConclusionStatus::Success();
 }
@@ -146,7 +153,7 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
     std::shared_ptr<arrow::Scalar> scalar;
     switch (typed.type().type_id()) {
         case Ydb::Type::BOOL:
-            scalar = std::make_shared<arrow::BooleanScalar>(value.bool_value());
+            scalar = std::make_shared<arrow::UInt8Scalar>(value.bool_value() ? 1 : 0);
             break;
         case Ydb::Type::UINT8:
             scalar = std::make_shared<arrow::UInt8Scalar>(static_cast<ui8>(value.uint32_value()));
@@ -179,8 +186,10 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
             scalar = std::make_shared<arrow::DoubleScalar>(value.double_value());
             break;
         case Ydb::Type::UTF8:
-        case Ydb::Type::STRING:
             scalar = std::make_shared<arrow::StringScalar>(value.text_value());
+            break;
+        case Ydb::Type::STRING:
+            scalar = std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(value.bytes_value())));
             break;
         case Ydb::Type::TIMESTAMP:
             scalar = std::make_shared<arrow::TimestampScalar>(value.uint64_value(), arrow::timestamp(arrow::TimeUnit::MICRO));
@@ -195,73 +204,80 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
     if (!expected.ok()) {
         return TConclusionStatus::Fail(expected.status().ToString());
     }
-    if (!(*expected)->Equals(scalar->type) && typed.type().type_id() != Ydb::Type::STRING && typed.type().type_id() != Ydb::Type::UTF8) {
-        if ((*expected)->id() != scalar->type->id()) {
-            return TConclusionStatus::Fail("Default value is not supported for type " + ::ToString(type.GetTypeId()) + " in column tables");
-        }
+    if (type.GetTypeId() != 0 && !(*expected)->Equals(scalar->type)) {
+        return TConclusionStatus::Fail("Default value is not supported for type " + ::ToString(type.GetTypeId()) + " in column tables");
     }
     Value = scalar;
     return TConclusionStatus::Success();
 }
 
-TConclusion<Ydb::TypedValue> TColumnDefaultScalarValue::SerializeToTypedValue() const {
+TConclusion<Ydb::TypedValue> TColumnDefaultScalarValue::SerializeToTypedValue(const NScheme::TTypeInfo& type) const {
     Ydb::TypedValue result;
     if (!Value) {
         return TConclusionStatus::Fail("empty default");
     }
-    auto* type = result.mutable_type();
+    auto* outType = result.mutable_type();
     auto* value = result.mutable_value();
     switch (Value->type->id()) {
         case arrow::Type::BOOL:
-            type->set_type_id(Ydb::Type::BOOL);
+            outType->set_type_id(Ydb::Type::BOOL);
             value->set_bool_value(static_cast<const arrow::BooleanScalar&>(*Value).value);
             break;
         case arrow::Type::UINT8:
-            type->set_type_id(Ydb::Type::UINT8);
-            value->set_uint32_value(static_cast<const arrow::UInt8Scalar&>(*Value).value);
+            if (type.GetTypeId() == NScheme::NTypeIds::Bool) {
+                outType->set_type_id(Ydb::Type::BOOL);
+                value->set_bool_value(static_cast<const arrow::UInt8Scalar&>(*Value).value != 0);
+            } else {
+                outType->set_type_id(Ydb::Type::UINT8);
+                value->set_uint32_value(static_cast<const arrow::UInt8Scalar&>(*Value).value);
+            }
             break;
         case arrow::Type::UINT16:
-            type->set_type_id(Ydb::Type::UINT16);
+            outType->set_type_id(Ydb::Type::UINT16);
             value->set_uint32_value(static_cast<const arrow::UInt16Scalar&>(*Value).value);
             break;
         case arrow::Type::UINT32:
-            type->set_type_id(Ydb::Type::UINT32);
+            outType->set_type_id(Ydb::Type::UINT32);
             value->set_uint32_value(static_cast<const arrow::UInt32Scalar&>(*Value).value);
             break;
         case arrow::Type::UINT64:
-            type->set_type_id(Ydb::Type::UINT64);
+            outType->set_type_id(Ydb::Type::UINT64);
             value->set_uint64_value(static_cast<const arrow::UInt64Scalar&>(*Value).value);
             break;
         case arrow::Type::INT8:
-            type->set_type_id(Ydb::Type::INT8);
+            outType->set_type_id(Ydb::Type::INT8);
             value->set_int32_value(static_cast<const arrow::Int8Scalar&>(*Value).value);
             break;
         case arrow::Type::INT16:
-            type->set_type_id(Ydb::Type::INT16);
+            outType->set_type_id(Ydb::Type::INT16);
             value->set_int32_value(static_cast<const arrow::Int16Scalar&>(*Value).value);
             break;
         case arrow::Type::INT32:
-            type->set_type_id(Ydb::Type::INT32);
+            outType->set_type_id(Ydb::Type::INT32);
             value->set_int32_value(static_cast<const arrow::Int32Scalar&>(*Value).value);
             break;
         case arrow::Type::INT64:
-            type->set_type_id(Ydb::Type::INT64);
+            outType->set_type_id(Ydb::Type::INT64);
             value->set_int64_value(static_cast<const arrow::Int64Scalar&>(*Value).value);
             break;
         case arrow::Type::FLOAT:
-            type->set_type_id(Ydb::Type::FLOAT);
+            outType->set_type_id(Ydb::Type::FLOAT);
             value->set_float_value(static_cast<const arrow::FloatScalar&>(*Value).value);
             break;
         case arrow::Type::DOUBLE:
-            type->set_type_id(Ydb::Type::DOUBLE);
+            outType->set_type_id(Ydb::Type::DOUBLE);
             value->set_double_value(static_cast<const arrow::DoubleScalar&>(*Value).value);
             break;
         case arrow::Type::STRING:
-            type->set_type_id(Ydb::Type::UTF8);
+            outType->set_type_id(Ydb::Type::UTF8);
             value->set_text_value(static_cast<const arrow::StringScalar&>(*Value).value->ToString());
             break;
+        case arrow::Type::BINARY:
+            outType->set_type_id(Ydb::Type::STRING);
+            value->set_bytes_value(static_cast<const arrow::BinaryScalar&>(*Value).value->ToString());
+            break;
         case arrow::Type::TIMESTAMP:
-            type->set_type_id(Ydb::Type::TIMESTAMP);
+            outType->set_type_id(Ydb::Type::TIMESTAMP);
             value->set_uint64_value(static_cast<const arrow::TimestampScalar&>(*Value).value);
             break;
         default:

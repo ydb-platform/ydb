@@ -40,7 +40,7 @@ public:
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardColumnDefaults::TColumnDefault& proto);
     TConclusionStatus ParseFromString(const TString& value, const NScheme::TTypeInfo& type);
     TConclusionStatus ParseFromTypedValue(const Ydb::TypedValue& value, const NScheme::TTypeInfo& type);
-    TConclusion<Ydb::TypedValue> SerializeToTypedValue() const;
+    TConclusion<Ydb::TypedValue> SerializeToTypedValue(const NScheme::TTypeInfo& type = {}) const;
 };
 
 }   // namespace NKikimr::NOlap

@@ -907,7 +907,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 if (columnDesc.HasDefaultValue() && columnDesc.GetDefaultValue().HasScalar()) {
                     NOlap::TColumnDefaultScalarValue scalar;
                     if (scalar.DeserializeFromProto(columnDesc.GetDefaultValue()).IsSuccess()) {
-                        auto typed = scalar.SerializeToTypedValue();
+                        auto typed = scalar.SerializeToTypedValue(column.PType);
                         if (typed.IsSuccess()) {
                             column.SetDefaultFromLiteral();
                             column.DefaultFromLiteral = typed.GetResult();

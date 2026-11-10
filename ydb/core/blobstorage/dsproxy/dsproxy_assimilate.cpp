@@ -1,5 +1,7 @@
 #include "dsproxy.h"
 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
+
 namespace NKikimr {
 
 class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor {
@@ -13,6 +15,8 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
     std::optional<TLogoBlobID> SkipBlobsUpTo;
     const bool IgnoreDecommitState;
     const bool Reverse;
+    const std::optional<ui32> ExpectedGeneration;
+    const bool IncludePartPlacement;
 
     struct TBlock : TEvBlobStorage::TEvAssimilateResult::TBlock {
         TBlock(const TBlock&) = default;
@@ -104,6 +108,9 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
                 Keep |= other.Keep;
                 DoNotKeep |= other.DoNotKeep;
                 HasData |= other.HasData;
+                for (ui32 part = 0; part < PartDisks.size(); ++part) {
+                    PartDisks[part] |= other.PartDisks[part];
+                }
                 return true;
             } else {
                 return false;
@@ -122,6 +129,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
     struct TPerVDiskInfo {
         std::optional<TString> ErrorReason;
 
+        bool Excluded = false;
         std::optional<ui64> LastProcessedBlock;
         std::optional<std::tuple<ui64, ui8>> LastProcessedBarrier;
         std::optional<TLogoBlobID> LastProcessedBlob;
@@ -138,7 +146,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
 
         void PushDataFromMessage(const NKikimrBlobStorage::TEvVAssimilateResult& msg,
                 const TBlobStorageGroupAssimilateRequest& self, TBlobStorageGroupType gtype,
-                bool reverse) {
+                bool reverse, ui32 orderNumber) {
             Y_ABORT_UNLESS(Blocks.empty() && Barriers.empty() && Blobs.empty());
 
             std::array<ui64, 3> context = {0, 0, 0};
@@ -172,7 +180,8 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
                 }
             };
 
-            auto processItems = [&](const auto& items, auto& lastProcessed, auto& field, const auto& skipUpTo) {
+            auto processItems = [&]<typename TRecord>(const NProtoBuf::RepeatedPtrField<TRecord>& items,
+                    auto& lastProcessed, auto& field, const auto& skipUpTo) {
                 for (const auto& item : items) {
                     const auto key = getKey(item);
                     const auto expected = [&](const auto& opt) { return !opt || (reverse ? key < *opt : *opt < key); };
@@ -180,6 +189,20 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
                     lastProcessed.emplace(key);
                     if (expected(skipUpTo)) {
                         field.emplace_back(key, item, gtype);
+                        if constexpr (std::is_same_v<TRecord, NKikimrBlobStorage::TEvVAssimilateResult::TBlob>) {
+                            if (self.IncludePartPlacement) {
+                                const TBlobStorageGroupInfo::TTopology& topology = self.Info->GetTopology();
+                                TVDiskIdShort disk = topology.GetVDiskId(orderNumber);
+                                ui32 index = topology.GetIdxInSubgroup(disk, key.Hash());
+                                TBlob& blob = field.back();
+                                blob.PartDisks.resize(gtype.TotalPartCount(), 0);
+                                if (index < gtype.BlobSubgroupSize()) {
+                                    for (ui8 part : TIngress(item.GetIngress()).LocalParts(gtype)) {
+                                        blob.PartDisks[part] |= 1u << index;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             };
@@ -293,6 +316,8 @@ public:
         , SkipBlobsUpTo(params.Common.Event->SkipBlobsUpTo)
         , IgnoreDecommitState(params.Common.Event->IgnoreDecommitState)
         , Reverse(params.Common.Event->Reverse)
+        , ExpectedGeneration(params.Common.Event->ExpectedGeneration)
+        , IncludePartPlacement(params.Common.Event->IncludePartPlacement)
         , PerVDiskInfo(Info->GetTotalVDisksNum())
         , Result(new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::OK, {}))
     {
@@ -307,8 +332,20 @@ public:
 
         Become(&TBlobStorageGroupAssimilateRequest::StateWork, TDuration::Seconds(10), new TEvents::TEvWakeup);
 
+        if (ExpectedGeneration && *ExpectedGeneration != Info->GroupGeneration) {
+            return ReplyAndDie(NKikimrProto::RACE);
+        }
         for (ui32 i = 0; i < PerVDiskInfo.size(); ++i) {
-            Request(i);
+            ui32 realm = Info->GetVDiskId(i).FailRealm;
+            TPerVDiskInfo& disk = PerVDiskInfo[i];
+            disk.Excluded = realm < Info->GetMirror3dcState().FailRealmStates.size() && Info->IsFailRealmExcluded(realm);
+            if (!disk.Excluded) {
+                Request(i);
+            }
+        }
+        if (!RequestsInFlight) {
+            ErrorReason = "No VDisks available for assimilation";
+            ReplyAndDie(NKikimrProto::ERROR);
         }
     }
 
@@ -332,12 +369,21 @@ public:
         TPerVDiskInfo& info = PerVDiskInfo[orderNumber];
         Y_ABORT_UNLESS(!info.Finished());
 
-        auto maxOpt = [](const auto& x, const auto& y) { return !x ? y : !y ? x : *x < *y ? y : x; };
+        auto pickCursor = [this](const auto& merged, const auto& disk) {
+            if (!merged) {
+                return disk;
+            }
+            if (!disk) {
+                return merged;
+            }
+            bool diskIsAhead = Reverse ? *disk < *merged : *merged < *disk;
+            return diskIsAhead ? disk : merged;
+        };
 
         SendToQueue(std::make_unique<TEvBlobStorage::TEvVAssimilate>(Info->GetVDiskId(orderNumber),
-            maxOpt(SkipBlocksUpTo, info.LastProcessedBlock),
-            maxOpt(SkipBarriersUpTo, info.LastProcessedBarrier),
-            maxOpt(SkipBlobsUpTo, info.LastProcessedBlob),
+            pickCursor(SkipBlocksUpTo, info.LastProcessedBlock),
+            pickCursor(SkipBarriersUpTo, info.LastProcessedBarrier),
+            pickCursor(SkipBlobsUpTo, info.LastProcessedBlob),
             IgnoreDecommitState, Reverse), 0);
 
         DSP_LOG_DEBUG_S("BPA03", "Request orderNumber# " << orderNumber << " VDiskId# " << Info->GetVDiskId(orderNumber));
@@ -369,7 +415,7 @@ public:
         auto& info = PerVDiskInfo[orderNumber];
         Y_ABORT_UNLESS(!info.HasItemsToMerge());
         if (record.GetStatus() == NKikimrProto::OK) {
-            info.PushDataFromMessage(record, *this, Info->Type, Reverse);
+            info.PushDataFromMessage(record, *this, Info->Type, Reverse, orderNumber);
             if (info.HasItemsToMerge()) {
                 Heap.push_back(&info);
                 std::push_heap(Heap.begin(), Heap.end(), TPerVDiskInfo::TCompare{Reverse});
@@ -395,11 +441,18 @@ public:
         TBlobStorageGroupInfo::TGroupVDisks disksWithData(top);
         for (ui32 i = 0; i < PerVDiskInfo.size(); ++i) {
             TPerVDiskInfo& info = PerVDiskInfo[i];
+            if (info.Excluded) {
+                continue;
+            }
             if (info.HasItemsToMerge() || info.Finished()) {
                 disksWithData += {top, top->GetVDiskId(i)};
             }
         }
-        if (!Info->GetQuorumChecker().CheckQuorumForGroup(disksWithData)) {
+        bool isMirror3dc = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc;
+        bool hasQuorum = isMirror3dc
+            ? TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, ~disksWithData)
+            : Info->GetQuorumChecker().CheckQuorumForGroup(disksWithData);
+        if (!hasQuorum) {
             if (Result->Blocks.empty() && Result->Barriers.empty() && Result->Blobs.empty()) {
                 // we didn't get any data, so reply with ERROR to prevent confusing blob depot with 'all finished' situation
                 ReplyAndDie(NKikimrProto::ERROR);
@@ -468,6 +521,8 @@ public:
         ++*Mon->NodeMon->RestartAssimilate;
         auto ev = std::make_unique<TEvBlobStorage::TEvAssimilate>(OriginalSkipBlocksUpTo, OriginalSkipBarriersUpTo,
             OriginalSkipBlobsUpTo, IgnoreDecommitState, Reverse);
+        ev->ExpectedGeneration = ExpectedGeneration;
+        ev->IncludePartPlacement = IncludePartPlacement;
         ev->RestartCounter = counter;
         return ev;
     }

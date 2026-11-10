@@ -131,6 +131,22 @@ Y_UNIT_TEST_SUITE(BridgeSkipperHealth) {
         }
     }
 
+    Y_UNIT_TEST(RealPrimaryPdiskErrorPreservesTheOwnQuorumVeto) {
+        const auto reply = Classify("real_fallback_primary_pdisk_error");
+        UNIT_ASSERT(reply.Mode == ESelfCheckMode::Fallback);
+        UNIT_ASSERT(reply.Parts.at("a") == EPart::FallbackRed);
+        TScenario s;
+        s.Replies.SelfChecks.clear();
+        s.AddSelfCheck("b", reply);
+        s.AddConnectivity("a", true, true);
+        s.AddConnectivity("b", true, true);
+        const auto evaluation = s.Evaluate();
+        UNIT_ASSERT(!evaluation.BscAvailable);
+        AssertVerdict(evaluation, "a", EPileVerdict::Unknown);
+        UNIT_ASSERT(evaluation.Piles.at("a").SelfQuorum);
+        UNIT_ASSERT(evaluation.Piles.at("a").FallbackRed);
+    }
+
     Y_UNIT_TEST(ValidatedConnectivityKeepsQueriedEndpointForRouting) {
         for (const unsigned invalid : {0u, 1u, 2u, 3u}) {
             TScenario s;

@@ -9,6 +9,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
@@ -252,6 +253,30 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#secondary-index
             UNIT_ASSERT_VALUES_EQUAL_C(result, Max<ui64>(dataSizeMB * 640, dataSizeMB * 128 + rowCount * 0.5), explain);
         }
+    }
+
+    Y_UNIT_TEST(BillingTxType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "index" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // with no progress from the shard the build stays in Filling and is billed every ReBillPeriod
+        TBlockEvents<TEvDataShard::TEvBuildIndexProgressResponse> progressBlocker(runtime);
+        TWaitForFirstEvent<NSchemeShard::TEvPrivate::TEvIndexBuildingMakeABill> billWaiter(runtime);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        billWaiter.Wait(TDuration::Minutes(1));
+        env.SimulateSleep(runtime, TDuration::Seconds(1)); // let TTxBilling complete
+
+        UNIT_ASSERT_GT(GetTabletTxCompleted(runtime, TTestTxConfig::SchemeShard, "SchemeShard/TxBillingIndexBuild"), 0);
     }
 
     void BaseCase(NKikimrSchemeOp::EIndexType indexType) {

@@ -32,6 +32,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 34,
+                "ColumnName": "BridgeSyncMaxSyncers",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 5,
                 "ColumnName": "NextOperationLogIndex",
                 "ColumnType": "Uint64"
@@ -156,6 +161,7 @@
                     2,
                     33,
                     4,
+                    34,
                     5,
                     6,
                     7,
@@ -1857,6 +1863,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "EstimatedBytesToCopy",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "TargetGroupId",
                 "ColumnType": "Uint32"
@@ -1891,6 +1902,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,

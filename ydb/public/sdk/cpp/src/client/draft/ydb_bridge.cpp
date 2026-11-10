@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
 #include <ydb/public/api/grpc/draft/ydb_bridge_v1.grpc.pb.h>
 #include <ydb/public/api/protos/draft/ydb_bridge.pb.h>
@@ -28,6 +29,119 @@ std::vector<TPileStateUpdate> StateFromProto(const Ydb::Bridge::GetClusterStateR
         });
     }
     return state;
+}
+
+TGroupSyncCounts GroupSyncCountsFromProto(const Ydb::Bridge::GroupSyncCounts& proto) {
+    return {
+        .Required = proto.required(),
+        .Synced = proto.synced(),
+        .Syncing = proto.syncing(),
+        .Pending = proto.pending(),
+        .Unknown = proto.unknown(),
+    };
+}
+
+TDatabaseSyncCounts DatabaseSyncCountsFromProto(const Ydb::Bridge::DatabaseSyncCounts& proto) {
+    return {
+        .Total = proto.total(),
+        .Synced = proto.synced(),
+        .Syncing = proto.syncing(),
+        .Pending = proto.pending(),
+        .Unknown = proto.unknown(),
+        .NotRequired = proto.not_required(),
+    };
+}
+
+ESynchronizationStatus SynchronizationStatusFromProto(Ydb::Bridge::SynchronizationStatus status) {
+    switch (status) {
+        case Ydb::Bridge::SYNCHRONIZATION_STATUS_UNSPECIFIED:
+            return ESynchronizationStatus::Unspecified;
+        case Ydb::Bridge::SYNCED:
+            return ESynchronizationStatus::Synced;
+        case Ydb::Bridge::SYNCING:
+            return ESynchronizationStatus::Syncing;
+        case Ydb::Bridge::PENDING:
+            return ESynchronizationStatus::Pending;
+        case Ydb::Bridge::NOT_REQUIRED:
+            return ESynchronizationStatus::NotRequired;
+        default:
+            return ESynchronizationStatus::Unknown;
+    }
+}
+
+EStorageMode StorageModeFromProto(Ydb::Bridge::StorageMode mode) {
+    switch (mode) {
+        case Ydb::Bridge::BRIDGED:
+            return EStorageMode::Bridged;
+        case Ydb::Bridge::ORDINARY:
+            return EStorageMode::Ordinary;
+        case Ydb::Bridge::MIXED:
+            return EStorageMode::Mixed;
+        default:
+            return EStorageMode::Unspecified;
+    }
+}
+
+TStoragePool StoragePoolFromProto(const Ydb::Bridge::StoragePool& proto) {
+    return {.Id = {.BoxId = proto.id().box_id(), .PoolId = proto.id().pool_id()}, .Name = proto.name()};
+}
+
+TSynchronizationError SynchronizationErrorFromProto(const Ydb::Bridge::SynchronizationError& proto) {
+    return {
+        .Message = proto.message(),
+        .OccurredAt = proto.has_occurred_at() ? std::optional<TInstant>(ProtoTimestampToInstant(proto.occurred_at())) : std::nullopt,
+    };
+}
+
+TPileSynchronization PileSynchronizationFromProto(const Ydb::Bridge::PileSynchronization& proto) {
+    return {
+        .PileName = proto.has_pile_name() ? std::optional<std::string>(proto.pile_name()) : std::nullopt,
+        .Databases = DatabaseSyncCountsFromProto(proto.databases()),
+    };
+}
+
+TDatabaseSynchronization DatabaseSynchronizationFromProto(const Ydb::Bridge::DatabaseSynchronization& proto) {
+    TDatabaseSynchronization result;
+    if (proto.has_database_path()) {
+        result.DatabasePath = proto.database_path();
+    }
+    for (const auto& pool : proto.storage_pools()) {
+        result.StoragePools.push_back(StoragePoolFromProto(pool));
+    }
+    result.StorageMode = StorageModeFromProto(proto.storage_mode());
+    if (proto.has_pile_name()) {
+        result.PileName = proto.pile_name();
+    }
+    result.Groups = GroupSyncCountsFromProto(proto.groups());
+    if (proto.has_last_sync_error()) {
+        result.LastSyncError = SynchronizationErrorFromProto(proto.last_sync_error());
+    }
+    return result;
+}
+
+TGroupSynchronization GroupSynchronizationFromProto(const Ydb::Bridge::GroupSynchronization& proto) {
+    return {
+        .GroupId = proto.group_id(),
+        .PhysicalGroupId = proto.has_physical_group_id() ? std::optional<uint32_t>(proto.physical_group_id()) : std::nullopt,
+        .StoragePool = proto.has_storage_pool() ? std::optional<TStoragePool>(StoragePoolFromProto(proto.storage_pool())) : std::nullopt,
+        .PileName = proto.has_pile_name() ? std::optional<std::string>(proto.pile_name()) : std::nullopt,
+        .SyncStatus = SynchronizationStatusFromProto(proto.sync_status()),
+        .SyncPhase = proto.sync_phase(),
+        .LastSyncError = proto.has_last_sync_error() ? std::optional<TSynchronizationError>(SynchronizationErrorFromProto(proto.last_sync_error())) : std::nullopt,
+    };
+}
+
+template <class TProto>
+bool UnpackDiagnostics(google::protobuf::Any* any, TPlainStatus& status, TProto& proto) {
+    if (!status.Ok()) {
+        return false;
+    }
+    if (!any || !any->UnpackTo(&proto)) {
+        status.Status = EStatus::CLIENT_INTERNAL_ERROR;
+        status.Issues.AddIssue(NIssue::TIssue("Invalid bridge diagnostics response"));
+        return false;
+    }
+    return true;
 }
 
 }
@@ -118,6 +232,109 @@ public:
         return promise.GetFuture();
     }
 
+    TAsyncListPileSynchronizationResult ListPileSynchronization(const TListPileSynchronizationSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::ListPileSynchronizationRequest>(settings);
+        auto promise = NThreading::NewPromise<TListPileSynchronizationResult>();
+        auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
+            Ydb::Bridge::ListPileSynchronizationResult proto;
+            if (!UnpackDiagnostics(any, status, proto)) {
+                promise.SetValue(TListPileSynchronizationResult(TStatus(std::move(status))));
+                return;
+            }
+            std::vector<TPileSynchronization> piles;
+            piles.reserve(proto.piles_size());
+            for (const auto& row : proto.piles()) {
+                piles.push_back(PileSynchronizationFromProto(row));
+            }
+            promise.SetValue(TListPileSynchronizationResult(TStatus(std::move(status)), std::move(piles),
+                                                          proto.cluster_state_generation(), ProtoTimestampToInstant(proto.observed_at()),
+                                                          proto.unattributed_storage_pools()));
+        };
+        Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ListPileSynchronizationRequest, Ydb::Bridge::ListPileSynchronizationResponse>(
+            std::move(request), extractor, &Ydb::Bridge::V1::BridgeService::Stub::AsyncListPileSynchronization,
+            DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, TRpcRequestSettings::Make(settings));
+        return promise.GetFuture();
+    }
+
+    TAsyncListDatabaseSynchronizationResult ListDatabaseSynchronization(const TListDatabaseSynchronizationSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::ListDatabaseSynchronizationRequest>(settings);
+        if (settings.DatabasePath_) {
+            request.set_database_path(*settings.DatabasePath_);
+        }
+        if (settings.PileName_) {
+            request.set_pile_name(*settings.PileName_);
+        }
+        request.set_only_incomplete(settings.OnlyIncomplete_);
+        if (settings.StorageMode_) {
+            request.set_storage_mode(static_cast<Ydb::Bridge::StorageMode>(*settings.StorageMode_));
+        }
+        auto promise = NThreading::NewPromise<TListDatabaseSynchronizationResult>();
+        auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
+            Ydb::Bridge::ListDatabaseSynchronizationResult proto;
+            if (!UnpackDiagnostics(any, status, proto)) {
+                promise.SetValue(TListDatabaseSynchronizationResult(TStatus(std::move(status))));
+                return;
+            }
+            std::vector<TDatabaseSynchronization> databases;
+            databases.reserve(proto.databases_size());
+            for (const auto& row : proto.databases()) {
+                databases.push_back(DatabaseSynchronizationFromProto(row));
+            }
+            promise.SetValue(TListDatabaseSynchronizationResult(TStatus(std::move(status)), std::move(databases),
+                                                                proto.cluster_state_generation(), ProtoTimestampToInstant(proto.observed_at()),
+                                                                proto.has_storage_owner_database_path() ? std::optional<std::string>(proto.storage_owner_database_path()) : std::nullopt));
+        };
+        Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ListDatabaseSynchronizationRequest, Ydb::Bridge::ListDatabaseSynchronizationResponse>(
+            std::move(request), extractor, &Ydb::Bridge::V1::BridgeService::Stub::AsyncListDatabaseSynchronization,
+            DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, TRpcRequestSettings::Make(settings));
+        return promise.GetFuture();
+    }
+
+    TAsyncListGroupSynchronizationResult ListGroupSynchronization(const TGroupSynchronizationScope& scope,
+                                                                  const TListGroupSynchronizationSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::ListGroupSynchronizationRequest>(settings);
+        switch (scope.GetKind()) {
+            case TGroupSynchronizationScope::EKind::All:
+                break;
+            case TGroupSynchronizationScope::EKind::Database:
+                request.set_database_path(scope.GetName());
+                break;
+            case TGroupSynchronizationScope::EKind::StoragePoolName:
+                request.set_storage_pool_name(scope.GetName());
+                break;
+            case TGroupSynchronizationScope::EKind::StoragePoolId:
+                request.mutable_storage_pool_id()->set_box_id(scope.GetPoolId().BoxId);
+                request.mutable_storage_pool_id()->set_pool_id(scope.GetPoolId().PoolId);
+                break;
+        }
+        if (settings.PileName_) {
+            request.set_pile_name(*settings.PileName_);
+        }
+        for (const auto status : settings.Statuses_) {
+            request.add_statuses(static_cast<Ydb::Bridge::SynchronizationStatus>(status));
+        }
+        auto promise = NThreading::NewPromise<TListGroupSynchronizationResult>();
+        auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
+            Ydb::Bridge::ListGroupSynchronizationResult proto;
+            if (!UnpackDiagnostics(any, status, proto)) {
+                promise.SetValue(TListGroupSynchronizationResult(TStatus(std::move(status))));
+                return;
+            }
+            std::vector<TGroupSynchronization> groups;
+            groups.reserve(proto.groups_size());
+            for (const auto& row : proto.groups()) {
+                groups.push_back(GroupSynchronizationFromProto(row));
+            }
+            promise.SetValue(TListGroupSynchronizationResult(TStatus(std::move(status)), std::move(groups),
+                                                             proto.cluster_state_generation(), ProtoTimestampToInstant(proto.observed_at()),
+                                                             proto.has_storage_owner_database_path() ? std::optional<std::string>(proto.storage_owner_database_path()) : std::nullopt));
+        };
+        Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ListGroupSynchronizationRequest, Ydb::Bridge::ListGroupSynchronizationResponse>(
+            std::move(request), extractor, &Ydb::Bridge::V1::BridgeService::Stub::AsyncListGroupSynchronization,
+            DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, TRpcRequestSettings::Make(settings));
+        return promise.GetFuture();
+    }
+
     TAsyncStatus ConvertToBridge(const TConvertToBridgeSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::ConvertToBridgeRequest>(settings);
         request.set_skip_storage_pool_conversion(settings.SkipStoragePoolConversion_);
@@ -174,6 +391,19 @@ TAsyncStatus TBridgeClient::UpdateClusterState(const std::vector<TPileStateUpdat
 
 TAsyncGetClusterStateResult TBridgeClient::GetClusterState(const TGetClusterStateSettings& settings) {
     return Impl_->GetClusterState(settings);
+}
+
+TAsyncListPileSynchronizationResult TBridgeClient::ListPileSynchronization(const TListPileSynchronizationSettings& settings) {
+    return Impl_->ListPileSynchronization(settings);
+}
+
+TAsyncListDatabaseSynchronizationResult TBridgeClient::ListDatabaseSynchronization(const TListDatabaseSynchronizationSettings& settings) {
+    return Impl_->ListDatabaseSynchronization(settings);
+}
+
+TAsyncListGroupSynchronizationResult TBridgeClient::ListGroupSynchronization(const TGroupSynchronizationScope& scope,
+                                                                             const TListGroupSynchronizationSettings& settings) {
+    return Impl_->ListGroupSynchronization(scope, settings);
 }
 
 TAsyncStatus TBridgeClient::ConvertToBridge(const TConvertToBridgeSettings& settings) {

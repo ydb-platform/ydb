@@ -54,6 +54,160 @@ message GetClusterStateResult {
     optional PileConnectivityReport pile_connectivity = 5;
 }
 
+// Administrator-only diagnostics; complete results or an error.
+message ListPileSynchronizationRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message ListPileSynchronizationResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListPileSynchronizationResult {
+    repeated PileSynchronization piles = 1;
+    uint64 cluster_state_generation = 2;
+    google.protobuf.Timestamp observed_at = 3;
+    // Pools whose database cannot be identified; excluded from totals.
+    uint64 unattributed_storage_pools = 4;
+}
+
+message ListDatabaseSynchronizationRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Absolute path; serverless selects shared storage.
+    optional string database_path = 2;
+    // Unset: all piles; empty: the pile named "".
+    optional string pile_name = 3;
+    // Skip synchronized databases and those with no required groups.
+    bool only_incomplete = 4;
+    // Filter by the aggregate mode of all database pools.
+    optional StorageMode storage_mode = 5;
+}
+
+message ListDatabaseSynchronizationResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListDatabaseSynchronizationResult {
+    // Storage-owning databases, not all logical serverless databases.
+    repeated DatabaseSynchronization databases = 1;
+    uint64 cluster_state_generation = 2;
+    google.protobuf.Timestamp observed_at = 3;
+    // Resolved owner, also returned for an empty selection.
+    optional string storage_owner_database_path = 4;
+}
+
+message ListGroupSynchronizationRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Unset: all groups. Paths/names must be nonempty; ambiguous pool names require IDs.
+    oneof scope {
+        string database_path = 2;
+        string storage_pool_name = 3;
+        StoragePoolId storage_pool_id = 4;
+    }
+    // Unset: all piles; empty: the pile named "".
+    optional string pile_name = 5;
+    // Empty: all statuses; otherwise OR. Unspecified is invalid.
+    repeated SynchronizationStatus statuses = 6;
+}
+
+message ListGroupSynchronizationResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListGroupSynchronizationResult {
+    repeated GroupSynchronization groups = 1;
+    uint64 cluster_state_generation = 2;
+    google.protobuf.Timestamp observed_at = 3;
+    optional string storage_owner_database_path = 4;
+}
+
+message StoragePoolId {
+    uint64 box_id = 1;
+    // Nonzero; box_id may be zero.
+    uint64 pool_id = 2;
+}
+
+message StoragePool {
+    StoragePoolId id = 1;
+    string name = 2;
+}
+
+enum StorageMode {
+    STORAGE_MODE_UNSPECIFIED = 0;
+    BRIDGED = 1;
+    ORDINARY = 2;
+    MIXED = 3;
+}
+
+enum SynchronizationStatus {
+    SYNCHRONIZATION_STATUS_UNSPECIFIED = 0;
+    SYNCED = 1;
+    SYNCING = 2;
+    PENDING = 3; // Required, but not running.
+    // No bridge synchronization required, including ordinary storage and inactive piles.
+    NOT_REQUIRED = 4;
+    UNKNOWN = 5; // Insufficient observations.
+}
+
+// Required groups only: required = synced + syncing + pending + unknown.
+message GroupSyncCounts {
+    uint64 required = 1;
+    uint64 synced = 2;
+    uint64 syncing = 3;
+    uint64 pending = 4;
+    uint64 unknown = 5;
+}
+
+// One known storage owner per pile; shared storage counts once.
+// total = synced + syncing + pending + unknown + not_required.
+message DatabaseSyncCounts {
+    uint64 total = 1;
+    uint64 synced = 2;
+    uint64 syncing = 3;
+    uint64 pending = 4;
+    uint64 unknown = 5;
+    uint64 not_required = 6;
+}
+
+message PileSynchronization {
+    // Unset: unknown placement; empty: the real pile named "".
+    optional string pile_name = 1;
+    DatabaseSyncCounts databases = 2;
+}
+
+// Last error; may remain while synchronization is running.
+message SynchronizationError {
+    string message = 1;
+    google.protobuf.Timestamp occurred_at = 2;
+}
+
+message DatabaseSynchronization {
+    // Storage owner path, if known.
+    optional string database_path = 1;
+    repeated StoragePool storage_pools = 2;
+    StorageMode storage_mode = 3;
+    // Unset if placement is unknown.
+    optional string pile_name = 4;
+    // Mixed mode counts only bridged pools.
+    GroupSyncCounts groups = 5;
+    SynchronizationError last_sync_error = 6;
+}
+
+message GroupSynchronization {
+    // ID used by tablets.
+    uint32 group_id = 1;
+    // Physical group ID, if known.
+    optional uint32 physical_group_id = 2;
+    // Unset for groups outside dynamic pools.
+    StoragePool storage_pool = 3;
+    // One row per pile; unset if placement is unknown.
+    optional string pile_name = 4;
+    SynchronizationStatus sync_status = 5;
+    // Diagnostic phase; use sync_status for programmatic checks.
+    string sync_phase = 6;
+    SynchronizationError last_sync_error = 7;
+}
+
 message PileConnectivity {
     string pile_name = 1;
     uint32 static_nodes = 2;

@@ -488,6 +488,7 @@ namespace NKikimr::NStorage {
         if (startNew) {
             syncer.BridgeProxyGroupGeneration = syncer.PendingBridgeProxyGroupGeneration;
             syncer.SyncerDataStats = std::make_unique<NBridge::TSyncerDataStats>();
+            syncer.ForceProgressReport = true;
             syncer.ActorId = Register(NBridge::CreateSyncerActor(group.Info, syncer.SourceGroupId, syncer.TargetGroupId,
                 syncer.SyncerDataStats, SyncRateQuoter));
             syncer.Finished = false;
@@ -563,6 +564,7 @@ namespace NKikimr::NStorage {
         // report syncer progress
         auto& stats = *syncer.SyncerDataStats;
         auto res = false;
+        forceProgress |= std::exchange(syncer.ForceProgressReport, false);
 
 #define ISSUE_METRIC(NAME) \
         const ui64 current##NAME = stats.NAME; \
@@ -578,8 +580,17 @@ namespace NKikimr::NStorage {
         ISSUE_METRIC(BlobsDone)
         ISSUE_METRIC(BlobsTotal)
         ISSUE_METRIC(BlobsError)
+        ISSUE_METRIC(BytesToCopy)
+        ISSUE_METRIC(BytesCopied)
 
 #undef ISSUE_METRIC
+
+        if (const bool scanFinished = stats.ScanFinished;
+                forceProgress || syncer.ReportedScanFinished != scanFinished) {
+            item->SetScanFinished(scanFinished);
+            syncer.ReportedScanFinished = scanFinished;
+            res = true;
+        }
 
         return res;
     }

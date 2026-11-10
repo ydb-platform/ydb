@@ -67,6 +67,22 @@ public:
             NIceDb::TNiceDb db(txc.DB);
             const TInstant now = TActivationContext::Now();
             if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
+                TNodeInfo* node = Self->FindNode(Local.NodeId());
+                if (node == nullptr) {
+                    // event from IC about disconnection of the node could overtake events from the node itself because of Pipe Server
+                    // KIKIMR-9614
+                    return true;
+                }
+                if (!(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) && !tablet->IsPresentOnLocal(Local)) {
+                    SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tablet->GetFullTabletId(), Generation));
+                    return true;
+                }
+                if (tablet->IsLeader() && Generation < tablet->GetLeader().KnownGeneration) {
+                    if (tablet->AsLeader().IsLockedToActor()) {
+                        tablet->SendStopTablet(Local, SideEffects);
+                    }
+                    return true;
+                }
                 if (tablet->BootTime != TInstant()) {
                     TDuration startTime = now - tablet->BootTime;
                     if (startTime > TDuration::Seconds(30)) {
@@ -77,18 +93,7 @@ public:
                     }
                     Self->TabletCounters->Percentile()[NHive::COUNTER_TABLETS_START_TIME].IncrementFor(startTime.MilliSeconds());
                     Self->UpdateCounterTabletsStarting(-1);
-                }
-                TNodeInfo* node = Self->FindNode(Local.NodeId());
-                if (node == nullptr) {
-                    // event from IC about disconnection of the node could overtake events from the node itself because of Pipe Server
-                    // KIKIMR-9614
-                    return true;
-                }
-                if (tablet->IsLeader() && Generation < tablet->GetLeader().KnownGeneration) {
-                    if (tablet->AsLeader().IsLockedToActor()) {
-                        tablet->SendStopTablet(Local, SideEffects);
-                    }
-                    return true;
+                    tablet->BootTime = {};
                 }
                 tablet->NotifyOnRestart("OK", SideEffects);
                 for (const TActorId& actor : Self->ActorsWaitingToMoveTablets) {

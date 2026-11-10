@@ -1609,6 +1609,7 @@ namespace NKikimr::NBsController {
             settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
             settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
             settings->AddBridgeSyncTotalRateBytesPerSecond(BridgeSyncTotalRate);
+            settings->AddBridgeSyncMaxSyncers(BridgeSyncMaxSyncers);
         }
 
         void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,

@@ -455,7 +455,7 @@ namespace NKikimr::NBsController {
                 const auto [it, inserted] = self.TargetGroupToSyncerState.try_emplace(targetGroupId, proxyGroupId,
                     targetGroupId);
                 if (inserted) {
-                    self.SyncersRequiringAction.PushBack(&it->second);
+                    self.EnqueueSyncer(it->second);
                 }
                 // the part is not going to be deleted anymore, it gets the whole delay when dropped again
                 self.DroppedBridgePartsSince.erase(targetGroupId);

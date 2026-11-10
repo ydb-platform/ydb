@@ -796,6 +796,11 @@ namespace NKikimr::NStorage {
             ui64 ReportedBlobsDone = 0;
             ui64 ReportedBlobsTotal = 0;
             ui64 ReportedBlobsError = 0;
+            ui64 ReportedBytesToCopy = 0;
+            ui64 ReportedBytesCopied = 0;
+            bool ReportedScanFinished = false;
+            // a new run starts from zero, while BSC may still have the values of the previous one, so all of them go
+            bool ForceProgressReport = false;
 
             friend std::strong_ordering operator <=>(const TWorkingSyncer& x, const TWorkingSyncer& y) {
                 return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId) <=>

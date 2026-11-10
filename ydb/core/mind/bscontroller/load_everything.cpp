@@ -100,6 +100,7 @@ public:
                 Self->MaxScrubbedDisksAtOnce = state.GetValue<T::MaxScrubbedDisksAtOnce>();
                 Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
                 Self->BridgeSyncTotalRate = state.GetValue<T::BridgeSyncTotalRate>();
+                Self->BridgeSyncMaxSyncers = state.GetValue<T::BridgeSyncMaxSyncers>();
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;
@@ -617,6 +618,9 @@ public:
                     .LastErrorTimestamp = bridgeSyncState.GetValue<Table::LastErrorTimestamp>(),
                     .FirstErrorTimestamp = bridgeSyncState.GetValue<Table::FirstErrorTimestamp>(),
                     .ErrorCount = bridgeSyncState.GetValue<Table::ErrorCount>(),
+                    .EstimatedBytesToCopy = bridgeSyncState.HaveValue<Table::EstimatedBytesToCopy>()
+                        ? std::make_optional(bridgeSyncState.GetValue<Table::EstimatedBytesToCopy>())
+                        : std::nullopt,
                 };
                 if (!bridgeSyncState.Next()) {
                     return false;
@@ -756,7 +760,7 @@ public:
                         const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, groupId,
                             targetGroupId);
                         Y_ABORT_UNLESS(inserted);
-                        Self->SyncersRequiringAction.PushBack(&it->second);
+                        Self->EnqueueSyncer(it->second);
                     }
                 });
             }

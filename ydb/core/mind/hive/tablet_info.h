@@ -163,6 +163,7 @@ public:
     EBalancerPolicy BalancerPolicy;
     TNodeId FailedNodeId = 0; // last time we tried to start the tablet, we failed on this node
     TInstant BootTime;
+    ui64 BootAttemptId = 0;
     TNodeFilter NodeFilter;
     bool InWaitQueue = false;
     double UsageImpact = 0;

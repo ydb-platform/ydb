@@ -170,6 +170,7 @@ protected:
     friend class TDrainNodeWaitActor;
     friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
+    friend struct TTabletInfo;
     friend struct TLeaderTabletInfo;
     friend class TReassignTabletsActor;
     friend class TMoveDataActor;
@@ -255,6 +256,9 @@ protected:
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
     void StartHiveBalancer(TBalancerSettings&& settings);
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
+    void StartPileDrain(TBridgePileInfo& pile);
+    bool HasTabletsToDrain(TBridgePileId pileId) const;
+    void ProcessPileDrains();
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
     void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
@@ -270,6 +274,10 @@ protected:
     ITransaction* CreateRestartTablet(TFullTabletId tabletId);
     ITransaction* CreateRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId);
     ITransaction* CreateForceRestartTablet(TFullTabletId tabletId);
+    ITransaction* CreateRestartTabletAfterBootUndelivered(TFullTabletId tabletId, ui64 bootAttemptId);
+    ui64 TrackBootAttempt(TTabletInfo& tablet, const TActorId& local);
+    void ClearBootAttempt(TTabletInfo& tablet);
+    TTabletInfo* FindStartingBootAttempt(ui64 bootAttemptId);
     ITransaction* CreateInitScheme();
     ITransaction* CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie);
     ITransaction* CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie);
@@ -309,7 +317,7 @@ protected:
     ITransaction* CreateReleaseTabletsReply(TEvHive::TEvReleaseTabletsReply::TPtr event);
     ITransaction* CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event);
     ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo = 0, ui64 cookie = 0);
-    ITransaction* CreateSwitchDrainOff(TDrainTarget target, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements);
+    ITransaction* CreateSwitchDrainOff(TDrainTarget target, NKikimrProto::EReplyStatus status, ui32 movements);
     ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
@@ -345,6 +353,12 @@ protected:
     std::unordered_map<TNodeId, TNodeInfo> Nodes;
     std::unordered_map<TSegmentId, TIntrusiveList<TNodeInfo, TSegmentNodesTag>> NodeSegments;
     std::unordered_map<TTabletId, TLeaderTabletInfo> Tablets;
+    struct TBootAttempt {
+        TFullTabletId TabletId;
+        TActorId Local;
+    };
+    std::unordered_map<ui64, TBootAttempt> BootAttempts;
+    ui64 LastBootAttemptId = 0;
     std::unordered_map<TOwnerIdxType::TValueType, TTabletId> OwnerToTablet;
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetrics;
@@ -398,6 +412,7 @@ protected:
     TBootQueue BootQueue;
     bool ProcessWaitQueueScheduled = false;
     bool ProcessBootQueueScheduled = false;
+    bool ProcessPileDrainsScheduled = false;
     bool ProcessBootQueuePostponed = false;
     TInstant LastConnect;
     TInstant ProcessBootQueuePostponedUntil;
@@ -594,6 +609,7 @@ protected:
     void Handle(TEvPrivate::TEvCheckTabletNodeAlive::TPtr&);
     void HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessBootQueue::TPtr&);
+    void Handle(TEvPrivate::TEvProcessPileDrains::TPtr&);
     void Handle(TEvPrivate::TEvPostponeProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr&);
     void HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&);
@@ -746,7 +762,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
             NKikimr::NHive::TResourceNormalizedValues deltaNormalized);
     void ResetTotalResourceValues();
     void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
-    void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
+    void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local);
     ui32 GetDataCenters();
     void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);

@@ -551,6 +551,8 @@ struct TEvBlobStorage {
         EvControllerUpdateSyncerState               = 0x1003162f,
         EvControllerAllocateDDiskBlockGroup         = 0x10031630,
         EvControllerAllocateDDiskBlockGroupResult   = 0x10031631,
+        EvControllerQueryBridgeStorage             = 0x10031638,
+        EvControllerQueryBridgeStorageResult       = 0x10031639,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -2499,6 +2501,9 @@ struct TEvBlobStorage {
             TLogoBlobID Id;
             bool Keep = false;
             bool DoNotKeep = false;
+            // some disk has a part of the blob; a disk may have a record of the blob with flags only, e.g. a Keep flag
+            // that has come before the data
+            bool HasData = true;
 
             TString ToString() const {
                 TStringStream str;
@@ -2513,6 +2518,9 @@ struct TEvBlobStorage {
                 }
                 if (DoNotKeep) {
                     s << "d";
+                }
+                if (!HasData) {
+                    s << "n";
                 }
             }
 
@@ -2667,6 +2675,8 @@ struct TEvBlobStorage {
     struct TEvControllerDistconfRequest;
     struct TEvControllerDistconfResponse;
     struct TEvControllerUpdateSyncerState;
+    struct TEvControllerQueryBridgeStorage;
+    struct TEvControllerQueryBridgeStorageResult;
 
     struct TEvControllerAllocateDDiskBlockGroup;
     struct TEvControllerAllocateDDiskBlockGroupResult;

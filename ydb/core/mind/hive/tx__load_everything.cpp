@@ -29,6 +29,7 @@ public:
         Self->NodeSegments.clear();
         Self->TabletCategories.clear();
         Self->Tablets.clear();
+        Self->BootAttempts.clear();
         Self->OwnerToTablet.clear();
         Self->ObjectToTabletMetrics.clear();
         Self->TabletTypeToTabletMetrics.clear();
@@ -347,6 +348,7 @@ public:
                 pileInfo.State = bridgePileRowset.GetValue<Schema::BridgePile::State>();
                 pileInfo.IsPrimary = bridgePileRowset.GetValue<Schema::BridgePile::IsPrimary>();
                 pileInfo.IsPromoted = bridgePileRowset.GetValue<Schema::BridgePile::IsPromoted>();
+                pileInfo.Drain = bridgePileRowset.GetValueOrDefault<Schema::BridgePile::Drain>();
                 if (!bridgePileRowset.Next()) {
                     return false;
                 }
@@ -675,7 +677,7 @@ public:
                     followerGroup.NodeFilter.AllowedNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedNodes>();
                     followerGroup.NodeFilter.AllowedDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::NewAllowedDataCenterIds>();
 
-                    followerGroup.RequireAllDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>();
+                    followerGroup.SetRequireAllDataCenters(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>());
                     followerGroup.LocalNodeOnly = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>();
                     followerGroup.FollowerCountPerDataCenter = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>();
                     followerGroup.RequireDifferentNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>();

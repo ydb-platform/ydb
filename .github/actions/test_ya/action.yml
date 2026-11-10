@@ -225,18 +225,18 @@ runs:
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml
         analytics end init --conclusion success
-if [ "${GH_PROXY_MEASURED:-}" = 1 ]; then
-  chosen_mbps="${GH_PROXY_DIRECT_MBPS}"
-  if [ "${GH_PROXY_USED}" = true ]; then
-    chosen_mbps="${GH_PROXY_PROXY_MBPS}"
-  fi
-  analytics track github_proxy --kind info --source ya_phase \
-    --value "$chosen_mbps" --unit "MB/s" \
-    --label "use_proxy=${GH_PROXY_USED}" \
-    --label "direct_mbps=${GH_PROXY_DIRECT_MBPS}" \
-    --label "proxy_mbps=${GH_PROXY_PROXY_MBPS}"
-  analytics flush
-fi
+        if [ "${GH_PROXY_MEASURED:-}" = 1 ]; then
+          chosen_mbps="${GH_PROXY_DIRECT_MBPS}"
+          if [ "${GH_PROXY_USED}" = true ]; then
+            chosen_mbps="${GH_PROXY_PROXY_MBPS}"
+          fi
+          analytics track github_proxy --kind info --source ya_phase \
+            --value "$chosen_mbps" --unit "MB/s" \
+            --label "use_proxy=${GH_PROXY_USED}" \
+            --label "direct_mbps=${GH_PROXY_DIRECT_MBPS}" \
+            --label "proxy_mbps=${GH_PROXY_PROXY_MBPS}"
+          analytics flush
+        fi
 
     - name: Clean ya cache
       id: clean_ya_cache
@@ -1141,39 +1141,39 @@ fi
 
         python3 .github/scripts/send_build_stats.py
 
-- name: show_build_size_diff
-  shell: bash
-  continue-on-error: true
-  if: always() && inputs.publish_github_status == 'true'
-  env:
-    GITHUB_TOKEN: ${{ github.token }}
-  run: |
-    set -x
-    export build_preset="${{ inputs.build_preset }}"
-    export branch_to_compare="$BRANCH_NAME"
-    export yellow_treshold=102400
-    export commit_git_sha="$ORIGINAL_HEAD"
+    - name: show_build_size_diff
+      shell: bash
+      continue-on-error: true
+      if: always() && inputs.publish_github_status == 'true'
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -x
+        export build_preset="${{ inputs.build_preset }}"
+        export branch_to_compare="$BRANCH_NAME"
+        export yellow_treshold=102400
+        export commit_git_sha="$ORIGINAL_HEAD"
 
-    get_sizes_comment_script=.github/scripts/get_build_diff.py
-    comment_raw=`$get_sizes_comment_script`
-    if [[ -z "$comment_raw" ]]; then
-      echo "Skipped build size difference: no comparison available"
-      exit 0
-    fi
+        get_sizes_comment_script=.github/scripts/get_build_diff.py
+        comment_raw=`$get_sizes_comment_script`
+        if [[ -z "$comment_raw" ]]; then
+          echo "Skipped build size difference: no comparison available"
+          exit 0
+        fi
 
-    IFS=';;;'
-    read -ra comment_arr <<< "$comment_raw"
+        IFS=';;;'
+        read -ra comment_arr <<< "$comment_raw"
 
-    if [[ ${comment_raw} != "Error"* ]]; then
-      color=${comment_arr[0]}
-      replace=$color";;;"
-      comment=${comment_raw/$replace/""}
+        if [[ ${comment_raw} != "Error"* ]]; then
+          color=${comment_arr[0]}
+          replace=$color";;;"
+          comment=${comment_raw/$replace/""}
 
-      printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
+          printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
 
-    else
-      echo "Skipped build size difference, comment_raw = ${comment_raw}"
-    fi
+        else
+          echo "Skipped build size difference, comment_raw = ${comment_raw}"
+        fi
 
     - name: comment-if-cancel
       shell: bash
@@ -1183,15 +1183,14 @@ fi
         GITHUB_TOKEN: ${{ github.token }}
       run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black
 
-
-- name: cleanup tmp
-  if: always()
-  shell: bash
-  run: |
-    set +e
-    set -x
-    if [ -n "${TMP_DIR:-}" ]; then
-      rm -rf "$TMP_DIR"
-    fi
-    rm -rf /tmp/tmp*
-    df -h / || true
+    - name: cleanup tmp
+      if: always()
+      shell: bash
+      run: |
+        set +e
+        set -x
+        if [ -n "${TMP_DIR:-}" ]; then
+          rm -rf "$TMP_DIR"
+        fi
+        rm -rf /tmp/tmp*
+        df -h / || true

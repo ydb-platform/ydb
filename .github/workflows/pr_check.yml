@@ -311,8 +311,7 @@ jobs:
           wait "$pid" 2>/dev/null || true
           if [ "$s1" -eq 0 ]; then
             echo "git clone never started receiving objects:" >&2
-            tr '' '
-' < "$log" | grep -E 'Receiving objects|Compressing objects|fatal:' | tail -5 >&2 || true
+            tr '\r' '\n' < \"$log\" | grep -E 'Receiving objects|Compressing objects|fatal:' | tail -5 >&2 || true
           fi
           rm -rf "$dest"
           rm -f "$log"
@@ -489,7 +488,6 @@ jobs:
       if: steps.plan.outputs.active_shard_count == '1'
       uses: ./.github/actions/build_and_test_ya
       with:
-        publish_github_status: false
         build_preset: ${{ matrix.build_preset }}
         build_target: ${{ matrix.build_target }}
         increment: false

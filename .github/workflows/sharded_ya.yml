@@ -121,12 +121,17 @@ jobs:
         PY
         plans=$(find graphs -name shard_plan.json 2>/dev/null | wc -l | tr -d ' ')
         if [ "$mode" != "1" ] && [ "${plans:-0}" = "0" ]; then
-          echo "degraded=true" >> "$GITHUB_OUTPUT"
           echo "has_shards=false" >> "$GITHUB_OUTPUT"
           echo "include=[]" >> "$GITHUB_OUTPUT"
           echo "presets=[]" >> "$GITHUB_OUTPUT"
-          echo "shard mode is on but no shard plan was uploaded"
-          exit 1
+          if [ "${{ inputs.graph_prepare_result }}" = "success" ]; then
+            echo "degraded=false" >> "$GITHUB_OUTPUT"
+            echo "folded to single job: no shard plan artifact"
+          else
+            echo "degraded=true" >> "$GITHUB_OUTPUT"
+            echo "shard mode is on but no shard plan was uploaded"
+            exit 1
+          fi
         fi
         count=$(python3 -c 'import json; print(len(json.load(open("include.json"))))')
         if [ -s errors.txt ]; then

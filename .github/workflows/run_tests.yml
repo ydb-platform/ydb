@@ -551,6 +551,7 @@ jobs:
           run_build: true
           run_tests: false
           save_test_graph: true
+          publish_github_status: false
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
           test_threads: ${{ env.threads_count }}
@@ -587,6 +588,15 @@ jobs:
           fi
           python3 .github/scripts/tests/shard_graph.py plan "${plan_args[@]}"
           cat shard_plan.md >> "$GITHUB_STEP_SUMMARY"
+          python3 - << 'PY'
+          import json
+          from pathlib import Path
+          plan = json.loads(Path("shard_plan.json").read_text())
+          count = int(plan["shard_count"])
+          ids = [] if count <= 1 else [shard["id"] for shard in plan["shards"]]
+          Path("shard_ids.txt").write_text(json.dumps(ids))
+          Path("active_count.txt").write_text(str(count))
+          PY
           if [ "$(cat active_count.txt)" -gt 1 ] && [ -n "${{ steps.determine-branch.outputs.pr_number }}" ]; then
             python3 .github/scripts/tests/shard_progress.py plan \
               --pr "${{ steps.determine-branch.outputs.pr_number }}" \
@@ -597,15 +607,6 @@ jobs:
               --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
               --summary-file "$GITHUB_STEP_SUMMARY" || true
           fi
-          python3 - << 'PY'
-          import json
-          from pathlib import Path
-          plan = json.loads(Path("shard_plan.json").read_text())
-          count = int(plan["shard_count"])
-          ids = [] if count <= 1 else [shard["id"] for shard in plan["shards"]]
-          Path("shard_ids.txt").write_text(json.dumps(ids))
-          Path("active_count.txt").write_text(str(count))
-          PY
           echo "shard_ids=$(cat shard_ids.txt)" >> "$GITHUB_OUTPUT"
           echo "active_shard_count=$(cat active_count.txt)" >> "$GITHUB_OUTPUT"
           echo "Planned shard ids: $(cat shard_ids.txt)"
@@ -620,7 +621,6 @@ jobs:
           build_target: ${{ inputs.test_targets }}
           run_build: true
           run_tests: true
-          publish_github_status: false
           skip_graph_compare: true
           prebuilt_graph_path: graph.json
           prebuilt_context_path: context.json

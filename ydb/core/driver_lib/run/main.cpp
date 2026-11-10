@@ -36,6 +36,7 @@ void SetupTerminateHandler() {
 int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFactories> factories) {
     try {
 #ifndef _win_
+        // CI comparison baseline: keep startup memory locking enabled.
         mlockall(MCL_CURRENT);
 #endif
         NKikimr::EnableYDBBacktraceFormat();

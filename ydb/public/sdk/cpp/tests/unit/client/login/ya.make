@@ -1,8 +1,13 @@
 UNITTEST()
 
-FORK_SUBTESTS()
+IF (SANITIZER_TYPE == "thread")
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
-TIMEOUT(60)
+FORK_SUBTESTS()
 
 PEERDIR(
     contrib/libs/grpc

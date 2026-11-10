@@ -64,28 +64,28 @@ private:
         }
 
         if (msg->GetMethod() != HTTP_METHOD_POST || !msg->ExtendedQuery) {
-            ReplyPage(ev->Sender, {}, false, {});
+            ReplyPage(ev->Sender, {}, EMessageSeverity::Info, {});
             return;
         }
 
         NKikimrSchemeOp::TS3Settings s3;
         const TString formError = ParseS3Form(*msg->ExtendedQuery, s3);
         if (Status.IsActive()) {
-            ReplyPage(ev->Sender, "Backup is already in progress", true, s3);
+            ReplyPage(ev->Sender, "Backup is already in progress", EMessageSeverity::Error, s3);
             return;
         }
         if (!formError.empty()) {
-            ReplyPage(ev->Sender, formError, true, s3);
+            ReplyPage(ev->Sender, formError, EMessageSeverity::Error, s3);
             return;
         }
 
         StartBackup(ev->Sender, std::move(s3));
     }
 
-    void ReplyPage(const NActors::TActorId& to, const TString& message, bool isError, NKikimrSchemeOp::TS3Settings prefill) {
+    void ReplyPage(const NActors::TActorId& to, const TString& message, EMessageSeverity severity, NKikimrSchemeOp::TS3Settings prefill) {
         prefill.ClearSecretKey();
         Send(to,
-            std::make_unique<NMon::TEvRemoteHttpInfoRes>(RenderPage(TabletId, Status, message, isError, prefill, TActivationContext::Now())));
+            std::make_unique<NMon::TEvRemoteHttpInfoRes>(RenderPage(TabletId, Status, message, severity, prefill, TActivationContext::Now())));
     }
 
     void StartBackup(const NActors::TActorId& replyTo, NKikimrSchemeOp::TS3Settings&& s3) {
@@ -118,7 +118,7 @@ private:
         YDB_LOG_NOTICE("LocalDbBackup: snapshot started", {"tabletId", TabletId}, {"path", msg->BackupPath}, {"tables", msg->Tables.size()},
             {"generation", msg->Generation}, {"step", msg->Step});
 
-        ReplyPage(pending.ReplyTo, "Backup started: " + msg->BackupPath, false, pending.S3);
+        ReplyPage(pending.ReplyTo, "Backup started: " + msg->BackupPath, EMessageSeverity::Info, pending.S3);
         Send(ev->Forward(Status.WriterActorId));
     }
 
@@ -143,7 +143,7 @@ private:
             Pending.reset();
             Status.OnFinished(msg->Success, msg->Error, msg->WrittenBytes, TActivationContext::Now());
             Send(Tablet, std::make_unique<TEvCancelBackup>());
-            ReplyPage(pending.ReplyTo, "Backup failed: " + msg->Error, true, pending.S3);
+            ReplyPage(pending.ReplyTo, "Backup failed: " + msg->Error, EMessageSeverity::Error, pending.S3);
             return;
         }
 

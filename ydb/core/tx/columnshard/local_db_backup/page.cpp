@@ -298,8 +298,8 @@ void RenderForm(TStringBuilder& html, ui64 tabletId, const TStatus& status, cons
 
 }   // namespace
 
-TString RenderPage(
-    ui64 tabletId, const TStatus& status, const TString& message, bool isError, const NKikimrSchemeOp::TS3Settings& prefill, TInstant now) {
+TString RenderPage(ui64 tabletId, const TStatus& status, const TString& message, EMessageSeverity severity,
+    const NKikimrSchemeOp::TS3Settings& prefill, TInstant now) {
     const TString pageUrl = TStringBuilder() << "app?page=localdb_backup&TabletID=" << tabletId;
 
     TStringBuilder html;
@@ -312,7 +312,8 @@ TString RenderPage(
     html << "<a href=\"app?TabletID=" << tabletId << "\">&larr; Tablet main page</a></div>";
 
     if (!message.empty()) {
-        html << "<div class=\"ldb-alert " << (isError ? "ldb-alert-error" : "ldb-alert-info") << "\">" << EncodeHtmlPcdata(message) << "</div>";
+        html << "<div class=\"ldb-alert " << (severity == EMessageSeverity::Error ? "ldb-alert-error" : "ldb-alert-info") << "\">"
+             << EncodeHtmlPcdata(message) << "</div>";
     }
 
     RenderCurrentBackup(html, status, now);

@@ -1038,7 +1038,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if erasure is None:
             erasure = self.__configurator.static_erasure
         if num_groups is None:
-            num_groups = 1
+            num_groups = 2
         request = bs.TConfigRequest()
         cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = 1

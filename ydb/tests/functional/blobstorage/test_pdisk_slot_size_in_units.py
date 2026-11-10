@@ -39,7 +39,7 @@ class TestPDiskSlotSizeInUnits(object):
             static_pdisk_size=CONST_64_GB,
             dynamic_pdisks=[{'disk_size': CONST_64_GB, 'user_kind': 1}],
             dynamic_pdisks_config=dict(expected_slot_count=4),
-            dynamic_storage_pools=[dict(name=self.pool_name, kind="hdd", pdisk_user_kind=1, num_groups=2)],
+            dynamic_storage_pools=[dict(name=self.pool_name, kind="hdd", pdisk_user_kind=1)],
             additional_log_configs=log_configs
         )
 

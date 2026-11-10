@@ -46,7 +46,7 @@ def test_deploy_actor_system_override(tmp_path, monkeypatch, tiny_mode, actor_sy
     if actor_system_config is None:
         assert not actual.get('use_auto_config', False)
         assert [(pool['name'], pool['threads']) for pool in actual['executor']] == [
-            ('System', 1), ('User', 1), ('Batch', 1), ('IO', 1), ('IC', 1),
+            ('System', 2), ('User', 3), ('Batch', 2), ('IO', 1), ('IC', 1),
         ]
     else:
         assert actual == actor_system_config

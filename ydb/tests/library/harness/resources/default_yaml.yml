@@ -95,15 +95,15 @@ system_tablets:
 actor_system_config:
   executor:
   - type: BASIC
-    threads: 1
+    threads: 2
     spin_threshold: 0
     name: "System"
   - type: BASIC
-    threads: 1
+    threads: 3
     spin_threshold: 0
     name: "User"
   - type: BASIC
-    threads: 1
+    threads: 2
     spin_threshold: 0
     name: "Batch"
   - type: IO
@@ -112,7 +112,7 @@ actor_system_config:
     time_per_mailbox_micro_secs: 100
   - type: BASIC
     threads: 1
-    spin_threshold: 0
+    spin_threshold: 10
     name: "IC"
     time_per_mailbox_micro_secs: 100
   scheduler:

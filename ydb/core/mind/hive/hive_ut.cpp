@@ -5276,14 +5276,21 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         };
 
         UNIT_ASSERT_VALUES_EQUAL(getTabletDC(), "1");
-        for (ui32 i = 0;; ++i) {
-            // restart node in DC 1
-            SendKillLocal(runtime, i % 2);
-            CreateLocal(runtime, i % 2);
-            auto dc = getTabletDC();
-            Ctest << "tablet is in dc" << dc << Endl;
-            if (dc == "2") {
-                break;
+        {
+            // Cap restarts so a stuck balancer cannot hang the suite (~600s wall).
+            // Nearby balancer waits use similar iteration budgets (100–300).
+            int iterations = 0;
+            for (ui32 i = 0;; ++i) {
+                UNIT_ASSERT_C(iterations < 200, "tablet did not move to DC 2 after 200 DC1 node restarts");
+                ++iterations;
+                // restart node in DC 1
+                SendKillLocal(runtime, i % 2);
+                CreateLocal(runtime, i % 2);
+                auto dc = getTabletDC();
+                Ctest << "tablet is in dc" << dc << Endl;
+                if (dc == "2") {
+                    break;
+                }
             }
         }
     }

@@ -276,8 +276,13 @@ namespace NKikimr::NStorage {
                 !config->GetPrevConfig().HasClusterState() || // conversion from non-bridged cluster
                 !NBridge::IsSameClusterState(config->GetClusterState(), config->GetPrevConfig().GetClusterState()))) {
             // update cluster state generation if something has changed
+            // the cluster bridged again goes on with the generations of the one rolled back, so that they don't repeat
+            // (requests expecting the generation, nodes of piles removed then knowing newer ones)
+            const auto& prev = config->GetPrevConfig();
+            const ui64 prevGeneration = prev.HasClusterState() ? prev.GetClusterState().GetGeneration()
+                : prev.GetBridgeRollback().GetClusterStateGeneration();
             auto *clusterState = config->MutableClusterState();
-            clusterState->SetGeneration(config->GetPrevConfig().GetClusterState().GetGeneration() + 1);
+            clusterState->SetGeneration(prevGeneration + 1);
             UpdateClusterStateGuid(clusterState);
 
             auto *entry = config->MutableClusterStateDetails()->AddUnsyncedHistory();
@@ -560,6 +565,7 @@ namespace NKikimr::NStorage {
         auto *record = config->MutableBridgeRollback();
         record->SetPileName(registry.GetPiles(pileId.GetPileIndex()).GetName());
         record->SetNextStaticGroupId(nextStaticGroupId);
+        record->SetClusterStateGeneration(config->GetClusterState().GetGeneration());
 
         config->ClearClusterState();
         config->ClearClusterStateDetails();

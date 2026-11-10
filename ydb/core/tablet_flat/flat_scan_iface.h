@@ -10,8 +10,6 @@ namespace NKikimr {
 namespace NTable {
     class TRowState;
     class TSpent;
-    class TMemTable;
-    class TPart;
     struct TSubset;
 
     /*_ IScan, the generic scan interface. Scan life cycle starts with
@@ -166,10 +164,7 @@ namespace NTable {
     };
 
 
-    struct TVersionScanSource {
-        const TMemTable* MemTable = nullptr;
-        const TPart* Part = nullptr;
-    };
+    using TVersionScanSource = TRowSource;
 
     /**
      * For each key, Feed(const TRow&, TRowVersion&) receives committed rows
@@ -198,10 +193,14 @@ namespace NTable {
 
     public:
         // Called immediately before each Feed overload. Exactly one pointer
-        // identifies the newest source contributing to that event, including
-        // a reconstructed row with values filled from older sources. The
-        // pointers are borrowed from the scan and must not be retained beyond
-        // its lifetime. Existing consumers may ignore this metadata.
+        // identifies the source of the lock/delta or, for a reconstructed row,
+        // the source of its newest fragment. Other cells may come from older
+        // sources: this metadata does not provide per-cell provenance.
+        // Interpret blob cells by their ELargeObj representation, not by the
+        // reported source. Unmaterialized external blob cells contain TGlobId
+        // for both memtables and parts (see TConf::LargeEdge).
+        // The pointers are borrowed from the scan and must not be retained
+        // beyond its lifetime. Existing consumers may ignore this metadata.
         virtual void SetSource(const TVersionScanSource&) {
         }
 

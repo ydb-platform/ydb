@@ -526,8 +526,7 @@ namespace NTable {
     private:
         void NotifySource()
         {
-            const auto source = Iter->GetSource();
-            VersionScan->SetSource({source.MemTable, source.Part});
+            VersionScan->SetSource(Iter->GetSource());
         }
 
         enum class ESeekState {

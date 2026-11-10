@@ -2,6 +2,7 @@
 #include "flat_iterator_ops.h"
 #include "flat_mem_iter.h"
 #include "flat_part_iter.h"
+#include "flat_row_eggs.h"
 #include "flat_row_remap.h"
 #include "flat_row_state.h"
 #include "flat_range_cache.h"
@@ -360,10 +361,7 @@ public:
     TRowVersion GetRowVersion() const;
     EReady SkipToRowVersion(TRowVersion rowVersion);
 
-    struct TSource {
-        const TMemTable* MemTable = nullptr;
-        const TPart* Part = nullptr;
-    };
+    using TSource = TRowSource;
 
     // Valid after a successful read. For a reconstructed row this is the
     // newest contributing source, independent of the sources filling its base.

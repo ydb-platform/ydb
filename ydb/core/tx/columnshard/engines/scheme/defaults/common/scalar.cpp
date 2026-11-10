@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
+#include <util/generic/ylimits.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -150,48 +151,93 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
         return TConclusionStatus::Fail("Default value is not supported for type " + ::ToString(type.GetTypeId()) + " in column tables");
     }
     const auto& value = typed.value();
+    const auto valueCase = value.value_case();
+    const auto invalidLiteral =
+        TConclusionStatus::Fail("Default value is not supported for type " + ::ToString(type.GetTypeId()) + " in column tables");
     std::shared_ptr<arrow::Scalar> scalar;
     switch (typed.type().type_id()) {
         case Ydb::Type::BOOL:
+            if (valueCase != Ydb::Value::kBoolValue) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::UInt8Scalar>(value.bool_value() ? 1 : 0);
             break;
         case Ydb::Type::UINT8:
+            if (valueCase != Ydb::Value::kUint32Value || value.uint32_value() > Max<ui8>()) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::UInt8Scalar>(static_cast<ui8>(value.uint32_value()));
             break;
         case Ydb::Type::UINT16:
+            if (valueCase != Ydb::Value::kUint32Value || value.uint32_value() > Max<ui16>()) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::UInt16Scalar>(static_cast<ui16>(value.uint32_value()));
             break;
         case Ydb::Type::UINT32:
+            if (valueCase != Ydb::Value::kUint32Value) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::UInt32Scalar>(value.uint32_value());
             break;
         case Ydb::Type::UINT64:
+            if (valueCase != Ydb::Value::kUint64Value) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::UInt64Scalar>(value.uint64_value());
             break;
         case Ydb::Type::INT8:
+            if (valueCase != Ydb::Value::kInt32Value || value.int32_value() < Min<i8>() || value.int32_value() > Max<i8>()) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::Int8Scalar>(static_cast<i8>(value.int32_value()));
             break;
         case Ydb::Type::INT16:
+            if (valueCase != Ydb::Value::kInt32Value || value.int32_value() < Min<i16>() || value.int32_value() > Max<i16>()) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::Int16Scalar>(static_cast<i16>(value.int32_value()));
             break;
         case Ydb::Type::INT32:
+            if (valueCase != Ydb::Value::kInt32Value) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::Int32Scalar>(value.int32_value());
             break;
         case Ydb::Type::INT64:
+            if (valueCase != Ydb::Value::kInt64Value) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::Int64Scalar>(value.int64_value());
             break;
         case Ydb::Type::FLOAT:
+            if (valueCase != Ydb::Value::kFloatValue) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::FloatScalar>(value.float_value());
             break;
         case Ydb::Type::DOUBLE:
+            if (valueCase != Ydb::Value::kDoubleValue) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::DoubleScalar>(value.double_value());
             break;
         case Ydb::Type::UTF8:
+            if (valueCase != Ydb::Value::kTextValue) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::StringScalar>(value.text_value());
             break;
         case Ydb::Type::STRING:
+            if (valueCase != Ydb::Value::kBytesValue) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(value.bytes_value())));
             break;
         case Ydb::Type::TIMESTAMP:
+            if (valueCase != Ydb::Value::kUint64Value) {
+                return invalidLiteral;
+            }
             scalar = std::make_shared<arrow::TimestampScalar>(value.uint64_value(), arrow::timestamp(arrow::TimeUnit::MICRO));
             break;
         default:

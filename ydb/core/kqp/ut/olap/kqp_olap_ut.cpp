@@ -5392,7 +5392,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT Value FROM `/Root/TestDef` WHERE Id = 1;
             )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([["aba"]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[["aba"]]])", FormatResultSetYson(result.GetResultSet(0)));
         }
         {
             auto result = queryClient.ExecuteQuery(R"(

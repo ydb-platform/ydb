@@ -74,13 +74,14 @@ protected:
     }
 
     bool CheckTargetSchema(const TOlapSchema& targetSchema) {
-        for (auto& [_, column] : targetSchema.GetColumns().GetColumns()) {
-            const bool sparsed = column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
-            if (sparsed && !AppData()->FeatureFlags.GetEnableSparsedColumns()) {
-                return false;
-            }
-            if (column.GetDefaultValue().GetValue() && !sparsed && !AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
-                return false;
+        // String DefaultValue belongs to the sparsed-column feature. SQL defaults use a separate flag
+        // and are rejected in ApplyDiff when that flag is off.
+        if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
+            for (auto& [_, column] : targetSchema.GetColumns().GetColumns()) {
+                const bool sparsed = column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
+                if (sparsed || (column.GetDefaultValue().GetValue() && !AppData()->FeatureFlags.GetEnableColumnTableDefaults())) {
+                    return false;
+                }
             }
         }
         return true;

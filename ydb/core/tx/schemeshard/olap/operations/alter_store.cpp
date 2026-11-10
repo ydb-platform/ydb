@@ -531,16 +531,14 @@ public:
             }
         }
 
-        for (auto& [_, preset] : alterData->SchemaPresets) {
-            for (auto& [_, column] : preset.GetColumns().GetColumns()) {
-                const bool sparsed = column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
-                if (sparsed && !AppData()->FeatureFlags.GetEnableSparsedColumns()) {
-                    result->SetError(NKikimrScheme::StatusSchemeError, "schema update error: sparsed columns are disabled");
-                    return result;
-                }
-                if (column.GetDefaultValue().GetValue() && !sparsed && !AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
-                    result->SetError(NKikimrScheme::StatusSchemeError, "schema update error: column table defaults are disabled");
-                    return result;
+        if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
+            for (auto& [_, preset] : alterData->SchemaPresets) {
+                for (auto& [_, column] : preset.GetColumns().GetColumns()) {
+                    const bool sparsed = column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
+                    if (sparsed || (column.GetDefaultValue().GetValue() && !AppData()->FeatureFlags.GetEnableColumnTableDefaults())) {
+                        result->SetError(NKikimrScheme::StatusSchemeError, "schema update error: sparsed columns are disabled");
+                        return result;
+                    }
                 }
             }
         }

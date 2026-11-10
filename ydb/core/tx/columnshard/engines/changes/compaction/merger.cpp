@@ -307,7 +307,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
     }
     if (PortionSchemas.size() == Batches.size()) {
         for (auto&& columnId : resultFiltered->GetIndexInfo().GetColumnIds(false)) {
-            if (columnsData.contains(columnId)) {
+            if (!resultFiltered->HasColumnId(columnId) || columnsData.contains(columnId)) {
                 continue;
             }
             bool differs = false;
@@ -364,6 +364,10 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
                 continue;
             }
             const auto fill = ISnapshotSchema::GetAbsentColumnFill(*PortionSchemas[batchIdx], *resultFiltered, columnId);
+            const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
+            if (NArrow::ScalarCompareNullable(fill, resultFill) == 0) {
+                continue;
+            }
             const ui32 rows = Batches[batchIdx]->num_rows();
             if (!rows) {
                 continue;

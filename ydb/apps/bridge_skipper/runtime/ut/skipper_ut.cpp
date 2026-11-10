@@ -713,6 +713,63 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
         UNIT_ASSERT(h.Clients->Updates.empty());
     }
 
+    Y_UNIT_TEST(DiscoveryRecoversFromCachedAddressesAfterEveryViewExpires) {
+        THarness h(EMode::Auto, {}, 1, "{}", 1);
+        h.Failed.clear();
+        h.Piles["c"] = EPileState::Synchronized;
+        const TString replacement = "grpc://c-replacement:1";
+        const TString addedLater = "grpc://d:1";
+        h.NodeIds[replacement] = 4;
+        h.NodeIds[addedLater] = 5;
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}};
+        h.Run(35);
+        UNIT_ASSERT(h.Endpoint(C).Identity == EEndpointIdentity::Verified);
+        // The original seed piles are removed while Skipper keeps running.
+        h.Piles = {{"c", EPileState::Primary}};
+        ++h.Generation;
+        h.Clients->FailedInventory = {A, B};
+        h.Run(35);
+        h.Clients->Inventory.push_back({ParseEndpoint(replacement), "c", 4});
+        h.Run(6);
+        for (const auto& call : h.Clients->States) {
+            UNIT_ASSERT_VALUES_UNEQUAL(call.Request.Endpoint, replacement);
+        }
+        const auto highWater = h.File->GetState().GenerationHighWater;
+        // The selected port still serves Config/Discovery, but both state
+        // variants and Monitoring stop answering. Its retention grace outlasts
+        // the evidence TTL, so the next cached probe must work without a view.
+        for (const auto& uri : {A, B, C}) {
+            for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+                h.FailedMethods.insert({uri, method});
+            }
+        }
+        ++h.Generation;
+        h.Held.insert({replacement, EYdbMethod::SelfCheck});
+        h.Run(12);
+        h.Clients->FailedInventory.insert(C);
+        UNIT_ASSERT(!h.Store->Read()->Selection.View);
+        UNIT_ASSERT(h.Store->Read()->Decision.Blocker == EBlockerReason::NoView);
+        UNIT_ASSERT_VALUES_EQUAL(h.File->GetState().GenerationHighWater, highWater);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+        // A cached advertisement and even a fresh Bridge reply are only
+        // bootstrap data until the new locator verifies its advertised identity.
+        UNIT_ASSERT(h.Endpoint(replacement).View);
+        UNIT_ASSERT(h.Endpoint(replacement).Identity == EEndpointIdentity::Unknown);
+        h.Held.clear();
+        h.Run(3);
+        UNIT_ASSERT(h.Store->Read()->Selection.View);
+        UNIT_ASSERT_VALUES_EQUAL(h.Store->Read()->Selection.View->Generation, h.Generation);
+        UNIT_ASSERT(h.Endpoint(replacement).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(h.Store->Read()->Selection.CurrentEndpoints.contains(replacement));
+        // The recovered locator must also resume discovery of future piles.
+        h.Piles["d"] = EPileState::Synchronized;
+        ++h.Generation;
+        h.Clients->Inventory.push_back({ParseEndpoint(addedLater), "d", 5});
+        h.Run(35);
+        UNIT_ASSERT(h.Endpoint(addedLater).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
     Y_UNIT_TEST(DiscoveryPendingAliasReservesItsPhysicalNode) {
         THarness h;
         h.Failed.clear();

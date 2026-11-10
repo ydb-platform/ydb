@@ -67,7 +67,9 @@ After verification, address retention includes the complete per-pile sampling
 rotation and RPC renewal deadline. This grace does not extend evidence or routing
 freshness. The last complete advertisement list is cached in memory, so failure
 of Config or Discovery can trigger another bounded probe even after all seeds
-have been removed. An extra inventory port may be on a node whose health port
+have been removed. Probing uses the last accepted pile membership even after all
+fresh views expire; it never extends evidence freshness or authorizes mutations.
+An extra inventory port may be on a node whose health port
 was already learned; it does not consume another health slot.
 For `grpc://`, published IPv4/IPv6 addresses are also candidates and pass the same
 node ID and pile checks; TLS discovery retains certificate verification by hostname.

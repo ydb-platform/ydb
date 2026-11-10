@@ -375,9 +375,13 @@ private:
     }
 
     void RefreshEndpoints(TMonotonic now) {
-        if (now < NextEndpointRefresh || !Selection.View || now >= Selection.ValidUntil) {
+        if (now < NextEndpointRefresh || !PreviousView) {
             return;
         }
+        // Last accepted membership only scopes bootstrap probes. Requiring a
+        // fresh view here would prevent cached locators from restoring one.
+        // Evidence and mutation authorization still use Selection and its TTL.
+        const auto& view = *PreviousView;
         NextEndpointRefresh = now + TDuration::Seconds(5);
         // Keep clients through their complete sampling/renewal period. This
         // owns addresses only: observation and routing TTLs remain unchanged.
@@ -403,7 +407,7 @@ private:
         // proposed identity; drain old calls, then verify it through SelfCheck.
         for (const auto& item : InventoryCandidates) {
             const auto it = Endpoints.find(item.Endpoint.Uri);
-            if (it == Endpoints.end() || !ShouldPollPile(*Selection.View, item.Pile)) {
+            if (it == Endpoints.end() || !ShouldPollPile(view, item.Pile)) {
                 continue;
             }
             auto& endpoint = it->second;
@@ -443,11 +447,11 @@ private:
         }
         std::map<TString, std::vector<const TDiscoveredEndpoint*>> candidates;
         for (const auto& item : InventoryCandidates) {
-            if (ShouldPollPile(*Selection.View, item.Pile)) {
+            if (ShouldPollPile(view, item.Pile)) {
                 candidates[item.Pile].push_back(&item);
             }
         }
-        std::erase_if(DiscoveryRotation, [&](const auto& entry) { return !Selection.View->Piles.contains(entry.first); });
+        std::erase_if(DiscoveryRotation, [&](const auto& entry) { return !view.Piles.contains(entry.first); });
         for (const auto& [pile, choices] : candidates) {
             auto& rotation = DiscoveryRotation[pile];
             const size_t start = rotation % choices.size();
@@ -471,7 +475,7 @@ private:
             const size_t start = InventoryDiscoveryRotation % InventoryCandidates.size();
             for (size_t i = 0; i < InventoryCandidates.size(); ++i) {
                 const auto& item = InventoryCandidates[(start + i) % InventoryCandidates.size()];
-                if (!ShouldPollPile(*Selection.View, item.Pile) || Endpoints.contains(item.Endpoint.Uri)) {
+                if (!ShouldPollPile(view, item.Pile) || Endpoints.contains(item.Endpoint.Uri)) {
                     continue;
                 }
                 AddDiscoveredEndpoint(item, true, now);

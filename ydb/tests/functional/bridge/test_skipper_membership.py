@@ -1,9 +1,11 @@
 """Observe operator-managed pile membership without restarting Skipper."""
 
 import json
+import signal
 import time
 
 from contextlib import closing
+from urllib.parse import urlsplit
 
 import grpc
 import yaml
@@ -64,12 +66,12 @@ class TestSkipperPileMembership(RealSkipperCluster):
             response = (stub.RemovePile if remove else stub.AddPile)(request, metadata=TOKEN, timeout=65)
         assert response.operation.status == StatusIds.SUCCESS, response
 
-    def add_pile(self, name, via='r1'):
+    def add_pile(self, name, via='r1', nodes_count=3):
         cfg = self.fetch_config(via)
         section = cfg['config']
         section['bridge_config']['piles'].append(dict(name=name))
         first = max(self.cluster.nodes) + 1
-        for node_id in range(first, first + 3):
+        for node_id in range(first, first + nodes_count):
             host_id = max(h['host_config_id'] for h in section['host_configs']) + 1
             section['host_configs'].append(
                 dict(host_config_id=host_id, drive=[dict(path='SectorMap:%d:64' % node_id, type='ROT')])
@@ -85,7 +87,7 @@ class TestSkipperPileMembership(RealSkipperCluster):
             )
         old_nodes = list(self.cluster.nodes.values())
         self.configurator.full_config = cfg
-        new_nodes = [self.cluster.prepare_node(self.configurator) for _ in range(3)]
+        new_nodes = [self.cluster.prepare_node(self.configurator) for _ in range(nodes_count)]
         self.replace_config(cfg, via, old_nodes)
         for node in new_nodes:
             node.start()
@@ -124,7 +126,8 @@ class TestSkipperPileMembership(RealSkipperCluster):
         cfg['config']['bridge_config']['piles'] = [
             p for p in cfg['config']['bridge_config']['piles'] if p['name'] != name
         ]
-        live = [node for node in self.cluster.nodes.values() if node not in removed]
+        remaining = {host['node_id'] for host in cfg['config']['hosts']}
+        live = [node for node in self.cluster.nodes.values() if node.node_id in remaining]
         self.replace_config(cfg, via, live)
         self.kill_pile(name)
         return self.wait_snapshot(
@@ -179,6 +182,57 @@ class TestSkipperPileMembership(RealSkipperCluster):
         self.write_after_fault('r3')
         records = [json.loads(line) for line in (self.skipper.directory / 'skipper.log').read_text().splitlines()]
         assert len([r for r in records if r.get('event') == 'mutation_sent']) == 1, records
+
+    def test_cached_discovery_recovers_after_all_views_expire(self):
+        self.create_data()
+        before = self.start_skipper(
+            ('r1',), timing=dict(read_timeout_seconds=7, evidence_ttl_seconds=9), health_endpoints_per_pile=1
+        )
+        self.skipper.mode('auto')
+        # Five nodes preserve the remaining pile's quorum while both installed
+        # locators (one health client and at most one inventory client) are paused.
+        self.add_pile('r3', nodes_count=5)
+        self.wait_snapshot(
+            lambda s: any(c['name'] == 'r3' and c['verdict'] == 'HEALTHY' for c in s['cards']),
+            'new pile health', timeout=90,
+        )
+        self.guarded_update({'r1': PileState.DISCONNECTED, 'r3': PileState.PRIMARY}, via='r3')
+        self.remove_pile('r1', via='r3')
+        self.remove_pile('r2', via='r3')
+        self.wait_snapshot(
+            lambda s: any(c['name'] == 'r3' and c['verdict'] == 'HEALTHY' for c in s['cards']),
+            'remaining pile health', timeout=90,
+        )
+        state = self.skipper.state()
+        addresses = {e['uri'] for e in state['endpoints'] if e['pile'] == 'r3'}
+        ports = {urlsplit(address).port for address in addresses}
+        paused = [node for node in self.pile_nodes['r3'] if node.port in ports]
+        assert 1 <= len(paused) <= 2, state
+        live = [node for node in self.pile_nodes['r3'] if node not in paused]
+        assert len(live) >= 3, state
+        # Use a survivor for later data operations. SIGSTOP makes RPCs reach
+        # their real client deadlines without destroying the cluster's quorum.
+        self.pile_nodes['r3'] = live + paused
+        for node in paused:
+            self.cleanup.callback(node.send_signal, signal.SIGCONT)
+            node.send_signal(signal.SIGSTOP)
+        state = self.wait_snapshot(lambda s: s['view'] is None, 'all selected views expired', timeout=20)
+        assert state['decision']['reason'] == 'NO_VIEW' and state['last_mutation'] is None, state
+        state = self.wait_snapshot(
+            lambda s: s['view'] and any(
+                e['pile'] == 'r3' and e['identity'] == 'VERIFIED' and e['uri'] not in addresses
+                for e in s['endpoints']
+            ),
+            'recovery through a cached locator', timeout=60,
+        )
+        assert state['controller_boot_id'] == before['controller_boot_id'], state
+        assert state['mode'] == 'auto' and state['last_mutation'] is None, state
+        # Erasure.NONE may keep table parts on the paused nodes. Recovery of
+        # observation is proved above while they are still unavailable.
+        for node in paused:
+            node.send_signal(signal.SIGCONT)
+        self.check_data('r3')
+        self.write_after_fault('r3')
 
     def test_remove_pile_without_restarting_controller(self):
         self.create_data()

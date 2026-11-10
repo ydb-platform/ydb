@@ -339,9 +339,47 @@ def build_html_dashboard(
       border: 1px solid #ffbeba; background: #ffebe9; border-radius: 4px;
       color: #a40e26; font-size: 13px;
     }}
+    @keyframes dash-spin {{ to {{ transform: rotate(360deg); }} }}
+    .dash-spinner {{
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid #d0d7de; border-top-color: var(--accent);
+      border-radius: 50%; animation: dash-spin .7s linear infinite;
+      vertical-align: -2px; flex: 0 0 auto;
+    }}
+    .dash-loading-banner {{
+      display: flex; align-items: center; gap: 10px;
+      margin: 0 0 12px; padding: 10px 12px;
+      border: 1px solid #d0d7de; border-radius: 8px; background: #f6f8fa;
+      color: var(--muted); font-size: 13px;
+    }}
+    .dash-loading-banner[hidden] {{ display: none !important; }}
+    .measured-charts {{ position: relative; }}
+    .measured-charts.is-loading .wide,
+    .measured-charts.is-loading .measured-test-list {{
+      opacity: 0.35; pointer-events: none;
+    }}
+    .measured-charts-loading {{
+      position: absolute; inset: 0; z-index: 5;
+      display: none; flex-direction: column; align-items: center; justify-content: flex-start;
+      gap: 10px; padding: 56px 16px 16px;
+      background: rgba(255,255,255,0.78); border-radius: 8px;
+      color: var(--muted); font-size: 13px; text-align: center;
+    }}
+    .measured-charts.is-loading .measured-charts-loading {{ display: flex; }}
+    .measured-charts-loading .dash-spinner {{ width: 22px; height: 22px; border-width: 3px; }}
+    #measuredMeta .load-inline {{
+      display: inline-flex; align-items: center; gap: 6px; margin-top: 4px;
+      color: var(--muted);
+    }}
+    #measuredMeta .load-inline.is-error {{ color: #a40e26; }}
+    .measured-nav.is-busy {{ opacity: 0.65; pointer-events: none; }}
   </style>
 </head>
 <body>
+  <div id="dashboardBoot" class="dash-loading-banner" role="status" aria-live="polite">
+    <span class="dash-spinner" aria-hidden="true"></span>
+    <span id="dashboardBootText">Loading dashboard…</span>
+  </div>
   <div id="dashboardLoadError"></div>
   <div id="chartTip"></div>
   <div id="dashboardHeader" class="dash-header">
@@ -421,7 +459,11 @@ def build_html_dashboard(
         <ol id="measuredTestHits" class="measured-test-hits" style="display:none;"></ol>
         <div id="measuredTree" class="measured-tree"></div>
       </div>
-      <div class="measured-charts">
+      <div class="measured-charts" id="measuredChartsPane">
+        <div id="measuredChartsLoading" class="measured-charts-loading" aria-live="polite">
+          <span class="dash-spinner" aria-hidden="true"></span>
+          <span id="measuredChartsLoadingText">Loading measured series…</span>
+        </div>
         <div id="measuredTestsLane" class="wide" style="height:90px;display:none;"></div>
         <ol id="measuredTestsList" class="measured-test-list" style="display:none;"></ol>
         <div id="measuredCpu" class="wide" style="height:280px;"></div>
@@ -676,12 +718,61 @@ def build_html_dashboard(
 
     (async function() {{
     const dataUrl = {data_url_js};
+    const bootEl = document.getElementById('dashboardBoot');
+    const bootText = document.getElementById('dashboardBootText');
+    function setBootText(msg) {{
+      if (bootText) bootText.textContent = msg;
+    }}
+    function hideBoot() {{
+      if (bootEl) bootEl.hidden = true;
+    }}
+    function formatBytes(n) {{
+      if (!Number.isFinite(n) || n < 0) return '?';
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    }}
+    async function fetchJsonWithProgress(url, onProgress) {{
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const total = Number(resp.headers.get('Content-Length')) || 0;
+      if (!resp.body || !resp.body.getReader) {{
+        if (onProgress && total) onProgress(total, total);
+        return await resp.json();
+      }}
+      const reader = resp.body.getReader();
+      const chunks = [];
+      let received = 0;
+      while (true) {{
+        const {{ done, value }} = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.byteLength;
+        if (onProgress) onProgress(received, total);
+      }}
+      const buf = new Uint8Array(received);
+      let offset = 0;
+      for (const chunk of chunks) {{
+        buf.set(chunk, offset);
+        offset += chunk.byteLength;
+      }}
+      if (onProgress) onProgress(received, total || received);
+      return JSON.parse(new TextDecoder('utf-8').decode(buf));
+    }}
     let data;
     try {{
-      const resp = await fetch(dataUrl);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      data = await resp.json();
+      setBootText('Downloading ' + dataUrl + '…');
+      data = await fetchJsonWithProgress(dataUrl, (received, total) => {{
+        if (total > 0) {{
+          const pct = Math.min(100, Math.round(100 * received / total));
+          setBootText('Downloading dashboard data… ' + pct + '% (' + formatBytes(received) + ' / ' + formatBytes(total) + ')');
+        }} else {{
+          setBootText('Downloading dashboard data… ' + formatBytes(received));
+        }}
+      }});
+      setBootText('Building charts…');
     }} catch (err) {{
+      hideBoot();
       const el = document.getElementById('dashboardLoadError');
       if (el) {{
         el.style.display = 'block';
@@ -3087,6 +3178,25 @@ def build_html_dashboard(
     function mergeMeasuredSeries(obj) {{
       Object.keys(obj || {{}}).forEach(key => {{ _measuredSeriesByKey[key] = obj[key]; }});
     }}
+    function setMeasuredLoading(on, text, isError) {{
+      const pane = document.getElementById('measuredChartsPane');
+      const label = document.getElementById('measuredChartsLoadingText');
+      const nav = document.querySelector('#measuredWrap .measured-nav');
+      const metaStatus = document.getElementById('measuredLoadStatus');
+      if (pane) pane.classList.toggle('is-loading', !!on);
+      if (label && text) label.textContent = text;
+      if (nav) nav.classList.toggle('is-busy', !!on);
+      if (metaStatus) {{
+        if (!on && !isError) {{
+          metaStatus.remove();
+        }} else if (text) {{
+          metaStatus.className = 'load-inline' + (isError ? ' is-error' : '');
+          metaStatus.innerHTML = isError
+            ? escapeHtml(text)
+            : ('<span class="dash-spinner" aria-hidden="true"></span><span>' + escapeHtml(text) + '</span>');
+        }}
+      }}
+    }}
     function loadMeasuredOverview() {{
       if (_measuredOverviewPromise) return _measuredOverviewPromise;
       _measuredOverviewPromise = fetch(measuredOverviewUrl)
@@ -3118,17 +3228,25 @@ def build_html_dashboard(
           _measuredLoadedSuites.add(name);
         }});
     }}
-    function ensureMeasuredSeriesForRows(rows, sel) {{
+    function ensureMeasuredSeriesForRows(rows, sel, onStatus) {{
       const picked = measuredRowsForChart(rows).rows;
       const missing = () => picked.filter(row => row && row.key && !_measuredSeriesByKey[row.key]);
+      const status = (msg) => {{ if (onStatus) onStatus(msg); }};
       let chain = Promise.resolve();
       if ((!sel || sel.kind === 'all') && missing().length) {{
-        chain = chain.then(() => loadMeasuredOverview());
+        chain = chain.then(() => {{
+          status('Fetching measured overview…');
+          return loadMeasuredOverview();
+        }});
       }}
       return chain.then(() => {{
         const needSuites = [...new Set(
           missing().map(row => row.suite).filter(Boolean)
         )];
+        if (!needSuites.length) return;
+        status(needSuites.length === 1
+          ? ('Fetching suite series: ' + needSuites[0])
+          : ('Fetching ' + needSuites.length + ' suite shards…'));
         return Promise.all(needSuites.map(loadMeasuredSuiteShard));
       }}).then(() => _measuredSeriesByKey);
     }}
@@ -3753,17 +3871,24 @@ def build_html_dashboard(
       const chunkTests = testsForMeasuredSelection(sel);
       const token = {{}};
       window._measuredSelectToken = token;
-      if (meta) {{
-        meta.innerHTML += '<div class="muted" style="margin-top:3px" id="measuredLoadStatus">Loading measured series…</div>';
+      if (meta && !document.getElementById('measuredLoadStatus')) {{
+        meta.innerHTML += '<div id="measuredLoadStatus" class="load-inline"></div>';
       }}
-      ensureMeasuredSeriesForRows(rows, sel).then(() => {{
+      setMeasuredLoading(true, 'Loading measured series…');
+      ensureMeasuredSeriesForRows(rows, sel, (msg) => {{
+        if (window._measuredSelectToken !== token) return;
+        setMeasuredLoading(true, msg);
+      }}).then(() => {{
         if (window._measuredSelectToken !== token) return null;
-        const status = document.getElementById('measuredLoadStatus');
-        if (status) status.remove();
+        setMeasuredLoading(true, 'Drawing measured charts…');
         return Promise.resolve(plotMeasuredLayersFromRows(rows, suffix))
           .then(() => plotMeasuredPressureFromRows(rows, suffix))
           .then(() => plotMeasuredTestLane(chunkTests))
           .then(() => applyMeasuredTestBands(chunkTests));
+      }}).then(() => {{
+        if (window._measuredSelectToken !== token) return;
+        setMeasuredLoading(false);
+        hideBoot();
       }}).catch((err) => {{
         if (window._measuredSelectToken !== token) return;
         const msg = (err && err.message) ? err.message : String(err);
@@ -3771,18 +3896,13 @@ def build_html_dashboard(
         // should not look like a missing series payload.
         const isFetch = /overview\\.json|suites\\/|Failed to fetch|NetworkError|status|HTTP/i.test(msg);
         console.error(isFetch ? 'Failed to load measured series' : 'Measured plot failed', err);
-        const status = document.getElementById('measuredLoadStatus');
         if (!isFetch) {{
-          if (status) status.remove();
+          setMeasuredLoading(false);
+          hideBoot();
           return;
         }}
-        if (status) {{
-          status.style.color = '#b42318';
-          status.textContent = 'Failed to load measured series: ' + msg;
-        }} else if (meta) {{
-          meta.innerHTML += '<div class="muted" style="margin-top:3px;color:#b42318">Failed to load measured series: ' +
-            escapeHtml(msg) + '</div>';
-        }}
+        setMeasuredLoading(false, 'Failed to load measured series: ' + msg, true);
+        hideBoot();
       }});
     }}
     function renderMeasuredNode(node, depth, sel, siblingExtremes, siblingCount) {{
@@ -3923,6 +4043,7 @@ def build_html_dashboard(
     }}
     if (measuredWrap && measuredList.length) {{
       measuredWrap.style.display = '';
+      setBootText('Loading measured cgroup series…');
       const suites = [...new Set(measuredList.map(row => row.suite).filter(Boolean))];
       if (suites.length === 1) {{
         openMeasuredPath(suites[0], false);
@@ -3930,6 +4051,8 @@ def build_html_dashboard(
       }} else {{
         selectMeasured({{kind: 'all'}});
       }}
+    }} else {{
+      hideBoot();
     }}
     const _toggleSuiteMarkersOrig = toggleSuiteMarkers;
     toggleSuiteMarkers = function(suitePath, enabled) {{

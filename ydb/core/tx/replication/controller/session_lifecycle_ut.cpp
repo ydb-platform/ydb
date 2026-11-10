@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
     public:
         bool Hold = false;
         TString Value = "root@builtin";
-        TString Revision = "schema:1:2:1";
+        TString Revision = "schema:1:2:0";
         TAutoPtr<IEventHandle> Pending;
 
         explicit TSecretGate(TTestActorRuntime& runtime)

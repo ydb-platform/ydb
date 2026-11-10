@@ -103,7 +103,8 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         TString revision;
         if (description.SecretRevisions.size() == 1) {
             const auto& value = description.SecretRevisions[0];
-            if (value.OwnerId && value.LocalPathId && value.Version) {
+            // CREATE SECRET has revision zero; identity distinguishes missing metadata.
+            if (value.OwnerId && value.LocalPathId) {
                 revision = TStringBuilder() << "schema:" << value.OwnerId << ':' << value.LocalPathId << ':' << value.Version;
             }
         }

@@ -60,6 +60,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         const auto first = ResolveSecret(name, kikimr).GetFuture().GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(first.SecretRevisions.size(), 1);
         UNIT_ASSERT(first.SecretRevisions[0].OwnerId && first.SecretRevisions[0].LocalPathId);
+        UNIT_ASSERT_VALUES_EQUAL(first.SecretRevisions[0].Version, 0);
         for (const auto& value : {TString("first"), TString("second")}) {
             AlterSchemaSecret(name, value, session);
             const auto next = ResolveSecret(name, kikimr).GetFuture().GetValueSync();

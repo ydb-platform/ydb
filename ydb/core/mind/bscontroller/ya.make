@@ -61,6 +61,7 @@ SRCS(
     mood.h
     mv_object_map.h
     node_report.cpp
+    pile_overrides.cpp
     propose_group_key.cpp
     register_node.cpp
     request_controller_info.cpp

@@ -685,6 +685,11 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            // the groups that didn't let BSC adopt storage pool pile overrides of StorageConfig may be gone now
+            if (PileOverridesError && (state.Groups.Changed() || state.StoragePools.Changed())) {
+                state.Callbacks.push_back([this] { UpdatePileOverrides(); });
+            }
+
             // groups relying on single parts get synced or lose their parts, see if they are done with it
             for (const auto& [base, overlay] : state.Groups.Diff()) {
                 if (const TGroupInfo *cur = overlay->second.Get(); cur && cur->BridgeGroupInfo &&

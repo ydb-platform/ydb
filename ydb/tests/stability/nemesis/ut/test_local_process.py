@@ -10,6 +10,7 @@ import subprocess
 import threading
 import time
 from dataclasses import replace
+from unittest.mock import Mock
 
 import pytest
 import requests
@@ -110,6 +111,25 @@ def test_restart_uses_recipe_and_does_not_duplicate_supervisor_restart(processes
     assert len(commands) == 1
 
 
+def test_failed_local_kill_restores_process_before_next_inject(processes):
+    child, spec = processes()
+    calls = []
+
+    def restart(*args, **kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            raise RuntimeError("restart unavailable")
+        processes()
+
+    runner = LocalProcessRunner(ProcessController([spec], run=restart, timeout=3), "kill")
+    service = AgentExecutionService(NemesisManager(), {"fault": {"runner": runner}})
+    payload = {"chaos_target": target(spec).to_dict()}
+    assert perform(service, payload=payload) == "error" and child.poll() is not None
+    assert perform(service, payload=payload) == "finished"
+    assert len(calls) == 3 and runner.controller.discover(spec) is not None
+    assert service.shutdown(2)["status"] == "ok"
+
+
 def test_supervisor_replacement_is_adopted(processes):
     _, spec = processes()
     controller = ProcessController([spec], run=lambda *a, **k: pytest.fail("duplicate restart"), timeout=3)
@@ -136,47 +156,66 @@ def test_inventory_loads_without_harness_and_keeps_piles(tmp_path, processes, mo
         load_process_specs(path)
 
 
-def test_manager_waits_for_inject_then_restores_and_rejects_new_inject():
+def execution(recovery="extract"):
+    runner = Mock()
+    return runner, AgentExecutionService(NemesisManager(), {"fault": {"runner": runner, "recovery": recovery}})
+
+
+def perform(service, action="inject", payload=None):
+    assert service.start("fault", action, payload)["status"] == "started"
+    assert service.wait_for_processes(timeout=2, poll_interval=0.01) == 0
+    # Wait for final ownership cleanup as well as the published execution status.
+    for thread in service._manager._threads:
+        thread.join(2)
+        assert not thread.is_alive()
+    return service.get_all()[-1]["status"]
+
+
+@pytest.mark.parametrize("recovery", ["self", "extract"])
+def test_manager_waits_for_inject_then_restores_and_rejects_new_inject(recovery):
     entered, release = threading.Event(), threading.Event()
-    calls = []
-
-    class Runner:
-        def inject_fault(self, payload):
-            entered.set()
-            release.wait(2)
-            calls.append("inject")
-
-        def extract_fault(self, payload):
-            calls.append("restore")
-
-    service = AgentExecutionService(NemesisManager(), {"toggle": {"runner": Runner(), "recovery": "extract"}})
-    assert service.start("toggle")["status"] == "started"
+    runner, service = execution(recovery)
+    runner.inject_fault.side_effect = lambda payload: (entered.set(), release.wait(2))
+    service.start("fault")
     assert entered.wait(1)
+    assert service.start("fault")["status"] == "error"  # even self-mode cannot overlap
     service.begin_shutdown()
-    assert service.start("toggle")["status"] == "error"
+    assert service.start("fault")["status"] == "error"
     release.set()
-    assert service.shutdown(3)["status"] == "ok"
-    assert service.shutdown(3)["status"] == "ok"
-    assert calls == ["inject", "restore"]
+    assert service.shutdown(3)["status"] == service.shutdown(3)["status"] == "ok"
+    assert runner.extract_fault.call_count == (recovery == "extract")
 
 
-def test_failed_restore_is_not_successful_shutdown(tmp_path):
-    class Runner:
-        def inject_fault(self, payload):
-            pass
+@pytest.mark.parametrize("cleanup_failures", [0, 2])
+def test_failed_self_inject_reconciles_before_retry(cleanup_failures):
+    runner, service = execution("self")
+    target = ChaosTarget.for_node("localhost", node_id=1, ic_port=19001).to_dict()
+    old, new = ({"chaos_target": target, "attempt": i} for i in (1, 2))
+    runner.inject_fault.side_effect = [RuntimeError("temporary inject failure"), None, None]
+    runner.extract_fault.side_effect = [RuntimeError("restore unavailable")] * cleanup_failures + [None]
+    assert perform(service, payload=old) == "error"
+    for _ in range(cleanup_failures):
+        assert perform(service, payload=new) == "error"
+        assert runner.inject_fault.call_count == 1  # never overwrite an unrestored effect
+    assert perform(service, payload=new) == perform(service, payload=new) == "finished"
+    assert runner.inject_fault.call_count == 3
+    assert [c.args[0] for c in runner.extract_fault.call_args_list] == [old] * (cleanup_failures + 1)
+    assert service.shutdown(2)["status"] == "ok"
 
-        def extract_fault(self, payload):
-            raise RuntimeError("restore unavailable")
 
-        def on_failed_extract_fault(self):
-            pass
-
-    service = AgentExecutionService(NemesisManager(), {"toggle": {"runner": Runner(), "recovery": "extract"}})
-    service.start("toggle")
+@pytest.mark.parametrize("inject_fails", [False, True])
+def test_failed_restore_retains_toggle_and_reports_shutdown_error(tmp_path, inject_fails):
+    runner, service = execution()
+    runner.inject_fault.side_effect = RuntimeError("partial inject") if inject_fails else None
+    runner.extract_fault.side_effect = RuntimeError("restore unavailable")
+    assert perform(service) == ("error" if inject_fails else "finished")
+    assert service.start("fault")["status"] == "error"
     coordinator = ShutdownCoordinator(service.begin_shutdown, lambda: service.shutdown(2),
                                       report_path=tmp_path / "shutdown.json", timeout=3)
     assert coordinator.shutdown()["status"] == "error"
-    assert json.loads((tmp_path / "shutdown.json").read_text())["unrestored"] == ["toggle"]
+    assert json.loads((tmp_path / "shutdown.json").read_text())["unrestored"] == ["fault"]
+    runner.extract_fault.side_effect = None
+    assert service.shutdown(2)["status"] == "ok"
 
 
 def test_shutdown_deadline_is_persisted_and_idempotent(tmp_path):
@@ -259,22 +298,12 @@ def test_agent_can_resume_after_remote_drain_but_not_sigterm():
 
 
 def test_extract_is_not_duplicated_between_probe_and_shutdown():
-    calls = []
-
-    class Runner:
-        def inject_fault(self, payload):
-            calls.append("inject")
-
-        def extract_fault(self, payload):
-            time.sleep(0.05)
-            calls.append("extract")
-
-    service = AgentExecutionService(NemesisManager(), {"toggle": {"runner": Runner(), "recovery": "extract"}})
-    service.start("toggle")
-    service.wait_for_processes(timeout=1, poll_interval=0.01)
-    service.start("toggle", "extract")
+    runner, service = execution()
+    perform(service)
+    runner.extract_fault.side_effect = lambda payload: time.sleep(0.05)
+    service.start("fault", "extract")
     assert service.shutdown(2)["status"] == "ok"
-    assert calls == ["inject", "extract"]
+    runner.extract_fault.assert_called_once_with({})
 
 
 def test_local_app_wires_process_inventory_and_engine_without_harness(tmp_path, processes, monkeypatch):

@@ -27,6 +27,7 @@ class NemesisManager:
         self._extracts = {}
         self._threads = []
         self._effects = {}
+        self._injecting = set()
         self._reversible_types = set()
         self._runner_locks = {}
 
@@ -97,11 +98,16 @@ class NemesisManager:
                 previous = self._extracts[key]
                 if previous["status"] != "error":
                     return dict(previous)
+            previous_effect = self._effects.get(key) if action == "inject" else None
             if action == "inject":
-                self._extracts.pop(key, None)
-                if key in self._effects:
+                if (key in self._injecting or self._extracts.get(key, {}).get("status") == "running"
+                        or (previous_effect is not None and type_name in self._reversible_types)):
                     raise RuntimeError("Target already has an unfinished agent action")
-                self._effects[key] = (runner, payload)
+                self._extracts.pop(key, None)
+                self._injecting.add(key)
+                # A failed self-recovering action may still own a partial effect.
+                # Retain its original payload until reconciliation succeeds.
+                self._effects.setdefault(key, (runner, payload))
             self._runner_locks.setdefault(id(runner), threading.Lock())
             proc_id = len(self.processes)
             proc_data = {
@@ -117,13 +123,13 @@ class NemesisManager:
                 self._extracts[key] = proc_data
 
             thread = threading.Thread(
-                target=self._run, args=(proc_id, runner, action, type_name, payload), daemon=True,
+                target=self._run, args=(proc_id, runner, action, type_name, payload, previous_effect), daemon=True,
             )
             self._threads.append(thread)
             thread.start()
         return proc_data
 
-    def _run(self, proc_id, runner, action, type_name, payload):
+    def _run(self, proc_id, runner, action, type_name, payload, previous_effect):
         try:
             # It's a nemesis runner
             log_capture_string = io.StringIO()
@@ -184,6 +190,10 @@ class NemesisManager:
 
             try:
                 with self._runner_locks[id(runner)]:
+                    if previous_effect is not None:
+                        _invoke_extract(*previous_effect)
+                        with self.processes_lock:
+                            self._effects[self._effect_key(type_name, payload)] = (runner, payload)
                     execute_with_logging()
                 with self.processes_lock:
                     if action == "extract" or type_name not in self._reversible_types:
@@ -213,6 +223,11 @@ class NemesisManager:
                     self.processes[proc_id]['logs'] += f"\nError setting up process: {str(e)}\n{traceback.format_exc()}"
                     self.processes[proc_id]['status'] = 'error'
                     self.processes[proc_id]['ret_code'] = 1
+
+        finally:
+            if action == "inject":
+                with self.processes_lock:
+                    self._injecting.discard(self._effect_key(type_name, payload))
 
     def get_all(self):
         with self.processes_lock:

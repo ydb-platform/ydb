@@ -176,6 +176,8 @@ def enrich_resources_overlay(
     }
     def _first_positive(key: str) -> Optional[float]:
         for rec in records or []:
+            if rec.get("kind") == "test":
+                continue
             raw = rec.get(key)
             if raw is None:
                 continue

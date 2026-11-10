@@ -538,6 +538,11 @@ def build_html_dashboard(
                 <option value="max_ram_gb">RAM GB</option>
                 <option value="max_write_mbps">disk write MB/s</option>
                 <option value="max_read_mbps">disk read MB/s</option>
+                <option value="max_cpu_throttled_pct">CPU throttle %</option>
+                <option value="max_cpu_psi_pct">PSI CPU %</option>
+                <option value="max_memory_psi_pct">PSI mem %</option>
+                <option value="max_io_psi_pct">PSI I/O %</option>
+                <option value="cpu_throttled_usec_delta">CPU throttled time</option>
               </select>
             </label>
             <label>N
@@ -4330,11 +4335,22 @@ def build_html_dashboard(
       if (metric === 'max_ram_gb') return {{ key: 'max_ram_gb', unit: ' GB', digits: 2 }};
       if (metric === 'max_write_mbps') return {{ key: 'max_write_mbps', unit: ' MB/s write', digits: 1 }};
       if (metric === 'max_read_mbps') return {{ key: 'max_read_mbps', unit: ' MB/s read', digits: 1 }};
+      if (metric === 'max_cpu_throttled_pct') return {{ key: 'max_cpu_throttled_pct', unit: '% throttle', digits: 1 }};
+      if (metric === 'max_cpu_psi_pct') return {{ key: 'max_cpu_psi_pct', unit: '% PSI CPU', digits: 1 }};
+      if (metric === 'max_memory_psi_pct') return {{ key: 'max_memory_psi_pct', unit: '% PSI mem', digits: 1 }};
+      if (metric === 'max_io_psi_pct') return {{ key: 'max_io_psi_pct', unit: '% PSI I/O', digits: 1 }};
+      if (metric === 'cpu_throttled_usec_delta') {{
+        return {{ key: 'cpu_throttled_usec_delta', unit: 's throttled', digits: 2, scale: 1 / 1000000 }};
+      }}
       return {{ key: 'max_cpu', unit: ' cores', digits: 2 }};
     }}
+    function measuredTopRawValue(row, meta) {{
+      const n = Number(row && row[meta.key]);
+      if (!Number.isFinite(n)) return 0;
+      return meta.scale ? n * meta.scale : n;
+    }}
     function formatMeasuredTopValue(row, meta) {{
-      const n = Number(row && row[meta.key]) || 0;
-      return n.toFixed(meta.digits) + meta.unit;
+      return measuredTopRawValue(row, meta).toFixed(meta.digits) + meta.unit;
     }}
     function renderMeasuredTop() {{
       const list = document.getElementById('measuredTopList');
@@ -4348,7 +4364,7 @@ def build_html_dashboard(
       const inSelection = !!(scopeEl && scopeEl.checked && sel && sel.kind !== 'all');
       const src = inSelection ? measuredRowsForSelection(sel) : measuredList;
       const ranked = (src || []).slice().sort((a, b) =>
-        (Number(b[meta.key]) || 0) - (Number(a[meta.key]) || 0)
+        measuredTopRawValue(b, meta) - measuredTopRawValue(a, meta)
       ).slice(0, limit);
       const selectedKey = sel && sel.kind === 'chunk' ? sel.key : null;
       list.innerHTML = ranked.map((row, i) => {{

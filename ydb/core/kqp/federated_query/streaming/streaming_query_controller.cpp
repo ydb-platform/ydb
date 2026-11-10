@@ -97,8 +97,7 @@ public:
         return PatchedGraph ? PatchedGraph : Settings.Graph;
     }
 
-    TStartedActors Start(
-        std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> graph, const TKqpTasksGraph& tasksGraph) override {
+    TStartedActors Start(std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> graph, const TKqpTasksGraph& tasksGraph) override {
         const auto& context = Settings.UserRequestContext;
         const bool enabled = AppData()->FeatureFlags.GetEnableStreamingQueries() && graph && context && context->CheckpointId;
         if (!enabled) {
@@ -242,8 +241,7 @@ private:
         TActivationContext::Send(new NActors::IEventHandle(recipient, Settings.ExecuterId, ev));
     }
 
-    NFq::NProto::TGraphParams MakeGraphParams(
-        const NKikimrKqp::TQueryPhysicalGraph& graph, const TKqpTasksGraph& tasksGraph) const {
+    NFq::NProto::TGraphParams MakeGraphParams(const NKikimrKqp::TQueryPhysicalGraph& graph, const TKqpTasksGraph& tasksGraph) const {
         const auto& userToken = Settings.UserToken;
 
         NFq::NProto::TGraphParams graphParams;

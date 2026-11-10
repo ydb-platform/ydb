@@ -169,6 +169,13 @@ callbacks never access an actor object.
    the generation observation and, after a role change, observation plus
    `bsc_warmup_seconds` can establish this failure. Cached earlier sends cannot
    seed it or supply conflicting evidence for that new epoch.
+   A qualifying fallback failure takes precedence over connectivity loss, so
+   retained settled reports cannot hide advancing fallback confirmation evidence.
+   Defaults are 1-second state/health rounds, 8-second evidence TTL and a
+   2-second confirmation span, targeting a committed steady-state failover
+   within 20 seconds when evidence and a surviving quorum permit it. The target
+   is not a timeout that overrides blockers or BSC warm-up; explicit timing
+   overrides can increase latency.
 9. **Clock.** Windows, schedules and evidence send times use the monotonic
    clock, read when a request is launched; a wall-clock step changes nothing.
    The HTTP layer reads the wall clock once per response for `now`. Event UTC is

@@ -197,7 +197,10 @@ SUSPENDED_PILE_LOST NO_MUTATION_ENDPOINT STATE_WRITE_FAILED
 [alerts.yaml](alerts.yaml) provides example Prometheus rules for a scrape job
 named `bridge_skipper`. Adapt the job selector and time thresholds to the
 deployed timing configuration and measured workload. The examples use the
-30 s evidence TTL and do not establish production timing qualification.
+8 s evidence TTL and do not establish production timing qualification.
+The stale-view rule warns above 4 s before the selected-view series disappears
+at expiry. Use 1 s scrape and rule-evaluation intervals for that short window;
+slower monitoring requires coordinated threshold and TTL adjustments.
 Missing evidence is never zero-age healthy evidence.
 
 Investigate persistent Unknown, Failed/Lost, blocked decisions, pending records,

@@ -32,3 +32,4 @@ jobs:
       blacklist_paths: |
         ydb/tests/compatibility*
       test_threads: '35'
+      additional_ya_make_args: -DNO_DEBUGINFO=yes

@@ -50,12 +50,14 @@ bool THelpers::ExtractKeyParts(const TString &key, TString &arbitraryPart, TKeyH
     return true;
 }
 
-void THelpers::DbUpdateState(TKeyValueStoredStateData &state, ISimpleDb &db) {
+void THelpers::DbUpdateState(TKeyValueStoredStateData& state, bool diskQuotaExceeded, ISimpleDb& db) {
     TString empty;
     TString key = THelpers::GenerateKeyFor(EIT_STATE, empty);
     state.UpdateChecksum();
-    TString value = TString::Uninitialized(sizeof(state));
+    // Older tablets validate the fixed-size prefix and ignore any trailing fields.
+    TString value = TString::Uninitialized(sizeof(state) + 1);
     memcpy(const_cast<char*>(value.data()), &state, sizeof(state));
+    value[sizeof(state)] = diskQuotaExceeded ? 1 : 0;
     db.Update(key, value);
 }
 

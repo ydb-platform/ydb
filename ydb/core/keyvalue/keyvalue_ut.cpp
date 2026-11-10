@@ -2519,6 +2519,52 @@ Y_UNIT_TEST(TestWriteToExtraChannelThenReadMixedChannelsReturnsOkNewApi) {
 }
 
 
+Y_UNIT_TEST(TestDiskQuotaStateSerialization) {
+    using namespace NKeyValue;
+
+    struct TStateDb : ISimpleDb {
+        TString Key;
+        TString Value;
+
+        void Update(const TString& key, const TString& value) override {
+            Key = key;
+            Value = value;
+        }
+
+        void Erase(const TString&) override {
+            UNIT_FAIL("Unexpected erase while persisting state");
+        }
+
+        void AddTrash(const TLogoBlobID&) override {
+            UNIT_FAIL("Unexpected trash while persisting state");
+        }
+    } db;
+
+    TKeyValueStoredStateData stored;
+    stored.SetUserGeneration(123);
+    stored.SetCollectGeneration(456);
+    for (bool exceeded : {false, true}) {
+        THelpers::DbUpdateState(stored, exceeded, db);
+        UNIT_ASSERT_VALUES_EQUAL(db.Value.size(), sizeof(stored) + 1);
+        const auto* legacy = reinterpret_cast<const TKeyValueStoredStateData*>(db.Value.data());
+        UNIT_ASSERT(legacy->CheckChecksum());
+        UNIT_ASSERT_VALUES_EQUAL(legacy->GetUserGeneration(), 123);
+        UNIT_ASSERT_VALUES_EQUAL(legacy->GetCollectGeneration(), 456);
+
+        TKeyValueState loaded;
+        loaded.Load(db.Key, db.Value);
+        UNIT_ASSERT_VALUES_EQUAL(loaded.DiskQuotaExceeded, exceeded);
+        loaded.PersistState(db);
+        TKeyValueState reloaded;
+        reloaded.Load(db.Key, db.Value);
+        UNIT_ASSERT_VALUES_EQUAL(reloaded.DiskQuotaExceeded, exceeded);
+
+        TKeyValueState oldState;
+        oldState.Load(db.Key, TString(db.Value.data(), sizeof(stored)));
+        UNIT_ASSERT(!oldState.DiskQuotaExceeded);
+    }
+}
+
 Y_UNIT_TEST(TestIncrementalKeySet) {
     // generate initial key set
     TSet<TString> keys;

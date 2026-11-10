@@ -4,6 +4,31 @@
 
 namespace NKikimr::NSchemeShard {
 
+NKikimrSubDomains::TKeyValuePartitionUsage PrepareKeyValueStorageUsage(
+    const NKikimrKeyValue::StorageUsageReport& report,
+    const TChannelsBindings& bindings, const TStoragePools& pools)
+{
+    NKikimrSubDomains::TKeyValuePartitionUsage usage;
+    usage.set_generation(report.generation());
+    usage.set_round(report.round());
+    for (const auto& [channel, bytes] : report.bytes_by_channel()) {
+        const auto* binding = channel < bindings.size() ? &bindings[channel] : nullptr;
+        // External data belongs to the user's object storage, not the database disk quota.
+        if (binding && binding->HasExternalDataSourceId()) {
+            continue;
+        }
+
+        usage.set_total_bytes(usage.total_bytes() + bytes);
+        if (binding) {
+            if (const auto* kind = GetPoolKind(*binding, pools)) {
+                (*usage.mutable_bytes_by_pool_kind())[*kind] += bytes;
+            }
+        }
+    }
+
+    return usage;
+}
+
 struct TSchemeShard::TTxStoreKeyValueUsage : NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvKeyValue::TEvStorageUsageReport::TPtr Event;
 
@@ -38,18 +63,7 @@ struct TSchemeShard::TTxStoreKeyValueUsage : NTabletFlatExecutor::TTransactionBa
         }
 
         auto domain = Self->ResolveDomainInfo(shard->PathId);
-        NKikimrSubDomains::TKeyValuePartitionUsage next;
-        next.set_generation(report.generation());
-        next.set_round(report.round());
-        for (const auto& [channel, bytes] : report.bytes_by_channel()) {
-            next.set_total_bytes(next.total_bytes() + bytes);
-            if (channel < shard->BindedChannels.size()) {
-                if (const auto* kind = GetPoolKind(shard->BindedChannels[channel], domain->EffectiveStoragePools())) {
-                    (*next.mutable_bytes_by_pool_kind())[*kind] += bytes;
-                }
-            }
-        }
-
+        auto next = PrepareKeyValueStorageUsage(report, shard->BindedChannels, domain->EffectiveStoragePools());
         domain->UpdateKeyValueUsage(next, previous);
         previous.Swap(&next);
         NIceDb::TNiceDb db(txc.DB);

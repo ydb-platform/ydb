@@ -393,6 +393,7 @@ public:
     TKeyValueState();
     void SetTabletInfo(TTabletStorageInfo* tabletInfo);
     void Clear();
+    void PersistState(ISimpleDb& db);
     bool DiskQuotaExceeded = false;
 
     void FillStorageUsageReport(NKikimrKeyValue::StorageUsageReport& report) const;
@@ -727,6 +728,10 @@ public:
 
         if (errorDescription) {
             response->Record.set_msg(errorDescription);
+        }
+
+        if constexpr (std::is_same_v<TResponse, TEvKeyValue::TEvExecuteTransactionResponse>) {
+            response->Record.mutable_issues()->Swap(intermediate->ExecuteTransactionResponse.mutable_issues());
         }
 
         ResourceMetrics->Network.Increment(response->Record.ByteSize());

@@ -13,6 +13,8 @@
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/escape.h>
@@ -197,6 +199,10 @@ void TKeyValueState::Clear() {
         ClearTabletCounters();
         CountStarting();
     }
+}
+
+void TKeyValueState::PersistState(ISimpleDb& db) {
+    THelpers::DbUpdateState(StoredState, DiskQuotaExceeded, db);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -622,6 +628,12 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             Y_ABORT_UNLESS(data->CheckChecksum());
             Y_ABORT_UNLESS(data->DataHeader.ItemType == EIT_STATE);
             StoredState = *data;
+            if (value.size() > sizeof(TKeyValueStoredStateData)) {
+                const ui8 exceeded = value[sizeof(TKeyValueStoredStateData)];
+                Y_ABORT_UNLESS(exceeded <= 1);
+                DiskQuotaExceeded = exceeded != 0;
+            }
+
             break;
         }
         case EIT_VACUUM_GENERATION: {
@@ -793,7 +805,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
 
     THelpers::DbEraseCollect(db);
     if (IsEmptyDbStart) {
-        THelpers::DbUpdateState(StoredState, db);
+        PersistState(db);
     }
 
     // corner case, if no CollectGarbage events were sent
@@ -828,7 +840,7 @@ void TKeyValueState::RegisterInitialGCCompletionExecute(ISimpleDb &db, const TAc
     Y_ABORT_UNLESS(ExecutorGeneration);
     StoredState.SetCollectGeneration(ExecutorGeneration - 1);
     StoredState.SetCollectStep(Max<ui32>());
-    THelpers::DbUpdateState(StoredState, db);
+    PersistState(db);
 }
 
 void TKeyValueState::RegisterInitialGCCompletionComplete(const TActorContext &ctx, const TTabletStorageInfo *info) {
@@ -1912,7 +1924,7 @@ bool TKeyValueState::IncrementGeneration(THolder<TIntermediate> &intermediate, I
     Y_ABORT_UNLESS(nextGeneration > StoredState.GetUserGeneration());
     StoredState.SetUserGeneration(nextGeneration);
 
-    THelpers::DbUpdateState(StoredState, db);
+    PersistState(db);
 
     intermediate->Response.MutableIncrementGenerationResult()->SetGeneration(nextGeneration);
     intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -3536,7 +3548,10 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
     }
 
     if (DiskQuotaExceeded && AnyOf(request.commands(), [](const auto& cmd) { return !cmd.has_delete_range(); })) {
-        ReplyError<TEvKeyValue::TEvExecuteTransactionResponse>(ctx, "Database disk quota exceeded",
+        const TString message = "Database disk quota exceeded";
+        const auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED, message);
+        NYql::IssueToMessage(issue, intermediate->ExecuteTransactionResponse.add_issues());
+        ReplyError<TEvKeyValue::TEvExecuteTransactionResponse>(ctx, message,
             NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED, intermediate);
         return false;
     }

@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
@@ -4100,6 +4101,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         runtime.GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
         runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
+        runtime.GetAppData().FeatureFlags.SetEnableKeyValueStorageUsageReports(true);
+        ui64 keyValueReports = 0;
+        auto observer = runtime.AddObserver<TEvKeyValue::TEvStorageUsageReport>([&](auto&) {
+            ++keyValueReports;
+        });
 
         ui64 txId = 100;
 
@@ -4154,8 +4160,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         WriteToTopic(runtime, "/MyRoot/USER_1/Topic1", ++seqNo, msg);
         env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
-                           {LsCheckDiskQuotaExceeded(true, "Message 0 was written")});
+        const auto domain = DescribePath(runtime, "/MyRoot/USER_1");
+        TestDescribeResult(domain, {LsCheckDiskQuotaExceeded(true, "Message 0 was written")});
+        const auto& usage = domain.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
+        UNIT_ASSERT_GT(usage.GetTopics().GetDataSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(usage.GetKeyValueBytes(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(keyValueReports, 0);
 
         stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
         UNIT_ASSERT_EQUAL_C(true, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer after write");

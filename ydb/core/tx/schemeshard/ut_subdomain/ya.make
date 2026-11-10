@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
+    yql/essentials/public/issue/protos
     yql/essentials/public/udf/service/exception_policy
 )
 

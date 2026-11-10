@@ -12,9 +12,6 @@
 #include <ydb/core/mind/local.h>
 #include <ydb/core/protos/local.pb.h>
 
-#include <yql/essentials/core/issue/yql_issue.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
 
 namespace NKikimr::NGRpcService {
 
@@ -1192,15 +1189,14 @@ protected:
         if constexpr (HasMsgV<decltype(ev->Get()->Record)>) {
             if (status != Ydb::StatusIds::SUCCESS && !requestLimitReached) {
                 const auto& record = ev->Get()->Record;
-                if (record.status() == NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED) {
-                    google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
-                    auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED, record.msg());
-                    NYql::IssueToMessage(issue, issues.Add());
-                    this->Reply(status, issues);
-                } else {
-                    this->Reply(status, record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
+                if constexpr (requires { record.issues(); }) {
+                    if (!record.issues().empty()) {
+                        this->Reply(status, record.issues());
+                        return;
+                    }
                 }
 
+                this->Reply(status, record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
                 return;
             }
         }

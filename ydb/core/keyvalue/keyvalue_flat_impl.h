@@ -91,10 +91,6 @@ protected:
                 // ApplyLogBatching(ctx, alter);
             }
 
-            if (!Self.LoadDiskQuota(txc)) {
-                return false;
-            }
-
             Self.State.InitExecute(Self.TabletID(), KeyValueActorId, txc.Generation, db, ctx, Self.Info());
             YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TTxInit flat Execute returns true",
                 {"keyValue", txc.Tablet});
@@ -429,7 +425,6 @@ protected:
     };
 
     struct TTxPersistDiskQuota;
-    bool LoadDiskQuota(NTabletFlatExecutor::TTransactionContext& txc);
     bool WatchesDiskQuota() const;
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev);
     void UpdateQuotaPath(TPathId pathId);

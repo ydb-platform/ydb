@@ -1,7 +1,9 @@
 #include <ydb/core/keyvalue/keyvalue_const.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
@@ -133,6 +135,11 @@ Y_UNIT_TEST(EnforceAcrossPartitionsAndReboot) {
         cmd->set_storage_channel(tablet == first ? NKeyValue::InlineStorageChannelInPublicApi : NKeyValue::MainStorageChannelInPublicApi);
         const auto response = env.Request<TEvKeyValue::TEvExecuteTransaction, TEvKeyValue::TEvExecuteTransactionResponse>(tablet, request);
         UNIT_ASSERT_C(response.status() == expected, response.ShortDebugString());
+        if (expected == NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED) {
+            UNIT_ASSERT_VALUES_EQUAL(response.issues_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response.issues(0).issue_code(),
+                static_cast<ui32>(NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED));
+        }
     };
 
     checkWrite(first, NKikimrKeyValue::Statuses::RSTATUS_OK);
@@ -165,6 +172,13 @@ Y_UNIT_TEST(EnforceAcrossPartitionsAndReboot) {
     env.Refresh(first);
     env.CheckUsage(6, false);
     checkWrite(second, NKikimrKeyValue::Statuses::RSTATUS_OK);
+
+    auto blockRecoveredUpdates = env.Runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>([](auto& event) {
+        event.Reset();
+    });
+
+    RebootTablet(env.Runtime, first, env.Edge);
+    checkWrite(first, NKikimrKeyValue::Statuses::RSTATUS_OK);
 }
 
 Y_UNIT_TEST(EnforceExternalSubdomainQuota) {
@@ -217,6 +231,41 @@ Y_UNIT_TEST(EnforceQuotaForThePoolHoldingTheValue) {
     env.CheckUsage(value.size(), false);
     writeToChannel(ssdChannel);
     env.CheckUsage(value.size(), true);
+}
+
+Y_UNIT_TEST(ExcludeExternalChannelsFromDiskUsage) {
+    TChannelsBindings bindings(4);
+    bindings[0].SetStoragePoolKind("ssd");
+    bindings[1].SetStoragePoolName("data");
+    bindings[2].SetStoragePoolKind("hdd");
+    bindings[3].SetStoragePoolName("external");
+    bindings[3].MutableExternalDataSourceId()->SetOwnerId(1);
+    bindings[3].MutableExternalDataSourceId()->SetLocalId(2);
+    const TStoragePools pools{{"data", "ssd"}};
+
+    NKikimrKeyValue::StorageUsageReport report;
+    report.set_generation(7);
+    report.set_round(9);
+    auto& bytes = *report.mutable_bytes_by_channel();
+    bytes[0] = 2;
+    bytes[1] = 3;
+    bytes[2] = 4;
+    bytes[3] = 100;
+    // Adopted tablets can report channels whose bindings are not known to SchemeShard.
+    bytes[4] = 5;
+
+    const auto usage = NSchemeShard::PrepareKeyValueStorageUsage(report, bindings, pools);
+    UNIT_ASSERT_VALUES_EQUAL(usage.generation(), 7);
+    UNIT_ASSERT_VALUES_EQUAL(usage.round(), 9);
+    UNIT_ASSERT_VALUES_EQUAL(usage.total_bytes(), 14);
+    UNIT_ASSERT_VALUES_EQUAL(usage.bytes_by_pool_kind().size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(usage.bytes_by_pool_kind().at("ssd"), 5);
+    UNIT_ASSERT_VALUES_EQUAL(usage.bytes_by_pool_kind().at("hdd"), 4);
+
+    bindings[3].SetStoragePoolKind("ssd");
+    const auto externalWithPoolKind = NSchemeShard::PrepareKeyValueStorageUsage(report, bindings, pools);
+    UNIT_ASSERT_VALUES_EQUAL(externalWithPoolKind.total_bytes(), usage.total_bytes());
+    UNIT_ASSERT_VALUES_EQUAL(externalWithPoolKind.bytes_by_pool_kind().at("ssd"), 5);
 }
 
 Y_UNIT_TEST(IgnoreOldReportsAndReleasePoolQuotaOnDrop) {

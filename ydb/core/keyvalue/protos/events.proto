@@ -1,6 +1,8 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/public/api/protos/ydb_issue_message.proto";
+
 package NKikimrKeyValue;
 option java_package = "ru.yandex.kikimr.proto";
 option java_outer_classname = "KeyValueProtos";
@@ -39,7 +41,8 @@ message StorageUsageReport {
     uint64 tablet_id = 1;
     uint32 generation = 2;
     uint64 round = 3;
-    // SchemeShard maps channels to storage pool kinds when checking per-pool quotas.
+    // SchemeShard excludes external channels and maps the rest to per-pool quotas.
+    // The reverse notification carries only the domain-wide DiskQuotaExceeded flag.
     map<uint32, uint64> bytes_by_channel = 4;
 }
 
@@ -197,6 +200,7 @@ message ExecuteTransactionResult {
     string msg = 3;
     uint64 cookie = 4;
     uint64 node_id = 5;
+    repeated Ydb.Issue.IssueMessage issues = 6;
 }
 
 message GetStorageChannelStatusRequest {

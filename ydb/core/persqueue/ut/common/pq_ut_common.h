@@ -274,6 +274,7 @@ struct TConsumerPreparationParameters {
     bool Important = false;
     std::optional<uint32_t> MetricsLevel;
     std::optional<TString> MonitoringProjectId;
+    std::optional<NKikimrPQ::TPQTabletConfig::EConsumerType> Type;
 };
 
 void PQTabletPrepare(

@@ -2442,6 +2442,77 @@ Y_UNIT_TEST_F(Cancel_Tx, TPQTabletFixture)
     WaitForPQWriteTxs();
 }
 
+Y_UNIT_TEST_F(SetOffset_MutateDisabled_AllowsOnlyConfiguredClientIds, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {
+        {.Name="custom-replica", .Type=NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION},
+        {.Name="replication"},
+        {.Name="mirror-from-lbkx-mow-to-lbkx-crux"},
+        {.Name="account@reader"},
+    }, *Ctx->Runtime, Ctx->TabletId, Ctx->Edge);
+    CmdWrite(0, "source", {{1, "first"}, {2, "second"}}, *Ctx);
+    CmdSetOffset(0, "custom-replica", 1, false, *Ctx);
+    CmdSetOffset(0, "replication", 1, false, *Ctx);
+    CmdSetOffset(0, "mirror-from-lbkx-mow-to-lbkx-crux", 1, false, *Ctx);
+    CmdSetOffset(0, "account@reader", 1, false, *Ctx);
+
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSourceTopicMutateRestricted(true);
+    auto& pqConfig = Ctx->Runtime->GetAppData(0).PQConfig;
+    pqConfig.SetTopicsAreFirstClassCitizen(false);
+
+    const auto assertCommitRejected = [&](const TString& consumer) {
+        auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto* partition = request->Record.MutablePartitionRequest();
+        partition->SetPartition(0);
+        auto* command = partition->MutableCmdSetClientOffset();
+        command->SetClientId(consumer);
+        command->SetOffset(2);
+        Ctx->Runtime->SendToPipe(Ctx->TabletId, Ctx->Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+        UNIT_ASSERT_EQUAL(response->Record.GetErrorCode(), NPersQueue::NErrorCode::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(response->Record.GetErrorReason(), "Topic mutations are temporarily disabled");
+    };
+
+    // An empty list does not grant exceptions even to replication consumers.
+    assertCommitRejected("custom-replica");
+    assertCommitRejected("mirror-from-lbkx-mow-to-lbkx-crux");
+    pqConfig.AddClientIdsAllowCommitWhenTopicMutateDisabled("account/reader");
+    pqConfig.AddClientIdsAllowCommitWhenTopicMutateDisabled("shared/mirror-from-lbkx-mow-to-lbkx-crux");
+    CmdSetOffset(0, "mirror-from-lbkx-mow-to-lbkx-crux", 2, false, *Ctx);
+    CmdGetOffset(0, "mirror-from-lbkx-mow-to-lbkx-crux", 2, *Ctx);
+    CmdSetOffset(0, "account@reader", 2, false, *Ctx);
+    CmdGetOffset(0, "account@reader", 2, *Ctx);
+
+    // External names in the list are converted to internal ClientIds.
+    for (const auto* consumer : {"custom-replica", "replication", "unknown"}) {
+        assertCommitRejected(consumer);
+    }
+    CmdGetOffset(0, "custom-replica", 1, *Ctx);
+    CmdGetOffset(0, "replication", 1, *Ctx);
+
+    pqConfig.ClearClientIdsAllowCommitWhenTopicMutateDisabled();
+    assertCommitRejected("mirror-from-lbkx-mow-to-lbkx-crux");
+    pqConfig.AddClientIdsAllowCommitWhenTopicMutateDisabled("shared/custom-replica");
+    CmdSetOffset(0, "custom-replica", 2, false, *Ctx);
+    CmdGetOffset(0, "custom-replica", 2, *Ctx);
+
+    auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* partition = request->Record.MutablePartitionRequest();
+    partition->SetPartition(0);
+    auto* command = partition->AddCmdWrite();
+    command->SetSourceId("source");
+    command->SetSeqNo(3);
+    command->SetData("restricted");
+    Ctx->Runtime->SendToPipe(Ctx->TabletId, Ctx->Edge, request.Release(), 0, GetPipeConfigWithRetries());
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+    UNIT_ASSERT_EQUAL(response->Record.GetErrorCode(), NPersQueue::NErrorCode::ERROR);
+    UNIT_ASSERT_STRING_CONTAINS(response->Record.GetErrorReason(), "Topic mutations are temporarily disabled");
+
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSourceTopicMutateRestricted(false);
+    CmdSetOffset(0, "replication", 2, false, *Ctx);
+    CmdGetOffset(0, "replication", 2, *Ctx);
+}
+
 Y_UNIT_TEST_F(ProposeTx_MutateDisabled_AbortsNewTransactions, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);

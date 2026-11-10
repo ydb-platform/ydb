@@ -109,6 +109,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(Replication->GetAuthenticationErrorRevision()),
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(rid, tid).Update(

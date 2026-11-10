@@ -43,6 +43,7 @@ class TSessionInfo {
 
     public:
         const TActorId ActorId;
+        TString CredentialGeneration;
         const TMetricsConfig::EMetricsLevel MetricsLevel;
         TRowVersion Heartbeat = TRowVersion::Min();
 
@@ -260,14 +261,15 @@ public:
     }
 
     TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId,
-        const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel)
+        const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel, const TString& credentialGeneration)
     {
         auto res = Workers.emplace(id, TWorkerInfo{
             ops->Register(actor, TMailboxType::HTSwap, poolId),
             replicationLocation, metricsLevel, id.WorkerId(), AppData()->Counters
         });
 
-        const auto& worker = res.first->second;
+        auto& worker = res.first->second;
+        worker.CredentialGeneration = credentialGeneration;
         if (metricsLevel == TMetricsConfig::LEVEL_DETAILED && !worker.Location.GetPath().empty()) {
             PendingStatsValues[id];
         }
@@ -327,7 +329,11 @@ public:
 
     template <typename... Args>
     void SendWorkerStatus(IActorOps* ops, const TWorkerId& id, Args&&... args) {
-        ops->Send(ActorId, new TEvService::TEvWorkerStatus(id, std::forward<Args>(args)...));
+        auto event = MakeHolder<TEvService::TEvWorkerStatus>(id, std::forward<Args>(args)...);
+        if (const auto it = Workers.find(id); it != Workers.end()) {
+            event->Record.SetCredentialGeneration(it->second.CredentialGeneration);
+        }
+        ops->Send(ActorId, event.Release());
     }
 
     void ApplyWorkerStats(const TWorkerId& id, const std::unique_ptr<TWorkerDetailedStats>& stats) {
@@ -603,15 +609,15 @@ struct TIamCredentialsKey {
 
 using TCredentialsKey = std::variant<TStaticCredentialsKey, TOAuthCredentialsKey, TIamCredentialsKey>;
 
-struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentialsKey> {
+struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentialsKey, TString> {
     explicit TConnectionParams(
             const TString& endpoint,
             const TString& database,
             bool ssl,
             const TString& caCert,
-            TCredentialsKey credentials)
-        : std::tuple<TString, TString, bool, TString, TCredentialsKey>(
-            endpoint, database, ssl, caCert, std::move(credentials))
+            TCredentialsKey credentials, const TString& generation)
+        : std::tuple<TString, TString, bool, TString, TCredentialsKey, TString>(
+            endpoint, database, ssl, caCert, std::move(credentials), generation)
     {
     }
 
@@ -633,7 +639,7 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentia
 
     size_t Hash() const {
         const auto& credentials = std::get<4>(*this);
-        return MultiHash(Endpoint(), Database(), EnableSsl(), CaCert(), credentials.index(),
+        return MultiHash(Endpoint(), Database(), EnableSsl(), CaCert(), std::get<5>(*this), credentials.index(),
             std::visit([](const auto& key) { return key.Hash(); }, credentials));
     }
 
@@ -651,13 +657,13 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentia
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
             return TConnectionParams(endpoint, database, ssl, caCert, TStaticCredentialsKey{
-                params.GetStaticCredentials().GetUser(), FingerprintCredential(params.GetStaticCredentials().GetPassword())});
+                params.GetStaticCredentials().GetUser(), FingerprintCredential(params.GetStaticCredentials().GetPassword())}, params.GetCredentialGeneration());
         case NKikimrReplication::TConnectionParams::kOAuthToken:
             return TConnectionParams(endpoint, database, ssl, caCert, TOAuthCredentialsKey{
-                FingerprintCredential(params.GetOAuthToken().GetToken())});
+                FingerprintCredential(params.GetOAuthToken().GetToken())}, params.GetCredentialGeneration());
         case NKikimrReplication::TConnectionParams::kIamCredentials:
             return TConnectionParams(endpoint, database, ssl, caCert, TIamCredentialsKey{
-                params.GetIamCredentials().GetServiceAccountId(), params.GetIamCredentials().GetResourceId()});
+                params.GetIamCredentials().GetServiceAccountId(), params.GetIamCredentials().GetResourceId()}, params.GetCredentialGeneration());
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -895,7 +901,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 cmd.HasProcessedSourceOffset() ? TMaybe<ui64>(cmd.GetProcessedSourceOffset()) : Nothing()),
             poolId,
             cmd.GetReplicationLocation(),
-            cmd.GetMetricsLevel()
+            cmd.GetMetricsLevel(),
+            readerSettings.GetConnectionParams().GetCredentialGeneration()
         );
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
@@ -1128,7 +1135,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         YDB_LOG_INFO("Worker has gone",
             {"worker", ev->Sender});
         WorkerActorIdToSession.erase(ev->Sender);
-        session->StopWorker(this, ev->Sender, ToReason(ev->Get()->Status), ev->Get()->ErrorDescription);
+        session->StopWorker(this, ev->Sender, ToReason(ev->Get()->Status), ev->Get()->ErrorDescription, Nothing(),
+            ev->Get()->Status == TEvWorker::TEvGone::AUTH_ERROR
+                ? NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION
+                : NKikimrReplication::TEvWorkerStatus::ERROR_KIND_UNSPECIFIED);
     }
 
     void Handle(TEvWorker::TEvStatus::TPtr& ev) {

@@ -72,12 +72,14 @@ struct TEvService {
                 NKikimrReplication::TEvWorkerStatus::EStatus status,
                 NKikimrReplication::TEvWorkerStatus::EReason reason,
                 const TString& errorDescription,
-                TMaybe<ui64> sourceCommittedOffset = Nothing()
+                TMaybe<ui64> sourceCommittedOffset = Nothing(),
+                NKikimrReplication::TEvWorkerStatus::EErrorKind errorKind = NKikimrReplication::TEvWorkerStatus::ERROR_KIND_UNSPECIFIED
         ) {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(status);
             Record.SetReason(reason);
             Record.SetErrorDescription(errorDescription);
+            Record.SetErrorKind(errorKind);
             if (sourceCommittedOffset) {
                 Record.SetSourceCommittedOffset(*sourceCommittedOffset);
             }

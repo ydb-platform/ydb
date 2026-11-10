@@ -189,7 +189,12 @@ public:
     ui64 GetNextTargetId() const;
 
     bool IsCredentialsReady() const;
-    void UpdateSecret(const TString& secretValue);
+    void UpdateSecret(const TString& secretValue, const TString& revision = {}, const TString& generation = {});
+    const TString& GetSecretRevision() const;
+    const TString& GetAuthenticationErrorRevision() const;
+    void SetAuthenticationErrorRevision(const TString& revision);
+    bool CanRecoverAuthenticationError() const;
+    bool IsExpectedSecretRefresh(const TActorId& actorId) const;
     bool IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const;
 
     void UpdateResourceId(const TString& value);

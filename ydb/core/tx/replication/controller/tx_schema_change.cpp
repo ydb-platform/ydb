@@ -315,6 +315,7 @@ class TController::TTxSchemaChangeReport: public TTxBase {
             TStringBuilder() << "Error in target #" << target->GetId() << ": " << target->GetIssue());
         db.Table<Schema::Replications>().Key(key.first).Update(
             NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(replication->GetAuthenticationErrorRevision()),
             NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue()));
         db.Table<Schema::Targets>().Key(key.first, key.second).Update(
             NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
@@ -1008,6 +1009,7 @@ public:
                     TStringBuilder() << "Error in target #" << target->GetId() << ": " << target->GetIssue());
                 db.Table<Schema::Replications>().Key(key.first).Update(
                     NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
+                    NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(replication->GetAuthenticationErrorRevision()),
                     NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue()));
                 db.Table<Schema::Targets>().Key(key.first, key.second).Update(
                     NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),

@@ -68,6 +68,18 @@ class TController::TTxInit: public TTxBase {
             }
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
+            // An intervening old binary cannot clear the new auth marker. A
+            // generation gap therefore disables automatic recovery, fail closed.
+            const ui64 generation = Self->Executor()->Generation();
+            if (generation > 1 && Self->SysParams.GetAuthenticationRecoveryGeneration() == generation - 1
+                && state == TReplication::EState::Error && desiredState == TReplication::EState::Ready)
+            {
+                replication->SetAuthenticationErrorRevision(
+                    rowset.GetValueOrDefault<Schema::Replications::AuthenticationErrorRevision>(TString()));
+            } else {
+                db.Table<Schema::Replications>().Key(rid).Update(
+                    NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(TString()));
+            }
             Self->CommittedVersions[rid] = TRowVersion(
                 rowset.GetValueOrDefault<Schema::Replications::CommittedStep>(0),
                 rowset.GetValueOrDefault<Schema::Replications::CommittedTxId>(0));
@@ -363,7 +375,12 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Execute");
-        return Load(txc.DB);
+        if (!Load(txc.DB)) {
+            return false;
+        }
+        NIceDb::TNiceDb db(txc.DB);
+        Self->SysParams.SetAuthenticationRecoveryGeneration(Self->Executor()->Generation(), db);
+        return true;
     }
 
     void Complete(const TActorContext& ctx) override {

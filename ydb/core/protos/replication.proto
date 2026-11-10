@@ -63,6 +63,8 @@ message TIamCredentials {
 }
 
 message TConnectionParams {
+    // Opaque controller incarnation for a freshly resolved credential. Old nodes ignore it.
+    optional string CredentialGeneration = 8;
     optional string Endpoint = 1;
     optional string Database = 2;
     optional bool EnableSsl = 5;
@@ -470,6 +472,12 @@ message TWorkerStats {
 }
 
 message TEvWorkerStatus {
+    enum EErrorKind {
+        ERROR_KIND_UNSPECIFIED = 0;
+        ERROR_KIND_SOURCE_AUTHENTICATION = 1;
+    }
+    optional EErrorKind ErrorKind = 8;
+    optional string CredentialGeneration = 9;
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
         STATUS_RUNNING = 1;

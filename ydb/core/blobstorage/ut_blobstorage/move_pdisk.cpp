@@ -181,21 +181,9 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
         TLogoBlobID id(1, 1, 1, 0, data.size(), 0);
         env.PutBlob(groupId, id, data);
 
-        {
-            // Stop destination PDisk.
-            NKikimrBlobStorage::TConfigRequest request;
-
-            NKikimrBlobStorage::TStopPDisk* cmd = request.AddCommand()->MutableStopPDisk();
-            auto* pdiskId = cmd->MutableTargetPDiskId();
-            pdiskId->SetNodeId(destinationNodeId);
-            pdiskId->SetPDiskId(destinationPDiskId);
-
-            auto response = env.Invoke(request);
-
-            UNIT_ASSERT_C(response.GetSuccess(), "Should've stopped");
-
-            WaitForPDiskStop(env);
-        }
+        const TPDisk source{sourceNodeId, sourcePDiskId};
+        const TPDisk destination{destinationNodeId, destinationPDiskId};
+        StopPDisk(env, destination);
 
         auto srcPDiskState = env.PDiskMockStates[std::make_pair(sourceNodeId, sourcePDiskId)];
 
@@ -208,43 +196,13 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
             env.Runtime->Send(new IEventHandle(destinationPDiskActorId, edge, evChangeState), destinationNodeId);
         }
 
-        {
-            // Execute the move PDisk command.
-            // This command will remove source PDisk.
-            NKikimrBlobStorage::TConfigRequest request;
-
-            NKikimrBlobStorage::TMovePDisk* cmd = request.AddCommand()->MutableMovePDisk();
-            request.SetIgnoreGroupFailModelChecks(true);
-
-            auto* sourcePdiskId = cmd->MutableSourcePDisk()->MutableTargetPDiskId();
-            sourcePdiskId->SetNodeId(sourceNodeId);
-            sourcePdiskId->SetPDiskId(sourcePDiskId);
-
-            auto* destinationPdiskId = cmd->MutableDestinationPDisk()->MutableTargetPDiskId();
-            destinationPdiskId->SetNodeId(destinationNodeId);
-            destinationPdiskId->SetPDiskId(destinationPDiskId);
-
-            auto response = env.Invoke(request);
-
-            UNIT_ASSERT(response.GetSuccess());
-        }
+        // Execute the move PDisk command. This command will remove source PDisk.
+        const auto response = InvokeMovePDisk(env, source, destination);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
 
         // Wait until destination PDisk is restarted.
         WaitForPDiskRestart(env);
-
-        {
-            NKikimrBlobStorage::TConfigRequest request;
-            request.SetIgnoreGroupFailModelChecks(true);
-
-            NKikimrBlobStorage::TRestartPDisk* cmd = request.AddCommand()->MutableRestartPDisk();
-            auto pdiskId = cmd->MutableTargetPDiskId();
-            pdiskId->SetNodeId(destinationNodeId);
-            pdiskId->SetPDiskId(destinationPDiskId);
-
-            auto response = env.Invoke(request);
-
-            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        }
+        RestartPDisk(env, destination);
 
         // Wait and read the data back from the destination PDisk.
         env.Sim(TDuration::Seconds(30));

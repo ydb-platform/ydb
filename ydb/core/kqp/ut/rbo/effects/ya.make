@@ -16,6 +16,7 @@ SRCS(
     kqp_rbo_index_writes_ut.cpp
     kqp_rbo_olap_effects_ut.cpp
     kqp_rbo_yql_effects_ut.cpp
+    kqp_connection_ut.cpp
     kqp_effects_ut.cpp
     kqp_effects_guards_ut.cpp
     kqp_immediate_effects_ut.cpp

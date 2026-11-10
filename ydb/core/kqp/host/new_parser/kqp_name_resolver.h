@@ -17,6 +17,7 @@ struct TColumnMetadata {
     ui32 Id = 0;
     TString Type;
     bool NotNull = false;
+    bool HasDefault = false;
 };
 
 struct TTableMetadata {
@@ -64,6 +65,7 @@ struct TResolvedColumn {
 struct TResolvedNames {
     THashMap<const TDeclareStatement*, TString> DeclarationNames;
     THashMap<const TWriteStatement*, TVector<TString>> WriteColumns;
+    THashMap<const TWriteStatement*, TVector<TString>> ReturningColumns;
     // Decoded static optimizer pragmas. The host dispatches these in statement
     // order after native lowering succeeds; an empty value means DEFAULT.
     THashMap<const TPragmaStatement*, TMaybe<TString>> CostBasedOptimizationPragmas;

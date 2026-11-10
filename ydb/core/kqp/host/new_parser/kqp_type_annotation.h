@@ -61,6 +61,7 @@ struct TAnnotatedSubquery {
 // so the same immutable syntax and name bindings can be lowered again.
 struct TAnnotatedAst {
     THashMap<const TWriteStatement*, TVector<std::pair<TString, TAnnotatedExpression>>> Writes;
+    THashMap<const TWriteStatement*, NYql::TExprNode::TPtr> WriteRows;
     // Scalar roots of relational clauses: projections, predicates, sort keys,
     // LIMIT/OFFSET. A star projection has a tuple body in catalog column order.
     THashMap<const TExpression*, TAnnotatedExpression> Expressions;

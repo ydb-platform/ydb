@@ -48,6 +48,7 @@ enum class EYqlJoinKind {
 struct TYqlJoinConstraint {
     EYqlJoinKind Kind;
     TNullable<TNodePtr> Condition;
+    TVector<TDeferredAtom> UsingColumns;
 };
 
 struct TYqlJoin {
@@ -178,7 +179,7 @@ TNodePtr BuildYqlScalarSubquery(TNodePtr node);
 
 TNodePtr BuildYqlExistsSubquery(TNodePtr node);
 
-TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression);
+TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression, bool compact = false);
 
 TNodePtr BuildYqlStar(TPosition position, TMaybe<TString> source = Nothing());
 

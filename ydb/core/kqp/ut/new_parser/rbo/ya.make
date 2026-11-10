@@ -19,6 +19,7 @@ DEPENDS(
     ydb/core/kqp/ut/rbo
     ydb/core/kqp/ut/rbo/aggregation
     ydb/core/kqp/ut/rbo/basic
+    ydb/core/kqp/ut/rbo/effects
     ydb/core/kqp/ut/rbo/explain
     ydb/core/kqp/ut/rbo/fallback
     ydb/core/kqp/ut/rbo/join_order

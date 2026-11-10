@@ -21,7 +21,6 @@ SRCS(
     node_info.h
     object_distribution.h
     outgoing_requests.h
-    reassign.h
     sequencer.h
     follower_group.h
     follower_tablet_info.h
@@ -63,8 +62,6 @@ JOIN_SRCS(
 JOIN_SRCS(
     all_reassign.cpp
     reassign_actor.cpp
-    reassign.cpp
-    tx__reassign_tablets.cpp
     tx__reassign_groups.cpp
     tx__reassign_groups_on_decommit.cpp
 )

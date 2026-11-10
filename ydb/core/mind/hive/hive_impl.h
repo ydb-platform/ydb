@@ -114,9 +114,6 @@ inline IOutputStream& operator <<(IOutputStream& out, NKikimr::NHive::TSequencer
 namespace NKikimr {
 namespace NHive {
 
-struct TReassignTabletsSettings;
-struct TReassignTabletsPlan;
-
 TResourceRawValues ResourceRawValuesFromMetrics(const NKikimrTabletBase::TMetrics& metrics);
 NKikimrTabletBase::TMetrics MetricsFromResourceRawValues(const TResourceRawValues& values);
 TResourceRawValues ResourceRawValuesFromMetrics(const NKikimrHive::TTabletMetrics& tabletMetrics);
@@ -190,7 +187,6 @@ protected:
     friend class TTxDeleteTablet;
     friend class TTxDeleteOwnerTablets;
     friend class TTxReassignGroups;
-    friend class TTxReassignTablets;
     friend class TTxReassignGroupsOnDecommit;
     friend class TTxStartTablet;
     friend class TTxCreateTablet;
@@ -284,7 +280,6 @@ protected:
     bool StartHiveStorageBalancer(TStorageBalancerSettings settings);
     // starts a new reassign for every tablet in the list
     TSubActorId StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
-    TReassignTabletsPlan PrepareReassignTablets(const TReassignTabletsSettings& settings);
     // continues reassigns of tablets that were left in the middle of it (e.g. by a Hive restart)
     void ContinueInterruptedReassigns(std::vector<TReassignOperation> operations);
     void StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IMoveDataCallback> callback, bool fastFail);

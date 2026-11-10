@@ -10,13 +10,15 @@
 #include "hive_schema.h"
 #include "hive_log.h"
 #include "monitoring.h"
-#include "reassign.h"
 #include "tx__set_down.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
+
+static constexpr ui64 MAX_REASSIGNS_WITHOUT_CONFIRMATION = 1000;
+static constexpr i64 REASSIGN_CONFIRMATION_ERROR_MARGIN = 10;
 
 TString GetMonUser(const NMon::TEvRemoteHttpInfo* ev) {
     const auto& query = ev->ExtendedQuery;
@@ -3571,6 +3573,10 @@ public:
         std::variant<std::monostate, TTabletId, TAllTablets> TabletId;
         TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
 
+        TTabletFilter()
+            : TabletId(TAllTablets{})
+        {}
+
         explicit TTabletFilter(const TCgiParameters& cgi) {
             auto tablet = cgi.Get("tablet");
             if (tablet == "all") {
@@ -3582,12 +3588,41 @@ public:
             TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(cgi.Get("type"), TabletType);
         }
 
+        bool CheckTabletId(const TLeaderTabletInfo* tablet) const {
+            if (auto* tabletId = std::get_if<TTabletId>(&TabletId)) {
+                return tablet->Id == *tabletId;
+            }
+            return true;
+        }
+
+        bool CheckTabletType(const TLeaderTabletInfo* tablet) const {
+            return TabletType == TTabletTypes::TypeInvalid || TabletType == tablet->Type;
+        }
+
+        bool operator()(const TLeaderTabletInfo* tablet) const {
+            return CheckTabletId(tablet) && CheckTabletType(tablet);
+        }
+
         bool IsValidFilter(TString& error) const {
             if (std::holds_alternative<std::monostate>(TabletId)) {
                 error = "must specify tablet";
                 return false;
             }
             return true;
+        }
+
+        bool AllowsEverything() const {
+            return std::holds_alternative<TAllTablets>(TabletId) && TabletType == TTabletTypes::TypeInvalid;
+        }
+
+        template <typename TStream>
+        void ToString(TStream& out) const {
+            if (std::holds_alternative<TTabletId>(TabletId)) {
+                out << std::get<TTabletId>(TabletId) << ", ";
+            }
+            if (TabletType != TTabletTypes::TypeInvalid) {
+                out << TTabletTypes::EType_Name(TabletType) << ", ";
+            }
         }
 
     };
@@ -3602,6 +3637,9 @@ public:
 
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
+    ui64 Cookie = 0;
+    ui64 SelectedTablets = 0;
+    TSubActorId ReassignId = 0;
     TTabletFilter TabletFilter;
     TVector<ui32> TabletChannels;
     ui32 GroupId = 0;
@@ -3633,11 +3671,49 @@ public:
         NumTablets = FromStringWithDefault(params.Get("numTablets"), NumTablets);
     }
 
+    TTxMonEvent_ReassignTablet(TEvHive::TEvReassignTablets::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , TLoggedMonTransaction(ev->Get()->Record.GetUserSID(), hive)
+        , Source(ev->Sender)
+        , Cookie(ev->Cookie)
+        , GroupId(ev->Get()->Record.GetGroupId())
+        , StoragePool(ev->Get()->Record.GetStoragePool())
+        , Wait(false)
+        , Async(ev->Get()->Record.GetAsync())
+        , MaxInFlight(ev->Get()->Record.GetMaxInFlight())
+        , TabletPercent(ev->Get()->Record.GetPercent())
+    {}
+
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
 
+    TInstant GetMaxTimestamp(const TReassignOperation& operation) const {
+        TInstant max;
+        const auto* tablet = Self->FindTablet(operation.TabletId);
+        for (const auto& channel : tablet->TabletStorageInfo->Channels) {
+            if (operation.TabletChannels.empty()
+                    || std::find(
+                        operation.TabletChannels.begin(),
+                        operation.TabletChannels.end(),
+                        channel.Channel) != operation.TabletChannels.end()) {
+                if (tablet->ChannelProfileNewGroup.test(channel.Channel)) {
+                    return TInstant::Max();
+                }
+                const auto* latest = channel.LatestEntry();
+                if (latest != nullptr && latest->Timestamp > max) {
+                    max = latest->Timestamp;
+                }
+            }
+        }
+        return max;
+    }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        if (Event->GetMethod() != HTTP_METHOD_POST) {
+        if (Event && Event->GetMethod() != HTTP_METHOD_POST) {
             Error = "Must use POST request";
+            return true;
+        }
+        if (!Event && ((StoragePool.empty() && !GroupId) || MaxInFlight == 0 || TabletPercent > 100)) {
+            Error = "invalid reassign parameters";
             return true;
         }
         if (!ForcedGroupIds.empty() && ForcedGroupIds.size() != TabletChannels.size()) {
@@ -3651,37 +3727,92 @@ public:
         if (!TabletFilter.IsValidFilter(Error)) {
             return true;
         }
-        TReassignTabletsSettings settings;
-        if (const auto* tabletId = std::get_if<TTabletId>(&TabletFilter.TabletId)) {
-            settings.TabletId = *tabletId;
+        auto tablets = Self->Tablets
+            | std::views::transform([](auto&& p) -> TLeaderTabletInfo* { return &p.second; })
+            | std::views::filter(TabletFilter);
+
+        std::vector<TReassignOperation> operations;
+        for (TLeaderTabletInfo* tablet : tablets) {
+            TVector<ui32> channels;
+            TVector<ui32> forcedGroupIds;
+            bool skip = false;
+            if (GroupId != 0 || StoragePool != "") {
+                skip = true;
+                for (const auto& channel : tablet->TabletStorageInfo->Channels) {
+                    if (StoragePool && channel.StoragePool != StoragePool) {
+                        continue;
+                    }
+                    if (TabletChannels.empty() || Find(TabletChannels, channel.Channel) != TabletChannels.end()) {
+                        const auto* latest = channel.LatestEntry();
+                        if (latest != nullptr && (GroupId == 0 || latest->GroupID == GroupId)) {
+                            skip = false;
+                            channels.push_back(channel.Channel);
+                            if (!ForcedGroupIds.empty()) {
+                                auto itTabletChannel = Find(TabletChannels, channel.Channel);
+                                forcedGroupIds.push_back(ForcedGroupIds[std::distance(TabletChannels.begin(), itTabletChannel)]);
+                            }
+                        }
+                    }
+                }
+            } else {
+                channels = TabletChannels;
+                forcedGroupIds = ForcedGroupIds;
+            }
+            if (skip) {
+                continue;
+            }
+            operations.emplace_back(tablet->Id, channels, forcedGroupIds, Async);
         }
-        settings.TabletType = TabletFilter.TabletType;
-        settings.TabletChannels = TabletChannels;
-        settings.GroupId = GroupId;
-        settings.StoragePool = StoragePool;
-        settings.ForcedGroupIds = ForcedGroupIds;
-        settings.Async = Async;
-        settings.TabletPercent = TabletPercent;
-        settings.NumTablets = NumTablets;
-        auto plan = Self->PrepareReassignTablets(settings);
-        if (!plan.Error.empty()) {
-            Error = std::move(plan.Error);
+
+        TStringBuilder description;
+        if (TabletPercent != 100) {
+            description << TabletPercent << "% of ";
+        }
+        TabletFilter.ToString(description);
+        if (StoragePool) {
+            description << StoragePool << ", ";
+        }
+        description << (GroupId ? ToString(GroupId) : "all groups");
+        if (TabletPercent != 100) {
+            std::sort(operations.begin(), operations.end(), [this](const auto& lhs, const auto& rhs) -> bool {
+                return GetMaxTimestamp(lhs) < GetMaxTimestamp(rhs);
+            });
+            auto it = operations.begin() + operations.size() * TabletPercent / 100;
+            operations.erase(it, operations.end());
+        }
+
+        if (Event && operations.size() > MAX_REASSIGNS_WITHOUT_CONFIRMATION && std::abs(static_cast<i64>(operations.size()) - NumTablets) > REASSIGN_CONFIRMATION_ERROR_MARGIN) {
+            Error = "must confirm number of tablets";
             return true;
         }
 
         NIceDb::TNiceDb db(txc.DB);
         NJson::TJsonValue jsonOperation;
-        jsonOperation["Reassign"] = plan.Description;
-        jsonOperation["TabletsCount"] = plan.Operations.size();
+        jsonOperation["Reassign"] = description;
+        jsonOperation["TabletsCount"] = operations.size();
         jsonOperation["MaxInFlight"] = MaxInFlight;
         jsonOperation["Async"] = Async;
-        WriteOperation(db, jsonOperation, "Hive UI: reassign requested");
+        WriteOperation(db, jsonOperation, Event ? "Hive UI: reassign requested" : "Hive API: reassign requested");
 
-        Self->StartReassignActor(std::move(plan.Operations), Wait ? Source : TActorId(), MaxInFlight, plan.Description, std::make_unique<TMonitoringReassignCallback>());
+        SelectedTablets = operations.size();
+        ReassignId = Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringReassignCallback>());
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
+        if (!Event) {
+            auto reply = std::make_unique<TEvHive::TEvReassignTabletsReply>();
+            reply->Record.SetStatus(Error ? NKikimrProto::ERROR : NKikimrProto::OK);
+            reply->Record.SetSelectedTablets(SelectedTablets);
+            if (Error) {
+                reply->Record.SetError(Error);
+            } else {
+                reply->Record.SetReassignId(ReassignId);
+                reply->Record.SetHiveGeneration(Self->HiveGeneration);
+            }
+            ctx.Send(Source, reply.release(), 0, Cookie);
+            return;
+        }
         if (Error) {
             ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {
@@ -3691,6 +3822,10 @@ public:
         }
     }
 };
+
+void THive::Handle(TEvHive::TEvReassignTablets::TPtr& ev) {
+    Execute(new TTxMonEvent_ReassignTablet(ev, this));
+}
 
 class TTxMonEvent_MoveData : public TTransactionBase<THive>, public TLoggedMonTransaction {
 public:

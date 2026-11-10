@@ -1,47 +1,54 @@
 #include "rpc_reassign_tablets.h"
 #include "service_tablet.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/grpc_services/rpc_request_base.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/string/vector.h>
 
 namespace NKikimr::NGRpcService {
 
-template <bool Stop>
-using TReassignRequest = std::conditional_t<Stop, TEvStopReassignTabletsRequest, TEvReassignTabletsRequest>;
-
-template <bool Stop>
-class TRpcReassignTablets : public TRpcRequestActor<TRpcReassignTablets<Stop>, TReassignRequest<Stop>> {
-    using TThis = TRpcReassignTablets<Stop>;
-    using TBase = TRpcRequestActor<TThis, TReassignRequest<Stop>>;
-    using TResponse = typename TBase::TResponse;
-    using TBase::GetProtoRequest;
-    using TBase::Reply;
-    using TBase::Request;
-    using TBase::UserToken;
-
+class TRpcReassignTablets : public TActorBootstrapped<TRpcReassignTablets> {
 public:
-    using TBase::TBase;
+    enum class EAction { Start, Stop };
+
+    TRpcReassignTablets(IRequestNoOpCtx* request, EAction action)
+        : Request(request)
+        , Action(action)
+    {}
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
 
     void Bootstrap() {
-        if (!IsAdministrator(AppData(), UserToken.Get())) {
+        const auto& token = Request->GetInternalToken();
+        if (!IsAdministrator(AppData(), token.Get())) {
             return Reply(Ydb::StatusIds::UNAUTHORIZED, "Cluster administrator access is required");
         }
-        const auto& request = *GetProtoRequest();
-        if constexpr (Stop) {
+        const TString user = token ? token->GetUserSID() : TString();
+        if (Action == EAction::Stop) {
+            const auto& request = *TEvStopReassignTabletsRequest::GetProtoRequest(Request);
+            ui64 generation = 0, id = 0;
             const auto parts = SplitString(request.id(), ":");
             if (parts.size() != 3 || !TryFromString(parts[0], HiveId)
-                    || !TryFromString(parts[1], HiveGeneration) || !TryFromString(parts[2], ReassignId)
-                    || !HiveId || !HiveGeneration || !ReassignId) {
+                    || !TryFromString(parts[1], generation) || !TryFromString(parts[2], id)
+                    || !HiveId || !generation || !id) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid reassignment id");
             }
             Request->AddAuditLogPart("reassign_id", request.id());
+            auto event = std::make_unique<TEvHive::TEvStopReassignTablets>();
+            event->Record.SetReassignId(id);
+            event->Record.SetHiveGeneration(generation);
+            event->Record.SetUserSID(user);
+            HiveRequest = std::move(event);
         } else {
+            const auto& request = *TEvReassignTabletsRequest::GetProtoRequest(Request);
             if (request.database().empty()) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "database must not be empty");
             }
@@ -57,25 +64,33 @@ public:
             Request->AddAuditLogPart("database", request.database());
             Request->AddAuditLogPart("storage_pool", request.storage_pool());
             Request->AddAuditLogPart("group", ToString(request.group()));
+            auto event = std::make_unique<TEvHive::TEvReassignTablets>();
+            event->Record.SetStoragePool(request.storage_pool());
+            event->Record.SetGroupId(request.group());
+            event->Record.SetMaxInFlight(request.has_max_in_flight() ? request.max_in_flight() : 1);
+            event->Record.SetPercent(request.has_percent() ? request.percent() : 100);
+            event->Record.SetAsync(request.async());
+            event->Record.SetUserSID(user);
+            HiveRequest = std::move(event);
         }
 
-        this->Become(&TThis::StateWork);
-        this->Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup);
-        if constexpr (Stop) {
+        Become(&TThis::StateWork);
+        Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup);
+        if (Action == EAction::Stop) {
             ConnectHive();
         } else {
             auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             auto& entry = navigate->ResultSet.emplace_back();
-            entry.Path = NKikimr::SplitPath(request.database());
+            entry.Path = NKikimr::SplitPath(TEvReassignTabletsRequest::GetProtoRequest(Request)->database());
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             entry.RedirectRequired = false;
-            this->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
         }
     }
 
     void PassAway() override {
-        NTabletPipe::CloseAndForgetClient(this->SelfId(), HivePipeClient);
-        TBase::PassAway();
+        NTabletPipe::CloseAndForgetClient(SelfId(), HivePipeClient);
+        IActor::PassAway();
     }
 
 private:
@@ -90,11 +105,19 @@ private:
         }
     }
 
+    void Reply(Ydb::StatusIds::StatusCode status, const TString& error = {}) {
+        if (error) {
+            Request->RaiseIssue(NYql::TIssue(error));
+        }
+        Request->ReplyWithYdbStatus(status);
+        PassAway();
+    }
+
     void ConnectHive() {
         Request->AddAuditLogPart("hive_id", ToString(HiveId));
         NTabletPipe::TClientConfig config;
         config.RetryPolicy.RetryLimitCount = 3;
-        HivePipeClient = this->Register(NTabletPipe::CreateClient(this->SelfId(), HiveId, config));
+        HivePipeClient = Register(NTabletPipe::CreateClient(SelfId(), HiveId, config));
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -120,68 +143,37 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        const auto* msg = ev->Get();
-        if (msg->ClientId != HivePipeClient) {
+        if (ev->Get()->ClientId != HivePipeClient) {
             return;
         }
-        if (msg->Status != NKikimrProto::OK) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
             return Reply(Ydb::StatusIds::UNAVAILABLE, "Cannot connect to Hive");
         }
-        if (Submitted) {
-            return;
+        if (!Submitted) {
+            Submitted = true;
+            NTabletPipe::SendData(SelfId(), HivePipeClient, HiveRequest.release());
         }
-        using THiveRequest = std::conditional_t<Stop, TEvHive::TEvStopReassignTablets, TEvHive::TEvReassignTablets>;
-        auto event = std::make_unique<THiveRequest>();
-        auto& record = event->Record;
-        if constexpr (Stop) {
-            record.SetReassignId(ReassignId);
-            record.SetHiveGeneration(HiveGeneration);
-        } else {
-            const auto& request = *GetProtoRequest();
-            record.SetStoragePool(request.storage_pool());
-            record.SetGroupId(request.group());
-            if (request.has_max_in_flight()) {
-                record.SetMaxInFlight(request.max_in_flight());
-            }
-            if (request.has_percent()) {
-                record.SetPercent(request.percent());
-            }
-            record.SetAsync(request.async());
-        }
-        if (UserToken) {
-            record.SetUserSID(UserToken->GetUserSID());
-        }
-        Submitted = true;
-        NTabletPipe::SendData(this->SelfId(), HivePipeClient, event.release());
     }
 
     void Handle(TEvHive::TEvReassignTabletsReply::TPtr& ev) {
-        if constexpr (!Stop) {
-            const auto& record = ev->Get()->Record;
-            TResponse response;
-            response.set_status(record.GetStatus() == NKikimrProto::OK
-                ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::PRECONDITION_FAILED);
-            response.set_selected_tablets(record.GetSelectedTablets());
-            if (record.GetStatus() == NKikimrProto::OK) {
-                const TString id = TStringBuilder() << HiveId << ':' << record.GetHiveGeneration() << ':' << record.GetReassignId();
-                response.set_id(id);
-            }
-            if (record.HasError()) {
-                auto* issue = response.add_issues();
-                issue->set_severity(NYql::TSeverityIds::S_ERROR);
-                issue->set_message(record.GetError());
-            }
-            Reply(response, response.status());
+        const auto& record = ev->Get()->Record;
+        if (record.GetStatus() != NKikimrProto::OK) {
+            return Reply(Ydb::StatusIds::PRECONDITION_FAILED, record.GetError());
         }
+        Ydb::Tablet::ReassignTabletsResponse response;
+        response.set_status(Ydb::StatusIds::SUCCESS);
+        response.set_selected_tablets(record.GetSelectedTablets());
+        const TString id = TStringBuilder() << HiveId << ':' << record.GetHiveGeneration() << ':' << record.GetReassignId();
+        response.set_id(id);
+        TProtoResponseHelper::SendProtoResponse(response, response.status(), Request);
+        PassAway();
     }
 
     void Handle(TEvHive::TEvStopReassignTabletsReply::TPtr& ev) {
-        if constexpr (Stop) {
-            if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
-                Reply(Ydb::StatusIds::SUCCESS);
-            } else {
-                Reply(Ydb::StatusIds::NOT_FOUND, "Reassignment is no longer running");
-            }
+        if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
+            Reply(Ydb::StatusIds::SUCCESS);
+        } else {
+            Reply(Ydb::StatusIds::NOT_FOUND, "Reassignment is no longer running");
         }
     }
 
@@ -197,29 +189,30 @@ private:
             Submitted ? "Hive acknowledgement timed out; request may have been applied" : "Database lookup or Hive connection timed out");
     }
 
+    const std::unique_ptr<IRequestNoOpCtx> Request;
+    const EAction Action;
+    std::unique_ptr<IEventBase> HiveRequest;
     TActorId HivePipeClient;
     ui64 HiveId = 0;
-    ui64 HiveGeneration = 0;
-    ui64 ReassignId = 0;
     bool Submitted = false;
 };
 
 void DoReassignTabletsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TRpcReassignTablets<false>(p.release()));
+    f.RegisterActor(new TRpcReassignTablets(p.release(), TRpcReassignTablets::EAction::Start));
 }
 
 void DoStopReassignTabletsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TRpcReassignTablets<true>(p.release()));
+    f.RegisterActor(new TRpcReassignTablets(p.release(), TRpcReassignTablets::EAction::Stop));
 }
 
 template<>
 IActor* TEvReassignTabletsRequest::CreateRpcActor(IRequestNoOpCtx* msg) {
-    return new TRpcReassignTablets<false>(msg);
+    return new TRpcReassignTablets(msg, TRpcReassignTablets::EAction::Start);
 }
 
 template<>
 IActor* TEvStopReassignTabletsRequest::CreateRpcActor(IRequestNoOpCtx* msg) {
-    return new TRpcReassignTablets<true>(msg);
+    return new TRpcReassignTablets(msg, TRpcReassignTablets::EAction::Stop);
 }
 
 } // namespace NKikimr::NGRpcService

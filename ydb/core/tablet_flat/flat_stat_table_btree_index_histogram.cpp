@@ -371,7 +371,7 @@ private:
                 {"openedDataSize", openedDataSize},
                 {"openedSortedByRowCount", openedSortedByRowCount.size()},
                 {"openedSortedByDataSize", openedSortedByDataSize.size()},
-                {"FutureEvents", FutureEvents.size()},
+                {"futureEvents", FutureEvents.size()},
                 {"currentKeyPointer", currentKeyPointer.ToString(KeyDefaults)});
 
             auto processEvent = [&](const TEvent& event) {

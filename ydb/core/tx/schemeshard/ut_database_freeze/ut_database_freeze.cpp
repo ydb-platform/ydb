@@ -1342,6 +1342,36 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         env.Write("Table", true, 2);
     }
 
+    Y_UNIT_TEST(UnrelatedCdcScanPayloadCannotBypassFreeze) {
+        TFreezeEnv env;
+        env.CreateTable();
+        env.Wait(1, true);
+
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(++env.TxId, env.Owner);
+        auto& tx = *request->Record.AddTransaction();
+        tx.SetWorkingDir(env.Root);
+        tx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
+        auto& table = *tx.MutableCreateTable();
+        table.SetName("Unexpected");
+        auto& column = *table.AddColumns();
+        column.SetName("key");
+        column.SetType("Uint32");
+        table.AddKeyColumnNames("key");
+        table.SetUniformPartitionsCount(1);
+        // This unrelated payload must not grant the CDC scan exception to
+        // CreateTable: execution dispatches using OperationType.
+        tx.MutableAlterCdcStream()->MutableGetReady();
+
+        const auto sender = env.Runtime.AllocateEdgeActor();
+        ForwardToTablet(env.Runtime, env.Owner, sender, request.Release());
+        const auto response = env.Runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
+        const auto& result = response->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL_C(ui32(result.GetStatus()), ui32(NKikimrScheme::StatusPreconditionFailed),
+            result.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetReason(), "Database is frozen for schema changes");
+        TestDescribeResult(DescribePath(env.Runtime, env.Owner, env.Path("Unexpected")), {NLs::PathNotExist});
+    }
+
     Y_UNIT_TEST(InitialCdcScanFinalizationRemainsAllowed) {
         TFreezeEnv env;
         env.CreateTable();

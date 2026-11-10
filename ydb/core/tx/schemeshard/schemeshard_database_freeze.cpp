@@ -2,6 +2,7 @@
 #include "index/index_build_info.h"
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <util/charset/utf8.h>
 #include <util/string/builder.h>
@@ -401,7 +402,9 @@ bool TSchemeShard::IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme
             // stages. CDC initial scan finalization also needs a scheme tx.
             const bool continuation = transaction.GetInternal() && freeze != DatabaseFreezes.end()
                 && !freeze->second.GetParticipantsFixed();
-            const bool finishCdcScan = transaction.HasAlterCdcStream()
+            const bool finishCdcScan =
+                transaction.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream
+                && transaction.HasAlterCdcStream()
                 && transaction.GetAlterCdcStream().HasGetReady();
             if (!continuation && !finishCdcScan) {
                 return true;

@@ -186,6 +186,7 @@
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
+#include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
 #include <ydb/core/tx/sequenceshard/sequenceshard.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx.h>
@@ -1471,6 +1472,7 @@ void TLocalServiceInitializer::InitializeServices(
     addToLocalConfig(TTabletTypes::GraphShard, &NGraph::CreateGraphShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BackupController, &NBackup::CreateBackupController, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::WasmCompileController, &NUdfStore::CreateWasmCompileController, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::CdcAggregator, &NCdcAggregator::CreateCdcAggregator, TMailboxType::ReadAsFilled, appData->UserPoolId);
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
     addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);

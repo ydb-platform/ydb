@@ -1,4 +1,5 @@
 RECURSE(
     public
     stream
+    tablet
 )

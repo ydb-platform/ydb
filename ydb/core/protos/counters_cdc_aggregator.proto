@@ -1,0 +1,45 @@
+import "ydb/core/protos/counters.proto";
+
+package NKikimr.NCdcAggregator;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+option (TabletTypeName) = "CdcAggregator"; // Used as prefix for all counters
+
+enum ESimpleCounters {
+    COUNTER_SIMPLE_IGNORE = 0;
+    COUNTER_SOURCES = 1                                   [(CounterOpts) = {Name: "Sources"}];
+    // Sources that block the ready barrier because they have not reported yet.
+    COUNTER_SOURCES_WITHOUT_PROGRESS = 2                  [(CounterOpts) = {Name: "SourcesWithoutProgress"}];
+    COUNTER_RETIRED_SOURCES = 3                           [(CounterOpts) = {Name: "RetiredSources"}];
+    COUNTER_ACTIVE = 4                                    [(CounterOpts) = {Name: "Active"}];
+}
+
+enum ECumulativeCounters {
+    COUNTER_CUMULATIVE_IGNORE = 0;
+    COUNTER_REPORTS_ADVANCED = 1                          [(CounterOpts) = {Name: "ReportsAdvanced"}];
+    // Duplicate or older versions; they are acknowledged without a state change.
+    COUNTER_REPORTS_NOT_ADVANCED = 2                      [(CounterOpts) = {Name: "ReportsNotAdvanced"}];
+    COUNTER_REPORTS_REJECTED = 3                          [(CounterOpts) = {Name: "ReportsRejected"}];
+    COUNTER_READY_BARRIER_ADVANCES = 4                    [(CounterOpts) = {Name: "ReadyBarrierAdvances"}];
+    COUNTER_SOURCE_REPLACEMENTS = 5                       [(CounterOpts) = {Name: "SourceReplacements"}];
+}
+
+enum EPercentileCounters {
+    option (GlobalCounterOpts) = {
+        Ranges { Value: 0      Name: "0 ms"      }
+        Ranges { Value: 1      Name: "1 ms"      }
+    };
+
+    COUNTER_PERCENTILE_IGNORE = 0;
+}
+
+enum ETxTypes {
+    TXTYPE_INIT_SCHEMA = 0                                [(TxTypeOpts) = {Name: "TxInitSchema"}];
+    TXTYPE_INIT = 1                                       [(TxTypeOpts) = {Name: "TxInit"}];
+    TXTYPE_CONFIGURE = 2                                  [(TxTypeOpts) = {Name: "TxConfigure"}];
+    TXTYPE_ACTIVATE = 3                                   [(TxTypeOpts) = {Name: "TxActivate"}];
+    TXTYPE_REPORT_DELIVERED_BATCH = 4                     [(TxTypeOpts) = {Name: "TxReportDeliveredBatch"}];
+    TXTYPE_REPLACE_SOURCE = 5                             [(TxTypeOpts) = {Name: "TxReplaceSource"}];
+    TXTYPE_DESCRIBE_STREAM = 6                            [(TxTypeOpts) = {Name: "TxDescribeStream"}];
+}

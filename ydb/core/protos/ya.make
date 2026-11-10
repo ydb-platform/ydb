@@ -53,6 +53,7 @@ SRCS(
     counters_backup.proto
     counters_blob_depot.proto
     counters_bs_controller.proto
+    counters_cdc_aggregator.proto
     counters_cms.proto
     counters_columnshard.proto
     counters_coordinator.proto

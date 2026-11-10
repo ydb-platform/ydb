@@ -88,8 +88,8 @@ private:
 
             prepareResponse->SetSizeLag(readResult.GetSizeLag());
             Response->Record.MutablePartitionResponse()->SetCookie(partitionResponse.GetCookie());
-            if (readResult.ResultSize()) {
-                prepareResponse->SetWriteTimestampMS(readResult.GetResult(readResult.ResultSize() - 1).GetWriteTimestampMS());
+            if (preparedReadResult.ResultSize()) {
+                prepareResponse->SetWriteTimestampMS(preparedReadResult.GetResult(preparedReadResult.ResultSize() - 1).GetWriteTimestampMS());
             }
             Response->Record.SetStatus(PreparedResponse->GetStatus());
             Response->Record.SetErrorCode(PreparedResponse->GetErrorCode());

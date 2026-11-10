@@ -2328,14 +2328,15 @@ FROM `{table_name}`"""
                             bar: String?,
                             baz: List<Int>?,
                             bat: Tuple<Int, String?>?,
-                            bet: Dict<String, Int>?>?,
+                            bet: Dict<String, Int>?,
+                            bum: Dict<Utf8, Bool?>?>?,
                         test String
                     )
                 )
                 WHERE foo.bar regexp "lunch" and foo.bat.`0` > 0
                       {comment_for_pushdown} OR ListLength(foo.baz) > 5
                 ;
-                $in = SELECT foo.bar AS bar, foo.baz AS baz, foo.bat AS bat, foo.bet AS bet, test FROM $in;
+                $in = SELECT foo.bar AS bar, foo.baz AS baz, foo.bat AS bat, foo.bet AS bet, foo.bum AS bum, test FROM $in;
                 -- $in = SELECT * FROM $in FLATTEN LIST BY baz; -- prevents pushdown
                 INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
             END DO;'''
@@ -2356,13 +2357,13 @@ FROM `{table_name}`"""
         longstr = '23456789876543212345678987654321'  # so that it won't fit SSO/embedded
         data = [
             '{"foo":{"bar":"before lunch", "bat":[0]}}',
-            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2}},"test":"xy{longstr}z"}',
-            '{"foo":{"bar":"after lunch", "baz":[], "bat":[2,"t{longstr}a"],"bet":{"a":2,"c{longstr}d":3}},"test":"x{longstr}yz"}',
+            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":{"полдник":null,"обед":true}},"test":"xy{longstr}z"}',
+            '{"foo":{"bar":"after lunch", "baz":[], "bat":[2,"t{longstr}a"],"bet":{"a":2,"c{longstr}d":3},"bum":{"supper":false}},"test":"x{longstr}yz"}',
         ]
         data = [*map(lambda x: x.replace('{longstr}', longstr), data)]
         expected_data = [
-            '{"bar":"lunch time","bat":[1,"{longstr}"],"baz":[1,2],"bet":{"a":1,"b{longstr}c":2},"test":"xy{longstr}z"}',
-            '{"bar":"after lunch","bat":[2,"t{longstr}a"],"baz":[],"bet":{"a":2,"c{longstr}d":3},"test":"x{longstr}yz"}',
+            '{"bar":"lunch time","bat":[1,"{longstr}"],"baz":[1,2],"bet":{"a":1,"b{longstr}c":2},"bum":{"обед":true,"полдник":null},"test":"xy{longstr}z"}',
+            '{"bar":"after lunch","bat":[2,"t{longstr}a"],"baz":[],"bet":{"a":2,"c{longstr}d":3},"bum":{"supper":false},"test":"x{longstr}yz"}',
         ] * 2
         expected_data = [*map(lambda x: x.replace('{longstr}', longstr), expected_data)]
 

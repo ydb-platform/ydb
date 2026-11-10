@@ -481,4 +481,5 @@ message TFeatureFlags {
     optional bool EnableDataTiering = 383 [default = false];   
     // Gate for HNSW creation and acceleration once the implementation is included.
     optional bool EnableHnswIndex = 384 [default = false];
+    optional bool EnableColumnshardCutHistorySending = 385 [default = false];
 }

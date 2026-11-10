@@ -1,5 +1,7 @@
 #include "ydb_bridge.h"
 
+#include <util/string/join.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
@@ -62,6 +64,7 @@ namespace {
             case NYdb::NBridge::TPendingPileOperation::EKind::UNSPECIFIED: return "UNSPECIFIED";
             case NYdb::NBridge::TPendingPileOperation::EKind::ADD: return "ADD";
             case NYdb::NBridge::TPendingPileOperation::EKind::REMOVE: return "REMOVE";
+            case NYdb::NBridge::TPendingPileOperation::EKind::ROLLBACK: return "ROLLBACK";
         }
         return "UNKNOWN";
     }
@@ -79,6 +82,8 @@ TCommandBridge::TCommandBridge(bool allowEmptyDatabase)
     AddCommand(std::make_unique<TCommandBridgeConvert>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeProvisionPile>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeDestroyPile>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandBridgeRollback>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandBridgeRollbackStatus>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeSetDatabaseMode>());
 }
 
@@ -299,6 +304,140 @@ int TCommandBridgeList::Run(TConfig& config) {
             break;
         }
     }
+
+    return EXIT_SUCCESS;
+}
+
+TCommandBridgeRollbackStatus::TCommandBridgeRollbackStatus(bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("rollback-status", {}, "Show how far the rollback of a cluster prepared for bridge mode has "
+        "gone. To roll back, remove bridge_config along with bridge_pile_name of hosts from the cluster configuration "
+        "in a single change, then restart every node without them (dynamic nodes without --bridge-pile-name). Dynamic "
+        "nodes not connected to the cluster are not reported.")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+    CompletionDescription = "Show the progress of rolling a cluster back to ordinary mode";
+}
+
+void TCommandBridgeRollbackStatus::Config(TConfig& config) {
+    TYdbReadOnlyCommand::Config(config);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    config.SetFreeArgsNum(0);
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::Json,
+    });
+}
+
+void TCommandBridgeRollbackStatus::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParseOutputFormats();
+}
+
+int TCommandBridgeRollbackStatus::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
+
+    auto result = client.GetRollbackStatus().GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    switch (OutputFormat) {
+        case EDataFormat::Json: {
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json.InsertValue("bridged", result.IsBridged());
+            for (const auto& [key, nodeIds] : {
+                    std::make_pair("bridge_config_node_ids", &result.GetBridgeConfigNodeIds()),
+                    std::make_pair("unreported_static_node_ids", &result.GetUnreportedStaticNodeIds())}) {
+                NJson::TJsonValue items(NJson::JSON_ARRAY);
+                for (const uint32_t nodeId : *nodeIds) {
+                    items.AppendValue(nodeId);
+                }
+                json.InsertValue(key, items);
+            }
+            json.InsertValue("complete", result.IsComplete());
+            json.InsertValue("rollback_in_progress", result.IsRollbackInProgress());
+            json.InsertValue("error_reason", result.GetErrorReason());
+            NJson::WriteJson(&Cout, &json, true);
+            Cout << Endl;
+            break;
+        }
+        default: {
+            TStringStream ss;
+            if (result.IsRollbackInProgress()) {
+                ss << "The bridged cluster is being rolled back: storage groups are being made ordinary ones" << Endl;
+                if (!result.GetErrorReason().empty()) {
+                    ss << "Last attempt has failed (being retried): " << result.GetErrorReason() << Endl;
+                }
+            } else if (result.IsBridged()) {
+                ss << "The cluster is a bridged one; run \"ydb admin cluster bridge rollback\" to roll it back" << Endl;
+            }
+            if (const auto& nodeIds = result.GetBridgeConfigNodeIds(); !nodeIds.empty()) {
+                // nodes restarted without bridge config can't serve the bridged cluster, so they wait for its storage
+                ss << (result.IsBridged()
+                    ? "Nodes running with bridge config (keep them running until storage groups are ordinary ones): "
+                    : "Nodes still running with bridge config (restart them without it): ")
+                    << MakeRangeJoiner(", ", nodeIds) << Endl;
+            }
+            if (const auto& nodeIds = result.GetUnreportedStaticNodeIds(); !nodeIds.empty()) {
+                ss << "Static nodes that have not reported their config (not running or not connected): "
+                    << MakeRangeJoiner(", ", nodeIds) << Endl;
+            }
+            if (result.IsComplete()) {
+                ss << "The cluster runs in ordinary mode, every node has reported running without bridge config" << Endl;
+            }
+            Cout << ss.Str();
+            break;
+        }
+    }
+
+    return EXIT_SUCCESS;
+}
+
+TCommandBridgeRollback::TCommandBridgeRollback(bool allowEmptyDatabase)
+    : TYdbCommand("rollback", {}, "Roll a cluster converted from an ordinary one back to it. The cluster must have the "
+        "only pile, the original one, and every storage group must be inline in it. Static storage groups become "
+        "ordinary ones right away, the other ones and the cluster state follow; see rollback-status. Then remove "
+        "bridge_config along with bridge_pile_name of hosts from the cluster configuration in a single change, and "
+        "restart every node without them (dynamic nodes without --bridge-pile-name).")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+    CompletionDescription = "Roll a converted cluster back to ordinary mode";
+}
+
+void TCommandBridgeRollback::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    config.SetFreeArgsNum(0);
+    config.Opts->AddLongOption("skip-bsc-validation",
+            "Don't ask the storage controller whether it can make its groups ordinary ones first. Use it only when the "
+            "storage controller can't start; it reports what blocks it then.")
+        .StoreTrue(&SkipBscValidation);
+}
+
+void TCommandBridgeRollback::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+}
+
+bool TCommandBridgeRollback::Prompt(TConfig& config) {
+    if (!config.AssumeYes) {
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
+        Cout << colors.RedColor() << "The cluster will stop being a bridged one; piles can't be added to it until it is "
+            "converted again." << colors.OldColor() << " Use \"--assume-yes\" (\"-y\") option to proceed without "
+            "prompting." << Endl;
+        return AskYesOrNo("Do you want to roll the bridged cluster back?", /* defaultAnswer */ false);
+    }
+    return true;
+}
+
+int TCommandBridgeRollback::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
+
+    auto result = client.Rollback(NYdb::NBridge::TRollbackSettings()
+        .SkipBscValidation(SkipBscValidation)).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    Cout << "Rollback started: static storage groups are ordinary ones now. Watch rollback-status until the cluster is "
+        "not a bridged one anymore, then remove bridge_config and restart the nodes." << Endl;
 
     return EXIT_SUCCESS;
 }

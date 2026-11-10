@@ -113,14 +113,18 @@ public:
 };
 
 void TDataShard::CheckSplitCanStart(const TActorContext& ctx) {
-    if (State == TShardState::SplitSrcWaitForNoTxInFlight) {
-        ui64 txInFly = TxInFly() + VolatileTxManager.GetTxInFlight();
-        ui64 immediateTxInFly = ImmediateInFly();
-        SetCounter(COUNTER_SPLIT_SRC_WAIT_TX_IN_FLY, txInFly);
-        SetCounter(COUNTER_SPLIT_SRC_WAIT_IMMEDIATE_TX_IN_FLY, immediateTxInFly);
-        if (txInFly == 0 && immediateTxInFly == 0 && !Pipeline.HasWaitingSchemeOps()) {
-            Execute(CreateTxStartSplit(), ctx);
-        }
+    const bool waitingForTransactions = State == TShardState::SplitSrcWaitForNoTxInFlight;
+    const bool restartingSnapshot = State == TShardState::SplitSrcMakeSnapshot && !SplitSnapshotStarted;
+    if (!waitingForTransactions && !restartingSnapshot) {
+        return;
+    }
+
+    const ui64 txInFly = TxInFly() + VolatileTxManager.GetTxInFlight();
+    const ui64 immediateTxInFly = ImmediateInFly();
+    SetCounter(COUNTER_SPLIT_SRC_WAIT_TX_IN_FLY, txInFly);
+    SetCounter(COUNTER_SPLIT_SRC_WAIT_IMMEDIATE_TX_IN_FLY, immediateTxInFly);
+    if (txInFly == 0 && immediateTxInFly == 0 && !Pipeline.HasWaitingSchemeOps()) {
+        Execute(CreateTxStartSplit(), ctx);
     }
 }
 
@@ -160,11 +164,13 @@ public:
             if (Self->MediatorStateWaiting) {
                 return true;
             }
-            const auto writeEdge = Self->GetSnapshotManager().GetImmediateWriteEdge();
-            const ui64 observedStep = Self->GetMaxObservedStep();
-            if (writeEdge.Step > observedStep) {
-                Self->WaitPlanStep(writeEdge.Step);
-                return true;
+            const ui64 writeStep = Self->GetSnapshotManager().GetImmediateWriteEdge().Step;
+            if (writeStep > Self->GetMaxObservedStep()) {
+                Self->WaitPlanStep(writeStep);
+                // The shared timecast entry may have advanced while subscribing.
+                if (writeStep > Self->GetMaxObservedStep()) {
+                    return true;
+                }
             }
         }
 
@@ -322,8 +328,10 @@ public:
         if (hasCdcStreams) {
             // All page-faulting work is finished. Persist the floor in the same
             // transaction that captures it, so a retry cannot lose the update.
+            // Preserve visibility of the transferred writes without closing the
+            // whole observed step to subsequent immediate writes.
             Self->GetSnapshotManager().PromoteCompleteEdge(
-                TRowVersion(Self->GetMaxObservedStep(), Max<ui64>()), txc);
+                Self->GetSnapshotManager().GetImmediateWriteEdge().Step, txc);
         }
 
         TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext;

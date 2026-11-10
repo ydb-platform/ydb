@@ -189,6 +189,12 @@ public:
                   const TActorContext &ctx) override;
 
 private:
+    struct TCleanupContext {
+        ui64 TxId = 0;
+        TReplicationSourceOffsetsDb::TCleanupCursor Cursor;
+    };
+
+    TCleanupContext Cleanup;
 };
 
 TAlterTableUnit::TAlterTableUnit(TDataShard &dataShard,
@@ -255,14 +261,19 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Reschedule;
         }
 
+        if (Cleanup.TxId != op->GetTxId()) {
+            Cleanup = {.TxId = op->GetTxId()};
+        }
+
         DataShard.ReplicatedTables.erase(tableId);
         TReplicationSourceOffsetsDb rdb(txc);
-        switch (rdb.RemoveTableBatch(tableId)) {
+        switch (rdb.RemoveTableBatch(tableId, Cleanup.Cursor)) {
         case TReplicationSourceOffsetsDb::ECleanupStatus::NotReady:
             return EExecutionStatus::Restart;
         case TReplicationSourceOffsetsDb::ECleanupStatus::More:
             return EExecutionStatus::Reschedule;
         case TReplicationSourceOffsetsDb::ECleanupStatus::Done:
+            Cleanup = {};
             break;
         }
     }

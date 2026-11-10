@@ -58,17 +58,18 @@ namespace NKikimr::NDataShard {
         static constexpr size_t SourceKeyBytes = 3 * sizeof(ui64);
 
     public:
-        ECleanupStatus ReadOffsets(NIceDb::TNiceDb& db, const TPathId& pathId) {
+        ECleanupStatus ReadOffsets(NIceDb::TNiceDb& db, const TPathId& pathId, TCleanupCursor& cursor) {
             auto rows = db.Table<Schema::ReplicationSourceOffsets>()
-                .Prefix(pathId.OwnerId, pathId.LocalPathId)
+                .GreaterOrEqual(pathId.OwnerId, pathId.LocalPathId, cursor.SourceId, cursor.SplitKeyId)
+                .LessOrEqual(pathId.OwnerId, pathId.LocalPathId)
                 .Select<Schema::ReplicationSourceOffsets::SourceId, Schema::ReplicationSourceOffsets::SplitKeyId>();
             if (!rows.IsReady()) {
                 return ECleanupStatus::NotReady;
             }
             while (!rows.EndOfSet() && HasBudget(OffsetKeyBytes)) {
-                Offsets.emplace_back(
-                    rows.GetValue<Schema::ReplicationSourceOffsets::SourceId>(),
-                    rows.GetValue<Schema::ReplicationSourceOffsets::SplitKeyId>());
+                cursor.SourceId = rows.GetValue<Schema::ReplicationSourceOffsets::SourceId>();
+                cursor.SplitKeyId = rows.GetValue<Schema::ReplicationSourceOffsets::SplitKeyId>();
+                Offsets.emplace_back(cursor.SourceId, cursor.SplitKeyId);
                 KeyBytes += OffsetKeyBytes;
                 if (!HasBudget(OffsetKeyBytes)) {
                     break;
@@ -80,15 +81,17 @@ namespace NKikimr::NDataShard {
             return rows.EndOfSet() ? ECleanupStatus::Done : ECleanupStatus::More;
         }
 
-        ECleanupStatus ReadSources(NIceDb::TNiceDb& db, const TPathId& pathId) {
+        ECleanupStatus ReadSources(NIceDb::TNiceDb& db, const TPathId& pathId, TCleanupCursor& cursor) {
             auto rows = db.Table<Schema::ReplicationSources>()
-                .Prefix(pathId.OwnerId, pathId.LocalPathId)
+                .GreaterOrEqual(pathId.OwnerId, pathId.LocalPathId, cursor.SourceId)
+                .LessOrEqual(pathId.OwnerId, pathId.LocalPathId)
                 .Select<Schema::ReplicationSources::SourceId>();
             if (!rows.IsReady()) {
                 return ECleanupStatus::NotReady;
             }
             while (!rows.EndOfSet() && HasBudget(SourceKeyBytes)) {
-                Sources.push_back(rows.GetValue<Schema::ReplicationSources::SourceId>());
+                cursor.SourceId = rows.GetValue<Schema::ReplicationSources::SourceId>();
+                Sources.push_back(cursor.SourceId);
                 KeyBytes += SourceKeyBytes;
                 if (!HasBudget(SourceKeyBytes)) {
                     break;
@@ -121,12 +124,21 @@ namespace NKikimr::NDataShard {
         size_t KeyBytes = 0;
     };
 
-    TReplicationSourceOffsetsDb::ECleanupStatus TReplicationSourceOffsetsDb::RemoveTableBatch(const TPathId& pathId) {
+    TReplicationSourceOffsetsDb::ECleanupStatus TReplicationSourceOffsetsDb::RemoveTableBatch(const TPathId& pathId, TCleanupCursor& cursor) {
         NIceDb::TNiceDb db(Txc.DB);
         TCleanupBatch batch;
-        auto status = batch.ReadOffsets(db, pathId);
-        if (status == ECleanupStatus::Done) {
-            status = batch.ReadSources(db, pathId);
+        auto next = cursor;
+        auto status = ECleanupStatus::Done;
+        if (!next.OffsetsDone) {
+            status = batch.ReadOffsets(db, pathId, next);
+            if (status == ECleanupStatus::Done) {
+                next.OffsetsDone = true;
+                next.SourceId = 0;
+                next.SplitKeyId = 0;
+            }
+        }
+        if (next.OffsetsDone) {
+            status = batch.ReadSources(db, pathId, next);
         }
         if (status == ECleanupStatus::NotReady) {
             return status;
@@ -135,6 +147,7 @@ namespace NKikimr::NDataShard {
         // Finish all reads before mutating the database, so a page fault can
         // restart the transaction without committing a partial cleanup batch.
         batch.Remove(db, pathId);
+        cursor = status == ECleanupStatus::Done ? TCleanupCursor{} : next;
         return status;
     }
 

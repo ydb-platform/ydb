@@ -62,8 +62,8 @@ bool JoinRejectsNulls(const TOpJoin& join, const TUnorderedIUs& nulls) {
     return AnyOf(join.JoinFilters, [&](const auto& filter) { return RejectsNulls(filter, nulls); });
 }
 
-bool UnmatchedRowsAreRejected(TOpJoin& join) {
-    auto nulls = join.GetRightInput()->GetOutputIUs();
+bool UnmatchedRowsAreRejected(TOpJoin& join, size_t nullInput) {
+    auto nulls = join.GetChild(nullInput)->GetOutputIUs();
     IOperator* current = &join;
     // Follow a single consumer. A shared producer must not be specialized for
     // just one of its consumers; Replicate ports are boundaries as well.
@@ -124,19 +124,32 @@ bool UnmatchedRowsAreRejected(TOpJoin& join) {
 
 } // namespace
 
-bool TReduceLeftJoinRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::Join && CastOperator<TOpJoin>(input)->JoinKind == "Left";
-}
-
-bool TReduceLeftJoinRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(props);
-    if (!QuickMatch(input) || !UnmatchedRowsAreRejected(*CastOperator<TOpJoin>(input))) {
+bool TReduceOuterJoinRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    if (input->Kind != EOperator::Join) {
         return false;
     }
-    CastOperator<TOpJoin>(input)->JoinKind = "Inner";
+    const auto& kind = CastOperator<TOpJoin>(input)->JoinKind;
+    return kind == "Left" || kind == "Right" || kind == "Full";
+}
+
+bool TReduceOuterJoinRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+    if (!QuickMatch(input)) {
+        return false;
+    }
+    auto& join = *CastOperator<TOpJoin>(input);
+    // Preserving one input means emitting its unmatched rows with NULLs on
+    // the other input. FULL preserves both sides; prove rejection separately.
+    const bool preserveLeft = (join.JoinKind == "Left" || join.JoinKind == "Full") && !UnmatchedRowsAreRejected(join, 1);
+    const bool preserveRight = (join.JoinKind == "Right" || join.JoinKind == "Full") && !UnmatchedRowsAreRejected(join, 0);
+    const TString kind = preserveLeft ? (preserveRight ? "Full" : "Left") : (preserveRight ? "Right" : "Inner");
+    if (join.JoinKind == kind) {
+        return false;
+    }
+    join.JoinKind = kind;
     // The rule stage invalidates derived properties and repeats, so reducing
-    // one join also exposes its ON predicates to simplify lower LEFT joins.
+    // one join also exposes its ON predicates to simplify lower outer joins.
     return true;
 }
 

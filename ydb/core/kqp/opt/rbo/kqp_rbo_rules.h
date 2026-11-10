@@ -379,11 +379,11 @@ class TExtractCommonConjunctsRule : public ISimplifiedRule {
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
-// Remove null-extension when an ancestor predicate rejects every unmatched row.
-class TReduceLeftJoinRule final : public IRule {
+// Remove preservation of either input when ancestors reject its unmatched rows.
+class TReduceOuterJoinRule final : public IRule {
 public:
-    TReduceLeftJoinRule()
-        : IRule("Reduce left join", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
+    TReduceOuterJoinRule()
+        : IRule("Reduce outer join", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
 
     bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;

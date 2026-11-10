@@ -1,8 +1,77 @@
 #include "helpers.h"
 
+#include <util/string/subst.h>
+
 using namespace NFq::NWasmServices::NTestHelpers;
 
+namespace {
+
+void CheckProfileJsonConsumption(bool batch) {
+    using namespace NYdb::NWasm::NServices;
+    THttpMock http;
+    TGrpcMock grpc;
+    TEnv env(Bindings(http, grpc));
+    const TString object = R"({"id":42,"name":"Ada","score":97,"version":1})";
+    const TString json = batch ? "[" + object + "]" : object;
+    TString escaped = json;
+    SubstGlobal(escaped, "Ada", "A\\u0064a");
+    const TString nul(1, '\0');
+    const TVector<std::pair<TString, bool>> cases = {
+        { json, true },
+        { json + " \r\n\t", true },
+        { escaped, true },
+        { json + nul + "trailing-garbage", false },
+        { json + nul, false },
+        { json + " " + nul + " \n", false },
+        { nul + json, false },
+        { json + "{}", false },
+        { json, true },
+    };
+    size_t exchange = 0;
+    for (const auto& [response, valid] : cases) {
+        char arguments[64];
+        TRowWriter writer(arguments, sizeof(arguments));
+        UNIT_ASSERT(writer.Put(
+            TServiceRequest{ ServiceMagic, ServiceVersion, NGenerated::NModuleWASM_PROFILE::MethodProfile, 2, 0, 1, 32768, batch ? 1u : 0u }));
+        UNIT_ASSERT(writer.Put(ui64(42)));
+        const auto call = env.Runtime->Start(TStringBuf(arguments, writer.Size()), TInstant::Now() + TDuration::Seconds(30));
+        UNIT_ASSERT(env.Runtime->Poll(call).Status == ECallStatus::Waiting);
+        http.State->Wait(exchange);
+        http.State->Reply(exchange++, response, 200);
+        const auto result = env.AwaitTerminal(call);
+        UNIT_ASSERT(result.Status == ECallStatus::Completed);
+        UNIT_ASSERT(!env.Runtime->IsPoisoned());
+        TRowReader reader(View(result.Data));
+        TServiceResult reply;
+        UNIT_ASSERT(reader.Get(reply));
+        const ui32 expected = valid ? 0 : static_cast<ui32>(EServiceError::Decode);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply.Error, expected, "batch=" << batch << ", response=" << exchange);
+        UNIT_ASSERT_VALUES_EQUAL(reply.Count, valid ? 1 : 0);
+        if (valid) {
+            ui64 id;
+            ui32 score;
+            std::string_view name;
+            UNIT_ASSERT(reader.Get(id) && reader.String(name, 256) && reader.Get(score));
+            UNIT_ASSERT_VALUES_EQUAL(id, 42);
+            UNIT_ASSERT_VALUES_EQUAL(TString(name.data(), name.size()), "Ada");
+            UNIT_ASSERT_VALUES_EQUAL(score, 97);
+        }
+        UNIT_ASSERT(reader.Remaining().empty());
+        env.Clean(call);
+    }
+}
+
+}   // namespace
+
 Y_UNIT_TEST_SUITE(TFqWasmModuleTest) {
+    Y_UNIT_TEST(ProfileScalarRejectsNulAndTrailingBytes) {
+        CheckProfileJsonConsumption(false);
+    }
+
+    Y_UNIT_TEST(ProfileBatchRejectsNulAndTrailingBytes) {
+        CheckProfileJsonConsumption(true);
+    }
+
     Y_UNIT_TEST(ProfileBatchResponseMayExceedRowBufferLimit) {
         using namespace NYdb::NWasm::NServices;
         THttpMock http;

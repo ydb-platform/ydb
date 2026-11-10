@@ -54,7 +54,7 @@ def fields(items, header_bytes):
 
 def generate_header(manifest):
     require(manifest['module_type'] == 'module' and manifest['module_kind'] == 'wasm'
-            and manifest['module_extension'] == 'wasm', 'Expected a WASM service module')
+            and manifest.get('module_extension', 'wasm') == 'wasm', 'Expected a WASM service module')
     module = name(manifest['module_name'])
     version = manifest.get('service_abi_version')
     require(type(version) is int and version == SERVICE_VERSION, 'Unsupported service ABI version')

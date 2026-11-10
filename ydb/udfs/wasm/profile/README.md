@@ -44,4 +44,8 @@ errors without corrupting the guest. Encoded batch responses are capped at
 other wire overhead do not consume the row budget. Decoded results must still
 fit the caller's row buffer.
 
+Scalar and batch HTTP decoders reject raw NUL bytes anywhere in the response,
+including after a complete JSON value. JSON whitespace after the value and valid
+Unicode escapes remain accepted.
+
 The parser regression uses an explicit test CPU budget to cover the full 32 KiB memory boundary. Runtime CPU limits remain independent and unchanged.

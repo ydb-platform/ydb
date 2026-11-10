@@ -232,7 +232,8 @@ struct TFixedJsonStackAllocator {
 };
 
 EServiceError DecodeHttpProfile(std::string_view bytes, TProfile& profile) {
-    if (bytes.size() > MaxProfilePayloadBytes) {
+    // Raw NUL is invalid JSON, but RapidJSON treats it as an end sentinel.
+    if (bytes.size() > MaxProfilePayloadBytes || HasZeroByte(bytes.data(), bytes.size())) {
         return EServiceError::Decode;
     }
     rapidjson::MemoryStream stream(bytes.data(), bytes.size());
@@ -374,7 +375,8 @@ struct TProfileBatchJsonHandler: TProfileJsonHandler {
 };
 
 EServiceError DecodeHttpBatch(std::string_view bytes, TProfileBatchResults& results) {
-    if (bytes.size() > MaxProfileBatchResponseBytes) {
+    // Check the whole length-delimited response, including bytes after a NUL.
+    if (bytes.size() > MaxProfileBatchResponseBytes || HasZeroByte(bytes.data(), bytes.size())) {
         return EServiceError::Decode;
     }
     rapidjson::MemoryStream stream(bytes.data(), bytes.size());

@@ -113,3 +113,18 @@ def test_direction_specific_row_boundary(direction, header_bytes, extra):
             generate_header(source)
     else:
         assert 'MethodEcho' in generate_header(source)
+
+
+def test_defaults_omitted_module_extension_to_wasm():
+    source = manifest()
+    explicit = generate_header(source)
+    del source['module_extension']
+    assert generate_header(source) == explicit
+
+
+@pytest.mark.parametrize('extension', ['', None, 'native'])
+def test_rejects_invalid_explicit_module_extension(extension):
+    source = manifest()
+    source['module_extension'] = extension
+    with pytest.raises(ValueError, match='Expected a WASM service module'):
+        generate_header(source)

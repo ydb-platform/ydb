@@ -2335,6 +2335,9 @@ private:
     }
 
     void Init(EKikimrQueryType queryType) {
+        auto* trace = SessionCtx->Query().CompileTrace.Get();
+        std::optional<TCompileTraceScope> providersTrace(std::in_place, trace, TCompileTraceLevels::Step,
+            "Initialize compilation providers");
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem, UsePessimisticLocks);
 
@@ -2449,6 +2452,8 @@ private:
         TypesCtx->MatchRecognize = QueryServiceConfig.GetEnableMatchRecognize();
 
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
+        providersTrace.reset();
+        TCompileTraceScope pipelinesTrace(trace, TCompileTraceLevels::Step, "Create frontend pipelines");
 
         // Compilation spans of the pipeline phases. The logical phases run in a loop
         // that restarts until the query stops changing: a phase span covers the loop,
@@ -2736,6 +2741,12 @@ private:
             NewParserNames = std::move(resolved.Names);
             YQL_CLOG(INFO, ProviderKqp) << "New YQL name resolution succeeded";
         }
+        // Each native result currently owns a separate importer/IU registry.
+        // Named producers can be shared across results, including volatile
+        // values. The legacy importer materializes them once across roots.
+        if (executableStatements > 1 && !NewParserNames->NamedQueries.empty()) {
+            ythrow TNewYqlParserFallback() << "Native multi-result named query sharing";
+        }
         {
             TCompileTraceScope typesTrace(trace, TCompileTraceLevels::Step, "Annotate native AST");
             NewParserTypeSettings.CompileTrace = trace;
@@ -2744,6 +2755,8 @@ private:
         }
         if (!NewParserTypes) { return false; }
         YQL_CLOG(INFO, ProviderKqp) << "New YQL type annotation succeeded";
+        std::optional<TCompileTraceScope> contractTrace(std::in_place, trace, TCompileTraceLevels::Step,
+            "Validate native execution contract");
         auto native = std::make_shared<TNativeQuery>();
         const auto lookup = [&](const NNewYql::TTableMetadata& snapshot) -> NNewYql::TRboTable {
             if (snapshot.Cluster != Cluster) {
@@ -2796,13 +2809,14 @@ private:
                 op.SetOperation(static_cast<ui32>(TYdbOperation::Select));
             }
         }
+        contractTrace.reset();
         const bool dataQuery = SessionCtx->Query().Type == EKikimrQueryType::Dml;
         const auto cap = dataQuery ? FillSettings.RowsLimitPerWrite : Nothing();
         for (const auto& statement : NewParserAst->Statements) {
             if (const auto* write = std::get_if<NNewYql::TWriteStatement>(&statement.Value)) {
                 TCompileTraceScope lowerTrace(trace, TCompileTraceLevels::Step, "Lower native AST to RBO");
                 auto root = NNewYql::LowerWriteToRbo(*write, *NewParserAst, *NewParserNames, *NewParserTypes, ctx, lookup,
-                    TypesCtx->OrderedColumns);
+                    TypesCtx->OrderedColumns, trace);
                 root->PlanProps.PhysicalTxGroup = 0;
                 root->PlanProps.EffectPriority = 0;
                 if (root->PlanProps.WithReturning) {
@@ -2819,7 +2833,7 @@ private:
             if (!query) { continue; }
             TCompileTraceScope lowerTrace(trace, TCompileTraceLevels::Step, "Lower native AST to RBO");
             auto lowered = NNewYql::LowerToRbo(*query->Query, *NewParserAst, *NewParserNames, *NewParserTypes,
-                ctx, lookup, TypesCtx->OrderedColumns);
+                ctx, lookup, TypesCtx->OrderedColumns, trace);
             TVector<TString> columns;
             for (const auto& column : lowered->GetColumns().Items()) { columns.push_back(column.second); }
             auto input = lowered->GetInput();
@@ -2839,6 +2853,8 @@ private:
             native->Execution.DiscardResults.push_back(false);
         }
         if (native->Roots.empty()) { ythrow TNewYqlParserFallback() << "No native query results"; }
+        TCompileTraceScope finalizeTrace(trace, TCompileTraceLevels::Step, "Finalize native execution contract");
+        finalizeTrace.SetSuccess(false);
         for (const auto& root : native->Roots) {
             if (root->PlanProps.WithEffects && !root->PlanProps.WithReturning) { continue; }
             native->Results.push_back({root->GetQueryColumns(), cap.GetOrElse(0)});
@@ -2883,6 +2899,7 @@ private:
         for (size_t i = 0; i < TransformCtx->NativeQuery->Roots.size(); ++i) {
             YQL_CLOG(INFO, ProviderKqp) << "New YQL RBO lowering succeeded";
         }
+        finalizeTrace.SetSuccess(true);
         return true;
     }
 

@@ -119,7 +119,7 @@ bool IsRboTraceLogEnabled() {
     return htmlTracePath.Defined() && !htmlTracePath->empty();
 }
 
-TExprNode::TListType SharedQueryInputs(const TKqlQuery& query) {
+TExprNode::TListType SharedQueryInputs(const TKqlQuery& query, TCompileTrace* trace) {
     TExprNode::TListType roots;
     for (const auto result : query.Results()) {
         // RETURNING observes the effect; it must not cause a second execution.
@@ -129,6 +129,7 @@ TExprNode::TListType SharedQueryInputs(const TKqlQuery& query) {
     }
     for (const auto effect : query.Effects()) { roots.push_back(effect.Ptr()); }
     if (roots.size() < 2) { return {}; }
+    TCompileTraceScope sharedTrace(trace, TCompileTraceLevels::Step, "Find shared RBO inputs");
 
     THashMap<const TExprNode*, size_t> consumers;
     THashMap<const TExprNode*, bool> canMaterialize;
@@ -269,7 +270,12 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
             // Each query block has its own snapshot. Materialize only producers
             // shared by its roots, never expressions merely equal across blocks.
             materializedInputs.clear();
-            for (const auto& source : SharedQueryInputs(query)) {
+            const auto sharedInputs = SharedQueryInputs(query, KqpCtx.GetCompileTrace());
+            std::optional<TCompileTraceScope> materializeTrace;
+            if (!sharedInputs.empty()) {
+                materializeTrace.emplace(KqpCtx.GetCompileTrace(), TCompileTraceLevels::Step, "Materialize shared RBO inputs");
+            }
+            for (const auto& source : sharedInputs) {
                 const TString name = TStringBuilder() << "%kqp_shared_input_" << nextMaterializedInput++;
                 TExprNode::TListType columns;
                 for (const auto* field : source->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems()) {
@@ -288,6 +294,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
                 input->SetTypeAnn(source->GetTypeAnn());
                 materializedInputs[source.Get()] = std::move(input);
             }
+            materializeTrace.reset();
             struct TReturningResult {
                 ui32 Index;
                 TExprNode::TPtr Columns;

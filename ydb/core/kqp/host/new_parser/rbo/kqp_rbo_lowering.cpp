@@ -1,5 +1,7 @@
 #include "kqp_rbo_lowering.h"
 
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
+
 #include <ydb/core/kqp/host/new_parser/kqp_new_parser.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include <yql/essentials/ast/yql_ast_escaping.h>
@@ -35,9 +37,10 @@ struct TSharedQuery {
 class TLowerer {
 public:
     TLowerer(const TScript& script, const TResolvedNames& names, const TAnnotatedAst& annotations,
-        TExprContext& ctx, const TRboTableLookup& tables)
-        : Script(script), Names(names), Annotations(annotations), Ctx(ctx), Tables(tables)
+        TExprContext& ctx, const TRboTableLookup& tables, TCompileTrace* trace)
+        : Script(script), Names(names), Annotations(annotations), Ctx(ctx), Tables(tables), Trace(trace)
     {
+        TCompileTraceScope indexTrace(Trace, TCompileTraceLevels::Detail, "Index native lowering inputs");
         for (TColumnId id = 0; id < names.Columns.size(); ++id) {
             if (const auto* source = names.Columns[id].Source) { SourceColumns[source].push_back(id); }
         }
@@ -137,6 +140,7 @@ public:
 
 private:
     TIntrusivePtr<TOpRoot> Finish(TIntrusivePtr<TOpRoot> root) {
+        TCompileTraceScope finishTrace(Trace, TCompileTraceLevels::Detail, "Finalize native RBO operators");
         root->PlanProps = std::move(Props);
         for (const auto& item : IterateSubtreeWithSubplans(root.Get(), root->PlanProps)) { item.Current->BindExpressionPlanProps(&root->PlanProps); }
         root->RecomputeOutputIUsSubtree();
@@ -802,6 +806,7 @@ private:
     const TAnnotatedAst& Annotations;
     TExprContext& Ctx;
     const TRboTableLookup& Tables;
+    TCompileTrace* const Trace;
     TPlanProps Props;
     THashMap<const TSource*, TVector<TColumnId>> SourceColumns;
     THashMap<TColumnId, const TQuery*> OutputQueries;
@@ -812,16 +817,16 @@ private:
 
 TIntrusivePtr<TOpRoot> LowerToRbo(const TQuery& query, const TScript& script,
     const TResolvedNames& names, const TAnnotatedAst& annotations, TExprContext& ctx,
-    const TRboTableLookup& tables, bool orderedColumns)
+    const TRboTableLookup& tables, bool orderedColumns, TCompileTrace* trace)
 {
-    return TLowerer(script, names, annotations, ctx, tables).Run(query, orderedColumns);
+    return TLowerer(script, names, annotations, ctx, tables, trace).Run(query, orderedColumns);
 }
 
 TIntrusivePtr<TOpRoot> LowerWriteToRbo(const TWriteStatement& write, const TScript& script,
     const TResolvedNames& names, const TAnnotatedAst& annotations, TExprContext& ctx,
-    const TRboTableLookup& tables, bool orderedColumns)
+    const TRboTableLookup& tables, bool orderedColumns, TCompileTrace* trace)
 {
-    return TLowerer(script, names, annotations, ctx, tables).RunWrite(write, orderedColumns);
+    return TLowerer(script, names, annotations, ctx, tables, trace).RunWrite(write, orderedColumns);
 }
 
 } // namespace NKikimr::NKqp::NNewYql

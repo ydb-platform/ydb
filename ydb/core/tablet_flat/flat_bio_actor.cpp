@@ -50,19 +50,27 @@ void TBlockIO::Inbox(TEventHandlePtr &eh)
         RequestCookie = ev->Cookie;
 
         PageCollection = std::move(ev->PageCollection);
+        MetadataAccounting = std::move(ev->MetadataAccounting);
         Pages = std::move(ev->Pages);
         Y_ENSURE(Pages, "Got TFetch request without pages list");
         PagesToBlobsConverter = new TPagesToBlobsConverter(*PageCollection, Pages);
         BlockStates.reserve(Pages.size());
         for (auto& page: Pages) {
             BlockStates.emplace_back(page.Size);
+            if (MetadataAccounting && page.Type == NTable::NPage::EPage::Globs) {
+                MetadataAccounting->AccountBuffer(BlockStates.back().Data);
+            }
         }
 
         Dispatch();
     } else if (eh->CastAsLocal<TEvents::TEvUndelivered>()) {
         Terminate(NKikimrProto::UNKNOWN);
     } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
-        PassAway();
+        if (Sender) {
+            Terminate(NKikimrProto::ERROR);
+        } else {
+            PassAway();
+        }
     } else {
         Y_TABLET_ERROR("Page collection blocks IO actor got an unexpected event");
     }

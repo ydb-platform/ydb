@@ -39,11 +39,29 @@ namespace NActors {
             NActors::NMemory::TLabel<MemoryLabelSharedData>::Sub(privateHeader->AllocSize);
 
             auto* header = reinterpret_cast<THeader*>(raw + PrivateHeaderSize);
-            Y_DEBUG_ABORT_UNLESS(header->Owner == nullptr);
+            Y_DEBUG_ABORT_UNLESS(header->Owner.load(std::memory_order_relaxed) == nullptr);
             header->~THeader();
 
             y_deallocate(raw);
         }
     }
 
+    bool TSharedData::TrySetBuiltinOwner(IOwner& owner) const noexcept {
+        if (!Data_) {
+            return false;
+        }
+        IOwner* expected = nullptr;
+        return Header()->Owner.compare_exchange_strong(
+            expected, &owner, std::memory_order_acq_rel, std::memory_order_acquire);
+    }
+
+    size_t TSharedData::IOwner::BuiltinAllocationSize(const char* data) noexcept {
+        return reinterpret_cast<const TPrivateHeader*>(data - OverheadSize)->AllocSize;
+    }
+
+    void TSharedData::IOwner::DeallocateBuiltin(char* data) noexcept {
+        auto* header = reinterpret_cast<THeader*>(data - HeaderSize);
+        header->Owner.store(nullptr, std::memory_order_relaxed);
+        TSharedData::Deallocate(data);
+    }
 }

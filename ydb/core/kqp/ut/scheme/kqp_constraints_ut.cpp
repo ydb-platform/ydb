@@ -1,4 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 
@@ -286,6 +288,13 @@ public:
         const auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
         CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    template <typename TResponse, typename TRequest>
+    TResponse TableRpc(TRequest request) {
+        using TEvRequest = NGRpcService::TGrpcRequestOperationCall<TRequest, TResponse>;
+        return NRpcService::DoLocalRpc<TEvRequest>(std::move(request), "/Root", Nothing(),
+            Kikimr.GetTestServer().GetRuntime()->GetActorSystem(0)).GetValueSync();
     }
 
     TString ShowCreateTable(const TString& tablePath) {
@@ -6811,6 +6820,247 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
         validateMain(R"([[[1];["idx2"];["default_value"]];[[2];["idx3"];#]])");
         validateIndex("idx3", R"([[[2];#]])");
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullTableServiceCreateAndWrite, CompileTimeDefaults) {
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults, false));
+        for (const bool optionalLiteral : {false, true}) {
+            Ydb::Table::CreateTableRequest request;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                path: "/Root/TestTable"
+                columns { name: "k" type { type_id: INT32 } not_null: true
+                    from_literal { type { type_id: INT32 } value { null_flag_value: NULL_VALUE } } }
+                columns { name: "value" type { optional_type { item { type_id: STRING } } }
+                    from_literal { type { type_id: STRING } value { null_flag_value: NULL_VALUE } } }
+                columns { name: "number" type { optional_type { item { type_id: UINT32 } } }
+                    from_literal { type { type_id: UINT32 } value { null_flag_value: NULL_VALUE } } }
+                columns { name: "amount" type { optional_type { item { decimal_type { precision: 22 scale: 9 } } } }
+                    from_literal { type { decimal_type { precision: 22 scale: 9 } } value { null_flag_value: NULL_VALUE } } }
+                columns { name: "pg_text" type { pg_type { type_name: "pgtext" oid: 25 } }
+                    from_literal { type { pg_type { type_name: "pgtext" oid: 25 } } value { null_flag_value: NULL_VALUE } } }
+                columns { name: "required" type { type_id: INT32 } not_null: true
+                    from_literal { type { type_id: INT32 } value { null_flag_value: NULL_VALUE } } }
+                primary_key: "k"
+            )", &request));
+            if (optionalLiteral) {
+                for (auto& column : *request.mutable_columns()) {
+                    if (!column.from_literal().type().has_pg_type()) {
+                        auto type = column.from_literal().type();
+                        column.mutable_from_literal()->mutable_type()->Clear();
+                        *column.mutable_from_literal()->mutable_type()->mutable_optional_type()->mutable_item() = std::move(type);
+                    }
+                }
+            }
+            const auto created = fixture.TableRpc<Ydb::Table::CreateTableResponse>(std::move(request));
+            UNIT_ASSERT_VALUES_EQUAL_C(created.operation().status(), Ydb::StatusIds::SUCCESS, created.DebugString());
+            TValueBuilder rows;
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("k").Int32(0).AddMember("required").Int32(10).EndStruct().EndList();
+            const auto bulk = fixture.Kikimr.GetTableClient().BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(bulk.IsSuccess(), bulk.GetIssues().ToString());
+            fixture.CheckNoDefault("/Root/TestTable", {"value", "number", "amount", "pg_text"});
+            fixture.CheckNoDefault("/Root/TestTable", {"k", "required"}, true);
+            fixture.CheckDefaultGeneration("/Root/TestTable", "k, required", "100, 1", false);
+            UNIT_ASSERT(fixture.ShowCreateTable("/Root/TestTable").find("DEFAULT NULL") == TString::npos);
+            Ydb::Table::DescribeTableRequest describe;
+            describe.set_path("/Root/TestTable");
+            const auto described = fixture.TableRpc<Ydb::Table::DescribeTableResponse>(std::move(describe));
+            UNIT_ASSERT_VALUES_EQUAL_C(described.operation().status(), Ydb::StatusIds::SUCCESS, described.DebugString());
+            Ydb::Table::DescribeTableResult schema;
+            UNIT_ASSERT(described.operation().result().UnpackTo(&schema));
+            for (const auto& column : schema.columns()) {
+                UNIT_ASSERT_C(column.default_value_case() == Ydb::Table::ColumnMeta::DEFAULT_VALUE_NOT_SET,
+                    column.DebugString());
+            }
+            Ydb::Table::CreateTableRequest copy;
+            copy.set_path("/Root/Copy");
+            copy.mutable_columns()->CopyFrom(schema.columns());
+            copy.mutable_primary_key()->CopyFrom(schema.primary_key());
+            const auto copied = fixture.TableRpc<Ydb::Table::CreateTableResponse>(std::move(copy));
+            UNIT_ASSERT_VALUES_EQUAL_C(copied.operation().status(), Ydb::StatusIds::SUCCESS, copied.DebugString());
+            fixture.CheckNoDefault("/Root/Copy", {"value", "number", "amount", "pg_text"});
+            fixture.CheckNoDefault("/Root/Copy", {"k", "required"}, true);
+            fixture.Exec("DROP TABLE Copy;");
+            int key = 0;
+            for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
+                fixture.Exec(TStringBuilder() << operation << " INTO TestTable (k, required, value) VALUES (" << ++key << ", 42, 'saved');");
+                fixture.Exec(TStringBuilder() << operation << " INTO TestTable (k, required, value) VALUES (" << ++key << ", 42, NULL);");
+                fixture.Exec(TStringBuilder() << operation << " INTO TestTable (k, required) VALUES (" << ++key << ", 42);");
+                fixture.Reject(operation + " INTO TestTable (k) VALUES (100);", "not null");
+                fixture.Reject(operation + " INTO TestTable (k, required) VALUES (100, NULL);", "Failed to convert type");
+                fixture.Reject(operation + " INTO TestTable (required) VALUES (42);", "Missing key column");
+            }
+            fixture.Check("SELECT COUNT(*), COUNT(value) FROM TestTable;", "[[10u;3u]]");
+            fixture.Check(R"(
+                UPSERT INTO TestTable (k, required) VALUES (1, 99) RETURNING value, required;
+            )", R"([[["saved"];99]])");
+            fixture.Reject("UPSERT INTO TestTable (k, value) VALUES (1, 'changed');", "not null");
+            fixture.Reject("UPSERT INTO TestTable (k, value) VALUES (1, 'changed'), (100, 'new') RETURNING value;", "not null");
+            TValueBuilder existing;
+            existing.BeginList().AddListItem().BeginStruct()
+                .AddMember("k").Int32(1).AddMember("required").Int32(100).EndStruct().EndList();
+            const auto preserved = fixture.Kikimr.GetTableClient().BulkUpsert("/Root/TestTable", existing.Build()).GetValueSync();
+            UNIT_ASSERT_C(preserved.IsSuccess(), preserved.GetIssues().ToString());
+            fixture.Check("SELECT value, required FROM TestTable WHERE k = 1;", R"([[["saved"];100]])");
+            if (optionalLiteral) {
+                fixture.Exec("ALTER TABLE TestTable ADD INDEX idx GLOBAL ON (value) COVER (required);");
+                fixture.Check("SELECT value, required FROM TestTable VIEW idx WHERE k = 1;", R"([[["saved"];100]])");
+            }
+            fixture.Exec("DROP TABLE TestTable;");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullTableServiceWithoutFeatureFlag, CompileTimeDefaults) {
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults, false));
+        for (const bool populated : {false, true}) {
+            fixture.Exec("CREATE TABLE TestTable (k Int32 NOT NULL, value String DEFAULT 'initial', PRIMARY KEY (k));");
+            if (populated) {
+                fixture.Exec("INSERT INTO TestTable (k, value) VALUES (1, 'saved');");
+            }
+            Ydb::Table::AlterTableRequest request;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                path: "/Root/TestTable"
+                add_columns { name: "extra" type { optional_type { item { type_id: UINT32 } } }
+                    from_literal { type { optional_type { item { type_id: UINT32 } } } value { null_flag_value: NULL_VALUE } } }
+            )", &request));
+            const auto added = fixture.TableRpc<Ydb::Table::AlterTableResponse>(std::move(request));
+            UNIT_ASSERT_VALUES_EQUAL_C(added.operation().status(), Ydb::StatusIds::SUCCESS, added.DebugString());
+            Ydb::Table::AlterTableRequest clear;
+            clear.set_path("/Root/TestTable");
+            auto* value = clear.add_alter_columns();
+            value->set_name("value");
+            value->mutable_from_literal()->mutable_type()->set_type_id(Ydb::Type::STRING);
+            value->mutable_from_literal()->mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+            const auto cleared = fixture.TableRpc<Ydb::Table::AlterTableResponse>(std::move(clear));
+            UNIT_ASSERT_VALUES_EQUAL_C(cleared.operation().status(), Ydb::StatusIds::SUCCESS, cleared.DebugString());
+            fixture.CheckNoDefault("/Root/TestTable", {"value", "extra"});
+            fixture.CheckDefaultGeneration("/Root/TestTable", "k", "100", false);
+            if (populated) {
+                fixture.Check("SELECT k, value, extra FROM TestTable;", R"([[1;["saved"];#]])");
+            } else {
+                fixture.Check("SELECT COUNT(*) FROM TestTable;", "[[0u]]");
+            }
+            for (const bool optionalLiteral : {false, true}) {
+                Ydb::Table::AlterTableRequest rejected;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                    path: "/Root/TestTable"
+                    add_columns { name: "required" type { type_id: INT32 } not_null: true
+                        from_literal { type { type_id: INT32 } value { null_flag_value: NULL_VALUE } } }
+                )", &rejected));
+                if (optionalLiteral) {
+                    auto* type = rejected.mutable_add_columns(0)->mutable_from_literal()->mutable_type();
+                    type->clear_type_id();
+                    type->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT32);
+                }
+                const auto response = fixture.TableRpc<Ydb::Table::AlterTableResponse>(std::move(rejected));
+                UNIT_ASSERT(response.operation().status() != Ydb::StatusIds::SUCCESS);
+                UNIT_ASSERT_STRING_CONTAINS(response.DebugString(), "without defaults");
+            }
+            const auto describe = fixture.Kikimr.GetTestClient().Ls("/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(describe->Record.GetPathDescription().GetTable().ColumnsSize(), 3);
+            fixture.Exec("UPSERT INTO TestTable (k) VALUES (2);");
+            fixture.Check("SELECT extra FROM TestTable WHERE k = 2;", "[[#]]");
+            fixture.Exec("DROP TABLE TestTable;");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullTableServiceSetAndDrop, CompileTimeDefaults) {
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (k Int32 NOT NULL, value Int32 DEFAULT 42,
+                required Int32 NOT NULL DEFAULT 7, PRIMARY KEY (k));
+        )");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        for (const bool drop : {false, false, true, true}) {
+            for (const TString name : {"value", "required"}) {
+                Ydb::Table::AlterTableRequest request;
+                request.set_path("/Root/TestTable");
+                auto& column = *request.add_alter_columns();
+                column.set_name(name);
+                if (drop) {
+                    column.set_empty_default(NProtoBuf::NULL_VALUE);
+                } else {
+                    column.mutable_from_literal()->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT32);
+                    column.mutable_from_literal()->mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+                }
+                const auto response = fixture.TableRpc<Ydb::Table::AlterTableResponse>(std::move(request));
+                UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.DebugString());
+            }
+            fixture.CheckNoDefault("/Root/TestTable", {"value"});
+            fixture.CheckNoDefault("/Root/TestTable", {"required"}, true);
+            fixture.CheckDefaultGeneration("/Root/TestTable", "k, required", "100, 1", false);
+            fixture.Check("SELECT k, value, required FROM TestTable;", "[[1;[42];7]]");
+        }
+        fixture.Reject("UPSERT INTO TestTable (k) VALUES (1);", "not null");
+        fixture.Reject("INSERT INTO TestTable (k, required) VALUES (2, NULL);", "Failed to convert type");
+        fixture.Exec("INSERT INTO TestTable (k, required) VALUES (2, 8);");
+        fixture.Check("SELECT value, required FROM TestTable WHERE k = 2;", "[[#;8]]");
+        Ydb::Table::AlterTableRequest restored;
+        restored.set_path("/Root/TestTable");
+        auto* column = restored.add_alter_columns();
+        column->set_name("value");
+        column->mutable_from_literal()->mutable_type()->set_type_id(Ydb::Type::INT32);
+        column->mutable_from_literal()->mutable_value()->set_int32_value(99);
+        const auto response = fixture.TableRpc<Ydb::Table::AlterTableResponse>(std::move(restored));
+        UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.DebugString());
+        fixture.Exec("INSERT INTO TestTable (k, required) VALUES (3, 9);");
+        fixture.Check("SELECT k, value, required FROM TestTable ORDER BY k;", "[[1;[42];7];[2;#;8];[3;[99];9]]");
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT NULL;");
+        fixture.CheckNoDefault("/Root/TestTable", {"value"});
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullTableServiceColumnTable, CompileTimeDefaults) {
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults, false));
+        Ydb::Table::CreateTableRequest request;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+            path: "/Root/TestTable" store_type: STORE_TYPE_COLUMN
+            partitioning_settings { partition_by: "k" }
+            columns { name: "k" type { type_id: UINT32 } not_null: true }
+            columns { name: "value" type { optional_type { item { type_id: INT32 } } }
+                from_literal { type { optional_type { item { type_id: INT32 } } } value { null_flag_value: NULL_VALUE } } }
+            primary_key: "k"
+        )", &request));
+        const auto created = fixture.TableRpc<Ydb::Table::CreateTableResponse>(std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL_C(created.operation().status(), Ydb::StatusIds::SUCCESS, created.DebugString());
+        Ydb::Table::AlterTableRequest add;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+            path: "/Root/TestTable"
+            add_columns { name: "extra" type { optional_type { item { type_id: INT32 } } }
+                from_literal { type { type_id: INT32 } value { null_flag_value: NULL_VALUE } } }
+        )", &add));
+        const auto added = fixture.TableRpc<Ydb::Table::AlterTableResponse>(std::move(add));
+        UNIT_ASSERT_VALUES_EQUAL_C(added.operation().status(), Ydb::StatusIds::SUCCESS, added.DebugString());
+        for (const bool populated : {false, true}) {
+            if (populated) {
+                fixture.Exec("UPSERT INTO TestTable (k) VALUES (1);");
+            }
+            Ydb::Table::AlterTableRequest notNull;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                path: "/Root/TestTable"
+                add_columns { name: "required" type { type_id: INT32 } not_null: true
+                    from_literal { type { type_id: INT32 } value { null_flag_value: NULL_VALUE } } }
+            )", &notNull));
+            const auto rejected = fixture.TableRpc<Ydb::Table::AlterTableResponse>(std::move(notNull));
+            UNIT_ASSERT_VALUES_EQUAL_C(rejected.operation().status(), Ydb::StatusIds::SCHEME_ERROR, rejected.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(rejected.DebugString(), "not null");
+        }
+        fixture.Check("SELECT value, extra FROM TestTable;", "[[#;#]]");
+        UNIT_ASSERT(fixture.ShowCreateTable("/Root/TestTable").find("DEFAULT NULL") == TString::npos);
+        for (const bool drop : {false, true}) {
+            Ydb::Table::AlterTableRequest alter;
+            alter.set_path("/Root/TestTable");
+            auto* column = alter.add_alter_columns();
+            column->set_name("value");
+            if (drop) {
+                column->set_empty_default(NProtoBuf::NULL_VALUE);
+            } else {
+                column->mutable_from_literal()->mutable_type()->set_type_id(Ydb::Type::INT32);
+                column->mutable_from_literal()->mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+            }
+            const auto rejected = fixture.TableRpc<Ydb::Table::AlterTableResponse>(std::move(alter));
+            UNIT_ASSERT_VALUES_EQUAL_C(rejected.operation().status(), Ydb::StatusIds::SCHEME_ERROR, rejected.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(rejected.DebugString(), "Default values are not supported in column tables");
+        }
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullCreateAndWrite, CompileTimeDefaults) {

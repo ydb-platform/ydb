@@ -851,7 +851,9 @@ bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TT
 }
 
 void TColumnEngineForLogs::SetSchemeNeedActualization(const bool value) {
-    MutableVersionedIndex().SetSchemeNeedActualization(value);
+    // off falls back to the option of the current schema: a cancel must not switch off an actualization asked for by it
+    auto& vIndex = MutableVersionedIndex();
+    vIndex.SetSchemeNeedActualization(value || vIndex.GetLastSchema()->GetIndexInfo().GetSchemeNeedActualization());
     StartActualization({});
     for (auto&& i : GranulesStorage->GetTables()) {
         i.second->RefreshScheme();

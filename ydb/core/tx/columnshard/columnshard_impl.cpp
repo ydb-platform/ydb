@@ -1254,12 +1254,14 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
             return;
         }
         LastForcedCompactionSeqNo = seqNo;
-        if (ForcedCompactionActualizeSchema != record.GetActualizeSchema()) {
-            // CASCADE: every portion is also rewritten to the current schema and the reply waits for that too;
-            // a cancel repeats the request with the flag off, which stops the rewrite
-            ForcedCompactionActualizeSchema = record.GetActualizeSchema();
-            engine.SetSchemeNeedActualization(ForcedCompactionActualizeSchema);
+        // CASCADE: every portion is also rewritten to the current schema and the reply waits for that too; a cancel
+        // repeats the request with the flag off, which stops the rewrite. A plain request leaves the engine alone.
+        if (record.GetActualizeSchema()) {
+            engine.SetSchemeNeedActualization(true);   // always: the current schema may be newer than the last target
+        } else if (ForcedCompactionActualizeSchema) {
+            engine.SetSchemeNeedActualization(false);
         }
+        ForcedCompactionActualizeSchema = record.GetActualizeSchema();
     }
 
     const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
@@ -1289,7 +1291,9 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         {"tablet", TabletID()},
         {"pathId", pathId},
         {"requestedFrom", ev->Sender});
-    ForcedCompactionWaiters[*internalPathId].push_back({ ev->Sender, ev->Cookie, pathId });
+    // the latest request supersedes the previous one: there is one forced compaction per table at a time, and the
+    // waiter of a cancelled one must not answer on behalf of the next
+    ForcedCompactionWaiters[*internalPathId] = { { ev->Sender, ev->Cookie, pathId } };
     SetupCompaction({ *internalPathId });
 }
 

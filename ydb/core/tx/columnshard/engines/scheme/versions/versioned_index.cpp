@@ -14,6 +14,7 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
     }
 
     const bool needActualization = indexInfo->GetSchemeNeedActualization();
+    const bool previousNeedActualization = !SnapshotByVersion.empty() && GetLastSchema()->GetIndexInfo().GetSchemeNeedActualization();
     auto newVersion = indexInfo->GetVersion();
     auto itVersion =
         SnapshotByVersion.emplace(newVersion, TSchemaInfoByVersion(std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot)));
@@ -22,8 +23,13 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
     Y_ABORT_UNLESS(itSnap.second);
     if (newVersion >= LastSchemaVersion) {
         LastSchemaVersion = newVersion;
-        // the flag of the current schema decides: true targets it, false stops the actualization
-        SetSchemeNeedActualization(needActualization);
+        // SchemeNeedActualization: on makes the current schema the target, switching it off stops the actualization;
+        // off in both versions leaves alone a target set by ALTER TABLE ... COMPACT WITH (CASCADE = true)
+        if (needActualization) {
+            SetSchemeNeedActualization(true);
+        } else if (previousNeedActualization) {
+            SetSchemeNeedActualization(false);
+        }
     }
     return &itVersion.first->second->GetIndexInfo();
 }

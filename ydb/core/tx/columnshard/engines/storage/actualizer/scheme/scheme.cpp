@@ -50,9 +50,11 @@ void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExterna
 }
 
 void TSchemeActualizer::DoRemovePortion(const ui64 portionId) {
-    PortionsInFlight.erase(portionId);
     auto it = PortionsInfo.find(portionId);
     if (it == PortionsInfo.end()) {
+        // not queued: the rewrite of a portion handed to a task has been committed (the hand-off itself removes the
+        // portion from the queue through this method too, while it stays in flight)
+        PortionsInFlight.erase(portionId);
         TSchemeGlobalCounters::OnSkipPortionToRemove();
         return;
     }

@@ -2404,6 +2404,137 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
     WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
 }
 
+Y_UNIT_TEST_F(KillReadSessionFailsPendingHasData, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const ui64 end = 10;
+    const TString client = "client";
+    const TString session = "session";
+    const ui64 step = 12345;
+    const ui64 txId = 67890;
+    const ui64 hasDataCookie = 42;
+
+    CreatePartition({.Partition=partition, .Begin=0, .End=end, .PlanStep=step, .TxId=10000});
+    CreateSession(client, session);
+
+    {
+        auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+        event->Record.SetPartition(partition.InternalPartitionId);
+        event->Record.SetOffset(end);
+        event->Record.SetDeadline((TInstant::Now() + TDuration::Minutes(1)).MilliSeconds());
+        event->Record.SetCookie(hasDataCookie);
+        event->Record.SetClientId(client);
+        event->Record.SetSessionId(session);
+        ActorIdToProto(Ctx->Edge, event->Record.MutableSender());
+        Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+    }
+
+    UNIT_ASSERT_C(
+        !Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::MilliSeconds(100)),
+        "HasData must stay pending while offset == EndOffset");
+
+    SendCalcPredicate(step, txId, client, 0, 2, {}, true);
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
+    SendCommitTx(step, txId);
+
+    bool gotSessionInvalidated = false;
+    bool gotCommitDone = false;
+    while (!gotSessionInvalidated || !gotCommitDone) {
+        TAutoPtr<IEventHandle> handle;
+        auto events = Ctx->Runtime->GrabEdgeEvents<
+            TEvPersQueue::TEvHasDataInfoResponse,
+            TEvKeyValue::TEvRequest,
+            TEvPQ::TEvTxDone>(handle, TDuration::Seconds(5));
+
+        if (auto* response = std::get<TEvPersQueue::TEvHasDataInfoResponse*>(events)) {
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), hasDataCookie);
+            UNIT_ASSERT(response->Record.GetSessionInvalidated());
+            gotSessionInvalidated = true;
+        } else if (std::get<TEvKeyValue::TEvRequest*>(events)) {
+            SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        } else if (auto* done = std::get<TEvPQ::TEvTxDone*>(events)) {
+            UNIT_ASSERT_VALUES_EQUAL(done->TxId, txId);
+            gotCommitDone = true;
+        } else {
+            UNIT_FAIL("timeout waiting for SessionInvalidated HasData response and TxDone");
+        }
+    }
+}
+
+Y_UNIT_TEST_F(ExpiredHasDataDeadlineIsAnsweredImmediately, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const ui64 end = 10;
+    const ui64 hasDataCookie = 42;
+
+    CreatePartition({.Partition=partition, .Begin=0, .End=end});
+
+    auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+    event->Record.SetPartition(partition.InternalPartitionId);
+    event->Record.SetOffset(end);
+    event->Record.SetDeadline(0);
+    event->Record.SetCookie(hasDataCookie);
+    ActorIdToProto(Ctx->Edge, event->Record.MutableSender());
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::Seconds(2));
+    UNIT_ASSERT_C(response, "Expired HasData deadline must not wait for the periodic partition wakeup");
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), hasDataCookie);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetEndOffset(), end);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSizeLag(), 0);
+}
+
+// Commit without session clears pending.Session before UsersInfoStorage is updated.
+// HasData with the old SessionId must be rejected via the pending-session check.
+Y_UNIT_TEST_F(HasDataRejectedByPendingSessionAfterCommitWithoutSession, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const ui64 end = 10;
+    const TString client = "client";
+    const TString session = "session";
+    const ui64 hasDataCookie = 99;
+
+    CreatePartition({.Partition=partition, .Begin=0, .End=end});
+    CreateSession(client, session);
+
+    // Commit without session id → pending.Session cleared, FailStale, then persist.
+    {
+        auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+            /*cookie=*/7, client, /*offset=*/2, /*session=*/"",
+            /*partitionSessionId=*/0, /*gen=*/0, /*step=*/0, TActorId{});
+        event->Strict = true;
+        Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+    }
+
+    {
+        auto kv = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(5));
+        UNIT_ASSERT(kv);
+        // Hold the write response: UsersInfoStorage still has the old session.
+    }
+
+    {
+        auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+        event->Record.SetPartition(partition.InternalPartitionId);
+        event->Record.SetOffset(end);
+        event->Record.SetDeadline((TInstant::Now() + TDuration::Minutes(1)).MilliSeconds());
+        event->Record.SetCookie(hasDataCookie);
+        event->Record.SetClientId(client);
+        event->Record.SetSessionId(session);
+        ActorIdToProto(Ctx->Edge, event->Record.MutableSender());
+        Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+    }
+
+    {
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), hasDataCookie);
+        UNIT_ASSERT(response->Record.GetSessionInvalidated());
+    }
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie=7, .Status=NMsgBusProxy::MSTATUS_OK});
+}
+
 Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
 {
     const TPartitionId partition{3};

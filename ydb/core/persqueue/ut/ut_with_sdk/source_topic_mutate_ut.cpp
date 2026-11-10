@@ -20,14 +20,17 @@ public:
     NYdb::TDriver Driver;
     TTopicClient Client;
     const TString Consumer;
+    const TString Topic;
 
-    explicit TSourceTopicMutateEnv(const TString& consumer = CONSUMER, bool allowCommit = false)
-        : Setup("SourceTopicMutate", MakeSettings(consumer, allowCommit), false)
+    explicit TSourceTopicMutateEnv(const TString& consumer = CONSUMER, bool allowCommit = false,
+                                  bool topicsAreFirstClassCitizen = true)
+        : Setup("SourceTopicMutate", MakeSettings(consumer, allowCommit, topicsAreFirstClassCitizen), false)
         , Driver(Setup.MakeDriverConfig())
         , Client(Driver)
         , Consumer(consumer)
+        , Topic(topicsAreFirstClassCitizen ? TOPIC : "/Root/PQ/rt3.dc1--account--source")
     {
-        const auto result = Client.CreateTopic(TOPIC, TCreateTopicSettings()
+        const auto result = Client.CreateTopic(Topic, TCreateTopicSettings()
             .BeginConfigurePartitioningSettings()
                 .MinActivePartitions(1)
             .EndConfigurePartitioningSettings()
@@ -44,7 +47,7 @@ public:
     }
 
     TWriteSessionSettings WriteSettings() const {
-        return TWriteSessionSettings().Path(TOPIC).PartitionId(0)
+        return TWriteSessionSettings().Path(Topic).PartitionId(0)
             .ProducerId("producer").MessageGroupId("producer").Codec(ECodec::RAW)
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
     }
@@ -60,7 +63,7 @@ public:
 
     void AssertOffsets(ui64 committedOffset, ui64 endOffset) {
         auto reader = Client.CreateReadSession(TReadSessionSettings()
-            .ConsumerName(Consumer).AppendTopics(TTopicReadSettings(TOPIC))
+            .ConsumerName(Consumer).AppendTopics(TTopicReadSettings(Topic))
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy()));
         const auto deadline = TInstant::Now() + TDuration::Seconds(30);
         bool started = false;
@@ -83,9 +86,16 @@ public:
     }
 
 private:
-    static Tests::TServerSettings MakeSettings(const TString& consumer, bool allowCommit) {
+    static Tests::TServerSettings MakeSettings(const TString& consumer, bool allowCommit,
+                                             bool topicsAreFirstClassCitizen) {
         auto settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
         settings.FeatureFlags.SetEnableSourceTopicMutateRestricted(false);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(topicsAreFirstClassCitizen);
+        if (!topicsAreFirstClassCitizen) {
+            settings.PQConfig.SetRoot("/Root/PQ");
+            // Consumer ACL tables are independent of the commit restriction tested here.
+            settings.PQConfig.SetCheckACL(false);
+        }
         if (allowCommit) {
             settings.PQConfig.AddClientIdsAllowCommitWhenTopicMutateDisabled(consumer);
         }
@@ -116,18 +126,18 @@ TContinuationToken WaitReady(const std::shared_ptr<IWriteSession>& writer) {
 
 Y_UNIT_TEST_SUITE(TSourceTopicMutateRestricted) {
     void TestMirrorConsumerCommitsThroughSdk(bool replicationConsumer, bool allowCommit) {
-        TSourceTopicMutateEnv env(MIRROR_CONSUMER, allowCommit);
+        TSourceTopicMutateEnv env(MIRROR_CONSUMER, allowCommit, /*topicsAreFirstClassCitizen=*/false);
         env.Setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_TX, NActors::NLog::PRI_INFO);
         NYdb::NPersQueue::TPersQueueClient pqClient(env.Driver);
         if (replicationConsumer) {
-            const auto description = pqClient.DescribeTopic(TOPIC).GetValueSync();
+            const auto description = pqClient.DescribeTopic(env.Topic).GetValueSync();
             UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
-            const auto altered = pqClient.AlterTopic(TOPIC, NYdb::NPersQueue::TAlterTopicSettings()
+            const auto altered = pqClient.AlterTopic(env.Topic, NYdb::NPersQueue::TAlterTopicSettings()
                 .SetSettings(description.TopicSettings())
                 .ReplicationConsumer(MIRROR_CONSUMER)).GetValueSync();
             UNIT_ASSERT_C(altered.IsSuccess(), altered.GetIssues().ToString());
         }
-        const auto description = pqClient.DescribeTopic(TOPIC).GetValueSync();
+        const auto description = pqClient.DescribeTopic(env.Topic).GetValueSync();
         UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
         const auto& configuredReplica = description.TopicSettings().ReplicationConsumer();
         UNIT_ASSERT_VALUES_EQUAL(configuredReplica.has_value(), replicationConsumer);
@@ -141,10 +151,10 @@ Y_UNIT_TEST_SUITE(TSourceTopicMutateRestricted) {
         env.Write(1);
         env.Write(2);
         env.Write(3);
-        const auto initial = env.Client.CommitOffset(TOPIC, 0, MIRROR_CONSUMER, 1).GetValueSync();
+        const auto initial = env.Client.CommitOffset(env.Topic, 0, MIRROR_CONSUMER, 1).GetValueSync();
         UNIT_ASSERT_C(initial.IsSuccess(), initial.GetIssues().ToString());
         env.SetRestricted(true);
-        const auto committed = env.Client.CommitOffset(TOPIC, 0, MIRROR_CONSUMER, 2,
+        const auto committed = env.Client.CommitOffset(env.Topic, 0, MIRROR_CONSUMER, 2,
             TCommitOffsetSettings().ClientTimeout(TDuration::Seconds(10))).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(committed.GetStatus(),
             allowCommit ? NYdb::EStatus::SUCCESS : NYdb::EStatus::UNAVAILABLE,
@@ -156,7 +166,7 @@ Y_UNIT_TEST_SUITE(TSourceTopicMutateRestricted) {
 
         // The mirrorer commits through a streaming read session, not CommitOffset RPC.
         auto reader = env.Client.CreateReadSession(TReadSessionSettings()
-            .ConsumerName(MIRROR_CONSUMER).AppendTopics(TTopicReadSettings(TOPIC))
+            .ConsumerName(MIRROR_CONSUMER).AppendTopics(TTopicReadSettings(env.Topic))
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy()));
         const auto deadline = TInstant::Now() + TDuration::Seconds(30);
         bool finished = false;

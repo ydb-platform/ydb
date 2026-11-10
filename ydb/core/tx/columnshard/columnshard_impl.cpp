@@ -1242,6 +1242,18 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
+    const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
+    if (noIntersections.IsFail()) {
+        // The optimizer does not support forced compaction (i.e. it is not tiling++).
+        YDB_LOG_WARN("Forced compaction is not supported",
+            {"tablet", TabletID()},
+            {"pathId", pathId},
+            {"reason", noIntersections.GetErrorMessage()},
+            {"requestedFrom", ev->Sender});
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+        return;
+    }
+
     if (record.HasSeqNo()) {
         TMessageSeqNo seqNo;
         seqNo.DeserializeFromProto(record.GetSeqNo()).Validate();
@@ -1264,17 +1276,9 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         ForcedCompactionActualizeSchema = record.GetActualizeSchema();
     }
 
-    const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
-    if (noIntersections.IsFail()) {
-        // The optimizer does not support forced compaction (i.e. it is not tiling++).
-        YDB_LOG_WARN("Forced compaction is not supported",
-            {"tablet", TabletID()},
-            {"pathId", pathId},
-            {"reason", noIntersections.GetErrorMessage()},
-            {"requestedFrom", ev->Sender});
-        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
-        return;
-    }
+    // the latest request supersedes the previous one: there is one forced compaction per table at a time, and the
+    // waiter of a cancelled one must not answer on behalf of the next (also when this request is answered at once)
+    ForcedCompactionWaiters.erase(*internalPathId);
 
     if (*noIntersections && (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
         YDB_LOG_DEBUG("Forced compaction already done",
@@ -1291,9 +1295,7 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         {"tablet", TabletID()},
         {"pathId", pathId},
         {"requestedFrom", ev->Sender});
-    // the latest request supersedes the previous one: there is one forced compaction per table at a time, and the
-    // waiter of a cancelled one must not answer on behalf of the next
-    ForcedCompactionWaiters[*internalPathId] = { { ev->Sender, ev->Cookie, pathId } };
+    ForcedCompactionWaiters[*internalPathId].push_back({ ev->Sender, ev->Cookie, pathId });
     SetupCompaction({ *internalPathId });
 }
 

@@ -70,6 +70,14 @@ public:
                 auto& columns = Result.WriteColumns[write];
                 for (const auto& column : write->Columns) { columns.push_back(Name(column)); }
                 if (write->Input) { Query(*write->Input, nullptr, {}); }
+                for (const auto& row : write->Rows) {
+                    for (const auto& value : row) { Expression(*value, {}, {}, {}); }
+                }
+                auto& returning = Result.ReturningColumns[write];
+                for (const auto& column : write->Returning) { returning.push_back(Name(column)); }
+                if (write->ReturningAll) {
+                    for (const auto& column : Result.Tables.at(write->Target.get())->Columns) { returning.push_back(column.Name); }
+                }
                 if (write->Where) { Expression(*write->Where, scope, {}, {}); }
                 for (const auto& assignment : write->Assignments) {
                     columns.push_back(Name(*assignment.Alias));
@@ -92,6 +100,9 @@ public:
             } else if (const auto* write = std::get_if<TWriteStatement>(&statement.Value)) {
                 CollectSource(*write->Target, {});
                 if (write->Input) { CollectQuery(*write->Input, {}); }
+                for (const auto& row : write->Rows) {
+                    for (const auto& value : row) { CollectExpression(*value, {}); }
+                }
                 if (write->Where) { CollectExpression(*write->Where, {}); }
                 for (const auto& assignment : write->Assignments) { CollectExpression(*assignment.Expression, {}); }
             } else if (std::holds_alternative<TDeclareStatement>(statement.Value)) {

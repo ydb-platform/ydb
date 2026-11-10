@@ -644,9 +644,13 @@ private:
         const auto pos = Pos(range);
         const auto scope = Source(*write.Target);
         const auto& table = *Names.Tables.at(write.Target.get());
-        if (table.HasDefaults) { Unsupported(range, "writes to tables with default expressions"); }
         THashMap<TString, TColumnId> targetColumns;
         for (const auto& [id, type] : scope) { Y_UNUSED(type); targetColumns[Names.Columns[id].Name] = id; }
+        THashSet<TString> returned;
+        for (const auto& name : Names.ReturningColumns.at(&write)) {
+            if (!targetColumns.contains(name)) { Error(range, "Column not found: " + name); }
+            if (!returned.insert(name).second) { Error(range, "Duplicate RETURNING column: " + name); }
+        }
         auto& output = Result.Writes[&write];
         THashSet<TString> written;
         const auto columnValue = [&](TColumnId id) {
@@ -669,24 +673,57 @@ private:
             Annotate(value.Lambda, range);
             output.emplace_back(name, std::move(value));
         };
-        if (write.Input) {
-            Query(*write.Input);
-            const auto& inputs = Names.QueryOutputs.at(write.Input.get());
+        if (write.Input || !write.Rows.empty()) {
             const auto& labels = Names.WriteColumns.at(&write);
-            if (!labels.empty() && labels.size() != inputs.size()) {
-                Error(range, "INSERT column count does not match SELECT output");
-            }
-            for (size_t i = 0; i < inputs.size(); ++i) {
-                add(labels.empty() ? Names.Columns[inputs[i]].Name : labels[i], columnValue(inputs[i]));
+            if (write.Input) {
+                Query(*write.Input);
+                const auto& inputs = Names.QueryOutputs.at(write.Input.get());
+                if (!labels.empty() && labels.size() != inputs.size()) {
+                    Error(range, "Write column count does not match SELECT output");
+                }
+                for (size_t i = 0; i < inputs.size(); ++i) {
+                    add(labels.empty() ? Names.Columns[inputs[i]].Name : labels[i], columnValue(inputs[i]));
+                }
+            } else {
+                TExprNode::TListType rows;
+                for (const auto& row : write.Rows) {
+                    if (labels.size() != row.size()) { Error(range, "Write column count does not match VALUES row"); }
+                    TExprNode::TListType members;
+                    for (size_t i = 0; i < row.size(); ++i) {
+                        const auto* id = targetColumns.FindPtr(labels[i]);
+                        if (!id) { Error(range, "Unknown write column: " + labels[i]); }
+                        Expression(*row[i], {});
+                        const auto& value = Result.Expressions.at(row[i].get());
+                        if (!value.Inputs.empty()) { Unsupported(row[i]->Range, "relational subqueries in VALUES"); }
+                        auto body = value.Lambda->TailPtr();
+                        if (TryConvertTo(body, *scope.at(*id), Ctx, Types) == IGraphTransformer::TStatus::Error) {
+                            Error(row[i]->Range, "Write column type mismatch: " + labels[i]);
+                        }
+                        members.push_back(Ctx.NewList(pos, {Ctx.NewAtom(pos, labels[i]), std::move(body)}));
+                    }
+                    rows.push_back(Call(pos, "AsStruct", std::move(members)));
+                }
+                auto list = Call(pos, "AsList", std::move(rows));
+                Annotate(list, range);
+                Result.WriteRows[&write] = std::move(list);
+                for (const auto& name : labels) { add(name, columnValue(targetColumns.at(name))); }
             }
             for (const auto& key : table.KeyColumns) {
-                if (!written.contains(key)) { Error(range, "Missing key column in input: " + key); }
+                if (!written.contains(key)) {
+                    for (const auto& column : table.Columns) {
+                        if (column.Name == key && column.HasDefault) {
+                            Unsupported(range, "omitted default key expressions in writes");
+                        }
+                    }
+                    Error(range, "Missing key column in input: " + key);
+                }
             }
             // Match ordinary INSERT defaults: omitted nullable columns are NULL;
             // non-nullable columns must have an explicitly supplied value.
-            if (write.Kind == EWriteKind::Insert) {
+            if (write.Kind == EWriteKind::Insert || write.Kind == EWriteKind::Replace) {
                 for (const auto& column : table.Columns) {
                     if (written.contains(column.Name)) { continue; }
+                    if (column.HasDefault) { Unsupported(range, "omitted default expressions in writes"); }
                     const auto* type = scope.at(targetColumns.at(column.Name));
                     if (type->GetKind() != ETypeAnnotationKind::Optional) {
                         Error(range, "Missing non-nullable write column: " + column.Name);
@@ -696,6 +733,12 @@ private:
                     UpdateLambdaAllArgumentsTypes(lambda, {}, Ctx);
                     Annotate(lambda, range);
                     add(column.Name, {std::move(lambda), {}});
+                }
+            } else if (write.Kind == EWriteKind::Upsert) {
+                for (const auto& column : table.Columns) {
+                    if (!written.contains(column.Name) && column.HasDefault) {
+                        Unsupported(range, "omitted default expressions in UPSERT");
+                    }
                 }
             }
         } else {

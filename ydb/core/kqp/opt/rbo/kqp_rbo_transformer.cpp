@@ -13,6 +13,8 @@
 #include <util/system/env.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <memory>
@@ -117,94 +119,55 @@ bool IsRboTraceLogEnabled() {
     return htmlTracePath.Defined() && !htmlTracePath->empty();
 }
 
-struct TInputRepeatability {
-    // The subtree contains a value that may change when evaluated again.
-    bool HasNonRepeatableExpression = false;
-    // The subtree contains a row producer that depends on such a value.
-    // Sharing this producer across roots may require evaluating its rows only once.
-    bool HasNonRepeatableProducer = false;
-};
+TExprNode::TListType SharedQueryInputs(const TKqlQuery& query) {
+    TExprNode::TListType roots;
+    for (const auto result : query.Results()) {
+        // RETURNING observes the effect; it must not cause a second execution.
+        auto value = result.Value().Ptr();
+        while (value->IsCallable({"Unordered", "Take"})) { value = value->HeadPtr(); }
+        if (!value->IsCallable("KqlReturningList")) { roots.push_back(value); }
+    }
+    for (const auto effect : query.Effects()) { roots.push_back(effect.Ptr()); }
+    if (roots.size() < 2) { return {}; }
 
-// Summarize the original expression DAG, caching each node's subtree properties.
-// Keep scalar nondeterminism separate from row production: a shared RandomNumber
-// node alone does not imply that two statements share the same input rows.
-TInputRepeatability AnalyzeInputRepeatability(const TExprNode* node, THashMap<const TExprNode*, TInputRepeatability>& memo) {
-    if (const auto it = memo.find(node); it != memo.end()) {
-        return it->second;
+    THashMap<const TExprNode*, size_t> consumers;
+    THashMap<const TExprNode*, bool> canMaterialize;
+    for (const auto& root : roots) {
+        VisitExpr(root, [](const auto&) { return true; }, [&](const TExprNode::TPtr& node) {
+            ++consumers[node.Get()];
+            bool safe = !node->IsCallable({"KqpOpTableEffect", "KqlSequencer"})
+                && !(TKqpInfuseDependents::Match(node.Get()) && TKqpInfuseDependents(node).Columns().Size());
+            for (const auto& child : node->Children()) { safe = safe && canMaterialize.at(child.Get()); }
+            canMaterialize[node.Get()] = safe;
+            return true;
+        });
     }
-    // Match the conservative treatment of opaque functions used by logical
-    // subtree copying. Sequencers also must not be evaluated independently.
-    TInputRepeatability result;
-    result.HasNonRepeatableExpression = TCoNonDeterministicBase::Match(node) || TKqlSequencer::Match(node)
-        || node->IsCallable({"Udf", "ScriptUdf", "SqlCall"});
-    for (const auto& child : node->Children()) {
-        const auto childInfo = AnalyzeInputRepeatability(child.Get(), memo);
-        result.HasNonRepeatableExpression |= childInfo.HasNonRepeatableExpression;
-        result.HasNonRepeatableProducer |= childInfo.HasNonRepeatableProducer;
+    THashSet<const TExprNode*> selected;
+    for (const auto& root : roots) {
+        VisitExpr(root, [&](const TExprNode::TPtr& node) {
+            // A subplan inside a scalar lambda may capture its row argument.
+            // Only whole relational producers can be evaluated independently.
+            if (node->IsLambda()) { return false; }
+            if (consumers.at(node.Get()) > 1 && canMaterialize.at(node.Get())
+                && node->IsCallable() && node->Content().StartsWith("KqpOp")
+                && !TKqpOpRoot::Match(node.Get()) && node->GetTypeAnn()
+                && node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List
+                && node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct) {
+                selected.insert(node.Get());
+                return false;
+            }
+            return true;
+        });
     }
-    const auto type = node->GetTypeAnn();
-    const bool producesRows = TCoYqlSelect::Match(node) || TKqlSequencer::Match(node)
-        || (type && (type->GetKind() == ETypeAnnotationKind::List
-            || type->GetKind() == ETypeAnnotationKind::Stream || type->GetKind() == ETypeAnnotationKind::Flow));
-    // Annotation may intern equal scalar calls in otherwise independent inputs.
-    // Only sharing a row producer requires preserving its evaluation across roots.
-    result.HasNonRepeatableProducer |= producesRows && result.HasNonRepeatableExpression;
-    memo.emplace(node, result);
+    TExprNode::TListType result;
+    THashSet<const TExprNode*> emitted;
+    for (const auto& root : roots) {
+        VisitExpr(root, [](const auto&) { return true; }, [&](const TExprNode::TPtr& node) {
+            if (selected.contains(node.Get()) && emitted.insert(node.Get()).second) { result.push_back(node); }
+            return true;
+        });
+    }
     return result;
-}
-
-// Each query root is imported independently by RBO. If two writes consume the
-// same random row producer, they can consequently store different generated keys.
-// Reject shared non-repeatable inputs involving an effect while compiling, so
-// fallback can retry the whole query with the legacy optimizer before execution.
-void CheckSharedNonRepeatableInputs(const TExprNode::TPtr& input) {
-    TVector<std::pair<const TExprNode*, bool>> roots;
-    bool hasEffects = false;
-    for (const auto query : TKqlQueryList(input)) {
-        for (const auto result : query.Results()) {
-            auto value = result.Value().Ptr();
-            while (TCoUnordered::Match(value.Get()) || TCoTake::Match(value.Get())) {
-                value = value->HeadPtr();
-            }
-            // RETURNING observes the effect below; it does not evaluate its
-            // input a second time and must not count as an independent root.
-            if (!TKqlReturningList::Match(value.Get())) {
-                roots.emplace_back(value.Get(), false);
-            }
-        }
-        for (const auto effect : query.Effects()) {
-            roots.emplace_back(effect.Raw(), true);
-            hasEffects = true;
-        }
-    }
-    if (!hasEffects || roots.size() < 2) {
-        return;
-    }
-
-    // Pointer identity detects shared expressions before rewriting clones them.
-    // Repeated visits within one root do not require cross-root coordination.
-    THashMap<const TExprNode*, size_t> owners;
-    THashMap<const TExprNode*, TInputRepeatability> nonRepeatable;
-    for (size_t rootIndex = 0; rootIndex < roots.size(); ++rootIndex) {
-        TVector<const TExprNode*> pending{roots[rootIndex].first};
-        while (!pending.empty()) {
-            const auto* node = pending.back();
-            pending.pop_back();
-            const auto [it, inserted] = owners.emplace(node, rootIndex);
-            if (!inserted) {
-                if (it->second != rootIndex && (roots[it->second].second || roots[rootIndex].second)) {
-                    Y_ENSURE(!AnalyzeInputRepeatability(node, nonRepeatable).HasNonRepeatableProducer,
-                        "New RBO cannot independently evaluate shared non-repeatable input across query roots with effects");
-                }
-                // Descendants already belong to the first root. Checking the
-                // shared subtree here avoids walking it again for every root.
-                continue;
-            }
-            for (const auto& child : node->Children()) {
-                pending.push_back(child.Get());
-            }
-        }
-    }
 }
 
 } // anonymous namespace
@@ -214,10 +177,6 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
         Y_ENSURE(false, "Forced fallback to legacy optimizer");
     }
 
-    // RewriteSelect clones lambdas, and each root is later imported by a fresh
-    // PlanConverter. Check sharing while original expression identity survives.
-    CheckSharedNonRepeatableInputs(input);
-    
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
     const bool needTraceAst = IsRboTraceLogEnabled();
@@ -236,15 +195,20 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
     THashSet<TExprNode*> topLevelSelects;
     THashSet<TExprNode*> visited;
 
-    CollectTopLevelSelects(input, topLevelSelects, visited);
+    // Named query producers can be referenced by several result/effect roots.
+    // Preserve their identity across all translations of this query graph.
+    THashMap<const TExprNode*, TExprNode::TPtr> translated;
+    // Replacing sublinks separately under each root clones shared producers,
+    // including expressions such as RandomNumber used by multiple writes.
+    output = RewriteSublinks(output, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, UniqueColumnIdCounter, translated);
+    CollectTopLevelSelects(output, topLevelSelects, visited);
 
     auto status = OptimizeExpr(
         output, output,
-        [this, &topLevelSelects](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
+        [this, &topLevelSelects, &translated](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
             
             // YQL AST rewriting
             if (TCoYqlSelect::Match(node.Get()) && topLevelSelects.contains(node.Get())) {
-                THashMap<const TExprNode*, TExprNode::TPtr> translated;
                 return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, UniqueColumnIdCounter, translated, true);
             }  else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
@@ -285,11 +249,14 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     } else {
         ui64 physicalTxGroup = 0;
         ui64 effectPriority = 0;
+        ui64 nextMaterializedInput = 0;
+        TNodeOnNodeOwnedMap materializedInputs;
         auto addRoot = [&](TExprNode::TPtr root, TExprNode::TPtr columns) {
             if (TCoUnordered::Match(root.Get())) {
                 root = root->HeadPtr();
             }
             Y_ENSURE(TKqpOpRoot::Match(root.Get()), "Expected an RBO query root, got " << root->Content());
+            root = ctx.ReplaceNodes<true>(TExprNode::TListType{root}, materializedInputs).front();
             auto opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root, columns);
             opRoot->PlanProps.PhysicalTxGroup = physicalTxGroup;
             opRoot->PlanProps.EffectPriority = effectPriority;
@@ -299,6 +266,28 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         };
         ui32 resultIndex = 0;
         for (const auto query : TKqlQueryList(input)) {
+            // Each query block has its own snapshot. Materialize only producers
+            // shared by its roots, never expressions merely equal across blocks.
+            materializedInputs.clear();
+            for (const auto& source : SharedQueryInputs(query)) {
+                const TString name = TStringBuilder() << "%kqp_shared_input_" << nextMaterializedInput++;
+                TExprNode::TListType columns;
+                for (const auto* field : source->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems()) {
+                    columns.push_back(ctx.NewAtom(source->Pos(), field->GetName()));
+                }
+                auto root = Build<TKqpOpRoot>(ctx, source->Pos())
+                    .Input(source).ColumnOrder(ctx.NewList(source->Pos(), std::move(columns))).Done().Ptr();
+                addRoot(root, nullptr)->PlanProps.MaterializedResult = name;
+                ++physicalTxGroup;
+                auto parameter = ctx.NewCallable(source->Pos(), "Parameter", {
+                    ctx.NewAtom(source->Pos(), name), ExpandType(source->Pos(), *source->GetTypeAnn(), ctx)});
+                auto annotator = CreateTypeAnnotationTransformer(CreateExtCallableTypeAnnotationTransformer(TypeCtx, true), TypeCtx);
+                Y_ENSURE(InstantTransform(*annotator, parameter, ctx) == IGraphTransformer::TStatus::Ok,
+                    "Failed to annotate an internal shared-input parameter");
+                auto input = Build<TKqpOpEmptySource>(ctx, source->Pos()).Input(parameter).Done().Ptr();
+                input->SetTypeAnn(source->GetTypeAnn());
+                materializedInputs[source.Get()] = std::move(input);
+            }
             struct TReturningResult {
                 ui32 Index;
                 TExprNode::TPtr Columns;

@@ -343,6 +343,74 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
         }
     }
 
+    Y_UNIT_TEST(NativeValuesWriteModesAndReturning) {
+        TVector<TString> baseline;
+        for (const bool enable : {false, true}) {
+            NKikimrConfig::TAppConfig app;
+            auto* config = app.MutableTableServiceConfig();
+            config->SetEnableNewYqlParser(enable);
+            config->SetEnableNewRBO(true);
+            config->SetEnableNewRBOPhysicalStagePeephole(false);
+            config->SetEnableFallbackToYqlOptimizer(false);
+            config->SetEnableIndexStreamWrite(true);
+            config->SetEnableAstCache(false);
+            config->SetCompileQueryCacheSize(0);
+            TCapturedLog logs(true);
+            auto settings = TKikimrSettings(app).SetWithSampleTables(false).SetLogCapture(logs);
+            settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_INFO);
+            settings.LogSettings->DefaultLogPriority = NActors::NLog::PRI_CRIT;
+            TKikimrRunner kikimr(settings);
+            auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto schema = tableSession.ExecuteSchemeQuery(
+                "CREATE TABLE `/Root/w` (id Uint64 NOT NULL, value String, extra Int32, "
+                "PRIMARY KEY(id), INDEX by_value GLOBAL ON(value));").GetValueSync();
+            UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            const auto start = logs.Snapshot().size();
+            const TVector<TString> queries = {
+                "INSERT INTO w (id,value,extra) VALUES (1,'one',10),(2,'two',20);",
+                "UPSERT INTO w (id,value) VALUES (1,'changed') RETURNING id,value,extra;",
+                "REPLACE INTO w (id,value) SELECT 1u,'replaced' RETURNING *;",
+                "UPDATE w ON (id,extra) VALUES (1,30),(99,99) RETURNING id,extra;",
+                "DELETE FROM w ON (id) VALUES (2) RETURNING id,value,extra;",
+                "INSERT OR REVERT INTO w (id,value) VALUES (3,'three');",
+                "DELETE FROM w WHERE id=3 RETURNING id,value;",
+                "UPDATE w SET extra=extra+1 WHERE id=1 RETURNING id,extra;",
+                "SELECT id,value,extra FROM w ORDER BY id;",
+            };
+            size_t index = 0;
+            for (const auto& sql : queries) {
+                const auto result = session.ExecuteQuery(sql, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), sql << ": " << result.GetIssues().ToString());
+                TString actual;
+                for (const auto& rows : result.GetResultSets()) { actual += FormatResultSetYson(rows); }
+                if (!enable) { baseline.push_back(actual); }
+                else { UNIT_ASSERT_VALUES_EQUAL_C(actual, baseline.at(index), sql); }
+                if (index == 1) { UNIT_ASSERT_VALUES_EQUAL(actual, "[[1u;[\"changed\"];[10]]]"); }
+                if (index == 8) { UNIT_ASSERT_VALUES_EQUAL(actual, "[[1u;[\"replaced\"];[31]]]"); }
+                ++index;
+            }
+            if (enable) {
+                const TString marker = "New YQL native execution contract built";
+                const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+                TString text;
+                size_t count = 0;
+                do {
+                    text = logs.Snapshot().substr(start);
+                    count = 0;
+                    for (size_t pos = text.find(marker); pos != TString::npos; pos = text.find(marker, pos + marker.size())) { ++count; }
+                    if (count < queries.size()) { Sleep(TDuration::MilliSeconds(10)); }
+                } while (count < queries.size() && TInstant::Now() < deadline);
+                UNIT_ASSERT_VALUES_EQUAL_C(count, queries.size(), text);
+                UNIT_ASSERT_C(!text.Contains("New YQL parser fallback:") && !text.Contains("New YQL frontend fallback:"), text);
+            }
+            const auto indexed = session.ExecuteQuery("SELECT id FROM w VIEW by_value WHERE value='replaced';",
+                NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(indexed.IsSuccess(), indexed.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(indexed.GetResultSet(0)), "[[1u]]");
+        }
+    }
+
     // Use nonempty tables and compare actual result sets for both storage kinds.
     // This catches value/order/NULL mistakes that an explain-only plan check misses;
     // the native success log requirement additionally guards against silent fallback.

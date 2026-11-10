@@ -69,14 +69,27 @@ public:
         return Finish(std::move(root));
     }
 
-    TIntrusivePtr<TOpRoot> RunWrite(const TWriteStatement& write) {
+    TIntrusivePtr<TOpRoot> RunWrite(const TWriteStatement& write, bool orderedColumns) {
         const auto pos = Pos(write.Target->Range);
         const auto& metadata = *Names.Tables.at(write.Target.get());
         const auto table = Tables(metadata);
         if (table.StorageType != NYql::EStorageType::RowStorage) {
             Unsupported(write.Target->Range, "native column-table writes");
         }
-        auto relation = write.Input ? Query(*write.Input) : Source(*write.Target);
+        TRelation relation;
+        if (const auto* rows = Annotations.WriteRows.FindPtr(&write)) {
+            TUnorderedIUs ius;
+            for (const auto id : SourceColumns.at(write.Target.get())) {
+                const auto& name = Names.Columns[id].Name;
+                if (!(*rows)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->FindItemType(name)) { continue; }
+                const auto iu = Props.InfoUnitRegistry.Add(TInfoUnit("", name));
+                ius.Add(iu);
+                relation.Bindings[id] = iu;
+            }
+            relation.Op = MakeIntrusive<TOpEmptySource>(pos, *rows, std::move(ius));
+        } else {
+            relation = write.Input ? Query(*write.Input) : Source(*write.Target);
+        }
         if (write.Where) {
             relation.Op = MakeIntrusive<TOpFilter>(relation.Op, pos, Predicate(*write.Where, relation.Bindings));
         }
@@ -92,7 +105,15 @@ public:
         switch (write.Kind) {
             case EWriteKind::Insert:
                 kind = metadata.HasWriteIndexes ? EEffectType::InsertRowsIndex : EEffectType::InsertRows;
-                options.OnConflict = "abort";
+                options.OnConflict = write.OnConflict;
+                break;
+            case EWriteKind::Upsert:
+            case EWriteKind::Replace:
+                kind = metadata.HasWriteIndexes ? EEffectType::UpsertRowsIndex : EEffectType::UpsertRows;
+                if (write.Kind == EWriteKind::Replace) {
+                    options.Settings = TVector<TExprNode::TPtr>{Ctx.NewList(pos, {
+                        Ctx.NewAtom(pos, "Mode"), Ctx.NewAtom(pos, "replace")})};
+                }
                 break;
             case EWriteKind::Update:
                 kind = metadata.HasWriteIndexes ? EEffectType::UpdateRowsIndex : EEffectType::UpdateRows;
@@ -101,9 +122,16 @@ public:
                 kind = metadata.HasWriteIndexes ? EEffectType::DeleteRowsIndex : EEffectType::DeleteRows;
                 break;
         }
+        auto returning = Names.ReturningColumns.at(&write);
+        if (write.ReturningAll && !orderedColumns) { std::sort(returning.begin(), returning.end()); }
+        for (const auto& name : returning) {
+            options.ReturningColumns.Append(Props.InfoUnitRegistry.Add(TInfoUnit("", name)), name);
+        }
+        auto columns = options.ReturningColumns;
         auto effect = MakeIntrusive<TOpTableEffect>(input, pos, table.Table, kind, std::move(options));
-        auto root = MakeIntrusive<TOpRoot>(effect, pos, TOrderedIUs<TString>{});
+        auto root = MakeIntrusive<TOpRoot>(effect, pos, std::move(columns));
         Props.WithEffects = true;
+        Props.WithReturning = !returning.empty();
         return Finish(std::move(root));
     }
 
@@ -791,9 +819,9 @@ TIntrusivePtr<TOpRoot> LowerToRbo(const TQuery& query, const TScript& script,
 
 TIntrusivePtr<TOpRoot> LowerWriteToRbo(const TWriteStatement& write, const TScript& script,
     const TResolvedNames& names, const TAnnotatedAst& annotations, TExprContext& ctx,
-    const TRboTableLookup& tables)
+    const TRboTableLookup& tables, bool orderedColumns)
 {
-    return TLowerer(script, names, annotations, ctx, tables).RunWrite(write);
+    return TLowerer(script, names, annotations, ctx, tables).RunWrite(write, orderedColumns);
 }
 
 } // namespace NKikimr::NKqp::NNewYql

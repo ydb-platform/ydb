@@ -137,6 +137,9 @@ private:
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpRBOCleanupTransformer(NYql::TTypeAnnotationContext& typeCtx);
 
+TExprNode::TPtr RewriteSublinks(TExprNode::TPtr node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
+    ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated);
+
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
                               ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated,
                               bool generateRoot = false);

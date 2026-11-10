@@ -28,6 +28,6 @@ TIntrusivePtr<TOpRoot> LowerToRbo(const TQuery& query, const TScript& script,
 
 TIntrusivePtr<TOpRoot> LowerWriteToRbo(const TWriteStatement& write, const TScript& script,
     const TResolvedNames& names, const TAnnotatedAst& annotations,
-    NYql::TExprContext& ctx, const TRboTableLookup& tables);
+    NYql::TExprContext& ctx, const TRboTableLookup& tables, bool orderedColumns = false);
 
 } // namespace NKikimr::NKqp::NNewYql

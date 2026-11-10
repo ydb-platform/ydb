@@ -1204,7 +1204,7 @@ IGraphTransformer::TStatus ValidateYqlSubLinkSettings(
         return true;
     };
 
-    if (!EnsureValidSettings(*settings, {"ansiIn", "warnNoAnsiIn", "unknownResultIfCorrelated"}, validator, ctx.Expr)) {
+    if (!EnsureValidSettings(*settings, {"ansiIn", "warnNoAnsiIn", "unknownResultIfCorrelated", "isCompact"}, validator, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 

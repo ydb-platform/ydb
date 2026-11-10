@@ -125,6 +125,7 @@ struct Schema : NIceDb::Schema {
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct BridgeSyncTotalRate : Column<33, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         struct BridgeSyncMaxSyncers : Column<34, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 64; };
+        struct AppliedPileOverrides : Column<35, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TStoragePoolPileOverrides; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
@@ -132,7 +133,8 @@ struct Schema : NIceDb::Schema {
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
               UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig,
-              ExpectedStorageYamlConfigVersion, EnableConfigV2, BridgeSyncTotalRate, BridgeSyncMaxSyncers>;
+              ExpectedStorageYamlConfigVersion, EnableConfigV2, BridgeSyncTotalRate, BridgeSyncMaxSyncers,
+              AppliedPileOverrides>;
     };
 
     struct VSlot : Table<5> {

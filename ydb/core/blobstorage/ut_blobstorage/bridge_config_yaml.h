@@ -20,14 +20,19 @@ namespace NBridgeTest {
 
     // replace main config of self-managed cluster with the current one modified by the callback (it gets the config
     // section of the YAML), the version is advanced automatically
-    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ReplaceMainConfig(TEnvironmentSetup& env,
-            const std::function<void(YAML::Node&)>& modify, ui32 nodeId = 1) {
+    inline TString MakeNextMainConfigYaml(TEnvironmentSetup& env, const std::function<void(YAML::Node&)>& modify,
+            ui32 nodeId = 1) {
         YAML::Node yaml = YAML::Load(FetchMainConfigYaml(env, nodeId));
         yaml["metadata"]["version"] = yaml["metadata"]["version"].as<ui64>() + 1;
         yaml["metadata"]["cluster"] = ""; // test environment has no cluster name
         YAML::Node config = yaml["config"];
         modify(config);
-        const TString text(YAML::Dump(yaml));
+        return TString(YAML::Dump(yaml));
+    }
+
+    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ReplaceMainConfig(TEnvironmentSetup& env,
+            const std::function<void(YAML::Node&)>& modify, ui32 nodeId = 1) {
+        const TString text = MakeNextMainConfigYaml(env, modify, nodeId);
         return InvokeDistconf(env, [&](auto& record) {
             auto *cmd = record.MutableReplaceStorageConfig();
             cmd->SetYAML(text);

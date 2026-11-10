@@ -150,6 +150,11 @@
                 "ColumnId": 28,
                 "ColumnName": "ExpectedStorageYamlConfigVersion",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "AppliedPileOverrides",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -184,7 +189,8 @@
                     24,
                     26,
                     27,
-                    28
+                    28,
+                    35
                 ],
                 "RoomID": 0,
                 "Codec": 0,

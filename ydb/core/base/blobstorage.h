@@ -2599,7 +2599,7 @@ struct TEvBlobStorage {
             bool HasData = true;
 
             // Masks of subgroup positions holding each part, populated for a placement scan.
-            TStackVec<ui16, TBlobStorageGroupType::MaxTotalParts> PartDisks;
+            TStackVec<ui16, TBlobStorageGroupType::MaxTotalParts> PartDisks{};
 
             TString ToString() const {
                 TStringStream str;

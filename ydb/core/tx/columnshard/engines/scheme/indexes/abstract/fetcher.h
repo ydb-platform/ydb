@@ -1,4 +1,6 @@
 #pragma once
+
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include "abstract.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
@@ -213,6 +215,7 @@ private:
     std::shared_ptr<IIndexMeta> IndexMeta;
     std::vector<TIndexChunkFetching> Fetching;
     std::vector<TString> FetchingStorageIds;
+    std::optional<NScanStats::TCapture> RuntimeIndexStats;
     std::vector<TIndexDataAddress> IndexAddressesVector;
 
     virtual void DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) override;

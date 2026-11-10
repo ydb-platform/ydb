@@ -25,9 +25,13 @@ TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(IDataSource& source
             YDB_LOG_DEBUG("",
                 {"event", "empty_data"},
                 {"scanStepIdx", CurrentStepIdx});
+            FinishRuntimeStats();
+            if (source.GetExecutionContext().GetRuntimeStats()) { source.GetExecutionContext().GetRuntimeStats()->Finish(); }
             source.OnEmptyStageData();
             break;
         } else if (source.HasStageResult() && source.GetStageResult().IsEmpty()) {
+            FinishRuntimeStats();
+            if (source.GetExecutionContext().GetRuntimeStats()) { source.GetExecutionContext().GetRuntimeStats()->Finish(); }
             YDB_LOG_DEBUG("",
                 {"event", "empty_result"},
                 {"scanStepIdx", CurrentStepIdx});
@@ -37,10 +41,9 @@ TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(IDataSource& source
         if (StepEndIfStepIsAsync.has_value()) {
             // previous step was asynchronous; measure how long we waited since it finished
             auto waitDuration = TMonotonic::Now() - *StepEndIfStepIsAsync;
-            if (CurrentStepIdx == 0) {
-                return TConclusionStatus::Fail("Internal error: step 0 should not have a predecessor");
-            }
-            counters.CountersForStep(Script->GetStep(CurrentStepIdx - 1)->GetName()).WaitDurationMicroSeconds->Add(waitDuration.MicroSeconds());
+            counters.CountersForStep(Script->GetStep(PendingStepIdx.value_or(CurrentStepIdx))->GetName())
+                .WaitDurationMicroSeconds->Add(waitDuration.MicroSeconds());
+            StepEndIfStepIsAsync.reset();
         }
         auto step = Script->GetStep(CurrentStepIdx);
         std::optional<TMemoryProfileGuard> mGuard;
@@ -51,8 +54,42 @@ TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(IDataSource& source
             {"scanStep", step->DebugString()},
             {"scanStepIdx", CurrentStepIdx});
 
+        StartRuntimeStats(source.GetContext()->GetCommonContext()->GetRuntimeStats(), source.GetSourceId());
+        if (RuntimeStats) {
+            TString meta = step->GetStatsMetaStep();
+            if (!meta && step->GetName() != "PROGRAM_EXECUTION") {
+                if (step->GetStatsKind() == NScanStats::TStep::BuildResult ||
+                    step->GetStatsKind() == NScanStats::TStep::PrepareResult) {
+                    const auto& collector = source.GetContext()->GetCommonContext()->GetRuntimeStats();
+                    meta = collector && collector->GetReaderKind() == "PLAIN" ? "PKFilter" : "BuildResult";
+                } else {
+                    meta = "PKFilter";
+                }
+            }
+            RuntimeStats->Update([&](NScanStats::TStep& record) {
+                if (meta) {
+                    record.SetMetaStep(meta);
+                    record.SetCanonicalPath("");
+                } else {
+                    record.ClearMetaStep();
+                    record.ClearCanonicalPath();
+                }
+            });
+        }
+        if (RuntimeStats && step->GetStatsKind() == NScanStats::TStep::Filter) {
+            const auto rows = source.GetStatsCandidateRows();
+            RuntimeStats->Update([&](NScanStats::TStep& record) {
+                auto* details = record.MutableDetails()->MutableFilter();
+                if (!details->HasInputRows() && rows) { details->SetInputRows(*rows); }
+                if (step->GetStatsPurpose()) { details->SetPurpose(*step->GetStatsPurpose()); }
+            });
+        }
+        PendingStepIdx = CurrentStepIdx;
         const TMonotonic startInstant = TMonotonic::Now();
-        auto resultStep = step->ExecuteInplace(source, *this);
+        auto resultStep = [&] {
+            NScanStats::TScope scope(RuntimeStats, source.GetContext()->GetCommonContext()->GetRuntimeStats());
+            return step->ExecuteInplace(source, *this);
+        }();
         const auto executionTime = TMonotonic::Now() - startInstant;
 
         counters.CountersForStep(step->GetName()).ExecutionDurationMicroSeconds->Add(executionTime.MicroSeconds());
@@ -60,6 +97,7 @@ TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(IDataSource& source
 
         Script->AddStepDuration(CurrentStepIdx, executionTime, TMonotonic::Now() - StepStartInstant);
         if (resultStep.IsFail()) {
+            FinishRuntimeStats(NScanStats::TStep::failed);
             YDB_LOG_DEBUG("",
                 {"scanStep", step->DebugString()},
                 {"scanStepIdx", CurrentStepIdx},
@@ -67,12 +105,19 @@ TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(IDataSource& source
             return resultStep;
         }
         if (resultStep->IsPending()) {
+            if (RuntimeStats) { RuntimeStats->Suspend(); }
             StepEndIfStepIsAsync.emplace(TMonotonic::Now());
             YDB_LOG_DEBUG("",
                 {"scanStep", step->DebugString()},
                 {"scanStepIdx", CurrentStepIdx});
             return resultStep;
         }
+        if (RuntimeStats && step->GetStatsKind() == NScanStats::TStep::Filter) {
+            const auto rows = source.GetStatsCandidateRows();
+            if (rows) { RuntimeStats->Update([&](NScanStats::TStep& record) { record.MutableDetails()->MutableFilter()->SetOutputRows(*rows); }); }
+        }
+        FinishRuntimeStats();
+        RuntimeStats.reset();
         StepEndIfStepIsAsync = std::nullopt;
         StepStartInstant = TMonotonic::Now();
         ++CurrentStepIdx;

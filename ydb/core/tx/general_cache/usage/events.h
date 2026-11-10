@@ -1,4 +1,6 @@
 #pragma once
+
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include "abstract.h"
 
 #include <ydb/core/base/events.h>
@@ -29,6 +31,7 @@ struct TEvents {
     private:
         YDB_READONLY(EConsumer, Consumer, EConsumer::Undefined);
         YDB_READONLY(TMonotonic, StartRequestInstant, TMonotonic::Now());
+        YDB_READONLY_DEF(NScanStats::TCapture, StatsCapture);
 
         bool AddressesExtracted = false;
         THashSet<TAddress> Addresses;

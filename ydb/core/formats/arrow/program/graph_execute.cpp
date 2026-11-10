@@ -1,5 +1,14 @@
 #include "execution.h"
 #include "graph_execute.h"
+#include "aggr_keys.h"
+#include "assign_const.h"
+#include "assign_internal.h"
+#include "stats.h"
+#include "original.h"
+#include "stream_logic.h"
+
+#include <util/string/cast.h>
+#include <util/string/join.h>
 #include "graph_optimization.h"
 #include "visitor.h"
 
@@ -45,6 +54,12 @@ public:
 TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const IColumnResolver& resolver) {
     for (auto&& i : original.GetNodes()) {
         Nodes.emplace(i.first, std::make_shared<TNode>(i.first, i.second->GetProcessor()));
+        if (const auto* accessor = dynamic_cast<const TOriginalColumnAccessorProcessor*>(i.second->GetProcessor().get())) {
+            const auto& name = accessor->GetDataAddress().GetColumnName();
+            if (name) {
+                StatsColumnNames.emplace(accessor->GetOutput().front().GetColumnId(), name);
+            }
+        }
     }
     for (auto&& n : original.GetNodes()) {
         auto itTo = Nodes.find(n.first);
@@ -164,16 +179,204 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
     }
     YDB_LOG_TRACE("",
         {"graphConstructed", DebugDOT()});
+    BuildStatsMetaSteps();
+}
+
+void TCompiledGraph::BuildStatsMetaSteps() {
+    constexpr ui8 filter = 1;
+    constexpr ui8 aggregation = 2;
+    constexpr ui8 index = 4;
+    constexpr ui8 result = 8;
+    const auto boundary = [&](const TNode& node) -> ui8 {
+        const auto& processor = node.GetProcessor();
+        if (processor->IsAggregation()) {
+            return aggregation;
+        }
+        switch (processor->GetProcessorType()) {
+            case EProcessorType::Filter:
+                return filter;
+            case EProcessorType::CheckIndexData:
+                return index;
+            case EProcessorType::Projection:
+                return result;
+            default:
+                return 0;
+        }
+    };
+    THashMap<ui32, ui32> remaining;
+    THashMap<ui32, ui8> consumers;
+    THashMap<ui32, std::set<ui32>> indexConsumers;
+    std::vector<TNode*> ready;
+    for (const auto& [id, node] : Nodes) {
+        ui32 outputs = 0;
+        for (const auto* output : node->GetOutputEdges()) {
+            outputs += Nodes.contains(output->GetIdentifier());
+        }
+        remaining.emplace(id, outputs);
+        consumers.emplace(id, boundary(*node));
+        auto& indexNodes = indexConsumers[id];
+        if (node->GetProcessor()->GetProcessorType() == EProcessorType::CheckIndexData) {
+            indexNodes.emplace(id);
+        }
+        if (outputs == 0) {
+            ready.push_back(node.get());
+        }
+    }
+    while (!ready.empty()) {
+        const auto* node = ready.back();
+        ready.pop_back();
+        const ui32 id = node->GetIdentifier();
+        const ui8 mask = consumers.at(id);
+        TString meta;
+        if (node->GetProcessor()->GetProcessorType() == EProcessorType::Projection) {
+            meta = "Projection";
+        } else if (mask & filter) {
+            meta = "Filter";
+        } else if (mask & index) {
+            meta = "IndexFilter";
+        } else if (mask == aggregation) {
+            meta = "Aggregation";
+        } else {
+            meta = "FetchOtherColumns";
+        }
+        const auto& indexNodes = indexConsumers.at(id);
+        if (!indexNodes.empty()) {
+            StatsIndexNodes.emplace(id, std::vector<ui32>(indexNodes.begin(), indexNodes.end()));
+        }
+        StatsMetaSteps.emplace(id, std::move(meta));
+        for (auto* input : node->GetInputEdges()) {
+            const ui32 inputId = input->GetIdentifier();
+            if (!remaining.contains(inputId)) {
+                continue;
+            }
+            if (!boundary(*input)) {
+                consumers.at(inputId) |= mask;
+                const auto& indexNodes = indexConsumers.at(id);
+                indexConsumers.at(inputId).insert(indexNodes.begin(), indexNodes.end());
+            }
+            if (--remaining.at(inputId) == 0) {
+                ready.push_back(input);
+            }
+        }
+    }
+    AFL_VERIFY(StatsMetaSteps.size() == Nodes.size());
+}
+
+const TString& TCompiledGraph::GetStatsMetaStep(ui32 identifier) const {
+    const auto it = StatsMetaSteps.find(identifier);
+    AFL_VERIFY(it != StatsMetaSteps.end())("node_id", identifier);
+    return it->second;
+}
+
+std::vector<std::shared_ptr<IResourceProcessor>> TCompiledGraph::GetStatsIndexProcessors(ui32 identifier) const {
+    std::vector<std::shared_ptr<IResourceProcessor>> result;
+    if (const auto it = StatsIndexNodes.find(identifier); it != StatsIndexNodes.end()) {
+        for (ui32 nodeId : it->second) {
+            result.emplace_back(Nodes.at(nodeId)->GetProcessor());
+        }
+    }
+    return result;
 }
 
 TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
     IDataSource& source, std::unique_ptr<TAccessorsCollection>&& resources) const {
+    const auto collector = NScanStats::CurrentCollector();
+    const bool plain = collector && collector->GetReaderKind() == "PLAIN";
+    THashMap<ui32, TString> expressions;
+    if (plain) {
+        expressions = StatsColumnNames;
+        for (const ui32 id : resources->GetStatsColumnIds()) {
+            expressions.emplace(id, TString(resources->GetFieldVerified(id)->name()));
+        }
+    }
+    const auto resolve = [&](ui32 id) -> TString {
+        const auto it = expressions.find(id);
+        if (it == expressions.end()) {
+            return TStringBuilder() << "resource_" << id;
+        }
+        return it->second;
+    };
     TProcessorContext context(source, std::move(resources), std::nullopt, false);
     NMiniKQL::TThrowingBindTerminator bind;
     std::shared_ptr<TExecutionVisitor> visitor = std::make_shared<TExecutionVisitor>(std::move(context));
     for (auto it = BuildIterator(visitor); it->IsValid();) {
         {
-            auto conclusion = visitor->Execute();
+            std::shared_ptr<NScanStats::TOperation> operation;
+            if (collector && visitor->GetExecutionNode()) {
+                const auto& processor = it->GetProcessorVerified();
+                const auto kind = processor->GetStatsKind();
+                const TString& meta = GetStatsMetaStep(it->GetCurrentNodeId());
+                const auto type = processor->GetProcessorType();
+                std::vector<TString> columns;
+                for (const auto& input : processor->GetInput()) {
+                    columns.emplace_back(resolve(input.GetColumnId()));
+                }
+                TString function = processor->GetSignalCategoryName();
+                if (const auto* calculation = dynamic_cast<const TCalculationProcessor*>(processor.get())) {
+                    function = calculation->GetStatsFunctionDescription();
+                } else if (const auto* stream = dynamic_cast<const TStreamLogicProcessor*>(processor.get())) {
+                    function = ::ToString(stream->GetOperation());
+                }
+                TString description = BuildStatsExpression(function, columns, it->GetCurrentNodeId());
+                if (const auto* constant = dynamic_cast<const TConstProcessor*>(processor.get())) {
+                    description = BuildStatsConstant(*constant->GetScalarConstant(), it->GetCurrentNodeId());
+                }
+                if (type == EProcessorType::Calculation || type == EProcessorType::Const ||
+                    type == EProcessorType::StreamLogic || type == EProcessorType::CheckIndexData ||
+                    type == EProcessorType::CheckHeaderData) {
+                    for (const auto& output : processor->GetOutput()) {
+                        expressions[output.GetColumnId()] = description;
+                    }
+                }
+                const bool supplied = plain && (meta == "IndexFilter" || kind == NScanStats::TStep::FetchColumns ||
+                    kind == NScanStats::TStep::MemoryReserve || kind == NScanStats::TStep::Assemble);
+                if (!supplied) {
+                    operation = collector->Start(kind, processor->GetSignalCategoryName(), description, NScanStats::Current());
+                }
+                if (operation) {
+                    operation->Update([&](NScanStats::TStep& record) {
+                        record.SetMetaStep(meta);
+                        record.SetCanonicalPath("");
+                        if (kind == NScanStats::TStep::Filter) {
+                            record.MutableDetails()->MutableFilter()->SetPredicate(description);
+                        }
+                        if (const auto* keyed = dynamic_cast<const NAggregation::TWithKeysAggregationProcessor*>(processor.get())) {
+                            auto* details = record.MutableDetails()->MutableAggregation();
+                            for (const auto& key : keyed->GetAggregationKeys()) {
+                                details->MutableKeys()->AddNames(resolve(key.GetColumnId()));
+                            }
+                            std::vector<TString> functions;
+                            for (const auto& aggregate : keyed->GetAggregations()) {
+                                std::vector<TString> inputs;
+                                for (const auto& input : aggregate.GetInputs()) {
+                                    inputs.emplace_back(resolve(input.GetColumnId()));
+                                }
+                                const TString expression = TStringBuilder() << aggregate.GetAggregationId() << "(" << JoinSeq(", ", inputs) << ")";
+                                details->MutableFunctions()->AddNames(expression);
+                                functions.emplace_back(expression);
+                                expressions[aggregate.GetOutput().GetColumnId()] = expression;
+                            }
+                            record.SetOperation(TStringBuilder() << "GROUP BY " << JoinSeq(", ", details->GetKeys().GetNames()) << ": " << JoinSeq(", ", functions));
+                        }
+                        if (kind == NScanStats::TStep::Projection) {
+                            auto* details = record.MutableDetails()->MutableProjection();
+                            for (const ui32 id : visitor->MutableContext().GetResources().GetStatsColumnIds()) {
+                                details->MutableInputColumns()->AddNames(resolve(id));
+                            }
+                            for (const auto& column : columns) {
+                                details->MutableOutputColumns()->AddNames(column);
+                            }
+                        }
+                    });
+                }
+            }
+            auto conclusion = [&] {
+                NScanStats::TScope scope(operation, collector);
+                return visitor->Execute();
+            }();
+            if (operation) {
+                operation->Finish(conclusion.IsFail() ? NScanStats::TStep::failed : NScanStats::TStep::completed);
+            }
             if (conclusion.IsFail()) {
                 return conclusion;
             } else {

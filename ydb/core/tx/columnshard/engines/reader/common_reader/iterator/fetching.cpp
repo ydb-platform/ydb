@@ -34,6 +34,10 @@ TConclusion<bool> TStepAction::DoExecuteImpl() {
     auto& source = SourceLease->GetSource();
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("step_action"));
     if (source.GetContext()->IsAborted()) {
+        Cursor.FinishRuntimeStats(NScanStats::TStep::cancelled);
+        if (source.GetExecutionContext().GetRuntimeStats()) {
+            source.GetExecutionContext().GetRuntimeStats()->Finish(NScanStats::TStep::cancelled);
+        }
         OnFinished();
         return true;
     }
@@ -264,6 +268,27 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(IDataSource& source
             if (iterator->IsValid()) {
                 GetSignals(iterator->GetCurrentNodeId())->OnSkipGraphNode(source.GetRecordsCount());
                 counters.OnSkipGraphNode(iterator->GetCurrentNode().GetIdentifier());
+                const auto& collector = source.GetContext()->GetCommonContext()->GetRuntimeStats();
+                if (collector) {
+                    const auto& skipped = iterator->GetCurrentNode().GetProcessor();
+                    std::vector<TString> columns;
+                    for (const auto& input : skipped->GetInput()) { columns.push_back(executionContext.GetStatsColumnName(source, input.GetColumnId())); }
+                    const auto description = executionContext.BuildStatsDescription(source, iterator->GetCurrentNodeId(), skipped, std::move(columns));
+                    auto operation = collector->Start(skipped->GetStatsKind(), skipped->GetSignalCategoryName(),
+                        description, step.GetRuntimeStats(), source.GetSourceId());
+                    if (operation) {
+                        operation->Update([&](NScanStats::TStep& record) {
+                            record.SetMetaStep(Program->GetStatsMetaStep(iterator->GetCurrentNodeId()));
+                            record.SetCanonicalPath("");
+                            const auto indexProcessors = Program->GetStatsIndexProcessors(iterator->GetCurrentNodeId());
+                            if (!indexProcessors.empty()) {
+                                record.ClearIndexDescriptors();
+                                source.FillIndexStatsContext(indexProcessors, record);
+                            }
+                        });
+                        operation->Finish(NScanStats::TStep::skipped);
+                    }
+                }
             }
             continue;
         }
@@ -272,10 +297,14 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(IDataSource& source
         const TString categoryName = iterator->GetCurrentNode().GetSignalCategoryName();
         const auto processor = iterator->GetProcessorVerified();
         const auto& signals = GetSignals(nodeId);
-        executionContext.OnStartProgramStepExecution(nodeId, signals);
+        executionContext.OnStartProgramStepExecution(nodeId, signals, source, processor, Program->GetStatsMetaStep(nodeId),
+            Program->GetStatsIndexProcessors(nodeId));
 
         const TMonotonic start = TMonotonic::Now();
-        auto conclusion = visitor->Execute();
+        auto conclusion = [&] {
+            NScanStats::TScope scope(executionContext.GetRuntimeStats());
+            return visitor->Execute();
+        }();
         const TDuration executionDuration = TMonotonic::Now() - start;
         counters.AddExecutionDuration(executionDuration);
         signals->AddExecutionDuration(executionDuration);
@@ -289,6 +318,7 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(IDataSource& source
             return conclusion;
         }
         if (conclusion->IsPending()) {
+            if (executionContext.GetRuntimeStats()) { executionContext.GetRuntimeStats()->Suspend(); }
             return conclusion;
         }
         executionContext.OnFinishProgramStepExecution();

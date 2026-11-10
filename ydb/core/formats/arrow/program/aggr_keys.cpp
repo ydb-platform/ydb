@@ -1,6 +1,7 @@
 #include "aggr_keys.h"
 #include "collection.h"
 #include "execution.h"
+#include "stats.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 
@@ -132,11 +133,15 @@ TConclusion<TExecutionResult> TWithKeysAggregationProcessor::DoExecute(
 
     funcOpts.schema = std::make_shared<arrow::Schema>(fields);
 
+    AddStatsArgumentRows(batch);
     auto gbRes = arrow::compute::CallFunction(GetHouseGroupByName(), batch, &funcOpts, GetCustomExecContext());
     if (!gbRes.ok()) {
         return TConclusionStatus::Fail(gbRes.status().ToString());
     }
     auto gbBatch = (*gbRes).record_batch();
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([&](NScanStats::TStep& record) { record.MutableDetails()->MutableAggregation()->SetOutputRows(gbBatch->num_rows()); });
+    }
     context.MutableResources().Remove(AggregationKeys);
 
     for (auto& assign : funcOpts.assigns) {
@@ -201,6 +206,9 @@ TConclusion<TFunctionResult> TAggregateFunction::Call(const TExecFunctionContext
         if (!rc) {
             return TConclusionStatus::Fail("resources hasn't info about records count actual");
         } else {
+            if (const auto& operation = NScanStats::Current()) {
+                operation->Update([&](NScanStats::TStep& record) { record.MutableDetails()->MutableAggregation()->SetInputRows(*rc); });
+            }
             return TFunctionResult(std::make_shared<arrow::UInt64Scalar>(*rc));
         }
     } else {

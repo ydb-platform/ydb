@@ -263,6 +263,9 @@ private:
         const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::TIndexCheckOperation& op) const;
     // Resolves the index meta (nullptr if there is no suitable index) for every check operation of the fetch context.
     THashMap<TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> SelectIndexesForFetch(const TFetchIndexContext& indexContext) const;
+
+    void FillIndexStatsContext(const std::vector<std::shared_ptr<NArrow::NSSA::IResourceProcessor>>& indexProcessors,
+        NScanStats::TStep& record) const override;
     // Stored bytes of the indexes selected for the given contexts. Inplace payload is included: the scan copies it.
     ui64 GetIndexesDataSizeForFetch(const THashMap<ui32, TFetchIndexContext>& indexes) const;
 

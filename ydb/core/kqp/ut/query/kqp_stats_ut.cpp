@@ -24,6 +24,51 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+Y_UNIT_TEST_SUITE(ColumnShardStepStatsPlan) {
+    Y_UNIT_TEST(PreservesTypedDetailsPresenceAndIdentity) {
+        NYql::NDqProto::TDqExecutionStats execution;
+        auto* stage = execution.AddStages();
+        stage->SetStageId(1);
+        stage->SetStageGuid("column-stage");
+        NKqpProto::TKqpStageExtraStats extra;
+        auto* scan = extra.AddColumnShardScans();
+        scan->SetStatsScanId("scan:1");
+        scan->SetTabletId(72075186224037888ULL);
+        scan->SetFinished(true);
+        auto* step = scan->AddSteps();
+        step->SetStepId(1);
+        step->SetStepKind(NKqpProto::TColumnShardStepStats::Filter);
+        step->SetOutcome(NKqpProto::TColumnShardStepStats::completed);
+        step->SetIntegralExecutionDuration(0);
+        step->MutableDetails()->MutableFilter()->SetInputRows(100);
+        step->MutableDetails()->MutableFilter()->SetOutputRows(0);
+        step = scan->AddSteps();
+        step->SetStepId(2);
+        step->SetParentStepId(1);
+        step->SetStepKind(NKqpProto::TColumnShardStepStats::Assemble);
+        step->SetOutcome(NKqpProto::TColumnShardStepStats::completed);
+        step->MutableDetails()->MutableAssemble()->MutableColumns()->AddNames("price");
+        stage->MutableExtra()->PackFrom(extra);
+
+        const TString plan = R"({"Node Type":"Query","Plans":[{"Node Type":"Stage","PlanNodeId":1,"StageGuid":"column-stage"}]})";
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(AddExecStatsToTxPlan(plan, execution, true), &json, true);
+        const auto& result = json["Plans"][0]["Stats"]["ColumnShardScans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(result["TabletId"].GetStringSafe(), "72075186224037888");
+        UNIT_ASSERT(result["Finished"].GetBooleanSafe());
+        UNIT_ASSERT(!result["Truncated"].GetBooleanSafe());
+        const auto& filter = result["Steps"][0];
+        UNIT_ASSERT_VALUES_EQUAL(filter["StepKind"].GetStringSafe(), "Filter");
+        UNIT_ASSERT_VALUES_EQUAL(filter["Outcome"].GetStringSafe(), "completed");
+        UNIT_ASSERT(filter.GetMapSafe().contains("IntegralExecutionDuration"));
+        UNIT_ASSERT(!filter.GetMapSafe().contains("IntegralWaitDuration"));
+        UNIT_ASSERT_VALUES_EQUAL(filter["Details"]["InputRows"].GetUIntegerSafe(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(filter["Details"]["OutputRows"].GetUIntegerSafe(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(result["Steps"][1]["Details"]["Columns"][0].GetStringSafe(), "price");
+        UNIT_ASSERT_VALUES_EQUAL(result["Steps"][1]["ParentStepId"].GetUIntegerSafe(), 1);
+    }
+}
+
 NJson::TJsonValue GetLegacySimplifiedPlan(const TString& plan) {
     NYql::NDqProto::TDqExecutionStats executionStats;
     NJson::TJsonValue planJson;

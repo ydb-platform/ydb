@@ -3,6 +3,8 @@
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 
+#include <util/generic/scope.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
@@ -28,6 +30,25 @@ TMergeBorders::TMergeBorders(const TActorId& owner, const std::shared_ptr<TMerge
 }
 
 void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
+    const auto runtimeStats = Event->Get()->Context.GetGlobalContext().GetRuntimeStats();
+    if (const auto& acquisition = Event->Get()->Context.GetGlobalContext().GetStatsJob()) {
+        acquisition->Finish();
+    }
+    auto operation =
+        runtimeStats ? runtimeStats->Start(NScanStats::TStep::Merge, "DUPLICATE_MERGE", "Resolve visible PK versions", {}) : nullptr;
+    if (operation) {
+        operation->Update([](auto& record) {
+            record.SetMetaStep("PKFilter");
+            record.SetCanonicalPath("Filter");
+        });
+    }
+    NScanStats::TScope statsScope(operation, runtimeStats);
+    auto outcome = NScanStats::TStep::failed;
+    Y_DEFER {
+        if (operation) {
+            operation->Finish(outcome);
+        }
+    };
     auto sendFailure = [&](const TString& reason) {
         TActivationContext::AsActorContext().Send(Owner, std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context),
                                                              THashMap<ui64, NArrow::TColumnFilter>{}, TConclusionStatus::Fail(reason)));
@@ -79,11 +100,18 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     Context->PrevRowsSkipped = Context->FiltersBuilder.GetRowsSkipped();
 
     auto readyFilters = Context->FiltersBuilder.ExtractReadyFilters();
+    outcome = NScanStats::TStep::completed;
+    if (operation) {
+        operation->Finish(outcome);
+    }
     TActivationContext::AsActorContext().Send(Owner,
         std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context), std::move(readyFilters), TConclusionStatus::Success()));
 }
 
 void TMergeBorders::DoOnCannotExecute(const TString& reason) {
+    if (const auto& acquisition = Event->Get()->Context.GetGlobalContext().GetStatsJob()) {
+        acquisition->Finish(NScanStats::TStep::failed);
+    }
     TActivationContext::AsActorContext().Send(Owner, std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context),
                                                          THashMap<ui64, NArrow::TColumnFilter>{}, TConclusionStatus::Fail(reason)));
 }

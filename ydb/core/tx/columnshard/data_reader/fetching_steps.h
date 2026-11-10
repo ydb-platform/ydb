@@ -59,6 +59,12 @@ public:
 };
 
 class TAskAccessorsStep: public IFetchingStep {
+public:
+    NScanStats::TStep::EStepKind GetStatsKind() const override {
+        return NScanStats::TStep::FetchAccessors;
+    }
+
+private:
 private:
     class TSubscriber: public IDataAccessorRequestsSubscriber {
     private:
@@ -258,6 +264,12 @@ public:
 };
 
 class TAskDataStep: public IFetchingStep {
+public:
+    NScanStats::TStep::EStepKind GetStatsKind() const override {
+        return NScanStats::TStep::FetchColumns;
+    }
+
+private:
 private:
     std::shared_ptr<NReader::NCommon::TColumnsSetIds> ColumnIds;
 
@@ -327,6 +339,12 @@ public:
 };
 
 class TAssembleDataStep: public IFetchingStep {
+public:
+    NScanStats::TStep::EStepKind GetStatsKind() const override {
+        return NScanStats::TStep::Assemble;
+    }
+
+private:
 private:
     std::shared_ptr<NReader::NCommon::TColumnsSetIds> ColumnIds;
 

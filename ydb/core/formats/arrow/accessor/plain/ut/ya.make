@@ -3,6 +3,11 @@ UNITTEST_FOR(ydb/core/formats/arrow/accessor/plain)
 SIZE(SMALL)
 
 PEERDIR(
+    ydb/core/formats/arrow/accessor/composite_serial
+    ydb/core/formats/arrow/accessor/sparsed
+    ydb/core/formats/arrow/reader/stats
+    ydb/core/formats/arrow/save_load
+    ydb/core/formats/arrow/serializer
     ydb/core/formats/arrow/accessor/plain
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy

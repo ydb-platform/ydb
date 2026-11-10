@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
+#include <ydb/core/kqp/compute_actor/kqp_scan_events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -16,6 +17,195 @@ void Report(TStageExecutionStats& stage, ui32 nodeId, ui64 taskId, NYql::NDqProt
     stage.UpdateStats(nodeId, TaskStats(taskId), state, 0, 0, 0);
 }
 
+Y_UNIT_TEST_SUITE(TColumnShardV2Transport) {
+    Y_UNIT_TEST(PreservesSemanticContextAcrossWireAndEmptyFinalReport) {
+        NKqpProto::TColumnShardScanStats first;
+        first.SetStatsScanId("v2-attempt");
+        first.SetTabletId(42);
+        first.SetReaderKind("PLAIN");
+        first.SetPendingOperations(2);
+        first.SetStatsGroupId("group-1");
+        first.SetParticipatingShards(2);
+        first.AddParticipatingTablets(42);
+        first.AddParticipatingTablets(43);
+        auto* step = first.AddSteps();
+        step->SetStepId(7);
+        step->SetStepKind(NKqpProto::TColumnShardStepStats::Decode);
+        step->SetMetaStep("PKFilter");
+        step->SetCanonicalPath("Merge");
+        step->SetOwnedExecutionDuration(0);
+
+        NKqpProto::TColumnShardScanStats remote;
+        UNIT_ASSERT(remote.ParseFromString(first.SerializeAsString()));
+        TColumnShardScanStatsCollection collection;
+        collection.Merge(remote);
+        collection.Merge(remote);
+
+        remote.ClearReaderKind();
+        remote.ClearTabletId();
+        remote.ClearStatsGroupId();
+        remote.ClearParticipatingShards();
+        remote.ClearParticipatingTablets();
+        remote.ClearSteps();
+        remote.SetFinished(true);
+        remote.SetPendingOperations(0);
+        collection.Merge(remote);
+        collection.Merge(first);
+
+        google::protobuf::RepeatedPtrField<NKqpProto::TColumnShardScanStats> reports;
+        collection.Export(&reports);
+        UNIT_ASSERT_VALUES_EQUAL(reports.size(), 1);
+        const auto& report = reports.Get(0);
+        UNIT_ASSERT_VALUES_EQUAL(report.GetReaderKind(), "PLAIN");
+        UNIT_ASSERT_VALUES_EQUAL(report.GetTabletId(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(report.GetStatsGroupId(), "group-1");
+        UNIT_ASSERT_VALUES_EQUAL(report.GetParticipatingShards(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(report.ParticipatingTabletsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(report.GetParticipatingTablets(0), 42);
+        UNIT_ASSERT_VALUES_EQUAL(report.GetParticipatingTablets(1), 43);
+        UNIT_ASSERT(report.GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(report.GetPendingOperations(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(report.StepsSize(), 1);
+        const auto& restored = report.GetSteps(0);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetMetaStep(), "PKFilter");
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetCanonicalPath(), "Merge");
+        UNIT_ASSERT(restored.HasOwnedExecutionDuration());
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetOwnedExecutionDuration(), 0);
+    }
+
+    Y_UNIT_TEST(ExpectedRosterRemainsSeparateFromRuntimeAttempts) {
+        NKqpProto::TColumnShardScanStats expected;
+        expected.SetStatsScanId("group:expected");
+        expected.SetStatsGroupId("group");
+        expected.SetParticipatingShards(16);
+        expected.SetExpectedContextOnly(true);
+        expected.SetFinished(true);
+        for (ui64 tabletId = 1; tabletId <= 16; ++tabletId) {
+            expected.AddParticipatingTablets(tabletId);
+        }
+        TColumnShardScanStatsCollection collection;
+        collection.Merge(expected);
+        collection.Merge(expected);
+
+        NKqpProto::TColumnShardScanStats runtime;
+        runtime.SetStatsScanId("group:attempt");
+        runtime.SetStatsGroupId("group");
+        runtime.SetTabletId(1);
+        runtime.SetReaderKind("TRIVIAL");
+        runtime.SetFinished(true);
+        collection.Merge(runtime);
+
+        google::protobuf::RepeatedPtrField<NKqpProto::TColumnShardScanStats> reports;
+        collection.Export(&reports);
+        UNIT_ASSERT_VALUES_EQUAL(reports.size(), 2);
+        ui32 expectedCount = 0;
+        ui32 runtimeCount = 0;
+        for (const auto& report : reports) {
+            if (report.GetExpectedContextOnly()) {
+                ++expectedCount;
+                UNIT_ASSERT_VALUES_EQUAL(report.GetTabletId(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(report.ParticipatingTabletsSize(), 16);
+                UNIT_ASSERT_VALUES_EQUAL(report.StepsSize(), 0);
+            } else {
+                ++runtimeCount;
+                UNIT_ASSERT_VALUES_EQUAL(report.GetTabletId(), 1);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(expectedCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(runtimeCount, 1);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TColumnShardV3Transport) {
+    Y_UNIT_TEST(StorageSnapshotsAreCumulativeAndKeepReadIdentity) {
+        NKqpProto::TColumnShardScanStats first;
+        first.SetStatsScanId("v3-read-a");
+        first.SetTabletId(42);
+        first.SetTablePath("/Root/A");
+        first.SetStorageStatsVersion(1);
+        auto* initial = first.AddStorageReads();
+        initial->SetSourceKind("BlobStorage");
+        initial->SetSourceName("__DEFAULT");
+        initial->SetDataKind("data");
+        initial->SetReadBytes(32);
+        initial->SetReadCount(1);
+        auto* step = first.AddSteps();
+        step->SetStepId(1);
+        step->SetStepKind(NKqpProto::TColumnShardStepStats::StorageRead);
+        step->AddDataSourceReads()->CopyFrom(*initial);
+        auto* index = step->AddIndexDescriptors();
+        index->SetIndexId(9);
+        index->SetName("marker_bloom");
+        index->SetType("BLOOM_FILTER");
+        index->AddColumns("marker");
+        step->SetApplicationOrder(2);
+        step->SetSharedIndexInputs(true);
+
+        NKqpProto::TColumnShardScanStats wire;
+        UNIT_ASSERT(wire.ParseFromString(first.SerializeAsString()));
+        TColumnShardScanStatsCollection collection;
+        collection.Merge(wire);
+        collection.Merge(wire);
+
+        auto update = wire;
+        update.ClearSteps();
+        update.ClearTablePath();
+        auto* total = update.MutableStorageReads(0);
+        total->SetReadBytes(96);
+        total->SetReadCount(3);
+        total->SetUnknownByteReads(1);
+        total->SetDataKind("mixed");
+        total->SetShared(true);
+        auto* cache = update.AddStorageReads();
+        cache->SetSourceKind("BlobCache");
+        cache->SetSourceName("blob-cache");
+        cache->SetReadBytes(64);
+        cache->SetReadCount(1);
+        cache->SetDataKind("data");
+        collection.Merge(update);
+        collection.Merge(update);
+        collection.Merge(wire);
+
+        NKqpProto::TColumnShardScanStats finished;
+        finished.SetStatsScanId(first.GetStatsScanId());
+        finished.SetFinished(true);
+        collection.Merge(finished);
+        NKqpProto::TColumnShardScanStats other;
+        other.SetStatsScanId("v3-read-b");
+        other.SetTabletId(42);
+        other.SetTablePath("/Root/B");
+        other.SetStorageStatsVersion(1);
+        auto* otherRead = other.AddStorageReads();
+        otherRead->CopyFrom(*initial);
+        otherRead->SetReadBytes(7);
+        collection.Merge(other);
+
+        google::protobuf::RepeatedPtrField<NKqpProto::TColumnShardScanStats> reports;
+        collection.Export(&reports);
+        UNIT_ASSERT_VALUES_EQUAL(reports.size(), 2);
+        const auto& restored = reports.Get(0);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetStatsScanId(), "v3-read-a");
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetTablePath(), "/Root/A");
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetStorageStatsVersion(), 1);
+        UNIT_ASSERT(restored.GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(restored.StorageReadsSize(), 2);
+        const auto& storage = restored.GetStorageReads(0);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetReadBytes(), 96);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetReadCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetUnknownByteReads(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetDataKind(), "mixed");
+        UNIT_ASSERT(storage.GetShared());
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetStorageReads(1).GetReadBytes(), 64);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSteps(0).GetDataSourceReads(0).GetReadBytes(), 32);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSteps(0).GetIndexDescriptors(0).GetName(), "marker_bloom");
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSteps(0).GetIndexDescriptors(0).GetColumns(0), "marker");
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSteps(0).GetApplicationOrder(), 2);
+        UNIT_ASSERT(restored.GetSteps(0).GetSharedIndexInputs());
+        UNIT_ASSERT_VALUES_EQUAL(reports.Get(1).GetTablePath(), "/Root/B");
+        UNIT_ASSERT_VALUES_EQUAL(reports.Get(1).GetStorageReads(0).GetReadBytes(), 7);
+    }
+}
+
 TStageExecutionStats PreparedStage(ui32 taskCount) {
     TStageExecutionStats stage;
     for (ui64 taskId = 1; taskId <= taskCount; ++taskId) {
@@ -29,6 +219,91 @@ TStageExecutionStats PreparedStage(ui32 taskCount) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpExecuterStats) {
+
+    Y_UNIT_TEST(ColumnShardStatsSnapshotsReplaceRecords) {
+        auto stage = PreparedStage(1);
+        auto task = TaskStats(1);
+        NKqpProto::TKqpTaskExtraStats extra;
+        auto* scan = extra.MutableScanTaskExtraStats()->AddColumnShardScans();
+        scan->SetStatsScanId("scan:attempt1");
+        scan->SetTabletId(42);
+        auto* step = scan->AddSteps();
+        step->SetStepId(1);
+        step->SetStepKind(NKqpProto::TColumnShardStepStats::Filter);
+        step->SetOutcome(NKqpProto::TColumnShardStepStats::completed);
+        step->SetReadBytes(0);
+        step->MutableDetails()->MutableFilter()->SetInputRows(100);
+        step->MutableDetails()->MutableFilter()->SetOutputRows(20);
+        task.MutableExtra()->PackFrom(extra);
+        stage.UpdateStats(7, task, NYql::NDqProto::COMPUTE_STATE_EXECUTING, 0, 0, 0);
+        stage.UpdateStats(7, task, NYql::NDqProto::COMPUTE_STATE_EXECUTING, 0, 0, 0);
+
+        scan->SetFinished(true);
+        scan->SetTruncated(true);
+        scan->MutableCacheStats()->SetReturnedBytes(20);
+        scan->AddSteps()->SetStepId(2);
+        task.MutableExtra()->PackFrom(extra);
+        stage.UpdateStats(7, task, NYql::NDqProto::COMPUTE_STATE_FINISHED, 0, 0, 0);
+
+        google::protobuf::RepeatedPtrField<NKqpProto::TColumnShardScanStats> reports;
+        stage.ColumnShardScans.Export(&reports);
+        UNIT_ASSERT_VALUES_EQUAL(reports.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reports.Get(0).StepsSize(), 2);
+        UNIT_ASSERT(reports.Get(0).GetFinished());
+        UNIT_ASSERT(reports.Get(0).GetTruncated());
+        UNIT_ASSERT_VALUES_EQUAL(reports.Get(0).GetCacheStats().GetReturnedBytes(), 20);
+        UNIT_ASSERT(reports.Get(0).GetSteps(0).HasReadBytes());
+        UNIT_ASSERT(!reports.Get(0).GetSteps(0).HasIntegralWaitDuration());
+        UNIT_ASSERT(stage.ComputeActors.empty());
+
+        const auto first = reports.Get(0).SerializeAsString();
+        stage.ColumnShardScans.Export(&reports);
+        UNIT_ASSERT_VALUES_EQUAL(reports.Get(0).SerializeAsString(), first);
+        // An older snapshot cannot reopen the scan or duplicate an operation.
+        scan->SetFinished(false);
+        scan->ClearSteps();
+        scan->MutableCacheStats()->SetReturnedBytes(1);
+        task.MutableExtra()->PackFrom(extra);
+        stage.UpdateStats(7, task, NYql::NDqProto::COMPUTE_STATE_EXECUTING, 0, 0, 0);
+        stage.ColumnShardScans.Export(&reports);
+        UNIT_ASSERT_VALUES_EQUAL(reports.Get(0).SerializeAsString(), first);
+
+        scan->SetStatsScanId("scan:attempt2");
+        task.MutableExtra()->PackFrom(extra);
+        stage.UpdateStats(7, task, NYql::NDqProto::COMPUTE_STATE_EXECUTING, 0, 0, 0);
+        stage.ColumnShardScans.Export(&reports);
+        UNIT_ASSERT_VALUES_EQUAL(reports.size(), 2);
+    }
+
+    Y_UNIT_TEST(ColumnShardStatsRemoteFinalEmptyBatch) {
+        TEvKqpCompute::TEvScanData event(7, 2);
+        event.Finished = true;
+        event.ColumnShardStats = std::make_unique<NKqpProto::TColumnShardScanStats>();
+        auto& scan = *event.ColumnShardStats;
+        scan.SetStatsScanId("scan:attempt2");
+        scan.SetTabletId(42);
+        scan.SetFinished(true);
+        auto* step = scan.AddSteps();
+        step->SetStepId(1);
+        step->SetStepKind(NKqpProto::TColumnShardStepStats::Decode);
+        step->SetIntegralExecutionDuration(0);
+        step->SetOutcome(NKqpProto::TColumnShardStepStats::failed);
+        step->MutableDetails()->MutableDecode()->SetEncodedInputBytes(17);
+
+        NActors::TAllocChunkSerializer serializer;
+        UNIT_ASSERT(event.SerializeToArcadiaStream(&serializer));
+        auto serialized = serializer.Release(event.CreateSerializationInfo(false));
+        THolder<TEvKqpCompute::TEvScanData> restored(TEvKqpCompute::TEvScanData::Load(serialized.Get()));
+        UNIT_ASSERT(restored->Finished);
+        UNIT_ASSERT(restored->IsEmpty());
+        UNIT_ASSERT(restored->ColumnShardStats);
+        UNIT_ASSERT_VALUES_EQUAL(restored->ColumnShardStats->SerializeAsString(), scan.SerializeAsString());
+
+        NScanPrivate::TEvScanExchange::TEvSendData metadata(std::move(restored->ColumnShardStats));
+        UNIT_ASSERT(metadata.IsStatsOnly());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetRowsCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetColumnShardStats()->GetStatsScanId(), "scan:attempt2");
+    }
 
     Y_UNIT_TEST(StageNodeCountedOnFirstReport) {
         auto stage = PreparedStage(3);

@@ -102,6 +102,10 @@ const NCommon::TPKSortPermutation& TSourceData::GetChunksPKOrder() const {
     return *ChunksPKOrder;
 }
 
+bool TSourceData::IsStorageBackedColumn(ui64 columnId) const {
+    return columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId;
+}
+
 std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::PathId::ColumnId) {
         return NArrow::TStatusValidator::GetValid(

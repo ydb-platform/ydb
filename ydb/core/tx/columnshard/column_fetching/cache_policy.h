@@ -1,4 +1,6 @@
 #pragma once
+
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/meta.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
@@ -79,7 +81,11 @@ public:
         }
     };
 
-    static TString GetCacheName() {
+        static void OnStatsCacheHit(const TObject& object);
+        static void OnStatsSharedRead(const TObject& object, const NScanStats::TCapture& capture);
+        static NScanStats::TCapture CaptureStatsRequest() { return {}; }
+
+        static TString GetCacheName() {
         return "column_data";
     }
 

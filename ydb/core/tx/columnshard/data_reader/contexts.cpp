@@ -7,10 +7,34 @@ namespace NKikimr::NOlap::NDataFetcher {
 
 IFetchingStep::EStepResult IFetchingStep::Execute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const {
     if (fetchingContext->IsAborted()) {
+        fetchingContext->FinishStatsOperation(NScanStats::TStep::cancelled);
         fetchingContext->OnError("aborted");
         return EStepResult::Error;
     }
-    return DoExecute(fetchingContext);
+    const auto& capture = fetchingContext->GetStatsCapture();
+    auto operation = fetchingContext->GetStatsOperation();
+    if (!operation && capture.Collector) {
+        operation = capture.Collector->Start(GetStatsKind(),
+            TString(NScanStats::TStep::EStepKind_Name(GetStatsKind())), "Fetch portion inputs", NScanStats::Current());
+        if (operation && fetchingContext->GetInput().GetConsumer() == NBlobOperations::EConsumer::DUPLICATE_FILTERING) {
+            operation->Update([](auto& record) {
+                record.SetMetaStep("PKFilter");
+                record.SetCanonicalPath("Filter/Merge");
+            });
+        }
+        fetchingContext->SetStatsOperation(operation, this);
+    }
+    NScanStats::TScope statsScope(operation, capture.Collector);
+    const auto result = DoExecute(fetchingContext);
+    if (operation) {
+        if (result == EStepResult::Detached) {
+            operation->Suspend();
+        } else {
+            fetchingContext->FinishStatsOperation(result == EStepResult::Error
+                ? NScanStats::TStep::failed : NScanStats::TStep::completed);
+        }
+    }
+    return result;
 }
 
 TRequestInput::TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,

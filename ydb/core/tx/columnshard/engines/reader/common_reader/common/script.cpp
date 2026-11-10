@@ -4,6 +4,11 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+static TString GetStatsMetaStep(NArrow::NSSA::IMemoryCalculationPolicy::EStage stage, bool plain) {
+    return !plain && stage == NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching
+        ? TString("FetchOtherColumns") : TString("PKFilter");
+}
+
 TString TFetchingScript::DebugString() const {
     TStringBuilder sb;
     TStringBuilder sbBranch;
@@ -42,7 +47,9 @@ TString TFetchingScript::ProfileDebugString() const {
 void TFetchingScriptBuilder::AddAllocation(
     const std::set<ui32>& entityIds, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage, const EMemType mType) {
     if (Steps.size() == 0) {
-        AddStep(std::make_shared<TAllocateMemoryStep>(entityIds, mType, stage));
+        auto allocation = std::make_shared<TAllocateMemoryStep>(entityIds, mType, stage);
+        allocation->SetStatsMetaStep(GetStatsMetaStep(stage, PlainStats));
+        AddStep(std::move(allocation));
     } else {
         std::optional<ui32> addIndex;
         for (i32 i = Steps.size() - 1; i >= 0; --i) {
@@ -65,6 +72,7 @@ void TFetchingScriptBuilder::AddAllocation(
         }
         AFL_VERIFY(addIndex);
         InsertStep<TAllocateMemoryStep>(*addIndex, entityIds, mType, stage);
+        Steps[*addIndex]->SetStatsMetaStep(GetStatsMetaStep(stage, PlainStats));
     }
 }
 
@@ -82,6 +90,9 @@ TString IFetchingStep::DebugString(const bool stats) const {
 TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& context)
     : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns())
 {
+    if (const auto& collector = context.GetCommonContext()->GetRuntimeStats()) {
+        PlainStats = collector->GetReaderKind() == "PLAIN";
+    }
 }
 
 void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {
@@ -91,13 +102,18 @@ void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, cons
         return;
     }
     if (Steps.size() && std::dynamic_pointer_cast<TColumnBlobsFetchingStep>(Steps.back())) {
+        const TString previousMeta = Steps.back()->GetStatsMetaStep();
         TColumnsSetIds fetchingColumns = actualColumns + std::dynamic_pointer_cast<TColumnBlobsFetchingStep>(Steps.back())->GetColumns();
         Steps.pop_back();
         AddAllocation(actualColumns.GetColumnIds(), stage, EMemType::Blob);
-        AddStep(std::make_shared<TColumnBlobsFetchingStep>(fetchingColumns));
+        auto fetch = std::make_shared<TColumnBlobsFetchingStep>(fetchingColumns);
+        fetch->SetStatsMetaStep(previousMeta == "PKFilter" ? previousMeta : GetStatsMetaStep(stage, PlainStats));
+        AddStep(std::move(fetch));
     } else {
         AddAllocation(actualColumns.GetColumnIds(), stage, EMemType::Blob);
-        AddStep(std::make_shared<TColumnBlobsFetchingStep>(actualColumns));
+        auto fetch = std::make_shared<TColumnBlobsFetchingStep>(actualColumns);
+        fetch->SetStatsMetaStep(GetStatsMetaStep(stage, PlainStats));
+        AddStep(std::move(fetch));
     }
 }
 
@@ -109,21 +125,25 @@ void TFetchingScriptBuilder::AddAssembleStep(
         return;
     }
     auto actualSet = std::make_shared<TColumnsSet>(actualColumns.GetColumnIds(), FullSchema);
+    const auto addAssembler = [&](auto assembler) {
+        assembler->SetStatsMetaStep(GetStatsMetaStep(stage, PlainStats));
+        AddStep(std::move(assembler));
+    };
     if (sequential) {
         const auto notSequentialColumnIds = GuaranteeNotOptional->Intersect(*actualSet);
         if (notSequentialColumnIds.size()) {
             AddAllocation(notSequentialColumnIds, stage, EMemType::Raw);
             std::shared_ptr<TColumnsSet> cross = actualSet->BuildSamePtr(notSequentialColumnIds);
-            AddStep(std::make_shared<TAssemblerStep>(cross, purposeId));
+            addAssembler(std::make_shared<TAssemblerStep>(cross, purposeId));
             *actualSet = *actualSet - *cross;
         }
         if (!actualSet->IsEmpty()) {
             AddAllocation(actualSet->GetColumnIds(), stage, EMemType::RawSequential);
-            AddStep(std::make_shared<TOptionalAssemblerStep>(actualSet, purposeId));
+            addAssembler(std::make_shared<TOptionalAssemblerStep>(actualSet, purposeId));
         }
     } else {
         AddAllocation(actualColumns.GetColumnIds(), stage, EMemType::Raw);
-        AddStep(std::make_shared<TAssemblerStep>(actualSet, purposeId));
+        addAssembler(std::make_shared<TAssemblerStep>(actualSet, purposeId));
     }
 }
 

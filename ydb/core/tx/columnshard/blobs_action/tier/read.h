@@ -13,6 +13,8 @@ private:
     // The holder is shared with the storage operator: every (re)try of a read uses the current external storage operator,
     // so reads started while the tier was unavailable succeed as soon as the tier is configured
     const std::shared_ptr<TExternalStorageOperatorHolder> ExternalStorageOperator;
+    THashMap<TBlobRange, std::shared_ptr<NScanStats::TOperation>> ReadAttempts;
+    THashSet<TBlobRange> DispatchedRanges;
 
 protected:
     virtual void DoStartReading(THashSet<TBlobRange>&& ranges) override;
@@ -23,6 +25,8 @@ protected:
     }
 
 public:
+    void OnReadAttemptResult(const TBlobRange& range, std::optional<ui64> payloadBytes, bool success) override;
+
     TReadingAction(const TString& storageId, const std::shared_ptr<TExternalStorageOperatorHolder>& storageOperator)
         : TBase(storageId)
         , ExternalStorageOperator(storageOperator)

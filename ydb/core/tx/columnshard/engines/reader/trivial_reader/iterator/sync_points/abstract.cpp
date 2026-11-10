@@ -1,5 +1,7 @@
 #include "abstract.h"
 
+#include <optional>
+
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/plain_read_data.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
@@ -12,12 +14,28 @@ namespace NKikimr::NOlap::NReader::NTrivial {
 
 void ISyncPoint::OnSourcePrepared(std::unique_ptr<NCommon::TDataSourceLease> lease, TPlainReadData& reader) {
     auto& source = lease->GetSource();
+    const auto runtimeStats = Context->GetCommonContext()->GetRuntimeStats();
+    auto readyStats = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Ready,
+        GetPointName(), "Dispatch prepared source in order", nullptr, source.GetSourceId()) : nullptr;
+    if (readyStats) {
+        readyStats->Update([](auto& record) {
+            record.SetMetaStep("Output");
+            record.SetCanonicalPath("");
+        });
+    }
+    std::optional<NScanStats::TScope> readyScope;
+    if (readyStats) {
+        readyScope.emplace(readyStats, runtimeStats);
+    }
     YDB_LOG_CREATE_CONTEXT(
         {"syncPoint", GetPointName()},
         {"aborted", AbortFlag},
         {"tabletId", Context->GetCommonContext()->GetReadMetadata()->GetTabletId()},
         {"preparedSourceIdx", source.GetSourceIdx()});
     if (AbortFlag) {
+        if (readyStats) {
+            readyStats->Finish(NScanStats::TStep::cancelled);
+        }
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("a" + GetShortPointName()));
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
             {"event", "sync_point_aborted"});
@@ -42,12 +60,26 @@ void ISyncPoint::OnSourcePrepared(std::unique_ptr<NCommon::TDataSourceLease> lea
     AFL_VERIFY(itEntry != SourcesSequentially.end())("source_idx", source.GetSourceIdx());
     AFL_VERIFY(!itEntry->Lease);
     itEntry->Lease = std::move(lease);
+    itEntry->ReadyStats = readyStats;
+    readyScope.reset();
+    if (readyStats) {
+        readyStats->Suspend();
+    }
     AFL_VERIFY(itEntry != SourcesSequentially.begin() || IsPrepared(*itEntry));
     bool drain = true;
     while (drain && SourcesSequentially.size() && IsPrepared(SourcesSequentially.front())) {
         auto& front = SourcesSequentially.front();
         auto& frontSource = front.Lease->GetSource();
-        switch (OnSourceReady(*front.Lease, reader)) {
+        const auto action = [&] {
+            auto dispatchStats = std::move(front.ReadyStats);
+            NScanStats::TScope scope(dispatchStats, runtimeStats);
+            const auto result = OnSourceReady(*front.Lease, reader);
+            if (dispatchStats) {
+                dispatchStats->Finish();
+            }
+            return result;
+        }();
+        switch (action) {
             case ESourceAction::Finish: {
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                     {"event", "finish_source"},

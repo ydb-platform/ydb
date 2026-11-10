@@ -14,10 +14,33 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/dictionary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
+#include <contrib/libs/apache/arrow/cpp/src/generated/Message.fbs.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
 
 namespace NKikimr::NArrow::NSerialization {
+
+std::optional<TString> TNativeSerializer::TryGetReadCodec(const TString& data) {
+    auto buffer = std::make_shared<TBufferOverString>(data);
+    arrow::io::BufferReader reader(buffer);
+    auto result = arrow::ipc::ReadMessage(&reader);
+    if (!result.ok() || !*result || (*result)->type() != arrow::ipc::MessageType::RECORD_BATCH || !(*result)->Verify()) {
+        return {};
+    }
+    const auto* batch = static_cast<const org::apache::arrow::flatbuf::RecordBatch*>((*result)->header());
+    const auto* compression = batch->compression();
+    if (!compression) {
+        return "uncompressed";
+    }
+    if (compression->method() != org::apache::arrow::flatbuf::BodyCompressionMethod::BUFFER) {
+        return {};
+    }
+    switch (compression->codec()) {
+        case org::apache::arrow::flatbuf::CompressionType::LZ4_FRAME: return "lz4";
+        case org::apache::arrow::flatbuf::CompressionType::ZSTD: return "zstd";
+        default: return {};
+    }
+}
 
 arrow::ipc::IpcOptions TNativeSerializer::BuildDefaultOptions() {
     arrow::ipc::IpcWriteOptions options;

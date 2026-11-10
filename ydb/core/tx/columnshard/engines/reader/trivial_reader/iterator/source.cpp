@@ -2,6 +2,9 @@
 #include "plain_read_data.h"
 #include "source.h"
 
+#include <ydb/core/formats/arrow/program/index.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/stats.h>
+
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
@@ -141,7 +144,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
                 reading->SetIsBackgroundProcess(false);
-                reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange));
+                reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange), {}, NKqpProto::TColumnShardStepDetails::TStorageRead::data);
                 ++fetchedChunks;
             } else {
                 defaultBlocks.emplace(c->GetAddress(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
@@ -246,6 +249,30 @@ THashMap<IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>>
 // Addresses match TIndexFetcherLogic: one per distinct category. An in-place chunk is copied once per
 // address, and an ordinary bloom header names the whole chunk for every category. A blob chunk is read
 // by unique ranges, so its stored size stays the upper bound.
+void TPortionDataSource::FillIndexStatsContext(
+    const std::vector<std::shared_ptr<NArrow::NSSA::IResourceProcessor>>& indexProcessors, NScanStats::TStep& record) const {
+    const auto& resolver = *GetContext()->GetCommonContext()->GetResolver();
+    for (const auto& processor : indexProcessors) {
+        const auto* checker = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
+        if (!checker) {
+            continue;
+        }
+        const auto check = checker->GetIndexContext();
+        const TFetchIndexContext fetch(check.GetColumnId(),
+            TFetchIndexContext::TOperationsBySubColumn().Add(check.GetSubColumnName(), check.GetOperation()));
+        for (auto&& [_, index] : SelectIndexesForFetch(fetch)) {
+            if (!index) {
+                const NIndexes::NRequest::TOriginalDataAddress address(check.GetColumnId(), check.GetSubColumnName());
+                index = SelectOptimalIndex(GetContext()->GetReadMetadata()->GetIndexInfo().FindSkipIndexes(address, check.GetOperation()),
+                    check.GetOperation());
+            }
+            if (index) {
+                NIndexes::AddIndexStatsDescriptor(record, *index, [&](ui32 id) { return resolver.GetColumnName(id, false); });
+            }
+        }
+    }
+}
+
 ui64 TPortionDataSource::GetIndexesDataSizeForFetch(const THashMap<ui32, TFetchIndexContext>& indexes) const {
     struct TSelected {
         std::shared_ptr<NIndexes::IIndexMeta> Meta;
@@ -310,12 +337,33 @@ TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDat
 TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     const NArrow::NSSA::TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) {
     auto meta = MutableStageData().GetRemapDataToIndex(fetchContext);
+    if (const auto& operation = NScanStats::Current()) {
+        const ui64 order = MutableExecutionContext().AllocateIndexCheckStatsOrder();
+        operation->Update([&](NScanStats::TStep& record) {
+            record.SetApplicationOrder(order);
+            auto* details = record.MutableDetails()->MutableIndexCheck();
+            details->SetIndexAvailable(bool(meta));
+            const ui64 inputRows = context.GetResources().GetFilter().GetFilteredCount().value_or(GetRecordsCount());
+            details->SetCandidateInputRows(inputRows);
+            details->SetCandidateOutputRows(inputRows);
+        });
+    }
     if (!meta) {
         NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});
         GetContext()->GetCommonContext()->GetCounters().OnNoIndex(GetRecordsCount());
+        if (const auto& operation = NScanStats::Current()) {
+            operation->Update([](NScanStats::TStep& record) {
+                record.SetOperation(record.GetOperation() + " (index unavailable)");
+            });
+        }
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
     AFL_VERIFY(meta->IsSkipIndex());
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            record.MutableDetails()->MutableIndexCheck()->SetIndexType(meta->GetClassName());
+        });
+    }
 
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(meta->GetIndexId())) {
         auto& source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
@@ -330,8 +378,18 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
 
     const std::optional<ui64> cat = meta->CalcCategory(fetchContext.GetSubColumnName());
     const NIndexes::TIndexColumnChunked* infoPointer = GetStageData().GetIndexes()->GetIndexDataOptional(meta->GetIndexId());
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            record.MutableDetails()->MutableIndexCheck()->SetIndexDataAvailable(bool(infoPointer));
+        });
+    }
     if (!infoPointer) {
         GetContext()->GetCommonContext()->GetCounters().OnNoIndexBlobs(GetRecordsCount());
+        if (const auto& operation = NScanStats::Current()) {
+            operation->Update([](NScanStats::TStep& record) {
+                record.SetOperation(record.GetOperation() + " (index data unavailable)");
+            });
+        }
         return filter;
     }
     const auto info = *infoPointer;
@@ -348,7 +406,17 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
             GetContext()->GetCommonContext()->GetCounters().OnDeniedByIndex(i.GetRecordsCount());
         }
     }
-    return filter.And(context.GetResources().GetFilter());
+    auto result = filter.And(context.GetResources().GetFilter());
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            auto* details = record.MutableDetails()->MutableIndexCheck();
+            details->SetInputRows(context.GetResources().GetFilter().GetFilteredCount().value_or(GetRecordsCount()));
+            details->SetOutputRows(result.GetFilteredCount().value_or(GetRecordsCount()));
+            details->SetCandidateInputRows(details->GetInputRows());
+            details->SetCandidateOutputRows(details->GetOutputRows());
+        });
+    }
+    return result;
 }
 
 void TPortionDataSource::DoAbort() {

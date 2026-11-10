@@ -1,4 +1,6 @@
 #pragma once
+
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include <ydb/core/base/events.h>
 
 #include <ydb/library/actors/core/event_local.h>
@@ -23,6 +25,13 @@ struct TEvents {
     };
 
     class TEvObjectsInfo: public NActors::TEventLocal<TEvObjectsInfo, EvObjectsInfo> {
+    public:
+        const NScanStats::TCapture& GetStatsCapture() const {
+            return StatsCapture;
+        }
+
+    private:
+        NScanStats::TCapture StatsCapture;
     private:
         bool RemovedExtracted = false;
         THashSet<TAddress> Removed;
@@ -68,6 +77,13 @@ struct TEvents {
     };
 
     class TEvAdditionalObjectsInfo: public NActors::TEventLocal<TEvAdditionalObjectsInfo, EvAdditionalObjectsInfo> {
+    public:
+        const NScanStats::TCapture& GetStatsCapture() const {
+            return StatsCapture;
+        }
+
+    private:
+        NScanStats::TCapture StatsCapture;
     private:
         bool AddObjectsExtracted = false;
         THashMap<TAddress, TObject> AddObjects;

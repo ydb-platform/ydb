@@ -88,10 +88,25 @@ void TKqpScanFetcherActor::Bootstrap() {
     for (const auto& read : Meta.GetReads()) {
         auto& state = PendingShards.emplace_back(TShardState(read.GetShardId()));
         state.Ranges = BuildSerializedTableRanges(read);
+        if (TableKind == NKqp::ETableKind::Olap && RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL) {
+            StatsParticipatingTablets.emplace(read.GetShardId());
+        }
     }
     RegistrationStartTime = Now();
     for (auto&& c : ComputeActorIds) {
         Sender<TEvScanExchange::TEvRegisterFetcher>().SendTo(c);
+    }
+    if (!StatsParticipatingTablets.empty()) {
+        auto expected = std::make_unique<NKqpProto::TColumnShardScanStats>();
+        expected->SetStatsScanId(SelfId().ToString() + ":expected");
+        expected->SetStatsGroupId(SelfId().ToString());
+        expected->SetParticipatingShards(StatsParticipatingTablets.size());
+        expected->SetExpectedContextOnly(true);
+        expected->SetFinished(true);
+        for (ui64 tabletId : StatsParticipatingTablets) {
+            expected->AddParticipatingTablets(tabletId);
+        }
+        Send(ComputeActorIds.front(), new TEvScanExchange::TEvSendData(std::move(expected)));
     }
     YDB_LOG_DEBUG("Bootstrapped scan fetcher actor",
         {"event", "bootstrap"},
@@ -645,6 +660,12 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
         {"locksCount", msg.LocksInfo.Locks.size()},
         {"brokenLocksCount", msg.LocksInfo.BrokenLocks.size()});
     auto shardScanner = InFlightShards.GetShardScannerVerified(state->TabletId);
+    if (msg.ColumnShardStats && RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL) {
+        msg.ColumnShardStats->SetStatsGroupId(SelfId().ToString());
+        msg.ColumnShardStats->SetParticipatingShards(StatsParticipatingTablets.size());
+        // Statistics have one owner even when data batches are split or sent to different tasks.
+        Send(ComputeActorIds.front(), new TEvScanExchange::TEvSendData(std::move(msg.ColumnShardStats)));
+    }
     auto tasksForCompute = shardScanner->OnReceiveData(msg, shardScanner);
     AFL_ENSURE(tasksForCompute.size() == 1 || tasksForCompute.size() == 0 || tasksForCompute.size() == ComputeActorIds.size())(
         "size", tasksForCompute.size())("compute_size", ComputeActorIds.size());

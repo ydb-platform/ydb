@@ -631,8 +631,12 @@ void TPlan::LoadOperators(const std::shared_ptr<TStage>& stage, const NJson::TJs
 // output channel, spilling, and the external source if there is one. Returns
 // the Input node the rest of the loading needs, or nullptr.
 const NJson::TJsonValue* TPlan::LoadStageStats(const std::shared_ptr<TStage>& stage, TStage* externalStage, TConnection* outputConnection) {
+    stage->ColumnShardScans = NJson::TJsonValue();
     if (!stage->StatsNode) {
         return nullptr;
+    }
+    if (auto* scans = stage->StatsNode->GetValueByPath("ColumnShardScans"); scans && scans->GetType() == NJson::JSON_ARRAY) {
+        stage->ColumnShardScans = *scans;
     }
 
     if (externalStage) {

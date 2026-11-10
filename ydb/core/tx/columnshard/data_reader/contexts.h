@@ -1,4 +1,6 @@
 #pragma once
+
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
@@ -58,6 +60,10 @@ public:
     void SetBlobs(NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
         AFL_VERIFY(!Blobs);
         Blobs = std::move(blobs);
+    }
+
+    std::optional<ui64> GetBlobBytesForStats() const {
+        return Blobs ? std::make_optional(Blobs->GetTotalBlobsSize()) : std::nullopt;
     }
 
     NBlobOperations::NRead::TCompositeReadBlobs& MutableBlobs() {
@@ -169,6 +175,12 @@ public:
 class TPortionsDataFetcher;
 
 class IFetchingStep {
+public:
+    virtual NScanStats::TStep::EStepKind GetStatsKind() const {
+        return NScanStats::TStep::Reader;
+    }
+
+private:
 public:
     enum class EStepResult {
         Continue,

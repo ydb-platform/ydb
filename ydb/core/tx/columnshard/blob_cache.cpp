@@ -28,13 +28,19 @@ using namespace NActors;
 
 class TBlobCache: public TActorBootstrapped<TBlobCache> {
 private:
+    struct TWaiter {
+        TActorId ActorId;
+        NOlap::TReadStatsContext Stats;
+    };
+
     struct TReadInfo {
         /// List of readers.
-        TList<TActorId> Waiting;
+        TList<TWaiter> Waiting;
         /// Put in cache after read.
         bool Cache{ false };
         /// Write-fill asked for sticky while this read was already in flight.
         bool Sticky{ false };
+        bool Tracked{ false };
     };
 
     struct TReadItem: public TReadBlobRangeOptions {
@@ -45,10 +51,12 @@ private:
         };
 
         TBlobRange BlobRange;
+        NOlap::TReadStatsContext Stats;
 
-        TReadItem(const TReadBlobRangeOptions& opts, const TBlobRange& blobRange)
+        TReadItem(const TReadBlobRangeOptions& opts, const TBlobRange& blobRange, NOlap::TReadStatsContext stats = {})
             : TReadBlobRangeOptions(opts)
             , BlobRange(blobRange)
+            , Stats(std::move(stats))
         {
             Y_ABORT_UNLESS(blobRange.BlobId.IsValid());
         }
@@ -119,6 +127,8 @@ private:
     i64 StickyDataSize;
     ui64 ReadCookie;
     THashMap<ui64, std::vector<TBlobRange>> CookieToRange;   // All in-flight requests
+    THashMap<ui64, std::shared_ptr<NScanStats::TOperation>> ReadAttempts;
+    ui64 TrackedReads = 0;
     THashMap<TBlobRange, TReadInfo> OutstandingReads;   // All in-flight and enqueued reads
     TDeque<TReadItem> ReadQueue;   // Reads that are waiting to be sent
         // TODO: Consider making per-group queues
@@ -272,7 +282,7 @@ private:
             {"cache", (ui32)promote},
             {"sender", ev->Sender});
 
-        if (!HandleSingleRangeRead(TReadItem(ev->Get()->ReadOptions, blobRange), ev->Sender, ctx)) {
+        if (!HandleSingleRangeRead(TReadItem(ev->Get()->ReadOptions, blobRange, ev->Get()->ReadStats), ev->Sender, ctx)) {
             MakeReadRequests(ctx);
         }
     }
@@ -282,7 +292,8 @@ private:
         YDB_LOG_DEBUG("",
             {"ask", blobRange});
 
-        if (SendCached(sender, blobRange, readItem.PromoteInCache(), ctx)) {
+        const TWaiter waiter{ sender, readItem.Stats };
+        if (SendCached(waiter, blobRange, readItem.PromoteInCache(), ctx)) {
             return true;
         }
 
@@ -295,7 +306,11 @@ private:
         TReadInfo& blobInfo = OutstandingReads[blobRange];
         const bool inserted = blobInfo.Waiting.empty();
 
-        blobInfo.Waiting.push_back(sender);
+        blobInfo.Waiting.push_back(waiter);
+        if (waiter.Stats.Collector && !blobInfo.Tracked) {
+            blobInfo.Tracked = true;
+            ++TrackedReads;
+        }
         blobInfo.Cache |= readItem.PromoteInCache();
 
         if (inserted) {
@@ -313,7 +328,7 @@ private:
         }
     }
 
-    bool SendCached(const TActorId& sender, const TBlobRange& blobRange, const bool promote, const TActorContext& ctx) {
+    bool SendCached(const TWaiter& sender, const TBlobRange& blobRange, const bool promote, const TActorContext& ctx) {
         auto exactIt = promote ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
         if (exactIt != Cache.End()) {
             SendCachedHit(sender, blobRange, exactIt.Value(), blobRange, promote, ctx);
@@ -332,7 +347,7 @@ private:
         return true;
     }
 
-    void SendCachedHit(const TActorId& sender, const TBlobRange& requested, const TCacheEntry& entry, const TBlobRange& covering,
+    void SendCachedHit(const TWaiter& sender, const TBlobRange& requested, const TCacheEntry& entry, const TBlobRange& covering,
         const bool promote, const TActorContext& ctx) {
         Y_ABORT_UNLESS(entry.Data.size() == covering.Size, "Cached %s, size %" PRISZT, covering.ToString().c_str(), entry.Data.size());
         TString partial;
@@ -372,7 +387,9 @@ private:
         readOptions.CacheAfterRead = (i64)MaxCacheDataSize && readOptions.CacheAfterRead;
 
         for (const auto& blobRange : ranges) {
-            HandleSingleRangeRead(TReadItem(readOptions, blobRange), ev->Sender, ctx);
+            const auto it = ev->Get()->ReadStats.find(blobRange);
+            const auto stats = it == ev->Get()->ReadStats.end() ? NOlap::TReadStatsContext{} : it->second;
+            HandleSingleRangeRead(TReadItem(readOptions, blobRange, stats), ev->Sender, ctx);
         }
 
         MakeReadRequests(ctx);
@@ -478,7 +495,44 @@ private:
 
         NKikimrBlobStorage::EGetHandleClass readClass = TReadItem::ReadClass(readVariant);
         TInstant deadline = ReadDeadline(readVariant);
+        std::optional<NOlap::TReadStatsContext> context;
+        ui64 requestedBytes = 0;
+        if (TrackedReads) {
+            for (const auto& range : blobRanges) {
+                requestedBytes += range.Size;
+                for (const auto& waiter : OutstandingReads.at(range).Waiting) {
+                    if (context) {
+                        context->Merge(waiter.Stats);
+                    } else {
+                        context = waiter.Stats;
+                    }
+                }
+            }
+        }
+        std::shared_ptr<NScanStats::TOperation> attempt;
+        if (context && context->Collector) {
+            attempt = context->Collector->Start(NScanStats::TStep::StorageRead, "STORAGE_READ", "BlobStorage", context->Parent);
+            if (attempt) {
+                attempt->Update([&](auto& record) {
+                    auto* details = record.MutableDetails()->MutableStorageRead();
+                    context->AppendIndexDescriptorsTo(*record.MutableIndexDescriptors());
+                    if (context->SharedIndexInputs) {
+                        record.SetSharedIndexInputs(true);
+                    }
+                    details->SetStorageTier("default");
+                    details->SetBackendKind(NKqpProto::TColumnShardStepDetails::TStorageRead::BlobStorage);
+                    details->SetDataKind(context->DataKind);
+                    details->SetRequestedRangeBytes(requestedBytes);
+                    details->SetIsRetry(false);
+                });
+                ReadAttempts.emplace(cookie, attempt);
+                attempt->Resume();
+            }
+        }
         SendToBSProxy(ctx, dsGroup, new TEvBlobStorage::TEvGet(queires, blobRanges.size(), deadline, readClass, false), cookie);
+        if (attempt) {
+            attempt->Suspend();
+        }
 
         ReadRequests->Inc();
     }
@@ -553,14 +607,33 @@ private:
         }
     }
 
-    void SendResult(const TActorId& to, const TBlobRange& blobRange, NKikimrProto::EReplyStatus status, const TString& data,
+    void SendResult(const TWaiter& to, const TBlobRange& blobRange, NKikimrProto::EReplyStatus status, const TString& data,
         const TString& detailedError, const TActorContext& ctx, const bool fromCache = false) {
         YDB_LOG_DEBUG("Send",
             {"result", blobRange},
-            {"to", to},
+            {"to", to.ActorId},
             {"status", status});
 
-        ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, detailedError, fromCache));
+        if (status == NKikimrProto::OK && to.Stats.Collector) {
+            to.Stats.Collector->AddCacheRead(data.size(), fromCache);
+            if (fromCache) {
+                auto origin = to.Stats.Collector->Start(NScanStats::TStep::Reader, "READ_SOURCE", "BlobCache", to.Stats.Parent);
+                if (origin) {
+                    NScanStats::TScope sourceScope(origin, to.Stats.Collector);
+                    origin->Update([&](auto& record) {
+                        to.Stats.AppendIndexDescriptorsTo(*record.MutableIndexDescriptors());
+                        if (to.Stats.SharedIndexInputs) {
+                            record.SetSharedIndexInputs(true);
+                        }
+                    });
+                    origin->AddDataSourceRead("BlobCache", "default", data.size(), to.Stats.DataKind);
+                    origin->Finish();
+                } else {
+                    to.Stats.Collector->AddStorageRead("BlobCache", "default", data.size(), to.Stats.DataKind);
+                }
+            }
+        }
+        ctx.Send(to.ActorId, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, detailedError, fromCache));
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr& ev, const TActorContext& ctx) {
@@ -595,16 +668,31 @@ private:
 
         Y_ABORT_UNLESS(blobRanges.size() == ev->Get()->ResponseSz, "Mismatched number of results for read request!");
 
+        std::shared_ptr<NScanStats::TOperation> readOwner;
+        if (auto it = ReadAttempts.find(readCookie); it != ReadAttempts.end()) {
+            auto& attempt = it->second;
+            readOwner = attempt;
+            attempt->Resume();
+            ui64 payloadBytes = 0;
+            bool success = ev->Get()->Status == NKikimrProto::OK;
+            for (size_t i = 0; i < ev->Get()->ResponseSz; ++i) {
+                payloadBytes += ev->Get()->Responses[i].Buffer.size();
+                success &= ev->Get()->Responses[i].Status == NKikimrProto::OK;
+            }
+            attempt->AddReadBytes(payloadBytes);
+            attempt->Finish(success ? NScanStats::TStep::completed : NScanStats::TStep::failed);
+            ReadAttempts.erase(it);
+        }
         for (size_t i = 0; i < ev->Get()->ResponseSz; ++i) {
             const auto& res = ev->Get()->Responses[i];
-            ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), detailedError, ctx);
+            ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), detailedError, ctx, readOwner);
         }
 
         MakeReadRequests(ctx);
     }
 
     void ProcessSingleRangeResult(const TBlobRange& blobRange, const ui64 readCookie, ui32 status, const TString& data,
-        const TString& detailedError, const TActorContext& ctx) noexcept {
+        const TString& detailedError, const TActorContext& ctx, const std::shared_ptr<NScanStats::TOperation>& readOwner = {}) noexcept {
         YDB_LOG_DEBUG("",
             {"processSingleRangeResult", blobRange});
         auto readIt = OutstandingReads.find(blobRange);
@@ -627,6 +715,7 @@ private:
             for (const auto& to : readIt->second.Waiting) {
                 SendCachedHit(to, blobRange, cached.Value(), blobRange, false, ctx);
             }
+            TrackedReads -= readIt->second.Tracked;
             OutstandingReads.erase(readIt);
             return;
         }
@@ -651,9 +740,14 @@ private:
             {"sendReplies", readIt->second.Waiting.size()});
         // Send results to all waiters
         for (const auto& to : readIt->second.Waiting) {
+            if (status == NKikimrProto::OK) {
+                NScanStats::RecordNonOwnerDataSourceRead(
+                    "BlobStorage", "default", to.Stats.DataKind, NScanStats::TCapture(to.Stats.Parent, to.Stats.Collector), readOwner);
+            }
             SendResult(to, blobRange, (NKikimrProto::EReplyStatus)status, data, detailedError, ctx);
         }
 
+        TrackedReads -= readIt->second.Tracked;
         OutstandingReads.erase(readIt);
     }
 
@@ -674,6 +768,10 @@ private:
 
             std::vector<TBlobRange> blobRanges = std::move(cookieIt->second);
             CookieToRange.erase(readCookie);
+            if (auto it = ReadAttempts.find(readCookie); it != ReadAttempts.end()) {
+                it->second->Finish(NScanStats::TStep::failed);
+                ReadAttempts.erase(it);
+            }
 
             for (size_t i = 0; i < blobRanges.size(); ++i) {
                 Y_ABORT_UNLESS(blobRanges[i].BlobId.GetTabletId() == tabletId);

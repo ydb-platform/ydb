@@ -59,6 +59,11 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
         {"blobId", ev->Get()->BlobRange});
 
     auto& event = *ev->Get();
+    if (auto action = Task->GetAgents().FindByStorageId(event.DataSourceId)) {
+        // Failed tier replies carry error text in Data, not backend payload.
+        const bool success = event.Status == NKikimrProto::OK;
+        action->OnReadAttemptResult(event.BlobRange, success ? std::make_optional<ui64>(event.Data.size()) : std::nullopt, success);
+    }
 
     bool aborted = false;
     if (event.Status != NKikimrProto::EReplyStatus::OK) {

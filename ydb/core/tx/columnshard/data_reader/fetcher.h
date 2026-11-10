@@ -1,4 +1,7 @@
 #pragma once
+
+#include "contexts.h"
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include "contexts.h"
 #include "fetching_executor.h"
 
@@ -54,6 +57,46 @@ public:
 };
 
 class TPortionsDataFetcher: TNonCopyable {
+private:
+    NScanStats::TCapture StatsCapture;
+    std::shared_ptr<NScanStats::TOperation> StatsOperation;
+    const IFetchingStep* StatsStep = nullptr;
+
+public:
+    const NScanStats::TCapture& GetStatsCapture() const {
+        return StatsCapture;
+    }
+
+    const std::shared_ptr<NScanStats::TOperation>& GetStatsOperation() const {
+        return StatsOperation;
+    }
+
+    void SetStatsOperation(std::shared_ptr<NScanStats::TOperation> operation, const IFetchingStep* step) {
+        StatsOperation = std::move(operation);
+        StatsStep = step;
+    }
+
+    void FinishStatsOperation(NScanStats::TStep::EOutcome outcome = NScanStats::TStep::completed) {
+        auto operation = std::move(StatsOperation);
+        StatsStep = nullptr;
+        if (operation) {
+            const auto bytes = CurrentContext.GetBlobBytesForStats();
+            operation->Update([&](auto& record) {
+                if (record.GetStepKind() == NScanStats::TStep::FetchColumns && bytes) {
+                    record.SetReadBytes(*bytes);
+                }
+            });
+            operation->Finish(outcome);
+        }
+    }
+
+    void FinishAdvancedStatsOperation() {
+        if (StatsOperation && (MutableScript().IsFinished() || MutableScript().GetCurrentStep().get() != StatsStep)) {
+            FinishStatsOperation();
+        }
+    }
+
+private:
 private:
     TRequestInput Input;
     const std::shared_ptr<IFetchCallback> Callback;
@@ -143,6 +186,7 @@ public:
     }
 
     void OnError(const TString& errMessage) {
+        FinishStatsOperation(NScanStats::TStep::failed);
         YDB_LOG_CREATE_CONTEXT(
             {"event", "on_error"},
             {"consumer", Input.GetConsumer()},
@@ -171,6 +215,7 @@ public:
     }
 
     bool Resume(std::shared_ptr<TPortionsDataFetcher>& selfPtr) {
+        FinishAdvancedStatsOperation();
         if (IsFinishedFlag) {
             return false;
         }

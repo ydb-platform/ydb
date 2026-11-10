@@ -23,3 +23,5 @@ SRCS(
 )
 
 END()
+
+RECURSE(stats)

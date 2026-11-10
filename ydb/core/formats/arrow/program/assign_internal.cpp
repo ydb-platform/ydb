@@ -20,6 +20,14 @@ TConclusion<TExecutionResult> TCalculationProcessor::DoExecute(
     if (result.IsFail()) {
         return result;
     }
+    if (IsAggregation()) {
+        if (const auto& operation = NScanStats::Current()) {
+            operation->Update([&](NScanStats::TStep& record) {
+                record.MutableDetails()->MutableAggregation()->SetOutputRows(
+                    result->IsScalar() ? 1 : result->GetAccessorVerified()->GetRecordsCount());
+            });
+        }
+    }
     if (result->IsScalar()) {
         context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), arrow::Datum(result->GetScalarVerified()));
     } else {

@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/formats/arrow/reader/stats
     ydb/core/base
     ydb/core/tx/columnshard/blobs_action/abstract
     ydb/library/actors/core

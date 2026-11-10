@@ -4,6 +4,7 @@
 #include <optional>
 
 #include "kqp_tasks_graph.h"
+#include <ydb/core/kqp/compute_actor/kqp_compute_events_stats.h>
 #include <ydb/core/kqp/common/kqp_current_query_stats.h>
 
 #include <ydb/core/protos/query_stats.pb.h>
@@ -283,6 +284,7 @@ struct TStageExecutionStats {
     std::vector<TStageExecutionStats*> InputStages;
     std::vector<TStageExecutionStats*> OutputStages;
     std::unordered_map<ui32, NYql::NDqProto::TDqComputeActorStats> ComputeActors;
+    TColumnShardScanStatsCollection ColumnShardScans;
 
     TStageExecutionStats() {
         MemoryUsage.Scale = 1_MB;

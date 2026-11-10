@@ -1,4 +1,6 @@
 #pragma once
+
+#include <util/generic/hash_set.h>
 #include <ydb/core/kqp/tracing/kqp_scan_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include "kqp_compute_actor.h"
@@ -202,6 +204,7 @@ private:
     TInFlightShards InFlightShards;
     TInFlightComputes InFlightComputes;
     const NKqp::ETableKind TableKind = NKqp::ETableKind::Unknown;
+    THashSet<ui64> StatsParticipatingTablets;
 
     std::set<ui32> TrackingNodes;
     ui32 MaxInFlight = 1024;

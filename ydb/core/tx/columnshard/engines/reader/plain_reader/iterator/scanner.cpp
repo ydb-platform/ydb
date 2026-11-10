@@ -1,6 +1,8 @@
 #include "plain_read_data.h"
 #include "scanner.h"
 
+#include <util/generic/scope.h>
+
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 
@@ -13,8 +15,35 @@ namespace NKikimr::NOlap::NReader::NPlain {
 void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
     std::optional<NArrow::TShardedRecordBatch>&& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK,
     std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader) {
-    if (Context->GetReadMetadata()->HasLimit() && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < MaxInFlight) {
-        InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 4);
+    const auto runtimeStats = Context->GetCommonContext()->GetRuntimeStats();
+    auto readyStats = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Ready,
+        "INTERVAL_RESULT", TStringBuilder() << "Dispatch prepared interval " << intervalIdx << " in order", nullptr) : nullptr;
+    if (readyStats) {
+        readyStats->Update([](auto& record) {
+            record.SetMetaStep("Output");
+            record.SetCanonicalPath("");
+        });
+    }
+    std::optional<NScanStats::TScope> readyScope;
+    if (readyStats) {
+        readyScope.emplace(readyStats, runtimeStats);
+    }
+    if (Context->GetReadMetadata()->HasLimit()) {
+        auto limitStats = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Limit,
+            "INTERVAL_LIMIT_WINDOW", "Adjust interval concurrency under read limit", nullptr) : nullptr;
+        if (limitStats) {
+            limitStats->Update([](auto& record) {
+                record.SetMetaStep("Output");
+                record.SetCanonicalPath("");
+            });
+        }
+        NScanStats::TScope limitScope(limitStats, runtimeStats);
+        if ((!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < MaxInFlight) {
+            InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 4);
+        }
+        if (limitStats) {
+            limitStats->Finish();
+        }
     }
     auto itInterval = FetchingIntervals.find(intervalIdx);
     AFL_VERIFY(itInterval != FetchingIntervals.end());
@@ -38,6 +67,13 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
     } else {
         AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
     }
+    if (readyStats) {
+        AFL_VERIFY(ReadyStats.emplace(intervalIdx, readyStats).second);
+    }
+    readyScope.reset();
+    if (readyStats) {
+        readyStats->Suspend();
+    }
     Y_ABORT_UNLESS(FetchingIntervals.size());
     while (FetchingIntervals.size()) {
         const auto interval = FetchingIntervals.begin()->second;
@@ -58,6 +94,17 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
                 {"merger", interval->HasMerger()},
                 {"intervalId", interval->GetIntervalId()});
         }
+        std::shared_ptr<NScanStats::TOperation> dispatchStats;
+        if (auto statsIt = ReadyStats.find(intervalIdx); statsIt != ReadyStats.end()) {
+            dispatchStats = std::move(statsIt->second);
+            ReadyStats.erase(statsIt);
+        }
+        NScanStats::TScope dispatchScope(dispatchStats, runtimeStats);
+        Y_DEFER {
+            if (dispatchStats) {
+                dispatchStats->Finish();
+            }
+        };
         auto result = std::move(it->second);
         ReadyIntervals.erase(it);
         bool hasResult = !!result;
@@ -222,6 +269,21 @@ void TScanHead::StartIntervalSources(TFetchingInterval& interval) {
 
 void TScanHead::OnSourceReady(std::unique_ptr<NCommon::TDataSourceLease> lease) {
     const ui32 sourceIdx = lease->GetSource().GetSourceIdx();
+    const auto runtimeStats = Context->GetCommonContext()->GetRuntimeStats();
+    auto sourceStats = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Ready,
+        "SOURCE_READY", "Notify intervals of prepared source", nullptr, lease->GetSource().GetSourceId()) : nullptr;
+    if (sourceStats) {
+        sourceStats->Update([](auto& record) {
+            record.SetMetaStep("Output");
+            record.SetCanonicalPath("");
+        });
+    }
+    NScanStats::TScope sourceScope(sourceStats, runtimeStats);
+    Y_DEFER {
+        if (sourceStats) {
+            sourceStats->Finish();
+        }
+    };
     lease.reset();
     std::vector<ui32> intervalIdxs;
     if (auto it = WaitingIntervals.find(sourceIdx); it != WaitingIntervals.end()) {
@@ -241,6 +303,7 @@ void TScanHead::OnSourceReady(std::unique_ptr<NCommon::TDataSourceLease> lease) 
 
 void TScanHead::Abort() {
     AFL_VERIFY(Context->IsAborted());
+    ReadyStats.clear();
     WaitingIntervals.clear();
     NotStartedSources.clear();
     FetchingIntervals.clear();

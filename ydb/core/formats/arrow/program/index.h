@@ -1,8 +1,6 @@
 #pragma once
 #include "abstract.h"
 #include "execution.h"
-#include "functions.h"
-#include "kernel_logic.h"
 
 namespace NKikimr::NArrow::NSSA {
 

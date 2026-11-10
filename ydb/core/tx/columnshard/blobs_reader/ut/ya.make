@@ -8,6 +8,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/columnshard/blobs_action/tier
+    ydb/core/wrappers
     library/cpp/testing/unittest
     ydb/library/actors/testlib
     ydb/library/signals
@@ -15,9 +17,12 @@ PEERDIR(
     ydb/core/tx/columnshard/blobs_action/abstract
     ydb/core/tx/columnshard/common
     ydb/core/tx/columnshard/resource_subscriber
+    yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()
+
+SRCS(v3_storage_context_ut.cpp)
 
 END()

@@ -5,6 +5,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/logoblob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/read.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 
 #include <ydb/library/actors/core/actorid.h>
@@ -64,10 +65,12 @@ struct TEvBlobCache {
     struct TEvReadBlobRange: public NActors::TEventLocal<TEvReadBlobRange, EvReadBlobRange> {
         TBlobRange BlobRange;
         TReadBlobRangeOptions ReadOptions;
+        NOlap::TReadStatsContext ReadStats;
 
-        explicit TEvReadBlobRange(const TBlobRange& blobRange, TReadBlobRangeOptions&& opts)
+        explicit TEvReadBlobRange(const TBlobRange& blobRange, TReadBlobRangeOptions&& opts, NOlap::TReadStatsContext readStats = {})
             : BlobRange(blobRange)
             , ReadOptions(std::move(opts))
+            , ReadStats(std::move(readStats))
         {
         }
     };
@@ -77,6 +80,7 @@ struct TEvBlobCache {
     struct TEvReadBlobRangeBatch: public NActors::TEventLocal<TEvReadBlobRangeBatch, EvReadBlobRangeBatch> {
         std::vector<TBlobRange> BlobRanges;
         TReadBlobRangeOptions ReadOptions;
+        THashMap<TBlobRange, NOlap::TReadStatsContext> ReadStats;
 
         explicit TEvReadBlobRangeBatch(std::vector<TBlobRange>&& blobRanges, TReadBlobRangeOptions&& opts)
             : BlobRanges(std::move(blobRanges))

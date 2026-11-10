@@ -1,6 +1,8 @@
 #include "actor.h"
 #include "task.h"
 
+#include <util/generic/scope.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -51,6 +53,10 @@ bool ITask::AddError(const TString& storageIdExt, const TBlobRange& range, const
 }
 
 void ITask::AddData(const TString& storageIdExt, const TBlobRange& range, const TString& data, const bool fromCache) {
+    auto stats = StatsCapture.Collector ? StatsCapture.Collector->Start(NScanStats::TStep::Reader,
+        "BLOB_READ_RESPONSE", "Process blob read response", StatsCapture.Operation) : nullptr;
+    NScanStats::TScope statsScope(stats, StatsCapture.Collector);
+    Y_DEFER { if (stats) { stats->Finish(); } };
     const TString storageId = storageIdExt ? storageIdExt : IStoragesManager::DefaultStorageId;
     AFL_VERIFY(--BlobsWaitingCount >= 0);
     if (TaskFinishedWithError || AbortFlag) {
@@ -84,6 +90,10 @@ void ITask::AddData(const TString& storageIdExt, const TBlobRange& range, const 
 }
 
 void ITask::StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress) {
+    auto stats = StatsCapture.Collector ? StatsCapture.Collector->Start(NScanStats::TStep::Reader,
+        "BLOB_READ_DISPATCH", "Dispatch blob reads", StatsCapture.Operation) : nullptr;
+    NScanStats::TScope statsScope(stats, StatsCapture.Collector);
+    Y_DEFER { if (stats) { stats->Finish(); } };
     YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
         {"taskId", ExternalTaskId},
         {"event", "start"});
@@ -135,6 +145,10 @@ TString ITask::DebugString() const {
 }
 
 void ITask::OnDataReady() {
+    auto operation = StatsCapture.Collector ? StatsCapture.Collector->Start(NScanStats::TStep::Reader,
+        "BLOB_READ_READY", "Process blob read completion", StatsCapture.Operation) : nullptr;
+    NScanStats::TScope statsScope(operation, StatsCapture.Collector);
+    Y_DEFER { if (operation) { operation->Finish(); } };
     YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
         {"event", "OnDataReady"},
         {"task", DebugString()},
@@ -145,6 +159,10 @@ void ITask::OnDataReady() {
 }
 
 bool ITask::OnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
+    auto operation = StatsCapture.Collector ? StatsCapture.Collector->Start(NScanStats::TStep::Reader,
+        "BLOB_READ_ERROR", "Process blob read error", StatsCapture.Operation) : nullptr;
+    NScanStats::TScope statsScope(operation, StatsCapture.Collector);
+    Y_DEFER { if (operation) { operation->Finish(NScanStats::TStep::failed); } };
     YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
         {"event", "OnError"},
         {"status", status.GetStatus()},

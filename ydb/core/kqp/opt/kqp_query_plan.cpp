@@ -3397,6 +3397,46 @@ void FillAsyncAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqAsyncSt
     }
 }
 
+static NJson::TJsonValue ColumnShardScanStatsToJson(const NKqpProto::TColumnShardScanStats& scan) {
+    NJson::TJsonValue result;
+    NProtobufJson::TProto2JsonConfig config;
+    config.EnumMode = NProtobufJson::TProto2JsonConfig::EnumName;
+    NProtobufJson::Proto2Json(scan, result, config);
+    if (scan.GetTabletId()) {
+        result["TabletId"] = ToString(scan.GetTabletId());
+    }
+    if (scan.ParticipatingTabletsSize()) {
+        auto& tablets = result["ParticipatingTablets"];
+        tablets = NJson::JSON_ARRAY;
+        for (ui64 tabletId : scan.GetParticipatingTablets()) {
+            tablets.AppendValue(ToString(tabletId));
+        }
+    }
+    result["Finished"] = scan.GetFinished();
+    result["Truncated"] = scan.GetTruncated();
+    if (!scan.StepsSize()) {
+        result["Steps"] = NJson::JSON_ARRAY;
+    }
+    for (auto& step : result["Steps"].GetArraySafe()) {
+        auto& fields = step.GetMapSafe();
+        auto it = fields.find("Details");
+        if (it == fields.end() || it->second.GetMapSafe().empty()) {
+            continue;
+        }
+        auto details = it->second.GetMapSafe().begin()->second;
+        for (TStringBuf field : {"Columns", "Keys", "Functions", "InputColumns", "OutputColumns"}) {
+            auto names = details.GetMapSafe().find(field);
+            if (names != details.GetMapSafe().end()) {
+                auto list = names->second.GetMapSafe().contains("Names")
+                    ? names->second["Names"] : NJson::TJsonValue(NJson::JSON_ARRAY);
+                names->second = std::move(list);
+            }
+        }
+        it->second = std::move(details);
+    }
+    return result;
+}
+
 TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TDqExecutionStats& stats, bool newRboEnabled) {
     if (txPlanJson.empty()) {
         return {};
@@ -3777,11 +3817,19 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
                 NKqpProto::TKqpStageExtraStats kqpStageStats;
                 if ((*stat)->GetExtra().UnpackTo(&kqpStageStats)) {
-                    auto& nodesStats = stats.InsertValue("NodesScanShards", NJson::JSON_ARRAY);
-                    for (auto&& i : kqpStageStats.GetNodeStats()) {
-                        auto& nodeInfo = nodesStats.AppendValue(NJson::JSON_MAP);
-                        nodeInfo.InsertValue("shards_count", i.GetShardsCount());
-                        nodeInfo.InsertValue("node_id", i.GetNodeId());
+                    if (kqpStageStats.NodeStatsSize()) {
+                        auto& nodesStats = stats.InsertValue("NodesScanShards", NJson::JSON_ARRAY);
+                        for (auto&& i : kqpStageStats.GetNodeStats()) {
+                            auto& nodeInfo = nodesStats.AppendValue(NJson::JSON_MAP);
+                            nodeInfo.InsertValue("shards_count", i.GetShardsCount());
+                            nodeInfo.InsertValue("node_id", i.GetNodeId());
+                        }
+                    }
+                    if (kqpStageStats.ColumnShardScansSize()) {
+                        auto& scans = stats.InsertValue("ColumnShardScans", NJson::JSON_ARRAY);
+                        for (const auto& scan : kqpStageStats.GetColumnShardScans()) {
+                            scans.AppendValue(ColumnShardScanStatsToJson(scan));
+                        }
                     }
                 }
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "read_metadata.h"
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
@@ -70,8 +71,11 @@ private:
     const NConveyorComposite::TProcessGuard ConveyorProcessGuard;
     std::shared_ptr<NArrow::NSSA::IColumnResolver> Resolver;
     std::shared_ptr<NLWTrace::TOrbit> ScanOrbit;
+    std::shared_ptr<NScanStats::TCollector> RuntimeStats;
 
 public:
+    const std::shared_ptr<NScanStats::TCollector>& GetRuntimeStats() const { return RuntimeStats; }
+
     const NArrow::NSSA::IColumnResolver* GetResolver() const {
         AFL_VERIFY(!!Resolver);
         return Resolver.get();
@@ -161,7 +165,8 @@ public:
         const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
         const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
         const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit, ui64 txId = 0,
-        const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool = std::nullopt);
+        const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool = std::nullopt,
+        std::shared_ptr<NScanStats::TCollector> runtimeStats = {});
 };
 
 class IDataReader {

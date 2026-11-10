@@ -1,4 +1,6 @@
 #pragma once
+
+#include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
@@ -41,7 +43,7 @@ private:
                            std::make_shared<arrow::UInt64Scalar>(0), recordsCount)), true);
             } else {
                 MutableStageData().MutableTable().AddVerified(
-                    i, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(i, recordsCount)), true);
+                    i, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildStatsArrayAccessor(i, recordsCount)), true);
             }
         }
     }
@@ -61,7 +63,21 @@ private:
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
 
-    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
+        virtual bool IsStorageBackedColumn(ui64) const {
+            return false;
+        }
+
+        std::shared_ptr<arrow::Array> BuildStatsArrayAccessor(ui64 columnId, ui32 recordsCount) const {
+            auto array = BuildArrayAccessor(columnId, recordsCount);
+            const auto& collector = GetContext()->GetCommonContext()->GetRuntimeStats();
+            if (collector && !IsStorageBackedColumn(columnId)) {
+                NScanStats::RecordDataSourceRead("SystemView", collector->GetTablePath(), NArrow::GetArrayDataSize(array),
+                    NKqpProto::TColumnShardStepDetails::TStorageRead::data, NScanStats::TCapture(NScanStats::Current(), collector));
+            }
+            return array;
+        }
+
+        virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
         return SourceSchema;
     }
 
@@ -162,7 +178,7 @@ protected:
                     NArrow::TThreadSimpleArraysCache::GetConst(arrow::uint64(), std::make_shared<arrow::UInt64Scalar>(0), recordsCount)), true);
         } else {
             context.MutableResources().AddVerified(
-                columnId, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(columnId, recordsCount)), true);
+                    columnId, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildStatsArrayAccessor(columnId, recordsCount)), true);
         }
         return TConclusionStatus::Success();
     }

@@ -1,5 +1,7 @@
 #include "limit.h"
 
+#include <util/generic/scope.h>
+
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections/ordered_result_with_limit.h>
 
@@ -52,6 +54,21 @@ std::unique_ptr<NCommon::TDataSourceLease> TSyncPointLimitControl::OnAddSource(s
 
 ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& /*reader*/) {
     auto& source = lease.GetSource();
+    const auto runtimeStats = Context->GetCommonContext()->GetRuntimeStats();
+    auto limitStats = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Limit,
+        GetPointName(), "Limit rows across sources", nullptr, source.GetSourceId()) : nullptr;
+    if (limitStats) {
+        limitStats->Update([](auto& record) {
+            record.SetMetaStep("Output");
+            record.SetCanonicalPath("");
+        });
+    }
+    NScanStats::TScope limitScope(limitStats, runtimeStats);
+    Y_DEFER {
+        if (limitStats) {
+            limitStats->Finish();
+        }
+    };
     YDB_LOG_CREATE_CONTEXT(
         {"sourceSchema", source.GetSourceSchema()->DebugString()});
     LWTRACK(LimitSyncPoint, source.GetDataSourceOrbit(), source.GetRawPathId(), source.GetTabletId(), source.GetTxId(), source.GetSourceId(),

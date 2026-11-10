@@ -2324,7 +2324,7 @@ def build_html_dashboard(
       if (traces.length) Plotly.addTraces(plotId, traces);
     }}
 
-    function stackedArea(divId, xs, tracks, title, yTitle, stepMode) {{
+    function stackedArea(divId, xs, tracks, title, yTitle, stepMode, fitXToData) {{
       const names = Object.keys(tracks);
       const xDisp = (xs || []).map(xToDisplay);
       const traces = names.map((n) => {{
@@ -2341,7 +2341,16 @@ def build_html_dashboard(
           hoverinfo: 'none',
         }};
       }});
-      const ax = axisLayout(xDisp, true);
+      // Measured cgroup series are short-lived; pinning them to the full ya-make
+      // evlog range collapses the plot to a one-pixel spike.
+      const ax = axisLayout(xDisp, !fitXToData);
+      if (fitXToData && xDisp.length) {{
+        const ms = xDisp.map(_toMs).filter(v => v != null).sort((a, b) => a - b);
+        if (ms.length) {{
+          const pad = Math.max(1000, (ms[ms.length - 1] - ms[0]) * 0.05);
+          ax.range = [new Date(ms[0] - pad).toISOString(), new Date(ms[ms.length - 1] + pad).toISOString()];
+        }}
+      }}
       Plotly.newPlot(divId, traces, {{
         title: false,
         xaxis: Object.assign(ax, {{
@@ -3197,7 +3206,7 @@ def build_html_dashboard(
         Object.keys(tracks).forEach((name, i) => {{
           _measuredColors[name] = name === 'other' ? '#bdbdbd' : MEASURED_PALETTE[i % MEASURED_PALETTE.length];
         }});
-        stackedArea(divId, layer.xs || [], tracks, title, unit);
+        stackedArea(divId, layer.xs || [], tracks, title, unit, false, true);
       }});
       attachMeasuredHover('measuredCpu', 'measuredCpuHover', 'cores');
       attachMeasuredHover('measuredRam', 'measuredRamHover', 'GB');
@@ -3253,6 +3262,12 @@ def build_html_dashboard(
       el.style.display = '';
       if (panel) panel.style.display = '';
       const xDisp = xs.map(xToDisplay);
+      const pressAx = axisLayout(xDisp, false);
+      const pressMs = xDisp.map(_toMs).filter(v => v != null).sort((a, b) => a - b);
+      if (pressMs.length) {{
+        const pad = Math.max(1000, (pressMs[pressMs.length - 1] - pressMs[0]) * 0.05);
+        pressAx.range = [new Date(pressMs[0] - pad).toISOString(), new Date(pressMs[pressMs.length - 1] + pad).toISOString()];
+      }}
       const traces = names.map((name, i) => ({{
         x: xDisp,
         y: tracks[name],
@@ -3265,7 +3280,7 @@ def build_html_dashboard(
       }}));
       Plotly.newPlot(el, traces, {{
         title: 'Cgroup throttling and pressure' + titleSuffix,
-        xaxis: axisLayout(xDisp),
+        xaxis: pressAx,
         yaxis: {{ title: 'Interval time (%)', rangemode: 'tozero' }},
         hovermode: 'x unified',
         hoverlabel: {{ namelength: -1 }},
@@ -3480,9 +3495,16 @@ def build_html_dashboard(
         }};
       }});
       if (window.Plotly) {{
+        const laneXs = xs.map(xToDisplay);
+        const laneAx = axisLayout(laneXs, false);
+        const laneMs = laneXs.map(_toMs).filter(v => v != null).sort((a, b) => a - b);
+        if (laneMs.length) {{
+          const pad = Math.max(1000, (laneMs[laneMs.length - 1] - laneMs[0]) * 0.05);
+          laneAx.range = [new Date(laneMs[0] - pad).toISOString(), new Date(laneMs[laneMs.length - 1] + pad).toISOString()];
+        }}
         Plotly.newPlot(el, traces, {{
           title: 'Tests in this chunk',
-          xaxis: axisLayout(xs.map(xToDisplay)),
+          xaxis: laneAx,
           yaxis: {{ visible: false, range: [0.4, 1.6] }},
           hovermode: 'closest',
           margin: {{ t: 36, r: 20, b: 24, l: 40 }},
@@ -3684,15 +3706,24 @@ def build_html_dashboard(
       const chunkTests = testsForMeasuredSelection(sel);
       const token = {{}};
       window._measuredSelectToken = token;
+      if (meta) {{
+        meta.innerHTML += '<div class="muted" style="margin-top:3px" id="measuredLoadStatus">Loading measured series…</div>';
+      }}
       ensureMeasuredSeries().then(() => {{
         if (window._measuredSelectToken !== token) return;
+        const status = document.getElementById('measuredLoadStatus');
+        if (status) status.remove();
         plotMeasuredLayersFromRows(rows, suffix);
         plotMeasuredPressureFromRows(rows, suffix);
         plotMeasuredTestLane(chunkTests);
         applyMeasuredTestBands(chunkTests);
-      }}).catch(() => {{
+      }}).catch((err) => {{
         if (window._measuredSelectToken !== token) return;
-        if (meta) {{
+        const status = document.getElementById('measuredLoadStatus');
+        if (status) {{
+          status.style.color = '#b42318';
+          status.textContent = 'Failed to load ' + measuredSeriesUrl + ': ' + (err && err.message ? err.message : err);
+        }} else if (meta) {{
           meta.innerHTML += '<div class="muted" style="margin-top:3px;color:#b42318">Failed to load ' +
             escapeHtml(measuredSeriesUrl) + '</div>';
         }}

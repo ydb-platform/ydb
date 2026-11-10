@@ -115,8 +115,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusPropose(
     // proposal, and never pass a hierarchical name to the automatic splitter.
     modifyScheme.SetWorkingDir(wdAndPath.first);
     modifyScheme.SetInternal(true);
-    // Return AlreadyExists for a completed replay. TTxProgress still rejects
-    // any path whose create txid differs from this item's persisted create txid.
+    // Let the common import handler resume an already existing creation.
     modifyScheme.SetFailOnExist(false);
     FillKesusDescription(*modifyScheme.MutableKesus(), item.Kesus->node().config(), wdAndPath.second);
     modifyScheme.MutableKesus()->MutableConfig()->clear_path();

@@ -506,12 +506,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
-        const auto contentLength = result.GetResult().GetContentLength();
-        if (IsKesus(SchemeKey) && (contentLength <= 0 || ui64(contentLength) > MaxKesusPayloadBytes)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << SchemeKey << ": empty or oversized coordination node scheme");
-        }
-        GetObject(SchemeKey, contentLength);
+        GetObject(SchemeKey, result.GetResult().GetContentLength());
     }
 
     void HandlePermissions(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -672,8 +667,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             item.CreationQuery = content;
         } else if (IsKesus(SchemeKey)) {
             Ydb::Coordination::CreateNodeRequest request;
-            if (content.empty() || content.size() > MaxKesusPayloadBytes
-                || !NYdb::NBackup::ParseProto(content, request)) {
+            if (!NYdb::NBackup::ParseProto(content, request)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST,
                     TStringBuilder() << SchemeKey << ": cannot parse coordination node scheme");
             }
@@ -764,23 +758,9 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
     }
 
-    // Bound both individual downloads and the payload persisted in one item.
-    static constexpr ui64 MaxKesusPayloadBytes = 128ull << 20;
-
     bool FailKesus(const TString& error, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::BAD_REQUEST) {
         Reply(status, TStringBuilder() << (KesusObjectKey.empty() ? MetadataKey : KesusObjectKey) << ": " << error);
         return false;
-    }
-
-    static bool IsValidKesusPrefix(const TString& prefix) {
-        if (prefix.empty() || prefix.front() == '/' || prefix.find('\0') != TString::npos) {
-            return false;
-        }
-        const auto parts = SplitPath(prefix);
-        if (JoinPath(parts) != prefix) {
-            return false;
-        }
-        return AllOf(parts, [](const auto& part) { return part != "." && part != ".."; });
     }
 
     bool ValidateKesusMetadata() {
@@ -788,34 +768,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         if (!metadata.GetRateLimiterResources() || !metadata.GetSemaphores()) {
             return FailKesus("Coordination node metadata must contain rate_limiter_resources and semaphores lists");
         }
-        THashSet<TString> prefixes, paths;
         for (const auto& resource : *metadata.GetRateLimiterResources()) {
-            if (!IsValidKesusPrefix(resource.ExportPrefix) || !prefixes.insert(resource.ExportPrefix).second) {
-                return FailKesus("Invalid or duplicate resource export_prefix");
-            }
             const TString& path = resource.ResourcePath;
-            if (path.empty() || path != NKesus::CanonizeQuoterResourcePath(path)
-                || !NKesus::TQuoterResources::IsResourcePathValid(path))
-            {
+            if (path.empty() || path != NKesus::CanonizeQuoterResourcePath(path)) {
                 return FailKesus("Invalid or noncanonical resource path");
-            }
-            if (!paths.insert(path).second) {
-                return FailKesus("Duplicate resource path");
-            }
-            const auto separator = path.rfind('/');
-            if (separator != TString::npos && !paths.contains(path.substr(0, separator))) {
-                return FailKesus(TStringBuilder() << "Parent resource '" << path.substr(0, separator)
-                    << "' must precede its child");
-            }
-        }
-        prefixes.clear();
-        THashSet<TString> names;
-        for (const auto& semaphore : *metadata.GetSemaphores()) {
-            if (!IsValidKesusPrefix(semaphore.ExportPrefix) || !prefixes.insert(semaphore.ExportPrefix).second) {
-                return FailKesus("Invalid or duplicate semaphore export_prefix");
-            }
-            if (!names.insert(semaphore.Name).second) {
-                return FailKesus("Duplicate semaphore name");
             }
         }
         return true;
@@ -851,8 +807,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
         const auto length = result.GetResult().GetContentLength();
-        if (length <= 0 || ui64(length) > MaxKesusPayloadBytes) {
-            FailKesus("Coordination node file is empty or exceeds the 128 MiB size limit");
+        if (length <= 0) {
+            FailKesus("Coordination node file is empty");
             return;
         }
         GetObject(KesusObjectKey, length);
@@ -869,8 +825,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 : NBackup::EBackupFileType::CoordinationNodeCreateRateLimiter, KesusObjectIdx)) {
             return;
         }
-        if (content.empty() || content.size() > MaxKesusPayloadBytes) {
-            FailKesus("Coordination node file is empty or exceeds the 128 MiB size limit");
+        if (content.empty()) {
+            FailKesus("Coordination node file is empty");
             return;
         }
 
@@ -913,14 +869,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             }
             *part.add_resources() = std::move(resource);
         }
-        const ui64 partSize = part.ByteSizeLong();
-        if (KesusPayloadBytes + partSize > MaxKesusPayloadBytes) {
-            FailKesus("Coordination node import payload exceeds the 128 MiB size limit");
-            return;
-        }
-        auto nextStep = [this, part = std::move(part), partSize]() {
+        auto nextStep = [this, part = std::move(part)]() {
             ImportInfo->Items.at(ItemIdx).Kesus->MergeFrom(part);
-            KesusPayloadBytes += partSize;
             ++KesusObjectIdx;
             DownloadNextKesusObject();
         };
@@ -1254,11 +1204,6 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             if (!ValidateKesusMetadata()) {
                 return;
             }
-            KesusPayloadBytes = item.Kesus->ByteSizeLong();
-            if (KesusPayloadBytes > MaxKesusPayloadBytes) {
-                FailKesus("Coordination node import payload exceeds the 128 MiB size limit");
-                return;
-            }
             DownloadNextKesusObject();
         } else {
             StartCheckingMaterializedIndexes();
@@ -1384,7 +1329,6 @@ private:
     const TString PermissionsKey;
     TString KesusObjectKey;
     ui32 KesusObjectIdx = 0;
-    ui64 KesusPayloadBytes = 0;
     bool DownloadingSemaphores = false;
     ui32 SchemePropertiesIdx = 0;
 

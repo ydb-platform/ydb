@@ -335,9 +335,6 @@ void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& i
         if (item.WaitTxId != InvalidTxId) {
             TxIdToImport.erase(item.WaitTxId);
         }
-        if (item.CreateKesusTxId != InvalidTxId) {
-            TxIdToImport.erase(item.CreateKesusTxId);
-        }
     }
 
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
@@ -375,7 +372,6 @@ void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo
     db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
         NIceDb::TUpdate<Schema::ImportItems::WaitTxId>(item.WaitTxId),
-        NIceDb::TUpdate<Schema::ImportItems::CreateKesusTxId>(item.CreateKesusTxId),
         NIceDb::TUpdate<Schema::ImportItems::NextIndexIdx>(item.NextIndexIdx),
         NIceDb::TUpdate<Schema::ImportItems::NextChangefeedIdx>(item.NextChangefeedIdx),
         NIceDb::TUpdate<Schema::ImportItems::Issue>(item.Issue)

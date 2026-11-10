@@ -12,7 +12,6 @@ NActors::IActor* CreateKesusRestorer(
     ui64 importId,
     ui32 itemIdx,
     TPathId dstPathId,
-    TTxId createTxId,
     NKikimrSchemeOp::TImportKesus contents,
     ui32 retries);
 

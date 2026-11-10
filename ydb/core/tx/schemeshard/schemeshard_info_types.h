@@ -4026,8 +4026,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
         TActorId KesusRestorer;
-        // Unlike WaitTxId, this is durable before the create proposal is sent.
-        TTxId CreateKesusTxId = InvalidTxId;
         int NextIndexIdx = 0;
         int NextChangefeedIdx = 0;
         TString Issue;

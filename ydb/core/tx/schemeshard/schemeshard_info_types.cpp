@@ -3249,7 +3249,6 @@ TString TImportInfo::TItem::ToString(ui32 idx) const {
         << " State: " << State
         << " SubState: " << SubState
         << " WaitTxId: " << WaitTxId
-        << " CreateKesusTxId: " << CreateKesusTxId
         << " SrcPath: " << SrcPath
         << " SrcPrefix: " << SrcPrefix
         << " Issue: '" << Issue << "'"

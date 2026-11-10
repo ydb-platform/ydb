@@ -10593,8 +10593,6 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST(InvalidMetadata) {
         TKesusImportEnv t;
-        const TString resource = R"({"export_prefix":"rate_limiter_resources/001","resource_path":"a"})";
-        const TString semaphore = R"({"export_prefix":"semaphores/001","name":"lock"})";
         const TVector<std::pair<TString, TString>> cases = {
             {R"("rate_limiter_resources":[])", "must contain"},
             {R"("semaphores":[])", "must contain"},
@@ -10602,9 +10600,6 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
             {R"("rate_limiter_resources":[],"semaphores":null)", "failed to parse metadata"},
             {R"("rate_limiter_resources":[{"export_prefix":1,"resource_path":"a"}],"semaphores":[])", "failed to parse metadata"},
             {R"("rate_limiter_resources":[],"semaphores":[{"export_prefix":"semaphores/001","name":1}])", "failed to parse metadata"},
-            {TStringBuilder() << "\"rate_limiter_resources\":[" << resource << ',' << resource << "],\"semaphores\":[]", "duplicate resource export_prefix"},
-            {TStringBuilder() << "\"rate_limiter_resources\":[],\"semaphores\":[" << semaphore << ',' << semaphore << ']', "duplicate semaphore export_prefix"},
-            {R"("rate_limiter_resources":[],"semaphores":[{"export_prefix":"semaphores/001","name":"lock"},{"export_prefix":"semaphores/002","name":"lock"}])", "Duplicate semaphore name"},
         };
         auto check = [&](const TString& fields, TStringBuf issue) {
             t.WriteBackup(MakeContents());
@@ -10616,12 +10611,6 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         };
         for (const auto& [fields, issue] : cases) {
             check(fields, issue);
-        }
-        for (const TString& prefix : {"", "/absolute", "../outside", "x/../outside", "x/./y", "x//y"}) {
-            check(TStringBuilder() << "\"rate_limiter_resources\":[{\"export_prefix\":\"" << prefix
-                << "\",\"resource_path\":\"a\"}],\"semaphores\":[]", "Invalid or duplicate resource export_prefix");
-            check(TStringBuilder() << "\"rate_limiter_resources\":[],\"semaphores\":[{\"export_prefix\":\"" << prefix
-                << "\",\"name\":\"lock\"}]", "Invalid or duplicate semaphore export_prefix");
         }
     }
 
@@ -10657,7 +10646,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
     Y_UNIT_TEST(InvalidSemaphoreFiles) {
         TKesusImportEnv t;
         for (const auto& [content, issue] : TVector<std::pair<TString, TString>>{
-            {"", "empty or exceeds"}, {"name: {", "cannot parse semaphore"},
+            {"name: {", "cannot parse semaphore"},
             {"name: \"wrong\" limit: 1", "Semaphore name differs"},
             {"limit: 0", "Invalid semaphore limit"},
             {"limit: 1 data: \"" + TString((1 << 20) + 1, 'a') + '"', "Invalid semaphore limit"},
@@ -10682,37 +10671,16 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         t.AssertNotCreated();
     }
 
-    Y_UNIT_TEST(OversizedFilesFailBeforeDownloadingContents) {
+    Y_UNIT_TEST(EmptyAdditionalFilesFailBeforeDownloadingContents) {
         TKesusImportEnv t;
-        const TString oversized((128 << 20) + 1, 'x');
-        for (const TString& key : {NodeKey, ResourcesKey, SemaphoreKey}) {
+        for (const TString& key : {ResourcesKey, SemaphoreKey}) {
             t.WriteBackup(MakeContents());
-            t.WriteFile(key, oversized, false);
+            t.WriteFile(key, "", false);
             const ui64 id = t.StartImport(t.MakeImport());
-            t.Finish(id, Ydb::StatusIds::CANCELLED,
-                key == NodeKey ? "oversized coordination node scheme" : "exceeds the 128 MiB size limit");
+            t.Finish(id, Ydb::StatusIds::CANCELLED, "Coordination node file is empty");
             t.AssertNotCreated();
             TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", id);
         }
-    }
-
-    Y_UNIT_TEST(OversizedPayloadFailsBeforeCreatingNode) {
-        TKesusImportEnv t;
-        NKikimrSchemeOp::TImportKesus contents;
-        // Every individual file is valid; protobuf overhead takes their sum
-        // over the persistence limit even though the data alone is 128 MiB.
-        const TString data(1 << 20, 'a');
-        for (ui32 i = 0; i < 128; ++i) {
-            auto& semaphore = *contents.add_semaphores();
-            semaphore.set_name(ToString(i));
-            semaphore.set_limit(1);
-            semaphore.set_data(data);
-        }
-        t.WriteBackup(contents);
-        contents.Clear();
-        t.Finish(t.StartImport(t.MakeImport()), Ydb::StatusIds::CANCELLED,
-            "import payload exceeds the 128 MiB size limit");
-        t.AssertNotCreated();
     }
 
     Y_UNIT_TEST_FLAG(EncryptedObjectIndexes, Semaphores) {
@@ -10839,24 +10807,21 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
             TStringBuf Name;
             TString Content;
             TStringBuf Issue;
+            bool NodeCreated = false;
         };
         const TCase cases[] = {
             {"ParentAfterChild", R"(
                 resources { resource_path: "a/b" hierarchical_drr {} }
                 resources { resource_path: "a" hierarchical_drr { max_units_per_second: 10 } }
-            )", "Parent resource 'a' must precede its child"},
+            )", "Parent resource", true},
             {"NoncanonicalPath", R"(resources { resource_path: "/a/" hierarchical_drr { max_units_per_second: 10 } })",
                 "Invalid or noncanonical resource path"},
             {"InvalidPathCharacters", R"(resources { resource_path: "a b" hierarchical_drr { max_units_per_second: 10 } })",
-                "Invalid or noncanonical resource path"},
+                "Invalid resource path.", true},
             {"EmptyResourcePath", R"(resources { hierarchical_drr { max_units_per_second: 10 } })",
                 "Invalid or noncanonical resource path"},
-            {"DuplicatePaths", R"(
-                resources { resource_path: "a" hierarchical_drr { max_units_per_second: 10 } }
-                resources { resource_path: "a" hierarchical_drr { max_units_per_second: 20 } }
-            )", "Duplicate resource path"},
             {"MissingParent", R"(resources { resource_path: "a/b" hierarchical_drr {} })",
-                "Parent resource 'a' must precede its child"},
+                "Parent resource", true},
             {"MissingResourceType", R"(resources { resource_path: "a" })", "No resource properties"},
             {"MeteringWithoutPermission", MakeResources(true).DebugString(), "Setting metering is allowed only for administrators"},
         };
@@ -10864,10 +10829,42 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         for (const auto& test : cases) {
             Cerr << "Invalid resource backup: " << test.Name << Endl;
             t.WriteBackup(test.Content);
-            const ui64 id = t.StartImport(t.MakeImport());
+            const TString destination = test.NodeCreated
+                ? TString(TStringBuilder() << "/MyRoot/" << test.Name) : "/MyRoot/Restored";
+            const ui64 id = t.StartImport(t.MakeImport(false, false, {{"coordination", destination}}));
             t.Finish(id, Ydb::StatusIds::CANCELLED, test.Issue);
-            t.AssertNotCreated();
+            if (test.NodeCreated) {
+                // Kesus rejects the first resource after the node has been created.
+                t.AssertContents({}, destination);
+            } else {
+                t.AssertNotCreated();
+            }
             // Finished operations still count towards MaxImports in this shared environment.
+            TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", id);
+        }
+    }
+
+    Y_UNIT_TEST(DuplicateObjectsFailBeforeRestoringContents) {
+        TKesusImportEnv t;
+        for (bool duplicateSemaphore : {false, true}) {
+            auto contents = MakeContents();
+            if (duplicateSemaphore) {
+                auto duplicate = contents.semaphores(0);
+                duplicate.set_limit(duplicate.limit() + 1);
+                *contents.add_semaphores() = std::move(duplicate);
+            } else {
+                auto duplicate = contents.resources(0);
+                duplicate.mutable_hierarchical_drr()->set_max_units_per_second(200);
+                *contents.add_resources() = std::move(duplicate);
+            }
+            t.WriteBackup(contents);
+            const TString destination = duplicateSemaphore
+                ? "/MyRoot/DuplicateSemaphores" : "/MyRoot/DuplicateResources";
+            const ui64 id = t.StartImport(t.MakeImport(false, false, {{"coordination", destination}}));
+            t.Finish(id, Ydb::StatusIds::CANCELLED,
+                duplicateSemaphore ? "Duplicate semaphore name" : "Duplicate resource path");
+            // Restorer detects duplicates after node creation, before adding any contents.
+            t.AssertContents({}, destination);
             TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", id);
         }
     }
@@ -10875,7 +10872,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
     Y_UNIT_TEST(InvalidResourceFiles) {
         TKesusImportEnv t;
         for (const auto& [content, issue] : TVector<std::pair<TString, TString>>{
-            {"", "empty or exceeds"}, {"resource {", "cannot parse rate limiter resource"},
+            {"resource {", "cannot parse rate limiter resource"},
             {"resource { future_algorithm { limit: 10 } }", "No resource properties"},
             {"resource { resource_path: \"wrong\" hierarchical_drr {} }", "Resource path differs"},
         }) {
@@ -11129,30 +11126,73 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST(RebootBeforeCreateProposalIsDelivered) {
         TKesusImportEnv t;
-        t.WriteBackup(MakeResources());
+        t.WriteBackup(MakeContents());
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(t.Runtime, IsKesusCreation);
         const ui64 id = t.StartImport(t.MakeImport());
-        t.Runtime.WaitFor("create txid persisted before proposal delivery", [&] { return !proposals.empty(); });
+        t.Runtime.WaitFor("create proposal pending before reboot", [&] { return !proposals.empty(); });
         const ui64 createTxId = proposals.front()->Get()->Record.GetTxId();
         proposals.Stop();
-        ui32 repeatedProposals = 0;
+        TVector<ui64> repeatedProposals;
         auto observer = t.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
             if (IsKesusCreation(ev)) {
-                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), createTxId);
-                ++repeatedProposals;
+                repeatedProposals.push_back(ev->Get()->Record.GetTxId());
             }
         });
         t.RebootSchemeShard();
         t.Finish(id);
-        UNIT_ASSERT(repeatedProposals);
-        t.AssertResources(MakeResources());
+        UNIT_ASSERT_VALUES_EQUAL(repeatedProposals.size(), 1);
+        UNIT_ASSERT(repeatedProposals.front() != createTxId);
+        t.AssertContents(MakeContents());
         proposals.Unblock();
         TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 
-    Y_UNIT_TEST(RebootAfterNodeCreationBeforeAcceptedIsPersisted) {
+    Y_UNIT_TEST_FLAG(RebootAfterNodeCreation, AcceptedPersisted) {
         TKesusImportEnv t;
-        t.WriteBackup(MakeResources());
+        t.WriteBackup(MakeContents());
+        ui64 createTxId = 0;
+        TActorId schemeShard;
+        ui32 proposals = 0;
+        auto observer = t.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            if (IsKesusCreation(ev)) {
+                if (!createTxId) {
+                    createTxId = ev->Get()->Record.GetTxId();
+                    schemeShard = ev->Sender;
+                } else {
+                    UNIT_ASSERT(ev->Get()->Record.GetTxId() != createTxId);
+                }
+                ++proposals;
+            }
+        });
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransactionResult> replies(t.Runtime, [&](const auto& ev) {
+            return !AcceptedPersisted && createTxId && ev->Get()->Record.GetTxId() == createTxId;
+        });
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> notifications(t.Runtime, [&](const auto& ev) {
+            return AcceptedPersisted && createTxId && ev->Get()->Record.GetTxId() == createTxId
+                && ev->Recipient == schemeShard;
+        });
+        const ui64 id = t.StartImport(t.MakeImport());
+        t.Runtime.WaitFor("creation reply blocked before reboot", [&] {
+            return AcceptedPersisted ? !notifications.empty() : !replies.empty();
+        });
+        // Cover both re-proposing an unconfirmed creation and subscribing to a saved WaitTxId.
+        t.Env.TestWaitNotification(t.Runtime, createTxId);
+        const ui64 originalTablet = t.TabletId();
+        replies.Stop();
+        notifications.Stop();
+        t.RebootSchemeShard();
+        t.Finish(id);
+        UNIT_ASSERT_VALUES_EQUAL(proposals, AcceptedPersisted ? 1 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(t.TabletId(), originalTablet);
+        t.AssertContents(MakeContents());
+        replies.Unblock();
+        notifications.Unblock();
+        TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(CreationSuccessRestoresContents) {
+        TKesusImportEnv t;
+        t.WriteBackup(MakeContents());
         ui64 createTxId = 0;
         auto observer = t.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
             if (IsKesusCreation(ev)) {
@@ -11163,19 +11203,13 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
             return createTxId && ev->Get()->Record.GetTxId() == createTxId;
         });
         const ui64 id = t.StartImport(t.MakeImport());
-        t.Runtime.WaitFor("Accepted reply blocked", [&] { return !replies.empty(); });
-        UNIT_ASSERT_VALUES_EQUAL(replies.front()->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted);
-        // Complete the actual schema operation without letting the import persist WaitTxId.
-        // Replaying an in-flight operation alone would not cover the already-existing node case.
+        t.Runtime.WaitFor("create result blocked", [&] { return !replies.empty(); });
         t.Env.TestWaitNotification(t.Runtime, createTxId);
-        const ui64 originalTablet = t.TabletId();
-        replies.Stop();
-        t.RebootSchemeShard();
+        // A synchronous success must still enter RestoreKesus, rather than finish the item.
+        replies.front()->Get()->Record.SetStatus(NKikimrScheme::StatusSuccess);
+        replies.Stop().Unblock();
         t.Finish(id);
-        UNIT_ASSERT_VALUES_EQUAL(t.TabletId(), originalTablet);
-        t.AssertResources(MakeResources());
-        replies.Unblock();
-        TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        t.AssertContents(MakeContents());
     }
 
     Y_UNIT_TEST(CancelWithPendingAddResponse) {
@@ -11397,9 +11431,9 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         t.AssertResources(MakeResources(), "/MyRoot/New/N2");
     }
 
-    Y_UNIT_TEST(ConcurrentNodeCreationDoesNotBecomeImportDestination) {
+    Y_UNIT_TEST_FLAG(ConcurrentNodeCreationBecomesImportDestination, InFlight) {
         TKesusImportEnv t;
-        t.WriteBackup(MakeResources());
+        t.WriteBackup(MakeContents());
         bool blockFirst = true;
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(t.Runtime, [&](const auto& ev) {
             if (blockFirst && IsKesusCreation(ev)) {
@@ -11410,11 +11444,41 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         });
         const ui64 id = t.StartImport(t.MakeImport());
         t.Runtime.WaitFor("import checked destination before concurrent create", [&] { return !proposals.empty(); });
-        const ui64 foreignTablet = t.CreateNode("Restored");
+        const ui64 importCreateTxId = proposals.front()->Get()->Record.GetTxId();
+        const ui64 foreignTxId = ++t.TxId;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> plans(t.Runtime, [&](const auto& ev) {
+            if (InFlight) {
+                for (const auto& tx : ev->Get()->Record.GetTransactions()) {
+                    if (tx.GetTxId() == foreignTxId) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+        TestCreateKesus(t.Runtime, foreignTxId, "/MyRoot", R"(Name: "Restored")");
+        if (InFlight) {
+            t.Runtime.WaitFor("concurrent creation still in flight", [&] { return !plans.empty(); });
+        } else {
+            t.Env.TestWaitNotification(t.Runtime, foreignTxId);
+        }
+        bool answered = false;
+        auto observer = t.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTxId() == importCreateTxId) {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), InFlight
+                    ? NKikimrScheme::StatusMultipleModifications : NKikimrScheme::StatusAlreadyExists);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetPathCreateTxId(), foreignTxId);
+                answered = true;
+            }
+        });
         proposals.Stop().Unblock();
-        t.Finish(id, Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_VALUES_EQUAL(t.TabletId(), foreignTablet);
-        UNIT_ASSERT_VALUES_EQUAL(t.DescribeResources().resources_size(), 0);
+        t.Runtime.WaitFor("import creation result received", [&] { return answered; });
+        plans.Stop().Unblock();
+        t.Finish(id);
+        const auto description = DescribePath(t.Runtime, "/MyRoot/Restored");
+        UNIT_ASSERT_VALUES_EQUAL(description.GetPathDescription().GetSelf().GetCreateTxId(), foreignTxId);
+        t.AssertContents(MakeContents());
     }
 
     Y_UNIT_TEST(RebootDoesNotRestoreIntoReplacementNode) {

@@ -1783,7 +1783,6 @@ struct Schema : NIceDb::Schema {
         struct SysView : Column<22, NScheme::NTypeIds::String> {};
         struct ReplicationConfig : Column<23, NScheme::NTypeIds::String> {};
         struct Kesus : Column<24, NScheme::NTypeIds::String> {};
-        struct CreateKesusTxId : Column<25, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1820,8 +1819,7 @@ struct Schema : NIceDb::Schema {
             ParentIndex,
             SysView,
             ReplicationConfig,
-            Kesus,
-            CreateKesusTxId
+            Kesus
         >;
     };
 

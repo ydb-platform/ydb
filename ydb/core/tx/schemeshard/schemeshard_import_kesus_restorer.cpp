@@ -60,20 +60,18 @@ public:
         ui64 importId,
         ui32 itemIdx,
         TPathId dstPathId,
-        TTxId createTxId,
         NKikimrSchemeOp::TImportKesus contents,
         ui32 retries)
         : SchemeShard(schemeShard)
         , ImportId(importId)
         , ItemIdx(itemIdx)
         , DstPathId(dstPathId)
-        , CreateTxId(createTxId)
         , Contents(std::move(contents))
         , Retries(retries)
     {}
 
     void Bootstrap() {
-        if (!DstPathId || CreateTxId == InvalidTxId) {
+        if (!DstPathId) {
             return Finish(false, "Coordination node identity is missing");
         }
 
@@ -134,7 +132,6 @@ private:
         if (!description.HasKesus()
             || self.GetPathType() != NKikimrSchemeOp::EPathTypeKesus
             || TPathId(self.GetSchemeshardId(), self.GetPathId()) != DstPathId
-            || self.GetCreateTxId() != ui64(CreateTxId)
             || !self.GetCreateFinished()
             || self.GetPathState() == NKikimrSchemeOp::EPathStateDrop)
         {
@@ -431,7 +428,6 @@ private:
     const ui64 ImportId;
     const ui32 ItemIdx;
     const TPathId DstPathId;
-    const TTxId CreateTxId;
     NKikimrSchemeOp::TImportKesus Contents;
     const ui32 Retries;
 
@@ -456,11 +452,10 @@ IActor* CreateKesusRestorer(
     ui64 importId,
     ui32 itemIdx,
     TPathId dstPathId,
-    TTxId createTxId,
     NKikimrSchemeOp::TImportKesus contents,
     ui32 retries)
 {
-    return new TKesusRestorer(schemeShard, importId, itemIdx, dstPathId, createTxId, std::move(contents), retries);
+    return new TKesusRestorer(schemeShard, importId, itemIdx, dstPathId, std::move(contents), retries);
 }
 
 } // namespace NKikimr::NSchemeShard

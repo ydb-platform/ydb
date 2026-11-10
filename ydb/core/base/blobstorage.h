@@ -551,6 +551,8 @@ struct TEvBlobStorage {
         EvControllerUpdateSyncerState               = 0x1003162f,
         EvControllerAllocateDDiskBlockGroup         = 0x10031630,
         EvControllerAllocateDDiskBlockGroupResult   = 0x10031631,
+        EvControllerQueryBridgeStorage             = 0x10031638,
+        EvControllerQueryBridgeStorageResult       = 0x10031639,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -2666,6 +2668,8 @@ struct TEvBlobStorage {
     struct TEvControllerDistconfRequest;
     struct TEvControllerDistconfResponse;
     struct TEvControllerUpdateSyncerState;
+    struct TEvControllerQueryBridgeStorage;
+    struct TEvControllerQueryBridgeStorageResult;
 
     struct TEvControllerAllocateDDiskBlockGroup;
     struct TEvControllerAllocateDDiskBlockGroupResult;

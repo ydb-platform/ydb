@@ -28,7 +28,9 @@ namespace {
             }
             Parts.reserve(parts.size());
             for (const auto& part : parts) {
-                if ((!tierId || part.TierId == *tierId) && (!level || part.Level == *level)) {
+                if (part.HasUnknownPlacement ||
+                    ((!tierId || part.TierId == *tierId) && (!level || part.Level == *level)))
+                {
                     Y_ENSURE(bool(part.Part) != bool(part.ColdPart),
                         "Compaction key space requires exactly one part representation");
                     Parts.emplace_back(part);
@@ -72,21 +74,13 @@ namespace {
                     }
                 }
 
-                bool rejected = false;
-                for (auto it = part->ByKeyPrefixes.rbegin(); it != part->ByKeyPrefixes.rend(); ++it) {
-                    const auto& [length, bloom] = *it;
-                    if (!bloom || length == 0 || length > BloomPrefixLimit) {
-                        continue;
-                    }
-                    if (!prefix) {
-                        prefix.emplace(key);
-                    }
-                    if (!bloom->MightHave(prefix->Get(length))) {
-                        rejected = true;
-                        break;
-                    }
+                if (part->ByKeyPrefixes.empty() || BloomPrefixLimit == 0) {
+                    return true;
                 }
-                if (!rejected) {
+                if (!prefix) {
+                    prefix.emplace(key);
+                }
+                if (part->MightHaveKeyPrefix(*prefix, BloomPrefixLimit)) {
                     return true;
                 }
             }

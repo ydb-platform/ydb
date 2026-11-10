@@ -148,6 +148,10 @@ def internalize(
             )
         response = temporary / 'inputs.rsp'
         response.write_text('\n'.join(json.dumps(str(item), ensure_ascii=False) for item in inputs), encoding='utf-8')
+        # LLD retains DWARF in relocatable links even with --strip-debug. Discard
+        # it here to avoid carrying it through COMMON allocation and localization.
+        discard = temporary / 'discard-debug.ld'
+        discard.write_text('SECTIONS { /DISCARD/ : { *(.debug* .zdebug* .gdb_index) } }\n')
         started = report_stage(module_name, 'prepare inputs', started)
         subprocess.run(
             [
@@ -155,7 +159,8 @@ def internalize(
                 # the unwind records from a subsequent object in the final link.
                 tools / 'ld.lld',
                 '-r',
-                '--strip-debug',
+                '-T',
+                discard,
                 '--force-group-allocation',
                 '--unique',
                 *[f'--undefined={name}' for name in exports],

@@ -5,8 +5,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from internalize_library import internalize, read_common_symbols
+from internalize_library import allocate_common_symbols, internalize, read_common_symbols
 
 
 class InternalizeLibraryTest(unittest.TestCase):
@@ -142,6 +143,18 @@ class InternalizeLibraryTest(unittest.TestCase):
         sections = self.run_tool('llvm-readelf', '--sections', archive)
         self.assertNotIn('.debug_', sections)
         self.assertNotIn('GROUP', sections)
+
+    def test_debug_sections_are_discarded_before_common_allocation(self):
+        def check_intermediate(tools, source, temporary):
+            sections = self.run_tool('llvm-readelf', '--sections', '--wide', source)
+            self.assertNotIn('.debug', sections)
+            self.assertNotIn('.zdebug', sections)
+            return allocate_common_symbols(tools, source, temporary)
+
+        for split_globals, direct in ((False, False), (True, False), (True, True)):
+            with self.subTest(split_globals=split_globals, direct=direct):
+                with patch('internalize_library.allocate_common_symbols', side_effect=check_intermediate):
+                    self.make_archive('debug', 17, split_globals=split_globals, direct=direct)
 
     def test_cli_from_read_only_directory(self):
         entry = self.compile('readonly', 'extern "C" int GetStaticUdfLibrary_readonly() { return 17; }')

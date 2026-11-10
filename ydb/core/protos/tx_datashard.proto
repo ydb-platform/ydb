@@ -250,6 +250,7 @@ message TKqpTransaction {
         optional EReadType ReadType = 14;
         repeated string GroupByColumnNames = 15;
         optional uint32 OptionalSorting = 16;
+        optional bool RequireSortedRead = 17;
     }
 
     optional EKqpTransactionType Type = 1;

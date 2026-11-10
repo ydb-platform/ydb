@@ -11,6 +11,7 @@
 #include <library/cpp/json/writer/json_value.h>
 
 #include <util/generic/ptr.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 #include <optional>
@@ -31,6 +32,9 @@ struct TOptimizerHints;
 class TCompileTrace;
 
 namespace NOpt {
+
+// Filters and projections preserve row order unless a projection replaces a sort key.
+bool OlapProcessPreservesSorting(const NYql::TExprNode::TPtr& lambda, const THashSet<TString>& sortColumns);
 
 struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     TKqpOptimizeContext(const TString& cluster, const TIntrusivePtr<NYql::TKikimrConfiguration>& config,

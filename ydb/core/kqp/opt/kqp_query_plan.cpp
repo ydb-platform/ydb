@@ -2409,6 +2409,9 @@ private:
             op.Properties["ReadLimit"] = limit;
         }
         readInfo.SetSorting(settings.GetSorting());
+        if (settings.RequireSortedRead) {
+            op.Properties["RequireSortedRead"] = true;
+        }
         if (settings.GetSorting() == ERequestSorting::DESC) {
             op.Properties["Reverse"] = true;
         } else if (settings.GetSorting() == ERequestSorting::ASC) {

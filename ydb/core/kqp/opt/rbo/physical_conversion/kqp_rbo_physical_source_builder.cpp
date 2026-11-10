@@ -306,6 +306,7 @@ NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
                 // clang-format on
             }
 
+            settings.RequireSortedRead = Read.RequireSortedRead;
             if (Read.SortDir != ESortDir::None) {
                 const auto sortDirection = Read.SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC;
                 settings.SetSorting(sortDirection);

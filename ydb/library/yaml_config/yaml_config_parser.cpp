@@ -82,7 +82,17 @@ namespace NKikimr::NYaml {
                 YAML::Node driveNode;
                 driveNode["path"] = drive["path"].GetString();
                 driveNode["type"] = drive["type"].GetString();
-                driveNode["expected_slot_count"] = 9; // Default value
+                // the settings of the drive go as they are; the ones not set stay out, so the parser takes its defaults
+                for (const char *key : {"shared_with_os", "read_centric"}) {
+                    if (drive.Has(key)) {
+                        driveNode[key] = drive[key].GetBoolean();
+                    }
+                }
+                for (const char *key : {"kind", "expected_slot_count", "expected_slot_size", "max_slots"}) {
+                    if (drive.Has(key)) {
+                        driveNode[key] = drive[key].GetUIntegerRobust();
+                    }
+                }
                 configNode["drive"].push_back(driveNode);
             }
 

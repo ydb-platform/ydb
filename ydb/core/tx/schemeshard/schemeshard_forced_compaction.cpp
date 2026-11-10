@@ -330,6 +330,13 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
     std::unique_ptr<TEvDataShard::TEvCompactTable> request(
         new TEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId));
     request->Record.SetCompactBorrowed(true);
+    if (it->second.TabletType == ETabletType::ColumnShard) {
+        if (auto* info = InProgressForcedCompactionsByShard.FindPtr(shardIdx)) {
+            // CASCADE on a column table: the shard also rewrites every portion to the current schema
+            request->Record.SetActualizeSchema((*info)->Cascade);
+            *request->Record.MutableSeqNo() = NextRound().SerializeToProto();
+        }
+    }
 
     PipeClientCache->Send(
         ctx,

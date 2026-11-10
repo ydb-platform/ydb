@@ -94,6 +94,13 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
             }
             Self->InProgressForcedCompactionsByShard.erase(shardId);
             Self->PersistForcedCompactionDoneShard(db, shardId);
+            // a CASCADE request makes column shards rewrite their portions to the current schema: stop that
+            if (forcedCompactionInfo.Cascade) {
+                auto* shardInfo = Self->ShardInfos.FindPtr(shardId);
+                if (shardInfo && shardInfo->TabletType == ETabletType::ColumnShard) {
+                    ColumnShardsToStop.emplace_back(shardInfo->TabletID, shardInfo->PathId);
+                }
+            }
         }
         forcedCompactionInfo.ShardsInFlight.clear();
 
@@ -108,6 +115,12 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
             {"schemeshard", Self->SelfTabletId()},
             {"request", Request->Get()->Record.ShortDebugString()},
         );
+        for (const auto& [tabletId, pathId] : ColumnShardsToStop) {
+            auto request = std::make_unique<TEvDataShard::TEvCompactTable>(pathId);
+            request->Record.SetActualizeSchema(false);
+            *request->Record.MutableSeqNo() = Self->NextRound().SerializeToProto();
+            Self->PipeClientCache->Send(ctx, ui64(tabletId), request.release(), static_cast<ui64>(ECompactionType::Forced));
+        }
         Self->ScheduleForcedCompactionProgress(ctx);
         SideEffects.ApplyOnComplete(Self, ctx);
     }
@@ -132,6 +145,7 @@ private:
 private:
     TSideEffects SideEffects;
     TEvForcedCompaction::TEvCancelRequest::TPtr Request;
+    TVector<std::pair<TTabletId, TPathId>> ColumnShardsToStop;
 };
 
 ITransaction* TSchemeShard::CreateTxCancelForcedCompaction(TEvForcedCompaction::TEvCancelRequest::TPtr& ev) {

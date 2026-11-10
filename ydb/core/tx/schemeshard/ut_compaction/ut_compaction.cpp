@@ -2,6 +2,7 @@
 
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
@@ -3668,7 +3669,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
     }
 
-    Y_UNIT_TEST(SchemeshardShouldRejectCascadeCompactionForColumnTable) {
+    Y_UNIT_TEST(SchemeshardShouldCascadeCompactColumnTableWithSchemaActualization) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         Setup(runtime, env);
@@ -3685,9 +3686,31 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Cascade compaction is not supported for column tables and must be rejected up front.
-        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true, /*maxShardsInFlight=*/1,
-            Ydb::StatusIds::BAD_REQUEST);
+        // Column tables have no index impl tables: CASCADE instead asks every shard to also rewrite its portions to
+        // the current schema (TEvCompactTable::ActualizeSchema), and a cancel repeats the request with the flag off.
+        // The requests carry the schemeshard's SeqNo so that the shard can drop an outdated one.
+        std::vector<NKikimrTxDataShard::TEvCompactTable> requests;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvCompactTable>(
+            [&](const TEvDataShard::TEvCompactTable::TPtr& ev) { requests.push_back(ev->Get()->Record); });
+        const auto seqNo = [](const NKikimrTxDataShard::TEvCompactTable& request) {
+            UNIT_ASSERT(request.HasSeqNo());
+            TMessageSeqNo seqNo;
+            seqNo.DeserializeFromProto(request.GetSeqNo()).Validate();
+            return seqNo;
+        };
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true);
+        const ui64 compactionId = txId;
+        runtime.WaitFor("EvCompactTable", [&]{ return requests.size() >= 1; });
+        UNIT_ASSERT(requests[0].GetActualizeSchema());
+        UNIT_ASSERT(seqNo(requests[0]));
+
+        // The shard is in flight (its result is blocked): the cancel stops the rewrite on it.
+        TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId);
+        runtime.WaitFor("EvCompactTable stop", [&]{ return requests.size() >= 2; });
+        UNIT_ASSERT(!requests[1].GetActualizeSchema());
+        UNIT_ASSERT(seqNo(requests[0]) < seqNo(requests[1]));
     }
 
     Y_UNIT_TEST(SchemeshardShouldFailToCompactColumnTableInStore) {

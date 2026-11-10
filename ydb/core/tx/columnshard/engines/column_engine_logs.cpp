@@ -305,10 +305,14 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
         {"switchOptimizer", switchOptimizer},
         {"switchAccessors", switchAccessorsManager});
 
+    const auto criticalSchemaBefore = vIndex.GetLastCriticalSchema();
     const bool isCriticalScheme = indexInfo->GetSchemeNeedActualization();
     auto* indexInfoActual = vIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme || switchTieringActualization) {
         StartActualization({});
+    }
+    if (ActualizationStarted && vIndex.GetLastCriticalSchema() != criticalSchemaBefore) {
+        // the new schema is the actualization target, or (SchemeNeedActualization set back to false) there is none now
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
         }
@@ -867,6 +871,14 @@ bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TT
     }
     ActualizationStarted = true;
     return true;
+}
+
+void TColumnEngineForLogs::SetSchemeNeedActualization(const bool value) {
+    MutableVersionedIndex().SetSchemeNeedActualization(value);
+    StartActualization({});
+    for (auto&& i : GranulesStorage->GetTables()) {
+        i.second->RefreshScheme();
+    }
 }
 
 void TColumnEngineForLogs::OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) {

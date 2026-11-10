@@ -518,6 +518,7 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta
 
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadOlapRanges>) {
         readProto.SetSorted(settings.IsSorted());
+        readProto.SetRequireSortedRead(settings.RequireSortedRead);
         if (settings.TabletId) {
             readProto.SetTabletId(*settings.TabletId);
         }

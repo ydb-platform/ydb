@@ -624,7 +624,9 @@ private:
             if (NodeStateResponse->IsOk()) {
                 for (const auto& nodeStateInfo : NodeStateResponse->Get()->Record.GetNodeStateInfo()) {
                     if (nodeStateInfo.GetConnected()) {
-                        TNodeId nodeId = FromStringWithDefault(TStringBuf(nodeStateInfo.GetPeerName()).Before(':'), 0);
+                        TNodeId nodeId = nodeStateInfo.GetPeerNodeId()
+                            ? nodeStateInfo.GetPeerNodeId()
+                            : FromStringWithDefault(TStringBuf(nodeStateInfo.GetPeerName()).Before(':'), 0);
                         if (nodeId) {
                             TNode* node = NodeCache[nodeId];
                             if (node) {

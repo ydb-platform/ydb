@@ -1696,7 +1696,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     auto response = std::make_unique<TEvWhiteboard::TEvNodeStateResponse>();
                     for (ui32 nodeIndex : *options.ConnectedNodeIndexes) {
                         auto* state = response->Record.AddNodeStateInfo();
-                        state->SetPeerName(TStringBuilder() << firstNodeId + nodeIndex << ":19001");
+                        state->SetPeerNodeId(firstNodeId + nodeIndex);
+                        state->SetPeerName(TStringBuilder() << "node" << nodeIndex << ':' << 19001 + nodeIndex);
                         state->SetConnected(true);
                     }
                     runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie),
@@ -1942,6 +1943,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST_TWIN(ClusterBridgeComputeNodeForwardsToStorageNode, forwarded) {
         // Only static nodes share the monitoring port used to build endpoints of other piles.
+        // Connected storage nodes must be identified by PeerNodeId, not the hostname in PeerName.
         const auto json = GetClusterBridgeInfo({
             .Https = true,
             .ForwardedFromNode = forwarded,

@@ -506,6 +506,10 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion :    Column<4, NScheme::NTypeIds::Uint64> {};
         struct NextPartitionId : Column<6, NScheme::NTypeIds::Uint32> {};
         struct TotalGroupCount : Column<5, NScheme::NTypeIds::Uint32> {};
+        // Deprecated: the write-only BootstrapConfig copy is no longer written
+        // or read (the wire bootstrap is rebuilt from the table's partitions);
+        // the column stays declared so the stored scheme layout is unchanged,
+        // and the column id must never be reused.
         struct BootstrapConfig : Column<7, NScheme::NTypeIds::String> { using Type = TString; };
 
         using TKey = TableKey<PathId>;

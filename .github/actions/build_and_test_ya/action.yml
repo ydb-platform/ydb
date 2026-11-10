@@ -954,21 +954,21 @@ runs:
           # Create run name based on event type and retry number
           case "$GITHUB_EVENT_NAME" in
             workflow_dispatch)
-              run_name="$GITHUB_RUN_ID_manual"
+              run_name="${GITHUB_RUN_ID}_manual"
               ;;
             pull_request | pull_request_target)
               pr_number="$INPUT_GITHUB_EVENT_NUMBER"
               if [ -n "$pr_number" ]; then
-                run_name="$GITHUB_RUN_ID_PR_${pr_number}"
+                run_name="${GITHUB_RUN_ID}_PR_${pr_number}"
               else
-                run_name="$GITHUB_RUN_ID_PR"
+                run_name="${GITHUB_RUN_ID}_PR"
               fi
               ;;
             schedule)
-              run_name="$GITHUB_RUN_ID_schedule"
+              run_name="${GITHUB_RUN_ID}_schedule"
               ;;
             push)
-              run_name="$GITHUB_RUN_ID_POST"
+              run_name="${GITHUB_RUN_ID}_POST"
               ;;
             *)
               run_name="$GITHUB_RUN_ID"

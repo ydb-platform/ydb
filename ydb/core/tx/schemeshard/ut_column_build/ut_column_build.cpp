@@ -51,6 +51,58 @@ public:
 }
 
 Y_UNIT_TEST_SUITE(ColumnBuildTest) {
+    Y_UNIT_TEST_FLAG(NullDefaultNonOptionalDirectRequest, Populated) {
+        TColumnBuildFixture fixture;
+        auto& runtime = fixture.Runtime;
+        if (Populated) {
+            WriteRow(runtime, ++fixture.TxId, "/MyRoot/Table", 1, 101, "existing");
+        }
+        const auto before = DescribePath(runtime, "/MyRoot/Table");
+        Ydb::TypedValue literal;
+        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
+        literal.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        const auto rejected = fixture.CreateBuild("extra", literal, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), Ydb::StatusIds::BAD_REQUEST, rejected.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.DebugString(), "NULL");
+        UNIT_ASSERT_STRING_CONTAINS(rejected.DebugString(), "extra");
+        const auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender,
+            GetBuildIndexRequest("/MyRoot", fixture.TxId));
+        const auto build = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvGetResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(build->Get()->Record.GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED,
+            build->Get()->Record.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(build->Get()->Record.DebugString(), "not found");
+        const auto after = DescribePath(runtime, "/MyRoot/Table");
+        TestDescribeResult(after, {NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true)});
+        UNIT_ASSERT_VALUES_EQUAL(after.GetPathDescription().GetTable().GetTableSchemaVersion(),
+            before.GetPathDescription().GetTable().GetTableSchemaVersion());
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), Populated ? 1 : 0);
+        if (Populated) {
+            const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+            const auto data = ReadTable(runtime, shards[1], "Table", {"key"}, {"key", "value"});
+            const auto rows = NClient::TValue::Create(data)["Result"]["List"];
+            UNIT_ASSERT_VALUES_EQUAL(rows.Size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(rows[0]["key"]), 101);
+            UNIT_ASSERT_VALUES_EQUAL(TString(rows[0]["value"]), "existing");
+        }
+        literal.mutable_value()->set_uint32_value(42);
+        const auto created = fixture.CreateBuild("extra", literal, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(created.GetStatus(), Ydb::StatusIds::SUCCESS, created.DebugString());
+        const auto finished = fixture.FinishBuild(fixture.TxId);
+        UNIT_ASSERT_VALUES_EQUAL_C(finished.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            finished.DebugString());
+        const auto description = DescribePath(runtime, "/MyRoot/Table");
+        TestDescribeResult(description, {NLs::CheckColumns("Table", {"key", "value", "extra"}, {}, {"key"}, true)});
+        for (const auto& column : description.GetPathDescription().GetTable().GetColumns()) {
+            UNIT_ASSERT_C(!column.GetIsBuildInProgress(), column.DebugString());
+            if (column.GetName() == "extra") {
+                UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromLiteral().value().uint32_value(), 42);
+                UNIT_ASSERT_C(!column.GetNotNull(), column.DebugString());
+            }
+        }
+    }
+
     Y_UNIT_TEST_FLAG(NullDefaultNotNullDirectRequest, Populated) {
         TColumnBuildFixture fixture;
         auto& runtime = fixture.Runtime;

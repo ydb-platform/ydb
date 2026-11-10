@@ -1795,6 +1795,8 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             if (Y_LIKELY(input.Meta.SourceSettings)) {
                 enableMetering = true;
                 YQL_ENSURE(input.Meta.SourceSettings->HasTable());
+                // Refresh request-specific hints even when restoring a cached task graph.
+                input.Meta.SourceSettings->SetReadHints(GetMeta().UserRequestContext->ReadHints);
                 bool isTableImmutable = input.Meta.SourceSettings->GetIsTableImmutable();
 
                 if (snapshot.IsValid() && !isTableImmutable) {

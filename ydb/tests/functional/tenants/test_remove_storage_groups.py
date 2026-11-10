@@ -19,10 +19,6 @@ logger = logging.getLogger(__name__)
 # local configuration for the ydb cluster (fetched by ydb_cluster_configuration fixture)
 CLUSTER_CONFIG = dict(
     additional_log_configs={
-        # more logs
-        'CMS_TENANTS': LogLevels.TRACE,
-        'HIVE': LogLevels.TRACE,
-        # less logs
         'KQP_PROXY': LogLevels.CRIT,
         'KQP_WORKER': LogLevels.CRIT,
         'KQP_GATEWAY': LogLevels.CRIT,

@@ -268,13 +268,13 @@ namespace NKikimr {
         }
 
         void Bootstrap(const TActorContext &ctx) {
-            const ui32 localRealm = SyncerContext->VCtx->ShortSelfVDisk.FailRealm;
-            const bool localRealmRecovering = GInfo->IsRecoveringFailRealm(localRealm);
+            ui32 localRealm = SyncerContext->VCtx->ShortSelfVDisk.FailRealm;
+            bool localRealmRecovering = GInfo->IsFailRealmRecovering(localRealm);
             // NodeWarden restarts a returning VDisk, so its new scheduler starts directly in R.
             if (localRealmRecovering) {
                 for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
-                    const ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
-                    if (!peer.Myself && !GInfo->IsFailedFailRealm(realm)) {
+                    ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
+                    if (!peer.Myself && !GInfo->IsFailRealmExcluded(realm)) {
                         FullSyncRequested.insert(peer.OrderNumber);
                     }
                 }
@@ -505,14 +505,14 @@ namespace NKikimr {
             if (msg->NewInfo->GroupGeneration <= GInfo->GroupGeneration) {
                 return;
             }
-            const std::function<bool(ui32)> returned = [&](ui32 realm) {
-                return GInfo->IsFailedFailRealm(realm)
-                    && msg->NewInfo->IsRecoveringFailRealm(realm);
+            std::function<bool(ui32)> returned = [&](ui32 realm) {
+                return GInfo->IsFailRealmExcluded(realm)
+                    && msg->NewInfo->IsFailRealmRecovering(realm);
             };
-            const bool localRealmReturned = returned(SyncerContext->VCtx->ShortSelfVDisk.FailRealm);
+            bool localRealmReturned = returned(SyncerContext->VCtx->ShortSelfVDisk.FailRealm);
             for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
-                const ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
-                const bool peerAvailable = !msg->NewInfo->IsFailedFailRealm(realm);
+                ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
+                bool peerAvailable = !msg->NewInfo->IsFailRealmExcluded(realm);
                 if (!peer.Myself && peerAvailable && (localRealmReturned || returned(realm))) {
                     FullSyncRequested.insert(peer.OrderNumber);
                 }

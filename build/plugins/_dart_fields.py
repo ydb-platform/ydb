@@ -263,29 +263,6 @@ def _resolve_module_files(unit, mod_dir, file_paths):
     return resolved_files
 
 
-def _resolve_config_path(unit, test_runner, rel_to):
-    config_path = unit.get("ESLINT_CONFIG_PATH") if test_runner == "eslint" else unit.get("TS_TEST_CONFIG_PATH")
-    arc_config_path = unit.resolve_arc_path(config_path)
-    abs_config_path = unit.resolve(arc_config_path)
-    if not abs_config_path:
-        raise Exception("{} config not found: {}".format(test_runner, config_path))
-
-    unit.onsrcs([arc_config_path])
-    abs_rel_to = unit.resolve(unit.resolve_arc_path(unit.get(rel_to)))
-    return os.path.relpath(abs_config_path, start=abs_rel_to)
-
-
-def _get_ts_test_data_dirs(unit):
-    return sorted(
-        set(
-            [
-                os.path.dirname(_common.rootrel_arc_src(p, unit))
-                for p in (get_values_list(unit, "_TS_TEST_DATA_VALUE") or [])
-            ]
-        )
-    )
-
-
 @_common.cache_by_second_arg
 def get_linter_configs(unit, config_paths):
     rel_config_path = _common.rootrel_arc_src(config_paths, unit)
@@ -384,16 +361,6 @@ class Classpath:
         return value
 
 
-class ConfigPath:
-    KEY = 'CONFIG-PATH'
-    required = True
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        test_runner, rel_to = flat_args
-        return _resolve_config_path(unit, test_runner, rel_to=rel_to)
-
-
 class CustomDependencies:
     KEY = 'CUSTOM-DEPENDENCIES'
 
@@ -427,15 +394,6 @@ class CustomDependencies:
             deps.extend([os.path.dirname(r.strip().split(" ")[0]) for r in recipes_lines])
 
         return " ".join(deps)
-
-
-class EslintConfigPath:
-    KEY = 'ESLINT_CONFIG_PATH'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        test_runner, rel_to = flat_args
-        return _resolve_config_path(unit, test_runner, rel_to=rel_to)
 
 
 class ParallelTestsInSingleNode:
@@ -836,14 +794,6 @@ class NodejsRootVarName:
         return unit.get("NODEJS-ROOT-VAR-NAME")
 
 
-class NodeModulesBundleFilename:
-    KEY = 'NODE-MODULES-BUNDLE-FILENAME'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        return spec_args.get('nm_bundle')
-
-
 class PythonPaths:
     KEY = 'PYTHON-PATHS'
 
@@ -896,11 +846,6 @@ class Requirements:
             if not any(r and r.startswith(f"{prefix}:") for r in requirements):
                 requirements.append(value)
 
-        return serialize_list(requirements)
-
-    @classmethod
-    def from_unit_with_full_network(cls, unit, flat_args, spec_args):
-        requirements = sorted(set(["network:full"] + get_values_list(unit, "TEST_REQUIREMENTS_VALUE")))
         return serialize_list(requirements)
 
 
@@ -1000,11 +945,6 @@ class Tag:
     def from_unit(cls, unit, flat_args, spec_args):
         tags = serialize_list(get_values_list(unit, "TEST_TAGS_VALUE"))
         return tags
-
-    @classmethod
-    def from_unit_fat_external_no_retries(cls, unit, flat_args, spec_args):
-        tags = sorted(set(["ya:fat", "ya:external", "ya:noretries"] + get_values_list(unit, "TEST_TAGS_VALUE")))
-        return serialize_list(tags)
 
 
 class TestClasspath:
@@ -1165,75 +1105,6 @@ class DockerImage:
         return serialize_list(images)
 
 
-class TsConfigPath:
-    KEY = 'TS_CONFIG_PATH'
-
-    DEFAULT_VALUE = "tsconfig.json"
-
-    @classmethod
-    def from_unit(cls, unit, flat_args, spec_args):
-        ts_config_paths = get_values_list(unit, cls.KEY)
-
-        # Special case: resolve path, relative to test dir
-        if unit.get("TS_FOR") == "yes" and unit.get("TS_CONFIG_PATH_CHANGED") == "yes":
-            tsconfig_path_test = os.path.join(unit.get("MODDIR"), ts_config_paths[0])
-            tsconfig_path_for = os.path.relpath(tsconfig_path_test, unit.get("TS_FOR_PATH"))
-
-            return tsconfig_path_for
-
-        return ts_config_paths[0]
-
-
-class TsStylelintConfig:
-    KEY = 'TS_STYLELINT_CONFIG'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        test_config = unit.get('_TS_STYLELINT_CONFIG')
-        abs_test_config = unit.resolve(unit.resolve_arc_path(test_config))
-        if not abs_test_config:
-            ymake.report_configure_error(
-                f"Config for stylelint not found: {test_config}.\n"
-                "Set the correct value in `TS_STYLELINT(<config_filename>)` macro in the `ya.make` file."
-            )
-
-        return test_config
-
-
-class TsBiomeConfig:
-    KEY = 'TS_BIOME_CONFIG'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        # config can be empty
-        test_config = unit.get('_TS_BIOME_CONFIG')
-        abs_test_config = unit.resolve(unit.resolve_arc_path(test_config))
-        if not abs_test_config:
-            ymake.report_configure_error(
-                f"Config for biome not found: {test_config}.\n"
-                "Set the correct value in `TS_BIOME(<config_filename>)` macro in the `ya.make` file."
-            )
-
-        return {cls.KEY: test_config}
-
-
-class TsTestDataDirs:
-    KEY = 'TS-TEST-DATA-DIRS'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        value = serialize_list(_get_ts_test_data_dirs(unit))
-        return value
-
-
-class TsTestDataDirsRename:
-    KEY = 'TS-TEST-DATA-DIRS-RENAME'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        return unit.get("_TS_TEST_DATA_DIRS_RENAME_VALUE")
-
-
 class TsTestForPath:
     KEY = 'TS-TEST-FOR-PATH'
 
@@ -1377,34 +1248,6 @@ class TestFiles:
         test_files = get_escaped_values_list(unit, "_TS_GLOB_FILES")
         rel_to = "TS_FOR_PATH" if unit.get("TS_FOR") else "MODDIR"
         test_files = _resolve_module_files(unit, unit.get(rel_to), test_files)
-        value = serialize_list(test_files)
-        return value
-
-    @classmethod
-    def ts_test_srcs(cls, unit, flat_args, spec_args):
-        test_files = get_values_list(unit, "_TS_TEST_SRCS_VALUE")
-        test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
-        value = serialize_list(test_files)
-        return value
-
-    @classmethod
-    def ts_lint_srcs(cls, unit, flat_args, spec_args):
-        test_files = get_values_list(unit, "_TS_LINT_SRCS_VALUE")
-        test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
-        value = serialize_list(test_files)
-        return value
-
-    @classmethod
-    def stylesheets(cls, unit, flat_args, spec_args):
-        test_files = get_values_list(unit, "_TS_STYLELINT_FILES")
-        test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
-        value = serialize_list(test_files)
-        return value
-
-    @classmethod
-    def ts_biome_srcs(cls, unit, flat_args, spec_args):
-        test_files = get_values_list(unit, "_TS_BIOME_FILES")
-        test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
         value = serialize_list(test_files)
         return value
 

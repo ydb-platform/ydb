@@ -3,6 +3,8 @@
 #include "schemeshard_identificators.h"
 #include "schemeshard_types.h"
 
+#include "schemeshard__pipe_messages.h"
+
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
@@ -23,6 +25,9 @@ private:
     using TMediatorAck = std::tuple<TActorId, TStepId>;
     using TSendRec = std::tuple<TActorId, TAutoPtr<::NActors::IEventBase>, ui64, ui32>;
     using TBindMsgRec = std::tuple<TOperationId, TTabletId, TPipeMessageId, TAutoPtr<::NActors::IEventBase>>;
+    // Same shape as TBindMsgRec, but holding composed wire fragments
+    // (TPipeMessageFragments) instead of an event to serialize eagerly.
+    using TBindDeferredMsgRec = std::tuple<TOperationId, TTabletId, TPipeMessageId, ui32, TPipeMessageFragments>;
     using TBindMsgAck = std::tuple<TOperationId, TTabletId, TPipeMessageId>;
     using TNotifyRec = std::tuple<TActorId, TTxId>;
     using TProposeRec = std::tuple<TOperationId, TPathId, TStepId>;
@@ -43,6 +48,7 @@ private:
     TDeque<TMediatorAck> MediatorAcks;
     TDeque<TSendRec> Messages;
     TDeque<TBindMsgRec> BindedMessages;
+    TDeque<TBindDeferredMsgRec> BindedDeferredMessages;
     TDeque<TBindMsgAck> BindedMessageAcks;
     TPublications PublishPaths;
     TPublications RePublishPaths; // only for UpgradeSubDomain
@@ -103,6 +109,8 @@ public:
     void BindMsgToPipe(TOperationId opId, TTabletId dst, TPathId pathId, TAutoPtr<::NActors::IEventBase> message);
     void BindMsgToPipe(TOperationId opId, TTabletId dst, TShardIdx shardIdx, TAutoPtr<::NActors::IEventBase> message);
     void BindMsgToPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie, TAutoPtr<::NActors::IEventBase> message);
+    void BindMsgToPipe(TOperationId opId, TTabletId dst, TShardIdx shardIdx, ui32 msgType, TPipeMessageFragments&& fragments);
+    void BindMsgToPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie, ui32 msgType, TPipeMessageFragments&& fragments);
 
     void UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPathId pathId);
     void UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TShardIdx shardIdx);

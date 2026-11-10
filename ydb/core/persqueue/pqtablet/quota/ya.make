@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/persqueue/common
     ydb/core/persqueue/public
     ydb/core/persqueue/public/counters
+    ydb/core/persqueue/public/metrics
     ydb/core/persqueue/pqtablet/common
     ydb/core/quoter/public
 )

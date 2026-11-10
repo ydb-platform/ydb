@@ -6,6 +6,8 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/generic/string.h>
+
+#include <optional>
 #include <vector>
 
 namespace NYdb::NConsoleClient {
@@ -40,6 +42,7 @@ private:
 
     TVector<TString> PileStateUpdates;
     TString FilePath;
+    std::optional<ui64> ExpectedGeneration;
 
     std::vector<NYdb::NBridge::TPileStateUpdate> Updates;
 };
@@ -54,6 +57,30 @@ public:
 private:
     bool AllowEmptyDatabase;
     bool Detailed = false;
+};
+
+class TCommandBridgeRollbackStatus : public TYdbReadOnlyCommand, public TCommandWithOutput {
+public:
+    TCommandBridgeRollbackStatus(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase;
+};
+
+class TCommandBridgeRollback : public TYdbCommand {
+public:
+    TCommandBridgeRollback(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    bool Prompt(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    bool SkipBscValidation = false;
 };
 
 class TCommandBridgeSwitchover : public TYdbCommand {

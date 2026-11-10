@@ -45,6 +45,9 @@ public:
         for (const auto& quorumPile : quorumPiles) {
             request.add_quorum_piles(quorumPile);
         }
+        if (settings.ExpectedGeneration_) {
+            request.set_expected_generation(*settings.ExpectedGeneration_);
+        }
 
         return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::UpdateClusterStateRequest, Ydb::Bridge::UpdateClusterStateResponse>(
             std::move(request),
@@ -54,6 +57,7 @@ public:
 
     TAsyncGetClusterStateResult GetClusterState(const TGetClusterStateSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::GetClusterStateRequest>(settings);
+        request.set_include_pile_connectivity(settings.IncludePileConnectivity_);
 
         auto promise = NThreading::NewPromise<TGetClusterStateResult>();
 
@@ -62,9 +66,30 @@ public:
                 uint64_t generation = 0;
                 bool conversionInProgress = false;
                 std::optional<TPendingPileOperation> pendingPileOperation;
+                std::optional<TPileConnectivityReport> pileConnectivity;
                 if (any) {
                     Ydb::Bridge::GetClusterStateResult result;
                     if (any->UnpackTo(&result)) {
+                        if (result.has_pile_connectivity()) {
+                            const auto& report = result.pile_connectivity();
+                            pileConnectivity.emplace(TPileConnectivityReport{
+                                .ReporterNodeId = report.reporter_node_id(),
+                                .ReporterIsRoot = report.reporter_is_root(),
+                                .BindingInProgress = report.binding_in_progress(),
+                                .Generation = report.generation(),
+                            });
+                            pileConnectivity->Piles.reserve(report.piles_size());
+                            for (const auto& pile : report.piles()) {
+                                pileConnectivity->Piles.push_back({
+                                    .PileName = pile.pile_name(),
+                                    .StaticNodes = pile.static_nodes(),
+                                    .ConnectedStaticNodes = pile.connected_static_nodes(),
+                                    .HasNodeQuorum = pile.has_node_quorum(),
+                                    .InConfigQuorum = pile.in_config_quorum(),
+                                    .InDataQuorum = pile.in_data_quorum(),
+                                });
+                            }
+                        }
                         state = StateFromProto(result);
                         generation = result.generation();
                         conversionInProgress = result.conversion_in_progress();
@@ -79,7 +104,7 @@ public:
                     }
                 }
                 promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state), generation,
-                    conversionInProgress, std::move(pendingPileOperation)));
+                    conversionInProgress, std::move(pendingPileOperation), std::move(pileConnectivity)));
             };
 
         Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::GetClusterStateRequest, Ydb::Bridge::GetClusterStateResponse>(
@@ -134,6 +159,57 @@ public:
             &Ydb::Bridge::V1::BridgeService::Stub::AsyncRemovePile,
             TRpcRequestSettings::Make(settings));
     }
+
+    TAsyncGetRollbackStatusResult GetRollbackStatus(const TGetRollbackStatusSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::GetRollbackStatusRequest>(settings);
+
+        auto promise = NThreading::NewPromise<TGetRollbackStatusResult>();
+
+        auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
+                bool bridged = false;
+                std::vector<uint32_t> bridgeConfigNodeIds;
+                std::vector<uint32_t> unreportedStaticNodeIds;
+                bool complete = false;
+                bool rollbackInProgress = false;
+                std::string errorReason;
+                if (any) {
+                    Ydb::Bridge::GetRollbackStatusResult result;
+                    if (any->UnpackTo(&result)) {
+                        bridged = result.bridged();
+                        bridgeConfigNodeIds.assign(result.bridge_config_node_ids().begin(),
+                            result.bridge_config_node_ids().end());
+                        unreportedStaticNodeIds.assign(result.unreported_static_node_ids().begin(),
+                            result.unreported_static_node_ids().end());
+                        complete = result.complete();
+                        rollbackInProgress = result.rollback_in_progress();
+                        errorReason = result.error_reason();
+                    }
+                }
+                promise.SetValue(TGetRollbackStatusResult(TStatus(std::move(status)), bridged,
+                    std::move(bridgeConfigNodeIds), std::move(unreportedStaticNodeIds), complete, rollbackInProgress,
+                    std::move(errorReason)));
+            };
+
+        Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::GetRollbackStatusRequest, Ydb::Bridge::GetRollbackStatusResponse>(
+            std::move(request),
+            extractor,
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncGetRollbackStatus,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+
+        return promise.GetFuture();
+    }
+
+    TAsyncStatus Rollback(const TRollbackSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::RollbackRequest>(settings);
+        request.set_skip_bsc_validation(settings.SkipBscValidation_);
+
+        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::RollbackRequest, Ydb::Bridge::RollbackResponse>(
+            std::move(request),
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncRollback,
+            TRpcRequestSettings::Make(settings));
+    }
 };
 
 TBridgeClient::TBridgeClient(const TDriver& driver, const TCommonClientSettings& settings)
@@ -166,6 +242,14 @@ TAsyncStatus TBridgeClient::SetDatabaseBridgeMode(const std::string& databasePat
 
 TAsyncStatus TBridgeClient::RemovePile(const std::string& pileName, const TRemovePileSettings& settings) {
     return Impl_->RemovePile(pileName, settings);
+}
+
+TAsyncGetRollbackStatusResult TBridgeClient::GetRollbackStatus(const TGetRollbackStatusSettings& settings) {
+    return Impl_->GetRollbackStatus(settings);
+}
+
+TAsyncStatus TBridgeClient::Rollback(const TRollbackSettings& settings) {
+    return Impl_->Rollback(settings);
 }
 
 }

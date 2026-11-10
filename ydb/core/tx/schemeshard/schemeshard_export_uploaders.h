@@ -10,6 +10,7 @@ namespace NKikimrSchemeOp {
 
 namespace NKikimr::NBackup {
     struct TEncryptionIV;
+    class TMetadata;
 }
 
 namespace Ydb::Export {
@@ -24,7 +25,7 @@ NActors::IActor* CreateExportCompletionUploader(NActors::TActorId schemeShard, u
 
 template <typename TSettings>
 NActors::IActor* CreateSchemeUploader(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const TSettings& settings, const TString& databaseRoot, const TString& metadata,
+    const TSettings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 

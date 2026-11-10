@@ -19,6 +19,7 @@ void TKeyValueState::ClearMoveDataBlobMovingStage() {
 }
 
 void TKeyValueState::ClearMoveDataTrashCheckingStage() {
+    MoveDataTrashCheckingVacuumResetGeneration = VacuumResetGeneration;
     MoveDataTrashCheckingVacuumGeneration = {};
     MoveDataTrashCheckingBlobId = TLogoBlobID();
     MoveDataTrashCheckingWaitingForGC = false;
@@ -286,6 +287,12 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::CheckTras
     YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "CheckTrash",
         {"keyValue", TabletId},
         {"marker", "KV96"});
+
+    if (MoveDataTrashCheckingVacuumResetGeneration != VacuumResetGeneration) {
+        // A vacuum reset moves blobs between bins and may reuse older generations.
+        // Restart here, after GC has woken the check, to preserve its pending wakeup.
+        ClearMoveDataTrashCheckingStage();
+    }
 
     TSet<TLogoBlobID>* trashBin = &Trash;
 

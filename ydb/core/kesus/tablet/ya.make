@@ -26,6 +26,7 @@ SRCS(
     tx_semaphore_create.cpp
     tx_semaphore_delete.cpp
     tx_semaphore_describe.cpp
+    tx_semaphores_describe.cpp
     tx_semaphore_release.cpp
     tx_semaphore_timeout.cpp
     tx_semaphore_update.cpp

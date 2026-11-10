@@ -8,7 +8,7 @@ IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:4)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 SRCS(
@@ -30,6 +30,7 @@ PEERDIR(
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/core/tx/replication/service
     ydb/public/lib/ydb_cli/dump/util
     ydb/library/yql/udfs/common/knn
     ydb/services/workload_manager/ut/common

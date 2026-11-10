@@ -11,6 +11,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/generic/array_ref.h>
+#include <util/generic/strbuf.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
@@ -1024,7 +1025,7 @@ void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId},
             {"updateTabletMetricsInProgress", UpdateTabletMetricsInProgress});
-        Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck);
+        Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck, 0, ev->Cookie);
     }
 }
 
@@ -2587,6 +2588,9 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         if (!node.Name.empty()) {
             nodeStats.SetNodeName(node.Name);
         }
+        if (node.BridgePileId) {
+            node.BridgePileId.CopyToProto(&nodeStats, &NKikimrHive::THiveNodeStats::SetBridgePileId);
+        }
         if (request.GetReturnExtendedTabletInfo()) {
             if (request.HasFilterTabletsByPathId()) {
                 auto itTabletsOfObject = node.TabletsOfObject.find({request.GetFilterTabletsBySchemeShardId(), request.GetFilterTabletsByPathId()});
@@ -2796,7 +2800,13 @@ void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
     ClusterConfig = record.GetConfig().GetHiveConfig();
     NodeBrokerEpoch = TDuration::MicroSeconds(record.GetConfig().GetNodeBrokerConfig().GetEpochDuration());
+    const NKikimrConfig::THiveConfig previousConfig = CurrentConfig;
     BuildCurrentConfig();
+    if (TString changes = GetHiveConfigDiffText(previousConfig, CurrentConfig)) {
+        YDB_LOG_INFO("Handle TEvConsole::TEvConfigNotificationRequest: effective config changed",
+            {"logPrefix", GetLogPrefix()},
+            {"changes", changes});
+    }
     YDB_LOG_DEBUG("Handle TEvConsole::TEvConfigNotificationRequest: merged config",
         {"logPrefix", GetLogPrefix()},
         {"config", CurrentConfig});
@@ -3281,7 +3291,7 @@ void THive::AggregateMetricsMax(NKikimrTabletBase::TMetrics& aggregate, const NK
 }
 
 template <ui64 TMetrics::* field>
-static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, TTabletId tabletId, const TString& name) {
+static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, TTabletId tabletId, TStringBuf name) {
     i64 oldValue = aggregate.*field;
     i64 delta = after.*field - before.*field;
     i64 newValue = oldValue + delta;
@@ -3289,7 +3299,7 @@ static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMe
         YDB_LOG_ERROR("AggregateMetricsDiff: aggregated metric value became negative",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tabletId},
-            {"metricName", name},
+            {"metricName", TString(name)},
             {"oldValue", oldValue},
             {"delta", delta},
             {"newValue", newValue});
@@ -3802,6 +3812,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(TEvPrivate::TEvProcessBootQueue, Handle);
+        hFunc(TEvPrivate::TEvProcessPileDrains, Handle);
         hFunc(TEvPrivate::TEvPostponeProcessBootQueue, Handle);
         hFunc(TEvPrivate::TEvProcessPendingOperations, Handle);
         hFunc(TEvPrivate::TEvProcessDisconnectNode, Handle);
@@ -3923,6 +3934,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvInterconnect::TEvNodesInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvents::TEvUndelivered::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessBootQueue::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessPileDrains::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvPostponeProcessBootQueue::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessPendingOperations::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessDisconnectNode::EventType, EnqueueIncomingEvent);

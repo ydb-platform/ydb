@@ -78,12 +78,12 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IInvokerPtr GetFinalizerInvoker()
+const IInvokerPtr& GetFinalizerInvoker()
 {
     return LeakySingleton<TFinalizerInvokerThread>()->GetInvoker();
 }
 
-IInvokerPtr GetShutdownInvoker()
+const IInvokerPtr& GetShutdownInvoker()
 {
     return LeakySingleton<TShutdownInvokerThread>()->GetInvoker();
 }

@@ -595,6 +595,40 @@ Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {
     PQGetPartInfo(0, 0, tc);
 }
 
+Y_UNIT_TEST(CmdWriteRejectsExplicitHashLongerThan255) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString ownerCookie = CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, 0).first;
+    auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* partitionRequest = request->Record.MutablePartitionRequest();
+    partitionRequest->SetPartition(0);
+    partitionRequest->SetOwnerCookie(ownerCookie);
+    partitionRequest->SetMessageNo(1);
+
+    auto* write = partitionRequest->AddCmdWrite();
+    write->SetSourceId("source");
+    write->SetSeqNo(1);
+    write->SetData("data");
+    write->SetLogicalMessageCount(1);
+    write->SetExplicitHash(TString(256, 'h'));
+
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+        [](const TEvPersQueue::TEvResponse& event) {
+            return event.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
+        });
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(
+        static_cast<ui32>(response->Record.GetErrorCode()),
+        static_cast<ui32>(NPersQueue::NErrorCode::BAD_REQUEST));
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetErrorReason(), "too long explicit hash");
+}
+
 Y_UNIT_TEST(BatchedMessagesWriteWithoutMaxSeqNoFails) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;
@@ -1136,18 +1170,18 @@ void TestMirroredOffsetSurvivesRestart(bool kafkaBatch) {
             CmdWrite(0, "sourceid_before_gap", {{1, "before-gap"}}, tc);
             expected.push_back({.SeqNo = 1, .Offset = 0, .Data = "before-gap"});
         }
-        const ui64 oldEndOffset = prefill ? 1 : 0;
         constexpr ui64 mirroredOffset = 1000;
+        // Only an empty partition advances its boundaries to the replicated position.
+        const ui64 expectedStartOffset = prefill ? 0 : mirroredOffset;
+        const ui64 expectedEndOffset = prefill ? 1 : mirroredOffset;
         auto replicationData = MakeHolder<TEvPQ::TEvReplicationData>();
         replicationData->MirroredOffset = mirroredOffset;
         tc.Runtime->Send(new IEventHandle(partitionActor, tc.Edge, replicationData.Release(), 0, 17));
-        auto ack = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(tc.Edge, TDuration::Seconds(10));
-        UNIT_ASSERT(ack);
-        UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, 17);
-        PQGetPartInfo(0, oldEndOffset, tc);
+        tc.Runtime->SimulateSleep(TDuration::Seconds(1));
+        PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
 
         PQTabletRestart(tc);
-        PQGetPartInfo(0, oldEndOffset, tc);
+        PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
 
         const TVector<TString> values = {"after-gap", TString(1_MB, 'x')};
         if (kafkaBatch) {

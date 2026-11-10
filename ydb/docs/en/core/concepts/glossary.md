@@ -194,10 +194,6 @@ A monotonically increasing lower bound on the event times in a [streaming query]
 
 **Bridge mode** is a special cluster topology in which data is stored with synchronous replication between multiple [piles](#pile). The specifics of the mode are described in [{#T}](topology.md#bridge) and also in [{#T}](bridge.md).
 
-#### Non-uniform storage {#non-uniform-storage}
-
-**Non-uniform storage** is a bridge cluster mode in which bridged storage pools and ordinary storage pools coexist. Ordinary pools can reduce storage overhead and write latency but still depend on the bridge control plane for failover. For details, see [Bridged and ordinary storage pools](bridge.md#storage-pools).
-
 ### Table {#table}
 
 A **table** is a structured piece of information organized into rows and columns. Each row represents a single record or item, and each column is a specific attribute or field with a defined data type.

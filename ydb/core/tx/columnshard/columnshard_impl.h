@@ -1,7 +1,6 @@
 #pragma once
 #include "background_controller.h"
 #include "columnshard.h"
-#include "columnshard_find_empty_history_intervals.h"
 #include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
 #include "counters.h"
@@ -22,9 +21,12 @@
 #include "data_sharing/modification/events/change_owning.h"
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
+#include "engines/reader/transaction/scan_gate.h"
+#include "maintenance/cut_history/find_empty_history_intervals.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
+#include "operations/write_gate.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
@@ -139,7 +141,6 @@ class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
 class TTxBlobsWritingFailed;
-class TWriteTasksQueue;
 class TWriteTask;
 class TCommitOperation;
 class IScanSnapshotGuard;
@@ -217,7 +218,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
     friend class TTxSaveCutHistoryRequests;
-    friend class TFindEmptyHistoryIntervalsResultProcessor;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitOnProposeTxSubscriberBase;
@@ -277,7 +277,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NLoading::TSpecialValuesInitializer;
     friend class NLoading::TTablesManagerInitializer;
     friend class NLoading::TTiersManagerInitializer;
-    friend class TWriteTasksQueue;
     friend class TWriteTask;
 
     class TTxProgressTx;
@@ -304,6 +303,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::TEvPassWriteGate::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorContext& ctx);
@@ -313,6 +313,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& ev);
+    void Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
@@ -441,11 +442,11 @@ public:
     }
 
 private:
+    void DrainWriteQueue(const TActorContext& ctx, const bool isRetryWakeup = false);
+    void FailStartedWrite(const NOlap::TEvPassWriteGate& batch, const NKikimrDataEvents::TEvWriteResult::EStatus status, const TString& reason,
+        const TActorContext& ctx);
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
-    TOverloadStatus ResourcesStatusToOverloadStatus(const NOverload::EResourcesStatus status) const;
-    TOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
-    EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
 
 protected:
     STFUNC(StateInit) {
@@ -473,7 +474,6 @@ private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
     TStartupTimeline StartupTimeline;
-    std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;
 
     std::unique_ptr<TTxController> ProgressTxController;
     std::unique_ptr<TOperationsManager> OperationsManager;
@@ -533,8 +533,10 @@ private:
     ui64 InProgressTxId = 0;
     bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
-    TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
+    NOlap::NReader::TScanGate ScanGate;
+    std::optional<TWriteGate> WriteGate;
     TBackgroundController BackgroundController;
+    std::unique_ptr<TFindEmptyHistoryIntervals> FindEmptyHistoryIntervals;
     TSettings Settings;
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
@@ -609,14 +611,7 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
-    std::optional<TEmptyHistoryIntervalsScan> EmptyHistoryIntervalsScan;
-    void InitFindEmptyHistoryIntervals();
-    void StartFindEmptyHistoryIntervals(const TActorContext& ctx);
-    void AbortFindEmptyHistoryIntervals();
-    void FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccessorsResult& result);
-    void TryCutHistory(const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvContinueFindEmptyHistoryIntervals::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx);
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
     bool SetupTtl();
@@ -652,6 +647,8 @@ public:
     const TTablesManager& GetTablesManager() const {
         return TablesManager;
     }
+
+    void OnFirstGC(ui32 completedBarrierGeneration, const TActorContext& ctx);
 
     void EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId = 0);
 
@@ -710,6 +707,11 @@ public:
     TOperationsManager& GetOperationsManager() const {
         AFL_VERIFY(OperationsManager);
         return *OperationsManager;
+    }
+
+    TWriteGate& GetWriteGate() {
+        AFL_VERIFY(WriteGate);
+        return *WriteGate;
     }
 
     bool HasIndex() const {

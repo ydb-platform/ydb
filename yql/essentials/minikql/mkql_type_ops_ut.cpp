@@ -210,21 +210,36 @@ Y_UNIT_TEST(SplitMakeTzDatetime32vs64) {
 
 Y_UNIT_TEST(SplitTzDatetime32vs64Pre1970) {
     const ui16 tzId = GetTimezoneId("Etc/GMT+1");
-    ui32 year_n, month_n, day_n, hour_n, minute_n, second_n;
-    ui32 dayOfYear_n, weekOfYear_n, weekOfYearIso8601_n, dayOfWeek_n;
-    UNIT_ASSERT(SplitTzDatetime(0u, year_n, month_n, day_n, hour_n, minute_n, second_n,
+    ui32 year_n;
+    ui32 month_n;
+    ui32 day_n;
+    ui32 hour_n;
+    ui32 minute_n;
+    ui32 second_n;
+    ui32 dayOfYear_n;
+    ui32 weekOfYear_n;
+    ui32 weekOfYearIso8601_n;
+    ui32 dayOfWeek_n;
+    UNIT_ASSERT(SplitTzDatetime(0U, year_n, month_n, day_n, hour_n, minute_n, second_n,
                                 dayOfYear_n, weekOfYear_n, weekOfYearIso8601_n, dayOfWeek_n, tzId));
-    UNIT_ASSERT_VALUES_EQUAL(1969u, year_n);
-    UNIT_ASSERT_VALUES_EQUAL(12u, month_n);
-    UNIT_ASSERT_VALUES_EQUAL(31u, day_n);
-    UNIT_ASSERT_VALUES_EQUAL(365u, dayOfYear_n);
-    UNIT_ASSERT_VALUES_EQUAL(53u, weekOfYear_n);
-    UNIT_ASSERT_VALUES_EQUAL(1u, weekOfYearIso8601_n);
-    UNIT_ASSERT_VALUES_EQUAL(3u, dayOfWeek_n);
+    UNIT_ASSERT_VALUES_EQUAL(1969U, year_n);
+    UNIT_ASSERT_VALUES_EQUAL(12U, month_n);
+    UNIT_ASSERT_VALUES_EQUAL(31U, day_n);
+    UNIT_ASSERT_VALUES_EQUAL(365U, dayOfYear_n);
+    UNIT_ASSERT_VALUES_EQUAL(53U, weekOfYear_n);
+    UNIT_ASSERT_VALUES_EQUAL(1U, weekOfYearIso8601_n);
+    UNIT_ASSERT_VALUES_EQUAL(3U, dayOfWeek_n);
 
     i32 year_w;
-    ui32 month_w, day_w, hour_w, minute_w, second_w;
-    ui32 dayOfYear_w, weekOfYear_w, weekOfYearIso8601_w, dayOfWeek_w;
+    ui32 month_w;
+    ui32 day_w;
+    ui32 hour_w;
+    ui32 minute_w;
+    ui32 second_w;
+    ui32 dayOfYear_w;
+    ui32 weekOfYear_w;
+    ui32 weekOfYearIso8601_w;
+    ui32 dayOfWeek_w;
     UNIT_ASSERT(SplitTzDatetime64(0LL, year_w, month_w, day_w, hour_w, minute_w, second_w,
                                   dayOfYear_w, weekOfYear_w, weekOfYearIso8601_w, dayOfWeek_w, tzId));
     UNIT_ASSERT_VALUES_EQUAL(year_n, static_cast<ui32>(year_w));

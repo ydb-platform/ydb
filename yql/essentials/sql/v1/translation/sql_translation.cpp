@@ -34,6 +34,9 @@ void VisitAllFields(const NProtoBuf::Message& msg, Callback& callback) {
     const auto* descr = msg.GetDescriptor();
     for (int i = 0; i < descr->field_count(); ++i) {
         const auto* fd = descr->field(i);
+        if (fd->cpp_type() != NProtoBuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+            continue;
+        }
         NProtoBuf::TConstField field(msg, fd);
         if (field.IsMessage()) {
             for (size_t j = 0; j < field.Size(); ++j) {
@@ -1292,7 +1295,7 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
         allowBinding = false;
         if (service != YtProviderName &&
             service != KikimrProviderName &&
-            service != RtmrProviderName && service != StatProviderName) {
+            service != StatProviderName) {
             Ctx_.Error() << "Unknown service: " << service;
             return false;
         }
@@ -3944,7 +3947,7 @@ TSQLStatus TSqlTranslation::SortSpecificationList(const TRule_sort_specification
     if (auto status = SortSpecification(node.GetRule_sort_specification1(), sortSpecs); !status) {
         return std::unexpected(status.error());
     }
-    for (auto sortSpec : node.GetBlock2()) {
+    for (const auto& sortSpec : node.GetBlock2()) {
         Token(sortSpec.GetToken1());
         if (auto status = SortSpecification(sortSpec.GetRule_sort_specification2(), sortSpecs); !status) {
             return std::unexpected(status.error());

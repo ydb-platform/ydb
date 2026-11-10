@@ -8,11 +8,13 @@
 #include "resources.h"
 #include "stat_processor.h"
 #include "bridge_sync_counters.h"
+#include "bridge_storage.h"
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
 
 #include <ydb/core/base/feature_flags_service.h>
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/base/pdisk_filter.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
@@ -2158,6 +2160,8 @@ private:
     // Bridge operation
 
     static constexpr TDuration DisconnectedSyncerReactionTime = TDuration::Seconds(10);
+    // the time given to nodes to report their syncers to the new BSC instance, until then their number is not known
+    static constexpr TDuration SyncerReportingTime = TDuration::Seconds(10);
 
     struct TSyncerProgress {
         ui64 BytesDone = 0;
@@ -2166,6 +2170,9 @@ private:
         ui64 BlobsDone = 0;
         ui64 BlobsTotal = 0;
         ui64 BlobsError = 0;
+        ui64 BytesToCopy = 0;
+        ui64 BytesCopied = 0;
+        bool ScanFinished = false;
     };
 
     struct TSyncersRequiringAction;
@@ -2186,6 +2193,16 @@ private:
         TBackoffTimer RetryBackoff{100, 30000};
         TMonotonic NotBefore;
 
+        // what is left to copy into the target, see GetBridgeSyncRemaining; it outlives the syncers of the stage, as
+        // each of them starts from zero
+        std::optional<NKikimrBridge::TGroupState::EStage> CopyStage; // the stage the two fields below belong to
+        std::optional<TSyncerProgress> LastProgress; // the latest report of a syncer in CopyStage
+        std::optional<ui64> KnownRemaining; // what was left at the latest report with a finished scan in CopyStage
+        // bytes copied into the target by all of its syncers, and its samples over BridgeSyncRateWindow for the rate
+        ui64 CopiedTotal = 0;
+        std::deque<std::tuple<TMonotonic, ui64>> CopiedSamples;
+        ui64 CopyRate = 0; // bytes per second
+
         TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
             : BridgeProxyGroupId(bridgeProxyGroupId)
             , TargetGroupId(targetGroupId)
@@ -2195,8 +2212,11 @@ private:
     THashMap<TGroupId, TSyncerState> TargetGroupToSyncerState;
     ui64 NextStaticSyncerCommitCookie = 0;
     std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
-    TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
+    TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction; // filled by EnqueueSyncer only
     TMonotonic SyncersRetryAt = TMonotonic::Max(); // when ProcessSyncers is scheduled to start the syncers that failed
+    // syncers beyond this number wait for their turn, which comes after each stage; those of static groups only count, as
+    // there are few of them and they matter the most; 0 means no limit
+    Schema::State::BridgeSyncMaxSyncers::Type BridgeSyncMaxSyncers = Schema::State::BridgeSyncMaxSyncers::Default;
 
     // the limit for the whole cluster gets divided equally between the nodes hosting syncers; the nodes get a new share
     // only when one of them starts hosting or stops doing so, or when the limit changes
@@ -2284,13 +2304,6 @@ private:
     // its inline pile goes away
     void DropBridgeGroupPart(TConfigState& state, TGroupId proxyGroupId, TBridgePileId pileId);
 
-    // the parts of the groups being made fully bridged ones are synced in synchronized piles by this many syncers at
-    // most, so that the traffic between piles doesn't hamper them
-    static constexpr size_t MaxBridgeUpgradeSyncers = 16;
-
-    // syncer of the part in the synchronized pile of the group being made fully bridged one
-    bool IsBridgeUpgradeSyncer(const TSyncerState& syncerState);
-
     // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
     TBridgePileId GetPendingOperationPileId() const;
 
@@ -2305,6 +2318,29 @@ private:
     ui64 BridgePileAddedOperationId = 0; // ADD operation BSC has done its part of (in memory, it is repeated on restart)
 
     void UpdateBridgeSyncCounters();
+    NBridgeStorage::TCopyObservation ObserveBridgeStorageCopy(const NBridgeStorage::TGroupContext& group,
+        const TBridgeInfo::TPile& pile, const NKikimrBridge::TClusterStateDetails::TPileSyncState* syncState,
+        bool bridged) const;
+    void Handle(TEvBlobStorage::TEvControllerQueryBridgeStorage::TPtr& ev);
+    Ydb::StatusIds::StatusCode SelectBridgeStoragePools(const NKikimrBridge::TStorageQuery& query,
+        std::set<TBoxStoragePoolId>& selected, NBridgeStorage::TReportBudget& budget, TString& error) const;
+
+    // bytes left to copy into the target group of a pile in the given sync stage; Complete is set when the number
+    // comes from a scan that has gone over all the blobs, otherwise it's a lower bound; nothing is known before any
+    // scan
+    struct TBridgeSyncRemaining {
+        ui64 Bytes = 0;
+        bool Complete = false;
+    };
+    std::optional<TBridgeSyncRemaining> GetBridgeSyncRemaining(TGroupId targetGroupId,
+        NKikimrBridge::TGroupState::EStage stage) const;
+    // the stage of the target group of a pile, if it is one
+    std::optional<NKikimrBridge::TGroupState::EStage> GetBridgeSyncStage(TGroupId targetGroupId);
+    // returns the bytes copied since the previous report
+    ui64 UpdateBridgeSyncCopyProgress(TSyncerState& syncerState, NKikimrBridge::TGroupState::EStage stage,
+        const TSyncerProgress& progress);
+    void UpdateBridgeSyncCopyRates();
+    static constexpr TDuration BridgeSyncRateWindow = TDuration::Minutes(1);
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);
@@ -2314,6 +2350,7 @@ private:
 
     void CheckSyncerDisconnectedNodes();
 
+    void EnqueueSyncer(TSyncerState& syncerState);
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
     void SendSyncersToNodes(const THashSet<TNodeId>& nodeIds);
     bool IsNodeHostingSyncers(TNodeId nodeId) const;
@@ -2334,6 +2371,9 @@ private:
         TInstant LastErrorTimestamp;
         TInstant FirstErrorTimestamp;
         ui32 ErrorCount = 0;
+        // what the blob scan of the stage before Stage has found missing from the target, in blob bytes; there is a row
+        // with this field and no errors, so that BSC restarts don't lose it
+        std::optional<ui64> EstimatedBytesToCopy;
     };
     THashMap<TGroupId, TBridgeSyncState> BridgeSyncState;
 
@@ -2473,6 +2513,7 @@ public:
         switch (type) {
             hFunc(TEvBlobStorage::TEvControllerRegisterNode, Handle);
             hFunc(TEvBlobStorage::TEvControllerGetGroup, Handle);
+            hFunc(TEvBlobStorage::TEvControllerQueryBridgeStorage, Handle);
             hFunc(TEvBlobStorage::TEvControllerSelectGroups, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateGroupStat, Handle);

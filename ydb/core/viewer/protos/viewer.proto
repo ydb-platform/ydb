@@ -319,12 +319,29 @@ enum EFlag {
     Red = 5;
 }
 
+// sync of the groups of a pile (or of one of its storage pools) that are not synced yet; bytes are blob bytes, as the
+// sync rate limits are
+message TBridgePileSyncInfo {
+    optional uint64 BytesRemaining = 1; // left to copy into the pile; a lower bound while GroupsNotEstimated isn't zero
+    optional uint64 BytesPerSecond = 2; // copy rate over the last minute
+    optional uint64 SecondsLeft = 3; // BytesRemaining / BytesPerSecond, when the rate isn't zero
+    optional uint32 GroupsNotEstimated = 4; // groups not synced yet, which no scan over all the blobs has been done for
+    map<string, uint32> GroupsInStage = 5; // groups by sync stage, SYNCED ones included
+}
+
+message TBridgePileStoragePool {
+    optional string Name = 1;
+    optional TBridgePileSyncInfo Sync = 2;
+}
+
 message TBridgePileInfo {
     optional uint32 PileId = 1;
     optional string Name = 2;
     optional Ydb.Bridge.PileState.State State = 3;
     optional uint32 Nodes = 4;
     map<string, uint32> GroupStatuses = 5; // UNKNOWN (grey), FULL (green), PARTIAL (yellow), DEGRADED (yellow), DISINTEGRATED (red)
+    optional TBridgePileSyncInfo Sync = 6; // set when some groups of the pile are not synced yet
+    repeated TBridgePileStoragePool StoragePools = 7; // the pools that have groups not synced yet in the pile
 }
 
 message TBridgeInfo {

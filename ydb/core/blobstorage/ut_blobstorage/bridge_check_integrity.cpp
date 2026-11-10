@@ -2,6 +2,7 @@
 #include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <ydb/library/testlib/helpers.h>
 
 #include <array>
@@ -11,15 +12,20 @@ using namespace NBridgeTest;
 namespace {
     enum class ECondition { Healthy, Missing, Corrupt, Error };
 
-    void CheckAllCopies(ECondition condition, bool healthyFirst) {
-        TEnvironmentSetup env{{
+    TEnvironmentSetup::TSettings MakeSettings(bool enableDeepScrubbing = false) {
+        return {
             .NodeCount = 16,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .LocationGenerator = GetBridgedLocation,
             .SelfManagementConfig = true,
+            .EnableDeepScrubbing = enableDeepScrubbing,
             .NumPiles = 2,
             .AutomaticBootstrap = true,
-        }};
+        };
+    }
+
+    void CheckAllCopies(ECondition condition, bool healthyFirst) {
+        TEnvironmentSetup env(MakeSettings());
         const ui32 groupId = CreatePoolAndGetGroup(env);
         const auto groups = GetPileGroups(env, groupId);
         const TLogoBlobID id(100500, 1, 1, 0, 100, 0);
@@ -101,4 +107,117 @@ Y_UNIT_TEST_SUITE(BridgeCheckIntegrity) {
     Y_UNIT_TEST_TWIN(MissingCopy, healthyFirst) { CheckAllCopies(ECondition::Missing, healthyFirst); }
     Y_UNIT_TEST_TWIN(CorruptCopy, healthyFirst) { CheckAllCopies(ECondition::Corrupt, healthyFirst); }
     Y_UNIT_TEST_TWIN(FailedCheck, healthyFirst) { CheckAllCopies(ECondition::Error, healthyFirst); }
+
+    // a part of bridged group serves the requests fenced with its generation only; the ones addressed to it directly
+    // without the fence, as monitoring pages send them, get an error instead of stopping the node
+    Y_UNIT_TEST(PartWithoutForcedGeneration) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const ui32 partGroupId = GetPileGroups(env, groupId).front(); // the part in the pile of node 1
+        const ui32 partGeneration = GetGroupInfo(env, partGroupId).GetGroupGeneration();
+        const TString data = "data checked in the part";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto send = [&](ui32 target, IEventBase *ev) {
+            env.Runtime->WrapInActorContext(edge, [&] { SendToBSProxy(edge, target, ev); });
+        };
+
+        send(groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        auto putResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(putResult->Get()->Status, NKikimrProto::OK, putResult->Get()->ErrorReason);
+
+        send(partGroupId, new TEvBlobStorage::TEvCheckIntegrity(id, TInstant::Max(), NKikimrBlobStorage::FastRead));
+        auto checkResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCheckIntegrityResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(checkResult->Get()->Status, NKikimrProto::ERROR, checkResult->Get()->ErrorReason);
+
+        send(partGroupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));
+        auto getResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Status, NKikimrProto::ERROR, getResult->Get()->ErrorReason);
+
+        send(partGroupId, new TEvBlobStorage::TEvRange(id.TabletID(), TLogoBlobID(id.TabletID(), 0, 0, 0, 0, 0),
+            TLogoBlobID(id.TabletID(), Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel, TLogoBlobID::MaxBlobSize,
+            TLogoBlobID::MaxCookie), false, TInstant::Max(), true));
+        auto rangeResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(rangeResult->Get()->Status, NKikimrProto::ERROR, rangeResult->Get()->ErrorReason);
+
+        // fenced with the generation of the part, the check of the copy in the part is served
+        auto ev = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(id, TInstant::Max(),
+            NKikimrBlobStorage::FastRead);
+        ev->ForceGroupGeneration = partGeneration;
+        send(partGroupId, ev.release());
+        checkResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCheckIntegrityResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(checkResult->Get()->Status, NKikimrProto::OK, checkResult->Get()->ErrorReason);
+        UNIT_ASSERT(checkResult->Get()->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+        UNIT_ASSERT(checkResult->Get()->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
+    }
+
+    // deep scrubbing of a VDisk checks the part of bridged group the VDisk belongs to
+    Y_UNIT_TEST(DeepScrubbingOfParts) {
+        TEnvironmentSetup env(MakeSettings(true));
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto groups = GetPileGroups(env, groupId);
+        TDataChecker checker(env);
+        for (ui32 i = 0; i < 10; ++i) {
+            checker.Write(groupId);
+        }
+        for (ui32 partGroupId : groups) { // the scrub checks the blobs it finds in SSTs
+            const auto info = env.GetGroupInfo(partGroupId);
+            for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+                env.CompactVDisk(info->GetActorId(i));
+            }
+        }
+
+        // successful checks are counted per part, the scrub actors being told apart by the parts they send checks to
+        THashMap<TActorId, ui32> scrubParts;
+        THashMap<ui32, ui32> numChecked;
+        std::vector<TString> failures;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvCheckIntegrity::EventType) {
+                for (ui32 partGroupId : groups) {
+                    if (ev->Recipient == MakeBlobStorageProxyID(partGroupId)) {
+                        scrubParts[ev->Sender] = partGroupId;
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::TEvCheckIntegrityResult::EventType) {
+                const auto *msg = ev->Get<TEvBlobStorage::TEvCheckIntegrityResult>();
+                if (msg->Status != NKikimrProto::OK) {
+                    failures.push_back(TStringBuilder() << NKikimrProto::EReplyStatus_Name(msg->Status) << ' '
+                        << msg->ErrorReason);
+                } else if (const auto it = scrubParts.find(ev->GetRecipientRewrite()); it != scrubParts.end()) {
+                    ++numChecked[it->second];
+                }
+            }
+            return true;
+        };
+
+        env.SetScrubPeriodicity(TDuration::Seconds(1));
+
+        for (ui32 partGroupId : groups) { // wait for a full scrub cycle of every VDisk of both parts
+            const auto info = env.GetGroupInfo(partGroupId);
+            for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+                const TActorId vdiskActorId = info->GetActorId(i);
+                const ui32 nodeId = vdiskActorId.NodeId();
+                const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+                const TInstant deadline = env.Runtime->GetClock() + TDuration::Minutes(5);
+                for (;;) {
+                    env.Runtime->Send(new IEventHandle(TEvBlobStorage::EvScrubAwait, 0, vdiskActorId, edge, nullptr,
+                        RandomNumber<ui64>()), nodeId);
+                    auto ev = env.WaitForEdgeActorEvent<TEvScrubNotify>(edge, false, deadline);
+                    UNIT_ASSERT_C(ev, "no successful scrub cycle of VDiskId# " << info->GetVDiskId(i));
+                    if (ev->Get()->Success) {
+                        break;
+                    }
+                }
+            }
+        }
+        env.Runtime->FilterFunction = {};
+
+        if (!failures.empty()) {
+            UNIT_FAIL(failures.size() << " checks failed, the first one: " << failures.front());
+        }
+        for (ui32 partGroupId : groups) {
+            UNIT_ASSERT_C(numChecked[partGroupId], "no blob of the part checked by deep scrubbing GroupId# "
+                << partGroupId);
+        }
+    }
 }

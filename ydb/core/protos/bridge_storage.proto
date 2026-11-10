@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package NKikimrBridge;
+
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+import "google/protobuf/timestamp.proto";
+
+// A read-only controller request. All observations are derived from existing bridge state.
+message TStorageQuery {
+    enum EView {
+        VIEW_UNSPECIFIED = 0;
+        PILES = 1;
+        DATABASES = 2;
+        GROUPS = 3;
+    }
+    EView View = 1;
+    optional string StoragePool = 2;
+    optional string PileName = 3;
+    bool NotSynced = 4; // incomplete database summaries only
+    repeated string PoolNames = 7;
+    bool FilterPools = 8;
+    TStoragePoolId StoragePoolId = 9;
+    repeated ESynchronizationStatus Statuses = 10;
+    optional EStorageMode StorageMode = 11;
+}
+
+message TStorageState {
+    message TOwner {
+        uint32 RowIndex = 1;
+        uint64 OwnerSchemeShardId = 2;
+        uint64 OwnerPathId = 3;
+    }
+    Ydb.StatusIds.StatusCode Status = 1;
+    string ErrorMessage = 2;
+    oneof Result {
+        TPileSynchronizationResult Piles = 3;
+        TDatabaseSynchronizationResult Databases = 4;
+        TGroupSynchronizationResult Groups = 5;
+    }
+    repeated TOwner Owners = 6;
+}
+
+message TPileSynchronizationResult {
+    repeated TPileSynchronization piles = 1;
+    uint64 cluster_state_generation = 2;
+    google.protobuf.Timestamp observed_at = 3;
+    // Pools whose database cannot be identified; excluded from totals.
+    uint64 unattributed_storage_pools = 4;
+}
+
+message TDatabaseSynchronizationResult {
+    // Storage-owning databases, not all logical serverless databases.
+    repeated TDatabaseSynchronization databases = 1;
+    uint64 cluster_state_generation = 2;
+    google.protobuf.Timestamp observed_at = 3;
+}
+
+message TGroupSynchronizationResult {
+    repeated TGroupSynchronization groups = 1;
+    uint64 cluster_state_generation = 2;
+    google.protobuf.Timestamp observed_at = 3;
+}
+
+message TStoragePoolId {
+    uint64 box_id = 1;
+    // Nonzero; box_id may be zero.
+    uint64 pool_id = 2;
+}
+
+message TStoragePool {
+    TStoragePoolId id = 1;
+    string name = 2;
+}
+
+enum EStorageMode {
+    STORAGE_MODE_UNSPECIFIED = 0;
+    BRIDGED = 1;
+    ORDINARY = 2;
+    MIXED = 3;
+}
+
+enum ESynchronizationStatus {
+    SYNCHRONIZATION_STATUS_UNSPECIFIED = 0;
+    SYNCED = 1;
+    SYNCING = 2;
+    PENDING = 3; // Required, but not running.
+    // No bridge synchronization required, including ordinary storage and inactive piles.
+    NOT_REQUIRED = 4;
+    UNKNOWN = 5; // Insufficient observations.
+}
+
+// Required groups only: required = synced + syncing + pending + unknown.
+message TGroupSyncCounts {
+    uint64 required = 1;
+    uint64 synced = 2;
+    uint64 syncing = 3;
+    uint64 pending = 4;
+    uint64 unknown = 5;
+}
+
+// One known storage owner per pile; shared storage counts once.
+// total = synced + syncing + pending + unknown + not_required.
+message TDatabaseSyncCounts {
+    uint64 total = 1;
+    uint64 synced = 2;
+    uint64 syncing = 3;
+    uint64 pending = 4;
+    uint64 unknown = 5;
+    uint64 not_required = 6;
+}
+
+message TPileSynchronization {
+    // Unset: unknown placement; empty: the real pile named "".
+    optional string pile_name = 1;
+    TDatabaseSyncCounts databases = 2;
+}
+
+// Last error; may remain while synchronization is running.
+message TSynchronizationError {
+    string message = 1;
+    google.protobuf.Timestamp occurred_at = 2;
+}
+
+message TDatabaseSynchronization {
+    repeated TStoragePool storage_pools = 1;
+    EStorageMode storage_mode = 2;
+    // Unset if placement is unknown.
+    optional string pile_name = 3;
+    // Mixed mode counts only bridged pools.
+    TGroupSyncCounts groups = 4;
+    TSynchronizationError last_sync_error = 5;
+}
+
+message TGroupSynchronization {
+    // ID used by tablets.
+    uint32 group_id = 1;
+    // Physical group ID, if known.
+    optional uint32 physical_group_id = 2;
+    // Unset for groups outside dynamic pools.
+    TStoragePool storage_pool = 3;
+    // One row per pile; unset if placement is unknown.
+    optional string pile_name = 4;
+    ESynchronizationStatus sync_status = 5;
+    // Diagnostic phase; use sync_status for programmatic checks.
+    string sync_phase = 6;
+    TSynchronizationError last_sync_error = 7;
+}

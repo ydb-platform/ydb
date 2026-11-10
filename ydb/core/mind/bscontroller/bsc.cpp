@@ -1069,6 +1069,7 @@ STFUNC(TBlobStorageController::StateWork) {
     switch (type) {
         fFunc(TEvBlobStorage::EvControllerRegisterNode, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerGetGroup, EnqueueIncomingEvent);
+        fFunc(TEvBlobStorage::EvControllerQueryBridgeStorage, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerSelectGroups, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerUpdateDiskStatus, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerUpdateGroupStat, EnqueueIncomingEvent);
@@ -1247,6 +1248,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerUpdateGroupStat:              return 10;
         case TEvControllerCommitGroupLatencies::EventType:             return 10;
         case TEvBlobStorage::EvRequestControllerInfo:                  return 10;
+        case TEvBlobStorage::EvControllerQueryBridgeStorage:           return 10;
         case TEvPrivate::EvUpdateSelfHealCounters:                     return 10;
 
         case TEvBlobStorage::EvControllerUpdateDiskStatus: {

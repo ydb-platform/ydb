@@ -5148,7 +5148,7 @@ state: STATE_ENABLED
                     retention_period {
                         seconds: 86400
                     }
-                    partition_write_speed_bytes_per_second: 1048576
+                    partition_write_speed_bytes_per_second: 10485760
                     partition_write_burst_bytes: 1048576
                 )";
                 UNIT_ASSERT_C(
@@ -5160,6 +5160,14 @@ state: STATE_ENABLED
                 UNIT_ASSERT_STRINGS_EQUAL(
                     actualTopicProto.partitioning_settings().DebugString(),
                     expectedTopicProto.partitioning_settings().DebugString()
+                );
+                UNIT_ASSERT_VALUES_EQUAL(
+                    actualTopicProto.partition_write_speed_bytes_per_second(),
+                    expectedTopicProto.partition_write_speed_bytes_per_second()
+                );
+                UNIT_ASSERT_VALUES_EQUAL(
+                    actualTopicProto.partition_write_burst_bytes(),
+                    expectedTopicProto.partition_write_burst_bytes()
                 );
 
                 const auto* changefeedChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb.sha256");

@@ -85,7 +85,7 @@ std::unique_ptr<NNewYql::TScript> ParseQuery(const TString& queryText,
         tree.emplace(queryText);
     }
     {
-        TCompileTraceScope phase(trace, TCompileTraceLevels::Detail, "Parse native ANTLR CST");
+        TCompileTraceScope phase(trace, TCompileTraceLevels::Step, "Parse native ANTLR CST");
         const bool success = tree->Parse(settings, isAmbiguityError, issues);
         phase.SetSuccess(success);
         if (!success) { return nullptr; }
@@ -93,11 +93,11 @@ std::unique_ptr<NNewYql::TScript> ParseQuery(const TString& queryText,
     // Build while the CST and token text are valid; only the owning AST escapes.
     std::unique_ptr<NNewYql::TScript> ast;
     {
-        TCompileTraceScope phase(trace, TCompileTraceLevels::Detail, "Build native syntax AST");
+        TCompileTraceScope phase(trace, TCompileTraceLevels::Step, "Build native syntax AST");
         ast = BuildNewYqlAst(*tree->GetRoot(), AnsiLexer, settings.File);
     }
     {
-        TCompileTraceScope phase(trace, TCompileTraceLevels::Detail, "Release native CST");
+        TCompileTraceScope phase(trace, TCompileTraceLevels::Step, "Release native CST");
         tree.reset();
     }
     return ast;

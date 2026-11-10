@@ -53,6 +53,10 @@ struct TAnnotationProfile {
     NWilson::TSpan Span;
     TCounter Expressions;
     TCounter Annotations;
+    TCounter ScalarLowering;
+    TCounter ExpandApply;
+    TCounter AnnotationSetup;
+    TCounter AnnotationRun;
     TCounter Comparisons;
     TCounter Columns;
     ui64 VisibleInputs = 0;
@@ -72,6 +76,10 @@ struct TAnnotationProfile {
         };
         record("scalar_expression", Expressions);
         record("yql_annotation", Annotations);
+        record("scalar_lowering", ScalarLowering);
+        record("expand_apply", ExpandApply);
+        record("annotation_setup", AnnotationSetup);
+        record("annotation_run", AnnotationRun);
         record("group_comparison", Comparisons);
         record("stored_column_type", Columns);
         Span.Attribute("scalar_visible_inputs", static_cast<i64>(VisibleInputs));
@@ -101,7 +109,23 @@ public:
                 // Scalar definitions (especially polymorphic lambdas) acquire
                 // types at their uses. Query producers must establish column
                 // types before any named-source consumer follows their IDs.
-                if (const auto* query = Names.NamedQueries.FindPtr(&binding->Name)) { Query(**query); }
+                if (const auto* query = Names.NamedQueries.FindPtr(&binding->Name)) {
+                    Query(**query);
+                } else if (!std::holds_alternative<TLambda>(binding->Value->Value)) {
+                    // Inlining a value into separate scalar annotation jobs
+                    // loses single evaluation (e.g. $x = RandomUuid(1)). Keep
+                    // literals/parameters and pure syntax substitutions native;
+                    // calls need a shared value binding, not polymorphic cloning.
+                    bool needsSharedValue = false;
+                    VisitScalar(*binding->Value, [&](const TExpression& expression) {
+                        needsSharedValue |= std::holds_alternative<TCall>(expression.Value)
+                            || std::holds_alternative<TLambda>(expression.Value)
+                            || std::holds_alternative<TSubquery>(expression.Value)
+                            || std::holds_alternative<TExists>(expression.Value);
+                        return !needsSharedValue;
+                    });
+                    if (needsSharedValue) { Unsupported(binding->Range, "shared scalar value bindings"); }
+                }
             } else if (const auto* declaration = std::get_if<TDeclareStatement>(&statement.Value)) {
                 auto type = LowerType(declaration->Type, Script, Ctx, Settings.Expressions);
                 if (!type) { throw TAnnotationError{}; }
@@ -217,13 +241,21 @@ private:
             for (const auto& argument : root->Head().Children()) { argumentTypes.push_back(argument->GetTypeAnn()); }
         }
         Ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-        if (ExpandApplyNoRepeat(root, root, Ctx, Types) != IGraphTransformer::TStatus::Ok) {
-            throw TAnnotationError{};
+        {
+            TAnnotationProfile::TScope expandProfile(Profile.ExpandApply, bool(Profile.Span));
+            if (ExpandApplyNoRepeat(root, root, Ctx, Types) != IGraphTransformer::TStatus::Ok) {
+                throw TAnnotationError{};
+            }
         }
         // Expansion rebuilds enclosing lambdas and can clear their argument
         // annotations. Restore the relational scope on the rewritten root.
         if (root->IsLambda()) { UpdateLambdaAllArgumentsTypes(root, argumentTypes, Ctx); }
-        auto transformer = CreateTypeAnnotationTransformer(CreateExtCallableTypeAnnotationTransformer(Types, true), Types);
+        TAutoPtr<IGraphTransformer> transformer;
+        {
+            TAnnotationProfile::TScope setupProfile(Profile.AnnotationSetup, bool(Profile.Span));
+            transformer = CreateTypeAnnotationTransformer(CreateExtCallableTypeAnnotationTransformer(Types, true), Types);
+        }
+        TAnnotationProfile::TScope runProfile(Profile.AnnotationRun, bool(Profile.Span));
         if (InstantTransform(*transformer, root, Ctx) != IGraphTransformer::TStatus::Ok) {
             throw TAnnotationError{};
         }
@@ -276,6 +308,7 @@ private:
             }
             body = Ctx.NewList(pos, std::move(items));
         } else {
+            TAnnotationProfile::TScope loweringProfile(Profile.ScalarLowering, bool(Profile.Span));
             body = LowerExpression(expression, Script, bindings, Ctx, Settings.Expressions);
             if (!body) { throw TAnnotationError{}; }
         }

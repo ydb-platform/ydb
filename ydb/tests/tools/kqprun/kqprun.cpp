@@ -16,6 +16,7 @@
 #include <library/cpp/getopt/small/modchooser.h>
 #include <util/folder/path.h>
 #include <util/stream/file.h>
+#include <util/string/split.h>
 #include <util/system/env.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
@@ -81,6 +82,7 @@ struct TExecutionOptions {
 
     ui32 LoopCount = 1;
     ui32 WarmupCount = 0;
+    std::vector<ui8> TraceLevelsPerLoop;
     TDuration QueryDelay;
     TDuration LoopDelay;
     bool ContinueAfterFail = false;
@@ -150,6 +152,11 @@ struct TExecutionOptions {
             SubstGlobal(sql, QUERY_ID_TEMPLATE, ToString(queryId));
         }
 
+        std::optional<ui8> traceLevel;
+        if (loopId >= WarmupCount && !TraceLevelsPerLoop.empty()) {
+            traceLevel = TraceLevelsPerLoop[(loopId - WarmupCount) % TraceLevelsPerLoop.size()];
+        }
+
         return {
             .Query = sql,
             .Action = GetScriptQueryAction(index),
@@ -163,7 +170,8 @@ struct TExecutionOptions {
             .Params = Params,
             .GroupSIDs = GetValue<std::optional<TVector<NACLib::TSID>>>(index, GroupSIDs, std::nullopt),
             .StatsCollectionMode = GetValue(index, StatsCollectionModes, Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE),
-            .TraceEnabled = loopId >= WarmupCount,
+            .TraceEnabled = loopId >= WarmupCount && traceLevel.value_or(1) != 0,
+            .TraceLevel = traceLevel,
         };
     }
 
@@ -222,10 +230,14 @@ private:
     }
 
     void ValidateScriptExecutionOptions(const TRunnerOptions& runnerOptions) const {
-        if (WarmupCount) {
+        if (!TraceLevelsPerLoop.empty() && !runnerOptions.YdbSettings.TraceFile) {
+            ythrow yexception() << "Trace-level looping requires --trace-file";
+        }
+        if (WarmupCount || !TraceLevelsPerLoop.empty()) {
             for (size_t i = 0; i < ScriptQueries.size(); ++i) {
                 if (GetExecutionCase(i) != EExecutionCase::GenericQuery || GetScriptQueryAction(i) != NKikimrKqp::QUERY_ACTION_EXPLAIN) {
-                    ythrow yexception() << "Warmup requires synchronous query EXPLAIN requests (-C query -A explain)";
+                    ythrow yexception() << (WarmupCount ? "Warmup" : "Trace-level looping")
+                        << " requires synchronous query EXPLAIN requests (-C query -A explain)";
                 }
             }
         }
@@ -748,6 +760,18 @@ protected:
             .StoreMappedResultT<ui32>(&RunnerOptions.YdbSettings.TraceLevel, [](ui32 level) {
                 Y_ENSURE(level >= 1 && level <= 15, "Trace level must be between 1 and 15");
                 return static_cast<ui8>(level);
+            });
+        options.AddLongOption("trace-level-per-loop", "Cycle comma-separated trace levels after warmup, in one process (0 disables tracing; EXPLAIN only)")
+            .RequiredArgument("levels")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                ExecutionOptions.TraceLevelsPerLoop.clear();
+                for (const auto item : StringSplitter(option->CurValOrDef()).Split(',')) {
+                    ui32 level = 0;
+                    Y_ENSURE(TryFromString(item.Token(), level) && level <= 15,
+                        "Trace levels must be comma-separated integers between 0 and 15");
+                    ExecutionOptions.TraceLevelsPerLoop.push_back(static_cast<ui8>(level));
+                }
+                Y_ENSURE(!ExecutionOptions.TraceLevelsPerLoop.empty(), "Trace level sequence must not be empty");
             });
 
         // Outputs

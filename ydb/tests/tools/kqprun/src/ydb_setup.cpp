@@ -903,8 +903,8 @@ private:
         }
     }
 
-    NWilson::TTraceId NewTraceId() const {
-        return Settings_.TraceFile ? NWilson::TTraceId::NewTraceId(Settings_.TraceLevel, 4095) : NWilson::TTraceId();
+    NWilson::TTraceId NewTraceId(std::optional<ui8> level = std::nullopt) const {
+        return Settings_.TraceFile ? NWilson::TTraceId::NewTraceId(level.value_or(Settings_.TraceLevel), 4095) : NWilson::TTraceId();
     }
 
     TQueryRequest GetQueryRequest(const TRequestOptions& query) {
@@ -920,7 +920,7 @@ private:
             .ResultRowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit(),
             .ResultSizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit(),
             .QueryId = query.QueryId,
-            .WilsonTraceId = query.TraceEnabled ? NewTraceId() : NWilson::TTraceId(),
+            .WilsonTraceId = query.TraceEnabled ? NewTraceId(query.TraceLevel) : NWilson::TTraceId(),
             .QueryLabel = query.QueryLabel };
     }
 

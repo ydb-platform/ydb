@@ -145,7 +145,8 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
                     context << ": join order changed; use JOIN_ORDER_QUERIES=" << id
                     << " with CANONIZE_JOIN_ORDER_TESTS=true to update it"
                     << "\nActual join order:\n" << actual
-                    << "\nExpected join order:\n" << expected);
+                    << "\nExpected join order:\n" << expected
+                    << "\nFull explain plan:\n" << *result.GetStats()->GetPlan());
             }
         } catch (const std::exception& error) {
             errors += context + ": " + error.what() + "\n";

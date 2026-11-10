@@ -162,7 +162,63 @@ bool HasOptimizerFallbackIssue(const NYdb::NIssue::TIssues& issues) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
-    Y_UNIT_TEST(NativeAggregatesAndComputedJoinKeysMatchLegacyOptimizer) {
+    Y_UNIT_TEST(SharedVolatileBindingsUseExplicitFrontendFallback) {
+        NKikimrConfig::TAppConfig app;
+        auto* config = app.MutableTableServiceConfig();
+        config->SetEnableNewYqlParser(true);
+        config->SetEnableNewRBO(true);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetEnableFallbackOnMultipleStatements(false);
+        config->SetEnableNewRBOPhysicalStagePeephole(false);
+        TCapturedLog logs(true);
+        auto settings = TKikimrSettings(app).SetWithSampleTables(false).SetLogCapture(logs);
+        settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_INFO);
+        settings.LogSettings->DefaultLogPriority = NActors::NLog::PRI_CRIT;
+        TKikimrRunner kikimr(settings);
+        auto table = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = table.ExecuteSchemeQuery(
+            "CREATE TABLE `/Root/t` (id Int64 NOT NULL, PRIMARY KEY(id));").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const auto inserted = session.ExecuteQuery("UPSERT INTO `/Root/t` (id) VALUES (1), (2);",
+            NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+        for (const bool sharedQuery : {true, false}) {
+            const auto before = GetNewRBOCompileCounters(kikimr);
+            const auto logStart = logs.Snapshot().size();
+            const TString sql = sharedQuery
+                ? "$q = SELECT id, CAST(RandomUuid(id) AS Utf8) AS value FROM `/Root/t`; "
+                    "$alias = $q; SELECT * FROM $q ORDER BY id; SELECT * FROM $alias ORDER BY id;"
+                : "$x = RandomUuid(1); SELECT CAST($x AS Utf8) AS a, CAST($x AS Utf8) AS b;";
+            const auto result = session.ExecuteQuery(sql, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (sharedQuery) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
+            } else {
+                TResultSetParser parser(result.GetResultSet(0));
+                UNIT_ASSERT(parser.TryNextRow());
+                const auto a = parser.ColumnParser("a").GetUtf8();
+                const auto b = parser.ColumnParser("b").GetUtf8();
+                UNIT_ASSERT_VALUES_EQUAL(a, b);
+            }
+            const auto after = GetNewRBOCompileCounters(kikimr);
+            UNIT_ASSERT_VALUES_EQUAL(after.first, before.first + 1);
+            UNIT_ASSERT_VALUES_EQUAL(after.second, before.second);
+            const TString reason = sharedQuery ? "Native multi-result named query sharing" : "shared scalar value bindings";
+            const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+            while (!logs.Snapshot().substr(logStart).Contains(reason) && TInstant::Now() < deadline) {
+                Sleep(TDuration::MilliSeconds(10));
+            }
+            const auto evidence = logs.Snapshot().substr(logStart);
+            UNIT_ASSERT_C(evidence.Contains(reason), evidence);
+            UNIT_ASSERT_C(evidence.Contains("Legacy YQL graph compilation started"), evidence);
+            UNIT_ASSERT_C(!evidence.Contains("New YQL native execution contract built"), evidence);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(NativeAggregatesAndComputedJoinKeysMatchLegacyOptimizer, PhysicalStagePeephole) {
         const TVector<TString> queries = {
             "SELECT MIN_BY(value, id), MAX_BY(value, id), MIN_BY(id, value), MAX_BY(id, value) FROM `/Root/t`;",
             "SELECT g, MIN_BY(value, id), MAX_BY(id, value) FROM `/Root/t` GROUP BY g ORDER BY g;",
@@ -180,6 +236,14 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
                 "LEFT JOIN `/Root/t` AS r ON CAST(l.id AS Decimal(10, 0)) = CAST(r.id AS Decimal(22, 9)) "
                 "LEFT JOIN `/Root/t` AS s ON CAST(l.id + 2 AS Decimal(10, 0)) = CAST(s.id AS Decimal(22, 9)) ORDER BY a;",
             "SELECT Ensure(id, id > 0, 'positive') FROM `/Root/t` ORDER BY id;",
+            "SELECT id, [10, 20][id - 2], [10, 20][CAST(id - 2 AS Uint32?)], "
+                "[10, 20][CAST(id AS Double) / 2] FROM `/Root/t` ORDER BY id;",
+            // The established optimizer is an independent oracle for tuple
+            // NULL semantics when focused lowering replaces full peephole.
+            "SELECT id, (id, value) IN ((1, 'b'), (2, NULL)), "
+                "(id, value) NOT IN ((3, 'a'), (4, NULL)), "
+                "((id, value), id) IN (((1, 'b'), 1), ((2, NULL), 2)) "
+                "FROM `/Root/t` ORDER BY id;",
         };
         TVector<TString> baseline;
         for (const bool native : {false, true}) {
@@ -189,6 +253,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             // Legacy RBO does not import MIN_BY/MAX_BY; use the established
             // optimizer as a result oracle, and require direct RBO for native.
             config->SetEnableNewRBO(native);
+            config->SetEnableNewRBOPhysicalStagePeephole(PhysicalStagePeephole);
             config->SetEnableFallbackToYqlOptimizer(false);
             TCapturedLog logs(true);
             auto settings = TKikimrSettings(app).SetWithSampleTables(false).SetLogCapture(logs);
@@ -414,7 +479,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
     // Use nonempty tables and compare actual result sets for both storage kinds.
     // This catches value/order/NULL mistakes that an explain-only plan check misses;
     // the native success log requirement additionally guards against silent fallback.
-    Y_UNIT_TEST_TWIN(DirectRboResultsMatchLegacyFrontend, ColumnStore) {
+    Y_UNIT_TEST_QUAD(DirectRboResultsMatchLegacyFrontend, ColumnStore, PhysicalStagePeephole) {
         const TVector<TString> queries = {
             // Real rows, NULLs and duplicate groups are compared to the existing
             // frontend; the log assertion below requires every new path result.
@@ -447,6 +512,10 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             "SELECT id FROM `/Root/t` WHERE value IS NULL ORDER BY id;",
             "SELECT id, id IN (1), id NOT IN (2), value IN ('one'), NULL IN (1), 1 IN (NULL), "
                 "(1, 2) IN ((1, 2)) FROM `/Root/t` ORDER BY id;",
+            "SELECT id, (id, value) IN ((1, 'a'), (3, NULL)), "
+                "(id, value) NOT IN ((2, 'a'), (4, NULL)), "
+                "((id, value), id) IN (((1, 'a'), 1), ((3, NULL), 3)) "
+                "FROM `/Root/t` ORDER BY id;",
             "SELECT DISTINCT value AS v FROM `/Root/t` ORDER BY v;",
             "SELECT value, COUNT(DISTINCT id), SUM(id) FROM `/Root/t` GROUP BY value "
                 "HAVING SUM(id) > 0 ORDER BY COUNT(DISTINCT id), value;",
@@ -464,6 +533,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             "SELECT * FROM `/Root/t` ORDER BY id;",
             "SELECT l.id, r.id FROM `/Root/t` AS l JOIN `/Root/t` AS r ON l.id = r.id ORDER BY l.id;",
             "SELECT [1, 2][0u] AS v, CAST(3 AS Int64) + 2 AS n;",
+            "SELECT id, [10, 20][id - 2], [10, 20][CAST(id - 2 AS Uint32?)], "
+                "[10, 20][CAST(id AS Double) / 2] FROM `/Root/t` ORDER BY id;",
             "SELECT 1, 2 AS column0, 3;",
             "SELECT 1 AS a; SELECT id AS b FROM `/Root/t` ORDER BY id LIMIT 2;",
             // Original workload helper declarations now pass through every
@@ -487,6 +558,7 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             config->SetEnableNewYqlParser(enable);
             config->SetEnableAstCache(enable);
             config->SetEnableNewRBO(true);
+            config->SetEnableNewRBOPhysicalStagePeephole(PhysicalStagePeephole);
             config->SetEnableFallbackToYqlOptimizer(false);
             config->SetEnableFallbackOnMultipleStatements(false);
             config->SetAllowOlapDataQuery(true);

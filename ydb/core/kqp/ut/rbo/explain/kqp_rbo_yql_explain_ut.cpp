@@ -892,6 +892,60 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         )");
     }
 
+    Y_UNIT_TEST_TWIN(ExplainSharedMaterializedInput, Analyze) {
+        auto config = CreateExplainPlanTestAppConfig();
+        config.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
+        CreateExplainPlanTestTables(kikimr);
+        BulkUpsertExplainPlanTestRows(kikimr);
+        auto session = CreateQuerySession(kikimr);
+        const auto result = session.ExecuteQuery(R"(
+            $q = SELECT a, CAST(RandomUuid(a) AS Utf8) AS value FROM `/Root/t1`;
+            SELECT * FROM $q ORDER BY a;
+            SELECT * FROM $q ORDER BY a;
+        )", NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()
+            .ExecMode(Analyze ? NYdb::NQuery::EExecMode::Execute : NYdb::NQuery::EExecMode::Explain)
+            .StatsMode(NYdb::NQuery::EStatsMode::Full)).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        if (Analyze) {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 12);
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)),
+                FormatResultSetYson(result.GetResultSet(1)));
+        }
+        UNIT_ASSERT(result.GetStats() && result.GetStats()->GetPlan());
+        const TString plan(*result.GetStats()->GetPlan());
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(plan, &json, true));
+        const auto& simplified = json["SimplifiedPlan"];
+        UNIT_ASSERT_VALUES_EQUAL_C(simplified["Node Type"].GetStringSafe(), "ResultSets", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(simplified["Plans"].GetArraySafe().size(), 2, plan);
+        for (const auto& clientResult : simplified["Plans"].GetArraySafe()) {
+            UNIT_ASSERT_VALUES_EQUAL_C(clientResult["Node Type"].GetStringSafe(), "ResultSet", plan);
+            UNIT_ASSERT_C(FindOperatorByNamePrefix(clientResult, "Table"), plan);
+        }
+        size_t precomputes = 0;
+        size_t clientResults = 0;
+        size_t references = 0;
+        THashSet<ui64> nodeIds;
+        const auto visit = [&](const auto& self, const NJson::TJsonValue& node) -> void {
+            if (node.Has("PlanNodeId")) {
+                UNIT_ASSERT_C(nodeIds.insert(node["PlanNodeId"].GetUIntegerSafe()).second, plan);
+            }
+            precomputes += node["PlanNodeType"].GetString() == "Materialize";
+            clientResults += node["PlanNodeType"].GetString() == "ResultSet";
+            references += node.Has("CTE Name");
+            for (const auto& child : node["Plans"].GetArray()) {
+                self(self, child);
+            }
+        };
+        visit(visit, json["Plan"]);
+        UNIT_ASSERT_VALUES_EQUAL_C(precomputes, 1, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(clientResults, 2, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(references, 2, plan);
+        visit(visit, simplified);
+    }
+
     Y_UNIT_TEST(ExplainAnalyzeMultipleSelect) {
         TExplainPlanTestContext testContext;
         auto& session = testContext.GetSession();

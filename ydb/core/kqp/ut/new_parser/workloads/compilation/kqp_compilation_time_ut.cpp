@@ -88,7 +88,7 @@ void CheckCboDisabled(const TString& plan, const TString& traceId) {
     }
 }
 
-void SaveTrace(TTestActorRuntime& runtime, const NWilson::TTraceId& parent, const TString& name, bool native) {
+void SaveTrace(TTestActorRuntime& runtime, const NWilson::TTraceId& parent, const TString& name, const TPipeline& pipeline) {
     const TString traceId(static_cast<const char*>(parent.GetTraceIdPtr()), parent.GetTraceIdSize());
     const auto deadline = TInstant::Now() + TDuration::Seconds(30);
     NJson::TJsonValue spans(NJson::JSON_ARRAY);
@@ -100,8 +100,11 @@ void SaveTrace(TTestActorRuntime& runtime, const NWilson::TTraceId& parent, cons
         spans = NJson::TJsonValue(NJson::JSON_ARRAY);
         bool compiled = false, released = false, replied = false;
         ui32 nameResolutions = 0, metadataRounds = 0;
+        THashMap<TString, ui32> counts;
         for (const auto& span : promise.GetFuture().GetValueSync()) {
             if (span.trace_id() != traceId) { continue; }
+            ++counts[span.name()];
+            UNIT_ASSERT_C(span.end_time_unix_nano() >= span.start_time_unix_nano(), name << ": " << span.name());
             compiled |= span.name() == "Compile query";
             released |= span.name() == "Release compilation state";
             replied |= span.name() == "GrpcRequestProxy";
@@ -120,9 +123,17 @@ void SaveTrace(TTestActorRuntime& runtime, const NWilson::TTraceId& parent, cons
             spans.AppendValue(std::move(item));
         }
         if (compiled && released && replied) {
-            if (native) {
+            UNIT_ASSERT_VALUES_EQUAL_C(counts["Create transformer pipelines"], 1, name);
+            UNIT_ASSERT_VALUES_EQUAL_C(counts["Create legacy runner pipeline"], !pipeline.NewRbo, name);
+            UNIT_ASSERT_VALUES_EQUAL_C(counts["Create new RBO runner pipeline"], pipeline.NewRbo, name);
+            if (pipeline.NewParser) {
                 UNIT_ASSERT_VALUES_EQUAL_C(nameResolutions, 1, name);
                 UNIT_ASSERT_C(metadataRounds <= 1, name << ": " << metadataRounds << " metadata rounds");
+                for (const TString phase : {"Parse native ANTLR CST", "Build native syntax AST", "Release native CST",
+                        "Annotate native AST", "Validate native execution contract", "Finalize native execution contract"}) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(counts[phase], 1, name << ": " << phase);
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(counts["New YQL frontend fallback"], 0, name);
             }
             const auto path = GetOutputPath() / (name + ".trace.json");
             TFileOutput(path).Write(spans.GetStringRobust());
@@ -136,10 +147,12 @@ void SaveTrace(TTestActorRuntime& runtime, const NWilson::TTraceId& parent, cons
 
 void Measure(EBenchType type, TStringBuf benchmark, ui32 id, const TPipeline& pipeline, ui32 iterations) {
     const bool tracing = !GetTestParam("PERF_COMPILATION_TRACE").empty();
+    // Pass-level spans explain the major costs without per-rule/property noise.
+    constexpr ui8 traceLevel = 14;
     NKikimrConfig::TAppConfig appConfig;
     if (tracing) {
         auto* external = appConfig.MutableTracingConfig()->AddExternalThrottling();
-        external->SetLevel(15);
+        external->SetLevel(traceLevel);
         external->SetMaxTracesPerMinute(1'000'000);
         external->SetMaxTracesBurst(1'000'000);
     }
@@ -179,20 +192,21 @@ void Measure(EBenchType type, TStringBuf benchmark, ui32 id, const TPipeline& pi
     auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
     const auto query = QueryText(type, id);
 
-    // Warm the parser DFA and compilation machinery once per query/pipeline.
+    // Warm the parser DFA and compilation machinery repeatedly in this process.
     // Validate the warmup like every measured request, but exclude it from both
     // timing samples and exported traces. Query and AST caches remain disabled.
-    for (ui32 iteration = 0; iteration <= iterations; ++iteration) {
-        const bool warmup = iteration == 0;
+    constexpr ui32 warmups = 5;
+    for (ui32 iteration = 0; iteration < warmups + iterations; ++iteration) {
+        const bool warmup = iteration < warmups;
         const TString traceId = TStringBuilder() << "compilation-time-" << benchmark << '-' << id << '-'
-            << pipeline.Name << '-' << (warmup ? TString("warmup") : ToString(iteration));
+            << pipeline.Name << '-' << (warmup ? TString("warmup-") + ToString(iteration) : ToString(iteration - warmups + 1));
         const auto logStart = logs.Snapshot().size();
         const auto countersBefore = GetNewRBOCompileCounters(kikimr);
         NWilson::TTraceId traceParent;
         auto querySettings = NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
             .TraceId(std::string(traceId));
         if (tracing && !warmup) {
-            traceParent = NWilson::TTraceId::NewTraceId(15, 4095).Span(15);
+            traceParent = NWilson::TTraceId::NewTraceId(traceLevel, 4095).Span(traceLevel);
             querySettings.TraceParent(traceParent.ToTraceresponseHeader());
         }
         const auto cpuStart = std::clock();
@@ -211,18 +225,18 @@ void Measure(EBenchType type, TStringBuf benchmark, ui32 id, const TPipeline& pi
         UNIT_ASSERT_VALUES_EQUAL_C(countersAfter.first - countersBefore.first, pipeline.NewRbo ? 1 : 0, traceId);
         UNIT_ASSERT_VALUES_EQUAL_C(countersAfter.second, countersBefore.second, traceId);
         if (warmup) { continue; }
-        if (tracing) { SaveTrace(runtime, traceParent, traceId, pipeline.NewParser); }
+        if (tracing) { SaveTrace(runtime, traceParent, traceId, pipeline); }
         // Keep raw samples for paired summaries. clock() matches the old
         // benchmark's process CPU metric. Explain wall time also includes
         // SDK transport and explain-result postprocessing, not execution.
-        Cout << "PERF_COMPILATION," << benchmark << ',' << id << ',' << pipeline.Name << ',' << iteration
+        Cout << "PERF_COMPILATION," << benchmark << ',' << id << ',' << pipeline.Name << ',' << iteration - warmups + 1
             << ',' << wallUs << ',' << processCpuUs << Endl;
     }
 }
 
 void RunBenchmark(EBenchType type, TStringBuf benchmark, const TVector<ui32>& queries) {
     if (GetTestParam("ENABLE_PERF_COMPILATION").empty()) { return; }
-    ui32 iterations = 2; // Measured repeats after one unmeasured warmup.
+    ui32 iterations = 2; // Measured repeats after five unmeasured warmups.
     const auto count = GetTestParam("PERF_COMPILATION_ITERATIONS");
     if (!count.empty()) {
         UNIT_ASSERT_C(TryFromString(count, iterations) && iterations > 0 && iterations <= 100,
@@ -255,7 +269,7 @@ void RunBenchmark(EBenchType type, TStringBuf benchmark, const TVector<ui32>& qu
     }
     Cout << "PERF_COMPILATION_CONFIG," << benchmark
         << ",storage=" << (type == EBenchType::CLICKBENCH ? "column" : "row")
-        << ",physical_stage_peephole=false,iterations=" << iterations << ",warmup=1,pipelines="
+        << ",physical_stage_peephole=false,iterations=" << iterations << ",warmup=5,pipelines="
         << (pipelineSelection.empty() ? TString("all") : pipelineSelection) << Endl;
     Cout << "PERF_COMPILATION_HEADER,benchmark,query,pipeline,iteration,explain_wall_us,process_cpu_us" << Endl;
     TString errors;

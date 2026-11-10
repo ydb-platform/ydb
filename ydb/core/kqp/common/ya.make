@@ -30,6 +30,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/common/compile_cache
     library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/protobuf/json
@@ -71,6 +72,7 @@ END()
 
 RECURSE(
     compilation
+    compile_cache
     events
     result_set_format
     simple

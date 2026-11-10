@@ -11,6 +11,7 @@
 #include "resources.h"
 #include "stat_processor.h"
 #include "bridge_sync_counters.h"
+#include "bridge_storage.h"
 #include "indir.h"
 #include "self_heal.h"
 #include "group_state.h"
@@ -22,6 +23,7 @@
 #include <ydb/core/base/feature_flags_service.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/base/pdisk_filter.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
@@ -115,6 +117,7 @@ public:
     class TTxBridgePileOperation;
     class TTxAddBridgePile;
     class TTxRemoveBridgePile;
+    class TTxBridgeRollback;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
@@ -2215,6 +2218,7 @@ private:
         std::unique_ptr<IEventHandle> response);
     // validate removal of the pile, then send the response
     ITransaction* CreateTxValidateRemoveBridgePile(TBridgePileId pileId, std::unique_ptr<IEventHandle> response);
+    ITransaction* CreateTxValidateBridgeRollback(TBridgePileId pileId, std::unique_ptr<IEventHandle> response);
 
     struct TAuditLogInfo {
         TString PeerName;
@@ -2401,6 +2405,12 @@ private:
     // groups that have lost their part
     size_t RemoveBridgePileGroups(TConfigState& state, TBridgePileId pileId);
 
+    // make bridged pools and groups ordinary ones when the bridged cluster is being rolled back: the pile is the only one
+    // left (the implicit one), and every bridged group has to be the inline pile in it; pools get the settings the pile
+    // has for them (pile overrides included); returns the number of groups made ordinary, throws TExError naming the
+    // groups that can't be made such
+    size_t RollbackBridgedGroups(TConfigState& state, TBridgePileId pileId);
+
     // delete the part of the bridged group in the pile along with its data; the group serves as bridge proxy only when
     // its inline pile goes away
     void DropBridgeGroupPart(TConfigState& state, TGroupId proxyGroupId, TBridgePileId pileId);
@@ -2413,12 +2423,20 @@ private:
 
     // the pile is being removed, so new groups get no parts there
     bool IsBridgePileBeingRemoved(TBridgePileId pileId) const;
+    // the bridged cluster is being rolled back: new pools and groups are ordinary ones, bridged groups stay as they are
+    bool IsBeingRolledBack() const;
     // the pile is being added, while this BSC hasn't added parts in it to its groups yet; the groups created meanwhile get
     // no part in the pile, the addition gives it to them
     bool IsBridgePileAwaitingParts(TBridgePileId pileId) const;
     ui64 BridgePileAddedOperationId = 0; // ADD operation BSC has done its part of (in memory, it is repeated on restart)
 
     void UpdateBridgeSyncCounters();
+    NBridgeStorage::TCopyObservation ObserveBridgeStorageCopy(const NBridgeStorage::TGroupContext& group,
+        const TBridgeInfo::TPile& pile, const NKikimrBridge::TClusterStateDetails::TPileSyncState* syncState,
+        bool bridged) const;
+    void Handle(TEvBlobStorage::TEvControllerQueryBridgeStorage::TPtr& ev);
+    Ydb::StatusIds::StatusCode SelectBridgeStoragePools(const NKikimrBridge::TStorageQuery& query,
+        std::set<TBoxStoragePoolId>& selected, NBridgeStorage::TReportBudget& budget, TString& error) const;
 
     // bytes left to copy into the target group of a pile in the given sync stage; Complete is set when the number
     // comes from a scan that has gone over all the blobs, otherwise it's a lower bound; nothing is known before any
@@ -2626,6 +2644,7 @@ public:
         switch (type) {
             hFunc(TEvBlobStorage::TEvControllerRegisterNode, Handle);
             hFunc(TEvBlobStorage::TEvControllerGetGroup, Handle);
+            hFunc(TEvBlobStorage::TEvControllerQueryBridgeStorage, Handle);
             hFunc(TEvBlobStorage::TEvControllerSelectGroups, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateGroupStat, Handle);

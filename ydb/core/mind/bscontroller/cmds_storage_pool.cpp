@@ -138,11 +138,16 @@ namespace NKikimr::NBsController {
 
         const auto current = StoragePools.Get().find(id);
         const bool existing = current != StoragePools.Get().end();
-        const bool defaultBridgeMode = BridgeInfo && !BridgeInfo->IsImplicit;
+        // BSC may have made its pools ordinary ones already while the cluster state is still there, and no pools are
+        // made ordinary ones after that
+        const bool rollingBack = Self.IsBeingRolledBack();
+        const bool defaultBridgeMode = BridgeInfo && !BridgeInfo->IsImplicit && !rollingBack;
         const bool bridgeMode = existing ? current->second.BridgeMode
             : cmd.HasBridgeMode() ? cmd.GetBridgeMode() : defaultBridgeMode;
         if (existing && cmd.HasBridgeMode() && cmd.GetBridgeMode() != bridgeMode) {
             throw TExError() << "can't change storage pool BridgeMode";
+        } else if (!existing && bridgeMode && rollingBack) {
+            throw TExError() << "new storage pool can't be a bridged one while the cluster is being rolled back";
         }
         if (!existing && bridgeMode != defaultBridgeMode) {
             const auto& details = Self.StorageConfig

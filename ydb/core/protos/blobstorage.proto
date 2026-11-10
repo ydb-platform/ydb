@@ -1605,6 +1605,9 @@ message TEvControllerDistconfRequest {
         // check that parts of bridged groups in the pile being removed (BridgePileId) can be deleted without committing:
         // every group having VDisks in the pile has to be bridged one
         ValidateRemoveBridgePile = 4;
+        // check that pools and groups can be made ordinary ones without committing, when the bridged cluster is being
+        // rolled back
+        ValidateBridgeRollback = 5;
     }
 
     optional EOperation Operation = 1;

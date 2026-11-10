@@ -1,5 +1,7 @@
 #pragma once
 
+// CI experiment: rebuild actor-system dependents for PR runner comparison.
+
 #include "event.h"
 #include "mailbox.h"
 #include "monotonic.h"

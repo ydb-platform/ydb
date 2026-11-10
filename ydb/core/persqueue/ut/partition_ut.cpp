@@ -2271,6 +2271,8 @@ Y_UNIT_TEST_F(RestoredPartitionStartsWithoutWriteSessionsQuoter, TPartitionFixtu
 
 Y_UNIT_TEST_F(WriteInitThrottledMetricTracksLastMinuteMaximum, TPartitionFixture)
 {
+    // TSlidingWindow needs an initial timestamp greater than its window length.
+    Ctx->Runtime->UpdateCurrentTime(TInstant::Days(1));
     CreatePartition();
     UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1)));
 

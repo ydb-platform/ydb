@@ -373,10 +373,11 @@ jobs:
           fi
         done
         if [ "$BUILD_RESULT" = "failure" ]; then
+          preset_csv=$(printf '%s' "$PRESETS" | jq -r 'if type == "array" then join(",") else . end')
           python3 .github/scripts/tests/shard_progress.py missing-build \
             --state-dir shard-events \
             --jobs jobs.json \
-            --presets relwithdebinfo,release-asan \
+            --presets "$preset_csv" \
             | while IFS= read -r preset; do
               [ -z "$preset" ] && continue
               post "{\"state\":\"failure\",\"description\":\"Preset failed before tests\",\"context\":\"build_${preset}\",\"target_url\":\"${target}\"}"

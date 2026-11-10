@@ -72,9 +72,9 @@ struct TInventoryResult {
 
 class TRedactor;
 
-// ConfigService's explicit domain section supplies the discovery database;
+// Raw MainConfig/StorageConfig supply the discovery database with main-first merging;
 // no conventional root name is assumed. Throws without copying server YAML.
-TString DiscoveryDatabase(TStringBuf yaml);
+TString DiscoveryDatabase(TStringBuf yaml, TStringBuf storageYaml = {});
 TInventoryResult DecodeInventoryResult(const NYdb::NDiscovery::TListEndpointsResult& result,
     TRpcResult rpc, const TRedactor& redactor, TStringBuf scheme);
 

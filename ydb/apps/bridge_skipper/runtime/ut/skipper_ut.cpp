@@ -659,6 +659,70 @@ void VerifyDispatchAtTtlBoundary(EMode mode, bool slowPersistence) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSkipperActor) {
+    Y_UNIT_TEST(DiscoveryReverifiesChangedNodeAtTheSameLearnedAddress) {
+        THarness h;
+        h.Failed.clear();
+        h.Piles["c"] = EPileState::Synchronized;
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}};
+        h.Run(35);
+        UNIT_ASSERT(h.Endpoint(C).Identity == EEndpointIdentity::Verified);
+        h.NodeIds[C] = 4;
+        h.Run(2);
+        UNIT_ASSERT(h.Endpoint(C).Identity == EEndpointIdentity::Mismatch);
+        h.Held.insert({C, EYdbMethod::SelfCheck});
+        h.Run(1);
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 4}};
+        h.Run(6);
+        UNIT_ASSERT(h.Clients->Removed.empty()); // the old invocation still owns its slot
+        h.Held.clear();
+        h.Run(10);
+        UNIT_ASSERT_VALUES_EQUAL(h.Clients->Removed.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(h.Clients->Removed.front(), C);
+        UNIT_ASSERT(h.Endpoint(C).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
+    Y_UNIT_TEST(DiscoveryRecoversANewAddressForAnExpiredSeedNode) {
+        THarness h;
+        h.Failed.clear();
+        h.Run(35);
+        const TString replacement = "grpc://replacement-b:1";
+        h.Clients->Inventory = {{ParseEndpoint(replacement), "b", 2}};
+        for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+            h.FailedMethods.insert({B, method});
+        }
+        h.Run(40);
+        UNIT_ASSERT(h.Endpoint(replacement).Identity == EEndpointIdentity::Verified);
+        h.Failed.insert("a");
+        h.Run(3);
+        UNIT_ASSERT_VALUES_EQUAL(h.Clients->Updates.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(h.Clients->Updates.front().Plan.Endpoint, replacement);
+    }
+
+    Y_UNIT_TEST(DiscoveryRotatesPastUnreachableCandidatesInUnchangedOrder) {
+        THarness h;
+        h.Failed.clear();
+        h.Piles["c"] = EPileState::Synchronized;
+        const TString second = "grpc://c:2";
+        const TString reachable = "grpc://c:3";
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}, {ParseEndpoint(second), "c", 4},
+            {ParseEndpoint(reachable), "c", 5}};
+        h.NodeIds[reachable] = 5;
+        for (const auto& uri : {C, second}) {
+            for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+                h.FailedMethods.insert({uri, method});
+            }
+        }
+        h.Run(40);
+        UNIT_ASSERT(h.Endpoint(reachable).Identity == EEndpointIdentity::Verified);
+        size_t count = 0;
+        for (const auto& endpoint : h.Store->Read()->Endpoints) {
+            count += endpoint.Pile == "c";
+        }
+        UNIT_ASSERT(count <= h.Config.HealthEndpointsPerPile);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
     Y_UNIT_TEST(DiscoveryBoundsNewAddressesAndDeduplicatesVerifiedNodeAliases) {
         THarness h;
         h.Failed.clear();

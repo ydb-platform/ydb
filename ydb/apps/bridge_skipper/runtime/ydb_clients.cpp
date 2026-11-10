@@ -195,7 +195,6 @@ public:
             completed(std::move(result));
         };
         const auto settings = NYdb::NConfig::TFetchAllConfigsSettings()
-            .Transform(NYdb::NConfig::EFetchAllConfigsTransform::ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG)
             .OperationTimeout(Timing.ReadTimeout).ClientTimeout(timeout);
         try {
             auto future = client->Config.FetchAllConfigs(settings);
@@ -208,20 +207,25 @@ public:
                         finish(std::move(base));
                         return;
                     }
-                    TString database;
+                    TString mainYaml;
+                    TString storageYaml;
                     if (!config.Transient()) {
                         for (const auto& entry : config.GetConfigs()) {
                             if (std::holds_alternative<NYdb::NConfig::TMainConfigIdentity>(entry.Identity)) {
-                                Y_ENSURE(database.empty(), "ambiguous discovery config");
-                                database = DiscoveryDatabase(entry.Config);
+                                Y_ENSURE(mainYaml.empty(), "ambiguous main config");
+                                mainYaml = entry.Config;
+                            } else if (std::holds_alternative<NYdb::NConfig::TStorageConfigIdentity>(entry.Identity)) {
+                                Y_ENSURE(storageYaml.empty(), "ambiguous storage config");
+                                storageYaml = entry.Config;
                             }
                         }
                     }
-                    if (database.empty()) {
+                    if (mainYaml.empty()) {
                         base.Error = "DISCOVERY_CONFIG_UNAVAILABLE";
                         finish(std::move(base));
                         return;
                     }
+                    const auto database = DiscoveryDatabase(mainYaml, storageYaml);
                     const auto endpoint = ParseEndpoint(base.Rpc.Request.Endpoint);
                     auto discovery = std::make_shared<NYdb::NDiscovery::TDiscoveryClient>(*driver,
                         MakePinnedClientSettings(endpoint).Database(Std(database)));
@@ -394,16 +398,45 @@ NYdb::TCommonClientSettings MakePinnedClientSettings(const TEndpoint& endpoint) 
         .DiscoveryMode(NYdb::EDiscoveryMode::Off);
 }
 
-TString DiscoveryDatabase(TStringBuf yaml) {
-    Y_ENSURE(yaml.size() <= 4 * 1024 * 1024, "discovery config exceeds size limit");
+TString DiscoveryDatabase(TStringBuf yaml, TStringBuf storageYaml) {
     try {
-        const auto docs = YAML::LoadAll(std::string(yaml.data(), yaml.size()));
-        Y_ENSURE(docs.size() == 1);
-        const auto domains = docs.front()["config"]["domains_config"]["domain"];
-        Y_ENSURE(domains.IsSequence() && domains.size() == 1);
-        const auto name = domains[0]["name"];
-        Y_ENSURE(name.IsScalar());
-        const TString value(name.Scalar());
+        const auto parse = [](TStringBuf text) {
+            Y_ENSURE(text.size() <= 4 * 1024 * 1024);
+            const auto docs = YAML::LoadAll(std::string(text.data(), text.size()));
+            Y_ENSURE(docs.size() == 1);
+            const auto config = docs.front()["config"];
+            Y_ENSURE(config.IsMap());
+            return config;
+        };
+        const auto main = parse(yaml);
+        const auto storage = storageYaml.empty() ? YAML::Node(YAML::NodeType::Map) : parse(storageYaml);
+        // Node startup fills missing top-level keys from StorageConfig into
+        // MainConfig. Existing maps are kept whole, without recursive merging.
+        const auto field = [&](const char* key) {
+            const auto value = main[key];
+            return value.IsDefined() ? value : storage[key];
+        };
+        // Match YDB's raw YAML domain-name precedence. The v1 downgrade
+        // transform rejects dedicated storage and independently configured boards.
+        // TEphemeralInputFields.DomainName defaults to Root on the server.
+        TString value = "Root";
+        const auto modernName = field("domain_name");
+        if (modernName.IsDefined()) {
+            Y_ENSURE(modernName.IsScalar());
+            value = modernName.Scalar();
+        } else {
+            const auto domainsConfig = field("domains_config");
+            if (domainsConfig.IsDefined()) {
+                Y_ENSURE(domainsConfig.IsMap());
+                const auto domains = domainsConfig["domain"];
+                if (domains.IsDefined()) {
+                    Y_ENSURE(domains.IsSequence() && domains.size() == 1);
+                    const auto name = domains[0]["name"];
+                    Y_ENSURE(name.IsScalar());
+                    value = name.Scalar();
+                }
+            }
+        }
         Y_ENSURE(!value.empty() && value.find_first_of("/\\\r\n") == TString::npos && value.find('\0') == TString::npos);
         return "/" + value;
     } catch (...) {

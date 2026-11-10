@@ -82,6 +82,7 @@ public:
     Ydb::StatusIds::StatusCode NextStatus = Ydb::StatusIds::SUCCESS;
     std::atomic<bool> HangSelfCheck{false};
     std::atomic<bool> HangDiscovery{false};
+    bool DedicatedStorage = false;
 
     grpc::Status FetchConfig(grpc::ServerContext* context, const Ydb::Config::FetchConfigRequest* request,
         Ydb::Config::FetchConfigResponse* response) override
@@ -92,10 +93,17 @@ public:
         Ydb::Config::FetchConfigResult result;
         auto* entry = result.add_config();
         entry->mutable_identity()->mutable_main();
-        entry->set_config("config: {domains_config: {domain: [{name: CustomRoot}]}}\n");
+        entry->set_config(DedicatedStorage ? "config: {}\n"
+            : "config: {domains_config: {domain: [{name: CustomRoot}]}}\n");
+        if (DedicatedStorage) {
+            auto* storage = result.add_config();
+            storage->mutable_identity()->mutable_storage();
+            storage->set_config("config: {domain_name: DedicatedRoot, domains_config: {explicit_state_storage_config: {}}}\n");
+        }
         auto* operation = response->mutable_operation();
         operation->set_ready(true);
-        operation->set_status(std::exchange(NextStatus, Ydb::StatusIds::SUCCESS));
+        operation->set_status(DedicatedStorage && request->all().has_add_blob_storage_and_domains_config()
+            ? Ydb::StatusIds::BAD_REQUEST : std::exchange(NextStatus, Ydb::StatusIds::SUCCESS));
         operation->mutable_result()->PackFrom(result);
         return grpc::Status::OK;
     }
@@ -294,6 +302,24 @@ void VerifyTokenPreparationExpiry(ui64 preparationSeconds) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
+    Y_UNIT_TEST(DiscoverySupportsDedicatedStorageWithoutDowngrade) {
+        TWireService service;
+        service.DedicatedStorage = true;
+        TString endpoint;
+        auto server = StartWireServer(service, endpoint);
+        const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n");
+        auto clients = CreateYdbClients(config, TLoadedCredentials{});
+        const auto result = Await<TInventoryResult>([&](auto completed) {
+            clients->Discover({endpoint, "a", 1}, std::move(completed));
+        });
+        UNIT_ASSERT_C(result.Rpc.Success, result.Rpc.Status);
+        UNIT_ASSERT_VALUES_EQUAL(result.Endpoints.size(), 1);
+        const auto capture = service.ReadCapture();
+        UNIT_ASSERT(!capture.Config.all().has_add_blob_storage_and_domains_config());
+        UNIT_ASSERT_VALUES_EQUAL(capture.Discovery.database(), "/DedicatedRoot");
+        clients->Stop();
+    }
+
     Y_UNIT_TEST(DiscoveryUsesConfiguredDomainAndAuthenticatedPinnedClients) {
         TWireService service;
         TString endpoint;
@@ -311,7 +337,7 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         UNIT_ASSERT_VALUES_EQUAL(result.Endpoints.front().NodeId, 12);
         UNIT_ASSERT_VALUES_EQUAL(result.Endpoints.front().Endpoint.Uri, "grpc://new-node:2135");
         const auto capture = service.ReadCapture();
-        UNIT_ASSERT(capture.Config.all().has_add_blob_storage_and_domains_config());
+        UNIT_ASSERT(!capture.Config.all().has_add_blob_storage_and_domains_config());
         UNIT_ASSERT_VALUES_EQUAL(capture.Config.operation_params().operation_timeout().seconds(), 1);
         UNIT_ASSERT_VALUES_EQUAL(capture.Discovery.database(), "/CustomRoot");
         UNIT_ASSERT_VALUES_EQUAL(capture.AuthTicket, "discovery-token");
@@ -358,7 +384,14 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
 
     Y_UNIT_TEST(DiscoveryConfigAndInventoryValidationAreAtomic) {
         UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domains_config: {domain: [{name: Other}]}}"), "/Other");
-        for (const TString yaml : {"config: {}", "config: {domains_config: {domain: [{name: a}, {name: b}]}}",
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {}"), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domain_name: Modern}"), "/Modern");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {}", "config: {domain_name: StorageRoot}"), "/StorageRoot");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domain_name: MainRoot}", "config: {domain_name: StorageRoot}"), "/MainRoot");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domains_config: {security_config: {}}}",
+            "config: {domains_config: {domain: [{name: StorageRoot}]}}"), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domain_name: Modern, domains_config: {domain: [{name: Old}]}}"), "/Modern");
+        for (const TString yaml : {"config: []", "config: {domains_config: {domain: [{name: a}, {name: b}]}}",
                 "config: {domains_config: {domain: [{name: 'bad/path'}]}}", "!!broken secret"})
         {
             UNIT_ASSERT_EXCEPTION_CONTAINS(DiscoveryDatabase(yaml), yexception, "INVALID_DISCOVERY_CONFIG");

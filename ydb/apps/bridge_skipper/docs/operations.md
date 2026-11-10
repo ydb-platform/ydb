@@ -41,8 +41,8 @@ high-water mark. Trusted endpoint inventory is a deployment requirement.
 
 Configured addresses are bootstrap seeds. Without changing the file or restarting,
 Skipper refreshes discovery every five seconds through a verified current node:
-ConfigService/FetchConfig supplies the explicit root domain (not a hardcoded
-`/Root`), then Discovery/ListEndpoints supplies gRPC addresses and pile names.
+ConfigService/FetchConfig supplies raw YAML without requiring a v1 downgrade;
+root selection follows YDB's main-first top-level config merge and domain-name defaults, then Discovery/ListEndpoints supplies gRPC addresses and pile names.
 The credential must be allowed to fetch cluster configuration and list root-domain
 endpoints. A failed refresh leaves existing observations and failure detection
 running; its status appears on the source endpoint under `last_error`.
@@ -54,6 +54,10 @@ address must pass SelfCheck with its advertised pile and node ID before its view
 health or mutation routes count. At most `health_endpoints_per_pile` learned
 addresses per pile are kept. Discovery is not a storage inventory or a quorum:
 omissions do not prove health/failure and do not discard fresh endpoint evidence.
+Candidate addresses rotate within each pile, so an unchanged Discovery ordering
+does not keep retrying only unreachable nodes. Only current verified endpoints
+deduplicate node IDs; a learned address advertising a changed identity is drained
+and checked again before reuse.
 `GetClusterState` supplies pile states, including Add/Remove progress; Auto never
 calls AddPile or RemovePile. Inactive, disconnected and removed piles disappear
 from the endpoint list. Their configured seeds retain low-frequency bootstrap

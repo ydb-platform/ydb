@@ -70,7 +70,7 @@ callbacks never access an actor object.
 
 1. **Inventory.** Configured single-node endpoints bootstrap discovery. Every
    five seconds one verified current endpoint supplies ConfigService/FetchConfig
-   (explicit domains transform) and database-scoped Discovery/ListEndpoints.
+   (raw MainConfig and optional StorageConfig) and database-scoped Discovery/ListEndpoints.
    Learned addresses are limited to `health_endpoints_per_pile` per pile and
    16,384 total endpoints; their views, health and routing require their own
    SelfCheck to verify both the advertised node ID and pile. Seed views retain

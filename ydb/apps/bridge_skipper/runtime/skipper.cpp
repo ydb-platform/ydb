@@ -352,16 +352,22 @@ private:
                 endpoint.Retiring = true;
             }
         }
-        // A removed pile's node may be reused by a new pile at the same URI.
-        // Drain its old calls before replacing the pinned client and attribution.
+        // A URI can be reused by a new node or pile. Discovery supplies the
+        // proposed identity; drain old calls, then verify it through SelfCheck.
         for (const auto& item : result.Endpoints) {
             const auto it = Endpoints.find(item.Endpoint.Uri);
             const auto pile = Selection.View->Piles.find(item.Pile);
-            if (it != Endpoints.end() && it->second.Snapshot.Ignored
-                && it->second.Snapshot.Pile != item.Pile && pile != Selection.View->Piles.end()
-                && pile->second != EPileState::Inactive && pile->second != EPileState::Disconnected)
+            if (it == Endpoints.end() || pile == Selection.View->Piles.end()
+                || pile->second == EPileState::Inactive || pile->second == EPileState::Disconnected)
             {
-                it->second.Retiring = true;
+                continue;
+            }
+            auto& endpoint = it->second;
+            const bool reusedSeed = endpoint.Snapshot.Ignored && endpoint.Snapshot.Pile != item.Pile;
+            const bool replacedLearned = endpoint.Discovered && endpoint.Snapshot.Identity == EEndpointIdentity::Mismatch
+                && (endpoint.Snapshot.Pile != item.Pile || endpoint.ExpectedNodeId != item.NodeId);
+            if (reusedSeed || replacedLearned) {
+                endpoint.Retiring = true;
             }
         }
         ReapEndpoints();
@@ -371,31 +377,48 @@ private:
         for (const auto& [uri, endpoint] : Endpoints) {
             (void)uri;
             learned[endpoint.Snapshot.Pile] += endpoint.Discovered;
-            if (!endpoint.Retiring && !endpoint.Snapshot.Ignored && endpoint.NodeId) {
+            if (!endpoint.Retiring && !endpoint.Snapshot.Ignored && endpoint.NodeId
+                && endpoint.Snapshot.Identity == EEndpointIdentity::Verified && Selection.CurrentEndpoints.contains(uri))
+            {
                 nodes.insert(*endpoint.NodeId);
             }
         }
+        std::map<TString, std::vector<const TDiscoveredEndpoint*>> candidates;
         for (const auto& item : result.Endpoints) {
             const auto pile = Selection.View->Piles.find(item.Pile);
-            if (pile == Selection.View->Piles.end() || pile->second == EPileState::Inactive
-                || pile->second == EPileState::Disconnected || nodes.contains(item.NodeId)
-                || Endpoints.contains(item.Endpoint.Uri)
-                || learned[item.Pile] >= Options.Config.HealthEndpointsPerPile || Endpoints.size() >= 16384)
+            if (pile != Selection.View->Piles.end() && pile->second != EPileState::Inactive
+                && pile->second != EPileState::Disconnected)
             {
-                continue;
+                candidates[item.Pile].push_back(&item);
             }
-            Options.Clients->AddEndpoint(item.Endpoint, item.Pile);
-            auto& endpoint = Endpoints[item.Endpoint.Uri];
-            endpoint.Snapshot.Uri = item.Endpoint.Uri;
-            endpoint.Snapshot.Pile = item.Pile;
-            endpoint.Discovered = true;
-            endpoint.ExpectedNodeId = item.NodeId;
-            Options.Config.Endpoints[item.Pile].push_back(item.Endpoint);
-            added = true;
-            ++learned[item.Pile];
-            nodes.insert(item.NodeId);
-            YDB_LOG_INFO_CTX_COMP(*NActors::TlsActivationContext, SkipperLogComponent, "Endpoint discovered",
-                {"event", "endpoint_discovered"}, {"pile", item.Pile}, {"endpoint", item.Endpoint.Uri});
+        }
+        std::erase_if(DiscoveryRotation, [&](const auto& entry) { return !Selection.View->Piles.contains(entry.first); });
+        for (const auto& [pile, choices] : candidates) {
+            auto& rotation = DiscoveryRotation[pile];
+            const size_t start = rotation % choices.size();
+            for (size_t i = 0; i < choices.size() && learned[pile] < Options.Config.HealthEndpointsPerPile
+                && Endpoints.size() < 16384; ++i)
+            {
+                const auto& item = *choices[(start + i) % choices.size()];
+                if (nodes.contains(item.NodeId) || Endpoints.contains(item.Endpoint.Uri)) {
+                    continue;
+                }
+                Options.Clients->AddEndpoint(item.Endpoint, item.Pile);
+                auto& endpoint = Endpoints[item.Endpoint.Uri];
+                endpoint.Snapshot.Uri = item.Endpoint.Uri;
+                endpoint.Snapshot.Pile = item.Pile;
+                endpoint.Discovered = true;
+                endpoint.ExpectedNodeId = item.NodeId;
+                Options.Config.Endpoints[item.Pile].push_back(item.Endpoint);
+                added = true;
+                ++learned[pile];
+                nodes.insert(item.NodeId);
+                // A failed bounded sample must give later candidates a turn,
+                // even when the server keeps returning the same cached order.
+                rotation = (start + i + 1) % choices.size();
+                YDB_LOG_INFO_CTX_COMP(*NActors::TlsActivationContext, SkipperLogComponent, "Endpoint discovered",
+                    {"event", "endpoint_discovered"}, {"pile", item.Pile}, {"endpoint", item.Endpoint.Uri});
+            }
         }
         if (added) {
             NextStatePoll = TMonotonic::Zero();
@@ -1356,6 +1379,7 @@ private:
     TMonotonic NextHealthRound;
     TMonotonic NextInventory;
     size_t InventoryRotation = 0;
+    std::map<TString, size_t> DiscoveryRotation;
     bool InventoryInFlight = false;
     ui64 NextSequence = 0;
     std::map<TString, TEndpointData> Endpoints;

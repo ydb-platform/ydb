@@ -53,7 +53,11 @@ Card `health_text`, `evidence_age_text` and `context_action` supply the same
 presentation to HTML and JavaScript; elapsed browser time advances ages and
 expiry between reads. Card `current_assessment` and `last_known_assessment`
 contain verdict, reasons, fallback/self-quorum flags, evidence, assessment
-availability and confirmation metadata. The evidence drawer resolves raw pile
+availability and confirmation metadata. `fallback_red` is a candidate veto
+for any attributed RED/GREY or incomplete fallback part, not sufficient proof
+of failure. A fallback Failed verdict has a reason naming decisive RED static
+group parts; the generation, role warm-up, no-BSC and no-self-quorum checks
+still apply. The evidence drawer resolves raw pile
 records by exact name and `endpoint_uris` through root `endpoints[]`, keeping
 current and historical evidence distinct. Captured log rows provide a canonical `summary` alongside
 their original redacted `message`.

@@ -24,6 +24,12 @@ using TEvAddPileRequest =
 using TEvRemovePileRequest =
     TGrpcRequestOperationCall<Ydb::Bridge::RemovePileRequest,
         Ydb::Bridge::RemovePileResponse>;
+using TEvGetRollbackStatusRequest =
+    TGrpcRequestOperationCall<Ydb::Bridge::GetRollbackStatusRequest,
+        Ydb::Bridge::GetRollbackStatusResponse>;
+using TEvRollbackRequest =
+    TGrpcRequestOperationCall<Ydb::Bridge::RollbackRequest,
+        Ydb::Bridge::RollbackResponse>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -89,6 +95,10 @@ void CopyFromInternalClusterStateDetails(const NKikimrBridge::TClusterStateDetai
 
             case TOperation::REMOVE:
                 pb->set_kind(Ydb::Bridge::PendingPileOperation::REMOVE);
+                break;
+
+            case TOperation::ROLLBACK:
+                pb->set_kind(Ydb::Bridge::PendingPileOperation::ROLLBACK);
                 break;
 
             case NKikimrBridge::TClusterStateDetails_TPendingPileOperation_EKind_TClusterStateDetails_TPendingPileOperation_EKind_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -498,23 +508,23 @@ private:
     }
 };
 
-class TConvertToBridgeRequest : public TBridgeRequestGrpc<TConvertToBridgeRequest, TEvConvertToBridgeRequest,
-    Ydb::Bridge::ConvertToBridgeResult> {
-    using TBase = TBridgeRequestGrpc<TConvertToBridgeRequest, TEvConvertToBridgeRequest, Ydb::Bridge::ConvertToBridgeResult>;
+// request of the operation distconf performs on the root node, checking all its preconditions; it is answered when
+// distconf has done it
+template<typename TDerived, typename TEvRequest, typename TResultRecord>
+class TInvokeOnRootRequest : public TBridgeRequestGrpc<TDerived, TEvRequest, TResultRecord> {
+    using TBase = TBridgeRequestGrpc<TDerived, TEvRequest, TResultRecord>;
 
 public:
     using TBase::TBase;
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        return CheckAdministrator(status, issues);
+        return this->CheckAdministrator(status, issues);
     }
 
     void SendRequest(const TActorContext& ctx) {
-        // all the preconditions are checked by distconf on the root node
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableConvertToBridge()->SetSkipStoragePoolConversion(
-            GetProtoRequest()->skip_storage_pool_conversion());
-        ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+        static_cast<TDerived*>(this)->FillCommand(request->Record);
+        ctx.Send(MakeBlobStorageNodeWardenID(this->SelfId().NodeId()), request.release());
     }
 
     STFUNC(StateFunc) {
@@ -530,10 +540,88 @@ private:
 
         const auto& record = ev->Get()->Record;
         if (record.GetStatus() == TResult::OK) {
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Bridge::ConvertToBridgeResult(), ActorContext());
+            this->ReplyWithResult(Ydb::StatusIds::SUCCESS, TResultRecord(), this->ActorContext());
         } else {
-            ReplyWithInvokeError(record);
+            this->ReplyWithInvokeError(record);
         }
+    }
+};
+
+class TConvertToBridgeRequest : public TInvokeOnRootRequest<TConvertToBridgeRequest, TEvConvertToBridgeRequest,
+    Ydb::Bridge::ConvertToBridgeResult> {
+public:
+    using TInvokeOnRootRequest::TInvokeOnRootRequest;
+
+    void FillCommand(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot& record) {
+        record.MutableConvertToBridge()->SetSkipStoragePoolConversion(GetProtoRequest()->skip_storage_pool_conversion());
+    }
+};
+
+// status of the rollback of the bridged cluster or the one prepared for bridge mode; it is served by distconf on the
+// root node (static nodes forward it there, dynamic ones send it to their static node), as the node serving the request
+// may run without bridge config already
+class TGetRollbackStatusRequest : public TBridgeRequestGrpc<TGetRollbackStatusRequest, TEvGetRollbackStatusRequest,
+    Ydb::Bridge::GetRollbackStatusResult> {
+    using TBase = TBridgeRequestGrpc<TGetRollbackStatusRequest, TEvGetRollbackStatusRequest,
+        Ydb::Bridge::GetRollbackStatusResult>;
+
+public:
+    using TBase::TBase;
+
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
+        // it makes every node report, so it is for administrators running the rollback
+        return CheckAdministrator(status, issues);
+    }
+
+    void SendRequest(const TActorContext& ctx) {
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableQueryBridgeRollbackStatus();
+        ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+    }
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+            default: return TBase::StateFuncBase(ev); // operation timeout and client cancellation
+        }
+    }
+
+private:
+    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+
+        const auto& record = ev->Get()->Record;
+        if (record.GetStatus() != TResult::OK) {
+            return ReplyWithInvokeError(record);
+        } else if (!record.HasBridgeRollbackStatus()) {
+            return Reply(Ydb::StatusIds::INTERNAL_ERROR, "Rollback status is missing in the response",
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+        }
+        const auto& status = record.GetBridgeRollbackStatus();
+        Ydb::Bridge::GetRollbackStatusResult result;
+        result.set_bridged(status.GetHasClusterState());
+        for (const ui32 nodeId : status.GetBridgeConfigNodeIds()) {
+            result.add_bridge_config_node_ids(nodeId);
+        }
+        for (const ui32 nodeId : status.GetUnreportedStaticNodeIds()) {
+            result.add_unreported_static_node_ids(nodeId);
+        }
+        result.set_rollback_in_progress(status.GetRollbackInProgress());
+        result.set_error_reason(status.GetErrorReason());
+        result.set_complete(!result.bridged() && result.bridge_config_node_ids().empty() &&
+            result.unreported_static_node_ids().empty());
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
+    }
+};
+
+// rollback of the bridged cluster: distconf checks it, makes static groups ordinary ones and lets BSC do the same; the
+// request is answered then, the rest is reported by the rollback status
+class TRollbackRequest : public TInvokeOnRootRequest<TRollbackRequest, TEvRollbackRequest, Ydb::Bridge::RollbackResult> {
+public:
+    using TInvokeOnRootRequest::TInvokeOnRootRequest;
+
+    void FillCommand(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot& record) {
+        record.MutableRollbackBridge()->SetSkipBscValidation(GetProtoRequest()->skip_bsc_validation());
     }
 };
 
@@ -660,6 +748,14 @@ void DoAddPile(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
 
 void DoRemovePile(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TRemovePileRequest(p.release()));
+}
+
+void DoGetRollbackStatus(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TGetRollbackStatusRequest(p.release()));
+}
+
+void DoRollback(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TRollbackRequest(p.release()));
 }
 
 } // namespace NKikimr::NGRpcService

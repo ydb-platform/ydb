@@ -1,0 +1,1 @@
+SELECT index AS input FROM Input;

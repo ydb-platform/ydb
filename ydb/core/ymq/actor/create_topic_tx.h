@@ -9,7 +9,8 @@
 namespace NKikimr::NSQS {
 
 struct TTopicParams {
-    ui64 PartitionLifetimeSeconds = 0;
+    // SQS MessageRetentionPeriod, in seconds. Stored on the consumer, not as topic retention.
+    ui64 MessageRetentionPeriod = 0;
     bool HasContentBasedDeduplication = false;
     bool ContentBasedDeduplication = false;
     ui64 DefaultDelayMessageTimeMs = 0;

@@ -19,6 +19,12 @@ const NKikimrBlobStorage::TStoragePoolPileOverride* FindStoragePoolPileOverride(
     return nullptr;
 }
 
+bool HasStoragePoolPileOverrides(const NKikimrConfig::TBlobStorageConfig& config, TStringBuf pileName) {
+    return std::ranges::any_of(config.GetStoragePoolPileOverrides(), [&](const auto& rule) {
+        return std::ranges::find(rule.GetPileName(), pileName) != rule.GetPileName().end();
+    });
+}
+
 std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrConfig::TBlobStorageConfig& config) {
     THashSet<TString> allKinds, dynamicPiles, staticPiles;
     THashSet<std::pair<TString, TString>> kinds;

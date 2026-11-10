@@ -569,6 +569,11 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
         )
         outs.append(b_rooted(os.path.join(pm.module_path, constants.NODE_MODULES_LAYER_FILENAME)))
 
+        if has_deps and unit.get("_WITH_NODE_MODULES_PROD") == "yes":
+            unit.set(["_NODE_MODULES_BUNDLE_ARG", "--nm-bundle-prod yes"])
+            unit.set(["_PREPARE_DEPS_BUNDLE_ARGS", "$_TS_OUTPUT_PREFIX_ARG"])
+            outs.append(b_rooted(os.path.join(pm.module_path, constants.PREPARED_NODE_MODULES_BUNDLE_FILENAME)))
+
     local_peers = pm.get_local_peers_from_package_json()
     if local_peers:
         unit.onpeerdir(local_peers)
@@ -852,7 +857,8 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
     prod_bundle = unit.get("_WITH_NODE_MODULES_PROD") == "yes"
-    if _use_hermetic_node_modules(unit):
+    use_hermetic_node_modules = _use_hermetic_node_modules(unit)
+    if use_hermetic_node_modules:
         _configure_hermetic_node_modules(unit)
 
     local_peers = pm.get_local_peers_from_package_json()
@@ -862,16 +868,26 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
 
     if has_deps:
         nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
-        if nm_bundle_needed:
+        from lib.nots.package_manager import constants
+        from lib.nots.package_manager.utils import b_rooted, s_rooted
+
+        copy_prepared_bundle = nm_bundle_needed and prod_bundle and use_hermetic_node_modules
+        if copy_prepared_bundle:
+            prepared_bundle = b_rooted(os.path.join(pm.module_path, constants.PREPARED_NODE_MODULES_BUNDLE_FILENAME))
+            bundle = b_rooted(os.path.join(pm.module_path, constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME))
+            unit.set(
+                [
+                    "_NODE_MODULES_BUNDLE_COPY_CMD",
+                    f'$COPY_CMD ${{input:"{prepared_bundle}"}} ${{output:"{bundle}"}}',
+                ]
+            )
+        elif nm_bundle_needed:
             bundle_args = "--nm-bundle yes"
             if prod_bundle:
                 bundle_args += " --nm-bundle-prod yes"
             unit.set(["_NODE_MODULES_BUNDLE_ARG", bundle_args])
 
-        ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
-
-        from lib.nots.package_manager import constants
-        from lib.nots.package_manager.utils import s_rooted
+        ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed and not copy_prepared_bundle)
 
         source_manifests = {
             s_rooted(os.path.join(pm.module_path, constants.PACKAGE_JSON_FILENAME)),
@@ -879,11 +895,11 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         }
         ins = [path for path in ins if path not in source_manifests]
 
-        if not _use_hermetic_node_modules(unit) or prod_bundle:
+        if not use_hermetic_node_modules:
             from lib.nots.package_manager.common_config import common_config_inputs
 
             ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root))
-            # Legacy and production-bundle builders materialize node_modules in the build action and
+            # Legacy builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
             # explicitly so they are available in a distbuild sandbox.
             ins.extend(

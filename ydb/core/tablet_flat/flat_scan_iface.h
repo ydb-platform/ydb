@@ -178,8 +178,10 @@ namespace NTable {
      * committed row is the newest row reconstructed from the fixed subset,
      * followed by strictly older versions.
      * Uncommitted deltas and locks may precede that first committed row, and a
-     * key may contain only such events. Feed receives reconstructed row states,
-     * not individual fragments from parts.
+     * key may contain only such events. Feed(const TRow&, TRowVersion&) receives
+     * reconstructed committed row states, not individual fragments from parts.
+     * Feed(const TRow&, ui64) may deliver separate uncommitted fragments for the
+     * same transaction from different sources.
      *
      * The consumer may lower the version passed to Feed(TRow, TRowVersion&),
      * asking the driver to continue below that version instead of the original

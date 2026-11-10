@@ -290,7 +290,7 @@ public:
                 for (auto elt : jsonValue.get_object()) {
                     std::string_view name;
                     {
-                        CHECK_JSON_ERROR(elt.escaped_key().get(name)) {
+                        CHECK_JSON_ERROR(elt.unescaped_key().get(name)) {
                             SetParsingError(error, jsonValue, "parse as object", status);
                             return false;
                         }
@@ -358,7 +358,7 @@ public:
                     for (auto elt : jsonObject) {
                         std::string_view name;
                         {
-                            CHECK_JSON_ERROR(elt.escaped_key().get(name)) {
+                            CHECK_JSON_ERROR(elt.unescaped_key().get(name)) {
                                 SetParsingError(error, jsonValue, "parse as object", status);
                                 return;
                             }
@@ -1161,7 +1161,7 @@ private:
             CHECK_JSON_ERROR(item.error()) {
                 return false;
             }
-            const auto it = ColumnsIndex.find(item.escaped_key().value());
+            const auto it = ColumnsIndex.find(item.unescaped_key().value());
             if (it == ColumnsIndex.end()) {
                 continue;
             }
@@ -1276,7 +1276,7 @@ private:
                     return TryToParseOneJson(state, status);
                 }
 
-                const auto it = ColumnsIndex.find(item.escaped_key().value());
+                const auto it = ColumnsIndex.find(item.unescaped_key().value());
                 if (it == ColumnsIndex.end()) {
                     continue;
                 }

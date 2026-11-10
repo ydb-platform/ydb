@@ -2357,7 +2357,7 @@ FROM `{table_name}`"""
         longstr = '23456789876543212345678987654321'  # so that it won't fit SSO/embedded
         data = [
             '{"foo":{"bar":"before lunch", "bat":[0]}}',
-            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":{"полдник":null,"обед":true}},"test":"xy{longstr}z"}',
+            '{"fo\\u006f":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":{"\\u043fолдни\\u043a":null,"обед":true}},"test":"xy{longstr}z"}',
             '{"foo":{"bar":"after lunch", "baz":[], "bat":[2,"t{longstr}a"],"bet":{"a":2,"c{longstr}d":3},"bum":{"supper":false}},"test":"x{longstr}yz"}',
         ]
         data = [*map(lambda x: x.replace('{longstr}', longstr), data)]
@@ -2460,8 +2460,8 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, name)
 
         messages = [
-            # Valid row with all nested containers.
-            '{"top":{"a":[1,2],"b":[3,"s"],"c":{"k":1},"d":4,"e":"x"},"req":{"id":10,"name":"y"},"note":"ok"}',
+            # Valid row with all nested containers (also validates Dict key unescape, \u006b is 'k')).
+            '{"top":{"a":[1,2],"b":[3,"s"],"c":{"\\u006b":1},"d":4,"e":"x"},"req":{"id":10,"name":"y"},"note":"ok"}',
             # Errors: missing required nested field.
             '{"req":{"name":"no"},"note":"skip-missing-req"}',
             # Errors: top-level structured field has wrong type.
@@ -2482,8 +2482,8 @@ FROM `{table_name}`"""
             '{"req":{"id":"bad"},"note":"skip-req-type"}',
             # Errors: nested required scalar null.
             '{"req":{"id":null},"note":"skip-req-null"}',
-            # Valid: tuple has extra elements, extra tuple elements are ignored.
-            '{"top":{"b":[5,"t","extra"]},"req":{"id":1},"note":"ok-extra"}',
+            # Valid: tuple has extra elements, extra tuple elements are ignored (also validates toplevel key unescape, \u006f is 'o').
+            '{"t\\u006fp":{"b":[5,"t","extra"]},"req":{"id":1},"note":"ok-extra"}',
             # Valid: explicit nulls for optional top-level structs.
             '{"top":null,"req":null,"note":"ok-nulls"}',
             # Valid: optional top-level structs omitted.
@@ -2492,8 +2492,8 @@ FROM `{table_name}`"""
             '{"top":{"a":[],"c":{}},"note":"ok-empty"}',
             # Valid: only one nested scalar present.
             '{"top":{"d":101},"note":"ok-only-d"}',
-            # Valid: tuple trailing optional element omitted.
-            '{"top":{"b":[7]},"note":"ok-tuple-trailing-optional"}',
+            # Valid: tuple trailing optional element omitted (also validates Struct key unescape, \u0062 is 'b').
+            '{"top":{"\\u0062":[7]},"note":"ok-tuple-trailing-optional"}',
             # Valid: explicit null for optional list.
             '{"top":{"a":null},"note":"ok-list-null"}',
             # Valid: unknown top-level and nested keys are ignored.

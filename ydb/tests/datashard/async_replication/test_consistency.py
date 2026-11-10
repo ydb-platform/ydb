@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 import boto3
 import pytest
+import requests
 import yatest.common
 
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
@@ -148,3 +149,79 @@ class TestAsyncReplicationConsistency(MulticlusterTestBase):
         assert source_checksum.row_count == 151, source_checksum
         assert source_checksum == destination_checksum, \
             f"Source checksum: {source_checksum}; destination checksum: {destination_checksum}"
+
+
+class TestAuthenticationRecovery(MulticlusterTestBase):
+    run_cli = TestAsyncReplicationConsistency.run_cli
+    describe = TestAsyncReplicationConsistency.describe
+
+    @classmethod
+    def get_extra_grpc_services(cls):
+        return ["replication"]
+
+    @classmethod
+    def get_extra_feature_flags(cls):
+        return [*super().get_extra_feature_flags(), "enable_schema_secrets"]
+
+    @pytest.mark.parametrize("consistency_level", ["ROW", "GLOBAL"])
+    def test_schema_secret_change_recovers_without_pause(self, consistency_level):
+        source_cluster, destination_cluster = self.clusters
+        source = Query.create(self.get_database(), self.get_endpoint(source_cluster))
+        destination = Query.create(self.get_database(), self.get_endpoint(destination_cluster))
+        name = f"auth_{self.hash_short}"
+        path = f"{self.get_database()}/{name}"
+        replication = f"{path}_replication"
+        secret = f"{path}_secret"
+        old_password, new_password = "OriginalCredential27516", "RotatedCredential27516"
+        source.query(f"CREATE USER {name} PASSWORD '{old_password}';")
+        source.query(f"GRANT ALL ON `{self.get_database()}` TO {name};")
+        source.query(f"CREATE TABLE `{path}` (key Uint64, value Utf8, PRIMARY KEY(key));")
+        destination.query(f"CREATE SECRET `{secret}` WITH (value='{old_password}');")
+        interval = ", COMMIT_INTERVAL=Interval('PT1S')" if consistency_level == "GLOBAL" else ""
+        destination.query(f"""
+            CREATE ASYNC REPLICATION `{replication}` FOR `{path}` AS `{path}` WITH (
+                CONNECTION_STRING='grpc://{self.get_endpoint(source_cluster)}/?database={self.get_database()}',
+                USER='{name}', PASSWORD_SECRET_PATH='{secret}',
+                CONSISTENCY_LEVEL='{consistency_level}'{interval})
+        """)
+        source.query(f"UPSERT INTO `{path}` (key,value) VALUES (1u,'initial');")
+
+        def equal_rows():
+            try:
+                return destination.query(f"SELECT * FROM `{path}` ORDER BY key;") == source.query(
+                    f"SELECT * FROM `{path}` ORDER BY key;")
+            except Exception:
+                return False
+
+        def identities():
+            node = destination_cluster.nodes[1]
+            result = []
+            for object_path in (replication, path):
+                response = requests.get(
+                    f"http://{node.host}:{node.mon_port}/viewer/json/describe",
+                    params={"database": self.get_database(), "path": object_path, "enums": "true"}, timeout=10)
+                response.raise_for_status()
+                entry = response.json()["PathDescription"]["Self"]
+                result.append((entry["SchemeshardId"], entry["PathId"]))
+            return result
+
+        assert wait_for(equal_rows, timeout_seconds=120), "Initial rows did not arrive"
+        original_identities = identities()
+        source.query(f"ALTER USER {name} PASSWORD '{new_password}';")
+        # All old destination tokens disappear, forcing a fresh Login with the stale secret.
+        for node in destination_cluster.nodes.values():
+            node.stop()
+        for node in destination_cluster.nodes.values():
+            node.start()
+        source.query(f"UPSERT INTO `{path}` (key,value) VALUES (2u,'while-failed');")
+        assert wait_for(lambda: "error" in self.describe(destination_cluster, replication),
+                        timeout_seconds=120), "Rejected Login did not become public Error"
+        error = self.describe(destination_cluster, replication)["error"]
+        assert old_password not in str(error) and new_password not in str(error)
+        destination.query(f"ALTER SECRET `{secret}` WITH (value='{new_password}');")
+        # Deliberately no ALTER REPLICATION / PAUSE / STANDBY here.
+        assert wait_for(equal_rows, timeout_seconds=120), "Secret change did not recover backlog"
+        source.query(f"UPSERT INTO `{path}` (key,value) VALUES (1u,'updated'), (3u,'after-recovery');")
+        source.query(f"DELETE FROM `{path}` WHERE key=2u;")
+        assert wait_for(equal_rows, timeout_seconds=120), "Recovered replication lost subsequent changes"
+        assert identities() == original_identities, "Recovery recreated schema objects"

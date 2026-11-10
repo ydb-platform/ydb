@@ -3427,8 +3427,11 @@ TTabletInfo* THive::FindStartingBootAttempt(ui64 bootAttemptId) {
         return nullptr;
     }
     TTabletInfo* tablet = FindTablet(it->second.TabletId);
-    if (tablet && tablet->BootAttemptId == bootAttemptId && tablet->IsStarting()
-            && tablet->IsPresentOnLocal(it->second.Local)) {
+    if (tablet
+            && tablet->BootAttemptId == bootAttemptId
+            && tablet->IsStarting()
+            && tablet->IsPresentOnLocal(it->second.Local))
+    {
         return tablet;
     }
     return nullptr;

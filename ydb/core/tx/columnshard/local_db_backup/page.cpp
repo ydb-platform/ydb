@@ -252,7 +252,7 @@ void RenderCurrentBackup(TStringBuilder& html, const TStatus& status, TInstant n
     }
     html << "</dl>";
 
-    if (!progress.Tables.empty()) {
+    if (status.IsActive() || !progress.Tables.empty()) {
         RenderTablesTable(html, progress);
     }
     html << "</div>";
@@ -343,7 +343,11 @@ TString ParseS3Form(const NActorsProto::TRemoteHttpInfo& query, NKikimrSchemeOp:
     s3.SetEndpoint(get("endpoint"));
     s3.SetBucket(get("bucket"));
     s3.SetObjectKeyPattern(get("prefix"));
-    s3.SetRegion(get("region"));
+    // An empty region must stay unset: HasRegion() would replace the SDK default with "" and, together
+    // with the required endpoint override, the AWS SDK signs requests as region "region-not-set".
+    if (const TString region = get("region"); !region.empty()) {
+        s3.SetRegion(region);
+    }
     s3.SetAccessKey(get("access_key"));
     s3.SetSecretKey(get("secret_key"));
     s3.SetScheme(get("scheme") == "HTTP" ? NKikimrSchemeOp::TS3Settings::HTTP : NKikimrSchemeOp::TS3Settings::HTTPS);

@@ -103,14 +103,15 @@ private:
     }
 
     void Handle(TEvBackupStarted::TPtr& ev) {
-        if (!Status.IsActive() || !Pending) {
-            YDB_LOG_WARN("LocalDbBackup: ignoring TEvBackupStarted of a finished backup", {"tabletId", TabletId});
+        auto* msg = ev->Get();
+        if (!Status.IsActive() || !Pending || msg->Writer != Status.WriterActorId) {
+            YDB_LOG_WARN("LocalDbBackup: ignoring TEvBackupStarted of another run", {"tabletId", TabletId},
+                {"writer", msg->Writer.ToString()}, {"currentWriter", Status.WriterActorId.ToString()});
             return;
         }
         auto pending = std::move(*Pending);
         Pending.reset();
 
-        auto* msg = ev->Get();
         msg->BackupPath = MakeBackupPath(pending.S3.GetObjectKeyPattern(), TabletId, msg->Generation, msg->Step, TActivationContext::Now());
         Status.CurrentBackupPath = msg->BackupPath;
 

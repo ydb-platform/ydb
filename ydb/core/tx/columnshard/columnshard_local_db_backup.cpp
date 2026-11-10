@@ -41,6 +41,7 @@ void TColumnShard::Handle(NLocalDbBackup::TEvStartBackup::TPtr& ev, const TActor
     // consistent with each other.
     const auto& scheme = Executor()->Scheme();
     auto started = std::make_unique<NLocalDbBackup::TEvBackupStarted>();
+    started->Writer = ev->Get()->Writer;
     started->Generation = Executor()->Generation();
     started->Step = Executor()->Step();
     started->Schema.reset(scheme.GetSnapshot().Release());
@@ -70,8 +71,10 @@ void TColumnShard::ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> 
 }
 
 void TColumnShard::CancelLocalDbBackupScans() {
-    for (const auto& [tableId, taskId] : LocalDbBackupScans) {
-        Executor()->CancelScan(tableId, taskId);
+    if (auto* executor = Executor()) {
+        for (const auto& [tableId, taskId] : LocalDbBackupScans) {
+            executor->CancelScan(tableId, taskId);
+        }
     }
     LocalDbBackupScans.clear();
 }

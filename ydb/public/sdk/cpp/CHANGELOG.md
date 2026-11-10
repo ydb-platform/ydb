@@ -5,6 +5,7 @@
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
 
 * Added `TGetClusterStateSettings::IncludePileConnectivity()` and `TGetClusterStateResult::GetPileConnectivity()` for optional bridge static-node connectivity reports.
+* Added `TGetClusterStateSettings::IncludeUnbridgedStatus()` and `TGetClusterStateResult::GetUnbridgedStatus()` to report node configuration when the cluster has no bridge state.
 
 * Added `TUpdateClusterStateSettings::ExpectedGeneration()` to apply a bridge cluster state update only if the cluster state still has the given generation.
 * Added draft bridge synchronization APIs for pile, database, and group diagnostics.

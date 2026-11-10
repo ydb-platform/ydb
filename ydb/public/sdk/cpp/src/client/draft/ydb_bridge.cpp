@@ -173,6 +173,7 @@ public:
     TAsyncGetClusterStateResult GetClusterState(const TGetClusterStateSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::GetClusterStateRequest>(settings);
         request.set_include_pile_connectivity(settings.IncludePileConnectivity_);
+        request.set_include_unbridged_status(settings.IncludeUnbridgedStatus_);
 
         auto promise = NThreading::NewPromise<TGetClusterStateResult>();
 
@@ -182,6 +183,7 @@ public:
             bool conversionInProgress = false;
             std::optional<TPendingPileOperation> pendingPileOperation;
             std::optional<TPileConnectivityReport> pileConnectivity;
+            std::optional<TUnbridgedStatus> unbridgedStatus;
             if (any) {
                 Ydb::Bridge::GetClusterStateResult result;
                 if (any->UnpackTo(&result)) {
@@ -205,6 +207,12 @@ public:
                             });
                         }
                     }
+                    if (result.has_unbridged_status()) {
+                        const auto& report = result.unbridged_status();
+                        auto& parsed = unbridgedStatus.emplace();
+                        parsed.BridgeConfigNodeIds.assign(report.bridge_config_node_ids().begin(), report.bridge_config_node_ids().end());
+                        parsed.UnreportedStaticNodeIds.assign(report.unreported_static_node_ids().begin(), report.unreported_static_node_ids().end());
+                    }
                     state = StateFromProto(result);
                     generation = result.generation();
                     conversionInProgress = result.conversion_in_progress();
@@ -219,7 +227,8 @@ public:
                 }
             }
             promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state), generation,
-                                                    conversionInProgress, std::move(pendingPileOperation), std::move(pileConnectivity)));
+                                                    conversionInProgress, std::move(pendingPileOperation), std::move(pileConnectivity),
+                                                    std::move(unbridgedStatus)));
         };
 
         Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::GetClusterStateRequest, Ydb::Bridge::GetClusterStateResponse>(

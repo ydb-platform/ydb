@@ -32,9 +32,12 @@ message SetDatabaseBridgeModeResult {}
 message GetClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
-    // Also query static-node connectivity, without requiring BSC or tablets.
+    // For a bridge state snapshot, also query static-node connectivity through distconf.
     // An older node in the forwarding path may reject this optional query.
     bool include_pile_connectivity = 2;
+
+    // If the cluster has no bridge state, collect the node configuration report. This requires administrator privileges.
+    bool include_unbridged_status = 3;
 }
 
 message GetClusterStateResponse {
@@ -49,9 +52,18 @@ message GetClusterStateResult {
     // Set after the cluster has been converted from a non-bridged one, until all its storage groups are converted
     // too; no piles can be added to the cluster meanwhile
     bool conversion_in_progress = 3;
-    // Operation changing the set of piles of the cluster that is not finished yet
+    // Pending pile operation or rollback to ordinary mode.
     optional PendingPileOperation pending_pile_operation = 4;
     optional PileConnectivityReport pile_connectivity = 5;
+    // A report-only response for a cluster without bridge state. Pile states and generation apply to bridge snapshots.
+    UnbridgedStatus unbridged_status = 6;
+}
+
+message UnbridgedStatus {
+    // Nodes that reported running with bridge config.
+    repeated uint32 bridge_config_node_ids = 1;
+    // Configured static nodes whose configuration was not observed.
+    repeated uint32 unreported_static_node_ids = 2;
 }
 
 // Administrator-only diagnostics; complete results or an error.
@@ -355,7 +367,7 @@ message GetRollbackStatusResult {
     repeated uint32 bridge_config_node_ids = 2;
     // Static nodes that have not reported their config, as they are not running or not connected.
     repeated uint32 unreported_static_node_ids = 3;
-    // The cluster is not bridged, and every node has reported running without a bridge config.
+    // The cluster is ordinary, and all static and connected dynamic nodes run without bridge config.
     bool complete = 4;
     // The rollback of the bridged cluster is in progress: storage groups are being made ordinary ones.
     bool rollback_in_progress = 5;
@@ -363,8 +375,8 @@ message GetRollbackStatusResult {
     string error_reason = 6;
 }
 
-// Roll a cluster converted from an ordinary one back to it, while it has the only pile, the original one, and every
-// storage group is inline in that pile (has its own VDisks there and no parts elsewhere). Static storage groups become
+// Roll a converted cluster back to ordinary mode while the original pile is the only pile and every bridged storage
+// group is inline in it (has its own VDisks there and no parts elsewhere). Static storage groups become
 // ordinary ones by the call, the storage controller does the same to its groups afterwards, then the cluster state is
 // removed; see GetRollbackStatusResult. The cluster is prepared for bridge mode then, and gets back to ordinary mode
 // as GetRollbackStatusRequest describes.

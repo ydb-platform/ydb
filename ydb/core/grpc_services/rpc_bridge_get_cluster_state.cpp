@@ -61,7 +61,10 @@ namespace NKikimr::NGRpcService {
                                                                  Ydb::Bridge::GetClusterStateResult> {
             using TBase = TBridgeRequestGrpc<TGetClusterStateRequest, TEvGetClusterStateRequest, Ydb::Bridge::GetClusterStateResult>;
 
+            enum class EPhase { LocalConfig, PileConnectivity, UnbridgedStatus };
+
             Ydb::Bridge::GetClusterStateResult Result;
+            EPhase Phase = EPhase::LocalConfig;
 
         public:
             using TBase::TBase;
@@ -86,6 +89,9 @@ namespace NKikimr::NGRpcService {
 
         private:
             void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
+                if (Phase != EPhase::LocalConfig) {
+                    return;
+                }
                 auto* self = Self();
                 const auto& config = ev->Get()->Config;
                 const auto& bridgeInfo = ev->Get()->BridgeInfo;
@@ -96,31 +102,66 @@ namespace NKikimr::NGRpcService {
                     return;
                 }
 
-                if (config->HasClusterState() && !bridgeInfo) {
+                if (!config->HasClusterState()) {
+                    if (!GetProtoRequest()->include_unbridged_status()) {
+                        Reply(Ydb::StatusIds::NOT_FOUND, "Bridge cluster state is not configured",
+                              NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+                        return;
+                    }
+                    Ydb::StatusIds::StatusCode status;
+                    NYql::TIssues issues;
+                    if (!CheckAdministrator(status, issues)) {
+                        Reply(status, issues, ActorContext());
+                        return;
+                    }
+                    auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+                    request->Record.MutableQueryBridgeRollbackStatus();
+                    Phase = EPhase::UnbridgedStatus;
+                    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+                    return;
+                }
+
+                if (!bridgeInfo) {
                     self->Reply(Ydb::StatusIds::UNAVAILABLE, NoBridgeConfigError, NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                                 self->ActorContext());
-                } else if (config->HasClusterState()) {
-                    CopyFromInternalClusterState(config->GetClusterState(), *bridgeInfo, Result);
-                    CopyFromInternalClusterStateDetails(config->GetClusterStateDetails(), *bridgeInfo, Result);
-                    if (GetProtoRequest()->include_pile_connectivity()) {
-                        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-                        request->Record.MutableQueryPileConnectivity();
-                        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
-                    } else {
-                        self->ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, self->ActorContext());
-                    }
+                    return;
+                }
+                CopyFromInternalClusterState(config->GetClusterState(), *bridgeInfo, Result);
+                CopyFromInternalClusterStateDetails(config->GetClusterStateDetails(), *bridgeInfo, Result);
+                if (GetProtoRequest()->include_pile_connectivity()) {
+                    auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+                    request->Record.MutableQueryPileConnectivity();
+                    Phase = EPhase::PileConnectivity;
+                    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
                 } else {
-                    self->Reply(Ydb::StatusIds::NOT_FOUND, "Bridge cluster state is not configured",
-                                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                    self->ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, self->ActorContext());
                 }
             }
 
             void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
+                if (Phase == EPhase::LocalConfig) {
+                    return;
+                }
                 using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
                 const auto& record = ev->Get()->Record;
                 if (record.GetStatus() != TResult::OK) {
                     ReplyWithInvokeError(record);
                     return;
+                }
+                if (Phase == EPhase::UnbridgedStatus) {
+                    if (!record.HasBridgeRollbackStatus()) {
+                        return Reply(Ydb::StatusIds::INTERNAL_ERROR, "Missing unbridged status report",
+                                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+                    }
+                    const auto& report = record.GetBridgeRollbackStatus();
+                    if (report.GetHasClusterState()) {
+                        return Reply(Ydb::StatusIds::ABORTED, "The root reports a bridge cluster state; retry the request",
+                                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+                    }
+                    auto* result = Result.mutable_unbridged_status();
+                    result->mutable_bridge_config_node_ids()->CopyFrom(report.GetBridgeConfigNodeIds());
+                    result->mutable_unreported_static_node_ids()->CopyFrom(report.GetUnreportedStaticNodeIds());
+                    return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ActorContext());
                 }
                 if (!record.HasPileConnectivity()) {
                     Reply(Ydb::StatusIds::GENERIC_ERROR, "Missing pile connectivity report",

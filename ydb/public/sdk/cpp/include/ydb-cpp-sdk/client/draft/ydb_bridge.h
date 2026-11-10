@@ -30,6 +30,8 @@ struct TGetClusterStateSettings: public TOperationRequestSettings<TGetClusterSta
     //! Request a static-node connectivity snapshot, independent of storage health.
     //! An older server may reject the optional query or omit the report.
     FLUENT_SETTING_DEFAULT(bool, IncludePileConnectivity, false);
+    // Request node reports when the cluster has no Bridge state.
+    FLUENT_SETTING_DEFAULT(bool, IncludeUnbridgedStatus, false);
 };
 
 struct TConvertToBridgeSettings: public TOperationRequestSettings<TConvertToBridgeSettings> {
@@ -253,17 +255,26 @@ struct TPileConnectivityReport {
     std::vector<TPileConnectivity> Piles;
 };
 
+struct TUnbridgedStatus {
+    // Static and connected dynamic nodes that reported running with bridge config.
+    std::vector<uint32_t> BridgeConfigNodeIds;
+    // Configured static nodes whose configuration was not observed.
+    std::vector<uint32_t> UnreportedStaticNodeIds;
+};
+
 class TGetClusterStateResult: public TStatus {
 public:
     TGetClusterStateResult(TStatus&& status, std::vector<TPileStateUpdate>&& state, uint64_t generation,
                            bool conversionInProgress = false, std::optional<TPendingPileOperation> pendingPileOperation = std::nullopt,
-                           std::optional<TPileConnectivityReport> pileConnectivity = std::nullopt)
+                           std::optional<TPileConnectivityReport> pileConnectivity = std::nullopt,
+                           std::optional<TUnbridgedStatus> unbridgedStatus = std::nullopt)
         : TStatus(std::move(status))
         , State_(std::move(state))
         , Generation_(generation)
         , ConversionInProgress_(conversionInProgress)
         , PendingPileOperation_(std::move(pendingPileOperation))
         , PileConnectivity_(std::move(pileConnectivity))
+        , UnbridgedStatus_(std::move(unbridgedStatus))
     {
     }
 
@@ -271,6 +282,7 @@ public:
         return State_;
     }
 
+    // Valid for responses that contain a bridge state snapshot.
     uint64_t GetGeneration() const {
         return Generation_;
     }
@@ -290,12 +302,18 @@ public:
         return PileConnectivity_;
     }
 
+    // A present report can have empty node lists.
+    const std::optional<TUnbridgedStatus>& GetUnbridgedStatus() const {
+        return UnbridgedStatus_;
+    }
+
 private:
     std::vector<TPileStateUpdate> State_;
     uint64_t Generation_ = 0;
     bool ConversionInProgress_ = false;
     std::optional<TPendingPileOperation> PendingPileOperation_;
     std::optional<TPileConnectivityReport> PileConnectivity_;
+    std::optional<TUnbridgedStatus> UnbridgedStatus_;
 };
 
 using TAsyncGetClusterStateResult = NThreading::TFuture<TGetClusterStateResult>;
@@ -496,9 +514,8 @@ public:
     // the cluster configuration and every node is restarted without it. Dynamic nodes not connected are not reported.
     TAsyncGetRollbackStatusResult GetRollbackStatus(const TGetRollbackStatusSettings& settings = {});
 
-    // Roll a cluster converted from an ordinary one back to it, while it has the only pile, the original one, and every
-    // storage group is inline in that pile. Completes when static storage groups are ordinary ones; the rest is reported
-    // by GetRollbackStatus.
+    // Roll a converted cluster back to ordinary mode when only the original pile remains and every bridged storage
+    // group is inline in it. The call completes when static storage groups become ordinary. GetRollbackStatus reports further progress.
     TAsyncStatus Rollback(const TRollbackSettings& settings = {});
 
     // Atomically change bridge mode of databasePath. For serverless databases, select their shared database.

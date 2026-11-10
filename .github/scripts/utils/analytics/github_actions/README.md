@@ -160,7 +160,7 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 | `github_job` | `job` | выгрузка | сколько job выполнялся, от `started_at` до `completed_at` |
 | `github_job` | `queue` | выгрузка | сколько job ждал раннера; `labels.queued_ms` то же число |
 | `github_step` | имя шага | выгрузка | сколько шёл шаг GitHub Actions |
-| `ya_phase` | см. ниже | `test_ya` | фазы внутри job |
+| `ya_phase` | см. ниже | `build_and_test_ya` | фазы внутри job |
 
 | `name` | Что измеряет |
 | --- | --- |
@@ -183,10 +183,11 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 | `s3_sync_try` | залить `PUBLIC_DIR` на публичный S3, чтобы ссылки из комментария открывались |
 | `upload_tests_results` | залить результаты тестов в таблицу `test_results` (это не `ci_metrics`) |
 | `runner_info` | одна строка на весь job, **до** цикла `ya make`: сколько ядер, RAM и диска у машины. Не длительность (`kind = info`), потому что железо за job не меняется. На дашборде: отфильтровать «медленно на 8 ядрах» от «медленно на 64». Не путать с `--runner`/`--usage` на фазе сборки — те пишутся в labels той фазы (спека на старте, занятость в конце) |
+| `github_proxy` | проба checkout, пишется в Init, до `ya make`: `labels.use_proxy`, скорости за 15 с приёма pack в `labels.direct_mbps` и `labels.proxy_mbps`. `value` — скорость выбранного пути, МБ/с |
 
 `ya_build` / `ya_tests` / `ya_cache_*` считает
 [`ya_evlog_phases.py`](ya_evlog_phases.py) по любому evlog, который пишет
-`test_ya`: попытка тестов, `save_test_graph` и оба `ya make` в
+`build_and_test_ya`: попытка тестов, `save_test_graph` и оба `ya make` в
 `graph_compare`. Те же узлы, что рисует `ya analyze-make timeline`.
 
 ## Выгрузка job и step

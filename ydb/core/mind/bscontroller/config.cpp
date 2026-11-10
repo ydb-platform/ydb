@@ -975,9 +975,14 @@ namespace NKikimr::NBsController {
             // this transaction, as the moved groups take only the space of the remaining VDisks to the new one
             for (const auto& [base, overlay] : state.VSlots.Diff()) {
                 if (overlay->second && overlay->second->DeletedFromStoragePoolId && overlay->second->Metrics.GetAllocatedSize()) {
+                    // the committed state is still in GroupMap, along with the groups this transaction deletes
                     TBoxStoragePoolId storagePoolId = *overlay->second->DeletedFromStoragePoolId;
-                    if (const TGroupInfo *group = base ? FindGroup(base->second->GroupId) : nullptr) {
-                        storagePoolId = group->StoragePoolId;
+                    if (base) {
+                        const auto it = GroupMap.find(base->second->GroupId);
+                        Y_DEBUG_ABORT_UNLESS(it != GroupMap.end());
+                        if (it != GroupMap.end()) {
+                            storagePoolId = it->second->StoragePoolId;
+                        }
                     }
                     StoragePoolStat->UpdateAllocatedSize(TStoragePoolStat::ConvertId(storagePoolId),
                         -overlay->second->Metrics.GetAllocatedSize());

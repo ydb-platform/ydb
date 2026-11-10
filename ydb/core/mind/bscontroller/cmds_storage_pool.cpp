@@ -801,6 +801,7 @@ namespace NKikimr::NBsController {
         }
         groups.insert(groups.end(), parts.begin(), parts.end());
 
+        std::map<TBridgePileId, TGroupGeometryInfo> targetGeometries;
         for (TGroupId groupId : groups) {
             // find the group belonging to the origin storage pool and remove it from the multimap
             if (!storagePoolGroups.erase({originId, groupId})) {
@@ -818,13 +819,17 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(group->StoragePoolId == originId);
 
             // the layout of the VDisks is checked by the geometry of the pool the group belongs to, which is laid over
-            // the topology of the group, so the target pool must have the same one for the pile of the group
+            // the topology of the group, so the target pool must have the same erasure and geometry for the pile of the
+            // group
             if (group->VDisksInGroup) {
-                const auto geometry = TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
-                    GetStoragePoolForPile(targetId, group->BridgePileId));
-                if (!geometry.MatchesGroup(*group)) {
-                    throw TExError() << "GroupId# " << groupId << " doesn't match the geometry of target StoragePoolId# "
-                        << targetId;
+                auto [it, inserted] = targetGeometries.try_emplace(group->BridgePileId);
+                if (inserted) {
+                    const auto pool = GetStoragePoolForPile(targetId, group->BridgePileId);
+                    it->second = TGroupGeometryInfo(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
+                }
+                if (!it->second.MatchesGroup(*group)) {
+                    throw TExError() << "GroupId# " << groupId
+                        << " doesn't match the erasure and geometry of target StoragePoolId# " << targetId;
                 }
             }
 

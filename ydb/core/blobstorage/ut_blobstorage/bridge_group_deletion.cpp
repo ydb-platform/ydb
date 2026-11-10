@@ -278,21 +278,18 @@ Y_UNIT_TEST_SUITE(BridgeGroupDeletion) {
         const ui32 proxy = CreatePoolAndGetGroup(env);
         const auto parts = GetPileGroups(env, proxy);
 
-        // the pool with nine fail domains, one more than the erasure needs
-        NKikimrBlobStorage::TDefineStoragePool pool = ReadStoragePool(env, 1);
-        pool.SetStoragePoolId(2);
-        pool.SetName("pool_2");
-        pool.SetKind("pool_2");
-        pool.SetNumGroups(1);
-        pool.ClearItemConfigGeneration();
-        auto *geometry = pool.MutableGeometry();
-        geometry->SetNumFailRealms(1);
-        geometry->SetNumFailDomainsPerFailRealm(9);
-        geometry->SetNumVDisksPerFailDomain(1);
-        NKikimrBlobStorage::TConfigRequest request;
-        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
-        const auto definition = env.Invoke(request);
-        UNIT_ASSERT_C(definition.GetSuccess(), definition.GetErrorDescription());
+        // the pool with nine fail domains, one more than the erasure needs, and the empty one of another erasure, which
+        // has the same geometry by default
+        CreateAnotherPool(env, 2, [](auto& pool) {
+            auto *geometry = pool.MutableGeometry();
+            geometry->SetNumFailRealms(1);
+            geometry->SetNumFailDomainsPerFailRealm(9);
+            geometry->SetNumVDisksPerFailDomain(1);
+        });
+        CreateAnotherPool(env, 3, [](auto& pool) {
+            pool.SetErasureSpecies("mirror-3-dc");
+            pool.SetNumGroups(0);
+        });
         env.Sim(TDuration::Seconds(30));
         const auto wideProxies = GetProxyGroups(env, 2);
         UNIT_ASSERT_VALUES_EQUAL(wideProxies.size(), 1);
@@ -303,11 +300,13 @@ Y_UNIT_TEST_SUITE(BridgeGroupDeletion) {
         checker.Write(proxy);
         checker.Write(wide);
 
-        // neither the wide group goes to the pool of eight fail domains, nor the other one in the opposite direction
-        for (const auto& [origin, target, groupId] : {std::make_tuple(2, 1, wide), std::make_tuple(1, 2, proxy)}) {
+        // neither the wide group goes to the pool of eight fail domains, nor the other one in the opposite direction or
+        // to the pool of mirror-3-dc
+        for (const auto& [origin, target, groupId] : {std::make_tuple(2, 1, wide), std::make_tuple(1, 2, proxy),
+                std::make_tuple(1, 3, proxy)}) {
             const auto response = MoveGroups(env, origin, target, {groupId});
             UNIT_ASSERT(!response.GetSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "doesn't match the geometry");
+            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "doesn't match the erasure and geometry");
         }
         const auto config = env.FetchBaseConfig();
         for (const ui32 groupId : {proxy, parts[0], parts[1]}) {

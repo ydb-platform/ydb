@@ -410,16 +410,16 @@ namespace NKikimr {
             }
 
             // delete the group along with its VDisks and, for a bridge proxy group, along with its parts, which nothing
-            // else refers to then; every deleted group is added to the set
-            void DeleteGroupWithBridgeParts(const TGroupInfo& group, THashSet<TGroupId>& deleted) {
+            // else refers to then; every deleted group is removed from the set of the ones to process
+            void DeleteGroupWithBridgeParts(const TGroupInfo& group, THashSet<TGroupId>& pending) {
                 for (const TGroupId partId : GetBridgeParts(group)) {
                     // group entries are held by pointers, so deleting other groups keeps `group` valid
                     if (const TGroupInfo *part = Groups.Find(partId)) {
                         DeleteExistingGroupWithVSlots(*part);
-                        deleted.insert(partId);
+                        pending.erase(partId);
                     }
                 }
-                deleted.insert(group.ID);
+                pending.erase(group.ID);
                 DeleteExistingGroupWithVSlots(group);
             }
 
@@ -429,17 +429,17 @@ namespace NKikimr {
             template<typename TNotFound, typename TPartAlone>
             void DeleteGroupsWithBridgeParts(const std::vector<TGroupId>& groups, TNotFound&& notFound,
                     TPartAlone&& partAlone) {
-                const THashSet<TGroupId> listed(groups.begin(), groups.end());
-                THashSet<TGroupId> deleted;
+                THashSet<TGroupId> pending(groups.begin(), groups.end());
                 for (const TGroupId groupId : groups) {
-                    if (deleted.contains(groupId)) {
-                        continue; // a part listed along with its bridge proxy group
+                    if (!pending.contains(groupId)) {
+                        continue; // deleted along with its bridge proxy group, or listed twice
                     } else if (const TGroupInfo *group = Groups.Find(groupId); !group) {
                         notFound(groupId);
-                    } else if (const TGroupInfo *proxy = FindBridgeProxyGroup(*group); proxy && !listed.contains(proxy->ID)) {
+                    } else if (const TGroupInfo *proxy = FindBridgeProxyGroup(*group);
+                            proxy && !pending.contains(proxy->ID)) { // an existing proxy group is pending when listed
                         partAlone(groupId, proxy->ID);
                     } else {
-                        DeleteGroupWithBridgeParts(*group, deleted);
+                        DeleteGroupWithBridgeParts(*group, pending);
                     }
                 }
             }

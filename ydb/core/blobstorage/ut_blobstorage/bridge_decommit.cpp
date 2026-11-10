@@ -587,7 +587,7 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         TEnvironmentSetup env(MakeBridgedSettings());
         TDataChecker checker(env);
         const ui32 groupId = PrepareBridgedCluster(env, checker);
-        const auto parts = GetPileGroupIds(env, groupId);
+        const auto parts = GetPileGroups(env, groupId);
 
         NKikimrBlobStorage::TConfigRequest request;
         auto *decommit = request.AddCommand()->MutableDecommitGroups();
@@ -596,12 +596,13 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         request.AddCommand()->MutableCancelVirtualGroup()->SetGroupId(groupId);
         const auto response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        env.Sim(TDuration::Seconds(30)); // the BlobDepot is never created, so its deletion finishes at once
+        WaitUntil(env, [&] {
+            const auto config = env.FetchBaseConfig(); // the proxy group stays there all along
+            return !FindGroup(config, groupId).HasVirtualGroupInfo();
+        }, "decommission cancelled");
 
         const auto config = env.FetchBaseConfig();
-        const auto& group = FindGroup(config, groupId);
-        UNIT_ASSERT_C(!group.HasVirtualGroupInfo(), group.ShortDebugString());
-        UNIT_ASSERT(GetPileGroupIds(env, groupId) == parts);
+        UNIT_ASSERT(GetPileGroups(env, groupId) == parts);
         for (const ui32 part : parts) {
             FindGroup(config, part);
         }

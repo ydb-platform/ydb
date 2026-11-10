@@ -3179,6 +3179,17 @@ public:
                     break;
             }
 
+            if (status == Ydb::StatusIds::ABORTED && QueryState->MvccVersion) {
+                // A new attempt cannot restore a caller-owned snapshot that is no longer readable.
+                for (const auto& issue : issues) {
+                    WalkThroughIssues(issue, false, [&](const TIssue& nested, ui16) {
+                        if (nested.GetCode() == TIssuesIds::KIKIMR_PRECONDITION_FAILED) {
+                            status = Ydb::StatusIds::PRECONDITION_FAILED;
+                        }
+                    });
+                }
+            }
+
             ReplyQueryError(status, "", MessageFromIssues(issues));
             return;
         }

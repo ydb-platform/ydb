@@ -95,6 +95,38 @@ private:
     NThreading::TPromise<TResult> Result = NThreading::NewPromise<TResult>();
 };
 
+struct TEvSnapshotQueryResponse: public TEventLocal<TEvSnapshotQueryResponse, EventSpaceBegin(TEvents::ES_PRIVATE) + 100>, TResult {
+    TEvSnapshotQueryResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues, std::vector<NYdb::TResultSet>&& results)
+        : TResult{ status, std::move(issues), std::move(results) }
+    {
+    }
+};
+
+class TRetrySnapshotQuery: public TQueryBase {
+public:
+    TRetrySnapshotQuery(TMaybe<TRowVersion> version, TString sql)
+        : TQueryBase(NKikimrServices::KQP_PROXY, {}, "/Root")
+        , Sql(std::move(sql))
+    {
+        MvccVersion = version;
+    }
+
+private:
+    void OnRunQuery() override {
+        RunDataQuery(Sql, nullptr, TTxControl::BeginAndCommitTx(true));
+    }
+
+    void OnQueryResult() override {
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        Send(Owner, new TEvSnapshotQueryResponse(status, std::move(issues), std::move(ResultSets)));
+    }
+
+    const TString Sql;
+};
+
 class TSnapshotTestEnv {
 public:
     explicit TSnapshotTestEnv(bool sourceRead = true, ui32 nodes = 1, TDuration keepSnapshotTimeout = TDuration::Minutes(5))
@@ -123,6 +155,24 @@ public:
         auto future = actor->GetResult();
         Runtime().Register(actor.release(), node);
         return Runtime().WaitFuture(future);
+    }
+
+    TResult RunWithRetry(TMaybe<TRowVersion> version, ui32 expectedAttempts, const TString& sql = ReadSql) {
+        ui32 attempts = 0;
+        auto observer = Runtime().AddObserver<TEvKqp::TEvQueryRequest>([&](auto& ev) {
+            if (ev->Recipient == MakeKqpProxyID(Runtime().GetNodeId()) && ev->Get()->GetQuery() == sql) {
+                UNIT_ASSERT_C(++attempts <= expectedAttempts, "Unexpected retry of snapshot query");
+            }
+        });
+        const auto edge = Runtime().AllocateEdgeActor();
+        using TRetry = TQueryRetryActor<TRetrySnapshotQuery, TEvSnapshotQueryResponse, TMaybe<TRowVersion>, TString>;
+        // Deliberately unbounded: a terminal error must stop retries independently of a policy's time/attempt limits.
+        auto policy = TQueryRetryActorBase::IRetryPolicy::GetFixedIntervalPolicy(
+            TQueryRetryActorBase::Retryable, TDuration::MilliSeconds(1), TDuration::MilliSeconds(1));
+        Runtime().Register(new TRetry(edge, policy, version, sql));
+        auto response = Runtime().GrabEdgeEventRethrow<TEvSnapshotQueryResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(attempts, expectedAttempts);
+        return std::move(static_cast<TResult&>(*response->Get()));
     }
 
     TRowVersion AcquireSnapshot() {
@@ -367,7 +417,7 @@ Y_UNIT_TEST_SUITE(QueryActorMvccVersion) {
         AssertValues(env.Run({ .Scan = true }), "old");
     }
 
-    Y_UNIT_TEST(UnavailableSnapshotDoesNotFallBack) {
+    Y_UNIT_TEST_TWIN(UnavailableSnapshotDoesNotFallBack, StreamLookup) {
         TSnapshotTestEnv env(true, 1, TDuration::Seconds(1));
         const auto version = env.AcquireSnapshot();
         env.WriteNewValues();
@@ -379,10 +429,47 @@ Y_UNIT_TEST_SUITE(QueryActorMvccVersion) {
             const auto vacuum = env.Runtime().GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(edge);
             UNIT_ASSERT_C(vacuum->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvVacuumResult::OK, vacuum->Get()->Record.DebugString());
         }
-        const auto result = env.Run({ .Version = version });
-        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::ABORTED, result.Issues.ToString());
+        const TString sql = StreamLookup ? R"(
+            SELECT o.Value AS Value
+            FROM AS_TABLE(AsList(AsStruct(1ul AS Key), AsStruct(101ul AS Key))) AS k
+            INNER JOIN `/Root/Objects` AS o ON k.Key = o.Key
+            ORDER BY k.Key;
+        )"
+                                         : ReadSql;
+        ui32 lookupReads = 0;
+        auto observer = env.Runtime().AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            if (env.Runtime().FindActorName(ev->Sender).Contains("KQP_STREAM_LOOKUP_ACTOR")) {
+                ++lookupReads;
+            }
+        });
+        const auto result = env.Run({ .Sql = sql, .Version = version });
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::PRECONDITION_FAILED, result.Issues.ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "snapshot");
         UNIT_ASSERT(result.ResultSets.empty());
+
+        const auto retried = env.RunWithRetry(version, 1, sql);
+        UNIT_ASSERT_VALUES_EQUAL_C(retried.Status, Ydb::StatusIds::PRECONDITION_FAILED, retried.Issues.ToString());
+        UNIT_ASSERT_STRING_CONTAINS(retried.Issues.ToString(), "snapshot");
+        UNIT_ASSERT(retried.ResultSets.empty());
+        if (StreamLookup) {
+            UNIT_ASSERT_GT(lookupReads, 0);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TransientAbortsRemainRetryable, ExplicitSnapshot) {
+        TSnapshotTestEnv env;
+        const auto version = env.AcquireSnapshot();
+        env.WriteNewValues();
+        bool injected = false;
+        auto observer = env.Runtime().AddObserver<TEvDataShard::TEvReadResult>([&](auto& ev) {
+            if (!injected && ev->Get()->Record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
+                // Ordinary snapshot loss may recover with a fresh snapshot; explicit queries may retry unrelated aborts.
+                ev->Get()->Record.MutableStatus()->SetCode(ExplicitSnapshot ? Ydb::StatusIds::ABORTED : Ydb::StatusIds::PRECONDITION_FAILED);
+                injected = true;
+            }
+        });
+        AssertValues(env.RunWithRetry(ExplicitSnapshot ? TMaybe<TRowVersion>(version) : Nothing(), 2), ExplicitSnapshot ? "old" : "new");
+        UNIT_ASSERT(injected);
     }
 }
 

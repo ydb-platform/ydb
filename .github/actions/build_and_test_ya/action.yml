@@ -555,6 +555,8 @@ runs:
             --interval 3 &
           MONITOR_RESOURCES_PID=$!
 
+          . .github/scripts/utils/metrics/profile_kernel_cpu.sh start
+
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
             GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
           else
@@ -615,6 +617,7 @@ runs:
             analytics end "$YA_MAKE_NAME" --rc "$RC" --error "ya make rc=${RC}"
           fi
           analytics start postprocess_try
+          . .github/scripts/utils/metrics/profile_kernel_cpu.sh stop
           # Optional sub-steps use || true so they don't abort the step.
           # Remember if any failed so we don't write conclusion=success.
           POSTPROCESS_RC=0

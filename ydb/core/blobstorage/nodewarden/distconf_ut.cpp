@@ -1281,6 +1281,33 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_VALUES_EQUAL(trimmedHistory[1].UnsyncedPilesSize(), 1);
     }
 
+    // the cluster converted again after the rollback goes on with the cluster state generations of the one rolled back,
+    // even when the rollback record has been left by an older version not keeping the generation in it
+    Y_UNIT_TEST(ClusterStateGenerationAfterRollback) {
+        auto convert = [](const NKikimrBlobStorage::TStorageConfig& prev) {
+            auto config = prev;
+            config.ClearBridgeRollback();
+            config.MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(1));
+            config.SetGeneration(prev.GetGeneration() + 1);
+            config.MutablePrevConfig()->CopyFrom(prev);
+            if (const auto error = NStorage::TDistributedConfigKeeper::UpdateClusterStateGeneration(&config)) {
+                UNIT_FAIL(*error);
+            }
+            return config.GetClusterState().GetGeneration();
+        };
+
+        auto prev = MakeStorageConfig(3, 7);
+        UNIT_ASSERT_VALUES_EQUAL(convert(prev), 1); // never bridged before
+
+        auto *record = prev.MutableBridgeRollback();
+        record->SetPileName("pile0");
+        record->SetNextStaticGroupId(1);
+        UNIT_ASSERT_VALUES_EQUAL(convert(prev), 8); // older version, the storage config generation bounds the old ones
+
+        record->SetClusterStateGeneration(5);
+        UNIT_ASSERT_VALUES_EQUAL(convert(prev), 6);
+    }
+
     // node warden handing out the designated storage config and bridge info to the bridge connection checker
     class TStorageConfigProvider : public TActor<TStorageConfigProvider> {
         const std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> Config;

@@ -2,7 +2,7 @@ YQL_LIBRARY()
 
 PEERDIR(
     contrib/libs/zstd
-    library/cpp/openssl
+    library/cpp/openssl/crypto
     ydb/core/backup/common
     ydb/library/actors/async
     ydb/core/base

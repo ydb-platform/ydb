@@ -12,6 +12,13 @@ on:
   pull_request:
     paths:
       - 'ydb/docs/**'
+      - 'ydb/**/*.proto'
+      - 'yql/**/*.proto'
+      - 'library/**/*.proto'
+      - 'contrib/libs/protobuf/**/*.proto'
+      - 'ydb/library/actors/core/executor_pool_basic_feature_flags.h'
+      - '.github/workflows/docs_build.yaml'
+      - '.github/workflows/docs_release.yaml'
   workflow_dispatch:
     inputs:
       pull_number:
@@ -45,6 +52,47 @@ jobs:
 
       - name: Disable PDF for PR build
         run: yq -i '.["docs-viewer"].pdf = false | .singlePage = false' ydb/docs/.yfm
+
+      - name: Detect feature flag generator
+        id: feature_flags
+        env:
+          FEATURE_FLAG_DEFAULTS_ENABLED: ${{ vars.FEATURE_FLAG_DEFAULTS_ENABLED }}
+        run: |
+          if [[ -f ydb/docs/tools/feature_flags/requirements.txt && -f ydb/docs/tools/feature_flags/generate.py ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Feature flag generator is absent in this PR revision; skipping it for backward compatibility"
+          fi
+          if [[ "$FEATURE_FLAG_DEFAULTS_ENABLED" == "false" ]]; then
+            echo "::notice::Feature flag defaults are disabled by the FEATURE_FLAG_DEFAULTS_ENABLED repository variable"
+          fi
+
+      - name: Set up Python for feature flag defaults
+        if: >-
+          steps.feature_flags.outputs.present == 'true' &&
+          vars.FEATURE_FLAG_DEFAULTS_ENABLED != 'false'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Generate version-local feature flag defaults
+        if: >-
+          steps.feature_flags.outputs.present == 'true' &&
+          vars.FEATURE_FLAG_DEFAULTS_ENABLED != 'false'
+        run: |
+          python -m pip install -r ydb/docs/tools/feature_flags/requirements.txt
+          python -m unittest discover -s ydb/docs/tools/feature_flags -p 'test_*.py'
+          python ydb/docs/tools/feature_flags/generate.py --catalog feature-flag-defaults.json
+
+      - name: Upload feature flag inventory
+        if: >-
+          steps.feature_flags.outputs.present == 'true' &&
+          vars.FEATURE_FLAG_DEFAULTS_ENABLED != 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-flag-defaults
+          path: feature-flag-defaults.json
 
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3

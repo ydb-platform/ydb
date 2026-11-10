@@ -1,9 +1,20 @@
 PROGRAM(ydb_query_replay)
 
 IF (OS_LINUX)
-    # Relink with a trace to compare the cost of generating the GDB index.
-    ENABLE(LINKER_TIME_TRACE)
-    LDFLAGS(-Wl,--no-gdb-index)
+    # Compare mold with LLD without a GDB index on the same inputs.
+    SET(_LINKER_ID mold)
+    LDFLAGS(
+        -Wl,--no-gdb-index
+        -Wl,--no-rosegment
+        -Wl,--build-id=sha1
+        -Wl,--perf
+    )
+    # Preserve the non-PIE flag normally added only for LLD.
+    IF (NOT PIE)
+        IF (NOT PIC OR PIC_NO_PIE)
+            LDFLAGS(-Wl,-no-pie)
+        ENDIF()
+    ENDIF()
 ENDIF()
 
 ALLOCATOR(LF)

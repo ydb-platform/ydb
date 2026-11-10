@@ -9464,6 +9464,21 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     };
 
+    NActorsProto::TRemoteHttpInfo MakeMoveTabletRequest(ui64 tabletId, ui32 nodeId) {
+        NActorsProto::TRemoteHttpInfo request;
+        request.SetMethod(HTTP_METHOD_POST);
+        request.SetPath("/app");
+        const std::pair<TString, TString> params[] = {
+            {"page", "MoveTablet"}, {"tablet", ToString(tabletId)}, {"node", ToString(nodeId)}, {"wait", "0"},
+        };
+        for (const auto& [key, value] : params) {
+            auto* param = request.AddQueryParams();
+            param->SetKey(key);
+            param->SetValue(value);
+        }
+        return request;
+    }
+
     Y_UNIT_TEST(TestMoveAfterLateStartingStatus) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true, 2, [](TAppPrepare& app) {
@@ -9504,22 +9519,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TBlockEvents<NHive::TEvPrivate::TEvProcessBootQueue> blockBootQueue(runtime, [&](const auto& ev) {
             return ev->GetRecipientRewrite() == hiveActor;
         });
-        NActorsProto::TRemoteHttpInfo request;
-        request.SetMethod(HTTP_METHOD_POST);
-        request.SetPath("/app");
-        auto* page = request.AddQueryParams();
-        page->SetKey("page");
-        page->SetValue("MoveTablet");
-        auto* tablet = request.AddQueryParams();
-        tablet->SetKey("tablet");
-        tablet->SetValue(ToString(tabletId));
-        auto* node = request.AddQueryParams();
-        node->SetKey("node");
-        node->SetValue(ToString(targetNodeId));
-        auto* wait = request.AddQueryParams();
-        wait->SetKey("wait");
-        wait->SetValue("0");
-        runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(request)), 0, GetPipeConfigWithRetries());
+        runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(MakeMoveTabletRequest(tabletId, targetNodeId)),
+            0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
         UNIT_ASSERT_C(WaitUntil(runtime, [&] {
@@ -9546,6 +9547,157 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 info.GetGeneration() == generation + 1;
         }), "the old boot success cancelled the move to the target node");
         UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_TABLETS_STARTING), 0);
+    }
+
+    struct TBootDeliveryTest {
+        TTestBasicRuntime Runtime{1, false};
+        const ui64 HiveTablet = MakeDefaultHiveID();
+        TBlockEvents<TEvLocal::TEvBootTablet> Boots;
+        TActorId HiveActor;
+        TActorId Sender;
+        ui64 TabletId;
+
+        explicit TBootDeliveryTest(bool withFollower = false)
+            : Boots(Runtime, [this](const auto& ev) {
+                return ev->Get()->Record.GetInfo().GetTabletID() != HiveTablet;
+            })
+        {
+            Setup(Runtime, true);
+            Sender = Runtime.AllocateEdgeActor(0);
+            CreateTestBootstrapper(Runtime, CreateTestTabletInfo(HiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+            MakeSureTabletIsUp(Runtime, HiveTablet, 0);
+            HiveActor = GetHiveActor(Runtime, HiveTablet);
+            Runtime.EnableScheduleForActor(HiveActor);
+
+            const ui64 ownerTablet = MakeTabletID(false, 1);
+            auto create = MakeHolder<TEvHive::TEvCreateTablet>(ownerTablet, 0, TTabletTypes::Dummy, BINDED_CHANNELS);
+            create->Record.SetBalancerPolicy(NKikimrHive::POLICY_IGNORE);
+            if (withFollower) {
+                auto* group = create->Record.AddFollowerGroups();
+                group->SetFollowerCount(1);
+                group->SetLocalNodeOnly(true);
+            }
+            TabletId = SendCreateTestTablet(Runtime, HiveTablet, ownerTablet, std::move(create), 0, false);
+        }
+
+        void WaitForBoot() {
+            Runtime.WaitFor("tablet boot", [&] { return !Boots.empty(); }, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(Boots.size(), 1);
+        }
+
+        TEvLocal::TEvBootTablet::TPtr TakeBoot() {
+            WaitForBoot();
+            auto boot = std::move(Boots.front());
+            Boots.pop_front();
+            return boot;
+        }
+
+        void SendUndelivered(TEvLocal::TEvBootTablet::TPtr boot) {
+            auto failure = IEventHandle::ForwardOnNondelivery(
+                std::unique_ptr<IEventHandle>(boot.Release()), TEvents::TEvUndelivered::ReasonActorUnknown);
+            UNIT_ASSERT(failure);
+            Runtime.Send(failure.release());
+        }
+
+        void SendMove(ui32 node) {
+            Runtime.Send(HiveActor, Sender, new NMon::TEvRemoteHttpInfo(MakeMoveTabletRequest(TabletId, node)));
+        }
+
+        void WaitForMove() {
+            UNIT_ASSERT(Runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(Sender, TDuration::Seconds(30)));
+        }
+
+        void WaitForTransactions() {
+            Runtime.Send(HiveActor, Sender, new TEvHive::TEvSetDown(Max<ui32>(), false));
+            const auto reply = Runtime.GrabEdgeEventRethrow<TEvHive::TEvSetDownReply>(Sender, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), NKikimrProto::OK);
+        }
+
+        auto TabletInfo() {
+            return GetHiveTabletInfo(Runtime, HiveTablet, TabletId, Sender);
+        }
+    };
+
+    Y_UNIT_TEST(TestStaleBootUndeliveredOnSameLocal) {
+        TBootDeliveryTest test;
+        auto firstBoot = test.TakeBoot();
+        const TActorId local = firstBoot->GetRecipientRewrite();
+        const ui32 firstGeneration = firstBoot->Get()->Record.GetSuggestedGeneration();
+
+        test.SendMove(local.NodeId());
+        test.WaitForMove();
+        test.WaitForBoot();
+        UNIT_ASSERT_VALUES_EQUAL(test.Boots.front()->GetRecipientRewrite(), local);
+        const ui32 secondGeneration = test.Boots.front()->Get()->Record.GetSuggestedGeneration();
+        UNIT_ASSERT_VALUES_EQUAL(secondGeneration, firstGeneration + 1);
+
+        test.SendUndelivered(std::move(firstBoot));
+        test.WaitForTransactions();
+        const auto current = test.TabletInfo();
+        UNIT_ASSERT_VALUES_EQUAL(ui32(current.GetVolatileState()), ui32(NKikimrHive::TABLET_VOLATILE_STATE_STARTING));
+        UNIT_ASSERT_VALUES_EQUAL(current.GetGeneration(), secondGeneration);
+
+        test.SendUndelivered(test.TakeBoot());
+        test.WaitForBoot();
+        UNIT_ASSERT_VALUES_EQUAL(test.Boots.front()->GetRecipientRewrite(), local);
+        UNIT_ASSERT_VALUES_EQUAL(test.Boots.front()->Get()->Record.GetSuggestedGeneration(), secondGeneration + 1);
+        test.Boots.Stop().Unblock();
+        UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] {
+            return test.TabletInfo().GetVolatileState() == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING;
+        }), "the retry did not complete");
+    }
+
+    Y_UNIT_TEST(TestQueuedBootRestartAfterMove) {
+        TBootDeliveryTest test;
+        auto boot = test.TakeBoot();
+        const ui32 node = boot->GetRecipientRewrite().NodeId();
+        test.WaitForTransactions();
+        TBlockEvents<NHive::TEvPrivate::TEvProcessBootQueue> bootQueue(test.Runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == test.HiveActor;
+        });
+
+        // Hive queues the delivery failure. The monitoring transaction runs directly and queues its move first.
+        test.SendUndelivered(std::move(boot));
+        test.SendMove(node);
+        test.WaitForMove();
+        test.WaitForTransactions();
+
+        UNIT_ASSERT_VALUES_EQUAL(ui32(test.TabletInfo().GetVolatileState()), ui32(NKikimrHive::TABLET_VOLATILE_STATE_BOOTING));
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(test.Runtime, test.HiveTablet, NHive::COUNTER_BOOTQUEUE_SIZE), 1);
+    }
+
+    Y_UNIT_TEST(TestFollowerBootUndelivered) {
+        TBootDeliveryTest test(/* withFollower */ true);
+        test.WaitForBoot();
+        const auto& leaderBoot = test.Boots.front()->Get()->Record;
+        UNIT_ASSERT_EQUAL(leaderBoot.GetBootMode(), NKikimrLocal::BOOT_MODE_LEADER);
+        const ui32 leaderGeneration = leaderBoot.GetSuggestedGeneration();
+        test.Boots.Unblock(1);
+
+        auto boot = test.TakeBoot();
+        UNIT_ASSERT_EQUAL(boot->Get()->Record.GetBootMode(), NKikimrLocal::BOOT_MODE_FOLLOWER);
+        const ui32 followerId = boot->Get()->Record.GetFollowerId();
+        UNIT_ASSERT(followerId != 0);
+
+        test.SendUndelivered(std::move(boot));
+        test.WaitForBoot();
+        const auto& retry = test.Boots.front()->Get()->Record;
+        UNIT_ASSERT_EQUAL(retry.GetBootMode(), NKikimrLocal::BOOT_MODE_FOLLOWER);
+        UNIT_ASSERT_VALUES_EQUAL(retry.GetFollowerId(), followerId);
+        test.Boots.Stop().Unblock();
+
+        UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] {
+            test.Runtime.SendToPipe(test.HiveTablet, test.Sender, new TEvHive::TEvRequestHiveInfo(test.TabletId, true));
+            TAutoPtr<IEventHandle> handle;
+            const auto& info = test.Runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle)->Record;
+            UNIT_ASSERT_VALUES_EQUAL(info.TabletsSize(), 2);
+            const auto& leader = info.GetTablets(0);
+            UNIT_ASSERT_VALUES_EQUAL(leader.GetGeneration(), leaderGeneration);
+            UNIT_ASSERT_EQUAL(leader.GetVolatileState(), NKikimrHive::TABLET_VOLATILE_STATE_RUNNING);
+            const auto& follower = info.GetTablets(1);
+            UNIT_ASSERT_VALUES_EQUAL(follower.GetFollowerID(), followerId);
+            return follower.GetVolatileState() == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING;
+        }), "the follower retry did not complete");
     }
 
     Y_UNIT_TEST(TestBridgeDrainAfterLateStartingStatus) {

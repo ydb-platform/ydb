@@ -1,0 +1,190 @@
+Investigation of https://github.com/ydb-platform/ydb/issues/56118
+2026-11-10; production memory limit supplied by the user: 16 GB per node.
+Production source revision: b0e1eb15a9962dbba38489a9d7bf46a5fc5acde4.
+Only test/profiling files were changed for this investigation.
+
+The reproductions confirm two separate sources of memory pressure:
+
+1. An active reshuffle scan retains roughly three batches: the batch in flight,
+   the next output batch, and a protobuf request payload copy. With the default
+   8 MiB byte limit, the unsampled process heap grew about 28 MiB per scan for
+   this dataset, including allocation and container overhead. The growth scaled
+   with scan count and batch size.
+
+2. Scans already allocate their centroid state before resource-broker admission.
+   In the real queued-scan test, all 32 broker submissions declared zero memory.
+   At 1,536 dimensions and 1,024 centroids, these queued scans added 430.269 MiB
+   of live allocations and 434.191 MiB of RSS without reading or uploading any
+   rows. The main allocation is NextClusters in TClusters::SetClusters, despite
+   reshuffle requesting zero clustering rounds.
+
+These tests expose bounded memory accumulation; they do not deliberately kill a
+process with the kernel OOM killer. The production vector settings, node-local
+queued/active scan counts, memory baseline and heap dump were not supplied, so
+these are demonstrated contributors, not a unique diagnosis of that incident.
+
+Measured results (sampling disabled during the entire measurement case)
+
+All deltas are blocked minus the same process's baseline, except the last column.
+Live heap is TCMalloc generic.current_allocated_bytes. RSS is process resident
+memory. MiB = 1,048,576 bytes. The first four cases use a 16 KiB covering column
+and one two-dimensional UInt8 centroid. Names encode scans and batch size.
+The last three cases encode queued scans and centroid count; dimensions = 1,536.
+
+case                       live heap delta    RSS delta    live delta after finish
+                           MiB                MiB          MiB
+upload-1-8m                    27.986          2.984             52.645
+upload-4-8m                   111.011         27.996            141.680
+upload-8-8m                   224.931        137.262            152.616
+upload-8-1m                    28.103         16.254             66.307
+centroids-1-256                 3.649          3.902              0.312
+centroids-32-256              108.085        109.090              0.631
+centroids-32-1024             430.269        434.191              0.631
+
+The upload cases verify one full held upload per scan, backpressure while that
+upload is held, successful completion after release, exact per-shard read/upload
+counts, and the destination COUNT(*). The 4-scan case writes all 4,232 rows.
+For eight scans, reducing the batch limit from 8 MiB to 1 MiB reduced the live
+heap delta from 224.931 MiB to 28.103 MiB.
+
+The queued-centroid cases use real empty source tables and real reshuffle
+requests. They intercept TEvResourceBroker::TEvSubmitTask before broker admission.
+All scan states are therefore retained simultaneously, even with the default
+active-scan CPU limit. No TEvUploadRowsRequest is observed. After the submissions
+are released, every scan finishes with zero read/upload rows. This separates the
+centroid cost from row storage and upload buffers.
+
+Resolved allocation stacks (separate runs with a 2 MiB sampling interval)
+
+For four active scans with 8 MiB batches, the sampled increase was:
+  66.41 MiB: SerializeCellVec -> TBufferData::AddRow -> AddRowToData ->
+             TReshuffleKMeansScan::Feed (the two scan buffers).
+  32.04 MiB: TSerializedRowToLoad::SetValueColumns ->
+             TUploadRowsBase::MakeShardRequests (protobuf request copy).
+  -4.54 MiB: tablet storage/cache allocations changing during the interval.
+
+The uploader and scan share the in-flight row vector via shared_ptr. That
+reference is not another independent payload copy. The protobuf copy above is
+an actual allocation found in the profile; retry metadata is in the same broad
+analysis category, but is not evidence of another full payload copy.
+
+For 32 queued scans, 256 centroids and 1,536 dimensions, the sampled increase was
+102.85 MiB at kmeans_clusters.cpp:292, aggregate.resize(Dimensions, 0), reached
+from the real DataShard reshuffle request transaction. The sampled centroid,
+scan-buffer and upload-request stacks disappear after their scans finish.
+
+The source explains these lifetimes:
+  ydb/core/tx/datashard/build_index/common_helper.h:89
+    ShouldWaitUpload allows the next destination buffer to fill while Uploading
+    owns the previous batch. The limit applies per buffer, not per node.
+  ydb/core/tx/datashard/buffer_data.h:63
+    HasReachedLimits counts serialized bytes/rows and checks after a row is
+    added. It excludes allocator, row-vector and cell metadata overhead.
+  ydb/core/tx/tx_proxy/upload_rows_common_impl.h:1283
+    MakeShardRequests copies serialized values into protobuf rows.
+  ydb/core/tx/datashard/build_index/reshuffle_kmeans.cpp:585
+    CreateClusters(settings, 0) and SetClusters execute before StartScan at 602.
+  ydb/core/base/kmeans_clusters.cpp:275
+    SetClusters allocates NextClusters[K][dimensions] regardless of MaxRounds.
+    Each aggregate coordinate occupies eight bytes (double or i64).
+  ydb/core/tablet_flat/flat_exec_scans.h:174
+    Scan submissions declare { CPU = 1, memory = 0 }.
+  ydb/core/tablet/resource_broker.cpp:1427
+    The default queue_build_index CPU limit is ten active scans per node.
+
+Implications for the reported 16 GB node limit
+
+Cluster-wide restore parallelism of 1,000 is not equivalent to 1,000 active
+uploaders per node. With the current default CPU limit, this upload shape alone
+is roughly 280 MiB for ten active scans, in addition to the node's existing
+working set. Configured limits or production revisions may differ.
+
+The queued allocation happens before that CPU limit helps. For the tested
+1,536-dimension/1,024-centroid shape, 1,000 queued scans on one node would imply
+about 13.1 GiB of additional live allocations by linear extrapolation from the
+32-scan run. That is conditional on the node-local queue and vector settings;
+it is not a measured 1,000-scan run. Other centroid representations, source
+storage, caches, prefix/sampling state, upload buffers and process overhead can
+add to it. The basic next-round scratch array alone is 8*K*dimensions bytes per
+scan, before allocation/container overhead.
+
+Likely fix directions are memory admission before centroid construction and a
+node-wide budget covering all upload buffers/copies. Lazy next-round scratch
+allocation for reshuffle's zero-round case deserves investigation. A shared
+upload actor could reduce upload-side costs, but would not by itself budget the
+centroid state already held by queued scans. No production fix is included here.
+
+RSS is not a live-allocation counter. After the 32-scan/256-centroid case finishes,
+only 0.631 MiB of additional live heap remains, while RSS is still 105.641 MiB
+above baseline. The allocator retains reusable pages. In the upload cases, the
+finished snapshots also include newly written destination data and table caches;
+total process heap is not expected to return to the source-only baseline. The
+resolved scan/uploader allocations do disappear. Initial free allocator pages
+also explain why RSS can grow much less than live heap during a blocked phase.
+
+Profiling method and limitations
+
+The numeric table uses vector-upload-measure=true, which disables new allocation
+sampling for the duration of each case. Stack attribution uses separate
+vector-upload-profile=true runs, with a 2 MiB interval. A pilot at 64 KiB inflated
+allocator/page accounting substantially and is excluded from the table. Sampled
+heap totals are estimates; they are not substituted for the unsampled totals.
+Profiles cover retained memory at selected phases, not every transient peak or
+inter-node serialization buffer. Deterministic actor execution preserves
+simultaneous scan lifetimes but does not simulate CPU execution in parallel.
+
+Reproduce from the repository root
+
+  set -o pipefail
+  ./ya make --build relwithdebinfo -tA ydb/core/tx/datashard/build_index/ut \
+    -F 'TVectorIndexUploadMemory::*' \
+    --test-param vector-upload-profile=true 2>&1 | tail -40
+
+For quantitative totals, replace vector-upload-profile=true with
+vector-upload-measure=true. Do not combine the measurements from these modes.
+Individual test names:
+  TVectorIndexUploadMemory::ConcurrentReshuffleWithBlockedUploads
+  TVectorIndexUploadMemory::ReshuffleCentroidsBeforeAdmission
+
+Parameters:
+  vector-upload-scans           1..8, default4
+  vector-upload-batch-bytes     65536..8388608, default8388608
+  vector-centroid-scans         1..32, default32
+  vector-centroid-dimensions    1..4096, default1536
+  vector-centroid-clusters      1..1024, default256
+
+Example larger queued state:
+  ./ya make --build relwithdebinfo -tA ydb/core/tx/datashard/build_index/ut \
+    -F 'TVectorIndexUploadMemory::ReshuffleCentroidsBeforeAdmission' \
+    --test-param vector-upload-measure=true \
+    --test-param vector-centroid-clusters=1024 2>&1 | tail -40
+
+Snapshots and stats are written under each test's testing_out_stuff directory.
+The reusable profile_upload_memory.py tool accepts:
+  python3 ydb/core/tx/datashard/build_index/ut/profile_upload_memory.py \
+    ydb/core/tx/datashard/build_index/ut/ydb-core-tx-datashard-build_index-ut \
+    <snapshot-directory> <analysis-directory> [--prefix centroids-]
+
+LLVM llvm-symbolizer 18+ is needed for heap stacks. The tool saves resolved
+stacks and category/delta summaries, handles PIE maps, and can summarize stats
+without heap snapshots. Keep the corresponding binary when re-symbolizing PCs.
+
+Validation and captured artifacts
+
+The focused suite passed with profiling enabled. Both cases then passed three
+repeated runs via --test-retries 3. Seven additional fresh-process measurement
+variants passed against the built binary; their exact arguments are saved in
+command.json beside run.log. The new Python tool was run on real heap snapshots
+and stats-only captures. git diff --check passed.
+
+Captured artifacts in this workspace:
+  /tmp/ydb-56118-memory/measurements.json
+  /tmp/ydb-56118-memory/upload-{1,4,8}-8m/
+  /tmp/ydb-56118-memory/upload-8-1m/
+  /tmp/ydb-56118-memory/centroids-1-256/
+  /tmp/ydb-56118-memory/centroids-32-{256,1024}/
+  /tmp/ydb-56118-memory/profile-upload-4/analysis/analysis.txt
+  /tmp/ydb-56118-memory/profile-centroids-32-256/analysis/analysis.txt
+
+These local raw artifacts are not added to the repository; the tests, analysis
+script and this report contain the reproducible setup and principal results.

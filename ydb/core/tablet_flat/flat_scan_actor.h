@@ -673,6 +673,7 @@ namespace NOps {
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */
             IScan* scan = DetachScan();
+            auto reservation = scan->GetResourceReservation();
             NProfiling::TMemoryTagScope scope(ScanMemoryTag);
             auto prod = exc
                 ? scan->Finish(*exc)
@@ -681,6 +682,7 @@ namespace NOps {
 
             if (status != EStatus::Lost) {
                 auto ev = new TEvResult(Serial, status, std::move(Snapshot), prod);
+                ev->ResourceReservation = std::move(reservation);
 
                 ev->Trace = std::move(trace);
 

@@ -3,6 +3,7 @@
 #include <memory_controller.h>
 #include <memory_controller_config.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/scan_admission.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -504,6 +505,41 @@ Y_UNIT_TEST(MemTable) {
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Limit")->Val(), static_cast<i64>(1_MB));
     UNIT_ASSERT_LE(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_MB));
     UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_KB));
+}
+
+Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(16_GB);
+    TControllerFixture fixture(config);
+    const ui64 total = GetIndexBuildLimitBytes(config, 16_GB);
+    const ui64 initialPending = Min<ui64>(64_MB, total / 8);
+    auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuild/Limit"), total);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetByteLimit(64_MB), initialPending);
+    auto lease = quota.TryAcquire(initialPending, 128, 64_MB);
+    UNIT_ASSERT(lease);
+    UNIT_ASSERT(!quota.TryAcquire(1, 128, 64_MB));
+    lease.reset();
+
+    auto broker = fixture.Runtime.Register(NResourceBroker::CreateResourceBrokerActor(
+        NResourceBroker::MakeDefaultConfig(), MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+    fixture.Runtime.RegisterService(NResourceBroker::MakeResourceBrokerID(), broker);
+    ui64 activeLimit = 0;
+    auto observer = fixture.Runtime.AddObserver<NResourceBroker::TEvResourceBroker::TEvConfigure>([&](auto& event) {
+        for (const auto& queue : event->Get()->Record.GetQueues()) {
+            if (queue.GetName() == "queue_build_index") {
+                activeLimit = queue.GetLimit().GetMemory();
+            }
+        }
+    });
+    // The controller already configured the broker during bootstrap. Change
+    // the pending slice to require a fresh update observable by this test.
+    fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(32_MB);
+    fixture.Tick();
+    UNIT_ASSERT_GT(activeLimit, 0);
+    UNIT_ASSERT_VALUES_EQUAL(activeLimit + 32_MB, total);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetUsage().Bytes, 0);
 }
 
 Y_UNIT_TEST_TWIN(ResourceBroker, EnableComputeSchedulerMemory) {

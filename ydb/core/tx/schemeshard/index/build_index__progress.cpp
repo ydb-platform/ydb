@@ -24,6 +24,8 @@
 #include <ydb/core/ydb_convert/table_description.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
+#include <util/random/random.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
@@ -1148,6 +1150,15 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuilder::TTxBase {
 private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
+    ui64 LastRequestBytes = 0;
+
+    template<class TEvent>
+    void QueueScanRequest(TTabletId tablet, THolder<TEvent> event) {
+        if constexpr (requires { event->Record.GetAllowMemoryAdmission(); }) {
+            LastRequestBytes = event->Record.SpaceUsedLong() + event->Record.ByteSizeLong() + 4_KB;
+        }
+        ToTabletSend.emplace(tablet, std::move(event));
+    }
 
     template <bool WithSnapshot = true, typename TRequest>
     TTabletId FillScanRequestCommon(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1176,6 +1187,9 @@ private:
             request.MutableScanSettings()->CopyFrom(buildInfo.ScanSettings);
         }
 
+        if constexpr (requires { request.SetAllowMemoryAdmission(true); }) {
+            request.SetAllowMemoryAdmission(true);
+        }
         request.SetSeqNoGeneration(Self->Generation());
         request.SetSeqNoRound(++shardStatus.SeqNoRound);
         return shardId;
@@ -1243,7 +1257,7 @@ private:
             {"record", ev->Record.ShortDebugString()},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     void SendVectorAutodetectRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1269,7 +1283,7 @@ private:
             {"record", ev->Record.ShortDebugString()},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1325,7 +1339,7 @@ private:
             {"record", ToShortDebugString(ev->Record)},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     void SendKMeansRecomputeRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1359,7 +1373,7 @@ private:
             {"record", ToShortDebugString(ev->Record)},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     void SendKMeansLocalRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1444,7 +1458,7 @@ private:
             {"record", ev->Record.ShortDebugString()},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     void SendPrefixKMeansRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1510,7 +1524,7 @@ private:
             {"record", ev->Record.ShortDebugString()},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     void SendKMeansFilterRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1545,7 +1559,7 @@ private:
             {"record", ev->Record.ShortDebugString()},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     void SendUploadKMeansBordersRequest(TIndexBuildInfo& buildInfo) {
@@ -1675,7 +1689,7 @@ private:
             {"record", ev->Record.ShortDebugString()},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     bool GetColumnStats(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
@@ -1764,7 +1778,7 @@ private:
             {"record", record.ShortDebugString()},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     void SendUploadClustersRequest(TIndexBuildInfo& buildInfo) {
@@ -1859,7 +1873,7 @@ private:
             {"record", ev->Record.ShortDebugString()},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     void SendBuildFulltextIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1929,7 +1943,7 @@ private:
             {"record", ev->Record.ShortDebugString()},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     NKikimrTxDataShard::EFulltextIndexType ConvertFulltextType(NKikimrSchemeOp::EIndexType indexType) {
@@ -2014,7 +2028,7 @@ private:
             {"record", ev->Record.ShortDebugString()},
         );
 
-        ToTabletSend.emplace(shardId, std::move(ev));
+        QueueScanRequest(shardId, std::move(ev));
     }
 
     void SendUploadFulltextStatsRequest(TIndexBuildInfo& buildInfo) {
@@ -2156,6 +2170,9 @@ private:
     }
 
     void ClearAfterFill(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {
+        for (auto& [_, status] : buildInfo.Shards) {
+            status.RequestReservation.reset();
+        }
         buildInfo.DoneShards = {};
         buildInfo.InProgressShards = {};
         buildInfo.ToUploadShards = {};
@@ -2166,11 +2183,53 @@ private:
 
     template<typename Send>
     bool SendToShards(TIndexBuildInfo& buildInfo, Send&& send) {
-        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.MaxInProgressShards) {
+        const bool bounded = buildInfo.IsBuildVectorIndex();
+        const auto& config = AppData()->SchemeShardConfig;
+        const ui64 bytesLimit = config.GetIndexBuildRequestBytesLimit();
+        const ui32 countLimit = config.GetIndexBuildRequestCountLimit();
+        const size_t perBuild = bounded
+            ? Min<ui64>(buildInfo.MaxInProgressShards, Max<ui64>(1, config.GetIndexBuildRequestsPerBuild()))
+            : buildInfo.MaxInProgressShards;
+        size_t attempts = Min(buildInfo.ToUploadShards.size(), perBuild);
+        while (attempts-- && !buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < perBuild) {
             auto shardIdx = buildInfo.ToUploadShards.front();
             buildInfo.ToUploadShards.pop_front();
+            auto& status = buildInfo.Shards.at(shardIdx);
+            const auto now = TActivationContext::Now();
+            if (status.AdmissionRetryAt > now) {
+                buildInfo.ToUploadShards.push_back(shardIdx);
+                ScheduleProgress(buildInfo, status.AdmissionRetryAt);
+                continue;
+            }
             buildInfo.InProgressShards.emplace(shardIdx);
+            LastRequestBytes = 0;
             send(shardIdx);
+            if (LastRequestBytes) {
+                Y_ENSURE(LastRequestBytes <= bytesLimit, "Vector scan request exceeds SchemeShard request window");
+                if (!Self->IndexBuildRequestAdmission) {
+                    Self->IndexBuildRequestAdmission = std::make_shared<TScanAdmissionControl>();
+                    Self->IndexBuildRequestAdmission->SetTotalLimit(Max<ui64>());
+                }
+                ui64 buildBytes = 0;
+                for (const auto& [_, shard] : buildInfo.Shards) {
+                    if (shard.RequestReservation) {
+                        buildBytes += shard.RequestBytes;
+                    }
+                }
+                // Leave byte credits for other builds; a single large request
+                // may use more than one share, but still fits the global window.
+                auto lease = (buildBytes && LastRequestBytes > bytesLimit / 4 - Min(buildBytes, bytesLimit / 4))
+                    ? nullptr : Self->IndexBuildRequestAdmission->TryAcquire(LastRequestBytes, countLimit, bytesLimit);
+                if (!lease) {
+                    ToTabletSend.erase(Self->ShardInfos.at(shardIdx).TabletID);
+                    buildInfo.InProgressShards.erase(shardIdx);
+                    buildInfo.ToUploadShards.push_back(shardIdx);
+                    ScheduleProgress(buildInfo, now + TDuration::MilliSeconds(500));
+                    continue;
+                }
+                status.RequestBytes = LastRequestBytes;
+                status.RequestReservation = std::move(lease);
+            }
         }
 
         return buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty();
@@ -2362,6 +2421,9 @@ private:
     bool SendKMeansSample(TIndexBuildInfo& buildInfo) {
         if (buildInfo.Sample.MaxProbability == 0) {
             buildInfo.ToUploadShards.clear();
+            for (auto& [_, status] : buildInfo.Shards) {
+                status.RequestReservation.reset();
+            }
             buildInfo.InProgressShards.clear();
             return true;
         }
@@ -2495,10 +2557,7 @@ private:
                 }
             }
             if (!buildInfo.ToUploadShards.empty()) {
-                auto idx = buildInfo.ToUploadShards.front();
-                buildInfo.ToUploadShards.pop_front();
-                buildInfo.InProgressShards.emplace(idx);
-                SendVectorAutodetectRequest(idx, buildInfo);
+                SendToShards(buildInfo, [&](TShardIdx idx) { SendVectorAutodetectRequest(idx, buildInfo); });
                 return false;
             }
             YDB_LOG_ERROR(LogPrefix << "FillPrefixedVectorIndex Autodetect: no shards available");
@@ -3837,6 +3896,10 @@ public:
             Y_ENSURE(false, "TTxBuildProgress: OnUnhandledException: unknown build type");
         }
 
+        for (auto& [_, status] : buildInfo->Shards) {
+            status.RequestReservation.reset();
+        }
+        ToTabletSend.clear();
         Self->PersistBuildIndexState(db, *buildInfo);
         Self->Execute(Self->CreateTxProgress(buildInfo->Id), ctx);
     }
@@ -3989,6 +4052,9 @@ public:
             Y_ENSURE(false, "TTxReply : OnUnhandledException: unknown build type");
         }
 
+        for (auto& [_, status] : buildInfo->Shards) {
+            status.RequestReservation.reset();
+        }
         Self->PersistBuildIndexState(db, *buildInfo);
         Self->Execute(Self->CreateTxProgress(buildInfo->Id), ctx);
     }
@@ -4040,6 +4106,7 @@ public:
 
         // reschedule shard
         if (buildInfo.InProgressShards.erase(shardIdx)) {
+            buildInfo.Shards.at(shardIdx).RequestReservation.reset();
             buildInfo.ToUploadShards.emplace_front(shardIdx);
 
             Self->IndexBuildPipes.Close(BuildId, ShardId, ctx);
@@ -4134,6 +4201,9 @@ public:
         NYql::IssuesFromMessage(record.GetIssues(), issues);
         shardStatus.DebugMessage = issues.ToString();
         shardStatus.Status = record.GetStatus();
+        if (shardStatus.Status != NKikimrIndexBuilder::ACCEPTED && shardStatus.Status != NKikimrIndexBuilder::IN_PROGRESS) {
+            shardStatus.RequestReservation.reset();
+        }
 
         switch (shardStatus.Status) {
         case NKikimrIndexBuilder::EBuildStatus::INVALID:
@@ -4147,6 +4217,8 @@ public:
             return true;
         }
         case NKikimrIndexBuilder::EBuildStatus::DONE: {
+            shardStatus.AdmissionRetryAt = {};
+            shardStatus.AdmissionRetries = 0;
             bool erased = buildInfo.InProgressShards.erase(shardIdx);
             Y_ENSURE(erased);
             buildInfo.DoneShards.emplace_back(shardIdx);
@@ -4160,7 +4232,15 @@ public:
             return true;
         }
         case NKikimrIndexBuilder::EBuildStatus::ABORTED: {
-            // datashard gracefully rebooted, reschedule shard
+            if constexpr (requires { record.GetRetryAfterMs(); }) {
+                if (record.GetRetryAfterMs()) {
+                    const ui64 hint = ClampVal<ui64>(record.GetRetryAfterMs(), 100, 30000);
+                    const ui64 backoff = Min<ui64>(30000, hint << Min<ui32>(shardStatus.AdmissionRetries++, 5));
+                    shardStatus.AdmissionRetryAt = ctx.Now() + TDuration::MilliSeconds(backoff + RandomNumber<ui32>(251));
+                    ScheduleProgress(buildInfo, shardStatus.AdmissionRetryAt);
+                }
+            }
+            // Old datashards without a retry hint retain the reboot retry path.
             bool erased = buildInfo.InProgressShards.erase(shardIdx);
             Y_ENSURE(erased);
             buildInfo.ToUploadShards.emplace_front(shardIdx);

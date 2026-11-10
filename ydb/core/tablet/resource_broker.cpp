@@ -37,7 +37,7 @@ TResourceLimit::TResourceLimit(const NKikimrResourceBroker::TResources &limit)
 bool TResourceLimit::HasResources(const TResourceValues &values) const
 {
     for (size_t i = 0; i < values.size(); ++i)
-        if (values[i] + Used[i] > Limit[i])
+        if (Used[i] > Limit[i] || values[i] > Limit[i] - Used[i])
             return false;
     return true;
 }
@@ -168,6 +168,7 @@ TTaskQueue::TTaskQueue(const NKikimrResourceBroker::TQueueConfig &config,
                        TQueueCountersPtr totalCounters)
     : Name(config.GetName())
     , Weight(config.GetWeight())
+    , StrictMemoryLimit(config.GetStrictMemoryLimit())
     , QueueLimit(config.GetLimit())
     , TotalLimit(totalLimit)
     , RealResourceUsage(0)
@@ -573,6 +574,10 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
     }
 
     auto task = it->second;
+    if (!task->InFly && cancel && task->KeepOnClientDeath) {
+        EraseTask(task, false, as);
+        return TTerminateTaskResult(true, task);
+    }
     if (!task->InFly) {
         YDB_LOG_DEBUG_CTX(as, "FinishTask failed for task: cannot finish queued task",
             {"taskId", taskId},
@@ -608,6 +613,9 @@ bool TScheduler::RemoveTasks(const TActorId &client, const TActorSystem &as)
     for (ui64 taskId : taskIds) {
         const auto* task = FindTask(taskId, client);
         Y_DEBUG_ABORT_UNLESS(task);
+        if (task->KeepOnClientDeath) {
+            continue;
+        }
         auto result = task->InFly
             ? FinishTask(taskId, client, true, as)
             : RemoveQueuedTask(taskId, client, as);
@@ -669,6 +677,16 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         if (task->GetRequiredResourcesMask() & blockedResources) {
             YDB_LOG_DEBUG_CTX(as, "Skipping queue blocked by an earlier queue",
                 {"queueName", queue->Name});
+            continue;
+        }
+
+        // Admission-aware scan reservations are strict even when the queue
+        // and the whole broker are idle. Preserve legacy progress exceptions
+        // for the other queues.
+        const bool strictMemory = queue->StrictMemoryLimit && task->RequiredResources[NKikimrResourceBroker::MEMORY];
+        if (strictMemory &&
+            (!queue->QueueLimit.HasResources({{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}}) ||
+             !ResourceLimit->HasResources({{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}}))) {
             continue;
         }
 
@@ -920,6 +938,14 @@ TResourceBroker::TOpError TResourceBroker::SubmitTask(const TEvResourceBroker::T
 {
     with_lock(Lock) {
         Scheduler.UpdateTime(ActorSystem->Timestamp());
+        if (!Scheduler.FitsMemoryLimit(ev.Task)) {
+            auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
+            error->TaskId = ev.Task.TaskId;
+            error->Status.Code = TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED;
+            error->Status.Message = "scan memory reservation exceeds the current broker limit";
+            error->Cookie = ev.Task.Cookie;
+            return error;
+        }
         if (Scheduler.SubmitTask(ev.Task, sender, *ActorSystem)) {
             Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
                 ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
@@ -942,6 +968,9 @@ bool TResourceBroker::SubmitTaskInstant(const TEvResourceBroker::TEvSubmitTask& 
         bool success = false;
 
         Scheduler.UpdateTime(ActorSystem->Timestamp());
+        if (!Scheduler.FitsMemoryLimit(ev.Task)) {
+            return false;
+        }
         if (Scheduler.SubmitTask(ev.Task, sender, *ActorSystem)) {
             Scheduler.ScheduleTasks(*ActorSystem, [this, taskId = ev.Task.TaskId, &success](const TTask &task) {
                 if (task.TaskId == taskId) {
@@ -1499,7 +1528,9 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue = config.AddQueues();
     queue->SetName("queue_build_index");
     queue->SetWeight(100);
+    queue->SetStrictMemoryLimit(true);
     queue->MutableLimit()->SetCpu(10);
+    queue->MutableLimit()->SetMemory(448_MB); // 512 MiB minus the pending-request pool.
 
     queue = config.AddQueues();
     queue->SetName("queue_ttl");
@@ -1733,6 +1764,9 @@ void MergeConfigUpdates(
         if (src.HasWeight()) {
             dst.SetWeight(src.GetWeight());
         }
+        if (src.HasStrictMemoryLimit()) {
+            dst.SetStrictMemoryLimit(src.GetStrictMemoryLimit());
+        }
 
         if (src.HasLimit()) {
             MergeConfigResources(*dst.MutableLimit(), src.GetLimit());
@@ -1796,6 +1830,9 @@ Y_DECLARE_OUT_SPEC(, NKikimr::NResourceBroker::TEvResourceBroker::TStatus::ECode
         break;
     case NKikimr::NResourceBroker::TEvResourceBroker::TStatus::TASK_IN_QUEUE:
         stream << "TASK_IN_QUEUE";
+        break;
+    case NKikimr::NResourceBroker::TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED:
+        stream << "MEMORY_LIMIT_EXCEEDED";
         break;
     default:
         stream << "<UNKNOWN_CODE>";

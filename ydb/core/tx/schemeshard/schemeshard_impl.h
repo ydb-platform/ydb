@@ -1938,6 +1938,7 @@ public:
     // namespace NIndexBuilder {
     TControlWrapper AllowDataColumnForIndexTable;
 
+    std::shared_ptr<TScanAdmissionControl> IndexBuildRequestAdmission;
     THashMap<TIndexBuildId, std::shared_ptr<TIndexBuildInfo>> IndexBuilds;
     THashMap<TString, std::shared_ptr<TIndexBuildInfo>> IndexBuildsByUid;
     TSet<std::pair<TInstant, TIndexBuildId>> IndexBuildsByTime;
@@ -2073,6 +2074,7 @@ public:
     void Handle(TEvDataShard::TEvBuildFulltextDictResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPrivate::TEvIndexBuildRetry::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);
 
     void Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);

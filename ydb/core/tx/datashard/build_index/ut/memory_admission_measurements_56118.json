@@ -1,0 +1,322 @@
+[
+  {
+    "name": "upload-1-8m",
+    "params": {
+      "vector-upload-admission": "true",
+      "vector-upload-measure": "true",
+      "vector-upload-scans": "1"
+    },
+    "stats": {
+      "baseline": {
+        "allocated": 132726816,
+        "physical": 201155222,
+        "rss": 431001600
+      },
+      "blocked": {
+        "allocated": 162105592,
+        "physical": 201155222,
+        "rss": 434315264
+      },
+      "finished": {
+        "allocated": 187970640,
+        "physical": 270361238,
+        "rss": 482476032
+      }
+    },
+    "details": [
+      "VECTOR_UPLOAD_MEMORY scans=1 active=1 reservation_bytes=124537172 batch_bytes=8388608 rows_per_shard=1058 blocked_request_bytes=8402944"
+    ]
+  },
+  {
+    "name": "upload-4-8m",
+    "params": {
+      "vector-upload-admission": "true",
+      "vector-upload-measure": "true",
+      "vector-upload-scans": "4"
+    },
+    "stats": {
+      "baseline": {
+        "allocated": 260597272,
+        "physical": 375218838,
+        "rss": 606883840
+      },
+      "blocked": {
+        "allocated": 348542560,
+        "physical": 375218838,
+        "rss": 608456704
+      },
+      "finished": {
+        "allocated": 406428576,
+        "physical": 576545430,
+        "rss": 777920512
+      }
+    },
+    "details": [
+      "VECTOR_UPLOAD_MEMORY scans=4 active=3 reservation_bytes=124537172 batch_bytes=8388608 rows_per_shard=1058 blocked_request_bytes=25208832"
+    ]
+  },
+  {
+    "name": "upload-8-8m",
+    "params": {
+      "vector-upload-admission": "true",
+      "vector-upload-measure": "true",
+      "vector-upload-scans": "8"
+    },
+    "stats": {
+      "baseline": {
+        "allocated": 405893744,
+        "physical": 517825174,
+        "rss": 747507712
+      },
+      "blocked": {
+        "allocated": 493935488,
+        "physical": 515728022,
+        "rss": 748285952
+      },
+      "finished": {
+        "allocated": 567362536,
+        "physical": 924672694,
+        "rss": 1141870592
+      }
+    },
+    "details": [
+      "VECTOR_UPLOAD_MEMORY scans=8 active=3 reservation_bytes=124537172 batch_bytes=8388608 rows_per_shard=1058 blocked_request_bytes=25208832"
+    ]
+  },
+  {
+    "name": "centroids-1-1024",
+    "params": {
+      "vector-upload-admission": "true",
+      "vector-upload-measure": "true",
+      "vector-centroid-scans": "1",
+      "vector-centroid-clusters": "1024"
+    },
+    "stats": {
+      "baseline": {
+        "allocated": 76885720,
+        "physical": 94200470,
+        "rss": 340758528
+      },
+      "blocked": {
+        "allocated": 77253456,
+        "physical": 94200470,
+        "rss": 341520384
+      },
+      "finished": {
+        "allocated": 77250128,
+        "physical": 94200470,
+        "rss": 342384640
+      }
+    },
+    "details": [
+      "VECTOR_CENTROID_MEMORY scans=1 dimensions=1536 clusters=1024 admitted=1 rejected=0 requested_memory=134299632"
+    ]
+  },
+  {
+    "name": "centroids-32-1024",
+    "params": {
+      "vector-upload-admission": "true",
+      "vector-upload-measure": "true",
+      "vector-centroid-scans": "32",
+      "vector-centroid-clusters": "1024"
+    },
+    "stats": {
+      "baseline": {
+        "allocated": 92880224,
+        "physical": 108880534,
+        "rss": 356691968
+      },
+      "blocked": {
+        "allocated": 93840936,
+        "physical": 108880534,
+        "rss": 357687296
+      },
+      "finished": {
+        "allocated": 93574216,
+        "physical": 110977686,
+        "rss": 358834176
+      }
+    },
+    "details": [
+      "VECTOR_CENTROID_MEMORY scans=32 dimensions=1536 clusters=1024 admitted=21 rejected=11 requested_memory=2820292272"
+    ]
+  },
+  {
+    "name": "centroids-128-1024",
+    "params": {
+      "vector-upload-admission": "true",
+      "vector-upload-measure": "true",
+      "vector-centroid-scans": "128",
+      "vector-centroid-clusters": "1024"
+    },
+    "stats": {
+      "baseline": {
+        "allocated": 141413056,
+        "physical": 169697942,
+        "rss": 406708224
+      },
+      "blocked": {
+        "allocated": 142562552,
+        "physical": 169697942,
+        "rss": 409866240
+      },
+      "finished": {
+        "allocated": 141980344,
+        "physical": 169697942,
+        "rss": 410554368
+      }
+    },
+    "details": [
+      "VECTOR_CENTROID_MEMORY scans=128 dimensions=1536 clusters=1024 admitted=21 rejected=107 requested_memory=2820292272"
+    ]
+  },
+  {
+    "name": "sampled-centroids-32-1024",
+    "params": {
+      "vector-upload-admission": "true",
+      "vector-upload-measure": "true",
+      "vector-centroid-scans": "32",
+      "vector-centroid-clusters": "1024",
+      "vector-upload-profile": "true"
+    },
+    "stats": {
+      "baseline": {
+        "allocated": 102317440,
+        "physical": 117269142,
+        "rss": 357347328
+      },
+      "blocked": {
+        "allocated": 103540296,
+        "physical": 117269142,
+        "rss": 358797312
+      },
+      "finished": {
+        "allocated": 103273512,
+        "physical": 119366294,
+        "rss": 359710720
+      }
+    },
+    "details": [
+      "VECTOR_CENTROID_MEMORY scans=32 dimensions=1536 clusters=1024 admitted=21 rejected=11 requested_memory=2820292272"
+    ]
+  },
+  {
+    "name": "sampled-upload-8-8m",
+    "params": {
+      "vector-upload-admission": "true",
+      "vector-upload-measure": "true",
+      "vector-upload-scans": "8",
+      "vector-upload-profile": "true"
+    },
+    "stats": {
+      "baseline": {
+        "allocated": 415593168,
+        "physical": 538796694,
+        "rss": 749166592
+      },
+      "blocked": {
+        "allocated": 513596384,
+        "physical": 538796694,
+        "rss": 750305280
+      },
+      "finished": {
+        "allocated": 580470088,
+        "physical": 964518582,
+        "rss": 1151127552
+      }
+    },
+    "details": [
+      "VECTOR_UPLOAD_MEMORY scans=8 active=3 reservation_bytes=124537172 batch_bytes=8388608 rows_per_shard=1058 blocked_request_bytes=25208832"
+    ]
+  },
+  {
+    "name": "distinct-centroids-1-1024",
+    "params": {
+      "vector-upload-admission": "true",
+      "vector-upload-measure": "true",
+      "vector-centroid-scans": "1",
+      "vector-centroid-clusters": "1024",
+      "vector-centroid-distinct-payloads": "true"
+    },
+    "stats": {
+      "baseline": {
+        "allocated": 76885880,
+        "physical": 94200470,
+        "rss": 340803584
+      },
+      "blocked": {
+        "allocated": 78990320,
+        "physical": 96297622,
+        "rss": 343457792
+      },
+      "finished": {
+        "allocated": 77250416,
+        "physical": 96297622,
+        "rss": 344211456
+      }
+    },
+    "details": [
+      "VECTOR_CENTROID_MEMORY scans=1 dimensions=1536 clusters=1024 admitted=1 rejected=0 requested_memory=134299632 pending_bytes=3186278 distinct_payloads=1"
+    ]
+  },
+  {
+    "name": "distinct-centroids-32-1024",
+    "params": {
+      "vector-upload-admission": "true",
+      "vector-upload-measure": "true",
+      "vector-centroid-scans": "32",
+      "vector-centroid-clusters": "1024",
+      "vector-centroid-distinct-payloads": "true"
+    },
+    "stats": {
+      "baseline": {
+        "allocated": 92618368,
+        "physical": 108880534,
+        "rss": 356454400
+      },
+      "blocked": {
+        "allocated": 130049928,
+        "physical": 165503638,
+        "rss": 413409280
+      },
+      "finished": {
+        "allocated": 93313192,
+        "physical": 165503638,
+        "rss": 414593024
+      }
+    },
+    "details": [
+      "VECTOR_CENTROID_MEMORY scans=32 dimensions=1536 clusters=1024 admitted=21 rejected=11 requested_memory=2820292272 pending_bytes=66911838 distinct_payloads=1"
+    ]
+  },
+  {
+    "name": "distinct-centroids-128-1024",
+    "params": {
+      "vector-upload-admission": "true",
+      "vector-upload-measure": "true",
+      "vector-centroid-scans": "128",
+      "vector-centroid-clusters": "1024",
+      "vector-centroid-distinct-payloads": "true"
+    },
+    "stats": {
+      "baseline": {
+        "allocated": 141421696,
+        "physical": 169697942,
+        "rss": 406659072
+      },
+      "blocked": {
+        "allocated": 179042040,
+        "physical": 385704598,
+        "rss": 632844288
+      },
+      "finished": {
+        "allocated": 141988728,
+        "physical": 228418198,
+        "rss": 476422144
+      }
+    },
+    "details": [
+      "VECTOR_CENTROID_MEMORY scans=128 dimensions=1536 clusters=1024 admitted=21 rejected=107 requested_memory=2820292272 pending_bytes=66911838 distinct_payloads=1"
+    ]
+  }
+]

@@ -5,6 +5,8 @@
 #include <ydb/core/tx/datashard/scan_common.h>
 #include <ydb/core/tx/datashard/upload_stats.h>
 #include <ydb/core/tx/tx_proxy/erase_rows.h>
+#include <ydb/core/base/scan_admission.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NDataShard {
@@ -70,6 +72,13 @@ public:
     };
 
 private:
+    struct TUploadAttempt {
+        std::shared_ptr<void> Reservation;
+        explicit TUploadAttempt(std::shared_ptr<void> reservation)
+            : Reservation(std::move(reservation))
+        {}
+    };
+
     struct TDestination {
         TBufferData Buffer;
         TEraseBuffer EraseBuffer;
@@ -183,7 +192,13 @@ public:
             return;
         }
 
-        ++RetryCount;
+        if (!PreviousAttempt.expired()) {
+            TActivationContext::ActorContextFor(Owner).Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
+            return;
+        }
+        if (!UploadStatus.IsNone() && !UploadStatus.IsSuccess()) {
+            ++RetryCount;
+        }
         StartUploadInternal();
     }
 
@@ -254,6 +269,10 @@ public:
 
     bool IsSuccess() const {
         return UploadStatus.IsSuccess();
+    }
+
+    void SetResourceReservation(std::shared_ptr<void> reservation) {
+        ResourceReservation = std::move(reservation);
     }
 
     void SetOwner(const TActorId& owner) {
@@ -403,20 +422,43 @@ private:
                 true /*writeToIndexImplTable*/);
             UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
         } else {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Starting batch row upload",
-                {"debug", Debug()});
-
-            Y_ENSURE(!Uploading.Buffer.IsEmpty());
-            auto actor = NTxProxy::CreateUploadRowsInternal(
-                Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
-                NTxProxy::EUploadRowsMode::WriteToTableShadow,
-                true /*writeToPrivateTable*/,
-                true /*writeToIndexImplTable*/);
-            UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
+            StartUploadRowsInternal();
         }
     }
 
+    void StartUploadRowsInternal() {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Starting batch row upload",
+            {"debug", Debug()});
+
+        Y_ENSURE(Uploading);
+        Y_ENSURE(!Uploading.Buffer.IsEmpty());
+        Y_ENSURE(!UploaderId);
+        Y_ENSURE(Owner);
+        // A timed-out child may leave a protobuf request in a local mailbox.
+        // Wait for its allocation owners before making another payload copy.
+        if (!PreviousAttempt.expired()) {
+            TActivationContext::ActorContextFor(Owner).Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup());
+            return;
+        }
+        std::shared_ptr<void> attempt;
+        if (ResourceReservation) {
+            auto token = std::make_shared<TUploadAttempt>(ResourceReservation);
+            PreviousAttempt = token;
+            attempt = std::move(token);
+        }
+        auto actor = NTxProxy::CreateUploadRowsInternal(
+            Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
+            NTxProxy::EUploadRowsMode::WriteToTableShadow,
+            true /*writeToPrivateTable*/,
+            true /*writeToIndexImplTable*/, false, 0, TBackoff(0), std::move(attempt));
+
+        UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
+    }
+
+
 private:
+    std::shared_ptr<void> ResourceReservation;
+    std::weak_ptr<TUploadAttempt> PreviousAttempt;
     const TString Database;
     const TIndexBuildScanSettings ScanSettings;
     TActorId Owner;
@@ -460,6 +502,239 @@ inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui6
     scanOpts.SetResourceBroker("build_index", 10);
     const auto scanId = dataShard->QueueScan(tableId, std::move(scan), 0, scanOpts);
     scanManager.Set(id, seqNo).push_back(scanId);
+}
+
+inline ui64 CheckedScanMemoryAdd(ui64 a, ui64 b) {
+    Y_ENSURE(b <= Max<ui64>() - a, "Index scan memory estimate overflow");
+    return a + b;
+}
+
+inline ui64 CheckedScanMemoryMul(ui64 a, ui64 b) {
+    Y_ENSURE(!b || a <= Max<ui64>() / b, "Index scan memory estimate overflow");
+    return a * b;
+}
+
+template<class TRequest>
+ui64 EstimateBuildIndexScanMemory(const TRequest& request, const TUserTable& table) {
+    const auto& config = AppData()->DataShardConfig;
+    const ui64 rowLimit = config.GetBuildIndexRowBytesLimit();
+    ui64 memory = CheckedScanMemoryAdd(4_MB, CheckedScanMemoryMul(request.SpaceUsedLong(), 2));
+    ui64 clusters = 1;
+    if constexpr (requires { request.ClustersSize(); }) {
+        clusters = request.ClustersSize();
+    } else if constexpr (requires { request.GetK(); }) {
+        clusters = request.GetK();
+    }
+    if constexpr (requires { request.GetSettings(); }) {
+        const ui64 dimensions = request.GetSettings().vector_dimension();
+        ui64 vectorBytes = CheckedScanMemoryAdd(dimensions ? CheckedScanMemoryMul(dimensions, 4) : rowLimit, 256);
+        if constexpr (requires { request.ColumnsSize(); }) {
+            vectorBytes = CheckedScanMemoryAdd(vectorBytes, CheckedScanMemoryMul(request.ColumnsSize(), 32));
+        }
+        memory = CheckedScanMemoryAdd(memory, CheckedScanMemoryMul(clusters, vectorBytes));
+        if constexpr (!std::is_same_v<TRequest, NKikimrTxDataShard::TEvReshuffleKMeansRequest> &&
+                      !std::is_same_v<TRequest, NKikimrTxDataShard::TEvSampleKRequest>) {
+            // Auto-detection must also reserve the largest accumulator dimension
+            // accepted by ValidateSettings, including compact bit vectors.
+            const ui64 scratchDimensions = dimensions ? dimensions : 65536;
+            memory = CheckedScanMemoryAdd(memory, CheckedScanMemoryMul(CheckedScanMemoryMul(clusters, scratchDimensions), 8));
+        }
+    }
+    if constexpr (requires { request.GetOutputName(); }) {
+        TIndexBuildScanSettings settings = request.GetScanSettings();
+        ui64 destinations = 1;
+        ui64 prefixCache = 0;
+        if constexpr (requires { request.GetLevelName(); }) {
+            ++destinations;
+            prefixCache = 1;
+        }
+        if constexpr (requires { request.GetPrefixName(); }) {
+            ++destinations;
+        }
+        if constexpr (requires { request.GetSkipFirstKey(); }) {
+            prefixCache += 3; // first/last key and current filter group
+        }
+        ui64 overlap = 1;
+        if constexpr (requires { request.GetOverlapClusters(); }) {
+            overlap = Max<ui64>(1, request.GetOverlapClusters());
+        }
+        const ui64 rowFanout = CheckedScanMemoryMul(rowLimit, overlap);
+        const ui64 buffers = destinations + 2 + prefixCache; // in-flight and protobuf copy
+        const ui64 payload = CheckedScanMemoryMul(CheckedScanMemoryAdd(settings.GetMaxBatchBytes(), rowFanout), 2);
+        memory = CheckedScanMemoryAdd(memory, CheckedScanMemoryMul(buffers, payload));
+        const ui64 rowMetadata = CheckedScanMemoryAdd(128, CheckedScanMemoryMul(table.KeyColumnIds.size() + table.Columns.size(), 32));
+        ui64 rows = ui64(settings.GetMaxBatchRows()) + 1;
+        if constexpr (requires { request.GetSkipFirstKey(); }) {
+            rows = CheckedScanMemoryAdd(rows, CheckedScanMemoryMul(overlap, overlap));
+        }
+        memory = CheckedScanMemoryAdd(memory, CheckedScanMemoryMul(
+            CheckedScanMemoryMul(rows, rowMetadata), buffers + 1));
+    }
+    // Bounded read-ahead plus the currently materialized row.
+    return CheckedScanMemoryAdd(memory, CheckedScanMemoryAdd(1_MB, rowLimit));
+}
+
+// The request and response are moved, never copied into an unbounded closure.
+// Only admission-aware senders may receive the new retry hint; old nodes keep
+// their existing protocol while rolling upgrades are in progress.
+template<class TRequest, class TResponse, class TFactory>
+void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
+    THolder<TResponse>&& response, TRowVersion rowVersion, ui32 tableId, TFactory makeScan)
+{
+    auto& request = ev->Get()->Record;
+    if (request.GetAllowMemoryAdmission()) {
+        if constexpr (requires { request.MutableScanSettings(); }) {
+            auto* settings = request.MutableScanSettings();
+            const ui64 cap = AppData()->DataShardConfig.GetBuildIndexBatchRowsLimit();
+            settings->SetMaxBatchRows(Min<ui64>(Max<ui64>(1, settings->GetMaxBatchRows()), Max<ui64>(1, cap)));
+        }
+    }
+    const ui64 id = request.GetId();
+    const TScanRecord::TSeqNo seqNo{request.GetSeqNoGeneration(), request.GetSeqNoRound()};
+    const auto pathId = TPathId::FromProto(request.GetPathId());
+    const auto tableIt = self->GetUserTables().find(pathId.LocalPathId);
+    Y_ENSURE(tableIt != self->GetUserTables().end());
+    const auto& table = *tableIt->second;
+    if (!request.GetAllowMemoryAdmission()) {
+        auto scan = makeScan(table, request, ev->Sender, std::move(response));
+        StartScan(self, std::move(scan), id, seqNo, rowVersion, tableId);
+        return;
+    }
+
+    auto& manager = self->GetScanManager();
+    if (const auto* previous = manager.Get(id)) {
+        if (previous->SeqNo >= seqNo) {
+            return;
+        }
+        for (ui64 serial : previous->ScanIds) {
+            self->CancelScan(tableId, serial);
+        }
+        manager.Drop(id);
+    }
+
+    const auto& config = AppData()->DataShardConfig;
+    auto reject = [&](const TString& reason, bool retry) {
+        response->Record.SetStatus(retry ? NKikimrIndexBuilder::ABORTED : NKikimrIndexBuilder::BAD_REQUEST);
+        if (retry) {
+            response->Record.SetRetryAfterMs(1000);
+        }
+        response->Record.AddIssues()->set_message(reason);
+        TlsActivationContext->Send(new IEventHandle(ev->Sender, self->SelfId(), response.Release()));
+    };
+    const ui64 rowLimit = config.GetBuildIndexRowBytesLimit();
+    if (!rowLimit) {
+        reject("BuildIndexRowBytesLimit must be nonzero for memory admission", false);
+        return;
+    }
+    const ui64 requestBytes = CheckedScanMemoryAdd(request.SpaceUsedLong(), request.ByteSizeLong());
+    if (request.ByteSizeLong() > config.GetBuildIndexRequestBytesLimit()) {
+        reject("Index scan request exceeds BuildIndexRequestBytesLimit", false);
+        return;
+    }
+    const ui64 memory = EstimateBuildIndexScanMemory(request, table);
+    if (memory > config.GetBuildIndexScanMemoryLimit()) {
+        reject("Index scan exceeds BuildIndexScanMemoryLimit; reduce batch/row limits or vector settings", false);
+        return;
+    }
+    const ui64 pendingBytes = CheckedScanMemoryAdd(requestBytes, 4_KB);
+    auto& admission = *AppData()->BuildIndexScanAdmission;
+    const ui64 pendingLimit = admission.GetByteLimit(config.GetBuildIndexPendingBytesLimit());
+    if (pendingLimit && pendingBytes > pendingLimit) {
+        reject("Index scan request exceeds the node pending byte budget", false);
+        return;
+    }
+    auto counters = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "build_index_admission");
+    auto lease = admission.TryAcquire(pendingBytes, config.GetBuildIndexPendingScansLimit(),
+        config.GetBuildIndexPendingBytesLimit(), counters);
+    if (!lease) {
+        reject("Node index scan pending queue is full", true);
+        return;
+    }
+
+    struct TPending {
+        // Destruction order: release the quota after freeing retained messages.
+        std::shared_ptr<TScanAdmissionControl::TLease> Lease;
+        typename TRequest::TPtr Event;
+        THolder<TResponse> Response;
+        bool Replied = false;
+    };
+    auto pending = std::make_shared<TPending>();
+    pending->Lease = lease;
+    pending->Event = std::move(ev);
+    pending->Response = std::move(response);
+    const ui64 schemaVersion = table.GetTableSchemaVersion();
+    auto fail = [self, pending, id, seqNo](const TString& reason, bool retry) {
+        if (pending->Replied) {
+            return;
+        }
+        pending->Replied = true;
+        if (!pending->Response) {
+            pending->Response = MakeHolder<TResponse>();
+            auto& rec = pending->Response->Record;
+            rec.SetId(id);
+            rec.SetTabletId(self->TabletID());
+            rec.SetRequestSeqNoGeneration(seqNo.Generation);
+            rec.SetRequestSeqNoRound(seqNo.Round);
+        }
+        auto& rec = pending->Response->Record;
+        rec.SetStatus(retry ? NKikimrIndexBuilder::ABORTED : NKikimrIndexBuilder::BAD_REQUEST);
+        if (retry) {
+            rec.SetRetryAfterMs(1000);
+        }
+        rec.AddIssues()->set_message(reason);
+        TlsActivationContext->Send(new IEventHandle(pending->Event->Sender, self->SelfId(), pending->Response.Release()));
+        if (const auto* scan = self->GetScanManager().Get(id); scan && scan->SeqNo == seqNo) {
+            self->GetScanManager().Drop(id);
+        }
+    };
+    TScanOptions options;
+    options.SetResourceBroker("build_index", 10, memory);
+    options.SetReadAhead(0, 1_MB);
+    options.SetSnapshotRowVersion(rowVersion);
+    options.PendingReservation = lease;
+    options.QueueTimeout = TDuration::MilliSeconds(Max<ui32>(1, config.GetBuildIndexQueueTimeoutMs()));
+    options.OnAdmissionFailure = fail;
+    options.Factory = [self, pending, pathId, tableId, schemaVersion, rowLimit, makeScan, fail](TScanOptions& opts) mutable -> TAutoPtr<NTable::IScan> {
+        try {
+            const auto found = self->GetUserTables().find(pathId.LocalPathId);
+            if (!self->IsStateActive() || found == self->GetUserTables().end() ||
+                found->second->LocalTid != tableId || found->second->GetTableSchemaVersion() != schemaVersion) {
+                fail("Table changed while waiting for scan admission", true);
+                return {};
+            }
+            const auto& req = pending->Event->Get()->Record;
+            bool explicitSnapshot = false;
+            if constexpr (requires { req.HasSnapshotStep(); }) {
+                explicitSnapshot = req.HasSnapshotStep() || req.HasSnapshotTxId();
+                if (explicitSnapshot) {
+                    const TSnapshotKey key(pathId, req.GetSnapshotStep(), req.GetSnapshotTxId());
+                    if (!self->GetSnapshotManager().FindAvailable(key)) {
+                        fail("Requested snapshot expired while waiting for scan admission", false);
+                        return {};
+                    }
+                }
+            }
+            if (!explicitSnapshot) {
+                // HEAD reads choose their point when the scan actually starts;
+                // registered snapshots keep the version requested by the sender.
+                opts.SetSnapshotRowVersion(self->GetMvccTxVersion(EMvccTxMode::ReadOnly));
+            }
+            const auto* version = std::get_if<TScanOptions::TSnapshotByRowVersion>(&opts.Snapshot);
+            Y_ENSURE(version);
+            if (self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(version->RowVersion)) {
+                fail("Waiting for volatile transactions at the admitted scan version", true);
+                return {};
+            }
+            auto scan = makeScan(*found->second, req, pending->Event->Sender, std::move(pending->Response));
+            scan->SetRowBytesLimit(rowLimit);
+            return scan;
+        } catch (const std::exception& exc) {
+            fail(TStringBuilder() << "Cannot initialize admitted index scan: " << exc.what(), false);
+            return {};
+        }
+    };
+    const ui64 serial = self->QueueScan(tableId, {}, 0, options);
+    manager.Set(id, seqNo).push_back(serial);
 }
 
 template<typename TResponse>

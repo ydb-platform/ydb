@@ -619,6 +619,8 @@ class TExecutor
     void Handle(NSharedCache::TEvUpdated::TPtr &ev);
     void Handle(NSharedCache::TEvStickyCollectionPages::TPtr &ev);
     void Handle(NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr&);
+    void Handle(NResourceBroker::TEvResourceBroker::TEvTaskOperationError::TPtr&);
+    void Handle(NOps::TEvAdmissionTimeout::TPtr&);
     void Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx);
     void Handle(NOps::TEvResult::TPtr &ev);
     void ProcessIoStats(

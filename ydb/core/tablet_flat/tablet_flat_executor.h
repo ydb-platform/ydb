@@ -12,6 +12,8 @@
 #include <util/generic/maybe.h>
 #include <util/system/type_name.h>
 #include <util/generic/variant.h>
+#include <functional>
+#include <memory>
 
 ////////////////////////////////////////////
 namespace NKikimr {
@@ -418,6 +420,7 @@ struct TScanOptions {
     struct TResourceBrokerOptions {
         TString Type;
         ui32 Prio;
+        ui64 Memory = 0;
     };
 
     struct TResourceBrokerDisabled {
@@ -444,6 +447,13 @@ struct TScanOptions {
         ui32 PoolId;
     };
 
+    // Only lightweight state is retained until the broker grants resources.
+    // The factory runs on the owning tablet's mailbox, before snapshot capture.
+    std::shared_ptr<void> PendingReservation;
+    std::function<TAutoPtr<NTable::IScan>(TScanOptions&)> Factory;
+    std::function<void(const TString&, bool)> OnAdmissionFailure;
+    TDuration QueueTimeout;
+
     EReadPrio ReadPrio = EReadPrio::Default;
     std::variant<TReadAheadDefaults, TReadAheadOptions> ReadAhead;
     std::variant<TResourceBrokerDefaults, TResourceBrokerOptions, TResourceBrokerDisabled> ResourceBroker;
@@ -460,8 +470,8 @@ struct TScanOptions {
         return *this;
     }
 
-    TScanOptions& SetResourceBroker(TString type, ui32 prio) {
-        ResourceBroker = TResourceBrokerOptions{ std::move(type), prio };
+    TScanOptions& SetResourceBroker(TString type, ui32 prio, ui64 memory = 0) {
+        ResourceBroker = TResourceBrokerOptions{ std::move(type), prio, memory };
         return *this;
     }
 

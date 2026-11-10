@@ -35,4 +35,12 @@ message TDataShardConfig {
     optional uint32 KeyAccessSampleCollectionMinIntervalSeconds = 27 [default = 5];
     optional uint32 KeyAccessSampleCollectionMaxIntervalSeconds = 28 [default = 60];
     optional uint32 KeyAccessSampleValidityIntervalSeconds = 29 [default = 30];
+    // Limits apply to admission-aware index-build requests across the node.
+    optional uint32 BuildIndexPendingScansLimit = 100 [default = 128];
+    optional uint64 BuildIndexPendingBytesLimit = 101 [default = 67108864]; // 64 MiB
+    optional uint64 BuildIndexRequestBytesLimit = 102 [default = 16777216]; // 16 MiB
+    optional uint32 BuildIndexQueueTimeoutMs = 103 [default = 60000];
+    optional uint64 BuildIndexScanMemoryLimit = 104 [default = 1073741824]; // 1 GiB
+    optional uint64 BuildIndexRowBytesLimit = 105 [default = 8388608]; // 8 MiB
+    optional uint32 BuildIndexBatchRowsLimit = 106 [default = 10000];
 }

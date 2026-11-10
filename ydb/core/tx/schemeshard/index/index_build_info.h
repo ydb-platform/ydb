@@ -1,6 +1,7 @@
 #pragma once
 
 #include "index_utils.h"
+#include <ydb/core/base/scan_admission.h>
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
@@ -14,6 +15,11 @@ struct TIndexBuildShardStatus {
     TSerializedTableRange Range;
     TString LastKeyAck;
     ui64 SeqNoRound = 0;
+    // Ephemeral credits: destruction also returns them on reset/cancellation.
+    std::shared_ptr<TScanAdmissionControl::TLease> RequestReservation;
+    ui64 RequestBytes = 0;
+    TInstant AdmissionRetryAt;
+    ui32 AdmissionRetries = 0;
     size_t Index = 0; // used only in prefixed vector index: a unique number of shard in the list
 
     // Used in fulltext index build:
@@ -201,6 +207,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     ui64 SenderCookie = 0;
 
     TIndexBuildId Id;
+    TInstant AdmissionRetryScheduledAt;
     TString Uid;
     TMaybe<TString> UserSID;
 

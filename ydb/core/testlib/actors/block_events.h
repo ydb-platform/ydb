@@ -37,7 +37,7 @@ namespace NActors {
                 ui32 nodeId = ev->GetRecipientRewrite().NodeId();
                 ui32 nodeIdx = nodeId - Runtime.GetFirstNodeId();
                 Cerr << "... unblocking " << (ev->HasEvent() ? TypeName(*ev->GetBase()) : TypeName<TEvType>())
-                    << " from " << Runtime.FindActorName(ev->Sender)
+                    << " from " << ev->Sender.ToString()
                     << " to " << Runtime.FindActorName(ev->GetRecipientRewrite())
                     << Endl;
                 Runtime.Send(ev.Release(), nodeIdx, /* viaActorSystem */ true);
@@ -72,7 +72,7 @@ namespace NActors {
             }
 
             Cerr << "... blocking " << (ev->HasEvent() ? TypeName(*ev->GetBase()) : TypeName<TEvType>())
-                << " from " << Runtime.FindActorName(ev->Sender)
+                << " from " << ev->Sender.ToString()
                 << " to " << Runtime.FindActorName(ev->GetRecipientRewrite())
                 << " cookie " << ptr->Cookie
                 << Endl;

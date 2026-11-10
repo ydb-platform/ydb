@@ -1791,6 +1791,8 @@ message TEvSampleKRequest {
     optional Ydb.Table.VectorIndexSettings Settings = 13;
 
     optional bool SkipEmptyColumns = 14;
+    // The sender understands admission overload and delayed retries.
+    optional bool AllowMemoryAdmission = 100 [default = false];
 }
 
 message TEvSampleKResponse {
@@ -1810,6 +1812,8 @@ message TEvSampleKResponse {
 
     reserved 6 to 7;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+    // Admission failed before any rows were processed; status is ABORTED.
+    optional uint32 RetryAfterMs = 100;
 }
 
 enum EKMeansState {
@@ -1863,6 +1867,8 @@ message TEvLocalKMeansRequest {
     optional bool OverlapOutForeign = 26;
 
     optional NKikimrTx.TKeyRange KeyRange = 27;
+    // The sender understands admission overload and delayed retries.
+    optional bool AllowMemoryAdmission = 100 [default = false];
 }
 
 message TEvLocalKMeansResponse {
@@ -1882,6 +1888,8 @@ message TEvLocalKMeansResponse {
     optional bool IsEmpty = 13;
 
     optional bytes LastKeyAck = 14;
+    // Admission failed before any rows were processed; status is ABORTED.
+    optional uint32 RetryAfterMs = 100;
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1921,6 +1929,8 @@ message TEvReshuffleKMeansRequest {
     optional bool OverlapOutForeign = 20;
 
     optional NKikimrTx.TKeyRange KeyRange = 21;
+    // The sender understands admission overload and delayed retries.
+    optional bool AllowMemoryAdmission = 100 [default = false];
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1941,6 +1951,8 @@ message TEvReshuffleKMeansResponse {
     optional bytes LastKeyAck = 13;
 
     repeated uint32 EmptyClusters = 14;
+    // Admission failed before any rows were processed; status is ABORTED.
+    optional uint32 RetryAfterMs = 100;
 }
 
 message TEvRecomputeKMeansRequest {
@@ -1965,6 +1977,8 @@ message TEvRecomputeKMeansRequest {
     optional string EmbeddingColumn = 11;
 
     optional bool SkipOverlapForeign = 12;
+    // The sender understands admission overload and delayed retries.
+    optional bool AllowMemoryAdmission = 100 [default = false];
 }
 
 message TEvRecomputeKMeansResponse {
@@ -1985,6 +1999,8 @@ message TEvRecomputeKMeansResponse {
 
     reserved 8 to 9;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+    // Admission failed before any rows were processed; status is ABORTED.
+    optional uint32 RetryAfterMs = 100;
 }
 
 message TEvIncrementalRestoreResponse {
@@ -2049,6 +2065,8 @@ message TEvPrefixKMeansRequest {
 
     optional bool Adaptive = 25;
     optional uint32 Levels = 26;
+    // The sender understands admission overload and delayed retries.
+    optional bool AllowMemoryAdmission = 100 [default = false];
 }
 
 message TEvPrefixKMeansResponse {
@@ -2067,6 +2085,8 @@ message TEvPrefixKMeansResponse {
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 
     optional bytes LastKeyAck = 13;
+    // Admission failed before any rows were processed; status is ABORTED.
+    optional uint32 RetryAfterMs = 100;
 }
 
 // Applies main table changes in (FromSnapshot, ToSnapshot] to the shadow copy of
@@ -2164,6 +2184,8 @@ message TEvFilterKMeansRequest {
     // and thus not copied directly but returned to the schemeshard
     optional bool SkipFirstKey = 14;
     optional bool SkipLastKey = 15;
+    // The sender understands admission overload and delayed retries.
+    optional bool AllowMemoryAdmission = 100 [default = false];
 }
 
 message TEvFilterKMeansResponse {
@@ -2183,6 +2205,8 @@ message TEvFilterKMeansResponse {
     // First and last key rows if skipped in the scan
     repeated bytes FirstKeyRows = 9;
     repeated bytes LastKeyRows = 10;
+    // Admission failed before any rows were processed; status is ABORTED.
+    optional uint32 RetryAfterMs = 100;
 }
 
 enum EFulltextIndexType {

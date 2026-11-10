@@ -188,6 +188,7 @@ public:
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
+        Uploader.SetResourceReservation(GetResourceReservation());
 
         return {EScan::Feed, {}};
     }
@@ -228,6 +229,7 @@ public:
                 {"debug", Debug()},
                 {"responseRecord", Response->Record.ShortDebugString()});
         }
+        Response->MemoryReservation = GetResourceReservation();
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -828,19 +830,42 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error);
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error, NKikimr::NKMeans::EClustersMode::AssignOnly);
         if (!clusters && !NKikimr::NKMeans::ValidateSettingsPartial(request.GetSettings(), error)) {
             badRequest(error);
             auto sent = trySendBadRequest();
             Y_ENSURE(sent);
             return;
         }
-        TAutoPtr<NTable::IScan> scan = new TLocalKMeansScan(
-            TabletID(), userTable, request, ev->Sender, std::move(response),
-            std::move(lead), std::move(clusters)
-        );
-
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+        clusters.reset();
+        StartDeferredBuildIndexScan<TEvDataShard::TEvLocalKMeansRequest, TEvDataShard::TEvLocalKMeansResponse>(
+            this, ev, std::move(response), rowVersion, userTable.LocalTid,
+            [tabletId = TabletID()](const TUserTable& table, const auto& req, TActorId sender, auto reply) -> TAutoPtr<NTable::IScan> {
+                NTable::TLead lead;
+                TCell from = TCell::Make(req.GetParentFrom() - 1);
+                TCell to = TCell::Make(req.GetParentTo());
+                TTableRange parentRange{{&from, 1}, false, {&to, 1}, true};
+                if (!req.GetParentFrom()) {
+                    parentRange = table.Range.ToTableRange();
+                }
+                if (req.HasKeyRange()) {
+                    TSerializedTableRange resume;
+                    resume.Load(req.GetKeyRange());
+                    const auto range = Intersect(table.KeyColumnTypes, resume.ToTableRange(),
+                        Intersect(table.KeyColumnTypes, parentRange, table.Range.ToTableRange()));
+                    Y_ENSURE(!range.IsEmptyRange(table.KeyColumnTypes), "Scan range changed during admission");
+                    lead = CreateLeadFrom(range);
+                } else if (!req.GetParentFrom()) {
+                    lead.To({}, NTable::ESeek::Lower);
+                } else {
+                    lead.To(parentRange.From, NTable::ESeek::Upper);
+                    lead.Until(parentRange.To, true);
+                }
+                TString error;
+                auto clusters = NKikimr::NKMeans::CreateClusters(req.GetSettings(), req.GetNeedsRounds(), error);
+                Y_ENSURE(clusters || NKikimr::NKMeans::ValidateSettingsPartial(req.GetSettings(), error), error);
+                return new TLocalKMeansScan(tabletId, table, req, sender, std::move(reply), std::move(lead), std::move(clusters));
+            });
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvLocalKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TLocalKMeansScan");
     }

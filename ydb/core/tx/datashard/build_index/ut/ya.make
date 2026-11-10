@@ -13,6 +13,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    contrib/libs/tcmalloc/malloc_extension
     ydb/core/tx/datashard/ut_common
     library/cpp/getopt
     library/cpp/regex/pcre
@@ -43,6 +44,7 @@ SRCS(
     ut_sample_k.cpp
     ut_secondary_index.cpp
     ut_unique_index.cpp
+    ut_upload_memory.cpp
 )
 
 END()

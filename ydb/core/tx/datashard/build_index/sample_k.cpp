@@ -50,6 +50,7 @@ protected:
     const TSerializedTableRange TableRange;
     const TSerializedTableRange RequestedRange;
     const ui64 K;
+    const ui64 SampleRowBytesLimit;
     bool SkipForeign = false;
     bool SkipEmptyColumns = false;
     NTable::TPos IsForeignPos = 0;
@@ -78,7 +79,7 @@ public:
         return NKikimrServices::TActivity::SAMPLE_K_SCAN_ACTOR;
     }
 
-    TSampleKScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvSampleKRequest& request,
+    TSampleKScan(ui64 tabletId, const TUserTable& table, const NKikimrTxDataShard::TEvSampleKRequest& request,
                  const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
                  const TSerializedTableRange& range, std::unique_ptr<IClusters>&& clusters)
         : TActor(&TThis::StateWork)
@@ -87,6 +88,8 @@ public:
         , TableRange(table.Range)
         , RequestedRange(range)
         , K(request.GetK())
+        , SampleRowBytesLimit((request.HasSettings() ? ui64(request.GetSettings().vector_dimension()) * 4
+            : AppData()->DataShardConfig.GetBuildIndexRowBytesLimit()) + 256 + ui64(request.ColumnsSize()) * 32)
         , SkipEmptyColumns(request.GetSkipEmptyColumns())
         , TabletId(tabletId)
         , BuildId(request.GetId())
@@ -160,6 +163,14 @@ public:
             return EScan::Feed;
         }
 
+        if (GetRowBytesLimit()) {
+            ui64 bytes = 2 + ui64(row.Size()) * 4;
+            for (const auto& cell : *row) {
+                Y_ENSURE(bytes <= SampleRowBytesLimit && cell.Size() <= SampleRowBytesLimit - bytes,
+                    "Sample row exceeds the memory reservation");
+                bytes += cell.Size();
+            }
+        }
         if (SkipForeign) {
             bool foreign = row.Get(IsForeignPos).AsValue<bool>();
             if (foreign) {
@@ -236,6 +247,7 @@ public:
                 {"debug", Debug()},
                 {"responseRecord", ToShortDebugString(Response->Record)});
         }
+        Response->MemoryReservation = GetResourceReservation();
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -419,11 +431,17 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
             return;
         }
 
-        // 4. Creating scan
-        TAutoPtr<NTable::IScan> scan = new TSampleKScan(TabletID(), userTable,
-            request, ev->Sender, std::move(response), requestedRange, std::move(clusters));
-
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+        clusters.reset();
+        StartDeferredBuildIndexScan<TEvDataShard::TEvSampleKRequest, TEvDataShard::TEvSampleKResponse>(
+            this, ev, std::move(response), rowVersion, userTable.LocalTid,
+            [tabletId = TabletID()](const TUserTable& table, const auto& req, TActorId sender, auto reply) -> TAutoPtr<NTable::IScan> {
+                TString error;
+                auto clusters = req.HasSettings() ? NKikimr::NKMeans::CreateClusters(req.GetSettings(), 0, error) : nullptr;
+                Y_ENSURE(!req.HasSettings() || clusters, error);
+                TSerializedTableRange range;
+                range.Load(req.GetKeyRange());
+                return new TSampleKScan(tabletId, table, req, sender, std::move(reply), range, std::move(clusters));
+            });
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvSampleKResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TSampleKScan");
     }

@@ -1,5 +1,8 @@
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/base/scan_admission.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
@@ -142,6 +145,104 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/HnswApiTable"), {NLs::IndexesCount(0)});
     }
 
+
+    Y_UNIT_TEST_TWIN(SenderWindowIsSharedAcrossBuilds, ByBytes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        ui64 schemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, schemeShard);
+        for (const TString name : {"TableA", "TableB"}) {
+            TestCreateTable(runtime, schemeShard, ++txId, "/MyRoot/ServerLessDB", TStringBuilder()
+                << "Name: \"" << name << "\" "
+                << R"(Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "embedding" Type: "String" }
+                    Columns { Name: "prefix" Type: "Uint32" }
+                    Columns { Name: "value" Type: "String" }
+                    KeyColumnNames: ["key"])");
+            env.TestWaitNotification(runtime, txId, schemeShard);
+            WriteVectorTableRows(runtime, schemeShard, ++txId, TStringBuilder() << "/MyRoot/ServerLessDB/" << name, 0, 0, 200);
+        }
+        auto& config = runtime.GetAppData().SchemeShardConfig;
+        config.SetIndexBuildRequestCountLimit(ByBytes ? 128 : 1);
+        ui32 requests = 0;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvLocalKMeansRequest>([&](auto& event) {
+            ++requests;
+            if (ByBytes && requests == 1) {
+                const auto& rec = event->Get()->Record;
+                config.SetIndexBuildRequestBytesLimit(rec.SpaceUsedLong() + rec.ByteSizeLong() + 4_KB + 1024);
+            }
+        });
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> replies(runtime);
+        const ui64 first = ++txId;
+        TestBuildVectorIndex(runtime, first, schemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/TableA", "index1", {"embedding"});
+        runtime.WaitFor("first build holds sender credits", [&] { return replies.size() > 0; });
+        const ui64 second = ++txId;
+        TestBuildVectorIndex(runtime, second, schemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/TableB", "index1", {"embedding"});
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(requests, 1);
+        replies.Stop().Unblock();
+        env.TestWaitNotification(runtime, first, schemeShard);
+        env.TestWaitNotification(runtime, second, schemeShard);
+        UNIT_ASSERT_GE(requests, 2);
+        for (const ui64 build : {first, second}) {
+            const auto result = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        }
+    }
+
+    Y_UNIT_TEST(AdmissionOverloadRetriesAfterDelay) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        ui64 schemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, schemeShard);
+        TestCreateTable(runtime, schemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix" Type: "Uint32" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, schemeShard);
+        WriteVectorTableRows(runtime, schemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+        runtime.GetAppData().SchemeShardConfig.SetIndexBuildRequestCountLimit(1);
+        runtime.GetAppData().DataShardConfig.SetBuildIndexPendingScansLimit(0);
+        TInstant rejectedAt;
+        ui32 rejections = 0;
+        ui32 retries = 0;
+        auto observeRequest = [&](auto& event) {
+            UNIT_ASSERT(event->Get()->Record.GetAllowMemoryAdmission());
+            if (rejectedAt) {
+                UNIT_ASSERT_C(runtime.GetCurrentTime() >= rejectedAt + TDuration::MilliSeconds(1000),
+                    "Admission overload retried before the retry hint");
+                ++retries;
+            }
+        };
+        auto sampleRequests = runtime.AddObserver<TEvDataShard::TEvSampleKRequest>(observeRequest);
+        auto localRequests = runtime.AddObserver<TEvDataShard::TEvLocalKMeansRequest>(observeRequest);
+        auto observeResponse = [&](const auto& event) {
+            const auto& record = event->Get()->Record;
+            if (record.GetRetryAfterMs()) {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrIndexBuilder::ABORTED);
+                ++rejections;
+                rejectedAt = runtime.GetCurrentTime();
+                runtime.GetAppData().DataShardConfig.SetBuildIndexPendingScansLimit(128);
+            }
+            return false;
+        };
+        TBlockEvents<TEvDataShard::TEvSampleKResponse> sampleReplies(runtime, observeResponse);
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localReplies(runtime, observeResponse);
+        const ui64 build = ++txId;
+        TestBuildVectorIndex(runtime, build, schemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, build, schemeShard);
+        UNIT_ASSERT_VALUES_EQUAL(rejections, 1);
+        UNIT_ASSERT_GT(retries, 0);
+        const auto result = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GetAppData().BuildIndexScanAdmission->GetUsage().Count, 0);
+    }
 
     Y_UNIT_TEST(CreateAndDrop) {
         TTestBasicRuntime runtime;

@@ -131,6 +131,9 @@ private:
         ui64 SentOverloadSeqNo = 0;
     };
 
+protected:
+    std::shared_ptr<void> MemoryReservation;
+private:
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
@@ -1197,6 +1200,7 @@ private:
         Y_ABORT_UNLESS(ShardRepliesLeft.contains(shardId));
 
         auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
+        ev->MemoryReservation = MemoryReservation;
         ev->Record = state->Headers;
         if (UserCtx != nullptr) {
             UserCtx->SerializeToEvent(ev->Record);
@@ -1247,6 +1251,7 @@ private:
             if (!ev) {
                 shardRequests[shardIdx].reset(new TEvDataShard::TEvUploadRowsRequest());
                 ev = shardRequests[shardIdx].get();
+                ev->MemoryReservation = MemoryReservation;
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
                 if (UserCtx != nullptr) {
                     UserCtx->SerializeToEvent(ev->Record);

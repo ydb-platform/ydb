@@ -75,6 +75,17 @@ void TSchemeShard::Handle(TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& ev, c
     Execute(CreateTxReply(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildRetry::TPtr& ev, const TActorContext& ctx) {
+    const TIndexBuildId id(ev->Get()->BuildId);
+    if (const auto* found = IndexBuilds.FindPtr(id)) {
+        auto& build = **found;
+        if (build.AdmissionRetryScheduledAt == ev->Get()->Deadline) {
+            build.AdmissionRetryScheduledAt = {};
+            Execute(CreateTxProgress(id), ctx);
+        }
+    }
+}
+
 void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxBilling(ev), ctx);
 }

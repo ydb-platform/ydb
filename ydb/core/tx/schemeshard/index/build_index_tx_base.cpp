@@ -34,6 +34,12 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
             buildInfo.EndTime = TAppData::TimeProvider->Now();
         }
         buildInfo.State = state;
+        if (state != TIndexBuildInfo::EState::Filling) {
+            for (auto& [_, shard] : buildInfo.Shards) {
+                shard.RequestReservation.reset();
+            }
+            buildInfo.AdmissionRetryScheduledAt = {};
+        }
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistBuildIndexState(db, buildInfo);
@@ -74,7 +80,18 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyOnComplete(const TActorContext& 
     ApplySchedule(ctx);
 }
 
+void TSchemeShard::TIndexBuilder::TTxBase::ScheduleProgress(TIndexBuildInfo& build, TInstant deadline) {
+    if (!build.AdmissionRetryScheduledAt || deadline < build.AdmissionRetryScheduledAt) {
+        build.AdmissionRetryScheduledAt = deadline;
+        ToScheduleProgress.emplace_back(build.Id, deadline);
+    }
+}
+
 void TSchemeShard::TIndexBuilder::TTxBase::ApplySchedule(const TActorContext& ctx) {
+    for (const auto& [id, deadline] : ToScheduleProgress) {
+        ctx.Schedule(Max(TDuration::MilliSeconds(1), deadline - ctx.Now()),
+            new TEvPrivate::TEvIndexBuildRetry(ui64(id), deadline));
+    }
     for (const auto& rec: ToScheduleBilling) {
         ctx.Schedule(
             std::get<1>(rec),

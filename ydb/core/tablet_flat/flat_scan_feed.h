@@ -11,9 +11,12 @@ namespace NKikimr {
 namespace NTable {
 
     class TFeed {
+        // Outlives the driver's snapshot and iterator during actor teardown.
+        std::shared_ptr<void> ResourceReservation;
     public:
         TFeed(IScan *scan, const TSubset &subset, TRowVersion snapshot = TRowVersion::Max())
-            : Scan(scan)
+            : ResourceReservation(scan->GetResourceReservation())
+            , Scan(scan)
             , Subset(subset)
             , SnapshotVersion(snapshot)
             , VersionScan(dynamic_cast<IVersionScan*>(scan))
@@ -148,6 +151,17 @@ namespace NTable {
                     switch (VersionState) {
                         case EVersionState::BeginKey:
                             if (!VersionScan) {
+                                if (const ui64 limit = Scan->GetRowBytesLimit()) {
+                                    ui64 bytes = 0;
+                                    auto check = [&](auto cells) {
+                                        for (const auto& cell : cells) {
+                                            Y_ENSURE(cell.Size() <= limit - bytes, "Index scan row exceeds BuildIndexRowBytesLimit");
+                                            bytes += cell.Size();
+                                        }
+                                    };
+                                    check(Iter->GetKey().Cells());
+                                    check(*Iter->Row());
+                                }
                                 Seen++;
                                 op = Scan->Feed(Iter->GetKey().Cells(), Iter->Row());
                             } else {

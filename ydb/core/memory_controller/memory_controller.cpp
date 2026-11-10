@@ -1,4 +1,6 @@
 #include "memory_controller.h"
+#include <ydb/core/base/scan_admission.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include "memory_controller_config.h"
 #include "consumer_collection.h"
 #include "memtable_collection.h"
@@ -712,9 +714,14 @@ private:
     }
 
     void ProcessResourceBrokerConfig(const TActorContext& ctx, NKikimrMemory::TMemoryStats& memoryStats, ui64 hardLimitBytes, ui64 activitiesLimitBytes) {
+        const ui64 indexBuildLimit = Min(GetIndexBuildLimitBytes(Config, hardLimitBytes), activitiesLimitBytes);
+        const ui64 pendingLimit = Min(AppData()->DataShardConfig.GetBuildIndexPendingBytesLimit(), indexBuildLimit / 8);
+        AppData()->BuildIndexScanAdmission->SetTotalLimit(indexBuildLimit);
+        Counters->GetCounter("Consumer/IndexBuild/Limit")->Set(indexBuildLimit);
         TResourceBrokerConfig config{
-            .LimitBytes = activitiesLimitBytes,
+            .LimitBytes = activitiesLimitBytes - pendingLimit,
             .QueueLimits = {
+                {"queue_build_index", indexBuildLimit - pendingLimit},
                 {NLocalDb::KqpResourceManagerQueue, GetQueryExecutionLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionIndexationQueue, GetColumnTablesCompactionIndexationQueueLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionTtlQueue, GetColumnTablesTtlQueueLimitBytes(Config, hardLimitBytes)},
@@ -725,7 +732,7 @@ private:
 
         for (auto &[name, limitBytes] : ResourceBrokerSelfConfig.QueueLimits) {
             if (config.QueueLimits.contains(name)) {
-                config.QueueLimits[name] = limitBytes; // for backward compatibility
+                config.QueueLimits[name] = name == "queue_build_index" ? Min(config.QueueLimits[name], limitBytes) : limitBytes; // for backward compatibility
             }
         }
 

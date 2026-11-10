@@ -167,6 +167,7 @@ public:
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
+        Uploader.SetResourceReservation(GetResourceReservation());
 
         return {EScan::Feed, {}};
     }
@@ -211,6 +212,7 @@ public:
                 {"debug", Debug()},
                 {"responseRecord", Response->Record.ShortDebugString()});
         }
+        Response->MemoryReservation = GetResourceReservation();
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -582,12 +584,12 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error);
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error, NKikimr::NKMeans::EClustersMode::AssignOnly);
         if (!clusters) {
             badRequest(error);
         } else if (request.ClustersSize() < 1) {
             badRequest("Should be requested for at least one cluster");
-        } else if (!clusters->SetClusters(TVector<TString>{request.GetClusters().begin(), request.GetClusters().end()})) {
+        } else if (!std::all_of(request.GetClusters().begin(), request.GetClusters().end(), [&](const TString& value) { return clusters->IsExpectedFormat({value.data(), value.size()}); })) {
             badRequest("Clusters have invalid format");
         }
 
@@ -595,11 +597,25 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
             return;
         }
 
-        TAutoPtr<NTable::IScan> scan = new TReshuffleKMeansScan(
-            TabletID(), userTable, std::move(lead), request, ev->Sender, std::move(response), std::move(clusters)
-        );
-
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+        clusters.reset();
+        StartDeferredBuildIndexScan<TEvDataShard::TEvReshuffleKMeansRequest, TEvDataShard::TEvReshuffleKMeansResponse>(
+            this, ev, std::move(response), rowVersion, userTable.LocalTid,
+            [tabletId = TabletID()](const TUserTable& table, const auto& req, TActorId sender, auto reply) -> TAutoPtr<NTable::IScan> {
+                NTable::TLead lead;
+                if (req.GetParent() == 0) {
+                    lead.To({}, NTable::ESeek::Lower);
+                } else {
+                    TCell from, to;
+                    const auto range = CreateRangeFrom(table, req.GetParent(), from, to);
+                    Y_ENSURE(!range.IsEmptyRange(table.KeyColumnTypes), "Scan range changed during admission");
+                    lead = CreateLeadFrom(range);
+                }
+                TString error;
+                auto clusters = NKikimr::NKMeans::CreateClusters(req.GetSettings(), 0, error, NKikimr::NKMeans::EClustersMode::AssignOnly);
+                Y_ENSURE(clusters, error);
+                Y_ENSURE(clusters->SetClusters(TVector<TString>{req.GetClusters().begin(), req.GetClusters().end()}), "Invalid clusters");
+                return new TReshuffleKMeansScan(tabletId, table, std::move(lead), req, sender, std::move(reply), std::move(clusters));
+            });
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvReshuffleKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TReshuffleKMeansScan");
     }

@@ -91,6 +91,8 @@ protected:
     TVector<TSerializedCellVec> LastKeyRows;
     TVector<TSerializedCellVec> LastRows;
     ui32 KeyColumnCount = 0;
+    ui64 FirstKeyBytes = 0;
+    ui64 LastRowsBytes = 0;
 
     ui32 RetryCount = 0;
 
@@ -190,6 +192,7 @@ public:
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
+        Uploader.SetResourceReservation(GetResourceReservation());
 
         return {EScan::Feed, {}};
     }
@@ -225,6 +228,7 @@ public:
                 {"debug", Debug()},
                 {"responseRecord", ToShortDebugString(Response->Record)});
         }
+        Response->MemoryReservation = GetResourceReservation();
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -354,6 +358,24 @@ protected:
             << " " << Uploader.Debug();
     }
 
+    void RetainRow(TVector<TSerializedCellVec>& rows, ui64& retainedBytes, TArrayRef<const TCell> cells) {
+        if (const ui64 rowLimit = GetRowBytesLimit()) {
+            // A key may span many source rows. Bound this independently of the
+            // uploader, which cannot flush until the whole group is filtered.
+            const ui64 limit = ScanSettings.GetMaxBatchBytes() + rowLimit * OverlapClusters;
+            ui64 bytes = 0;
+            for (const auto& cell : cells) {
+                bytes += cell.Size();
+            }
+            const ui64 rowCountLimit = ui64(ScanSettings.GetMaxBatchRows()) + 1 + ui64(OverlapClusters) * OverlapClusters;
+            Y_ENSURE(rows.size() < rowCountLimit &&
+                retainedBytes <= limit && bytes <= limit - retainedBytes,
+                "Filter key group exceeds the memory reservation");
+            retainedBytes += bytes;
+        }
+        rows.emplace_back(cells);
+    }
+
     void Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         TVector<TCell> fullRow(key.begin(), key.end());
@@ -362,11 +384,11 @@ protected:
         if (SkipFirstKey) {
             if (!FirstIndexKey) {
                 FirstIndexKey = TSerializedCellVec(pk);
-                FirstKeyRows.push_back(TSerializedCellVec(fullRow));
+                RetainRow(FirstKeyRows, FirstKeyBytes, fullRow);
                 return;
             }
             if (TCellVectorsEquals{}(pk, FirstIndexKey.GetCells())) {
-                FirstKeyRows.push_back(TSerializedCellVec(fullRow));
+                RetainRow(FirstKeyRows, FirstKeyBytes, fullRow);
                 return;
             } else {
                 // first key skipping is finished
@@ -380,13 +402,14 @@ protected:
         if (!LastIndexKey) {
             LastIndexKey = TSerializedCellVec(pk);
         }
-        LastRows.push_back(TSerializedCellVec(fullRow));
+        RetainRow(LastRows, LastRowsBytes, fullRow);
     }
 
     void FinishKey(bool last)
     {
         if (last && SkipLastKey) {
             LastKeyRows = std::move(LastRows);
+            LastRowsBytes = 0;
         } else if (LastRows.size() > 0) {
             NKikimr::NKMeans::FilterOverlapRows(LastRows, KeyColumnCount+DistancePos, OverlapClusters, OverlapRatio);
             TVector<TCell> pk(KeyColumnCount);
@@ -402,6 +425,7 @@ protected:
         }
         LastIndexKey = {};
         LastRows.clear();
+        LastRowsBytes = 0;
     }
 };
 
@@ -522,11 +546,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, cons
             return;
         }
 
-        TAutoPtr<NTable::IScan> scan = new TFilterKMeansScan(
-            TabletID(), userTable, request, ev->Sender, std::move(response)
-        );
-
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+        StartDeferredBuildIndexScan<TEvDataShard::TEvFilterKMeansRequest, TEvDataShard::TEvFilterKMeansResponse>(
+            this, ev, std::move(response), rowVersion, userTable.LocalTid,
+            [tabletId = TabletID()](const TUserTable& table, const auto& req, TActorId sender, auto reply) -> TAutoPtr<NTable::IScan> {
+                return new TFilterKMeansScan(tabletId, table, req, sender, std::move(reply));
+            });
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvFilterKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TFilterKMeansScan");
     }

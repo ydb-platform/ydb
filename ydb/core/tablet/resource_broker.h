@@ -76,6 +76,9 @@ struct TEvResourceBroker {
          */
         ui64 TabletId = 0;
         ui32 FollowerId = 0;
+        // A shared allocation lease will finish this task after the submitting
+        // actor dies. Used for buffers still owned by asynchronous children.
+        bool KeepOnClientDeath = false;
     };
 
     struct TEvSubmitTask : public TEventLocal<TEvSubmitTask, EvSubmitTask> {
@@ -123,7 +126,8 @@ struct TEvResourceBroker {
             // Cannot remove task in-fly.
             TASK_IN_FLY,
             // Cannot finish task which is still in queue.
-            TASK_IN_QUEUE
+            TASK_IN_QUEUE,
+            MEMORY_LIMIT_EXCEEDED
         };
 
         ECode Code;

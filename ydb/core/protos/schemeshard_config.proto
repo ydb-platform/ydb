@@ -47,4 +47,8 @@ message TSchemeShardConfig {
 
     // maximum recent index build operations to maintain (older ones are removed)
     optional uint32 MaxStoredIndexBuilds = 11 [default = 1000];
+    // Aggregate vector scan request window, across all builds on this SchemeShard.
+    optional uint32 IndexBuildRequestCountLimit = 12 [default = 128];
+    optional uint64 IndexBuildRequestBytesLimit = 13 [default = 67108864];
+    optional uint32 IndexBuildRequestsPerBuild = 14 [default = 32];
 }

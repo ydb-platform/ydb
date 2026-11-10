@@ -6,6 +6,7 @@
 #include "util_fmt_line.h"
 #include "util_fmt_abort.h"
 #include "flat_util_misc.h"
+#include <atomic>
 #include "tablet_flat_executor.h"
 
 namespace NKikimr {
@@ -47,6 +48,29 @@ namespace NTabletFlatExecutor {
             }
 
             const ui64 Serial;
+            bool ManagedLease = false;
+        };
+
+        // The last scan/upload buffer owner returns the broker reservation.
+        // It deliberately outlives executor/tablet shutdown when children still
+        // own memory. The broker's cookie contains no strong reference to it.
+        struct TTaskLease {
+            TActorSystem* const System;
+            const TActorId Client;
+            const ui64 TaskId;
+            std::atomic<bool> Cancel{true};
+            bool Armed = true;
+
+            TTaskLease(TActorSystem* system, TActorId client, ui64 taskId)
+                : System(system), Client(client), TaskId(taskId)
+            {}
+
+            ~TTaskLease() {
+                if (Armed) {
+                    System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
+                        new TEvResourceBroker::TEvFinishTask(TaskId, Cancel.load(std::memory_order_acquire))));
+                }
+            }
         };
 
         struct TOne : public TIntrusiveListItem<TOne> {
@@ -79,6 +103,7 @@ namespace NTabletFlatExecutor {
 
             const ui64 Serial;
             const ui32 Table;
+            std::shared_ptr<TTaskLease> Lease;
             TScanOptions Options;
             THolder<TScanSnapshot> Snapshot;
             EState State = EState::None;
@@ -122,11 +147,14 @@ namespace NTabletFlatExecutor {
          * since executor learns its follower id only during boot.
          */
         TScans(NUtil::ILogger *logger, IOps *ops, TIntrusivePtr<TIdEmitter> emitter,
-                    ITablet *owner, const TActorId& ownerActorId, const ui32& followerId)
+                    ITablet *owner, const TActorId& ownerActorId,
+                    const TActorId& brokerClient, TActorSystem* actorSystem, const ui32& followerId)
             : Logger(logger)
             , Ops(ops)
             , Owner(owner)
             , OwnerActorId(ownerActorId)
+            , BrokerClient(brokerClient)
+            , ActorSystem(actorSystem)
             , Tablet(Owner->TabletID())
             , FollowerId(followerId)
             , Emitter(std::move(emitter))
@@ -166,6 +194,7 @@ namespace NTabletFlatExecutor {
             one.Cookie = cookie;
 
             if (options.IsResourceBrokerDisabled()) {
+                Y_ENSURE(!options.Factory, "Deferred scans require broker admission");
                 // A call to Start is expected now
                 one.State = EState::Ready;
                 one.TaskId = 0;
@@ -176,14 +205,24 @@ namespace NTabletFlatExecutor {
 
                 const auto* overrides = std::get_if<TScanOptions::TResourceBrokerOptions>(&options.ResourceBroker);
 
+                auto cookie = MakeIntrusive<TCookie>(one.Serial);
+                const ui64 memory = overrides ? overrides->Memory : 0;
+                if (options.Factory) {
+                    Y_ENSURE(memory, "Deferred scans must declare memory before construction");
+                    one.Lease = std::make_shared<TTaskLease>(ActorSystem, BrokerClient, one.TaskId);
+                    cookie->ManagedLease = true;
+                }
                 auto submit = MakeHolder<TEvResourceBroker::TEvSubmitTask>(
-                            one.TaskId, MakeLabelFor(one),
-                            NResourceBroker::TResourceValues{{ 1, 0 }},
-                            overrides ? overrides->Type : Tables[table].Type,
-                            overrides ? overrides->Prio : Tables[table].Prio,
-                            new TCookie(one.Serial));
+                    one.TaskId, MakeLabelFor(one), NResourceBroker::TResourceValues{{1, memory}},
+                    overrides ? overrides->Type : Tables[table].Type,
+                    overrides ? overrides->Prio : Tables[table].Prio, cookie);
+                submit->Task.KeepOnClientDeath = bool(one.Lease);
                 submit->SetOwner(Tablet, FollowerId);
                 ToBroker(submit.Release());
+                if (options.Factory && options.QueueTimeout) {
+                    TActivationContext::ActorContextFor(BrokerClient).Schedule(options.QueueTimeout,
+                        new NOps::TEvAdmissionTimeout(one.Serial));
+                }
             }
 
             return one.Serial;
@@ -194,7 +233,9 @@ namespace NTabletFlatExecutor {
             auto *one = Lookup(CheckedCast<TCookie*>(cookie)->Serial, false);
 
             if (one == nullptr) {
-                ToBroker(new TEvResourceBroker::TEvFinishTask(task));
+                if (!CheckedCast<TCookie*>(cookie)->ManagedLease) {
+                    ToBroker(new TEvResourceBroker::TEvFinishTask(task));
+                }
 
                 return { };
             } else if (one->State != EState::Task) {
@@ -207,11 +248,57 @@ namespace NTabletFlatExecutor {
             }
         }
 
+        bool Initialize(ui64 serial) {
+            auto& one = *Lookup(serial, true);
+            if (one.Options.Factory) {
+                auto factory = std::move(one.Options.Factory);
+                one.Scan = factory(one.Options);
+                one.Options.PendingReservation.reset();
+            }
+            return bool(one.Scan);
+        }
+
+        TScanOptions& GetOptions(ui64 serial) {
+            return Lookup(serial, true)->Options;
+        }
+
+        bool NeedsSnapshot(ui64 serial) {
+            return !Lookup(serial, true)->Snapshot;
+        }
+
+        void SetSnapshot(ui64 serial, THolder<TScanSnapshot> snapshot) {
+            Lookup(serial, true)->Snapshot = std::move(snapshot);
+        }
+
+        void AdmissionFailed(ui64 serial, const TString& reason, bool submitted = true) {
+            auto* one = Lookup(serial, false);
+            if (!one || one->State > EState::Ready) {
+                return;
+            }
+            if (!submitted && one->Lease) {
+                one->Lease->Armed = false;
+            }
+            auto callback = std::move(one->Options.OnAdmissionFailure);
+            Cancel(*one, EState::Forget);
+            if (callback) {
+                callback(reason, submitted);
+            }
+        }
+
+        void Rejected(const TEvResourceBroker::TEvTaskOperationError& error) {
+            if (error.Cookie) {
+                const auto* resource = CheckedCast<TResource*>(error.Cookie.Get());
+                if (resource->Source == TResource::ESource::Scan) {
+                    AdmissionFailed(CheckedCast<const TCookie*>(resource)->Serial, error.Status.Message, false);
+                }
+            }
+        }
+
         void Start(ui64 serial)
         {
             auto &one = *Lookup(serial, true);
-
             Start(one, { });
+            one.Options.OnAdmissionFailure = {};
         }
 
         ui64 StartSystem(ui32 table, TAutoPtr<IScan> scan, NOps::TConf conf, THolder<TScanSnapshot> snapshot)
@@ -351,6 +438,9 @@ namespace NTabletFlatExecutor {
             }
 
             Y_ENSURE(one.Snapshot);
+            if (one.Lease) {
+                one.Scan->HoldResourceReservation(one.Lease);
+            }
             auto *actor = new NOps::TDriver(one.Serial, one.Scan, conf, std::move(one.Snapshot));
 
             if (auto logl = Logger->Log(NUtil::ELnLev::Info))
@@ -388,7 +478,10 @@ namespace NTabletFlatExecutor {
 
         TScanOutcome Throw(TOne &one, EState last, EStatus status, TAutoPtr<IDestructable> &result)
         {
-            if (auto task = std::exchange(one.TaskId, 0)) {
+            if (one.Lease && status == EStatus::Done) {
+                one.Lease->Cancel.store(false, std::memory_order_release);
+            }
+            if (auto task = std::exchange(one.TaskId, 0); task && !one.Lease) {
                 if (one.State == EState::Task) {
                     ToBroker(new TEvResourceBroker::TEvRemoveTask(task));
                 } else if (one.State > EState::Task) {
@@ -450,6 +543,8 @@ namespace NTabletFlatExecutor {
         IOps * const Ops;
         ITablet * const Owner;
         const TActorId OwnerActorId;
+        const TActorId BrokerClient;
+        TActorSystem* const ActorSystem;
         const ui64 Tablet;
         const ui32& FollowerId;
 

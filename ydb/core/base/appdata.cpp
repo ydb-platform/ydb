@@ -1,4 +1,5 @@
 #include "appdata.h"
+#include "scan_admission.h"
 #include "tablet_types.h"
 
 #include "defs.h"
@@ -121,6 +122,7 @@ TAppData::TAppData(
     , Dcb(new TDynamicControlBoard())
     , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry())
     , SharedCachePages(new NSharedCache::TSharedCachePages())
+    , BuildIndexScanAdmission(std::make_shared<TScanAdmissionControl>())
     , StreamingConfig(Impl->StreamingConfig)
     , PQConfig(Impl->PQConfig)
     , PQClusterDiscoveryConfig(Impl->PQClusterDiscoveryConfig)

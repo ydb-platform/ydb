@@ -1824,14 +1824,13 @@ struct TReadInfo {
  * TMainTableReader -- reader for the user's original table.
  *
  * After the merge identifies matching document IDs, this reader fetches the
- * full row data that the user's SELECT requested.  FromSettings() analyzes
- * the requested columns to determine:
+ * full row data that the user's SELECT requested. FromSettings() configures:
  *
  *   - ResultCellIndices: mapping from output column position to either a table
  *     cell index or RELEVANCE_COLUMN_MARKER for the BM25 score column.
  *   - MainTableCovered: true if all requested columns are key columns of the
  *     main table (so no actual read is needed -- the data is already known
- *     from the doc_id).
+ *     from the doc_id). Set by the optimizer, or derived for older settings.
  *   - WithRelevance: true if the user requested __ydb_full_text_relevance and
  *     the index type supports it.
  */
@@ -1887,7 +1886,8 @@ public:
 
         TVector<std::pair<i32, NScheme::TTypeInfo>> resultCellIndices;
         resultCellIndices.reserve(settings->GetColumns().size());
-        bool mainTableCovered = true;
+        // Older saved graphs and task settings do not carry this decision.
+        bool mainTableCovered = !settings->HasMainTableCovered() || settings->GetMainTableCovered();
         for(i32 i = 0; i < settings->GetColumns().size(); i++) {
             const auto& column = settings->GetColumns(i);
             if (column.GetName() == FullTextRelevanceColumn) {
@@ -1901,6 +1901,7 @@ public:
                 continue;
             }
 
+            YQL_ENSURE(!settings->GetMainTableCovered(), "Covered fulltext source requests a non-key column");
             mainTableCovered = false;
             resultColumnTypes.push_back(NScheme::TypeInfoFromProto(
                 column.GetTypeId(), column.GetTypeInfo()));

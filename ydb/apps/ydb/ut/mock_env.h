@@ -485,7 +485,7 @@ public:
         return copy;
     }
 
-    TString RunCli(TList<TString> args, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}) {
+    TString RunCli(TList<TString> args, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}, TString* stderrOutput = nullptr) {
         ClearFailures();
 
         if (profileFileContent) {
@@ -499,7 +499,8 @@ public:
             true,
             false,
             GetEndEnv(env),
-            ExpectedExitCode
+            ExpectedExitCode,
+            stderrOutput
         );
         CheckExpectations();
         // reset

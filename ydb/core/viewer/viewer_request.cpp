@@ -91,6 +91,9 @@ public:
                 if (!TBase::RequestSettings.MergeFields) {
                     Merge(response->Record, nodeId, nodeResponse.Get()->Record);
                 }
+            } else if (!nodeResponse.IsDone()) {
+                // still waiting for the node when the request timed out
+                response->Record.MutableLocationTimedOut()->AddNodeId(nodeId);
             }
         }
         if (TBase::RequestSettings.MergeFields) {

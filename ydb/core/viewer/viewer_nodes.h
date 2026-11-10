@@ -229,6 +229,7 @@ class TJsonNodes : public TViewerPipeClient {
         bool Problems = false;
         NKikimrWhiteboard::TNodeStateInfo NetworkStateInfo;
         bool Disconnected = false;
+        bool ResponseTimeout = false; // the node was marked as disconnected only because it did not answer in time
         bool HasDisks = false;
         bool HasPDiskWhiteboardResponse = false;
         bool GotDatabaseFromDatabaseBoardInfo = false;
@@ -796,6 +797,7 @@ class TJsonNodes : public TViewerPipeClient {
             SystemState.MergeFrom(systemState);
             // we received valid data, so the node should not be considered disconnected
             Disconnected = false;
+            ResponseTimeout = false;
             Problems = false;
             Cleanup();
             CalcDatabase();
@@ -928,6 +930,7 @@ class TJsonNodes : public TViewerPipeClient {
     bool NoDC = false;
     std::vector<TString> Problems;
     TString InvalidParamError;
+    static inline const TString TimeoutError = "Timeout";
 
     void AddProblem(const TString& problem) {
         for (const auto& p : Problems) {
@@ -1501,6 +1504,22 @@ public:
             if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
                 node->RemapDisks(IncludeDDisks);
             }
+        }
+    }
+
+    // A node that did not answer in time is not necessarily down. It is still reported
+    // as disconnected, as before, but the reason is exposed to the client.
+    void SetNodeResponseTimeout(TNodeId nodeId) {
+        if (TNode* node = FindNode(nodeId)) {
+            node->ResponseTimeout = true;
+        }
+    }
+
+    template<typename TResponse>
+    void SetNodeDisconnected(TNodeId nodeId, const TResponse& failedResponse) {
+        SetNodeDisconnected(nodeId);
+        if (failedResponse.IsError() && failedResponse.GetError() == TimeoutError) {
+            SetNodeResponseTimeout(nodeId);
         }
     }
 
@@ -2886,8 +2905,13 @@ public:
                     for (auto nodeId : nodesWithoutData) {
                         SetNodeDisconnected(nodeId);
                     }
+                    for (TNodeId nodeId : response.Get()->Record.GetLocationTimedOut().GetNodeId()) {
+                        if (nodesWithoutData.count(nodeId) > 0) {
+                            SetNodeResponseTimeout(nodeId);
+                        }
+                    }
                 } else {
-                    SetNodeDisconnected(responseNodeId);
+                    SetNodeDisconnected(responseNodeId, response);
                 }
             }
             for (const auto& [nodeId, response] : SystemStateResponse) {
@@ -2909,7 +2933,7 @@ public:
                         hasMemoryDetailed |= systemState.GetSystemStateInfo(0).HasMemoryStats();
                     }
                 } else {
-                    SetNodeDisconnected(nodeId);
+                    SetNodeDisconnected(nodeId, response);
                 }
             }
             if (!removeNodes.empty()) {
@@ -3475,7 +3499,7 @@ public:
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
         CurrentTimeoutState = static_cast<ETimeoutTag>(ev->Get()->Tag);
-        TString error = "Timeout";
+        TString error = TimeoutError;
         if (ev->Get()->Tag == TimeoutTablets) {
             if (NodesInfoResponse && NodesInfoResponse->Error(error)) {
                 ProcessResponses();
@@ -3677,6 +3701,9 @@ public:
                 }
                 if (node->Disconnected) {
                     jsonNode.SetDisconnected(node->Disconnected);
+                }
+                if (node->ResponseTimeout) {
+                    jsonNode.SetResponseTimeout(true);
                 }
                 if (node->CpuUsage && FieldsRequested.test(+ENodeFields::CPU)) {
                     jsonNode.SetCpuUsage(node->CpuUsage);

@@ -5105,6 +5105,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(json["Nodes"].GetArray().size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(json["Nodes"][1]["NodeId"].GetUInteger(), disconnectedNodeId);
             UNIT_ASSERT(json["Nodes"][1]["Disconnected"].GetBoolean());
+            // the node only failed to answer in time, so the client is told it is not a real disconnect
+            UNIT_ASSERT_C(json["Nodes"][1]["ResponseTimeout"].GetBoolean(), NJson::WriteJson(json, false));
+            UNIT_ASSERT_C(!json["Nodes"][0].Has("ResponseTimeout"), NJson::WriteJson(json, false));
+            UNIT_ASSERT_C(!json["Nodes"][2].Has("ResponseTimeout"), NJson::WriteJson(json, false));
         }
 
         const auto minimal = makeRequest("&alive=true&sort=NodeId");
@@ -5163,6 +5167,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(recovered["Nodes"].GetArray().size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(recovered["Nodes"][1]["NodeId"].GetUInteger(), disconnectedNodeId);
         UNIT_ASSERT(!recovered["Nodes"][1]["Disconnected"].GetBoolean());
+        UNIT_ASSERT(!recovered["Nodes"][1].Has("ResponseTimeout"));
 
         disconnectAll = true;
         const auto empty = makeRequest("&alive=true&group=SystemState");

@@ -57,7 +57,13 @@ omissions do not prove health/failure and do not discard fresh endpoint evidence
 Candidate addresses rotate within each pile, so an unchanged Discovery ordering
 does not keep retrying only unreachable nodes. Only current verified endpoints
 deduplicate node IDs; a learned address advertising a changed identity is drained
-and checked again before reuse.
+and checked again before reuse. The first verification budget covers read/SelfCheck
+deadlines and polling rounds; Bridge-only ports cannot keep a slot indefinitely.
+After verification, each API must keep answering within its evidence TTL plus
+RPC renewal deadline. This address-retention grace does not extend evidence or
+routing freshness.
+For `grpc://`, published IPv4/IPv6 addresses are also candidates and pass the same
+node ID and pile checks; TLS discovery retains certificate verification by hostname.
 `GetClusterState` supplies pile states, including Add/Remove progress; Auto never
 calls AddPile or RemovePile. Inactive, disconnected and removed piles disappear
 from the endpoint list. Their configured seeds retain low-frequency bootstrap

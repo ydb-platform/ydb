@@ -55,6 +55,10 @@ struct TEndpointData {
     TEndpointSnapshot Snapshot;
     bool Discovered = false;
     bool Retiring = false;
+    // A fresh Bridge reply alone cannot keep an unverified address forever.
+    std::optional<TMonotonic> VerificationDeadline;
+    // Mismatching replies cannot renew the last successfully verified identity.
+    std::optional<TMonotonic> VerifiedSelfCheckAt;
     std::optional<ui32> ExpectedNodeId;
     std::optional<ui32> NodeId;
     TMonotonic NextBootstrapPoll;
@@ -72,6 +76,12 @@ struct TEndpointData {
     std::set<EYdbMethod> Due;
     std::map<EYdbMethod, TString> Errors;
 };
+
+bool ShouldPollPile(const TClusterView& view, const TString& name) {
+    const auto pile = view.Piles.find(name);
+    return pile != view.Piles.end() && pile->second != EPileState::Inactive
+        && pile->second != EPileState::Disconnected;
+}
 
 void SetEndpointError(TEndpointData& endpoint, EYdbMethod method, TString error) {
     if (error.empty()) {
@@ -342,13 +352,22 @@ private:
             return;
         }
         const auto now = NActors::TActivationContext::Monotonic();
-        // Expired learned addresses may be replaced, but fresh observations are
-        // never discarded merely because Discovery omitted an endpoint.
+        // Give initial verification its full scheduling/deadline budget. Keep
+        // known addresses during RPC renewal without extending evidence TTLs.
         for (auto& [uri, endpoint] : Endpoints) {
             (void)uri;
-            if (endpoint.Discovered && (!endpoint.Snapshot.View
-                || now - endpoint.Snapshot.View->SentAt >= Options.Config.Timing.EvidenceTtl))
-            {
+            if (!endpoint.Discovered) {
+                continue;
+            }
+            const auto& snapshot = endpoint.Snapshot;
+            const auto& timing = Options.Config.Timing;
+            const bool responsive = snapshot.View
+                && now - snapshot.View->SentAt < timing.EvidenceTtl + timing.ReadTimeout
+                && endpoint.VerifiedSelfCheckAt
+                && now - *endpoint.VerifiedSelfCheckAt < timing.EvidenceTtl + timing.SelfCheckClientTimeout;
+            if (responsive) {
+                endpoint.VerificationDeadline.reset();
+            } else if (!endpoint.VerificationDeadline || now >= *endpoint.VerificationDeadline) {
                 endpoint.Retiring = true;
             }
         }
@@ -356,10 +375,7 @@ private:
         // proposed identity; drain old calls, then verify it through SelfCheck.
         for (const auto& item : result.Endpoints) {
             const auto it = Endpoints.find(item.Endpoint.Uri);
-            const auto pile = Selection.View->Piles.find(item.Pile);
-            if (it == Endpoints.end() || pile == Selection.View->Piles.end()
-                || pile->second == EPileState::Inactive || pile->second == EPileState::Disconnected)
-            {
+            if (it == Endpoints.end() || !ShouldPollPile(*Selection.View, item.Pile)) {
                 continue;
             }
             auto& endpoint = it->second;
@@ -385,10 +401,7 @@ private:
         }
         std::map<TString, std::vector<const TDiscoveredEndpoint*>> candidates;
         for (const auto& item : result.Endpoints) {
-            const auto pile = Selection.View->Piles.find(item.Pile);
-            if (pile != Selection.View->Piles.end() && pile->second != EPileState::Inactive
-                && pile->second != EPileState::Disconnected)
-            {
+            if (ShouldPollPile(*Selection.View, item.Pile)) {
                 candidates[item.Pile].push_back(&item);
             }
         }
@@ -409,7 +422,14 @@ private:
                 endpoint.Snapshot.Pile = item.Pile;
                 endpoint.Discovered = true;
                 endpoint.ExpectedNodeId = item.NodeId;
-                Options.Config.Endpoints[item.Pile].push_back(item.Endpoint);
+                auto& pileEndpoints = Options.Config.Endpoints[item.Pile];
+                pileEndpoints.push_back(item.Endpoint);
+                const auto& timing = Options.Config.Timing;
+                const auto rounds = (pileEndpoints.size() + Options.Config.HealthEndpointsPerPile - 1)
+                    / Options.Config.HealthEndpointsPerPile;
+                endpoint.VerificationDeadline = now + std::max(
+                    timing.ReadTimeout + timing.StatePollInterval,
+                    timing.SelfCheckClientTimeout + timing.RoundInterval * rounds);
                 added = true;
                 ++learned[pile];
                 nodes.insert(item.NodeId);
@@ -464,13 +484,8 @@ private:
                     Start(endpoint, EYdbMethod::SelfCheck);
                 }
             }
-            if (PreviousView) {
-                const auto it = PreviousView->Piles.find(pile);
-                if (it == PreviousView->Piles.end() || it->second == EPileState::Inactive
-                    || it->second == EPileState::Disconnected)
-                {
-                    continue;
-                }
+            if (PreviousView && !ShouldPollPile(*PreviousView, pile)) {
+                continue;
             }
             // A busy slot for one method must not consume another endpoint's
             // budget for that method or couple the two independent samplers.
@@ -553,6 +568,7 @@ private:
                 } else {
                     snapshot.Identity = EEndpointIdentity::Verified;
                     endpoint.NodeId = result.ResponderNodeId;
+                    endpoint.VerifiedSelfCheckAt = result.Reply->SentAt;
                 }
             } else {
                 snapshot.Identity = EEndpointIdentity::Mismatch;
@@ -711,9 +727,7 @@ private:
             for (auto& [uri, endpoint] : Endpoints) {
                 auto& snapshot = endpoint.Snapshot;
                 replies.Endpoints.push_back({uri, snapshot.Pile, snapshot.Identity, Selection.CurrentEndpoints.contains(uri)});
-                const auto member = view.Piles.find(snapshot.Pile);
-                snapshot.Ignored = member == view.Piles.end() || member->second == EPileState::Inactive
-                    || member->second == EPileState::Disconnected;
+                snapshot.Ignored = !ShouldPollPile(view, snapshot.Pile);
                 if (snapshot.Ignored && endpoint.Discovered) {
                     endpoint.Retiring = true;
                 }

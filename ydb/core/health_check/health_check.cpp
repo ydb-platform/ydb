@@ -3062,15 +3062,21 @@ public:
         }
     };
 
+    const TBridgeInfo::TPile* FindCurrentPile(TBridgePileId pileId) const {
+        const auto* bridgeInfo = NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk()
+            ? NodeWardenStorageConfig->Get()->BridgeInfo.get() : nullptr;
+        const auto* pile = bridgeInfo ? bridgeInfo->FindPile(pileId) : nullptr;
+        return pile && !pile->IsFreeSlot ? pile : nullptr;
+    }
+
     void FillGroupStatusWithWhiteboard(TGroupId groupId, const NKikimrWhiteboard::TBSGroupStateInfo& groupInfo, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
         if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->empty()) {
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id();
         }
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(groupId));
-        if (groupInfo.HasBridgePileId() && NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk() && NodeWardenStorageConfig->Get()->BridgeInfo) {
+        if (groupInfo.HasBridgePileId()) {
             const auto& pileId = TBridgePileId::FromProto(&groupInfo, &NKikimrWhiteboard::TBSGroupStateInfo::GetBridgePileId);
-            const auto* pile = NodeWardenStorageConfig->Get()->BridgeInfo->FindPile(pileId);
-            if (pile && !pile->IsFreeSlot) {
+            if (const auto* pile = FindCurrentPile(pileId)) {
                 context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pile->Name);
             }
         }
@@ -3583,8 +3589,6 @@ public:
             // Sysview and storage configuration are independent snapshots. A
             // removed pile can remain in BSC statistics after its registry slot
             // has disappeared (or become free).
-            const TBridgeInfo* bridgeInfo = NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk()
-                ? NodeWardenStorageConfig->Get()->BridgeInfo.get() : nullptr;
             auto parts = itGroup->second.BridgeGroups;
             if (itGroup->second.BridgePileId) { // inline pile: group converted from non-bridged one is also its own part
                 parts.insert(parts.begin(), &itGroup->second);
@@ -3592,8 +3596,7 @@ public:
             auto getStatus = [&](const TGroupState* group) {
                 TGroupChecker checker(group->ErasureSpecies, group->LayoutCorrect, ETags::BridgeGroupState);
                 TSelfCheckContext pileContext(&context, "BRIDGE_GROUP");
-                const auto* pile = bridgeInfo ? bridgeInfo->FindPile(group->BridgePileId) : nullptr;
-                if (pile && !pile->IsFreeSlot) {
+                if (const auto* pile = FindCurrentPile(group->BridgePileId)) {
                     const auto& pileName = pile->Name;
                     pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pileName);
                 } else { // this fallback should not ever happen - but is used in tests
@@ -3608,15 +3611,15 @@ public:
                 if (!group->BridgePileId) {
                     return true;
                 }
-                const auto* pile = bridgeInfo ? bridgeInfo->FindPile(group->BridgePileId) : nullptr;
-                return pile && !pile->IsFreeSlot && pile->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
+                const auto* pile = FindCurrentPile(group->BridgePileId);
+                return pile && pile->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
             };
             auto isDataQuorumPile = [&](const TGroupState* group) {
                 if (!group->BridgePileId) {
                     return true;
                 }
-                const auto* pile = bridgeInfo ? bridgeInfo->FindPile(group->BridgePileId) : nullptr;
-                return pile && !pile->IsFreeSlot && NBridge::PileStateTraits(pile->State).RequiresDataQuorum;
+                const auto* pile = FindCurrentPile(group->BridgePileId);
+                return pile && NBridge::PileStateTraits(pile->State).RequiresDataQuorum;
             };
             if (std::ranges::none_of(parts, isSyncPile)) {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group has no parts in synchronized piles", ETags::GroupState);
@@ -3870,8 +3873,8 @@ public:
             if (ringGroup.BridgePileId && NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk()
                 && NodeWardenStorageConfig->Get()->BridgeInfo)
             {
-                const auto* pile = NodeWardenStorageConfig->Get()->BridgeInfo->FindPile(ringGroup.BridgePileId);
-                if (!pile || pile->IsFreeSlot) {
+                const auto* pile = FindCurrentPile(ringGroup.BridgePileId);
+                if (!pile) {
                     continue;
                 }
                 pileContext.Location.mutable_compute()->mutable_state_storage()->mutable_pile()->set_name(pile->Name);

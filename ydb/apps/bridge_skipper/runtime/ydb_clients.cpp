@@ -424,16 +424,23 @@ TString DiscoveryDatabase(TStringBuf yaml, TStringBuf storageYaml) {
         if (modernName.IsDefined()) {
             Y_ENSURE(modernName.IsScalar());
             value = modernName.Scalar();
-        } else {
+        }
+        const auto pools = field("storage_pool_types");
+        Y_ENSURE(!pools.IsDefined() || pools.IsSequence());
+        // MoveFields rebuilds the domain only for a nonempty top-level pool
+        // list. Otherwise PrepareDomainsConfig keeps an existing domain name.
+        if (!modernName.IsDefined() || !pools.IsDefined() || pools.size() == 0) {
             const auto domainsConfig = field("domains_config");
             if (domainsConfig.IsDefined()) {
                 Y_ENSURE(domainsConfig.IsMap());
                 const auto domains = domainsConfig["domain"];
                 if (domains.IsDefined()) {
-                    Y_ENSURE(domains.IsSequence() && domains.size() == 1);
-                    const auto name = domains[0]["name"];
-                    Y_ENSURE(name.IsScalar());
-                    value = name.Scalar();
+                    Y_ENSURE(domains.IsSequence() && domains.size() <= 1);
+                    if (domains.size() == 1) {
+                        const auto name = domains[0]["name"];
+                        Y_ENSURE(name.IsScalar());
+                        value = name.Scalar();
+                    }
                 }
             }
         }
@@ -467,18 +474,41 @@ TInventoryResult DecodeInventoryResult(const NYdb::NDiscovery::TListEndpointsRes
         }
         try {
             Y_ENSURE(item.NodeId != 0 && item.BridgePileName.find('\0') == std::string::npos);
-            TString host(item.Address);
-            if (host.find(':') != TString::npos && !host.StartsWith('[')) {
-                host = "[" + host + "]";
-            }
-            auto endpoint = ParseEndpoint(TString(scheme) + "://" + host + ":" + ::ToString(item.Port));
             const std::pair<TString, ui32> identity{TString(item.BridgePileName), item.NodeId};
             const auto [node, newNode] = piles.emplace(item.NodeId, identity.first);
             Y_ENSURE(newNode || node->second == identity.first);
-            const auto [it, inserted] = seen.emplace(endpoint.Uri, identity);
-            Y_ENSURE(inserted || it->second == identity);
-            if (inserted) {
-                decoded.Endpoints.push_back({std::move(endpoint), identity.first, identity.second});
+            const auto addAddress = [&](TStringBuf address) {
+                TString host(address);
+                if (host.find(':') != TString::npos && !host.StartsWith('[')) {
+                    host = "[" + host + "]";
+                }
+                auto endpoint = ParseEndpoint(TString(scheme) + "://" + host + ":" + ::ToString(item.Port));
+                const auto [it, inserted] = seen.emplace(endpoint.Uri, identity);
+                Y_ENSURE(inserted || it->second == identity);
+                if (inserted) {
+                    if (decoded.Endpoints.size() == 16384) {
+                        decoded.Error = "DISCOVERY_INVENTORY_TOO_LARGE";
+                        return;
+                    }
+                    decoded.Endpoints.push_back({std::move(endpoint), identity.first, identity.second});
+                }
+            };
+            addAddress(item.Address);
+            // TLS IP connections need certificate-name overrides, unsupported
+            // by pinned clients. Plaintext clients can use the published IPs.
+            if (scheme == "grpc") {
+                for (const auto& addresses : {&item.IPv4Addrs, &item.IPv6Addrs}) {
+                    for (const auto& address : *addresses) {
+                        if (!decoded.Error.empty()) {
+                            break;
+                        }
+                        addAddress(address);
+                    }
+                }
+            }
+            if (!decoded.Error.empty()) {
+                decoded.Endpoints.clear();
+                return decoded;
             }
         } catch (...) {
             decoded.Endpoints.clear();

@@ -83,6 +83,7 @@ public:
     std::atomic<bool> HangSelfCheck{false};
     std::atomic<bool> HangDiscovery{false};
     bool DedicatedStorage = false;
+    std::optional<ui16> IpEndpointPort;
 
     grpc::Status FetchConfig(grpc::ServerContext* context, const Ydb::Config::FetchConfigRequest* request,
         Ydb::Config::FetchConfigResponse* response) override
@@ -128,6 +129,13 @@ public:
         endpoint->set_port(2135);
         endpoint->set_node_id(12);
         endpoint->set_bridge_pile_name("new-pile");
+        if (IpEndpointPort) {
+            endpoint->set_address("unresolvable.invalid");
+            endpoint->set_port(*IpEndpointPort);
+            endpoint->set_node_id(77);
+            endpoint->set_bridge_pile_name("a");
+            endpoint->add_ip_v4("127.0.0.1");
+        }
         auto* operation = response->mutable_operation();
         operation->set_ready(true);
         operation->set_status(Ydb::StatusIds::SUCCESS);
@@ -382,6 +390,109 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         clients->Stop();
     }
 
+    Y_UNIT_TEST(DiscoveryIpAliasCanReachMonitoringWithoutDns) {
+        TWireService service;
+        TString seed;
+        auto server = StartWireServer(service, seed);
+        TWireService other;
+        TString target;
+        auto targetServer = StartWireServer(other, target);
+        service.IpEndpointPort = ParseEndpoint(target).Port;
+        auto clients = CreateYdbClients(ParseConfig("cluster_id: test\nendpoints: {a: ['" + seed + "']}\n"),
+            TLoadedCredentials{});
+        const auto inventory = Await<TInventoryResult>([&](auto completed) {
+            clients->Discover({seed, "a", 1}, std::move(completed));
+        });
+        UNIT_ASSERT_C(inventory.Rpc.Success, inventory.Rpc.Status);
+        UNIT_ASSERT_VALUES_EQUAL(inventory.Error, "");
+        const auto ip = std::ranges::find_if(inventory.Endpoints, [&](const auto& item) {
+            return item.Endpoint.Uri == target;
+        });
+        UNIT_ASSERT(ip != inventory.Endpoints.end());
+        clients->AddEndpoint(ip->Endpoint, ip->Pile);
+        const auto health = Await<TSelfCheckResult>([&](auto completed) {
+            clients->SelfCheck({ip->Endpoint.Uri, ip->Pile, 2}, std::move(completed));
+        });
+        UNIT_ASSERT_C(health.Rpc.Success, health.Rpc.Status);
+        UNIT_ASSERT(health.ResponderNodeId == ip->NodeId);
+        UNIT_ASSERT(health.Reply && health.Reply->ResponderPile == ip->Pile);
+        clients->Stop();
+    }
+
+    Y_UNIT_TEST(DiscoveryIpExpansionKeepsInventoryBounded) {
+        const TRedactor redactor{TLoadedCredentials{}};
+        Ydb::Discovery::ListEndpointsResult proto;
+        auto* endpoint = proto.add_endpoints();
+        endpoint->set_address("node");
+        endpoint->set_port(2135);
+        endpoint->set_node_id(1);
+        endpoint->set_bridge_pile_name("a");
+        for (size_t i = 0; i < 16384; ++i) {
+            endpoint->add_ip_v6("2001:db8::" + Sprintf("%zx", i));
+        }
+        const auto result = DecodeInventoryResult(NYdb::NDiscovery::TListEndpointsResult(Status(), proto),
+            Rpc(EYdbMethod::Inventory), redactor, "grpc");
+        UNIT_ASSERT_VALUES_EQUAL(result.Error, "DISCOVERY_INVENTORY_TOO_LARGE");
+        UNIT_ASSERT(result.Endpoints.empty());
+    }
+
+    Y_UNIT_TEST(DiscoveryDomainNameFollowsStoragePoolTransformation) {
+        const TString names = "domain_name: Modern, domains_config: {domain: [{name: Old}]}";
+        // Automatic-config defaults create the domain when its list is empty.
+        for (const TString pools : {"", "storage_pool_types: [], ", "storage_pool_types: [{kind: hdd}], "}) {
+            UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {hosts: [{host: localhost}], " + pools
+                + "domain_name: Modern, domains_config: {domain: []}}"), "/Modern");
+            UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {hosts: [{host: localhost}], " + pools
+                + "domains_config: {domain: []}}"), "/Root");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {" + names + "}"), "/Old");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {storage_pool_types: [], " + names + "}"), "/Old");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase(
+            "config: {storage_pool_types: [{kind: hdd}], " + names + "}"), "/Modern");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase(
+            "config: {storage_pool_types: [{kind: hdd}], domains_config: {domain: [{name: Old}]}}"), "/Old");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {" + names + "}",
+            "config: {storage_pool_types: [{kind: hdd}]}"), "/Modern");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {storage_pool_types: [], " + names + "}",
+            "config: {storage_pool_types: [{kind: hdd}]}"), "/Old");
+    }
+
+    Y_UNIT_TEST(DiscoveryIncludesPlaintextIpAliasesAndChecksTheirIdentity) {
+        const TRedactor redactor{TLoadedCredentials{}};
+        Ydb::Discovery::ListEndpointsResult proto;
+        auto* endpoint = proto.add_endpoints();
+        endpoint->set_address("unresolvable.invalid");
+        endpoint->set_port(2135);
+        endpoint->set_node_id(12);
+        endpoint->set_bridge_pile_name("new-pile");
+        endpoint->add_ip_v4("127.0.0.1");
+        endpoint->add_ip_v4("127.0.0.1");
+        endpoint->add_ip_v6("::1");
+        auto decode = [&](TStringBuf scheme = "grpc") {
+            return DecodeInventoryResult(NYdb::NDiscovery::TListEndpointsResult(Status(), proto),
+                Rpc(EYdbMethod::Inventory), redactor, scheme);
+        };
+        const auto result = decode();
+        UNIT_ASSERT_VALUES_EQUAL(result.Error, "");
+        std::set<TString> addresses;
+        for (const auto& item : result.Endpoints) {
+            addresses.insert(item.Endpoint.Uri);
+            UNIT_ASSERT_VALUES_EQUAL(item.NodeId, 12);
+            UNIT_ASSERT_VALUES_EQUAL(item.Pile, "new-pile");
+        }
+        UNIT_ASSERT((addresses == std::set<TString>{"grpc://unresolvable.invalid:2135",
+            "grpc://127.0.0.1:2135", "grpc://[::1]:2135"}));
+        *proto.add_endpoints() = *proto.mutable_endpoints(0);
+        proto.mutable_endpoints(1)->set_address("127.0.0.1");
+        proto.mutable_endpoints(1)->set_node_id(13);
+        UNIT_ASSERT_VALUES_EQUAL(decode().Error, "INVALID_DISCOVERY_ENDPOINT");
+        proto.mutable_endpoints()->RemoveLast();
+        proto.mutable_endpoints(0)->set_ssl(true);
+        const auto tls = decode("grpcs");
+        UNIT_ASSERT_VALUES_EQUAL(tls.Endpoints.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tls.Endpoints.front().Endpoint.Uri, "grpcs://unresolvable.invalid:2135");
+    }
+
     Y_UNIT_TEST(DiscoveryConfigAndInventoryValidationAreAtomic) {
         UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domains_config: {domain: [{name: Other}]}}"), "/Other");
         UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {}"), "/Root");
@@ -390,7 +501,7 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domain_name: MainRoot}", "config: {domain_name: StorageRoot}"), "/MainRoot");
         UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domains_config: {security_config: {}}}",
             "config: {domains_config: {domain: [{name: StorageRoot}]}}"), "/Root");
-        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domain_name: Modern, domains_config: {domain: [{name: Old}]}}"), "/Modern");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domain_name: Modern, domains_config: {domain: [{name: Old}]}}"), "/Old");
         for (const TString yaml : {"config: []", "config: {domains_config: {domain: [{name: a}, {name: b}]}}",
                 "config: {domains_config: {domain: [{name: 'bad/path'}]}}", "!!broken secret"})
         {

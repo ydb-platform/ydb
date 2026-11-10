@@ -181,6 +181,7 @@ struct THarness {
     std::optional<ui64> ConnectivityGeneration;
     // SelfCheck replies arrive this long after they were sent.
     std::optional<TDuration> SelfCheckDelay;
+    std::map<TString, TDuration> StateDelays;
 
     std::shared_ptr<std::atomic<bool>> Shutdown = std::make_shared<std::atomic<bool>>(false);
 
@@ -333,6 +334,10 @@ struct THarness {
     void ReplyReads() {
         for (auto& call : Clients->States) {
             if (call.Done || Held.contains({call.Request.Endpoint, call.Method})) {
+                continue;
+            }
+            const auto delay = StateDelays.find(call.Request.Endpoint);
+            if (delay != StateDelays.end() && call.SentAt + delay->second > Runtime.GetCurrentMonotonicTime()) {
                 continue;
             }
             call.Done = true;
@@ -659,6 +664,75 @@ void VerifyDispatchAtTtlBoundary(EMode mode, bool slowPersistence) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSkipperActor) {
+    Y_UNIT_TEST(DiscoveryRotatesPastPortsWithoutMonitoring) {
+        THarness h;
+        h.Failed.clear();
+        h.Piles["c"] = EPileState::Synchronized;
+        const TString second = "grpc://c:2";
+        const TString reachable = "grpc://c:3";
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}, {ParseEndpoint(second), "c", 4},
+            {ParseEndpoint(reachable), "c", 5}};
+        h.NodeIds[reachable] = 5;
+        // Both state variants keep answering on these Bridge-only ports.
+        h.FailedMethods.insert({C, EYdbMethod::SelfCheck});
+        h.FailedMethods.insert({second, EYdbMethod::SelfCheck});
+        h.Run(50);
+        UNIT_ASSERT(h.Endpoint(reachable).Identity == EEndpointIdentity::Verified);
+        h.Piles["b"] = EPileState::Inactive;
+        ++h.Generation;
+        h.Failed.insert("a");
+        h.Run(3);
+        UNIT_ASSERT_VALUES_EQUAL(h.Clients->Updates.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(h.Clients->Updates.front().Plan.Endpoint, reachable);
+    }
+
+    Y_UNIT_TEST(DiscoveryWaitsForSlowInitialVerification) {
+        THarness h(EMode::Auto, {}, 1,
+            "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 20, "
+            "read_timeout_seconds: 7, selfcheck_operation_timeout_seconds: 4, evidence_ttl_seconds: 9}");
+        h.Failed.clear();
+        h.Piles["c"] = EPileState::Synchronized;
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}};
+        h.StateDelays[C] = TDuration::Seconds(6);
+        h.SelfCheckDelay = TDuration::Seconds(5);
+        bool staleViewRetained = false;
+        for (size_t i = 0; i < 40; ++i) {
+            h.Step();
+            const auto snapshot = h.Store->Read();
+            for (const auto& endpoint : snapshot->Endpoints) {
+                if (endpoint.Uri == C && endpoint.View
+                    && h.Runtime.GetCurrentMonotonicTime() - endpoint.View->SentAt >= h.Config.Timing.EvidenceTtl)
+                {
+                    staleViewRetained = true;
+                    // Keeping the client during renewal grants no stale routing authority.
+                    UNIT_ASSERT(!snapshot->Selection.CurrentEndpoints.contains(C));
+                }
+            }
+        }
+        UNIT_ASSERT(staleViewRetained);
+        UNIT_ASSERT(h.Endpoint(C).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(h.Clients->Removed.empty());
+        UNIT_ASSERT(h.Clients->Updates.empty());
+        h.FailedMethods.insert({C, EYdbMethod::SelfCheck});
+        h.Run(30);
+        UNIT_ASSERT(!h.Clients->Removed.empty());
+    }
+
+    Y_UNIT_TEST(DiscoveryReplacesAnAddressWhoseSelfCheckExpired) {
+        THarness h;
+        h.Failed.clear();
+        h.Piles["c"] = EPileState::Synchronized;
+        h.Clients->Inventory = {{ParseEndpoint(C), "c", 3}};
+        h.Run(35);
+        UNIT_ASSERT(h.Endpoint(C).Identity == EEndpointIdentity::Verified);
+        h.FailedMethods.insert({C, EYdbMethod::SelfCheck});
+        const TString replacement = "grpc://c:2";
+        h.Clients->Inventory.push_back({ParseEndpoint(replacement), "c", 3});
+        h.Run(50);
+        UNIT_ASSERT(h.Endpoint(replacement).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(!h.Clients->Removed.empty());
+    }
+
     Y_UNIT_TEST(DiscoveryReverifiesChangedNodeAtTheSameLearnedAddress) {
         THarness h;
         h.Failed.clear();

@@ -658,7 +658,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Ydb::Monitoring::SelfCheckResult RequestHcWithBridgeVdisks(const TVector<TVDisks>& groupVdisks,
             size_t bridgeGroupCount = 1, bool ordinary = false,
             std::array<NKikimrBridge::TClusterState::EPileState, 2> pileStates = {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::SYNCHRONIZED},
-            bool inlinePile = false, bool bridgeModeEnabled = false, size_t currentPileCount = 2)
+            bool inlinePile = false, bool bridgeModeEnabled = false, bool removedSecondPile = false)
     {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -681,10 +681,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
         bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "pile0", .State = pileStates[0]});
         bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "pile1", .State = pileStates[1]});
-        bridgeInfo->Piles.resize(currentPileCount);
+        if (removedSecondPile) {
+            bridgeInfo->Piles.pop_back();
+        }
         bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(0)] = &bridgeInfo->Piles[0];
-        if (currentPileCount > 1) {
+        if (!removedSecondPile) {
             bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(1)] = &bridgeInfo->Piles[1];
         }
 
@@ -1304,7 +1306,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                      TVDisks{8, liveCopyFailed ? NKikimrBlobStorage::READY : NKikimrBlobStorage::ERROR}},
                     1, false,
                     {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::SYNCHRONIZED},
-                    inlinePile, true, 1);
+                    inlinePile, true, /*removedSecondPile=*/true);
                 CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED,
                     liveCopyFailed ? 1 : 0, TLocationFilter().Pool("/Root:test"));
                 for (const auto& issue : result.issue_log()) {
@@ -4409,6 +4411,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         if (removedPile) {
             // Ring data may still reference the pile removed from the registry.
             info->RingGroups.back().BridgePileId = TBridgePileId::FromPileIndex(1);
+            // The removed pile's nodes are no longer in the nameservice and
+            // have no whiteboard replies. Current pile nodes remain available.
+            for (ui32 i = 0; i < 9; ++i) {
+                info->RingGroups.back().Rings[i].Replicas.front() = TActorId(runtime.GetNodeId(0) + 9 + i, "FAKE");
+            }
         }
 
         auto ssObserver = runtime.AddObserver<TEvStateStorage::TEvListStateStorageResult>([&](auto&& ev) { ev->Get()->Info = info; });
@@ -4457,6 +4464,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         };
 
+        if (removedPile) {
+            for (const auto& issue : result.issue_log()) {
+                for (const TString& type : {"STATE_STORAGE", "SCHEME_BOARD", "BOARD"}) {
+                    UNIT_ASSERT_C(!issue.type().Contains(type), issue.ShortDebugString());
+                }
+            }
+        }
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), statusToResult(expectedStatus));
     }
 

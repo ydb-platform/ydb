@@ -1,21 +1,21 @@
 """Observe operator-managed pile membership without restarting Skipper."""
 
-from concurrent.futures import ThreadPoolExecutor
 import json
 import time
+
+from contextlib import closing
 
 import grpc
 import yaml
 
 from test_skipper import RealSkipperCluster, TOKEN, eventually, state_rpc
-from ydb.public.api.grpc import ydb_config_v1_pb2_grpc as config_grpc
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc
 from ydb.public.api.protos import ydb_config_pb2 as config
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.harness import daemon
+from ydb.tests.library.clients.kikimr_config_client import ConfigClient
 
 
 class TestSkipperPileMembership(RealSkipperCluster):
@@ -33,10 +33,10 @@ class TestSkipperPileMembership(RealSkipperCluster):
             host['node_id'] = ids[host['port']]
 
     def fetch_config(self, via):
-        with grpc.insecure_channel(self.pile_nodes[via][0].endpoint) as channel:
-            response = config_grpc.ConfigServiceStub(channel).FetchConfig(
-                config.FetchConfigRequest(all=config.FetchConfigRequest.FetchModeAll()), metadata=TOKEN, timeout=10
-            )
+        node = self.pile_nodes[via][0]
+        with closing(ConfigClient(node.host, node.port, timeout=10)) as client:
+            client.set_auth_token(TOKEN[0][1])
+            response = client.fetch_all_configs()
         assert response.operation.status == StatusIds.SUCCESS, response
         result = config.FetchConfigResult()
         assert response.operation.result.Unpack(result) and len(result.config) == 1, response
@@ -45,10 +45,10 @@ class TestSkipperPileMembership(RealSkipperCluster):
         return cfg
 
     def replace_config(self, cfg, via, nodes):
-        with grpc.insecure_channel(self.pile_nodes[via][0].endpoint) as channel:
-            response = config_grpc.ConfigServiceStub(channel).ReplaceConfig(
-                config.ReplaceConfigRequest(replace=yaml.safe_dump(cfg)), metadata=TOKEN, timeout=30
-            )
+        node = self.pile_nodes[via][0]
+        with closing(ConfigClient(node.host, node.port, timeout=30)) as client:
+            client.set_auth_token(TOKEN[0][1])
+            response = client.replace_config(yaml.safe_dump(cfg))
         assert response.operation.status == StatusIds.SUCCESS, response
 
         def applied():
@@ -126,8 +126,7 @@ class TestSkipperPileMembership(RealSkipperCluster):
         ]
         live = [node for node in self.cluster.nodes.values() if node not in removed]
         self.replace_config(cfg, via, live)
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            list(executor.map(lambda node: node.stop(), removed))
+        self.kill_pile(name)
         return self.wait_snapshot(
             lambda s: s['view']
             and all(p['name'] != name for p in s['view']['piles'])
@@ -165,8 +164,7 @@ class TestSkipperPileMembership(RealSkipperCluster):
         )
         generation = int(self.skipper.state()['view']['generation'])
         started = time.monotonic()
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            list(executor.map(daemon.Daemon.kill, self.pile_nodes['r2']))
+        self.kill_pile('r2')
         expected = {'r2': 'DISCONNECTED', 'r3': 'PRIMARY'}
         state = self.wait_snapshot(
             lambda s: s['view'] and {p['name']: p['state'] for p in s['view']['piles']} == expected,

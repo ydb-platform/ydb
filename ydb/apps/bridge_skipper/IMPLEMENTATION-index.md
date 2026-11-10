@@ -77,15 +77,18 @@ callbacks never access an actor object.
    their original behavior before pile verification. GetClusterState determines
    membership and lifecycle; a Discovery omission never changes a pile state or
    discards fresh evidence. Learned endpoints in inactive, disconnected or absent
-   piles retire after outstanding calls settle. Expired learned addresses can be
-   replaced. Configured seeds stay as dormant bootstrap probes, hidden from the
+   piles retire after outstanding calls settle. The initial verification budget
+   covers RPC deadlines and scheduling. Afterwards both APIs must keep answering
+   within their evidence TTL plus RPC renewal deadline; retaining an address does
+   not extend the evidence/routing TTL. Expired addresses can be replaced.
+   Configured seeds stay as dormant bootstrap probes, hidden from the
    published endpoint list while their pile is absent/inactive/disconnected; a
    reused address can be verified for a new pile after its old calls settle.
    A reply without a pile keeps earlier identity and cached evidence at its
    original TTL; a named mismatch excludes the endpoint until a matching reply.
    Discovery uses the seed TLS scheme and driver credentials; certificate-name
-   overrides are skipped. Discovery is best effort and does not persist learned
-   locators: restart requires a reachable configured seed. Neither matching pile
+   overrides are skipped. Plaintext discovery also admits published IPv4/IPv6
+   aliases. Discovery is best effort and does not persist learned locators: restart requires a reachable configured seed. Neither matching pile
    names nor the configured local `cluster_id` prove remote cluster identity.
 2. **View.** Plain `GetClusterState` polls run every state poll. The highest
    fresh generation among all endpoints is selected; same-generation

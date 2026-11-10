@@ -705,6 +705,11 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
         set(CURLOPT_PATH_AS_IS, 1L);
         set(CURLOPT_CUSTOMREQUEST, request.Method.c_str());
         set(CURLOPT_NOSIGNAL, 1L);
+        // On a reused connection curl may replay even a POST if no response
+        // arrived, although the server may already have applied the mutation.
+        // Use a fresh connection for every call and do not retain idle sockets.
+        set(CURLOPT_FRESH_CONNECT, 1L);
+        set(CURLOPT_FORBID_REUSE, 1L);
         set(CURLOPT_FOLLOWLOCATION, 0L);
         set(CURLOPT_PROTOCOLS_STR, "http,https");
         set(CURLOPT_PROXY, "");
@@ -734,7 +739,9 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
             set(CURLOPT_NOBODY, 1L);
         }
         for (const auto& [name, value] : binding.Headers) {
-            auto* headers = curl_slist_append(request.HttpHeaders, (name + ": " + value).c_str());
+            // "name:" suppresses a header in curl; "name;" sends an empty value.
+            const TString header = value.empty() ? name + ";" : name + ": " + value;
+            auto* headers = curl_slist_append(request.HttpHeaders, header.c_str());
             Y_ENSURE(headers, "curl header allocation failed");
             request.HttpHeaders = headers;
         }

@@ -75,6 +75,75 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         env.Clean(call);
     }
 
+    Y_UNIT_TEST(HttpPreservesEmptyConfiguredHeaders) {
+        THttpMock http;
+        TBinding binding;
+        binding.Endpoint = http.Url();
+        binding.Headers = { { "X-Required", "" }, { "X-Control", "present" } };
+        TTransport transport({ binding }, TestExecutor());
+        auto reply = StartDirectHttp(transport, std::make_shared<TDirectReply>());
+        auto request = http.State->Wait();
+        http.State->Reply(0, "ok", 200);
+        {
+            std::unique_lock lock(reply->Mutex);
+            UNIT_ASSERT(reply->Changed.wait_for(lock, std::chrono::seconds(10), [&] {
+                return reply->Done;
+            }));
+            UNIT_ASSERT(reply->Status == EOperationStatus::Ready);
+        }
+        UNIT_ASSERT(HasHeader(*request, "X-Control", "present"));
+        UNIT_ASSERT(HasHeader(*request, "X-Required", ""));
+    }
+
+    Y_UNIT_TEST(HttpDoesNotReplayAfterAmbiguousDisconnect) {
+        for (const auto* method : { "POST", "PATCH", "DELETE" }) {
+            for (const auto* payload : { "mutation", "" }) {
+                THttpMock http(true);
+                TBinding binding;
+                binding.Endpoint = http.Url();
+                TTransport transport({ binding }, TestExecutor());
+                auto start = [&](THandle handle, TStringBuf verb, TStringBuf body) {
+                    auto completed = std::make_shared<std::promise<EOperationStatus>>();
+                    auto result = completed->get_future();
+                    transport.Start(handle, EOperationKind::Request, MakeRequest(0, body, verb, "/call"),
+                        TInstant::Now() + TDuration::Seconds(10), [completed](EOperationStatus status, TString) {
+                            completed->set_value(status);
+                            return true;
+                        });
+                    return result;
+                };
+                // Seed curl's connection cache with a successful keep-alive request.
+                auto first = start(1, "POST", "prime");
+                http.State->Wait();
+                http.State->Reply(0, "ok", 200);
+                UNIT_ASSERT(first.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+                UNIT_ASSERT(first.get() == EOperationStatus::Ready);
+
+                auto second = start(2, method, payload);
+                auto request = http.State->Wait(1);
+                UNIT_ASSERT_VALUES_EQUAL(request->Payload, payload);
+                UNIT_ASSERT(request->Method.StartsWith(TString(method) + " /call "));
+                // The server consumed the mutation, but closes before any response.
+                http.State->Reply(1, {}, 0, true);
+                Eventually([&] {
+                    return second.wait_for(std::chrono::seconds(0)) == std::future_status::ready || http.State->Count() > 2;
+                });
+                if (http.State->Count() > 2) {
+                    // Let a buggy replay finish, so failure reports the duplicate.
+                    http.State->Reply(2, "ok", 200);
+                }
+                UNIT_ASSERT(second.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+                const auto status = second.get();
+                UNIT_ASSERT_VALUES_EQUAL_C(http.State->Count(), 2, method);
+                UNIT_ASSERT(status == EOperationStatus::Failed);
+                Eventually([&] {
+                    return transport.Stats().Operations == 0;
+                });
+                UNIT_ASSERT_VALUES_EQUAL(transport.Stats().ReservedBytes, 0);
+            }
+        }
+    }
+
     Y_UNIT_TEST(GenericGrpcThroughWasmAndNativeCredentials) {
         THttpMock http;
         TGrpcMock grpc;

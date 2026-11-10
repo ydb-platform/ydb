@@ -41,6 +41,15 @@ checks TLS certificates/hostnames, optionally accepts a CA file, disables
 redirects and ambient proxies, and bounds decoded response bodies. gRPC uses
 the guest's method path, injected channel credentials and native metadata.
 There are no application retries; gRPC retries are disabled on the channel.
+HTTP calls force a fresh connection and close it after completion. This avoids
+libcurl's automatic replay on a reused connection when the server consumes a
+request but disconnects before sending any response. An ambiguous disconnect
+is returned as an error, including for POST/PATCH/DELETE with or without a body.
+The tradeoff is connection setup and, for HTTPS, a TLS handshake on each call;
+HTTP pooling must not be restored without preserving this replay policy.
+This does not provide exactly-once execution: a failed call may already have
+changed the remote service. Caller retries still require service idempotency.
+Configured empty HTTP header values are sent as present, empty fields.
 HTTP status and gRPC status codes accompany opaque response bytes. Network
 errors are ordinary operation failures, not traps or compartment poisoning.
 The private wire-v3 response envelope classifies transport, TLS, authentication,

@@ -232,6 +232,11 @@ class THttpMock: public THttpServer::ICallBack {
             if (!head && !ProcessHeaders()) {
                 return true;
             }
+            // ProcessHeaders parses DELETE but leaves its body unread. The
+            // disconnect regression must consume the whole mutation first.
+            if (RequestString.StartsWith("DELETE ")) {
+                Buf = TBlob::FromStream(Input());
+            }
             auto exchange = Owner.State->Record(TString(Buf.AsCharPtr(), Buf.Size()), RequestString, ParsedHeaders);
             if (!Owner.State->AwaitReply(exchange)) {
                 ResetConnection();

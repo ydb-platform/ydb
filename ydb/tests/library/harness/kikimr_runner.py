@@ -399,7 +399,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             super(KiKiMRNode, self).start()
         finally:
             logger.info("Started node %s", self)
-            logger.info("Node %s version:\n%s", self.node_id, self.get_node_binary_version())
+            # Skip ydbd -V on every start: extra process spawn on each node boot.
 
     def read_node_config(self):
         config_file = os.path.join(self.__config_path, "config.yaml")
@@ -1038,7 +1038,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if erasure is None:
             erasure = self.__configurator.static_erasure
         if num_groups is None:
-            num_groups = 2
+            num_groups = 1
         request = bs.TConfigRequest()
         cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = 1

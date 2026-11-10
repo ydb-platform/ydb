@@ -320,9 +320,8 @@ def use_in_memory_pdisks_flag(ydb_working_dir=None):
     if os.getenv('YDB_USE_IN_MEMORY_PDISKS') is not None:
         return os.getenv('YDB_USE_IN_MEMORY_PDISKS') == "true"
 
-    if ydb_working_dir:
-        return False
-
+    # Prefer in-memory PDisks for tests even when a working dir is set.
+    # Opt out explicitly with YDB_USE_IN_MEMORY_PDISKS=false.
     return True
 
 
@@ -517,7 +516,7 @@ def deploy(arguments, actor_system_config=None):
         for flag_name in flags:
             enable_feature_flags.append(flag_name)
 
-    kafka_api_port = os.environ.get("YDB_KAFKA_PROXY_PORT", "auto")
+    kafka_api_port = os.environ.get("YDB_KAFKA_PROXY_PORT", "0")  # off unless tests opt in
     if kafka_api_port != 'auto':
         kafka_api_port = int(kafka_api_port)
     if kafka_api_port != 0:
@@ -546,6 +545,7 @@ def deploy(arguments, actor_system_config=None):
         pdisk_store_path=pdisk_store_path,
         domain_name='local',
         pq_client_service_types=pq_client_service_types(arguments),
+        enable_pq=getattr(arguments, "enable_pq", True),
         enable_pqcd=enable_pqcd(arguments),
         suppress_version_check=arguments.suppress_version_check,
         udfs_path=arguments.ydb_udfs_dir,

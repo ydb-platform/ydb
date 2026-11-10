@@ -19,11 +19,11 @@ DEFAULT_CLUSTER_CONFIG = dict(
     erasure=Erasure.NONE,
     nodes=1,
     additional_log_configs={
-        'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
+        'FLAT_TX_SCHEMESHARD': LogLevels.NOTICE,
         'SCHEME_BOARD_POPULATOR': LogLevels.WARN,
         'SCHEME_BOARD_SUBSCRIBER': LogLevels.WARN,
-        'TX_DATASHARD': LogLevels.DEBUG,
-        'CHANGE_EXCHANGE': LogLevels.DEBUG,
+        'TX_DATASHARD': LogLevels.NOTICE,
+        'CHANGE_EXCHANGE': LogLevels.NOTICE,
     },
 )
 

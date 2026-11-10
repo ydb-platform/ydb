@@ -113,9 +113,7 @@ def _use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks):
     if os.getenv('YDB_USE_IN_MEMORY_PDISKS') is not None:
         return os.getenv('YDB_USE_IN_MEMORY_PDISKS') == "true"
 
-    if pdisk_store_path:
-        return False
-
+    # pdisk_store_path alone is not enough to force file-backed disks.
     return use_in_memory_pdisks
 
 

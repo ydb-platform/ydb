@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include "interconnect_common.h"
@@ -161,6 +162,7 @@ namespace NActors {
             if (TProfiled::Duration() >= TDuration::MilliSeconds(16)) {                         \
                 const TString report = TProfiled::Format();                                     \
                 YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Event processing took too much time", \
+                    {"logPrefix", LogPrefix},                                                   \
                     {"marker", "ICP35"},                                                        \
                     {"report", report.data()});                                                 \
             }                                                                                   \
@@ -201,6 +203,7 @@ namespace NActors {
             ICPROXY_PROFILED;
 
             YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "@ ->",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP77"},
                 {"line", line},
                 {"state", State},
@@ -236,8 +239,12 @@ namespace NActors {
         void SwitchToInitialState() {
             ICPROXY_PROFILED;
 
+            TStringBuilder stringPrefix;
+            NActors::NStructuredLog::TTextWriter TextWriter;
+            TextWriter.Write(stringPrefix, LogPrefix);
+
             Y_ABORT_UNLESS(!PendingSessionEvents && !PendingIncomingHandshakeEvents, "%s PendingSessionEvents# %zu"
-                " PendingIncomingHandshakeEvents# %zu State# %s", LogPrefix.data(), PendingSessionEvents.size(),
+                " PendingIncomingHandshakeEvents# %zu State# %s", stringPrefix.data(), PendingSessionEvents.size(),
                 PendingIncomingHandshakeEvents.size(), State);
             SwitchToState(__LINE__, "PendingActivation", &TThis::PendingActivation);
         }
@@ -417,6 +424,7 @@ namespace NActors {
                     " THIS IS NOT A BUG IN INTERCONNECT, check the event sender instead",
                     ev->Type, ev->GetTypeRewrite(), ev->Sender.ToString().data());
                 YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, msg,
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP03"});
                 Y_DEBUG_ABORT_UNLESS(false, "%s", msg.data());
             }
@@ -501,6 +509,7 @@ namespace NActors {
 
             if (const TActorId& actorId = std::exchange(IncomingHandshakeActor, TActorId())) {
                 YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Dropped incoming",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP111"},
                     {"handshake", actorId},
                     {"poison", poison ? "true" : "false"});
@@ -518,6 +527,7 @@ namespace NActors {
 
             if (const TActorId& actorId = std::exchange(OutgoingHandshakeActor, TActorId())) {
                 YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Dropped outgoing",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP052"},
                     {"handshake", actorId},
                     {"poison", poison ? "true" : "false"});
@@ -541,6 +551,7 @@ namespace NActors {
             // drop existing session if we have one
             if (Session) {
                 YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "Terminating current session as we are negotiating a new one",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP04"});
                 InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::NewSession());
             }

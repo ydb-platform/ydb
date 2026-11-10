@@ -7728,6 +7728,97 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         fixture.WarmAll();
     }
 
+    Y_UNIT_TEST_TWIN(HnswEvictedIndexExhaustsMemoryRetryBudget, ZeroLimit) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
+        TIntrusivePtr<NMemory::TRegistrantConsumer> consumer;
+        std::optional<ui64> limit;
+        ui32 rebuildRequests = 0;
+        constexpr ui32 rebuild = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 36;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() != actor) { return; }
+            if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegistered::EventType) {
+                consumer = dynamic_cast<NMemory::TRegistrantConsumer*>(ev->Get<NMemory::TEvConsumerRegistered>()->Consumer.Get());
+            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && limit) {
+                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = *limit;
+            } else if (ev->GetTypeRewrite() == rebuild) {
+                ++rebuildRequests;
+            }
+        });
+        fixture.Warm();
+        UNIT_ASSERT(consumer);
+        auto pinned = fixture.Index();
+        const auto used = consumer->GetReport().Used;
+        UNIT_ASSERT_GT(used, 0u);
+        limit = ZeroLimit ? 0 : used - 1;
+        runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(*limit)));
+        runtime.WaitFor("HNSW graph evicted", [&] { return !fixture.Index(); });
+        const auto before = rebuildRequests;
+        fixture.Read();
+        for (ui32 second = 0; second < 40; ++second) { runtime.SimulateSleep(TDuration::Seconds(1)); }
+        UNIT_ASSERT_GT(rebuildRequests, before);
+        UNIT_ASSERT_LE(rebuildRequests - before, 32u);
+        const auto exhausted = rebuildRequests;
+        for (ui32 second = 0; second < 10; ++second) { runtime.SimulateSleep(TDuration::Seconds(1)); }
+        UNIT_ASSERT_VALUES_EQUAL(rebuildRequests, exhausted);
+        pinned.reset();
+        runtime.WaitFor("retired HNSW graph released", [&] { return consumer->GetReport().Used == 0; });
+        UNIT_ASSERT_VALUES_EQUAL(consumer->GetReport().Demand, 0u);
+        fixture.Read();
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(rebuildRequests, exhausted);
+
+        limit = 64_MB;
+        runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(*limit)));
+        fixture.Warm(); // A real grant increase may start a fresh bounded attempt.
+    }
+
+    Y_UNIT_TEST(HnswHotKeyWritesDoNotAccumulateBetweenPeriodicPrunes) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto* shard = fixture.Shard();
+        auto graph = fixture.Index();
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
+        constexpr ui32 periodic = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 7;
+        TVector<TAutoPtr<IEventHandle>> periodicEvents;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == actor && ev->GetTypeRewrite() == periodic) {
+                periodicEvents.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        auto write = [&](bool negative) {
+            ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, negative ? R"(
+                UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                    (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            )" : R"(
+                UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                    (1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+            )");
+        };
+        write(true);
+        const auto snapshot = CreateVolatileSnapshot(fixture.Helper.Server,
+            {"/Root/hnsw-lifecycle"}, TDuration::Hours(1));
+        const auto baseline = shard->GetHnswIndexStats(tid, {})->MemoryBytes;
+        const TVector<TCell> key{TCell::Make<ui32>(1)};
+        const auto versionBytes = THnswIndexChanges::EstimateBytes(TSerializedCellVec::Serialize(key), 9);
+        for (ui32 update = 0; update < 128; ++update) {
+            write(update % 2 == 0);
+            UNIT_ASSERT(fixture.Index() == graph);
+            UNIT_ASSERT_LE(shard->GetHnswIndexStats(tid, {})->MemoryBytes, baseline + 8 * versionBytes);
+        }
+        auto historical = fixture.Helper.SendRead("hnsw-lifecycle", fixture.Request(snapshot).release());
+        fixture.Check(*historical, 2);
+        UNIT_ASSERT_VALUES_EQUAL(historical->Record.GetStats().GetRows(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read(1)->Record.GetStats().GetRows(), 1u);
+        observer.Remove();
+        for (auto& ev : periodicEvents) { runtime.Send(ev.Release()); }
+    }
+
     Y_UNIT_TEST(HnswMultipleIndexesSurviveSplitRecovery) {
         THnswMultiFixture fixture;
         fixture.WarmAll();

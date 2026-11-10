@@ -1,4 +1,5 @@
 #include <ydb/core/tx/datashard/hnsw_index/hnsw_index.h>
+#include <ydb/core/tx/datashard/hnsw_index/hnsw_memory_tracker.h>
 
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -889,6 +890,53 @@ namespace NKikimr::NDataShard {
             // Once history is released, a newly requested old pin cannot resurrect coverage.
             changes->Compact({1000, 0}, {{20, 0}});
             UNIT_ASSERT(!index->CanRead({20, 0}));
+        }
+
+        Y_UNIT_TEST(MvccHotKeyReservationsStayBoundedBetweenPrunes) {
+            auto tracker = std::make_shared<THnswCacheMemoryTracker>();
+            auto changes = std::make_shared<THnswIndexChanges>();
+            TString vector(768 * sizeof(float) + 1, '\0');
+            vector.back() = 1;
+            const ui64 bytes = THnswIndexChanges::EstimateBytes("hot", vector.size());
+            tracker->SetLimit(4 * bytes);
+            auto reserve = [&] {
+                UNIT_ASSERT_C(tracker->TryAcquire(bytes), "Hot-key journal exhausted its four-version budget");
+                return std::shared_ptr<void>(new int(0), [tracker, bytes](void* value) {
+                    delete static_cast<int*>(value);
+                    tracker->Release(bytes);
+                });
+            };
+            std::shared_ptr<void> firstPin, duplicatePin, secondPin;
+            std::weak_ptr<void> obsolete;
+            for (ui64 step = 11; step <= 5000; ++step) {
+                auto reservation = reserve();
+                if (step == 12) { obsolete = reservation; }
+                changes->AdvanceRetentionFloor({step, 0});
+                changes->Set("hot", {step, 0}, vector, std::move(reservation));
+                if (step == 11) {
+                    firstPin = changes->PinReadVersion({11, 0});
+                    duplicatePin = changes->PinReadVersion({11, 0});
+                }
+                if (step == 20) { secondPin = changes->PinReadVersion({20, 0}); }
+                if (step == 100) { duplicatePin.reset(); }
+                UNIT_ASSERT_LE(changes->GetVersionCount(), 3u);
+            }
+            UNIT_ASSERT(obsolete.expired());
+            UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 3 * bytes);
+            for (ui64 step : {11, 20, 5000}) {
+                UNIT_ASSERT(changes->Covers({step, 0}));
+                const auto* visible = changes->Find("hot", {step, 0}, {10, 0});
+                UNIT_ASSERT(visible);
+                UNIT_ASSERT_VALUES_EQUAL(visible->Version, TRowVersion(step, 0));
+            }
+            firstPin.reset();
+            secondPin.reset();
+            changes->AdvanceRetentionFloor({5001, 0});
+            changes->Set("hot", {5001, 0}, vector, reserve());
+            UNIT_ASSERT_VALUES_EQUAL(changes->GetVersionCount(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), bytes);
+            UNIT_ASSERT(!changes->Covers({11, 0}));
+            UNIT_ASSERT(!changes->PinReadVersion({11, 0}));
         }
 
         Y_UNIT_TEST(MvccBatchedRetentionPreservesWritesAndPinnedSnapshots) {

@@ -154,10 +154,9 @@ namespace NKikimr::NDataShard {
         }
         EstimatedBytes += bytes;
         UpdateCounts(before, history.back().Version);
-        // A full prune already compacted the older prefix. Appending above its
-        // floor cannot make any of that prefix obsolete, and walking the growing
-        // suffix on every write would be quadratic between periodic prunes.
-        if (RetentionInitialized && (RetentionNeedsCompaction || version <= LowerReadVersion)) {
+        // Compact just this key; its obsolete vector reservations must not wait
+        // for the periodic full-journal prune.
+        if (RetentionInitialized) {
             CompactHistory(key, history);
         }
     }
@@ -226,7 +225,38 @@ namespace NKikimr::NDataShard {
     }
 
     bool THnswIndexChanges::Covers(TRowVersion version) const {
-        return version >= LowerReadVersion || std::binary_search(PinnedVersions.begin(), PinnedVersions.end(), version);
+        if (version >= LowerReadVersion || std::binary_search(PinnedVersions.begin(), PinnedVersions.end(), version)) {
+            return true;
+        }
+        std::lock_guard guard(ReadPins->Mutex);
+        return ReadPins->Versions.contains(version);
+    }
+
+    std::shared_ptr<void> THnswIndexChanges::PinReadVersion(TRowVersion version) {
+        if (!Covers(version)) { return {}; }
+        struct TPin {
+            std::shared_ptr<TReadPins> Pins;
+            TRowVersion Version;
+
+            TPin(std::shared_ptr<TReadPins> pins, TRowVersion version)
+                : Pins(std::move(pins)), Version(version)
+            {
+                std::lock_guard guard(Pins->Mutex);
+                ++Pins->Versions[Version];
+            }
+
+            ~TPin() {
+                std::lock_guard guard(Pins->Mutex);
+                auto it = Pins->Versions.find(Version);
+                if (!--it->second) { Pins->Versions.erase(it); }
+            }
+        };
+        return std::make_shared<TPin>(ReadPins, version);
+    }
+
+    void THnswIndexChanges::AdvanceRetentionFloor(TRowVersion floor) {
+        LowerReadVersion = Max(LowerReadVersion, floor);
+        RetentionInitialized = true;
     }
 
     void THnswIndexChanges::AdvanceRetention(TRowVersion floor, const std::vector<TRowVersion>& pins) {
@@ -237,25 +267,27 @@ namespace NKikimr::NDataShard {
         Sort(retained);
         retained.erase(std::unique(retained.begin(), retained.end()), retained.end());
         PinnedVersions.swap(retained);
-        LowerReadVersion = Max(LowerReadVersion, floor);
-        RetentionInitialized = true;
-        RetentionNeedsCompaction = true;
+        AdvanceRetentionFloor(floor);
     }
 
     void THnswIndexChanges::CompactHistory(TStringBuf key, THistory& history) {
         std::vector<size_t> keep;
-        for (auto version : PinnedVersions) {
-            const auto it = std::upper_bound(history.begin(), history.end(), version,
-                [](TRowVersion value, const TVersion& item) { return value < item.Version; });
-            if (it != history.begin()) { keep.push_back(it - history.begin() - 1); }
-        }
         // Keep the predecessor of the floor, every newer version, and each pin's predecessor.
         auto boundary = std::upper_bound(history.begin(), history.end(), LowerReadVersion,
             [](TRowVersion value, const TVersion& item) { return value < item.Version; });
         if (boundary != history.begin()) { --boundary; }
+        {
+            std::lock_guard guard(ReadPins->Mutex);
+            for (size_t i = 0; i < size_t(boundary - history.begin()); ++i) {
+                const auto retained = std::lower_bound(PinnedVersions.begin(), PinnedVersions.end(), history[i].Version);
+                const auto pin = ReadPins->Versions.lower_bound(history[i].Version);
+                if ((retained != PinnedVersions.end() && *retained < history[i + 1].Version)
+                        || (pin != ReadPins->Versions.end() && pin->first < history[i + 1].Version)) {
+                    keep.push_back(i);
+                }
+            }
+        }
         for (size_t i = boundary - history.begin(); i < history.size(); ++i) { keep.push_back(i); }
-        Sort(keep);
-        keep.erase(std::unique(keep.begin(), keep.end()), keep.end());
         size_t next = 0;
         size_t output = 0;
         const size_t previousSize = history.size();
@@ -276,7 +308,6 @@ namespace NKikimr::NDataShard {
     void THnswIndexChanges::Compact(TRowVersion floor, const std::vector<TRowVersion>& pins) {
         AdvanceRetention(floor, pins);
         for (auto& [key, history] : Rows) { CompactHistory(key, history); }
-        RetentionNeedsCompaction = false;
     }
 
     void THnswIndexChanges::Clear() {
@@ -671,6 +702,10 @@ namespace NKikimr::NDataShard {
 
     TRowVersion THnswIndex::GetBaseVersion() const {
         return Impl->BaseVersion;
+    }
+
+    std::shared_ptr<void> THnswIndex::PinReadVersion(TRowVersion version) {
+        return CanRead(version) ? Impl->Changes->PinReadVersion(version) : nullptr;
     }
 
     bool THnswIndex::CanRead(TRowVersion version) const {

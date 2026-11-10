@@ -691,6 +691,7 @@ void TSnapshotManager::PersistAddSnapshot(NIceDb::TNiceDb& db, const TSnapshotKe
         std::forward_as_tuple(key),
         std::forward_as_tuple(key, name, flags, timeout));
     Y_ENSURE(res.second, "Unexpected duplicate snapshot: " << key);
+    Self->UpdateHnswSnapshotPin(key, true);
 
     db.Table<Schema::Snapshots>()
         .Key(key.OwnerId, key.PathId, key.Step, key.TxId)
@@ -709,6 +710,7 @@ void TSnapshotManager::PersistRemoveSnapshot(NIceDb::TNiceDb& db, const TSnapsho
     }
 
     Snapshots.erase(it);
+    Self->UpdateHnswSnapshotPin(key, false);
 
     db.Table<Schema::Snapshots>()
         .Key(key.OwnerId, key.PathId, key.Step, key.TxId)

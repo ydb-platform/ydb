@@ -82,6 +82,7 @@ struct TReadIteratorVectorTop {
     // if set, TReader::IterateRange uses it instead of the brute-force scan below.
     std::shared_ptr<NDataShard::THnswIndex> HnswIndex;
     TPathId HnswIndexId;
+    std::shared_ptr<void> HnswReadPin;
     std::optional<THnswSearchResult> HnswCandidates;
     TRowVersion HnswCandidatesVersion = TRowVersion::Max();
 
@@ -1501,6 +1502,7 @@ private:
             if (TableInfo.CoversFullShard(tableRange)) {
                 auto& topK = *State.VectorTopK;
                 if (!topK.HnswCandidates || topK.HnswCandidatesVersion != State.ReadVersion) {
+                    topK.HnswReadPin = topK.HnswIndex->PinReadVersion(State.ReadVersion);
                     topK.HnswCandidates = SearchHnswDistinct();
                     topK.HnswCandidatesVersion = State.ReadVersion;
                 }
@@ -2957,6 +2959,9 @@ public:
                 if (canUseHnsw) {
                     topState->HnswIndex = Self->GetHnswIndex(localTid, vectorColumnTag,
                         hnswSettings, false, state.ReadVersion, selected);
+                    if (topState->HnswIndex) {
+                        topState->HnswReadPin = topState->HnswIndex->PinReadVersion(state.ReadVersion);
+                    }
                     Self->RegisterHnswCacheLookup(localTid, bool(topState->HnswIndex), selected);
                 }
                 if (canUseHnsw && !topState->HnswIndex) {

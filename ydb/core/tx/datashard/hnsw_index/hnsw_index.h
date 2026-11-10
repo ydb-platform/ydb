@@ -54,6 +54,10 @@ namespace NKikimr::NDataShard {
         // Future reads below this floor deliberately use the exact table scan.
         void Compact(TRowVersion floor, const std::vector<TRowVersion>& pins = {});
         void AdvanceRetention(TRowVersion floor, const std::vector<TRowVersion>& pins);
+        // Advance on commit without scanning other keys or open readers. Leases
+        // keep their snapshot's predecessor when Set compacts the changed key.
+        void AdvanceRetentionFloor(TRowVersion floor);
+        std::shared_ptr<void> PinReadVersion(TRowVersion version);
         bool Covers(TRowVersion version) const;
         void Clear();
         static size_t EstimateBytes(TStringBuf key, size_t vectorBytes);
@@ -76,7 +80,11 @@ namespace NKikimr::NDataShard {
         void CompactHistory(TStringBuf key, THistory& history);
         std::vector<TRowVersion> PinnedVersions;
         bool RetentionInitialized = false;
-        bool RetentionNeedsCompaction = false;
+        struct TReadPins {
+            std::mutex Mutex;
+            TMap<TRowVersion, size_t> Versions;
+        };
+        std::shared_ptr<TReadPins> ReadPins = std::make_shared<TReadPins>();
         size_t VersionCount = 0;
         size_t EstimatedBytes = 0;
     };
@@ -127,6 +135,7 @@ namespace NKikimr::NDataShard {
         void SetSnapshot(TRowVersion base, std::shared_ptr<THnswIndexChanges> changes,
                          TRowVersion upper = TRowVersion::Max());
         TRowVersion GetBaseVersion() const;
+        std::shared_ptr<void> PinReadVersion(TRowVersion version);
         bool CanRead(TRowVersion version) const;
         // The limit counts distinct changed rows, independently of graph size.
         bool NeedsRebuild(ui64 deltaRows) const;

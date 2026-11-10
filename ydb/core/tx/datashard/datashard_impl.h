@@ -1987,6 +1987,7 @@ public:
     void ReconcileHnswIndexes(const TUserTable& before, const TUserTable& after);
     void InvalidateHnswIndexes();
     void PruneHnswIndexes();
+    void UpdateHnswSnapshotPin(const TSnapshotKey& snapshot, bool add);
     std::vector<TRowVersion> GetHnswReadVersions(ui32 localTid) const;
     void ScheduleHnswRebuild(ui32 localTid, TPathId indexId = {});
     void ScheduleHnswInitialBuilds();
@@ -2001,6 +2002,7 @@ public:
     void DeferHnswIndexBuild(ui32 localTid, TDuration delay, TPathId indexId = {}) {
         if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
             entry->Building = false;
+            entry->BuildReadPin.reset();
             const ui64 desired = HnswCacheMemoryTracker ? HnswCacheMemoryTracker->GetDemand(entry->MemoryOwner) : 0;
             entry->RetryMemoryBytes = Max(entry->RetryMemoryBytes, desired > Max<ui64>() / 2 ? Max<ui64>() : desired * 2);
             if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetDemand(entry->MemoryOwner); }
@@ -2013,6 +2015,7 @@ public:
         EraseIf(HnswBuildQueue, [&](const auto& queued) { return queued.first == localTid && queued.second == indexId; });
         if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
             entry->Building = false;
+            entry->BuildReadPin.reset();
             entry->NextScanAttemptAt = TInstant::Max();
             if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetDemand(entry->MemoryOwner); }
         }
@@ -2070,6 +2073,10 @@ public:
         HnswCacheMemoryTracker->SetLimit(limit);
         if (limit > previousLimit) {
             ForEachHnswIndexEntry([&](ui32 localTid, const TPathId& indexId, auto& entry) {
+                if (entry.EvictedMemoryBytes && entry.NextScanAttemptAt == TInstant::Max()) {
+                    entry.NextScanAttemptAt = TInstant::Zero();
+                    entry.InitialBuildAttemptsLeft = 30;
+                }
                 if (entry.NextScanAttemptAt != TInstant::Max()) {
                     if (entry.InitialBuildAttemptsLeft) { ScheduleHnswRebuild(localTid, indexId); }
                 }
@@ -3239,6 +3246,8 @@ private:
         ui32 VectorColumnTag = 0;
         Ydb::Table::VectorIndexSettings Settings;
         std::shared_ptr<THnswIndexChanges> Changes = std::make_shared<THnswIndexChanges>();
+        TMap<TRowVersion, std::shared_ptr<void>> SnapshotReadPins;
+        std::shared_ptr<void> BuildReadPin;
         std::vector<std::shared_ptr<THnswIndex>> Retained;
         std::vector<std::weak_ptr<THnswIndex>> Generations;
         THashMap<ui64, THashMap<TString, THnswIndexChanges::TVersion>> Pending;
@@ -3297,7 +3306,10 @@ private:
         if (!FindHnswIndexInfo(localTid, indexId)) { return nullptr; }
         auto& entry = HnswIndexCache[localTid][indexId];
         entry.LocalTid = localTid;
-        if (!entry.MemoryOwner) { entry.MemoryOwner = ++NextHnswMemoryOwner; }
+        if (!entry.MemoryOwner) {
+            entry.MemoryOwner = ++NextHnswMemoryOwner;
+            RefreshHnswSnapshotPins(entry);
+        }
         return &entry;
     }
 
@@ -3319,6 +3331,8 @@ private:
     }
 
     void InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry);
+    void ResetHnswIndexChanges(THnswIndexCacheEntry& entry);
+    void RefreshHnswSnapshotPins(THnswIndexCacheEntry& entry);
     std::shared_ptr<THnswCacheMemoryTracker> HnswCacheMemoryTracker;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;

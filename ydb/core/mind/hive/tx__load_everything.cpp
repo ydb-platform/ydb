@@ -37,6 +37,8 @@ public:
         Self->BlockedOwners.clear();
         Self->BridgePiles.clear();
 
+        Self->ResetTotalResourceValues();
+
         Self->Domains[Self->RootDomainKey].Path = Self->RootDomainName;
         Self->Domains[Self->RootDomainKey].HiveId = rootHiveId;
 
@@ -478,6 +480,11 @@ public:
                 tablet.LockedToActor = tabletRowset.GetValueOrDefault<Schema::Tablet::LockedToActor>();
                 tablet.LockedReconnectTimeout = TDuration::MilliSeconds(tabletRowset.GetValueOrDefault<Schema::Tablet::LockedReconnectTimeout>());
                 if (tablet.LockedToActor) {
+                    if (tablet.NodeId != 0) {
+                        // A lock suppresses local execution; discard stale placement from older versions.
+                        tablet.NodeId = 0;
+                        db.Table<Schema::Tablet>().Key(tabletId).Update<Schema::Tablet::LeaderNode>(0);
+                    }
                     TNodeId nodeId = tablet.LockedToActor.NodeId();
                     auto it = Self->Nodes.find(nodeId);
                     if (it == Self->Nodes.end()) {
@@ -487,7 +494,7 @@ public:
                     }
                     it->second.LockedTablets.insert(&tablet);
                     if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
-                        tablet.BecomeUnknown(tablet.Hive.FindNode(tablet.LockedToActor.NodeId()));
+                        tablet.BecomeUnknown(&it->second);
                     }
                 }
 
@@ -507,7 +514,10 @@ public:
                 }
 
                 if (tablet.NodeId == 0) {
-                    if (!tablet.LockedToActor || !Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                    if (tablet.IsDeleting()
+                            || !tablet.LockedToActor
+                            || !Self->CurrentConfig.GetLockedTabletsSendMetrics())
+                    {
                         tablet.BecomeStopped();
                     }
                 } else {

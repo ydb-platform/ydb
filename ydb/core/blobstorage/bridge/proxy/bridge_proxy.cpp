@@ -1244,7 +1244,7 @@ namespace NKikimr {
                 {"bridgePileId", bridgePileId},
                 {"request", ev->ToString()},
                 {"cookie", LastRequestCookie + 1},
-                {"groupPileInfo", groupPileInfo});
+                {"groupPileInfo", *groupPileInfo});
 
             // allocate cookie for this specific request and bind it to the common one
             const ui64 cookie = ++LastRequestCookie;

@@ -30,8 +30,8 @@ public:
         OutputBytes->Set(stats.OutputBytes);
         if (stats.HopInputEventsCount && !HopInputEventsCount) {
             auto queryGroup = HostGroup->GetSubgroup("path", Path);
-            HopInputEventsCount = queryGroup->GetCounter("hop.input_events.rate", true);
-            HopLateEventsCount = queryGroup->GetCounter("hop.late_events.rate", true);
+            HopInputEventsCount = queryGroup->GetCounter("streaming.query.hop.input_events.rate", true);
+            HopLateEventsCount = queryGroup->GetCounter("streaming.query.hop.late_events.rate", true);
         }
         if (HopInputEventsCount) {
             HopInputEventsCount->Set(stats.HopInputEventsCount);

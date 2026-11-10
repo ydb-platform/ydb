@@ -688,8 +688,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             kqpCounters->GetSubgroup("subsystem", "streaming_queries")->GetSubgroup("host", "")->GetSubgroup("path", "/Root/hopCountersQuery");
         const auto waitCounters = [&](i64 expectedInput, i64 expectedLate) {
             WaitFor(TDuration::Seconds(30), "streaming query Hop counters", [&](TString& error) {
-                const auto inputEvents = queryCounters->FindCounter("hop.input_events.rate");
-                const auto lateEvents = queryCounters->FindCounter("hop.late_events.rate");
+                const auto inputEvents = queryCounters->FindCounter("streaming.query.hop.input_events.rate");
+                const auto lateEvents = queryCounters->FindCounter("streaming.query.hop.late_events.rate");
                 if (!inputEvents || !lateEvents) {
                     error = "Hop counters have not been created";
                     return false;
@@ -716,8 +716,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         addEvents("2025-08-24T00:00:00Z");   // Four late events must still count as input.
         readSession->AddDataReceivedEvent(offset++, R"({"time":null,"key":0})");
         waitCounters(13, 4);
-        const auto inputEvents = queryCounters->FindCounter("hop.input_events.rate");
-        const auto lateEvents = queryCounters->FindCounter("hop.late_events.rate");
+        const auto inputEvents = queryCounters->FindCounter("streaming.query.hop.input_events.rate");
+        const auto lateEvents = queryCounters->FindCounter("streaming.query.hop.late_events.rate");
 
         addEvents("2025-08-24T00:00:40Z");
         addEvents("2025-08-24T00:00:00Z");
@@ -2654,8 +2654,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             const auto uptime = queryCounters->FindCounter("streaming.query.uptime.seconds");
             return uptime && uptime->Val() > 0;
         });
-        UNIT_ASSERT(!queryCounters->FindCounter("hop.input_events.rate"));
-        UNIT_ASSERT(!queryCounters->FindCounter("hop.late_events.rate"));
+        UNIT_ASSERT(!queryCounters->FindCounter("streaming.query.hop.input_events.rate"));
+        UNIT_ASSERT(!queryCounters->FindCounter("streaming.query.hop.late_events.rate"));
     }
 
     Y_UNIT_TEST_TWIN_F(ReadLargeTopicMessage, Compressed, TStreamingTestFixture) {

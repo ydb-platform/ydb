@@ -4810,7 +4810,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
     }
 
     void CheckNodesStorageFilterCase(TTestActorRuntime& runtime, size_t& vslotsResponses, bool vslotsAvailable,
-                                    const TString& query, const std::vector<TNodeId>& expectedNodeIds, bool expectVSlots) {
+                                    const TString& query, const std::vector<TNodeId>& expectedNodeIds, bool expectVSlots,
+                                    bool storageFilter = false) {
         vslotsResponses = 0;
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
@@ -4825,10 +4826,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const TString context = TStringBuilder() << query << ": " << result->Response->Body;
         UNIT_ASSERT_VALUES_EQUAL_C(vslotsResponses > 0, expectVSlots, context);
         bool hasVSlotsError = false;
+        bool hasFilterNotApplied = false;
         for (const auto& problem : json["Problems"].GetArray()) {
             hasVSlotsError |= problem.GetString() == "bsc-storage-slots-no-data";
+            hasFilterNotApplied |= problem.GetString() == "filter-not-applied";
         }
         UNIT_ASSERT_VALUES_EQUAL_C(hasVSlotsError, expectVSlots && !vslotsAvailable, context);
+        // a group or pool filter that could not be resolved to nodes must not be dropped silently
+        UNIT_ASSERT_VALUES_EQUAL_C(hasFilterNotApplied, storageFilter && !vslotsAvailable, context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(expectedNodeIds.size()), context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["FoundNodes"].GetString(), ToString(expectedNodeIds.size()), context);
         UNIT_ASSERT_C(!json["NeedFilter"].GetBoolean(), context);
@@ -4907,10 +4912,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
             for (const TString& filter : {TString("&group_id=10"), TString("&pool=test-pool")}) {
                 // Without VSlots, keep the explicit node filter even when group membership is unavailable.
                 CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
-                    fields + filter, vslotsAvailable ? groupNodeIds : allNodeIds, true);
+                    fields + filter, vslotsAvailable ? groupNodeIds : allNodeIds, true, true);
                 CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
                     TStringBuilder() << fields << filter << "&node_id=" << firstNodeId << ',' << secondNodeId,
-                    vslotsAvailable ? groupNodeIds : selectedNodeIds, true);
+                    vslotsAvailable ? groupNodeIds : selectedNodeIds, true, true);
             }
         }
     }

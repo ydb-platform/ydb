@@ -1489,6 +1489,12 @@ public:
         return nullptr;
     }
 
+    void AddStorageFilterNotAppliedProblem() {
+        // The nodes of a storage pool or a group are known only from BSC data. Without it the filter
+        // is dropped and the nodes are returned unfiltered, so the client has to be told about that.
+        AddProblem("filter-not-applied");
+    }
+
     void SetNodeDisconnected(TNodeId nodeId) {
         if (TNode* node = FindNode(nodeId)) {
             node->DisconnectNode();
@@ -2464,6 +2470,9 @@ public:
                 FilterStorageStage = EFilterStorageStage::Groups;
             } else {
                 AddProblem("bsc-storage-pools-no-data");
+                if (!FilterStoragePools.empty()) {
+                    AddStorageFilterNotAppliedProblem();
+                }
                 FilterStorageStage = EFilterStorageStage::None;
             }
             StoragePoolsResponse.reset();
@@ -2481,6 +2490,7 @@ public:
                 FilterStorageStage = EFilterStorageStage::VSlots;
             } else {
                 AddProblem("bsc-storage-groups-no-data");
+                AddStorageFilterNotAppliedProblem(); // this stage is reached only with a storage pool filter
                 FilterStorageStage = EFilterStorageStage::None;
             }
         }
@@ -2513,6 +2523,9 @@ public:
                 FieldsAvailable.set(+ENodeFields::HasDisks);
             } else {
                 AddProblem("bsc-storage-slots-no-data");
+                if (!FilterGroupIds.empty()) {
+                    AddStorageFilterNotAppliedProblem();
+                }
             }
             FilterStorageStage = EFilterStorageStage::None;
             ApplyEverything();

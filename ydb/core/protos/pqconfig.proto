@@ -535,6 +535,16 @@ message TPQTabletConfig {
     optional string SqsCloudId = 46 [default = ""];
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
+
+    // Set for the topic of a CDC stream in the aggregated barrier mode. Only the
+    // bound CdcAggregator may publish the barrier, and partitions do not
+    // aggregate heartbeats of registered sources. Absent for legacy CDC streams
+    // and ordinary topics.
+    message TCdcBarrierBinding {
+        optional NKikimrProto.TPathID StreamPathId = 1;
+        optional fixed64 AggregatorTabletId = 2;
+    }
+    optional TCdcBarrierBinding CdcBarrierBinding = 50;
 }
 
 message THeartbeat {

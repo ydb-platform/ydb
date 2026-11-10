@@ -482,4 +482,9 @@ message TFeatureFlags {
     // Gate for HNSW creation and acceleration once the implementation is included.
     optional bool EnableHnswIndex = 384 [default = false];
     optional bool EnableColumnshardCutHistorySending = 385 [default = false];
+    // New CDC streams with resolved timestamps are created in the aggregated
+    // barrier mode: a CdcAggregator tablet publishes resolved timestamps instead
+    // of every DataShard sending heartbeats to every partition. Existing streams
+    // keep their mode when the flag changes.
+    optional bool EnableCdcAggregator = 386 [default = false];
 }

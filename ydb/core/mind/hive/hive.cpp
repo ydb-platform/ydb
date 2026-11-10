@@ -224,6 +224,7 @@ const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES =
                                                                                   {TTabletTypes::BlockStoreDiskRegistry, "BDR"},
                                                                                   {TTabletTypes::BackupController, "BCT"},
                                                                                   {TTabletTypes::WasmCompileController, "WCC"},
+                                                                                  {TTabletTypes::CdcAggregator, "CA"},
                                                                                  };
 
 const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHORT_NAME = MakeReverseMap(TABLET_TYPE_SHORT_NAMES);

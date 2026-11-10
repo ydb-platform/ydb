@@ -1183,6 +1183,16 @@ enum ECdcStreamCompression {
     ECdcStreamCompressionZstd = 1;
 }
 
+// How resolved timestamps reach the topic of a CDC stream.
+enum ECdcStreamBarrierMode {
+    // Every DataShard sends heartbeats to every partition; each partition
+    // aggregates heartbeats of its registered sources.
+    ECdcStreamBarrierModeLegacy = 0;
+    // DataShards report delivered progress to the stream's CdcAggregator,
+    // which publishes the common barrier to every partition.
+    ECdcStreamBarrierModeAggregated = 1;
+}
+
 message TCdcStreamScanProgress {
     optional uint32 ShardsTotal = 1;
     optional uint32 ShardsCompleted = 2;
@@ -1207,6 +1217,10 @@ message TCdcStreamDescription {
     optional bool TraceIds = 14;
     optional ECdcStreamCompression Compression = 15 [default = ECdcStreamCompressionNone];
     optional int32 CompressionLevel = 16;
+    // Chosen when the stream is created and never changed afterwards.
+    optional ECdcStreamBarrierMode BarrierMode = 17;
+    // CdcAggregator tablet of an aggregated stream; required for it.
+    optional fixed64 AggregatorTabletId = 18;
 }
 
 message TCreateCdcStream {

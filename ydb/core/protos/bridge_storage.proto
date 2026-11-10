@@ -47,6 +47,8 @@ message TPileSynchronizationResult {
     google.protobuf.Timestamp observed_at = 3;
     // Pools whose database cannot be identified; excluded from totals.
     uint64 unattributed_storage_pools = 4;
+    // Known storage owners whose pools are all bridged. Omitted for pool-filtered reports.
+    optional uint64 bridge_databases = 5;
 }
 
 message TDatabaseSynchronizationResult {
@@ -114,6 +116,8 @@ message TPileSynchronization {
     // Unset: unknown placement; empty: the real pile named "".
     optional string pile_name = 1;
     TDatabaseSyncCounts databases = 2;
+    // Same classification as databases, restricted to fully bridged owners.
+    TDatabaseSyncCounts bridge_databases = 3;
 }
 
 // Last error; may remain while synchronization is running.

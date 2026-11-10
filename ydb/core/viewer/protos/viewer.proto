@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "ydb/core/graph/protos/graph.proto";
+import "ydb/core/protos/bridge_storage.proto";
 import "ydb/core/protos/tablet_counters.proto";
 import "ydb/core/protos/memory_stats.proto";
 import "ydb/core/protos/node_whiteboard.proto";
@@ -342,10 +343,14 @@ message TBridgePileInfo {
     map<string, uint32> GroupStatuses = 5; // UNKNOWN (grey), FULL (green), PARTIAL (yellow), DEGRADED (yellow), DISINTEGRATED (red)
     optional TBridgePileSyncInfo Sync = 6; // set when some groups of the pile are not synced yet
     repeated TBridgePileStoragePool StoragePools = 7; // the pools that have groups not synced yet in the pile
+    // Fully bridged databases, keyed by ESynchronizationStatus name.
+    map<string, uint64> DatabaseCountsBySyncStatus = 12;
 }
 
 message TBridgeInfo {
     repeated TBridgePileInfo Piles = 1;
+    // Counts each known storage-owning database with fully bridged pools once.
+    optional uint64 BridgeDatabases = 2;
 }
 
 message TClusterInfo {
@@ -441,6 +446,9 @@ message TTenant {
     uint64 NetworkWriteThroughput = 53;
     uint64 GrpcRequestBytes = 54;
     uint64 GrpcResponseBytes = 55;
+    // Omitted when the database's storage mode is unavailable or mixed.
+    optional bool BridgeMode = 56;
+    optional NKikimrBridge.ESynchronizationStatus BridgeSyncStatus = 57;
 }
 
 message TTenants {
@@ -538,6 +546,8 @@ message TStorageGroupInfo {
     optional uint32 GroupSizeInUnits = 29;
     repeated TStorageVDisk VDisks = 30;
     TStorageGroupStateInfo StateInfo = 31; // omitted when CalcState cannot determine a known status
+    optional string BridgeSyncStage = 32;
+    optional string BridgeSyncLastError = 33;
 }
 
 message TStorageGroupGroup {

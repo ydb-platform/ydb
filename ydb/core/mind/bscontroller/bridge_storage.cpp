@@ -549,6 +549,10 @@ namespace NKikimr::NBsController {
             }
         }
         if (query.GetView() == TQuery::PILES) {
+            // A pool filter can hide other pools of the same owner and change its apparent mode.
+            const bool reportBridgeDatabases = !query.HasStoragePool() && !query.HasStoragePoolId() && !query.GetFilterPools();
+            ui64 bridgeDatabases = 0;
+            std::map<TBridgePileId, NBridgeStorage::TCounts> bridgeDatabaseCounts;
             for (auto& [key, owner] : owners) {
                 Y_UNUSED(key);
                 if (!budget.Visit()) {
@@ -557,6 +561,8 @@ namespace NKikimr::NBsController {
                 if (owner.Mode == NKikimrBridge::ORDINARY && owner.Copies.empty() && !query.HasPileName()) {
                     owner.Copies.try_emplace(TBridgePileId());
                 }
+                const bool bridged = reportBridgeDatabases && owner.Mode == NKikimrBridge::BRIDGED;
+                bridgeDatabases += bridged;
                 for (const auto& [pileId, copy] : owner.Copies) {
                     if (!pileId && owner.Mode == NKikimrBridge::MIXED) {
                         continue;
@@ -564,10 +570,17 @@ namespace NKikimr::NBsController {
                     if (!budget.Visit()) {
                         return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                     }
-                    databaseCounts[pileId].CountDatabase(copy.Counts.GetStatus());
+                    const auto status = copy.Counts.GetStatus();
+                    databaseCounts[pileId].CountDatabase(status);
+                    if (bridged) {
+                        bridgeDatabaseCounts[pileId].CountDatabase(status);
+                    }
                 }
             }
             report.MutablePiles()->set_unattributed_storage_pools(unattributedPools);
+            if (reportBridgeDatabases) {
+                report.MutablePiles()->set_bridge_databases(bridgeDatabases);
+            }
             for (const auto* pile : piles) {
                 if (!budget.Visit() || !budget.Fits(pile->Name.size() + 128)) {
                     return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
@@ -575,6 +588,9 @@ namespace NKikimr::NBsController {
                 NKikimrBridge::TPileSynchronization row;
                 row.set_pile_name(pile->Name);
                 databaseCounts[pile->BridgePileId].ToProto(row.mutable_databases());
+                if (reportBridgeDatabases) {
+                    bridgeDatabaseCounts[pile->BridgePileId].ToProto(row.mutable_bridge_databases());
+                }
                 if (!budget.Account(row)) {
                     return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                 }

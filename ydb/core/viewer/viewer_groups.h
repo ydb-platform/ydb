@@ -323,6 +323,7 @@ public:
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
         float DiskSpaceUsage = 0; // the highest
         TString PileName;
+        const NKikimrSysView::TGroupInfo* BscInfo = nullptr;
         float MaxPDiskUsage = 0;
         float MaxVDiskSlotUsage = 0;
         float MaxVDiskRawUsage = 0;
@@ -1635,6 +1636,7 @@ public:
                         continue;
                     }
                     TGroup& group = GroupData.emplace_back();
+                    group.BscInfo = &info;
                     group.GroupId = entry.GetKey().GetGroupId();
                     group.GroupGeneration = info.GetGeneration();
                     group.BoxId = info.GetBoxId();
@@ -2492,6 +2494,7 @@ public:
             json.AddProblems(problem);
         }
         if (GroupGroups.empty()) {
+            const bool showBridgeSync = !IsStrictDatabaseOnlyRequest() || DatabaseStoragePoolsApplied;
             for (const TGroup* group : GroupView) {
                 NKikimrViewer::TStorageGroupInfo& jsonGroup = *json.AddStorageGroups();
                 jsonGroup.SetGroupId(::ToString(group->GroupId));
@@ -2574,6 +2577,15 @@ public:
                 }
                 if (FieldsAvailable.test(+EGroupFields::PileName) && FieldsRequested.test(+EGroupFields::PileName)) {
                     jsonGroup.SetPileName(group->PileName);
+                }
+                if (showBridgeSync && group->BscInfo) {
+                    const auto& info = *group->BscInfo;
+                    if (info.HasBridgeSyncStage()) {
+                        jsonGroup.SetBridgeSyncStage(info.GetBridgeSyncStage());
+                    }
+                    if (!info.GetBridgeSyncLastError().empty()) {
+                        jsonGroup.SetBridgeSyncLastError(info.GetBridgeSyncLastError());
+                    }
                 }
                 if (FieldsAvailable.test(+EGroupFields::MaxPDiskUsage) && FieldsRequested.test(+EGroupFields::MaxPDiskUsage)) {
                     jsonGroup.SetMaxPDiskUsage(group->MaxPDiskUsage);
@@ -2873,6 +2885,10 @@ public:
         storageGroupProperties["MaxNormalizedOccupancy"]["description"] = "max VDisk.NormalizedOccupancy across VDisks in this group";
         storageGroupProperties["MaxVDiskRawUsage"]["description"] = "max VDisk.RawUsage across VDisks in this group";
         storageGroupProperties["CapacityAlert"]["description"] = "worst VDisk.CapacityAlert in this group";
+        storageGroupProperties["BridgeSyncStage"]["description"] =
+            "Bridge synchronization stage as reported by the storage controller. Omitted when unavailable.";
+        storageGroupProperties["BridgeSyncLastError"]["description"] =
+            "Last synchronization error reported by the storage controller. Omitted when no error text is available.";
         return node;
     }
 };

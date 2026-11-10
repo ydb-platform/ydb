@@ -15,6 +15,7 @@
 #include <util/string/join.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include "viewer_tabletinfo.h"
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
@@ -1447,6 +1448,83 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
+    Y_UNIT_TEST(TenantInfoBridgeStorage) {
+        TPortManager ports;
+        auto settings = TServerSettings(ports.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        auto& appData = runtime.GetAppData();
+        appData.BridgeModeEnabled = true;
+        const auto root = appData.DomainsInfo->GetDomain()->SchemeRoot;
+        const auto sender = runtime.AllocateEdgeActor();
+
+        auto mode = NKikimrBridge::BRIDGED;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvBlobStorage::EvControllerQueryBridgeStorage) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            UNIT_ASSERT(ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record.GetView() ==
+                NKikimrBridge::TStorageQuery::DATABASES);
+            auto result = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>();
+            auto& record = result->Record;
+            if (mode == NKikimrBridge::STORAGE_MODE_UNSPECIFIED) {
+                record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+            } else {
+                record.SetStatus(Ydb::StatusIds::SUCCESS);
+                for (int pile = 0; pile < 2; ++pile) {
+                    auto* owner = record.AddOwners();
+                    owner->SetRowIndex(pile);
+                    owner->SetOwnerSchemeShardId(root);
+                    owner->SetOwnerPathId(1);
+                    auto* row = record.MutableDatabases()->add_databases();
+                    row->set_storage_mode(mode);
+                    if (mode == NKikimrBridge::BRIDGED) {
+                        auto* counts = row->mutable_groups();
+                        counts->set_required(1);
+                        counts->set_synced(pile == 0);
+                        counts->set_pending(pile == 1);
+                    }
+                }
+            }
+            runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), result.release(), 0, ev->Cookie));
+            return TTestActorRuntime::EEventAction::DROP;
+        });
+
+        auto getTenant = [&] {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                "GET /viewer/tenantinfo HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response->Response->Body, &json, true);
+            const auto& tenants = json["TenantInfo"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
+            return tenants.front();
+        };
+        auto tenant = getTenant();
+        UNIT_ASSERT(tenant["BridgeMode"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "PENDING");
+
+        mode = NKikimrBridge::ORDINARY;
+        tenant = getTenant();
+        UNIT_ASSERT(tenant.Has("BridgeMode"));
+        UNIT_ASSERT(!tenant["BridgeMode"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "NOT_REQUIRED");
+
+        mode = NKikimrBridge::STORAGE_MODE_UNSPECIFIED;
+        tenant = getTenant();
+        UNIT_ASSERT(!tenant.Has("BridgeMode"));
+        UNIT_ASSERT(!tenant.Has("BridgeSyncStatus"));
+    }
+
     Y_UNIT_TEST(TenantInfoStorageLimitWithGroupSizeInUnits)
     {
         CheckStorageLimitWithGroupSizeInUnits(false);
@@ -2432,6 +2510,50 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(checkedParameters, 4);
     }
 
+    Y_UNIT_TEST(StorageGroupsBridgeSync) {
+        TPortManager ports;
+        auto settings = TServerSettings(ports.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        auto observer = runtime.AddObserver<NSysView::TEvSysView::TEvGetGroupsResponse>([](auto& ev) {
+            auto& record = ev->Get()->Record;
+            record.ClearEntries();
+            for (ui32 id : {1, 2, 3}) {
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetGroupId(id);
+                entry->MutableInfo()->SetErasureSpeciesV2("none");
+            }
+            auto* syncing = record.MutableEntries(0)->MutableInfo();
+            syncing->SetBridgeSyncStage("BLOCKS");
+            syncing->SetBridgeSyncLastError("Synchronization failed");
+            record.MutableEntries(1)->MutableInfo()->SetBridgeSyncStage("SYNCED");
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /storage/groups HTTP/1.1\r\n\r\n", endpoint, {});
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response->Response->Body, &json, true);
+        const auto& groups = json["StorageGroups"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncStage"].GetString(), "BLOCKS");
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncLastError"].GetString(), "Synchronization failed");
+        UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncStage"].GetString(), "SYNCED");
+        UNIT_ASSERT(!groups[1].Has("BridgeSyncLastError"));
+        UNIT_ASSERT(!groups[2].Has("BridgeSyncStage"));
+        UNIT_ASSERT(!groups[2].Has("BridgeSyncLastError"));
+    }
+
     void CheckStorageGroupsStateInfoFieldsRequired(bool whiteboard, bool missingStatuses = false) {
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort(2134))
@@ -2522,7 +2644,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NJson::TJsonValue json;
             NJson::ReadJsonTree(response->Response->Body, &json, true);
             const auto& groups = json.GetMap().at("StorageGroups").GetArray();
-            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 14);
             UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
             const auto& group = groups[0].GetMap();
             UNIT_ASSERT_VALUES_EQUAL(group.at("GroupId").GetString(), "2");

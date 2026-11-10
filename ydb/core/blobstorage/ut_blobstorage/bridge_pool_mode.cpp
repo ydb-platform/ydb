@@ -481,6 +481,8 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         UNIT_ASSERT_C(overview.GetStatus() == Ydb::StatusIds::SUCCESS, overview.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().piles_size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().unattributed_storage_pools(), 2);
+        UNIT_ASSERT(overview.GetPiles().has_bridge_databases());
+        UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().bridge_databases(), 0);
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().cluster_state_generation(), QueryStorageConfig(env).GetClusterState().GetGeneration());
         UNIT_ASSERT(overview.GetPiles().has_observed_at());
         for (const auto& row : overview.GetPiles().piles()) {
@@ -614,11 +616,25 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         const auto mixedOverview = QueryStorageDiagnostics(env, query);
         UNIT_ASSERT_C(mixedOverview.GetStatus() == Ydb::StatusIds::SUCCESS, mixedOverview.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(mixedOverview.GetPiles().unattributed_storage_pools(), 0);
+        UNIT_ASSERT(mixedOverview.GetPiles().has_bridge_databases());
+        UNIT_ASSERT_VALUES_EQUAL(mixedOverview.GetPiles().bridge_databases(), 0);
         for (const auto& row : mixedOverview.GetPiles().piles()) {
             UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), 1); // two groups and two pools, one storage owner
             UNIT_ASSERT_VALUES_EQUAL(row.databases().synced(), 1);
             UNIT_ASSERT_VALUES_EQUAL(row.databases().not_required(), 0);
+            UNIT_ASSERT(row.has_bridge_databases());
+            UNIT_ASSERT_VALUES_EQUAL(row.bridge_databases().total(), 0);
         }
+
+        query.MutableStoragePoolId()->set_box_id(1);
+        query.MutableStoragePoolId()->set_pool_id(1);
+        const auto filteredOverview = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(filteredOverview.GetStatus() == Ydb::StatusIds::SUCCESS, filteredOverview.DebugString());
+        UNIT_ASSERT(!filteredOverview.GetPiles().has_bridge_databases());
+        for (const auto& row : filteredOverview.GetPiles().piles()) {
+            UNIT_ASSERT(!row.has_bridge_databases());
+        }
+        query.ClearStoragePoolId();
 
         auto ordinaryPool = ReadStoragePool(env, 2);
         ordinaryPool.MutableScopeId()->SetX2(6);
@@ -629,11 +645,14 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         const auto separateOverview = QueryStorageDiagnostics(env, query);
         UNIT_ASSERT_C(separateOverview.GetStatus() == Ydb::StatusIds::SUCCESS, separateOverview.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(separateOverview.GetPiles().unattributed_storage_pools(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(separateOverview.GetPiles().bridge_databases(), 1);
         for (const auto& row : separateOverview.GetPiles().piles()) {
             UNIT_ASSERT(row.has_pile_name());
             UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), row.pile_name() == "pile_2" ? 2 : 1);
             UNIT_ASSERT_VALUES_EQUAL(row.databases().synced(), 1);
             UNIT_ASSERT_VALUES_EQUAL(row.databases().not_required(), row.pile_name() == "pile_2" ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(row.bridge_databases().total(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(row.bridge_databases().synced(), 1);
         }
 
         auto emptyPool = ReadStoragePool(env, 2);

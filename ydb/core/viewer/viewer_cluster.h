@@ -1,10 +1,12 @@
 #pragma once
 #include "json_handlers.h"
 #include "json_pipe_req.h"
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/util/proto_duration.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/public/api/protos/ydb_bridge_common.pb.h>
@@ -28,6 +30,7 @@ class TJsonCluster : public TViewerPipeClient {
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
     // bridge mode only, for the names of the pools in the sync state of piles
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> StoragePoolsResponse;
+    std::optional<TRequestResponse<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>> BridgeStorageResponse;
     std::optional<TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStatsResponse;
 
     int WhiteboardStateRequestsInFlight = 0;
@@ -126,6 +129,10 @@ public:
             NodeWardenStorageConfigResponse = MakeRequest<TEvNodeWardenStorageConfig>(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ false));
             StoragePoolsResponse = MakeCachedRequestBSControllerPools();
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
+            request->Record.SetView(NKikimrBridge::TStorageQuery::PILES);
+            BridgeStorageResponse = MakeRequestToTablet<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(
+                GetBSControllerId(), request.release());
         }
         NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
         PDisksResponse = MakeCachedRequestBSControllerPDisks();
@@ -749,6 +756,12 @@ private:
         }
     }
 
+    void Handle(TEvBlobStorage::TEvControllerQueryBridgeStorageResult::TPtr& ev) {
+        if (BridgeStorageResponse && BridgeStorageResponse->Set(std::move(ev))) {
+            RequestDone();
+        }
+    }
+
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         if (HiveNodeStatsResponse->Set(std::move(ev))) {
             ProcessResponses();
@@ -922,6 +935,9 @@ private:
             ProcessResponses();
             result = true;
         }
+        if (BridgeStorageResponse && BridgeStorageResponse->Error(error)) {
+            result = true;
+        }
         return result;
     }
 
@@ -968,6 +984,7 @@ private:
             hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerQueryBridgeStorageResult, Handle);
             hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
@@ -1010,6 +1027,38 @@ private:
                 return NKikimrWhiteboard::EFlag::Red;
             default:
                 return NKikimrWhiteboard::EFlag::Grey;
+        }
+    }
+
+    void FillBridgeDatabaseCounts(NKikimrViewer::TBridgeInfo& bridgeInfo) const {
+        if (!BridgeStorageResponse || !BridgeStorageResponse->IsOk()) {
+            return;
+        }
+        const auto& response = BridgeStorageResponse->Get()->Record;
+        const auto& storageConfig = NodeWardenStorageConfigResponse->Get()->Config;
+        if (response.GetStatus() != Ydb::StatusIds::SUCCESS || !response.HasPiles() ||
+                !response.GetPiles().has_bridge_databases() || !storageConfig || !storageConfig->HasClusterState() ||
+                response.GetPiles().cluster_state_generation() != storageConfig->GetClusterState().GetGeneration()) {
+            return;
+        }
+        const auto& snapshot = response.GetPiles();
+        bridgeInfo.SetBridgeDatabases(snapshot.bridge_databases());
+        THashMap<TStringBuf, const NKikimrBridge::TDatabaseSyncCounts*> byPile;
+        for (const auto& pile : snapshot.piles()) {
+            if (pile.has_pile_name() && pile.has_bridge_databases()) {
+                byPile.emplace(pile.pile_name(), &pile.bridge_databases());
+            }
+        }
+        for (auto& pile : *bridgeInfo.MutablePiles()) {
+            if (const auto it = byPile.find(pile.GetName()); it != byPile.end()) {
+                const auto& counts = *it->second;
+                auto& target = *pile.MutableDatabaseCountsBySyncStatus();
+                target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCED)] = counts.synced();
+                target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCING)] = counts.syncing();
+                target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::PENDING)] = counts.pending();
+                target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::UNKNOWN)] = counts.unknown();
+                target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::NOT_REQUIRED)] = counts.not_required();
+            }
         }
     }
 
@@ -1143,6 +1192,7 @@ private:
                             pile.SetNodes(it->second);
                         }
                     }
+                    FillBridgeDatabaseCounts(pbBridgeInfo);
                 } else {
                     AddProblem("empty-node-warden-bridge-info");
                 }

@@ -8,6 +8,7 @@
 #include "wb_aggregate.h"
 #include "wb_merge.h"
 #include <ydb/core/base/memory_stats.h>
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 
 namespace NKikimr::NViewer {
@@ -40,6 +41,7 @@ class TJsonTenantInfo : public TViewerPipeClient {
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse>> VSlotsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> PoolsResponse;
+    std::optional<TRequestResponse<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>> BridgeStorageResponse;
 
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
@@ -69,6 +71,27 @@ class TJsonTenantInfo : public TViewerPipeClient {
     struct TStorageQuota {
         uint64 SoftQuota = 0;
         uint64 HardQuota = 0;
+    };
+
+    struct TBridgeDatabaseStats {
+        NKikimrBridge::EStorageMode Mode = NKikimrBridge::STORAGE_MODE_UNSPECIFIED;
+        ui64 Required = 0;
+        ui64 Synced = 0;
+        ui64 Syncing = 0;
+        ui64 Unknown = 0;
+
+        NKikimrBridge::ESynchronizationStatus GetStatus() const {
+            if (!Required) {
+                return NKikimrBridge::NOT_REQUIRED;
+            }
+            if (Synced == Required) {
+                return NKikimrBridge::SYNCED;
+            }
+            if (Syncing) {
+                return NKikimrBridge::SYNCING;
+            }
+            return Unknown ? NKikimrBridge::UNKNOWN : NKikimrBridge::PENDING;
+        }
     };
 
 public:
@@ -162,6 +185,12 @@ public:
         }
 
         HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);
+        if (AppData()->BridgeModeEnabled) {
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
+            request->Record.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+            BridgeStorageResponse = MakeRequestToTablet<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(
+                GetBSControllerId(), request.release());
+        }
         if (Storage) {
             DescribeSchemeResult[DomainPath] = MakeRequestSchemeShardDescribe(RootSchemeShardId, DomainPath);
             DescribesBySchemeShard[RootSchemeShardId].emplace_back(DomainPath);
@@ -198,6 +227,12 @@ public:
         }
     }
 
+    void Handle(TEvBlobStorage::TEvControllerQueryBridgeStorageResult::TPtr& ev) {
+        if (BridgeStorageResponse && BridgeStorageResponse->Set(std::move(ev))) {
+            RequestDone();
+        }
+    }
+
     void PassAway() override {
         for (const TNodeId nodeId : Subscribers) {
             if (nodeId != SelfId().NodeId()) {
@@ -226,6 +261,7 @@ public:
             hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerQueryBridgeStorageResult, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
             default:
                 return TBase::StateWork(ev);
@@ -241,6 +277,9 @@ public:
             result = true;
         }
         if (GroupsResponse && GroupsResponse->Error(error)) {
+            result = true;
+        }
+        if (BridgeStorageResponse && BridgeStorageResponse->Error(error)) {
             result = true;
         }
         return result;
@@ -718,8 +757,35 @@ public:
         ui64 Groups = 0;
     };
 
+    THashMap<TPathId, TBridgeDatabaseStats> GetBridgeDatabaseStats() const {
+        THashMap<TPathId, TBridgeDatabaseStats> stats;
+        if (!BridgeStorageResponse || !BridgeStorageResponse->IsOk()) {
+            return stats;
+        }
+        const auto& record = BridgeStorageResponse->Get()->Record;
+        if (record.GetStatus() != Ydb::StatusIds::SUCCESS || !record.HasDatabases()) {
+            return stats;
+        }
+        const auto& rows = record.GetDatabases().databases();
+        for (const auto& owner : record.GetOwners()) {
+            if (!owner.GetOwnerSchemeShardId() || !owner.GetOwnerPathId() ||
+                    owner.GetRowIndex() >= static_cast<ui32>(rows.size())) {
+                continue;
+            }
+            const auto& row = rows.Get(owner.GetRowIndex());
+            auto& database = stats[TPathId(owner.GetOwnerSchemeShardId(), owner.GetOwnerPathId())];
+            database.Mode = row.storage_mode();
+            database.Required += row.groups().required();
+            database.Synced += row.groups().synced();
+            database.Syncing += row.groups().syncing();
+            database.Unknown += row.groups().unknown();
+        }
+        return stats;
+    }
+
     void ReplyAndPassAway() override {
         Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/tenantinfo"));
+        const auto bridgeStats = GetBridgeDatabaseStats();
         THashMap<TString, NKikimrViewer::EFlag> OverallByDomainId;
         std::unordered_map<TNodeId, const NKikimrWhiteboard::TSystemStateInfo*> nodeSystemStateInfo;
 
@@ -878,6 +944,13 @@ public:
                 }
                 if (tenant.GetType() == NKikimrViewer::UnknownTenantType) {
                     tenant.SetType(NKikimrViewer::Dedicated);
+                }
+                if (const auto it = bridgeStats.find(subDomainKey); it != bridgeStats.end()) {
+                    const auto& stats = it->second;
+                    if (stats.Mode == NKikimrBridge::BRIDGED || stats.Mode == NKikimrBridge::ORDINARY) {
+                        tenant.SetBridgeMode(stats.Mode == NKikimrBridge::BRIDGED);
+                    }
+                    tenant.SetBridgeSyncStatus(stats.GetStatus());
                 }
                 tenant.SetCreateTime(TInstant::MicroSeconds(entry.CreateStep).MilliSeconds());
                 if (entry.SecurityObject) {
@@ -1161,8 +1234,30 @@ public:
                 tenant.SetOverall(it->second);
             }
         }
+        TStringBuf sort = Params.Get("sort");
+        const bool reverseSort = sort.StartsWith("-");
+        if (reverseSort || sort.StartsWith("+")) {
+            sort.Skip(1);
+        }
+        const auto sortKey = [sort](const NKikimrViewer::TTenant& tenant) -> std::optional<int> {
+            if (sort == "BridgeMode" && tenant.HasBridgeMode()) {
+                return tenant.GetBridgeMode();
+            }
+            if (sort == "BridgeSyncStatus" && tenant.HasBridgeSyncStatus()) {
+                return tenant.GetBridgeSyncStatus();
+            }
+            return std::nullopt;
+        };
         std::sort(Result.MutableTenantInfo()->begin(), Result.MutableTenantInfo()->end(),
-            [](const NKikimrViewer::TTenant& a, const NKikimrViewer::TTenant& b) {
+            [&](const NKikimrViewer::TTenant& a, const NKikimrViewer::TTenant& b) {
+                const auto left = sortKey(a);
+                const auto right = sortKey(b);
+                if (left.has_value() != right.has_value()) {
+                    return left.has_value();
+                }
+                if (left != right) {
+                    return reverseSort ? left > right : left < right;
+                }
                 return a.name() < b.name();
             });
         for (auto problem : Problems) {
@@ -1178,6 +1273,9 @@ public:
         TString error = "Timeout";
         if (ListTenantsResponse) {
             ListTenantsResponse->Error(error);
+        }
+        if (BridgeStorageResponse) {
+            BridgeStorageResponse->Error(error);
         }
         for (auto& [_, request] : TenantStatusResponses) {
             request.Error(error);
@@ -1227,6 +1325,11 @@ public:
         yaml.AddParameter({
             .Name = "user",
             .Description = "tenant owner",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "sort",
+            .Description = "Sort by BridgeMode or BridgeSyncStatus. Prefix with '-' for descending order. Missing values sort last.",
             .Type = "string",
         });
         yaml.AddParameter({

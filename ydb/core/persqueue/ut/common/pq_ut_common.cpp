@@ -112,6 +112,9 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 if (u.MetricsLevel.has_value()) {
                     consumer->SetMetricsLevel(*u.MetricsLevel);
                 }
+                if (u.Type.has_value()) {
+                    consumer->SetType(*u.Type);
+                }
             }
 
             runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());

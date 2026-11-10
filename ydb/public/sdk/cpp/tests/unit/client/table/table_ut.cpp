@@ -1063,7 +1063,6 @@ TEST(VectorIndexSettings, ReducedPrecisionRoundTrip) {
     }
 }
 
-
 TEST(VectorIndexSettings, Float8RoundTrip) {
     using TSettings = NYdb::NTable::TVectorIndexSettings;
     for (const auto& [type, protoType, name] : {
@@ -1361,4 +1360,56 @@ TEST(VectorIndexSettings, HnswDiagnosticOutputIncludesSettings) {
 
     const NTable::TIndexDescription unconfigured("vidx", NTable::EIndexType::GlobalHnsw, {"emb"});
     EXPECT_EQ(unconfigured.ToString().find("vector_settings:"), std::string::npos);
+}
+
+TEST(TTableDescription, SequenceDescriptionRoundTrip) {
+    using namespace NYdb::NTable;
+
+    Ydb::Table::DescribeTableResult desc;
+
+    auto* column = desc.add_columns();
+    column->set_name("__ydb_row_id");
+    column->mutable_type()->set_type_id(Ydb::Type::UINT64);
+    column->set_not_null(true);
+
+    auto* source = column->mutable_from_sequence();
+    source->set_name("_seq___ydb_row_id");
+    source->set_min_value(1);
+    source->set_max_value(std::numeric_limits<i64>::max());
+    source->set_start_value(1);
+    source->set_cache(100);
+    source->set_increment(5);
+    source->set_cycle(true);
+    source->mutable_data_type()->set_type_id(Ydb::Type::UINT64);
+    source->mutable_set_val()->set_next_value(42);
+    source->mutable_set_val()->set_next_used(true);
+
+    desc.add_primary_key("__ydb_row_id");
+
+    TTableDescription table(std::move(desc), TDescribeTableSettings());
+
+    Ydb::Table::CreateTableRequest create;
+    table.SerializeTo(create);
+
+    ASSERT_EQ(create.columns_size(), 1);
+    const auto& result = create.columns(0).from_sequence();
+
+    EXPECT_EQ(result.name(), "_seq___ydb_row_id");
+    ASSERT_TRUE(result.has_min_value());
+    EXPECT_EQ(result.min_value(), 1);
+    ASSERT_TRUE(result.has_max_value());
+    EXPECT_EQ(result.max_value(), std::numeric_limits<i64>::max());
+    ASSERT_TRUE(result.has_start_value());
+    EXPECT_EQ(result.start_value(), 1);
+    ASSERT_TRUE(result.has_cache());
+    EXPECT_EQ(result.cache(), 100u);
+    ASSERT_TRUE(result.has_increment());
+    EXPECT_EQ(result.increment(), 5);
+    ASSERT_TRUE(result.has_cycle());
+    EXPECT_TRUE(result.cycle());
+    ASSERT_TRUE(result.has_data_type());
+    EXPECT_EQ(result.data_type().type_id(), Ydb::Type::UINT64);
+    ASSERT_TRUE(result.has_set_val());
+    EXPECT_EQ(result.set_val().next_value(), 42);
+    EXPECT_TRUE(result.set_val().next_used());
 }

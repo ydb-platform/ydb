@@ -9,6 +9,7 @@
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
@@ -40,6 +41,7 @@
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -890,6 +892,20 @@ public:
 
         if (!ev->Get()->GetUserRequestContext()) {
             ev->Get()->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(traceId, database, sessionId));
+        }
+
+        const bool isChecksumTable = ev->Get()->IsInternalCall()
+            && ev->Get()->GetRequestType() == NRequestTypes::ChecksumTable
+            && (queryType == NKikimrKqp::QUERY_TYPE_SQL_DML
+                || queryType == NKikimrKqp::QUERY_TYPE_PREPARED_DML
+                || queryType == NKikimrKqp::QUERY_TYPE_AST_DML);
+        ev->Get()->GetUserRequestContext()->ReadHints = isChecksumTable
+            ? NKikimrTxDataShard::TEvRead::HINT_BATCH | NKikimrTxDataShard::TEvRead::HINT_LOW_PRIORITY
+            : 0;
+        if (isChecksumTable) {
+            // This flag is local to the event. Reapply it at each proxy hop before
+            // calculating deadlines, including when the session is on another node.
+            ev->Get()->SetDisableDefaultTimeout(true);
         }
 
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);

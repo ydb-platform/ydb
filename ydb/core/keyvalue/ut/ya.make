@@ -20,6 +20,8 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+GENERATE_ENUM_SERIALIZATION(keyvalue_test_enums.h)
+
 SRCS(
     keyvalue_ut.cpp
     keyvalue_collector_ut.cpp

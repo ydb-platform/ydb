@@ -1,4 +1,3 @@
-/* syntax version 1 */
 select AGGREGATE_LIST_DISTINCT(x) from 
 (select [null, null] as x)
 flatten list by x;

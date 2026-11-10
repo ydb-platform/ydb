@@ -1286,6 +1286,7 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
 
         forward.emplace_back(record.Order, record.PathId, record.BodySize);
 
+        it->second.PathId = record.PathId;
         it->second.EnqueuedAt = now;
         it->second.ReservationCookie = cookie;
         ChangesList.PushBack(&it->second);
@@ -5288,4 +5289,3 @@ void TEvDataShard::TEvProposeTransactionResult::SetStepOrderId(const std::pair<u
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

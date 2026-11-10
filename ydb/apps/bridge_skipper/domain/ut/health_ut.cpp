@@ -90,6 +90,47 @@ void AssertVerdict(const THealthEvaluation& evaluation, const TString& pile, EPi
 } // namespace
 
 Y_UNIT_TEST_SUITE(BridgeSkipperHealth) {
+    Y_UNIT_TEST(FallbackEvidenceRedRequiresDecisiveVDiskReasons) {
+        for (unsigned mode = 0; mode != 5; ++mode) {
+            auto raw = Fixture("fallback_red");
+            if (mode == 0) {
+                raw.mutable_issue_log(2)->set_status(Ydb::Monitoring::StatusFlag::BLUE);
+                raw.mutable_issue_log(2)->set_message("Replication in progress");
+            } else if (mode == 1) {
+                raw.mutable_issue_log(1)->set_reason(0, "missing");
+            } else if (mode == 2) {
+                raw.mutable_issue_log(2)->set_status(Ydb::Monitoring::StatusFlag::GREY);
+            } else if (mode == 3) {
+                raw.mutable_issue_log(1)->clear_reason();
+            } else {
+                raw.mutable_issue_log(1)->set_type("BRIDGE_GROUP");
+            }
+            UNIT_ASSERT_C(ClassifySelfCheck(raw).Parts.at("b") == EPart::Incomplete, mode);
+        }
+        UNIT_ASSERT(Classify("fallback_red").Parts.at("b") == EPart::FallbackRed);
+    }
+
+    Y_UNIT_TEST(FreshFallbackFailureTakesPrecedenceOverRetainedSettledLoss) {
+        TScenario s;
+        s.Replies.SelfChecks.clear();
+        auto raw = Fixture("fallback_red");
+        raw.mutable_issue_log(1)->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name("a");
+        s.AddSelfCheck("b", ClassifySelfCheck(raw));
+        s.AddConnectivity("b", false, true);
+        s.Now = TMonotonic::Seconds(101);
+        s.AddConnectivity("b", false, true);
+        s.Replies.Connectivity.back().Report.BindingInProgress = true;
+        for (const ui64 now : {101u, 103u}) {
+            s.Now = TMonotonic::Seconds(now);
+            s.Replies.SelfChecks.back().SentAt = s.Now;
+            s.Replies.Connectivity.back().Report.SentAt = s.Now;
+            const auto evaluation = s.Evaluate();
+            AssertVerdict(evaluation, "a", EPileVerdict::Failed);
+            UNIT_ASSERT(evaluation.Piles.at("a").FallbackFailure);
+            UNIT_ASSERT(evaluation.Piles.at("a").NewestEvidenceSentAt == s.Now);
+        }
+    }
+
     Y_UNIT_TEST(ValidatedConnectivityKeepsQueriedEndpointForRouting) {
         for (const unsigned invalid : {0u, 1u, 2u, 3u}) {
             TScenario s;
@@ -259,6 +300,9 @@ Y_UNIT_TEST_SUITE(BridgeSkipperHealth) {
         UNIT_ASSERT(ClassifySelfCheck(raw).Parts.at("b") == EPart::RedPart);
         raw = Fixture("fallback_grey");
         *raw.add_issue_log() = Fixture("fallback_red").issue_log(1);
+        raw.mutable_issue_log(raw.issue_log_size() - 1)->set_reason(0, "red-disk");
+        *raw.add_issue_log() = Fixture("fallback_red").issue_log(2);
+        raw.mutable_issue_log(raw.issue_log_size() - 1)->set_id("red-disk");
         UNIT_ASSERT(ClassifySelfCheck(raw).Parts.at("b") == EPart::FallbackRed);
         raw = Fixture("blue_only");
         *raw.add_issue_log() = Fixture("blue_only").issue_log(1);

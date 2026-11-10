@@ -25,13 +25,20 @@ http:
 # selfcheck_operation_timeout + 2 + round_interval < evidence_ttl and
 # bsc_warmup >= 20.
 # A SelfCheck still in flight at a round boundary is sent again as soon as it settles.
+# These defaults target a committed failover within 20 s once a previously healthy
+# cluster suffers a provable failure and a surviving quorum can commit the change.
+# BSC gets half the SelfCheck operation timeout (2 s here). A shorter budget can
+# produce more fallback replies under load. Larger explicit overrides increase
+# failover latency; qualification must use the deployed settings.
+# GREY/missing evidence, role warm-up, unresolved history or unavailable survivor
+# quorums never become an authorization merely because 20 s have elapsed.
 timing:
   state_poll_interval_seconds: 1
-  read_timeout_seconds: 5
-  round_interval_seconds: 10
-  selfcheck_operation_timeout_seconds: 12
-  evidence_ttl_seconds: 30
-  confirm_seconds: 20
+  read_timeout_seconds: 1
+  round_interval_seconds: 1
+  selfcheck_operation_timeout_seconds: 4
+  evidence_ttl_seconds: 8
+  confirm_seconds: 2
   bsc_warmup_seconds: 30
   mutation_operation_timeout_seconds: 25
 health_endpoints_per_pile: 2

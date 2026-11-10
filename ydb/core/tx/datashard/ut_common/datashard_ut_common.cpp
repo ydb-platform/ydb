@@ -1942,6 +1942,9 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetSchemaChanges(streamDesc.SchemaChanges);
     desc.MutableStreamDescription()->SetUserSIDs(streamDesc.UserSIDs);
     desc.MutableStreamDescription()->SetTraceIds(streamDesc.TraceIds);
+    if (streamDesc.TopicPartitions) {
+        desc.SetTopicPartitions(streamDesc.TopicPartitions);
+    }
     if (streamDesc.ResolvedTimestamps) {
         desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(streamDesc.ResolvedTimestamps->MilliSeconds());
     }
@@ -2734,8 +2737,10 @@ namespace {
                     break
 
             switch (parser.GetPrimitiveType()) {
+            PRINT_PRIMITIVE(Uint16);
             PRINT_PRIMITIVE(Uint32);
             PRINT_PRIMITIVE(Uint64);
+            PRINT_PRIMITIVE(Int16);
             PRINT_PRIMITIVE(Int32);
             PRINT_PRIMITIVE(Int64);
             PRINT_PRIMITIVE(Date);

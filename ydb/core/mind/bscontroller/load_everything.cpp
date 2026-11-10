@@ -605,6 +605,20 @@ public:
             Self->StoragePoolStat->Update(TStoragePoolStat::ConvertId(group->StoragePoolId), std::nullopt, group->StatusFlags);
         }
 
+        // fill in correct relations between bridged groups before rebuilding database space state
+        for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
+            if (proxyGroup->BridgeGroupInfo) {
+                NBridge::ForEachGroupPile(proxyGroup->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId bridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
+                    auto *group = Self->FindGroup(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+                    Y_ABORT_UNLESS(group);
+                    Y_ABORT_UNLESS(group->BridgePileId == bridgePileId);
+                    Y_ABORT_UNLESS(!group->BridgeProxyGroupId);
+                    group->BridgeProxyGroupId = proxyGroupId;
+                });
+            }
+        }
+
         // database space state; the hysteresis latches are restored and evaluated against complete group counters
         Self->DatabaseSpace.ResetState();
         {
@@ -675,6 +689,9 @@ public:
                     .LastErrorTimestamp = bridgeSyncState.GetValue<Table::LastErrorTimestamp>(),
                     .FirstErrorTimestamp = bridgeSyncState.GetValue<Table::FirstErrorTimestamp>(),
                     .ErrorCount = bridgeSyncState.GetValue<Table::ErrorCount>(),
+                    .EstimatedBytesToCopy = bridgeSyncState.HaveValue<Table::EstimatedBytesToCopy>()
+                        ? std::make_optional(bridgeSyncState.GetValue<Table::EstimatedBytesToCopy>())
+                        : std::nullopt,
                 };
                 if (!bridgeSyncState.Next()) {
                     return false;
@@ -683,20 +700,6 @@ public:
         }
 
         std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, TGroupGeometryInfo> cache;
-
-        // fill in correct relations between bridged groups
-        for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
-            if (proxyGroup->BridgeGroupInfo) {
-                NBridge::ForEachGroupPile(proxyGroup->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId bridgePileId,
-                        const NKikimrBridge::TGroupState::TPile& pile) {
-                    auto *group = Self->FindGroup(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-                    Y_ABORT_UNLESS(group);
-                    Y_ABORT_UNLESS(group->BridgePileId == bridgePileId);
-                    Y_ABORT_UNLESS(!group->BridgeProxyGroupId);
-                    group->BridgeProxyGroupId = proxyGroupId;
-                });
-            }
-        }
 
         // calculate group status for all groups
         for (auto& [id, group] : Self->GroupMap) {

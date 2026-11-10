@@ -25,7 +25,25 @@ namespace NWriter {
             , BlobsChannels(conf.BlobsChannels)
             , ExtraChannel(conf.ExtraChannel)
             , ChannelsShares(conf.ChannelsShares)
-            , Banks(base, conf.Slots)
+        {
+            OwnedBanks.ConstructInPlace(base, conf.Slots);
+            BanksPtr = OwnedBanks.Get();
+            InitBlocks(conf);
+        }
+
+        // Constructor for shared TBanks (multi-output compaction)
+        TBundle(TBanks* sharedBanks, const TConf &conf)
+            : Groups(conf.Groups)
+            , BlobsChannels(conf.BlobsChannels)
+            , ExtraChannel(conf.ExtraChannel)
+            , ChannelsShares(conf.ChannelsShares)
+            , BanksPtr(sharedBanks)
+        {
+            InitBlocks(conf);
+        }
+
+    private:
+        void InitBlocks(const TConf &conf)
         {
             Y_ENSURE(Groups.size() >= 1, "There must be at least one page collection group");
 
@@ -44,6 +62,8 @@ namespace NWriter {
 
             Growth = new NTable::TScreen::TCook;
         }
+
+    public:
 
         TVector<NPageCollection::TGlob> GetBlobsToSave() noexcept
         {
@@ -90,7 +110,7 @@ namespace NWriter {
         {
             ui8 bestChannel = ChannelsShares.Select(BlobsChannels);
             
-            auto glob = Banks.Data.Do(bestChannel, blob.size());
+            auto glob = BanksPtr->Data.Do(bestChannel, blob.size());
 
             Blobs.emplace_back(glob, std::move(blob));
             Growth->Pass(ref);
@@ -122,7 +142,7 @@ namespace NWriter {
         {
             Y_ENSURE(cookieRange == 0 || cookieRange == 1, "Invalid cookieRange requested");
 
-            return cookieRange == 0 ? Banks.Meta : Banks.Data;
+            return cookieRange == 0 ? BanksPtr->Meta : BanksPtr->Data;
         }
 
         void Put(NPageCollection::TGlob&& glob) override
@@ -159,7 +179,8 @@ namespace NWriter {
         const TVector<ui8> BlobsChannels;
         const ui8 ExtraChannel;
         const NUtil::TChannelsShares& ChannelsShares;
-        TBanks Banks;
+        TMaybe<TBanks> OwnedBanks;  // Owned TBanks for single-output mode
+        TBanks* BanksPtr = nullptr;  // Pointer to TBanks (owned or shared)
         TVector<NPageCollection::TGlob> Blobs;
         TVector<THolder<TBlocks>> Blocks;
         TAutoPtr<NTable::TScreen::TCook> Growth;

@@ -1126,4 +1126,7 @@ template
 TMessagePtr<TProduceResponseData> TKafkaTestClient::WriteAndRead<TProduceResponseData>(TRequestHeaderData& header, TApiMessage& request, bool silent = false);
 
 template
+TMessagePtr<TFetchResponseData> TKafkaTestClient::WriteAndRead<TFetchResponseData>(TRequestHeaderData& header, TApiMessage& request, bool silent = false);
+
+template
 TMessagePtr<TProduceResponseData> TKafkaTestClient::Read<TProduceResponseData>(TSocketInput& si, TRequestHeaderData* requestHeader);

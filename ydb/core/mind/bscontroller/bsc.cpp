@@ -911,6 +911,19 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
             return;
         }
 
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateBridgeRollback: {
+            const auto pileId = TBridgePileId::FromProto(&record,
+                &NKikimrBlobStorage::TEvControllerDistconfRequest::GetBridgePileId);
+            if (!BridgeInfo || !BridgeInfo->FindPile(pileId)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("unknown pile");
+                break;
+            }
+            // the transaction replies when it is done
+            Execute(CreateTxValidateBridgeRollback(pileId, std::exchange(h, {})));
+            return;
+        }
+
         case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateConfig: {
             if (!mainYaml) {
                 rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);

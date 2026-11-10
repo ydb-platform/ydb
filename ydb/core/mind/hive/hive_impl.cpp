@@ -2588,6 +2588,9 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         if (!node.Name.empty()) {
             nodeStats.SetNodeName(node.Name);
         }
+        if (node.BridgePileId) {
+            node.BridgePileId.CopyToProto(&nodeStats, &NKikimrHive::THiveNodeStats::SetBridgePileId);
+        }
         if (request.GetReturnExtendedTabletInfo()) {
             if (request.HasFilterTabletsByPathId()) {
                 auto itTabletsOfObject = node.TabletsOfObject.find({request.GetFilterTabletsBySchemeShardId(), request.GetFilterTabletsByPathId()});

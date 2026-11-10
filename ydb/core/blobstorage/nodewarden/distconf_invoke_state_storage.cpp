@@ -170,10 +170,12 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStateStorageConfig currentConfig;
         GetCurrentStateStorageConfig(&currentConfig, false);
 
-        if (Self->StateStorageSelfHealActor) {
-            Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->StateStorageSelfHealActor.value(), Self->SelfId(), nullptr, 0));
-            Self->StateStorageSelfHealActor.reset();
-        }
+        const auto stopCurrentSelfHeal = [&] {
+            if (Self->StateStorageSelfHealActor) {
+                Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->StateStorageSelfHealActor.value(), Self->SelfId(), nullptr, 0));
+                Self->StateStorageSelfHealActor.reset();
+            }
+        };
         enum ReconfigType {
             NONE,
             ONE_NODE,
@@ -357,6 +359,7 @@ namespace NKikimr::NStorage {
                 {"targetConfig", targetConfig});
             auto *op = std::get_if<TInvokeExternalOperation>(&Query);
             Y_ABORT_UNLESS(op);
+            stopCurrentSelfHeal();
             Self->StateStorageSelfHealActor = Register(new TStateStorageReassignNodeSelfhealActor(op->Sender, op->Cookie
                 , TDuration::Seconds(waitForConfigStep), nodesToReplace.begin()->first, std::get<2>(nodesToReplace.begin()->second)
                 , needReconfigSS == ReconfigType::ONE_NODE, needReconfigSSB == ReconfigType::ONE_NODE, needReconfigSB == ReconfigType::ONE_NODE));
@@ -423,6 +426,7 @@ namespace NKikimr::NStorage {
 
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
+        stopCurrentSelfHeal();
         Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
             TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), prepareCurrentConfig));
         Finish(TResult::OK, std::nullopt);

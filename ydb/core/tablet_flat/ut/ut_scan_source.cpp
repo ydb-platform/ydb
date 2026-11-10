@@ -7,6 +7,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <algorithm>
+#include <functional>
 #include <optional>
 #include <utility>
 
@@ -213,8 +214,9 @@ namespace {
 
     class TTestFeed final : public TFeed {
     public:
-        TTestFeed(IScan* scan, const TSubset& subset, IPages* env)
-            : TFeed(scan, subset)
+        TTestFeed(IScan* scan, const TSubset& subset, IPages* env,
+                TRowVersion snapshot = TRowVersion::Max())
+            : TFeed(scan, subset, snapshot)
             , Env(env)
         {
             Conf.NoErased = false;
@@ -224,10 +226,12 @@ namespace {
             return Env;
         }
 
-        TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>&) override {
-            UNIT_FAIL("Unloaded parts are not used in this test");
-            return {};
+        TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>& part) override {
+            UNIT_ASSERT_C(PartLoader, "Missing cold part loader");
+            return PartLoader(part);
         }
+
+        std::function<TPartView(const TIntrusiveConstPtr<TColdPart>&)> PartLoader;
 
     private:
         IPages* const Env;
@@ -251,8 +255,7 @@ namespace {
         bool FailNext = true;
     };
 
-    void Run(TRecordingScan& scan, const TSubset& subset, IPages& env) {
-        TTestFeed driver(&scan, subset, &env);
+    void Run(TRecordingScan& scan, TTestFeed& driver) {
         for (ui32 step = 0; step < 10000; ++step) {
             const auto ready = driver.Process();
             if (ready == EReady::Gone) {
@@ -270,6 +273,12 @@ namespace {
             }
         }
         UNIT_FAIL("Version scan made no progress");
+    }
+
+    void Run(TRecordingScan& scan, const TSubset& subset, IPages& env,
+            TRowVersion snapshot = TRowVersion::Max()) {
+        TTestFeed driver(&scan, subset, &env, snapshot);
+        Run(scan, driver);
     }
 
     TVector<const TEvent*> Events(const TRecordingScan& scan, EEvent kind) {
@@ -316,6 +325,145 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 3);
     }
 
+    Y_UNIT_TEST(VersionedScanReadsHistoryBeyondSnapshotBound) {
+        TFixture f;
+        auto oldest = f.Cook(10).Ver({10, 1}).AddN(ui32(1), ui32(10), ui32(100))
+            .Finish().ToPartView();
+        auto middle = f.Cook(20).Ver({20, 1}).AddN(ui32(1), ui32(20), ui32(200))
+            .Finish().ToPartView();
+        auto newest = f.Cook(30).Ver({30, 1}).AddN(ui32(1), ui32(30), ui32(300))
+            .Finish().ToPartView();
+        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
+        subset.Flatten = {middle, newest, oldest};
+        TRecordingScan scan(*subset.Scheme);
+        NTest::TTestEnv env;
+        Run(scan, subset, env, {25, 1});
+
+        const auto rows = Events(scan, EEvent::Row);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(rows[0]->Version, TRowVersion(30, 1));
+        UNIT_ASSERT_VALUES_EQUAL(rows[0]->Value.value(), 30);
+        UNIT_ASSERT(rows[0]->Source.Part == newest.Part.Get());
+        UNIT_ASSERT(!rows[0]->Source.MemTable);
+        UNIT_ASSERT_VALUES_EQUAL(rows[1]->Version, TRowVersion(20, 1));
+        UNIT_ASSERT_VALUES_EQUAL(rows[1]->Value.value(), 20);
+        UNIT_ASSERT(rows[1]->Source.Part == middle.Part.Get());
+        UNIT_ASSERT(!rows[1]->Source.MemTable);
+        UNIT_ASSERT_VALUES_EQUAL(rows[2]->Version, TRowVersion(10, 1));
+        UNIT_ASSERT_VALUES_EQUAL(rows[2]->Value.value(), 10);
+        UNIT_ASSERT(rows[2]->Source.Part == oldest.Part.Get());
+        UNIT_ASSERT(!rows[2]->Source.MemTable);
+        UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::BeginKey).size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 1);
+    }
+
+    Y_UNIT_TEST(SourceTracksSliceReuseAndPartSwitches) {
+        TFixture f;
+        auto sliced = f.Cook(10)
+            .Ver({10, 1}).AddN(ui32(1), ui32(10), ui32(100))
+            .Ver({9, 1}).AddN(ui32(1), ui32(9), ui32(90))
+            .Ver({10, 1}).AddN(ui32(2), ui32(999), ui32(999))
+            .AddN(ui32(3), ui32(10), ui32(100))
+            .Ver({9, 1}).AddN(ui32(3), ui32(9), ui32(90))
+            .Finish().ToPartView();
+        auto other = f.Cook(20)
+            .Ver({20, 1}).AddN(ui32(4), ui32(20), ui32(200))
+            .Ver({19, 1}).AddN(ui32(4), ui32(19), ui32(190))
+            .Finish().ToPartView();
+        auto newest = f.Cook(30)
+            .Ver({30, 1}).AddN(ui32(1), ui32(30), ui32(300))
+            .AddN(ui32(3), ui32(30), ui32(300))
+            .AddN(ui32(4), ui32(30), ui32(300))
+            .Finish().ToPartView();
+
+        const auto key = [](ui32 value) {
+            return TSerializedCellVec(TVector<TCell>{TCell::Make(value)});
+        };
+        TIntrusivePtr<TSlices> slices = new TSlices;
+        slices->emplace_back(key(1), key(1), 0, 0, true, true);
+        slices->emplace_back(key(3), key(3), 2, 2, true, true);
+        sliced.Slices = slices;
+        sliced.Screen = slices->ToScreen();
+
+        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
+        subset.Flatten = {newest, other, sliced};
+
+        // Verify that the older run really switches slices and then parts.
+        TLevels levels(subset.Scheme->Keys);
+        levels.AddContiguous(sliced.Part, sliced.Slices);
+        levels.AddContiguous(other.Part, other.Slices);
+        UNIT_ASSERT_VALUES_EQUAL(levels.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(levels.begin()->size(), 3);
+        levels.AddContiguous(newest.Part, newest.Slices);
+        UNIT_ASSERT_VALUES_EQUAL(levels.size(), 2);
+
+        TRecordingScan scan(*subset.Scheme);
+        NTest::TTestEnv env;
+        Run(scan, subset, env);
+
+        const auto rows = Events(scan, EEvent::Row);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 9);
+        const ui32 keys[] = {1, 1, 1, 3, 3, 3, 4, 4, 4};
+        const ui64 versions[] = {30, 10, 9, 30, 10, 9, 30, 20, 19};
+        const TPart* sources[] = {
+            newest.Part.Get(), sliced.Part.Get(), sliced.Part.Get(),
+            newest.Part.Get(), sliced.Part.Get(), sliced.Part.Get(),
+            newest.Part.Get(), other.Part.Get(), other.Part.Get(),
+        };
+        for (size_t i = 0; i < rows.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(rows[i]->Key, keys[i]);
+            UNIT_ASSERT_VALUES_EQUAL(rows[i]->Version, TRowVersion(versions[i], 1));
+            UNIT_ASSERT_VALUES_EQUAL(rows[i]->Value.value(), versions[i]);
+            UNIT_ASSERT_VALUES_EQUAL(rows[i]->Base.value(), versions[i] * 10);
+            UNIT_ASSERT(rows[i]->Source.Part == sources[i]);
+            UNIT_ASSERT(!rows[i]->Source.MemTable);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::BeginKey).size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 3);
+    }
+
+    Y_UNIT_TEST(LoadedColdPartReportsItsSourceAndRestoresPartialUpserts) {
+        TFixture f;
+        auto cold = f.Cook(10).Ver({10, 1}).AddN(ui32(1), ui32(10), ui32(100))
+            .AddN(ui32(2), ui32(10), ui32(200)).Finish().ToPartView();
+        auto hot = f.Cook(20).Ver({20, 1}).AddN(ui32(1), ui32(20))
+            .AddN(ui32(2), ui32(20)).Finish().ToPartView();
+        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
+        subset.Flatten = {hot};
+        subset.ColdParts.push_back(new TColdPart(cold->Label, cold->Epoch));
+        TRecordingScan scan(*subset.Scheme);
+        NTest::TTestEnv env;
+        TTestFeed driver(&scan, subset, &env);
+        ui32 loads = 0;
+        driver.PartLoader = [&](const TIntrusiveConstPtr<TColdPart>& part) -> TPartView {
+            UNIT_ASSERT(part.Get() == subset.ColdParts.front().Get());
+            UNIT_ASSERT_VALUES_EQUAL(part->Label, cold->Label);
+            UNIT_ASSERT_VALUES_EQUAL(part->Epoch, cold->Epoch);
+            // The first attempt starts loading; the next one supplies the part.
+            return ++loads == 1 ? TPartView{} : cold;
+        };
+        Run(scan, driver);
+
+        UNIT_ASSERT_VALUES_EQUAL(loads, 2);
+        const auto rows = Events(scan, EEvent::Row);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
+        const ui32 keys[] = {1, 1, 2, 2};
+        const ui64 versions[] = {20, 10, 20, 10};
+        const ui32 values[] = {20, 10, 20, 10};
+        const ui32 bases[] = {100, 100, 200, 200};
+        const TPart* sources[] = {hot.Part.Get(), cold.Part.Get(), hot.Part.Get(), cold.Part.Get()};
+        for (size_t i = 0; i < rows.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(rows[i]->Key, keys[i]);
+            UNIT_ASSERT_VALUES_EQUAL(rows[i]->Version, TRowVersion(versions[i], 1));
+            UNIT_ASSERT_VALUES_EQUAL(rows[i]->Value.value(), values[i]);
+            UNIT_ASSERT_VALUES_EQUAL(rows[i]->Base.value(), bases[i]);
+            UNIT_ASSERT(rows[i]->Source.Part == sources[i]);
+            UNIT_ASSERT(!rows[i]->Source.MemTable);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::BeginKey).size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 2);
+    }
+
     Y_UNIT_TEST(PartialUpsertKeepsTheNewestSourceAfterRestoringItsBase) {
         TFixture f;
         auto base = f.Cook(10).Ver({10, 1}).AddN(ui32(1), ui32(10), ui32(100)).Finish().ToPartView();
@@ -360,6 +508,38 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
         const auto rowPos = std::find_if(scan.Events.begin(), scan.Events.end(),
             [](const auto& event) { return event.Kind == EEvent::Row; });
         UNIT_ASSERT(deltaPos < rowPos);
+    }
+
+    Y_UNIT_TEST(DeltaOnlyKeysReportTheirMemoryAndPartSources) {
+        TFixture f;
+        auto memory = f.Memory(20);
+        f.Write(*memory, 1, 20, TRowVersion(Max<ui64>(), 123));
+        auto part = f.Cook(30).Delta(124).AddN(ui32(2), ui32(30), ui32(300))
+            .Finish().ToPartView();
+        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
+        subset.Flatten = {part};
+        subset.Frozen.emplace_back(memory, memory->Immediate());
+        TRecordingScan scan(*subset.Scheme);
+        NTest::TTestEnv env;
+        Run(scan, subset, env);
+
+        UNIT_ASSERT(Events(scan, EEvent::Row).empty());
+        const auto deltas = Events(scan, EEvent::Delta);
+        UNIT_ASSERT_VALUES_EQUAL(deltas.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(deltas[0]->Key, 1);
+        UNIT_ASSERT_VALUES_EQUAL(deltas[0]->TxId, 123);
+        UNIT_ASSERT_VALUES_EQUAL(deltas[0]->Value.value(), 20);
+        UNIT_ASSERT(deltas[0]->Source.MemTable == memory.Get());
+        UNIT_ASSERT(!deltas[0]->Source.Part);
+        UNIT_ASSERT_VALUES_EQUAL(deltas[1]->Key, 2);
+        UNIT_ASSERT_VALUES_EQUAL(deltas[1]->TxId, 124);
+        UNIT_ASSERT_VALUES_EQUAL(deltas[1]->Value.value(), 30);
+        UNIT_ASSERT(deltas[1]->Source.Part == part.Part.Get());
+        UNIT_ASSERT(!deltas[1]->Source.MemTable);
+        UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::BeginKey).size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::BeginDeltas).size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndDeltas).size(), 2);
     }
 
     Y_UNIT_TEST(CommittedTransactionDeltaKeepsItsPartSource) {

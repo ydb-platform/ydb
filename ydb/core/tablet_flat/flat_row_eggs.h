@@ -9,6 +9,9 @@
 namespace NKikimr {
 namespace NTable {
 
+    class TMemTable;
+    class TPart;
+
     using TRowId = ui64;
     using TTag  = ui32;
     using TPos  = ui32;  /* Column logical position      */
@@ -107,6 +110,11 @@ namespace NTable {
         explicit operator bool() const {
             return Valid;
         }
+    };
+
+    struct TRowSource {
+        const TMemTable* MemTable = nullptr;
+        const TPart* Part = nullptr;
     };
 
     struct TSelectRowVersionResult {

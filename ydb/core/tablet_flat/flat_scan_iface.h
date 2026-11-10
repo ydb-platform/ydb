@@ -10,8 +10,6 @@ namespace NKikimr {
 namespace NTable {
     class TRowState;
     class TSpent;
-    class TMemTable;
-    class TPart;
     struct TSubset;
 
     /*_ IScan, the generic scan interface. Scan life cycle starts with
@@ -166,18 +164,21 @@ namespace NTable {
     };
 
 
-    struct TVersionScanSource {
-        const TMemTable* MemTable = nullptr;
-        const TPart* Part = nullptr;
-    };
+    using TVersionScanSource = TRowSource;
 
     /**
-     * A versioned scan visits keys in scan order. All callbacks for a key are
-     * enclosed by BeginKey/EndKey; the first committed row is the newest row
-     * reconstructed from the fixed subset, followed by strictly older versions.
+     * For each key, Feed(const TRow&, TRowVersion&) receives committed rows
+     * in strictly descending TRowVersion order: newest first, then older versions.
+     * The first committed row is the newest row reconstructed from the fixed subset.
+     *
+     * Keys are visited in scan order. During uninterrupted traversal, row, delta
+     * and lock callbacks for a key are enclosed by BeginKey/EndKey.
+     * Reset or Final may terminate that traversal without EndKey.
      * Uncommitted deltas and locks may precede that first committed row, and a
-     * key may contain only such events. Feed receives reconstructed row states,
-     * not individual fragments from parts.
+     * key may contain only such events. Feed(const TRow&, TRowVersion&) receives
+     * reconstructed committed row states, not individual fragments from parts.
+     * Feed(const TRow&, ui64) may deliver separate uncommitted fragments for the
+     * same transaction from different sources.
      *
      * The consumer may lower the version passed to Feed(TRow, TRowVersion&),
      * asking the driver to continue below that version instead of the original
@@ -192,10 +193,14 @@ namespace NTable {
 
     public:
         // Called immediately before each Feed overload. Exactly one pointer
-        // identifies the newest source contributing to that event, including
-        // a reconstructed row with values filled from older sources. The
-        // pointers are borrowed from the scan and must not be retained beyond
-        // its lifetime. Existing consumers may ignore this metadata.
+        // identifies the source of the lock/delta or, for a reconstructed row,
+        // the source of its newest fragment. Other cells may come from older
+        // sources: this metadata does not provide per-cell provenance.
+        // Interpret blob cells by their ELargeObj representation, not by the
+        // reported source. Unmaterialized external blob cells contain TGlobId
+        // for both memtables and parts (see TConf::LargeEdge).
+        // The pointers are borrowed from the scan and must not be retained
+        // beyond its lifetime. Existing consumers may ignore this metadata.
         virtual void SetSource(const TVersionScanSource&) {
         }
 

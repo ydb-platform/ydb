@@ -1,5 +1,5 @@
 #include "hnsw_index_build_actor.h"
-#include "../datashard_impl.h"
+#include <ydb/core/tx/datashard/datashard_impl.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <util/thread/pool.h>

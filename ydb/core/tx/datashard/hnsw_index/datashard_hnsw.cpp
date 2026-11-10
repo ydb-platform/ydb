@@ -1,6 +1,6 @@
-#include "../datashard_impl.h"
+#include <ydb/core/tx/datashard/datashard_impl.h>
 #include "hnsw_index_build_actor.h"
-#include "../build_index/kmeans_helper.h"
+#include <ydb/core/tx/datashard/build_index/kmeans_helper.h>
 
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 

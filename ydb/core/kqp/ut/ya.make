@@ -19,6 +19,7 @@ RECURSE_FOR_TESTS(
     perf
     rbo
     query
+    query_out_of_space
     scan
     scheme
     service

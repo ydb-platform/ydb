@@ -1,0 +1,56 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:75:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple, At tuple, At tuple, At tuple, At tuple
+    	SELECT item FROM AsTable([<|items: Just([1, 2])|>])
+	^
+        <tmp_path>/program.sql:<main>:76:1: Warning: At tuple, At function: YqlFlattenBy, At lambda, At function: FlattenByColumns
+        	FLATTEN BY items AS item;
+	^
+            <tmp_path>/program.sql:<main>:76:1: Warning: Ambiguous FLATTEN BY statement, please choose FLATTEN LIST BY or FLATTEN OPTIONAL BY
+            	FLATTEN BY items AS item;
+	^
+    <tmp_path>/program.sql:<main>:78:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple, At tuple, At tuple, At tuple, At tuple
+    	SELECT item FROM AsTable([<|items: Nothing(List<Int32>?)|>])
+	^
+        <tmp_path>/program.sql:<main>:79:1: Warning: At tuple, At function: YqlFlattenBy, At lambda, At function: FlattenByColumns
+        	FLATTEN BY items AS item;
+	^
+            <tmp_path>/program.sql:<main>:79:1: Warning: Ambiguous FLATTEN BY statement, please choose FLATTEN LIST BY or FLATTEN OPTIONAL BY
+            	FLATTEN BY items AS item;
+	^
+    <tmp_path>/program.sql:<main>:81:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple, At tuple, At tuple, At tuple, At tuple
+    	SELECT item FROM AsTable([<|items: Just({'one': 1})|>])
+	^
+        <tmp_path>/program.sql:<main>:82:1: Warning: At tuple, At function: YqlFlattenBy, At lambda, At function: FlattenByColumns
+        	FLATTEN BY items AS item;
+	^
+            <tmp_path>/program.sql:<main>:82:1: Warning: Ambiguous FLATTEN BY statement, please choose FLATTEN DICT BY or FLATTEN OPTIONAL BY
+            	FLATTEN BY items AS item;
+	^
+    <tmp_path>/program.sql:<main>:84:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple, At tuple, At tuple, At tuple, At tuple
+    	SELECT item FROM AsTable([<|items: Nothing(Dict<String,Int32>?)|>])
+	^
+        <tmp_path>/program.sql:<main>:85:1: Warning: At tuple, At function: YqlFlattenBy, At lambda, At function: FlattenByColumns
+        	FLATTEN BY items AS item;
+	^
+            <tmp_path>/program.sql:<main>:85:1: Warning: Ambiguous FLATTEN BY statement, please choose FLATTEN DICT BY or FLATTEN OPTIONAL BY
+            	FLATTEN BY items AS item;
+	^
+    <tmp_path>/program.sql:<main>:105:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple, At tuple, At tuple, At tuple, At tuple
+    	SELECT item FROM AsTable([<|items: Just(ListCreate(Int32))|>])
+	^
+        <tmp_path>/program.sql:<main>:106:1: Warning: At tuple, At function: YqlFlattenBy, At lambda, At function: FlattenByColumns
+        	FLATTEN BY items AS item;
+	^
+            <tmp_path>/program.sql:<main>:106:1: Warning: Ambiguous FLATTEN BY statement, please choose FLATTEN LIST BY or FLATTEN OPTIONAL BY
+            	FLATTEN BY items AS item;
+	^
+    <tmp_path>/program.sql:<main>:108:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple, At tuple, At tuple, At tuple, At tuple
+    	SELECT item FROM AsTable([<|items: Just(DictCreate(String, Int32))|>])
+	^
+        <tmp_path>/program.sql:<main>:109:1: Warning: At tuple, At function: YqlFlattenBy, At lambda, At function: FlattenByColumns
+        	FLATTEN BY items AS item;
+	^
+            <tmp_path>/program.sql:<main>:109:1: Warning: Ambiguous FLATTEN BY statement, please choose FLATTEN DICT BY or FLATTEN OPTIONAL BY
+            	FLATTEN BY items AS item;
+	^

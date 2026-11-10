@@ -13,6 +13,56 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
 
+    Y_UNIT_TEST_FLAG(VectorIndexDescriptionPersistence, Hnsw) {
+        NKikimrSchemeOp::TIndexCreationConfig config;
+        config.SetName("vidx");
+        config.SetType(Hnsw
+            ? NKikimrSchemeOp::EIndexTypeGlobalHnsw
+            : NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+        config.AddKeyColumnNames("scope");
+        config.AddKeyColumnNames("custom_embedding");
+        config.AddDataColumnNames("payload");
+        auto* settings = Hnsw
+            ? config.MutableHnswIndexDescription()->MutableSettings()
+            : config.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
+        settings->set_clusters(Hnsw ? 1 : 2);
+        settings->set_levels(1);
+        settings->set_autoupdate(false);
+        auto* vector = settings->mutable_settings();
+        vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        vector->set_vector_dimension(128);
+        if (Hnsw) {
+            vector->set_min_rows(0);
+            vector->set_m(24);
+            vector->set_ef_construction(300);
+            vector->set_delta_rows(1ULL << 40);
+        }
+
+        TString error;
+        const auto index = TTableIndexInfo::Create(config, error);
+        UNIT_ASSERT_C(index, error);
+        const auto& altered = *index->AlterData;
+        UNIT_ASSERT_VALUES_EQUAL(altered.IndexKeys.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(altered.IndexKeys.back(), "custom_embedding");
+        UNIT_ASSERT_VALUES_EQUAL(altered.IndexDataColumns.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(altered.IndexDataColumns.front(), "payload");
+
+        // The description is stored separately from the index type and keys.
+        const auto serialized = altered.SerializeDescription();
+        const TTableIndexInfo restored(altered.AlterVersion, altered.Type, altered.State, serialized);
+        UNIT_ASSERT_VALUES_EQUAL(restored.SerializeDescription(), serialized);
+        if (Hnsw) {
+            UNIT_ASSERT(std::holds_alternative<NKikimrSchemeOp::THnswIndexDescription>(restored.SpecializedIndexDescription));
+            const auto& description = std::get<NKikimrSchemeOp::THnswIndexDescription>(restored.SpecializedIndexDescription);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetSettings().SerializeAsString(), settings->SerializeAsString());
+        } else {
+            UNIT_ASSERT(std::holds_alternative<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(restored.SpecializedIndexDescription));
+            const auto& description = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(restored.SpecializedIndexDescription);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetSettings().SerializeAsString(), settings->SerializeAsString());
+        }
+    }
+
     void VerifyDeduplicateColumnFamiliesById(
             const TString& srcProtoText,
             const TString& dstProtoText,

@@ -19,8 +19,10 @@ main.cpp
   domain/health.*         SelfCheck classification and per-pile verdicts
   domain/policy.*         confirmation, failover overlay and CLI rendering
   domain/mutation.*       resend rules, survivor visibility and endpoint selection
-  http/actor.cpp          read-only routing
-  http/state_json.cpp     schema-2 snapshot document
+  http/actor.cpp          read routes and asynchronous controller commands
+  http/state_json.cpp     schema-3 canonical JSON/HTML projection
+  http/page.cpp           embedded server-rendered HTML, plain JS and CSS
+  runtime/diagnostics.*   bounded history, redacted logs and attempt records
   http/metrics.cpp        Prometheus rendering
   config/ut, domain/ut, runtime/ut, http/ut
   domain/ut/fixtures      synthetic source-derived SelfCheck fixtures
@@ -31,24 +33,30 @@ main.cpp
 ## Actors and threads
 
 `main.cpp` validates arguments, configuration and credentials, opens the
-locked state directory and starts NActors with one pool of two
-workers. The token file is re-read before each UpdateClusterState and after an
+locked state directory and starts NActors with a basic pool for HTTP, proxy and
+logging plus a dedicated one-thread IO executor for the controller only. The token file is re-read before each UpdateClusterState and after an
 UNAUTHORIZED reply; CA, certificate and key are read once. `main.cpp`
 registers the HTTP proxy and actor, waits for the listen
-confirmation and only then registers the Skipper actor, so a bind failure
-exits before any YDB call. The Skipper actor owns scheduling, latest replies,
+confirmation and only then registers the Skipper actor, followed by a private
+controller-ready handshake, so a bind failure exits before any YDB call and
+commands return 503 before readiness. The Skipper actor owns scheduling, latest replies,
 health and confirmation state, the mutation protocol, persistence and
 counters. Domain functions are pure: callers supply `now`; domain code does no
 I/O and uses no SDK clients.
 
 Every 250 ms the actor starts due calls, selects and persists a view, evaluates
 verdicts and confirmations, decides, sends a Ready plan in Auto and publishes an
-immutable snapshot. The HTTP actor only reads the latest snapshot. There is at
+immutable snapshot. HTTP parses command syntax and forwards typed requests to
+the controller; per-request actors retain the original HTTP request/cookie,
+track controller replies, handle nondelivery and return 504 after 15 seconds.
+A timeout never cancels a controller command. There is at
 most one outstanding call per endpoint and method, with separate slots for
 plain state, connectivity state, SelfCheck and update. A deadline does not free
 a slot before the SDK future settles, so a result always belongs to the call
 that holds its slot. SDK callbacks own their results and only send actor events.
-State-file writes are small synchronous atomic replacements in the actor.
+State-file writes are small synchronous atomic replacements on the dedicated
+IO executor. HTTP and logging stay responsive while an SDK call is outstanding;
+Off cannot preempt the controller during an ongoing fsync.
 
 SIGINT/SIGTERM stops scheduling first: the main thread waits for one stop
 acknowledgement, so the actor starts no new call. It then drains
@@ -101,8 +109,11 @@ callbacks never access an actor object.
    and publishes `EVIDENCE_EXPIRED` without an invocation, completion, occupied
    update slot or `mutation_sent` log. Fresh evidence may authorize it again.
 5. **Classification.** `ClassifySelfCheck` pins exact message texts and
-   distinguishes BSC from fallback mode. In fallback mode every RED group part
-   is fallback RED, and a GREY `Group has disks with no data` with a pile name
+   distinguishes BSC from fallback mode. In fallback mode a RED STORAGE_GROUP part
+   is fallback RED only with complete, unambiguous VDISK reasons, at least one
+   RED reason and no GREY or unknown reason. Neutral and exact BLUE
+   `Replication in progress` reasons are allowed but do not establish failure
+   alone. Other RED parts are incomplete. A GREY `Group has disks with no data` with a pile name
    is an incomplete (unknown) part; without a pile name it is ignored. In BSC
    mode, any reason other than a neutral (GREEN, YELLOW,
    ORANGE) or BLUE `Replication in progress` VDisk makes the part RED;
@@ -118,6 +129,9 @@ callbacks never access an actor object.
    every BSC reply has a RED part for the pile; Lost when at least
    one outside report exists, every outside report shows the pile in config
    quorum without node quorum, and no inside report shows its node quorum;
+   fallback Failed only for the BSC-host pile (PROMOTED, else PRIMARY), with no
+   fresh BSC reply anywhere, no self quorum, and every current outside
+   fallback reply reporting a decisive RED static part without truncation;
    Replicating when every BSC reply has a RED or replication-only part and one
    is replication-only; Healthy after the warm-up; otherwise Unknown, which an
    incomplete part also gives. SUSPENDED gets only the Lost rule;
@@ -149,13 +163,25 @@ callbacks never access an actor object.
    A generation change keeps a pile's confirmation when its state and the
    PRIMARY and PROMOTED roles are unchanged (a no-op bump, CMS or a stage flap
    elsewhere); any other change restarts it. Every Down pile must confirm
-   before acting.
+   before acting. Fallback failure is confined to one observed generation:
+   its confirmation restarts even on a no-op bump and when switching to or
+   from the BSC/Lost failure source. Only fallback requests sent at or after
+   the generation observation and, after a role change, observation plus
+   `bsc_warmup_seconds` can establish this failure. Cached earlier sends cannot
+   seed it or supply conflicting evidence for that new epoch.
+   A qualifying fallback failure takes precedence over connectivity loss, so
+   retained settled reports cannot hide advancing fallback confirmation evidence.
+   Defaults are 1-second state/health rounds, 8-second evidence TTL and a
+   2-second confirmation span, targeting a committed steady-state failover
+   within 20 seconds when evidence and a surviving quorum permit it. The target
+   is not a timeout that overrides blockers or BSC warm-up; explicit timing
+   overrides can increase latency.
 9. **Clock.** Windows, schedules and evidence send times use the monotonic
    clock, read when a request is launched; a wall-clock step changes nothing.
-   The HTTP layer reads the wall clock once per response for `now` and derives
-   the displayed `down_since` and `sent_at` from the monotonic stamps
-   (`now - age`), so ages are exact and the displayed times drift only by wall
-   steps that happened after the event.
+   The HTTP layer reads the wall clock once per response for `now`. Event UTC is
+   fixed when recorded (with the boot monotonic/UTC mapping for observation
+   stamps), and freshness always uses monotonic time. A wall-clock step can
+   change `now`, but never rewrites an event timestamp or extends evidence TTL.
 10. **Decision.** A lost SUSPENDED pile blocks. With no Down pile, Healthy or
     Replicating everywhere is Stable, otherwise Unknown. Replicating is never
     a promotion candidate. A primary that is not Down stays primary whatever
@@ -163,15 +189,19 @@ callbacks never access an actor object.
     primary is replaced by the eligible PROMOTED pile, else the first eligible
     SYNCHRONIZED pile by name (`NO_CANDIDATE` otherwise).
     Eligible means Healthy, or, without a fresh BSC-mode reply, self quorum
-    with no fallback part on the candidate. In a partition, the BSC side
+    plus a fresh non-truncated fallback reply from the candidate itself,
+    with no fallback RED/GREY part on the candidate from any current responder.
+    There is no additional candidate confirmation window and this does not
+    establish full disk health. In a partition, the BSC side
     wins when its BSC replies show the other side RED. When the BSC-host side
     cannot be observed for a TTL and the other side reports it without node
     quorum, it is Lost and the reachable side wins through the no-BSC rule.
-    Known limits, pending real-cluster recordings: if survivors'
-    connectivity reports stay `binding_in_progress`, no Lost verdict forms and
-    a silent primary loss is not handled automatically; act manually from
-    the published state. With fresh BSC-mode replies a candidate's fallback
-    RED is not a veto (D3); a stale clean BSC reply within the TTL can
+    If survivors' connectivity reports stay `binding_in_progress`, no Lost
+    verdict forms. The limited fallback Failed rule can still confirm loss of
+    the BSC host; GREY or missing static parts remain Unknown and require
+    manual action from the published state. Real-cluster qualification remains
+    incomplete. With fresh BSC-mode replies a candidate's fallback
+    RED is not a veto; a stale clean BSC reply within the TTL can
     therefore qualify a pile whose own fallback reply shows its groups RED.
 11. **Overlay.** One update disconnects every Down pile; if the primary is
     down, it also assigns the survivor PRIMARY and resets any other PROMOTED
@@ -192,10 +222,11 @@ callbacks never access an actor object.
     `update`) is persisted before the first send, and only the identical
     update, or a plan that keeps its primary and adds DISCONNECTED targets, is
     sent at G; such a plan replaces the record before it is sent. A Rejected
-    outcome keeps the record, because earlier attempts may still commit, and
-    stops Auto at that generation until a restart or a new generation
-    (reason `REJECTED_BY_SERVER`). A restart preserves the overlay restriction;
-    ambiguous outcomes back
+    outcome keeps the record because earlier attempts may still commit.
+    Rejected failover stops all dispatch at that generation until a restart or
+    a new generation (reason `REJECTED_BY_SERVER`); rejected lifecycle stops
+    lifecycle dispatch only, and its retained record blocks incompatible work.
+    Manual requires a new review for every resend; Auto ambiguous retries back
     off exponentially up to five minutes. The state file and
     outcome rules are in the
     [runbook](docs/operations.md#pending-mutations-and-state-overrides).
@@ -220,3 +251,33 @@ callbacks never access an actor object.
 This guide records no test pass. Synthetic fixtures and mock behavior are not
 real-cluster qualification; the real recordings and loaded measurements in the
 README checklist remain external release work.
+
+
+## Web administration contracts
+
+Fresh state starts Observe; persisted schema 3 stores mode and pending
+`kind`/`origin` with decimal-string generations. Unversioned state is rejected;
+there is no migration. External clear-pending atomically stores Observe and
+preserves high-water.
+
+Commands execute in one controller turn. A review binds boot ID, mode revision,
+action, target, exact generation/vector/endpoint and a 120-second single-use
+plan ID; execute freshly evaluates, consumes, persists pending and hands off.
+The controller retains 256 plans and 1024 process-local receipts. Receipt
+eviction cannot revive a consumed token. Manual authorizes one handoff only;
+Auto owns guarded failover retries and never lifecycle. Rejected failover
+latches all dispatch at G; lifecycle rejection latches lifecycle only. Restored,
+ambiguous and overlapping work carries volatile uncertainty through compatible
+failover supersets, preventing a later rejection from erasing potentially live
+work. Old replies only update their own diagnostic attempt.
+
+Diagnostic stores stay outside the per-tick snapshot: 1000 history rows, 5000
+log rows, 1000 completed attempts plus endpoint-bounded in-flight attempts.
+Cursors report restart/eviction gaps; capacity never blocks commands. JSON and
+server-rendered HTML share one presentation projection; last observed roles and
+unresolved incidents survive evidence expiry. No request overlay becomes an
+observed card state. The browser polls once per second with one read outstanding,
+reconciles POST responses and never automatically repeats uncertain commands.
+
+Browser resource registration and actual browser execution remain a separate
+validation prerequisite; see [browser acceptance](acceptance/browser/README.md).

@@ -54,6 +54,7 @@ enum ESimpleCounters {
     COUNTER_INDEX_BYTES = 44                                [(CounterOpts) = {Name: "IndexBytes"}];
     COUNTER_SCANS_WAITING_SNAPSHOT = 45                     [(CounterOpts) = {Name: "ScansWaitingSnapshot"}];
     COUNTER_SCANS_WAITING_LOADED_PORTIONS = 46              [(CounterOpts) = {Name: "ScansWaitingLoadedPortions"}];
+    COUNTER_WRITES_WAITING_LOADED_PORTIONS = 47             [(CounterOpts) = {Name: "WritesWaitingLoadedPortions"}];
 }
 
 enum ECumulativeCounters {

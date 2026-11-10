@@ -13,6 +13,22 @@
 
 namespace NBridgeSkipper {
 
+enum class EMode { Observe, Manual, Auto };
+enum class EOperationKind { Failover, Switchover, TakeOffline, Rejoin };
+enum class EDispatchOrigin { Manual, Auto };
+
+struct TParticipationEvidence {
+    // nullopt means unknown, not non-participating.
+    std::optional<bool> Value;
+    TMonotonic SentAt;
+};
+
+using TPileParticipation = std::map<TString, TParticipationEvidence>;
+
+TString ToString(EMode mode);
+TString ToString(EOperationKind kind);
+TString ToString(EDispatchOrigin origin);
+
 // Public wire values are retained, including unknown future enum values.
 enum class EPileState : ui32 {
     Unspecified = 0,
@@ -70,10 +86,14 @@ struct TPileVerdict {
     EPileVerdict Verdict = EPileVerdict::Unknown;
     std::vector<TString> Reasons;
     // A fresh fallback-mode reply attributes a group part (RED, or GREY "no data") to
-    // the pile. Never Down evidence; it vetoes promotion on connectivity alone.
+    // the pile. This aggregate is a candidate veto, not sufficient Down evidence.
     bool FallbackRed = false;
     bool SelfQuorum = false;
     TMonotonic NewestEvidenceSentAt;
+    // A complete fresh fallback reply from this pile; not proof of disk health.
+    bool OwnFallback = false;
+    // Failed established by the restricted outside-fallback rule, not by BSC.
+    bool FallbackFailure = false;
 };
 
 enum class EBlockerReason {
@@ -110,6 +130,8 @@ enum class EMutationOutcome { Success, GenerationMoved, NotAppliedHere, Rejected
 struct TPendingMutation {
     ui64 ExpectedGeneration = 0;
     TExactUpdate Update;
+    EOperationKind Kind = EOperationKind::Failover;
+    EDispatchOrigin Origin = EDispatchOrigin::Auto;
 
     bool operator==(const TPendingMutation&) const = default;
 };
@@ -118,6 +140,7 @@ struct TPersistentState {
     TString ClusterId;
     ui64 GenerationHighWater = 0;
     std::optional<TPendingMutation> PendingMutation;
+    EMode Mode = EMode::Observe;
 
     bool operator==(const TPersistentState&) const = default;
 };

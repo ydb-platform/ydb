@@ -14,6 +14,7 @@ PEERDIR(
     library/cpp/resource
     library/cpp/containers/cow_string
     yql/essentials/public/issue/protos
+    yql/essentials/public/utf8
     yql/essentials/utils
 )
 

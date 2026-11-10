@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yt/yql/providers/yt/codec/yt_codec.h>
+#include <yql/essentials/minikql/mkql_stats_registry.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
@@ -19,7 +20,13 @@
 
 #include <arrow/memory_pool.h>
 
+#include <atomic>
+
+#include <util/generic/maybe.h>
+#include <util/generic/string.h>
+
 namespace NYql::NDqs {
+
 NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath);
 class TPayloadRPCReader : public NYT::TRawTableReader {
 public:
@@ -51,13 +58,17 @@ private:
     TMemoryInput PayloadStream_;
 };
 
-struct TSettingsHolder : public TNonCopyable {
+class TSettingsHolder : public TNonCopyable {
+public:
     TSettingsHolder(NYT::NApi::IConnectionPtr&& connection, NYT::TIntrusivePtr<NYT::NApi::NRpcProxy::TClient>&& client,
-        TVector<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr>&& requests, TVector<size_t>&& originalIndexes)
+        TVector<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr>&& requests, TVector<size_t>&& originalIndexes, bool useLocalJobProxy)
         : Connection(std::move(connection))
         , Client(std::move(client))
         , Requests(std::move(requests))
-        , OriginalIndexes(std::move(originalIndexes)) {};
+        , OriginalIndexes(std::move(originalIndexes))
+        , UseLocalJobProxy_(useLocalJobProxy) {};
+    void RecordReadPayload(size_t bytes);
+    void ReportReadStats(NKikimr::NMiniKQL::IStatsRegistry* stats);
     void SetColumns(const TVector<TString>& columnNames) {
         for (ui32 i = 0; i < columnNames.size(); ++i) {
             ColumnNameMapping[columnNames[i]] = i;
@@ -72,6 +83,12 @@ struct TSettingsHolder : public TNonCopyable {
 
     TVector<size_t> OriginalIndexes;
     std::unordered_map<std::string, ui32> ColumnNameMapping;
+
+private:
+    const bool UseLocalJobProxy_;
+    // Arrow input callbacks run concurrently; the stats registry is updated by the consumer.
+    std::atomic<ui64> PayloadBytes_;
+    std::atomic<ui64> PayloadBlocks_;
 };
 
 std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString& token, const TString& clusterName, const ui64 timeout, bool unordered, const TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>& tables, NYT::TNode samplingSpec);

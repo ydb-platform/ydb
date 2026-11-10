@@ -911,6 +911,19 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
             return;
         }
 
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateBridgeRollback: {
+            const auto pileId = TBridgePileId::FromProto(&record,
+                &NKikimrBlobStorage::TEvControllerDistconfRequest::GetBridgePileId);
+            if (!BridgeInfo || !BridgeInfo->FindPile(pileId)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("unknown pile");
+                break;
+            }
+            // the transaction replies when it is done
+            Execute(CreateTxValidateBridgeRollback(pileId, std::exchange(h, {})));
+            return;
+        }
+
         case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateConfig: {
             if (!mainYaml) {
                 rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
@@ -1123,6 +1136,7 @@ STFUNC(TBlobStorageController::StateWork) {
     switch (type) {
         fFunc(TEvBlobStorage::EvControllerRegisterNode, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerGetGroup, EnqueueIncomingEvent);
+        fFunc(TEvBlobStorage::EvControllerQueryBridgeStorage, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerSelectGroups, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerUpdateDiskStatus, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerUpdateGroupStat, EnqueueIncomingEvent);
@@ -1308,6 +1322,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerUpdateGroupStat:              return 10;
         case TEvControllerCommitGroupLatencies::EventType:             return 10;
         case TEvBlobStorage::EvRequestControllerInfo:                  return 10;
+        case TEvBlobStorage::EvControllerQueryBridgeStorage:           return 10;
         case TEvPrivate::EvUpdateSelfHealCounters:                     return 10;
 
         case TEvBlobStorage::EvControllerUpdateDiskStatus: {
@@ -1391,8 +1406,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kPopulatePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteSpecificGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineDataCenterStates:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kTestResetDataCenterStates:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineFailRealmStates:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineGroupState:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateStoragePoolSettings:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kChangeStoragePoolBridgeMode:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact

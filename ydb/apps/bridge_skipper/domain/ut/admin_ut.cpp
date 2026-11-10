@@ -79,12 +79,18 @@ Y_UNIT_TEST_SUITE(AdminView) {
             TDuration::Seconds(30)).Blocker == EBlockerReason::ViewConflict);
     }
 
+    Y_UNIT_TEST(EvidenceExpiresAtThePublishedTtlBoundary) {
+        const auto result = SelectView({View(7, 70)}, 7, TMonotonic::Seconds(100), TDuration::Seconds(30));
+        UNIT_ASSERT(!result.View);
+        UNIT_ASSERT(result.Blocker == EBlockerReason::NoView);
+    }
+
     Y_UNIT_TEST(FreshnessUsesSendTimeAndHighWaterIsEnforced) {
         const auto now = TMonotonic::Seconds(100);
         const auto ttl = TDuration::Seconds(30);
         UNIT_ASSERT(SelectView({View(9, 69)}, 0, now, ttl).Blocker == EBlockerReason::NoView);
-        UNIT_ASSERT(SelectView({View(7, 70)}, 8, now, ttl).Blocker == EBlockerReason::StaleHistory);
-        UNIT_ASSERT(SelectView({View(7, 70)}, 7, now, ttl).View);
+        UNIT_ASSERT(SelectView({View(7, 71)}, 8, now, ttl).Blocker == EBlockerReason::StaleHistory);
+        UNIT_ASSERT(SelectView({View(7, 71)}, 7, now, ttl).View);
         UNIT_ASSERT(SelectView({}, 0, now, ttl).Blocker == EBlockerReason::NoView);
     }
 
@@ -341,6 +347,19 @@ Y_UNIT_TEST_SUITE(AdminMutation) {
         UNIT_ASSERT(!SelectMutationEndpoint(view, endpoints, resync, {connectivity}));
         connectivity.Report.Piles["d"].InConfigQuorum = false;
         UNIT_ASSERT(!SelectMutationEndpoint(view, endpoints, update, {connectivity}));
+    }
+
+    Y_UNIT_TEST(BscProvenStageTwoSurvivorStillRequiresNodeQuorum) {
+        auto view = View();
+        view.Piles["c"] = EPileState::NotSynchronized;
+        const auto endpoints = std::vector<TEndpointState>{Endpoint("a", "a")};
+        const TExactUpdate update{{"b", EPileState::Disconnected}};
+        auto connectivity = Sees("a", {"a", "b"});
+        connectivity.Report.Piles["c"] = {.HasNodeQuorum = false, .InConfigQuorum = false};
+        const TPileParticipation participation{{"c", {true, TMonotonic::Seconds(100)}}};
+        UNIT_ASSERT(!SelectMutationEndpoint(view, endpoints, update, {connectivity}, {}, participation));
+        connectivity.Report.Piles["c"].HasNodeQuorum = true;
+        UNIT_ASSERT_VALUES_EQUAL(*SelectMutationEndpoint(view, endpoints, update, {connectivity}, {}, participation), "a");
     }
 }
 

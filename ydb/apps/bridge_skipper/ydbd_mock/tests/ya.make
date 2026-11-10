@@ -13,6 +13,7 @@ TEST_SRCS(
     test_health.py
     test_health_modes.py
     test_instance.py
+    test_lab.py
     test_lifecycle.py
     test_model.py
     test_proto_contract.py

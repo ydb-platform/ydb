@@ -349,6 +349,15 @@ namespace NKikimr::NStorage {
         TControlWrapper CommonStaticLogChunks;
         TControlWrapper MaxActiveCompactionsPerPDisk;
 
+        struct TReplPDiskRate {
+            ui64 ReadBytesPerSecond;
+            ui64 WriteBytesPerSecond;
+        };
+
+        ui64 ReplTotalRequestBytesPerSecond = 0;
+        ui64 ReplTotalResponseBytesPerSecond = 0;
+        THashMap<NPDisk::EDeviceType, TReplPDiskRate> ReplPDiskRates;
+
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 
@@ -878,6 +887,7 @@ namespace NKikimr::NStorage {
         void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
         void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse::TPtr ev);
         void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
+        void ApplyReplBrokerConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge syncer operation
@@ -904,6 +914,11 @@ namespace NKikimr::NStorage {
             ui64 ReportedBlobsDone = 0;
             ui64 ReportedBlobsTotal = 0;
             ui64 ReportedBlobsError = 0;
+            ui64 ReportedBytesToCopy = 0;
+            ui64 ReportedBytesCopied = 0;
+            bool ReportedScanFinished = false;
+            // a new run starts from zero, while BSC may still have the values of the previous one, so all of them go
+            bool ForceProgressReport = false;
 
             friend std::strong_ordering operator <=>(const TWorkingSyncer& x, const TWorkingSyncer& y) {
                 return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId) <=>

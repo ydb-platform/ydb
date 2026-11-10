@@ -3,6 +3,12 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
+#include <util/string/printf.h>
+
+#include <deque>
+#include <map>
+#include <set>
+
 // helpers shared by bridge tests
 namespace NBridgeTest {
 
@@ -26,15 +32,33 @@ namespace NBridgeTest {
     }
 
     // settings of the cluster to be converted into bridged one
-    inline TEnvironmentSetup::TSettings MakeUnbridgedSettings(bool setupHive = false) {
+    inline TEnvironmentSetup::TSettings MakeUnbridgedSettings(bool setupHive = false, ui32 nodeCount = 9) {
         return {
-            .NodeCount = 9, // one spare node to make disk reassignment possible
+            .NodeCount = nodeCount, // 9 is one spare node to make disk reassignment possible
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .LocationGenerator = GetUnbridgedLocation,
             .SetupHive = setupHive,
             .SelfManagementConfig = true,
             .AutomaticBootstrap = true,
         };
+    }
+
+    // the same with one more node than a group has VDisks, so that a node other than the controller one has no VDisks of
+    // a group
+    inline TEnvironmentSetup::TSettings MakeUnbridgedSettingsWithSpareNode(bool setupHive = false) {
+        return MakeUnbridgedSettings(setupHive, 10);
+    }
+
+    // send the event the filter function of the test runtime has held anew: runtime resolves service id of the recipient
+    // at send, and the actor it was resolved to may be gone already
+    inline void ResendEvent(TEnvironmentSetup& env, ui32 nodeId, std::unique_ptr<IEventHandle> ev) {
+        const TActorId forwardOnNondelivery = ev->GetForwardOnNondeliveryRecipient();
+        const TActorId *forward = forwardOnNondelivery ? &forwardOnNondelivery : nullptr;
+        env.Runtime->Send(ev->HasEvent()
+            ? new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie, forward)
+            // events coming from other nodes are kept serialized, and some local ones have no event object
+            : new IEventHandle(ev->Type, ev->Flags, ev->Recipient, ev->Sender, ev->ReleaseChainBuffer(), ev->Cookie,
+                forward), nodeId);
     }
 
     // check that the read result contains exactly one blob with the expected data
@@ -371,6 +395,74 @@ namespace NBridgeTest {
         return res;
     }
 
+    // the group is an inline pile in the designated pile: it has its own VDisks there and serves as its own bridge proxy
+    // group, with numPiles entries in its pile list; returns its info
+    inline NKikimrBlobStorage::TGroupInfo CheckInlinePileGroup(TEnvironmentSetup& env, ui32 groupId, ui32 numPiles = 1,
+            ui32 pileIndex = 0) {
+        const auto info = GetGroupInfo(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL_C(info.GetBridgeProxyGroupId(), groupId, info.ShortDebugString());
+        UNIT_ASSERT_C(TBridgePileId::FromProto(&info, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId) ==
+            TBridgePileId::FromPileIndex(pileIndex), info.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(info.GetBridgeGroupState().PileSize(), numPiles, info.ShortDebugString());
+        const auto& pile = info.GetBridgeGroupState().GetPile(pileIndex);
+        UNIT_ASSERT_VALUES_EQUAL_C(pile.GetGroupId(), groupId, info.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(pile.GetGroupGeneration(), info.GetGroupGeneration(), info.ShortDebugString());
+        UNIT_ASSERT_C(info.RingsSize(), info.ShortDebugString());
+        const auto baseConfig = env.FetchBaseConfig(); // the group is referenced by pointer
+        const auto& group = FindGroup(baseConfig, groupId);
+        UNIT_ASSERT_C(!group.GetIsProxyGroup() && group.VSlotIdSize(), group.ShortDebugString());
+        return info;
+    }
+
+    // nodes started in the environment that have no VDisks of the group; they get its info only when using it
+    inline std::vector<ui32> GetNodesWithoutGroupVDisks(TEnvironmentSetup& env, ui32 groupId) {
+        std::set<ui32> hosting;
+        const auto baseConfig = env.FetchBaseConfig(); // a temporary would be gone before the loop body (pre-C++23)
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            if (vslot.GetGroupId() == groupId) {
+                hosting.insert(vslot.GetVSlotId().GetNodeId());
+            }
+        }
+        std::vector<ui32> res;
+        for (ui32 nodeId : env.Runtime->GetNodes()) {
+            if (nodeId <= env.ConfiguredNodeCount && !hosting.contains(nodeId)) {
+                res.push_back(nodeId);
+            }
+        }
+        return res;
+    }
+
+    // the node having no VDisks of the group, other than the controller one; the test holds the info of the group on its
+    // way to the node warden there (IsGroupInfoForNode), so that the proxy of the group starts without configuration
+    inline ui32 PickNodeWithoutGroupVDisks(TEnvironmentSetup& env, ui32 groupId) {
+        for (ui32 nodeId : GetNodesWithoutGroupVDisks(env, groupId)) {
+            if (nodeId != env.Settings.ControllerNodeId) {
+                return nodeId;
+            }
+        }
+        UNIT_FAIL("no node without VDisks of GroupId# " << groupId);
+        return 0;
+    }
+
+    // does the event bring the info of the group to the node warden of the node: an update from BS controller, or the
+    // cached info from distconf
+    inline bool IsGroupInfoForNode(IEventHandle& ev, ui32 groupId, ui32 nodeId) {
+        if (ev.Recipient.NodeId() != nodeId) {
+            return false;
+        } else if (ev.GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+            const auto& record = ev.Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+            for (const auto& group : record.GetServiceSet().GetGroups()) {
+                if (group.GetGroupID() == groupId) {
+                    return true;
+                }
+            }
+        } else if (ev.GetTypeRewrite() == TEvBlobStorage::EvNodeWardenQueryCacheResult && ev.HasEvent()) {
+            const auto *msg = ev.Get<NStorage::TEvNodeWardenQueryCacheResult>();
+            return msg->GenerationValue && msg->Key == Sprintf("G%08" PRIx32, groupId);
+        }
+        return false;
+    }
+
     // current generation of the group as the node knows it
     inline ui32 GetNodeGroupGeneration(TEnvironmentSetup& env, ui32 groupId, ui32 nodeId) {
         const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
@@ -436,5 +528,87 @@ namespace NBridgeTest {
         UNIT_ASSERT_VALUES_EQUAL(details.GetNonUniformStorageEnabled(), skipStoragePoolConversion);
         return groupId;
     }
+
+    inline NKikimrBlobStorage::TUpdateSettings ReadSettings(TEnvironmentSetup& env) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableReadSettings();
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        return response.GetStatus(0).GetSettings();
+    }
+
+    inline void SetBridgeSyncMaxSyncers(TEnvironmentSetup& env, ui32 maxSyncers) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableUpdateSettings()->AddBridgeSyncMaxSyncers(maxSyncers);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    // Follows the syncers of dynamic groups as BSC assigns them to nodes, and holds their completions on demand, so that
+    // they stay running. Updates for different nodes may come in any order, so the numbers are exact when things settle.
+    struct TSyncerTracker {
+        bool Hold = false; // whether completions are put into Held
+        std::map<ui32, std::set<ui32>> NodeSyncers; // node -> target groups, as the last update from BSC says
+        std::vector<std::pair<ui32, ui32>> Started; // node and target group, in the order of starting
+        std::deque<std::pair<ui32, std::unique_ptr<IEventHandle>>> Held; // node and completion, in the order of arrival
+        std::set<const void*> Released; // completions on their way through the filter again, not to be held twice
+
+        // to be called from the filter function, whose result it returns
+        bool OnEvent(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                if (record.GetUpdateSyncers()) {
+                    std::set<ui32> targets;
+                    for (const auto& syncer : record.GetSyncers()) {
+                        if (IsDynamicGroup(TGroupId::FromValue(syncer.GetBridgeProxyGroupId()))) {
+                            targets.insert(syncer.GetTargetGroupId());
+                        }
+                    }
+                    auto& current = NodeSyncers[nodeId];
+                    for (ui32 target : targets) {
+                        if (!current.contains(target)) {
+                            Started.emplace_back(nodeId, target);
+                        }
+                    }
+                    current = std::move(targets);
+                }
+            } else if (Hold && ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                if (IsDynamicGroup(msg->BridgeProxyGroupId) && !Released.erase(msg)) {
+                    Held.emplace_back(nodeId, std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        size_t GetNumRunning() const {
+            size_t res = 0;
+            for (const auto& [nodeId, targets] : NodeSyncers) {
+                res += targets.size();
+            }
+            return res;
+        }
+
+        void ReleaseOne(TEnvironmentSetup& env) {
+            UNIT_ASSERT(!Held.empty());
+            auto [nodeId, ev] = std::move(Held.front());
+            Held.pop_front();
+            Released.insert(ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>());
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+
+        // lets held syncers finish one by one until the condition is met, checking the number of the running ones
+        void RunUntil(TEnvironmentSetup& env, size_t maxRunning, const TString& what, const std::function<bool()>& condition) {
+            for (ui32 i = 0; i < 1000 && !condition(); ++i) {
+                env.Sim(TDuration::Seconds(1));
+                UNIT_ASSERT_LE(GetNumRunning(), maxRunning);
+                if (!Held.empty()) {
+                    ReleaseOne(env);
+                }
+            }
+            UNIT_ASSERT_C(condition(), what);
+        }
+    };
 
 } // NBridgeTest

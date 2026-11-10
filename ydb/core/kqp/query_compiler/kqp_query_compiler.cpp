@@ -1150,6 +1150,10 @@ private:
                         settingsProto,
                         tablesMap,
                         stage);
+                    // A returning sink cannot run without this metadata. Fail
+                    // compilation so New RBO can fall back before any effects.
+                    YQL_ENSURE(!settingsProto.GetReturningColumns().empty(),
+                        "Returning table sink requires returning-column metadata");
                     transformProto->MutableInternalSink()->MutableSettings()->PackFrom(settingsProto);
                     transformProto->SetOutputIndex(FromString(TStringBuf(transformNode.Index())));
 

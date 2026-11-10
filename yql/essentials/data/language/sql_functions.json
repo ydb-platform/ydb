@@ -1579,6 +1579,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::any_value",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::asin",
     "kind": "Normal"
   },
@@ -1707,6 +1711,14 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::current_date",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::current_timestamp",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::degrees",
     "kind": "Normal"
   },
@@ -1745,6 +1757,10 @@
   {
     "name": "Spark::find_in_set",
     "kind": "Normal"
+  },
+  {
+    "name": "Spark::first",
+    "kind": "Agg"
   },
   {
     "name": "Spark::floor",
@@ -1789,6 +1805,10 @@
   {
     "name": "Spark::isnull",
     "kind": "Normal"
+  },
+  {
+    "name": "Spark::last",
+    "kind": "Agg"
   },
   {
     "name": "Spark::lcase",

@@ -85,6 +85,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/cache
     ydb/library/actors/core
     ydb/library/actors/http
     ydb/library/actors/interconnect

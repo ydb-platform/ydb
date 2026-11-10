@@ -1,0 +1,26 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    x.key,
+    item
+FROM
+    AsTable([
+        <|key: 1, items: [10, 20]|>,
+        <|key: 2, items: [30]|>
+    ]) AS x
+    FLATTEN LIST BY (
+        IF(
+            EXISTS (
+                SELECT
+                    1
+                FROM
+                    AsTable([<|dummy: 1|>]) AS y
+                WHERE
+                    x.key == 1
+            ), x.items, []
+        ) AS item
+    )
+ORDER BY
+    x.key,
+    item
+;

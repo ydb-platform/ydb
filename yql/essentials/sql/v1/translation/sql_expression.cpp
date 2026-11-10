@@ -337,7 +337,7 @@ TSQLStatus ExprList(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const
         return std::unexpected(status.error());
     }
 
-    for (auto b : node.GetBlock2()) {
+    for (const auto& b : node.GetBlock2()) {
         sqlExpr.Token(b.GetToken1());
         if (auto status = Expr(sqlExpr, exprNodes, b.GetRule_expr2()); !status) {
             return std::unexpected(status.error());
@@ -1250,7 +1250,26 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
                         YQL_ENSURE(false, "Unreachable");
                 }
 
-                if (lastExpr) {
+                if (IsYqlSelectProduced_ && isColumnRef && isFirstElem &&
+                    (!YqlSelectSourceAliases_ || !YqlSelectSourceAliases_->contains(name))) {
+                    const auto& member = ids.back();
+                    TNodePtr key = member.Expr
+                                       ? new TCallNodeImpl(pos, "EvaluateAtom", {member.Expr})
+                                       : BuildQuotedAtom(pos, member.Name);
+                    TVector<TNodePtr> options;
+                    if (Ctx_.PragmaYsonAutoConvert) {
+                        options.push_back(BuildQuotedAtom(pos, "yson_auto_convert"));
+                    }
+                    if (Ctx_.PragmaYsonStrict) {
+                        options.push_back(BuildQuotedAtom(pos, "yson_strict"));
+                    }
+                    if (Ctx_.PragmaYsonFast) {
+                        options.push_back(BuildQuotedAtom(pos, "yson_fast"));
+                    }
+                    lastExpr = new TCallNodeImpl(pos, "YqlColumnOrAccess", {new TCallNodeImpl(pos, "Void", {}), BuildQuotedAtom(pos, name), key,
+                                                                            BuildQuote(pos, BuildList(pos, std::move(options)))});
+                    ids.clear();
+                } else if (lastExpr) {
                     lastExpr = BuildAccess(pos, ids, /*isLookup=*/false);
                     ids.clear();
                 }

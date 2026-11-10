@@ -595,6 +595,40 @@ Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {
     PQGetPartInfo(0, 0, tc);
 }
 
+Y_UNIT_TEST(CmdWriteRejectsExplicitHashLongerThan255) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString ownerCookie = CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, 0).first;
+    auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* partitionRequest = request->Record.MutablePartitionRequest();
+    partitionRequest->SetPartition(0);
+    partitionRequest->SetOwnerCookie(ownerCookie);
+    partitionRequest->SetMessageNo(1);
+
+    auto* write = partitionRequest->AddCmdWrite();
+    write->SetSourceId("source");
+    write->SetSeqNo(1);
+    write->SetData("data");
+    write->SetLogicalMessageCount(1);
+    write->SetExplicitHash(TString(256, 'h'));
+
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+        [](const TEvPersQueue::TEvResponse& event) {
+            return event.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
+        });
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(
+        static_cast<ui32>(response->Record.GetErrorCode()),
+        static_cast<ui32>(NPersQueue::NErrorCode::BAD_REQUEST));
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetErrorReason(), "too long explicit hash");
+}
+
 Y_UNIT_TEST(BatchedMessagesWriteWithoutMaxSeqNoFails) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

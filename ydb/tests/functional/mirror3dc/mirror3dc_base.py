@@ -1,9 +1,8 @@
 from collections import Counter
 import logging
-import time
 import unittest
 
-from ydb.core.protos import blobstorage_base_pb2, blobstorage_config_pb2, msgbus_pb2
+from ydb.core.protos import blobstorage_base3_pb2, msgbus_pb2
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.common.wait_for import retry_assertions
@@ -23,8 +22,8 @@ class Mirror3dcTestBase(unittest.TestCase):
     PARTITIONS = 3
     WRITES_PER_THREAD = 100
     INITIAL_WRITES = WRITERS * WRITES_PER_THREAD
-    REALM_STATES = blobstorage_base_pb2.TGroupInfo.TFailRealm
-    DC_STATES = blobstorage_config_pb2.TDefineDataCenterStates.TDataCenter
+    DC_STATES = blobstorage_base3_pb2.TDataCenterState
+    GROUP_STATES = blobstorage_base3_pb2.TGroupState
 
     def setUp(self):
         super().setUp()
@@ -118,20 +117,79 @@ class Mirror3dcTestBase(unittest.TestCase):
             self.assertEqual(self.get_group().GroupGeneration, before.GroupGeneration + 1)
 
     def recovered_realm_states(self):
-        return {dc: self.REALM_STATES.F if dc in self.excluded_dcs else self.REALM_STATES.N2
-                for dc in self.data_centers}
+        return {
+            dc: self.DC_STATES.EXCLUDED if dc in self.excluded_dcs else self.DC_STATES.INCLUDED
+            for dc in self.data_centers
+        }
 
-    def check_realm_states(self, expected):
+    def recovered_group_state(self):
+        return {
+            0: self.GROUP_STATES.NORMAL,
+            1: self.GROUP_STATES.DC_FAILURE_INV2,
+            2: self.GROUP_STATES.DC_SOLO_INV2,
+        }[len(self.excluded_dcs)]
+
+    def define_group_state(self, state, realm_states):
+        group = self.get_group()
+        self.assertEqual(set(realm_states), {realm.DataCenter for realm in group.FailRealms})
+        request = msgbus_pb2.TBlobStorageConfigRequest(Domain=1)
+        definition = request.Request.Command.add().DefineGroupState.Groups.add(
+            GroupId=self.group_id,
+            ExpectedGroupGeneration=group.GroupGeneration,
+            GroupState=state,
+        )
+        # The command uses physical realm order, which need not match sorted DC names.
+        definition.FailRealmStates.extend(realm_states[realm.DataCenter] for realm in group.FailRealms)
+        logger.info('DefineGroupState: %s', definition)
+        response = self.bsc_client.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        self.assertTrue(response.Success, str(response))
+        self.assertEqual(len(response.Status), 1, str(response))
+        self.assertTrue(response.Status[0].Success, str(response))
+
+    def check_group_state(self, expected_state, expected_realms):
         group = self.get_group()
         realms = group.FailRealms
-        logger.info('Group %s generation %s FailRealms: %s', self.group_id, group.GroupGeneration,
-                    [(realm.DataCenter, self.REALM_STATES.EState.Name(realm.State)) for realm in realms])
+        self.assertTrue(group.HasField('Mirror3dcState'), str(group))
+        logger.info(
+            'Group %s generation %s state %s FailRealms: %s',
+            self.group_id,
+            group.GroupGeneration,
+            self.GROUP_STATES.EState.Name(group.Mirror3dcState),
+            [(realm.DataCenter, self.DC_STATES.EState.Name(realm.State)) for realm in realms],
+        )
+        self.assertEqual(group.Mirror3dcState, expected_state, str(group))
         self.assertEqual(len(realms), 3, str(group))
         self.assertEqual({realm.DataCenter for realm in realms}, set(self.data_centers), str(group))
-        self.assertEqual({realm.DataCenter: realm.State for realm in realms}, expected, str(group))
+        self.assertEqual({realm.DataCenter: realm.State for realm in realms}, expected_realms, str(group))
 
-    def wait_for_realm_states(self, expected):
-        retry_assertions(lambda: self.check_realm_states(expected), timeout_seconds=240, step_seconds=1)
+    def wait_for_group_state(self, expected_state, expected_realms):
+        retry_assertions(
+            lambda: self.check_group_state(expected_state, expected_realms), timeout_seconds=240, step_seconds=1
+        )
+
+    def wait_for_two_copy_recovery(self, _pause_writes=None):
+        self.assertEqual(len(self.excluded_dcs), 1)
+        states = self.recovered_realm_states()
+        current = self.get_group().Mirror3dcState
+        if current == self.GROUP_STATES.DC_FAILURE:
+            self.define_group_state(self.GROUP_STATES.DC_FAILURE_INV1_PENDING, states)
+            self.wait_for_group_state(self.GROUP_STATES.DC_FAILURE_INV1, states)
+            current = self.GROUP_STATES.DC_FAILURE_INV1
+        if current == self.GROUP_STATES.DC_FAILURE_INV1:
+            self.define_group_state(self.GROUP_STATES.DC_FAILURE_INV2_PENDING, states)
+        else:
+            self.assertIn(current, (self.GROUP_STATES.DC_FAILURE_INV2_PENDING, self.GROUP_STATES.DC_FAILURE_INV2))
+        self.wait_for_group_state(self.GROUP_STATES.DC_FAILURE_INV2, states)
+
+    def return_dc(self, dc):
+        self.define_dc_state(dc, self.DC_STATES.INCLUDED)
+        realms = self.recovered_realm_states()
+        if self.excluded_dcs:
+            # Returning from SOLO_INV2 restores the second DC with guarantee INV1.
+            self.wait_for_group_state(self.GROUP_STATES.DC_FAILURE_INV1, realms)
+            self.wait_for_two_copy_recovery()
+        else:
+            self.wait_for_group_state(self.GROUP_STATES.NORMAL, realms)
 
     def run_workload(self, before_action, background_action):
         return run_kv_workload(
@@ -159,25 +217,27 @@ class Mirror3dcTestBase(unittest.TestCase):
             self.assertGreaterEqual(sum(n >= copies_per_dc for n in self.copy_counts(layout)), dc_count,
                                     f'Blob {blob} has no {copies_per_dc} copies in {dc_count} DCs: {layout}')
 
-    def wait_for_automatic_recovery(self, _pause_writes=None):
-        time.sleep(1)
-        self.wait_for_realm_states(self.recovered_realm_states())
-
-    def run_automatic_recovery(self, dc):
-        # Stop the workload after N2/N2/F, then inspect a snapshot without issuing
-        # any external restoration requests.
+    def run_two_copy_recovery(self, dc):
+        # Enable each invariant explicitly, then inspect replication results
+        # without issuing external per-blob restoration requests.
         written = self.run_workload(
-            lambda: self.define_dc_state(dc, self.DC_STATES.EXCLUDED), self.wait_for_automatic_recovery,
+            lambda: self.define_dc_state(dc, self.DC_STATES.EXCLUDED),
+            self.wait_for_two_copy_recovery,
         )
-        self.check_realm_states(self.recovered_realm_states())
+        self.check_group_state(self.GROUP_STATES.DC_FAILURE_INV2, self.recovered_realm_states())
         _, layouts = self.snapshot()
         blobs = self.kv_blobs(layouts)
         self.assertGreater(written, self.INITIAL_WRITES, 'No writes completed while the DC was excluded')
         self.assertEqual(len(blobs), written, 'Snapshot must contain every acknowledged KV write')
         self.check_blob_layouts(blobs)
         distribution = Counter(tuple(sorted(self.copy_counts(layout))) for layout in blobs.values())
-        logger.info('Automatic recovery: %d KV blobs (%d old, %d new), layouts %s',
-                    len(blobs), self.INITIAL_WRITES, written - self.INITIAL_WRITES, dict(distribution))
+        logger.info(
+            'Two-copy recovery: %d KV blobs (%d old, %d new), layouts %s',
+            len(blobs),
+            self.INITIAL_WRITES,
+            written - self.INITIAL_WRITES,
+            dict(distribution),
+        )
 
     def check_blob_layouts_under_load(self):
         # VDisks take snapshots independently. A live snapshot may contain

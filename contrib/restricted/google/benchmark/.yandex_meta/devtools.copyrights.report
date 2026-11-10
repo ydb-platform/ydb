@@ -77,6 +77,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/benchmark/benchmark.h [1:1]
+        include/benchmark/benchmark_api.h [1:1]
+        include/benchmark/counter.h [1:1]
+        include/benchmark/macros.h [1:1]
+        include/benchmark/managers.h [1:1]
+        include/benchmark/registration.h [1:1]
+        include/benchmark/reporter.h [1:1]
+        include/benchmark/state.h [1:1]
+        include/benchmark/statistics.h [1:1]
+        include/benchmark/sysinfo.h [1:1]
+        include/benchmark/types.h [1:1]
+        include/benchmark/utils.h [1:1]
         src/benchmark.cc [1:1]
         src/benchmark_name.cc [1:1]
         src/benchmark_register.cc [1:1]

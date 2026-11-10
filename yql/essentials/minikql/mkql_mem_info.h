@@ -25,13 +25,11 @@ using TMkqlLocation = TSourceLocation;
         ::NKikimr::NMiniKQL::Return(MemInfo, (Mem))
 #else
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using TMkqlLocation = int;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
     #define __MKQL_LOCATION__ 0
     #define MKQL_MEM_TAKE3(MemInfo, Mem, Size) \

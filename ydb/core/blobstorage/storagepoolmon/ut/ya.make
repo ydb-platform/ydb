@@ -15,9 +15,6 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
     ydb/core/blobstorage/storagepoolmon
-    ydb/core/testlib/default
-    ydb/core/testlib/actors
-    ydb/core/testlib/basics
 )
 
 SRCS(

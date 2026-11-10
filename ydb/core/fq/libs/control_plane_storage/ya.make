@@ -33,7 +33,6 @@ PEERDIR(
     ydb/core/fq/libs/quota_manager/events
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
-    ydb/core/kqp/opt
     ydb/core/kqp/script_executions/common
     ydb/core/mon
     ydb/core/util

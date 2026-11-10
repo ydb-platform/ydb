@@ -47,8 +47,10 @@ namespace {
 
     class TLoginService final: public Ydb::Auth::V1::AuthService::Service {
     public:
-        explicit TLoginService(Ydb::StatusIds::StatusCode firstStatus)
+        explicit TLoginService(Ydb::StatusIds::StatusCode firstStatus,
+                               grpc::StatusCode firstTransportStatus = grpc::StatusCode::OK)
             : FirstStatus(firstStatus)
+            , FirstTransportStatus(firstTransportStatus)
             , Token(jwt::create()
                         .set_expires_at(std::chrono::system_clock::now() + std::chrono::hours(1))
                         .sign(jwt::algorithm::none{}))
@@ -64,6 +66,9 @@ namespace {
             if (attempt == 1 && !ReleaseFirst.WaitT(TDuration::Seconds(10))) {
                 return grpc::Status(grpc::StatusCode::DEADLINE_EXCEEDED, "Test response release timed out");
             }
+            if (attempt == 1 && FirstTransportStatus != grpc::StatusCode::OK) {
+                return grpc::Status(FirstTransportStatus, "Test transport failure");
+            }
             auto* operation = response->mutable_operation();
             operation->set_ready(true);
             operation->set_status(attempt == 1 ? FirstStatus : Ydb::StatusIds::SUCCESS);
@@ -76,6 +81,7 @@ namespace {
         }
 
         const Ydb::StatusIds::StatusCode FirstStatus;
+        const grpc::StatusCode FirstTransportStatus;
         const std::string Token;
         TManualEvent ReleaseFirst;
         std::atomic_uint Requests{0};
@@ -83,11 +89,12 @@ namespace {
     };
 
     template <typename TCallback>
-    void WithProvider(Ydb::StatusIds::StatusCode firstStatus, TCallback callback) {
+    void WithProvider(Ydb::StatusIds::StatusCode firstStatus, TCallback callback,
+                      grpc::StatusCode firstTransportStatus = grpc::StatusCode::OK) {
         NTesting::InitPortManagerFromEnv();
         const auto port = NTesting::GetFreePort();
         const std::string endpoint = "127.0.0.1:" + std::to_string(port);
-        TLoginService service(firstStatus);
+        TLoginService service(firstStatus, firstTransportStatus);
         auto server = grpc::ServerBuilder()
                           .AddListeningPort(TStringType{endpoint}, grpc::InsecureServerCredentials())
                           .RegisterService(&service)
@@ -135,5 +142,14 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(service.Requests.load() >= 1);
             UNIT_ASSERT(service.CredentialsMatch.load());
         });
+    }
+
+    Y_UNIT_TEST(InitialTransportUnauthenticatedFails) {
+        WithProvider(Ydb::StatusIds::SUCCESS, [](const auto& service, const auto& future) {
+            UNIT_ASSERT_C(future.Wait(TDuration::Seconds(10)), "Transport rejection left the initial auth future pending");
+            UNIT_ASSERT(future.HasException());
+            UNIT_ASSERT_VALUES_EQUAL(service.Requests.load(), 1);
+            UNIT_ASSERT(service.CredentialsMatch.load());
+        }, grpc::StatusCode::UNAUTHENTICATED);
     }
 } // Y_UNIT_TEST_SUITE(Login)

@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(ServiceAuthentication) {
                     return true;
                 }, TDuration::Seconds(5));
             };
-            runtime.Send(new IEventHandle(service, edge, new TEvService::TEvHandshake(42, 1)));
+            runtime.Send(new IEventHandle(service, edge, new TEvService::TEvHandshake(42, 1)), 0, true);
             UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvStatus>(edge, TDuration::Seconds(5)));
             auto intercept = runtime.AddObserver<TEvYdbProxy::TEvCreateTopicReaderRequest>(
                 [&](TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev) { requests.push_back(std::move(ev)); });
@@ -549,7 +549,8 @@ Y_UNIT_TEST_SUITE(ServiceAuthentication) {
             }, TDuration::Seconds(5));
             if (staticLogin) {
                 UNIT_ASSERT_C(stopped, "static Login initialization failure restarted the reader");
-                UNIT_ASSERT_VALUES_EQUAL(stopped->GetReason(), NKikimrReplication::TEvWorkerStatus::REASON_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(stopped->GetReason()),
+                    static_cast<int>(NKikimrReplication::TEvWorkerStatus::REASON_ERROR));
                 UNIT_ASSERT_STRING_CONTAINS(stopped->GetErrorDescription(), "authentication");
                 UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
             } else {

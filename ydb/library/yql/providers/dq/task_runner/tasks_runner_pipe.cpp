@@ -25,6 +25,7 @@
 #include <util/system/shellcommand.h>
 #include <util/system/thread.h>
 #include <util/system/fs.h>
+#include <util/system/pipe.h>
 #include <util/stream/file.h>
 #include <util/stream/pipe.h>
 #include <util/stream/length.h>
@@ -198,23 +199,37 @@ public:
 #ifdef _win_
         Y_ABORT_UNLESS(false);
 #else
-        int input[2];
-        int output[2];
-        int error[2];
-
-        Y_ABORT_UNLESS(pipe(input) == 0);
-        Y_ABORT_UNLESS(pipe(output) == 0);
-        Y_ABORT_UNLESS(pipe(error) == 0);
+        int handles[2];
+        Y_ABORT_UNLESS(pipe(handles) == 0);
+        TPipeHandle input[2] = {handles[0], handles[1]};
+        Y_ABORT_UNLESS(pipe(handles) == 0);
+        TPipeHandle output[2] = {handles[0], handles[1]};
+        Y_ABORT_UNLESS(pipe(handles) == 0);
+        TPipeHandle error[2] = {handles[0], handles[1]};
 
         PrepareForExec();
+
+        const int parentInput = input[1];
+        const int parentOutput = output[0];
+        const int parentError = error[0];
+
+        // Allocate before releasing the handles and before a child can exist.
+        Stdin.Reset(new TPipedOutput(input[1].Release()));
+        Stdout.Reset(new TPipedInput(output[0].Release()));
+        Stderr.Reset(new TPipedInput(error[0].Release()));
+
+        TFailureInjector::Reach("DqPipeBeforeFork", [] {
+            ythrow yexception() << "Injected task runner launch failure";
+        });
+
         const int pid = fork();
         Y_ABORT_UNLESS(pid >= 0);
 
         if (pid == 0) {
             try {
-                close(input[1]);
-                close(output[0]);
-                close(error[0]);
+                close(parentInput);
+                close(parentOutput);
+                close(parentError);
 
                 if (dup2(input[0], 0) == -1) {
                     ythrow TSystemError() << "Cannot dup2 input";
@@ -235,14 +250,10 @@ public:
         }
 
         ProcessState.SetPid(pid);
-        close(input[0]);
-        close(output[1]);
-        close(error[1]);
+        input[0].Close();
+        output[1].Close();
+        error[1].Close();
 
-        Stdin = MakeHolder<TPipedOutput>(input[1]);
-        Stdout = MakeHolder<TPipedInput>(output[0]);
-        Stderr = MakeHolder<TPipedInput>(error[0]);
-        YQL_CLOG(DEBUG, ProviderDq) << "Forked child, pid: " << pid;
         OnStarted();
 #endif
     }
@@ -301,7 +312,7 @@ protected:
         }
     }
 
-    virtual void OnStarted() {
+    virtual void OnStarted() noexcept {
     }
 
     virtual void Exec() {
@@ -493,7 +504,7 @@ public:
 
 private:
 
-    void OnStarted() override {
+    void OnStarted() noexcept override {
         Started = true;
         ++*Counters->PortoContainersStarted;
         ++*Counters->PortoContainersAlive;
@@ -2169,9 +2180,9 @@ public:
         , Counters(std::make_shared<TPipeFactoryCounters>(
               options.Counters ? options.Counters : MakeIntrusive<NMonitoring::TDynamicCounters>()))
         , ProcessHolder(Counters)
-        , TaskScheduler(1)
         , MaxProcesses(options.MaxProcesses)
         , PortoCtlPath(options.PortoCtlPath)
+        , TaskScheduler(1)
     {
         Start(ExePath, PortoSettings);
         TaskScheduler.Start();
@@ -2373,9 +2384,11 @@ private:
 
     const TPipeFactoryCountersPtr Counters;
     TProcessHolder ProcessHolder;
-    TTaskScheduler TaskScheduler;
     const int MaxProcesses;
     const TString PortoCtlPath;
+
+    // Stop callbacks before destroying the fields they access.
+    TTaskScheduler TaskScheduler;
 };
 
 IProxyFactory::TPtr CreatePipeFactory(

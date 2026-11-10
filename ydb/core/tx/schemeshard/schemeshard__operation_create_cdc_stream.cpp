@@ -772,7 +772,7 @@ void DoCreatePqPart(
     auto& partitionConfig = *pqConfig.MutablePartitionConfig();
     partitionConfig.SetLifetimeSeconds(op.GetRetentionPeriodSeconds());
     partitionConfig.SetWriteSpeedInBytesPerSecond(10_MB); // TODO: configurable write speed
-    partitionConfig.SetBurstSize(partitionConfig.GetWriteSpeedInBytesPerSecond()); // TODO: configurable burst
+    partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 
     if (pqParams.ReplicationAutoPartitioning) {

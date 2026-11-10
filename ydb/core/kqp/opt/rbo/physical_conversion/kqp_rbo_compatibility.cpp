@@ -53,6 +53,44 @@ bool IsSqlScalar(const TTypeAnnotationNode* type) {
     return type && (IsDataOrOptionalOfData(type) || type->GetKind() == ETypeAnnotationKind::Null);
 }
 
+bool IsSqlComparable(const TTypeAnnotationNode* type) {
+    return IsSqlScalar(type) || (type && type->GetKind() == ETypeAnnotationKind::Tuple
+        && AllOf(type->Cast<TTupleExprType>()->GetItems(), IsSqlComparable));
+}
+
+bool NeedsScalarDictKeyConversion(const TExprNode::TPtr& node) {
+    if (!node->IsCallable({"Lookup", "Contains"})) {
+        return false;
+    }
+    const auto dict = node->Head().GetTypeAnn();
+    const auto lookup = node->Tail().GetTypeAnn();
+    if (!dict || dict->GetKind() != ETypeAnnotationKind::Dict || !lookup) {
+        return false;
+    }
+    const auto* key = dict->Cast<TDictExprType>()->GetKeyType();
+    return IsDataOrOptionalOfData(key) && IsDataOrOptionalOfData(lookup)
+        && !IsSameAnnotation(*key, *lookup);
+}
+
+TExprNode::TPtr ConvertScalarDictKey(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const auto* key = node->Head().GetTypeAnn()->Cast<TDictExprType>()->GetKeyType();
+    const bool mayFail = CastResult<true>(node->Tail().GetTypeAnn(), key) & NUdf::ECastOptions::MayFail;
+    // Match the physical peephole's checked lookup conversion. A narrowing,
+    // negative or fractional index must miss rather than wrap or truncate.
+    const TTypeAnnotationNode* castType = mayFail ? ctx.MakeType<TOptionalExprType>(key) : key;
+    auto casted = ctx.NewCallable(node->Pos(), "StrictCast",
+        {node->TailPtr(), ExpandType(node->Pos(), *castType, ctx)});
+    if (!mayFail) {
+        return ctx.ChangeChild(*node, 1, std::move(casted));
+    }
+    auto argument = ctx.NewArgument(node->Pos(), "converted_key");
+    auto lookup = ctx.NewCallable(node->Pos(), node->Content(), {node->HeadPtr(), argument});
+    auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), {argument}), std::move(lookup));
+    auto missing = node->IsCallable("Contains") ? MakeBool(node->Pos(), false, ctx)
+        : ctx.NewCallable(node->Pos(), "Nothing", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
+    return ctx.NewCallable(node->Pos(), "IfPresent", {std::move(casted), std::move(lambda), std::move(missing)});
+}
+
 TExprNode::TPtr TupleItem(const TExprNode::TPtr& tuple, size_t index, TExprContext& ctx) {
     return ctx.NewCallable(
         tuple->Pos(), "Nth",
@@ -74,7 +112,7 @@ bool CanExpandTupleComparison(const TExprNode::TPtr& node) {
         return false;
     }
     for (size_t index = 0; index < leftItems.size(); ++index) {
-        if (!IsSqlScalar(leftItems[index]) || !IsSqlScalar(rightItems[index])) {
+        if (!IsSqlComparable(leftItems[index]) || !IsSqlComparable(rightItems[index])) {
             return false;
         }
     }
@@ -222,7 +260,7 @@ TExprNode::TPtr ExpandScalarSqlIn(const TExprNode::TPtr& node, TExprContext& ctx
     const auto lookup = node->ChildPtr(1);
     const auto collectionType = collection->GetTypeAnn();
     const auto lookupType = lookup->GetTypeAnn();
-    if (HasSetting(*node->Child(2), "tableSource") || !collectionType || !IsSqlScalar(lookupType)) {
+    if (HasSetting(*node->Child(2), "tableSource") || !collectionType || !IsSqlComparable(lookupType)) {
         return node;
     }
 
@@ -232,7 +270,7 @@ TExprNode::TPtr ExpandScalarSqlIn(const TExprNode::TPtr& node, TExprContext& ctx
     // Other scalar lists, including parameters, use runtime dictionary lookup.
     if (collectionType->GetKind() == ETypeAnnotationKind::Tuple) {
         const auto tupleType = collectionType->Cast<TTupleExprType>();
-        if (!AllOf(tupleType->GetItems(), IsSqlScalar)) {
+        if (!AllOf(tupleType->GetItems(), IsSqlComparable)) {
             return node;
         }
         if (tupleType->GetSize()) {
@@ -240,7 +278,7 @@ TExprNode::TPtr ExpandScalarSqlIn(const TExprNode::TPtr& node, TExprContext& ctx
         }
     } else if (collectionType->GetKind() == ETypeAnnotationKind::List) {
         itemType = collectionType->Cast<TListExprType>()->GetItemType();
-        if (!IsSqlScalar(itemType)) {
+        if (!IsSqlComparable(itemType)) {
             return node;
         }
         if ((collection->IsList() || collection->IsCallable("AsList")) && collection->ChildrenSize()) {
@@ -261,6 +299,12 @@ TExprNode::TPtr ExpandScalarSqlIn(const TExprNode::TPtr& node, TExprContext& ctx
 
     if (!itemType) { // EmptyList or an empty tuple.
         return ansi && nullableLookup ? justFalse : legacyFalse;
+    }
+
+    // Explicit tuple-valued collections above use SQL component comparisons.
+    // Dictionary membership below implements scalar NULL semantics only.
+    if (!IsSqlScalar(lookupType) || !IsSqlScalar(itemType)) {
+        return node;
     }
 
     // A list of Null has no possible match. ANSI IN still distinguishes an
@@ -296,8 +340,7 @@ TExprNode::TPtr ExpandScalarSqlIn(const TExprNode::TPtr& node, TExprContext& ctx
 
 bool IsSupportedHasNullType(const TTypeAnnotationNode* type) {
     type = RemoveAllOptionals(type);
-    return type && (type->GetKind() == ETypeAnnotationKind::Data ||
-                    type->GetKind() == ETypeAnnotationKind::Null);
+    return IsSqlComparable(type);
 }
 
 bool IsComplexComparison(const TExprNode::TPtr& node) {
@@ -323,6 +366,15 @@ TExprNode::TPtr ExpandScalarHasNull(
         case ETypeAnnotationKind::Null:
             result = MakeBool(node->Pos(), true, ctx);
             break;
+        case ETypeAnnotationKind::Tuple: {
+            TExprNode::TListType items;
+            for (size_t index = 0; index < type->Cast<TTupleExprType>()->GetSize(); ++index) {
+                items.push_back(ctx.NewCallable(node->Pos(), "HasNull", {TupleItem(node->HeadPtr(), index, ctx)}));
+            }
+            result = items.empty() ? MakeBool(node->Pos(), false, ctx)
+                : ctx.NewCallable(node->Pos(), "Or", std::move(items));
+            break;
+        }
         case ETypeAnnotationKind::Optional:
             result = ctx.Builder(node->Pos())
                 .Callable("IfPresent")
@@ -348,7 +400,7 @@ TExprNode::TPtr ExpandScalarHasNull(
 TExprNode::TPtr FindCompatibilityNode(const TExprNode::TPtr& root) {
     return FindNode(root, [](const TExprNode::TPtr& node) {
         return node->IsCallable({"ExtractMembers", "OptionalIf", "StrictCast", "HasNull", "SqlIn", "RangeEmpty", "AsRange", "RangeFor"}) ||
-            CanLiftSafeCastOptional(node) || IsComplexComparison(node);
+            CanLiftSafeCastOptional(node) || NeedsScalarDictKeyConversion(node) || IsComplexComparison(node);
     });
 }
 
@@ -370,6 +422,9 @@ NYql::TExprNode::TPtr RewriteRboCompatibilityNode(
     }
     if (node->IsCallable("StrictCast")) {
         return NPhysicalConvertionUtils::ExpandScalarStrictCast(node, ctx);
+    }
+    if (NeedsScalarDictKeyConversion(node)) {
+        return ConvertScalarDictKey(node, ctx);
     }
     if (CanLiftSafeCastOptional(node)) {
         // MiniKQL casts such as ToDecimal and ToString preserve input optionality.

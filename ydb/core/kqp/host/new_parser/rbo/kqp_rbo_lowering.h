@@ -24,10 +24,10 @@ using TRboTableLookup = std::function<TRboTable(const TTableMetadata&)>;
 // plan escapes. Table lookup must reject unavailable or changed metadata.
 TIntrusivePtr<TOpRoot> LowerToRbo(const TQuery& query, const TScript& script,
     const TResolvedNames& names, const TAnnotatedAst& annotations,
-    NYql::TExprContext& ctx, const TRboTableLookup& tables, bool orderedColumns = false);
+    NYql::TExprContext& ctx, const TRboTableLookup& tables, bool orderedColumns = false, TCompileTrace* trace = nullptr);
 
 TIntrusivePtr<TOpRoot> LowerWriteToRbo(const TWriteStatement& write, const TScript& script,
     const TResolvedNames& names, const TAnnotatedAst& annotations,
-    NYql::TExprContext& ctx, const TRboTableLookup& tables, bool orderedColumns = false);
+    NYql::TExprContext& ctx, const TRboTableLookup& tables, bool orderedColumns = false, TCompileTrace* trace = nullptr);
 
 } // namespace NKikimr::NKqp::NNewYql

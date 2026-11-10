@@ -90,6 +90,7 @@ SRCS(
     datashard_change_sender_activation.cpp
     datashard_change_sending.cpp
     datashard_common_upload.cpp
+    datashard_database_freeze.cpp
     datashard_dep_tracker.cpp
     datashard_dep_tracker.h
     datashard_direct_erase.cpp
@@ -327,6 +328,7 @@ RECURSE_FOR_TESTS(
     ut_change_exchange
     ut_column_stats
     ut_compaction
+    ut_database_freeze
     ut_disk_quotas
     ut_direct_restore
     ut_erase_rows

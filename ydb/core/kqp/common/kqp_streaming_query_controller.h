@@ -17,6 +17,8 @@
 
 namespace NKikimr::NKqp {
 
+class TKqpTasksGraph;
+
 // Contract between the data executer and the streaming query runtime:
 // graph patching on restart, checkpointing and nodes monitoring.
 //
@@ -58,7 +60,8 @@ public:
         const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, ui32 usableThreadsPerNode) = 0;
 
     // Starts side actors after the tasks graph is built (and saved, if requested).
-    virtual TStartedActors Start(std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> graph) = 0;
+    virtual TStartedActors Start(
+        std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> graph, const TKqpTasksGraph& tasksGraph) = 0;
 
     // Called once all compute actors are started. checkpointsEnabled is false
     // if the graph turned out to have no checkpointed ingress.

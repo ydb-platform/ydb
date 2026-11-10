@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/fq/libs/checkpointing
     ydb/core/fq/libs/state
     ydb/core/kqp/common
+    ydb/core/kqp/executer_actor
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/script_executions/common
     ydb/core/protos

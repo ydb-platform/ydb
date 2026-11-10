@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
 #include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
@@ -96,14 +97,15 @@ public:
         return PatchedGraph ? PatchedGraph : Settings.Graph;
     }
 
-    TStartedActors Start(std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> graph) override {
+    TStartedActors Start(
+        std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> graph, const TKqpTasksGraph& tasksGraph) override {
         const auto& context = Settings.UserRequestContext;
         const bool enabled = AppData()->FeatureFlags.GetEnableStreamingQueries() && graph && context && context->CheckpointId;
         if (!enabled) {
             return {};
         }
 
-        const auto graphParams = MakeGraphParams(*graph);
+        const auto graphParams = MakeGraphParams(*graph, tasksGraph);
 
         if (Settings.HasPqSources) {
             Actors.NodesManager = TActivationContext::Register(
@@ -240,18 +242,9 @@ private:
         TActivationContext::Send(new NActors::IEventHandle(recipient, Settings.ExecuterId, ev));
     }
 
-    NFq::NProto::TGraphParams MakeGraphParams(const NKikimrKqp::TQueryPhysicalGraph& graph) const {
-        const auto& physicalQuery = graph.GetPreparedQuery().GetPhysicalQuery();
+    NFq::NProto::TGraphParams MakeGraphParams(
+        const NKikimrKqp::TQueryPhysicalGraph& graph, const TKqpTasksGraph& tasksGraph) const {
         const auto& userToken = Settings.UserToken;
-
-        // Persisted task and physical stage IDs are transaction-local, while checkpoint stage IDs must be graph-wide.
-        TVector<ui64> stageIdBases;
-        stageIdBases.reserve(physicalQuery.TransactionsSize());
-        ui64 stageIdBase = 0;
-        for (const auto& tx : physicalQuery.GetTransactions()) {
-            stageIdBases.push_back(stageIdBase);
-            stageIdBase += tx.StagesSize();
-        }
 
         NFq::NProto::TGraphParams graphParams;
         for (const auto& task : graph.GetTasks()) {
@@ -264,13 +257,8 @@ private:
             requestContext["UserSID"] = userToken ? userToken->GetUserSID() : TString();
             requestContext["UserGroupSIDs"] = SequenceToJsonString(userToken ? userToken->GetGroupSIDs() : TVector<NACLib::TSID>{});
 
-            const auto txId = task.GetTxId();
-            Y_VALIDATE(txId < static_cast<ui64>(physicalQuery.TransactionsSize()), "Missing task transaction");
-            const auto& tx = physicalQuery.GetTransactions(txId);
-            const auto stageId = checkpointTask.GetStageId();
-            Y_VALIDATE(stageId < static_cast<ui64>(tx.StagesSize()), "Missing task stage");
-            const auto& stage = tx.GetStages(stageId);
-            checkpointTask.SetStageId(stageIdBases.at(txId) + stageId);
+            const auto& stageInfo = tasksGraph.GetStageInfo(tasksGraph.GetTask(checkpointTask.GetId()).StageId);
+            const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
             const auto& program = stage.GetProgram();
             graphParams.MutableStageProgram()->try_emplace(checkpointTask.GetStageId(), program.GetRaw());
             checkpointTask.MutableProgram()->SetRuntimeVersion(program.GetRuntimeVersion());

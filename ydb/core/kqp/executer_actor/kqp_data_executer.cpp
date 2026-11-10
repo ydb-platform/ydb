@@ -1203,7 +1203,7 @@ private:
             return;
         }
 
-        const auto actors = StreamingQuery->Start(Request.QueryPhysicalGraph);
+        const auto actors = StreamingQuery->Start(Request.QueryPhysicalGraph, TasksGraph);
         StreamingQueryNodesManagerId = actors.NodesManager;
         CheckpointCoordinatorId = actors.CheckpointCoordinator;
         TasksGraph.GetMeta().AllowCheckpoints = static_cast<bool>(CheckpointCoordinatorId);

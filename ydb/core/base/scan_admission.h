@@ -19,6 +19,7 @@ class TScanAdmissionControl {
         ui64 Count = 0;
         ui64 Bytes = 0;
         ui64 TotalLimit = 512_MB;
+        ui64 ActiveLimit = Max<ui64>();
         ::NMonitoring::TDynamicCounters::TCounterPtr CountCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr BytesCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr RejectedCounter;
@@ -32,6 +33,12 @@ class TScanAdmissionControl {
     };
 
 public:
+    static ui64 CalculatePendingByteLimit(ui64 totalLimit, ui64 configuredLimit) {
+        // A quarter leaves room for supported centroid requests on small
+        // nodes, while preserving an independent bound on active scans.
+        return Min(configuredLimit, totalLimit / 4);
+    }
+
     struct TUsage {
         ui64 Count;
         ui64 Bytes;
@@ -78,7 +85,7 @@ public:
             }
             // Keep pending descriptors inside the same overall index-build
             // budget as the active broker queue, including on small nodes.
-            bytesLimit = Min(bytesLimit, State->TotalLimit / 8);
+            bytesLimit = CalculatePendingByteLimit(State->TotalLimit, bytesLimit);
             if (State->Count >= countLimit || State->Bytes > bytesLimit || bytes > bytesLimit - State->Bytes) {
                 if (State->RejectedCounter) {
                     State->RejectedCounter->Inc();
@@ -95,13 +102,21 @@ public:
 
     ui64 GetByteLimit(ui64 configuredLimit) const {
         with_lock(State->Lock) {
-            return Min(configuredLimit, State->TotalLimit / 8);
+            return CalculatePendingByteLimit(State->TotalLimit, configuredLimit);
         }
     }
 
-    void SetTotalLimit(ui64 bytes) {
+    ui64 GetActiveByteLimit(ui64 configuredPendingLimit) const {
+        with_lock(State->Lock) {
+            return Min(State->ActiveLimit,
+                State->TotalLimit - CalculatePendingByteLimit(State->TotalLimit, configuredPendingLimit));
+        }
+    }
+
+    void SetTotalLimit(ui64 bytes, ui64 activeLimit = Max<ui64>()) {
         with_lock(State->Lock) {
             State->TotalLimit = bytes;
+            State->ActiveLimit = activeLimit;
         }
     }
 

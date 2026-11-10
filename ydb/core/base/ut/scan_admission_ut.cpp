@@ -28,16 +28,30 @@ Y_UNIT_TEST_SUITE(TScanAdmission) {
         {
             TScanAdmissionControl quota;
             quota.SetTotalLimit(800);
-            lease = quota.TryAcquire(100, 100, 1000);
+            lease = quota.TryAcquire(200, 100, 1000);
             UNIT_ASSERT(lease);
             quota.SetTotalLimit(400);
             UNIT_ASSERT(!quota.TryAcquire(1, 100, 1000));
             lease.reset();
-            UNIT_ASSERT(!quota.TryAcquire(51, 100, 1000));
-            lease = quota.TryAcquire(50, 100, 1000);
+            UNIT_ASSERT(!quota.TryAcquire(101, 100, 1000));
+            lease = quota.TryAcquire(100, 100, 1000);
             UNIT_ASSERT(lease);
         }
         lease.reset();
+    }
+
+    Y_UNIT_TEST(ActiveBudgetRespectsBrokerLimitAndPendingSlice) {
+        TScanAdmissionControl quota;
+        quota.SetTotalLimit(256, 192);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetByteLimit(64), 64);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 192);
+        quota.SetTotalLimit(256, 32);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 32);
+        quota.SetTotalLimit(128);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetByteLimit(64), 32);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 96);
+        quota.SetTotalLimit(128, 0);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 0);
     }
 
     Y_UNIT_TEST(OverflowCannotBypassLimit) {

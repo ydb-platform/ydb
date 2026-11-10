@@ -160,6 +160,19 @@ public:
     }
 
     auto Usage() { return Runtime.GetAppData().BuildIndexScanAdmission->GetUsage(); }
+
+    void SetMemoryBudget(ui64 total, ui64 active) {
+        Runtime.GetAppData().BuildIndexScanAdmission->SetTotalLimit(total, active);
+        using TBroker = NResourceBroker::TEvResourceBroker;
+        auto event = MakeHolder<TBroker::TEvConfigure>();
+        event->Merge = true;
+        auto* queue = event->Record.AddQueues();
+        queue->SetName("queue_build_index");
+        queue->MutableLimit()->SetMemory(active);
+        Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Sender, event.Release()));
+        const auto reply = Runtime.GrabEdgeEventRethrow<TBroker::TEvConfigureResult>(Sender);
+        UNIT_ASSERT(reply->Get()->Record.GetSuccess());
+    }
 };
 
 } // namespace
@@ -299,6 +312,9 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
 
     Y_UNIT_TEST(LargestValidCentroidPayloadFitsDefaultRequestLimit) {
         TAdmissionFixture fixture;
+        // The default budget on a 2 GiB node must support this request without
+        // retries or a later increase of the memory limit.
+        fixture.SetMemoryBudget(256_MB, 192_MB);
         auto event = fixture.Request(fixture.Shards[0]);
         auto& rec = event->Record;
         rec.MutableSettings()->set_vector_dimension(2048);
@@ -311,19 +327,113 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         }
         UNIT_ASSERT_GT(rec.ByteSizeLong(), 16_MB);
         UNIT_ASSERT_LE(rec.ByteSizeLong(), fixture.Runtime.GetAppData().DataShardConfig.GetBuildIndexRequestBytesLimit());
-        auto retry = MakeHolder<TEvDataShard::TEvReshuffleKMeansRequest>();
-        retry->Record.CopyFrom(rec);
-        fixture.Runtime.GetAppData().BuildIndexScanAdmission->SetTotalLimit(2_GB * 3 / 100);
         fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, event.Release(), 0, GetPipeConfigWithRetries());
-        auto rejected = fixture.Reply(NKikimrIndexBuilder::ABORTED);
-        UNIT_ASSERT_GT(rejected->Get()->Record.GetRetryAfterMs(), 0);
-        fixture.Runtime.GetAppData().BuildIndexScanAdmission->SetTotalLimit(512_MB);
-        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, retry.Release(), 0, GetPipeConfigWithRetries());
         fixture.Reply(NKikimrIndexBuilder::DONE);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Bytes, 0);
+    }
+
+    Y_UNIT_TEST(RecomputeFitsSmallNodeWithQueryExecutionBudget) {
+        TAdmissionFixture fixture;
+        // Compute scheduler reserves 20% out of the 30% activities budget.
+        const ui64 total = 2_GB / 10;
+        const ui64 pending = TScanAdmissionControl::CalculatePendingByteLimit(total, 64_MB);
+        fixture.SetMemoryBudget(total, total - pending);
+        auto request = MakeHolder<TEvDataShard::TEvRecomputeKMeansRequest>();
+        auto& rec = request->Record;
+        rec.SetAllowMemoryAdmission(true);
+        rec.SetId(1);
+        rec.SetSeqNoGeneration(1);
+        rec.SetSeqNoRound(1);
+        rec.SetTabletId(fixture.Shards[0]);
+        fixture.Table.PathId.ToProto(rec.MutablePathId());
+        rec.MutableSettings()->set_vector_dimension(2048);
+        rec.MutableSettings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        rec.MutableSettings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        rec.SetParent(0);
+        rec.SetEmbeddingColumn("embedding");
+        TString centroid(2048 * sizeof(float) + 1, '\0');
+        centroid.back() = 1;
+        for (ui32 i = 0; i < 1024; ++i) {
+            rec.AddClusters(centroid);
+        }
+        UNIT_ASSERT_GT(rec.ByteSizeLong(), 8_MB);
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, request.Release(), 0, GetPipeConfigWithRetries());
+        auto reply = fixture.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvRecomputeKMeansResponse>(fixture.Sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetStatus(), NKikimrIndexBuilder::DONE,
+            reply->Get()->Record.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Bytes, 0);
+    }
+
+    Y_UNIT_TEST(LocalScanShrinksBuffersToFitBrokerBudget) {
+        TAdmissionFixture fixture;
+        fixture.SetMemoryBudget(256_MB, 96_MB);
+        fixture.InsertRow();
+        CreateLevelTable(fixture.Server, fixture.Sender, TShardedTableOptions().Shards(1));
+        ui64 reservation = 0;
+        auto observer = fixture.Runtime.AddObserver<NResourceBroker::TEvResourceBroker::TEvSubmitTask>([&](auto& event) {
+            if (event->Get()->Task.Type == "build_index") {
+                reservation = event->Get()->Task.RequiredResources[NKikimrResourceBroker::MEMORY];
+            }
+        });
+        auto request = MakeHolder<TEvDataShard::TEvLocalKMeansRequest>();
+        auto& rec = request->Record;
+        rec.SetAllowMemoryAdmission(true);
+        rec.SetId(1);
+        rec.SetSeqNoGeneration(1);
+        rec.SetSeqNoRound(1);
+        rec.SetTabletId(fixture.Shards[0]);
+        fixture.Table.PathId.ToProto(rec.MutablePathId());
+        rec.MutableSettings()->set_vector_dimension(2);
+        rec.MutableSettings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
+        rec.MutableSettings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        rec.SetK(2);
+        rec.SetSeed(1337);
+        rec.SetNeedsRounds(3);
+        rec.SetUpload(NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING);
+        rec.SetParentFrom(0);
+        rec.SetParentTo(0);
+        rec.SetChild(1);
+        rec.SetEmbeddingColumn("embedding");
+        rec.AddDataColumns("data");
+        rec.SetDatabaseName("/Root");
+        rec.SetLevelName("/Root/table-level");
+        rec.SetOutputName("/Root/table-posting");
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, request.Release(), 0, GetPipeConfigWithRetries());
+        auto reply = fixture.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvLocalKMeansResponse>(fixture.Sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetStatus(), NKikimrIndexBuilder::DONE,
+            reply->Get()->Record.ShortDebugString());
+        UNIT_ASSERT_GT(reservation, 0);
+        UNIT_ASSERT_LE(reservation, 96_MB);
+        UNIT_ASSERT_GT(reply->Get()->Record.GetMeteringStats().GetUploadRows(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Bytes, 0);
+    }
+
+    Y_UNIT_TEST(ScanShrinksBuffersToFitExplicitScanLimit) {
+        TAdmissionFixture fixture;
+        fixture.InsertRow();
+        fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexScanMemoryLimit(32_MB);
+        ui64 reservation = 0;
+        auto observer = fixture.Runtime.AddObserver<NResourceBroker::TEvResourceBroker::TEvSubmitTask>([&](auto& event) {
+            if (event->Get()->Task.Type == "build_index") {
+                reservation = event->Get()->Task.RequiredResources[NKikimrResourceBroker::MEMORY];
+            }
+        });
+        fixture.Send(fixture.Shards[0]);
+        auto reply = fixture.Reply(NKikimrIndexBuilder::DONE);
+        UNIT_ASSERT_GT(reservation, 0);
+        UNIT_ASSERT_LE(reservation, 32_MB);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetMeteringStats().GetUploadRows(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Bytes, 0);
     }
 
     Y_UNIT_TEST(LargeValidRowRetriesWithLargerReservation) {
         TAdmissionFixture fixture;
+        fixture.SetMemoryBudget(256_MB, 96_MB);
+        auto observer = fixture.Runtime.AddObserver<NResourceBroker::TEvResourceBroker::TEvSubmitTask>([&](auto& event) {
+            if (event->Get()->Task.Type == "build_index") {
+                UNIT_ASSERT_LE(event->Get()->Task.RequiredResources[NKikimrResourceBroker::MEMORY], 96_MB);
+            }
+        });
         fixture.InsertRow(TString(10_MB, 'x'));
         fixture.Send(fixture.Shards[0]);
         const auto reply = fixture.Reply(NKikimrIndexBuilder::ABORTED);

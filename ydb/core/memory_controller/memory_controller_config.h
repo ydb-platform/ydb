@@ -87,6 +87,18 @@ GET_LIMIT(QueryExecutionLimit)
 GET_LIMIT(CompactionLimit)
 GET_LIMIT(IndexBuildLimit)
 
+inline ui64 GetIndexBuildBudgetBytes(const NKikimrConfig::TMemoryControllerConfig& config,
+    ui64 hardLimitBytes, ui64 activitiesLimitBytes)
+{
+    ui64 limit = GetIndexBuildLimitBytes(config, hardLimitBytes);
+    if (!config.HasIndexBuildLimitPercent() && !config.HasIndexBuildLimitBytes()) {
+        // The default percentage alone cannot accommodate an ordinary vector
+        // scan on a small node. Explicit operator limits keep their meaning.
+        limit = Max<ui64>(limit, 256_MB);
+    }
+    return Min(limit, activitiesLimitBytes);
+}
+
 // TODO: the memory of the queries is limited by the compute scheduler (the QueryExecution consumer) and not by the
 //       resource broker anymore, so it's taken out of the computed limit of the resource broker - the sum of the
 //       limits stays as before. The limits which make it up:

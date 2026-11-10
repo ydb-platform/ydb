@@ -1,6 +1,7 @@
 #include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
 #include "flat_redo_observer.h"
+#include "flat_scan_actor.h"
 #include "util_fmt_abort.h"
 #include "shared_cache_counters.h"
 #include <ydb/core/base/counters.h>
@@ -1212,6 +1213,19 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
     private:
         bool& Destroyed;
     };
+
+    Y_UNIT_TEST(ScanDriverAcceptsMovedSnapshot) {
+        bool destroyed = false;
+        TAutoPtr<NTable::IScan> scan = new TThrowingDescriptionScan(destroyed);
+        TAutoPtr<NTable::TSubset> subset = new NTable::TSubset(NTable::TEpoch::Zero(), nullptr);
+        auto snapshot = THolder<TScanSnapshot>(new TScanSnapshot{TRowsModel::TableId, {}, subset, TRowVersion::Max()});
+        {
+            auto driver = MakeHolder<NOps::TDriver>(1, scan, NOps::TConf{}, std::move(snapshot));
+            UNIT_ASSERT(!scan);
+            UNIT_ASSERT(!snapshot);
+        }
+        UNIT_ASSERT(destroyed);
+    }
 
     Y_UNIT_TEST_TWIN(ScanStartFailureReleasesPreparedSnapshot, Deferred) {
         TMyEnvScans env;

@@ -714,9 +714,9 @@ private:
     }
 
     void ProcessResourceBrokerConfig(const TActorContext& ctx, NKikimrMemory::TMemoryStats& memoryStats, ui64 hardLimitBytes, ui64 activitiesLimitBytes) {
-        const ui64 indexBuildLimit = Min(GetIndexBuildLimitBytes(Config, hardLimitBytes), activitiesLimitBytes);
-        const ui64 pendingLimit = Min(AppData()->DataShardConfig.GetBuildIndexPendingBytesLimit(), indexBuildLimit / 8);
-        AppData()->BuildIndexScanAdmission->SetTotalLimit(indexBuildLimit);
+        const ui64 indexBuildLimit = GetIndexBuildBudgetBytes(Config, hardLimitBytes, activitiesLimitBytes);
+        const ui64 pendingLimit = TScanAdmissionControl::CalculatePendingByteLimit(indexBuildLimit,
+            AppData()->DataShardConfig.GetBuildIndexPendingBytesLimit());
         Counters->GetCounter("Consumer/IndexBuild/Limit")->Set(indexBuildLimit);
         const ui64 pendingBytes = AppData()->BuildIndexScanAdmission->GetUsage().Bytes;
         Counters->GetCounter("Consumer/IndexBuildPending/Consumption")->Set(pendingBytes);
@@ -742,6 +742,7 @@ private:
         // The index budget is a combined bound on active and pending scans.
         auto& activeIndexLimit = config.QueueLimits["queue_build_index"];
         activeIndexLimit = Min(activeIndexLimit, indexBuildLimit - pendingLimit);
+        AppData()->BuildIndexScanAdmission->SetTotalLimit(indexBuildLimit, Min(activeIndexLimit, config.LimitBytes));
 
         // TODO: counters and logs for all column table queues
         if (Collections.contains(EMemoryConsumerKind::QueryExecution)) {

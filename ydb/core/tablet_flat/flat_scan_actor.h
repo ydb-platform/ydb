@@ -62,6 +62,10 @@ namespace NOps {
             Snapshot = std::move(snapshot);
         }
 
+        TDriver(ui64 serial, TAutoPtr<IScan>& scan, TConf args, THolder<TScanSnapshot>&& snapshot)
+            : TDriver(serial, scan, args, snapshot)
+        {}
+
         void RestoreUnstartedScan(TAutoPtr<IScan>& scan, THolder<TScanSnapshot>& snapshot) noexcept
         {
             Y_ABORT_UNLESS(!Spent);

@@ -548,9 +548,7 @@ private:
 };
 
 template<class TRequest>
-ui64 EstimateBuildIndexScanMemory(const TRequest& request, const TUserTable& table) {
-    const auto& config = AppData()->DataShardConfig;
-    const ui64 rowLimit = Max(config.GetBuildIndexRowBytesLimit(), request.GetRequiredRowBytes());
+ui64 EstimateBuildIndexScanMemory(const TRequest& request, const TUserTable& table, ui64 rowLimit) {
     ui64 memory = CheckedScanMemoryAdd(4_MB, CheckedScanMemoryMul(request.SpaceUsedLong(), 2));
     ui64 clusters = 1;
     if constexpr (requires { request.ClustersSize(); }) {
@@ -609,6 +607,40 @@ ui64 EstimateBuildIndexScanMemory(const TRequest& request, const TUserTable& tab
     return CheckedScanMemoryAdd(memory, CheckedScanMemoryAdd(1_MB, rowLimit));
 }
 
+template<class TRequest>
+ui64 FitBuildIndexScanMemory(TRequest& request, const TUserTable& table, ui64 limit, ui64& rowLimit) {
+    if (!limit) {
+        return 0;
+    }
+    const ui64 minimumRow = Max<ui64>(1, request.GetRequiredRowBytes());
+    for (;;) {
+        const ui64 memory = EstimateBuildIndexScanMemory(request, table, rowLimit);
+        if (memory <= limit) {
+            return memory;
+        }
+        bool changed = false;
+        const ui64 smallerRow = Max(minimumRow, rowLimit / 2);
+        if (smallerRow < rowLimit) {
+            rowLimit = smallerRow;
+            changed = true;
+        }
+        if constexpr (requires { request.MutableScanSettings(); }) {
+            auto& settings = *request.MutableScanSettings();
+            if (settings.GetMaxBatchBytes()) {
+                settings.SetMaxBatchBytes(settings.GetMaxBatchBytes() / 2);
+                changed = true;
+            }
+            if (settings.GetMaxBatchRows() > 1) {
+                settings.SetMaxBatchRows(Max<ui32>(1, settings.GetMaxBatchRows() / 2));
+                changed = true;
+            }
+        }
+        if (!changed) {
+            return 0;
+        }
+    }
+}
+
 // The request and response are moved, never copied into an unbounded closure.
 // Only admission-aware senders may receive the new retry hint; old nodes keep
 // their existing protocol while rolling upgrades are in progress.
@@ -656,23 +688,28 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
         response->Record.AddIssues()->set_message(reason);
         TlsActivationContext->Send(new IEventHandle(ev->Sender, self->SelfId(), response.Release()));
     };
-    const ui64 rowLimit = Max(config.GetBuildIndexRowBytesLimit(), request.GetRequiredRowBytes());
+    ui64 rowLimit = Max(config.GetBuildIndexRowBytesLimit(), request.GetRequiredRowBytes());
     if (!rowLimit) {
         reject("BuildIndexRowBytesLimit must be nonzero for memory admission", false);
         return;
     }
-    const ui64 requestBytes = CheckedScanMemoryAdd(request.SpaceUsedLong(), request.ByteSizeLong());
     if (request.ByteSizeLong() > config.GetBuildIndexRequestBytesLimit()) {
         reject("Index scan request exceeds BuildIndexRequestBytesLimit", false);
         return;
     }
-    const ui64 memory = EstimateBuildIndexScanMemory(request, table);
-    if (memory > config.GetBuildIndexScanMemoryLimit()) {
-        reject("Index scan exceeds the current BuildIndexScanMemoryLimit", true);
+    auto& admission = *AppData()->BuildIndexScanAdmission;
+    const ui64 scanLimit = Min(config.GetBuildIndexScanMemoryLimit(),
+        admission.GetActiveByteLimit(config.GetBuildIndexPendingBytesLimit()));
+    // Batch sizes and the initial row allowance are upper bounds, not a reason
+    // to retry forever when a smaller scan fits. Actual larger rows retain the
+    // RequiredRowBytes floor discovered by the existing row-reservation retry.
+    const ui64 memory = FitBuildIndexScanMemory(request, table, scanLimit, rowLimit);
+    if (!memory) {
+        reject("Minimum index scan reservation exceeds the current memory budget", true);
         return;
     }
+    const ui64 requestBytes = CheckedScanMemoryAdd(request.SpaceUsedLong(), request.ByteSizeLong());
     const ui64 pendingBytes = CheckedScanMemoryAdd(requestBytes, 4_KB);
-    auto& admission = *AppData()->BuildIndexScanAdmission;
     const ui64 pendingLimit = admission.GetByteLimit(config.GetBuildIndexPendingBytesLimit());
     if (pendingLimit && pendingBytes > pendingLimit) {
         reject("Index scan request exceeds the current node pending byte budget", true);

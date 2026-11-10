@@ -620,7 +620,7 @@ NScheme::TSchemeEntry DescribePath(TDriver driver, const TString& fullPath) {
     return status.GetEntry();
 }
 
-static bool IsPathOmittedFromBackup(TDriver driver, const TString& path, NScheme::ESchemeEntryType type) {
+static bool IsPathOmittedFromBackup(TDriver driver, const TString& path, NScheme::ESchemeEntryType type, bool checkTopicParent) {
     if (type == NScheme::ESchemeEntryType::Table || type == NScheme::ESchemeEntryType::ColumnTable) {
         const auto description = DescribeTable(driver, path);
         const auto& attributes = description.GetAttributes();
@@ -628,19 +628,27 @@ static bool IsPathOmittedFromBackup(TDriver driver, const TString& path, NScheme
         return IsOmittedFromBackup(attributes)
             || (replica != attributes.end() && replica->second == "true");
     }
-    if (type == NScheme::ESchemeEntryType::Topic) {
+    if (type == NScheme::ESchemeEntryType::Topic && checkTopicParent) {
         // A directly requested changefeed is exposed as a topic. Its attributes
         // belong to the parent table's changefeed description, not DescribeTopic.
         const TString parentPath(TStringBuf(path).RBefore('/'));
-        const auto parent = DescribePath(driver, parentPath);
-        if (parent.Type == NScheme::ESchemeEntryType::Table) {
-            const auto description = DescribeTable(driver, parentPath);
-            for (const auto& feed : description.GetChangefeedDescriptions()) {
-                if (TStringBuf(feed.GetName()) == TStringBuf(path).RAfter('/')) {
-                    return IsOmittedFromBackup(feed.GetAttributes())
-                        || feed.GetAttributes().contains(ATTR_ASYNC_REPLICATION);
+        try {
+            const auto parent = DescribePath(driver, parentPath);
+            if (parent.Type == NScheme::ESchemeEntryType::Table) {
+                const auto description = DescribeTable(driver, parentPath);
+                for (const auto& feed : description.GetChangefeedDescriptions()) {
+                    if (TStringBuf(feed.GetName()) == TStringBuf(path).RAfter('/')) {
+                        return IsOmittedFromBackup(feed.GetAttributes())
+                            || feed.GetAttributes().contains(ATTR_ASYNC_REPLICATION);
+                    }
                 }
             }
+        } catch (const TYdbErrorException& e) {
+            if (e.Status.GetStatus() != EStatus::UNAUTHORIZED) {
+                throw;
+            }
+            LOG_W("Cannot check changefeed backup exclusions for " << path.Quote()
+                << ": access to parent " << parentPath.Quote() << " is denied; dumping the topic");
         }
     }
     // Other object types do not expose scheme user attributes through the
@@ -1137,8 +1145,10 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
         while (dbIt) {
+            // Only directly requested topics are already listed. Topics found
+            // while traversing directories have directory parents, not tables.
             if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)
-                || IsPathOmittedFromBackup(driver, dbIt.GetFullPath(), dbIt.GetCurrentNode()->Type))
+                || IsPathOmittedFromBackup(driver, dbIt.GetFullPath(), dbIt.GetCurrentNode()->Type, dbIt.IsListed()))
             {
                 LOG_D("Skip " << dbIt.GetFullPath().Quote());
                 dbIt.Next();

@@ -457,7 +457,6 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     TExportClient client(driver);
     TTableClient tableClient(driver);
 
-    auto originalItems = settings.Item_;
     if (expandItems) {
         ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
         if (settings.Item_.empty()) {
@@ -470,14 +469,10 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         }
     }
 
-    TResponse response = CallExport<TResponse>(client, settings).ExtractValueSync();
-    if (expandItems && response.Status().GetStatus() == EStatus::BAD_REQUEST) {
-        // Retry the export operation limiting the scope to tables only.
-        // This approach ensures compatibility with servers running an older version of YDB.
-        settings.Item_ = std::move(originalItems);
-        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterTables);
-        response = CallExport<TResponse>(client, settings).ExtractValueSync();
-    }
+    // BAD_REQUEST does not identify an old server: it can also mean that all
+    // requested objects were excluded. Retrying with fewer items could turn an
+    // empty selection into a request to export the entire source directory.
+    const TResponse response = CallExport<TResponse>(client, settings).ExtractValueSync();
     ThrowOnError(response);
     PrintOperation(response, OutputFormat);
 

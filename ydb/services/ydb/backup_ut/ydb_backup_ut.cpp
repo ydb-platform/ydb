@@ -4236,6 +4236,41 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
+    Y_UNIT_TEST(DirectTopicDumpWithoutParentPermissions) {
+        TKikimrWithGrpcAndRootSchema server;
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto adminDriver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
+        TSchemeClient adminScheme(adminDriver);
+        auto result = adminScheme.ModifyPermissions("/Root", TModifyPermissionsSettings()
+            .AddGrantPermissions(TPermissions("root@builtin", {"ydb.generic.full"}))
+            .AddGrantPermissions(TPermissions("dump@builtin", {"ydb.database.connect"}))).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        result = adminScheme.MakeDirectory("/Root/private").ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        NTopic::TTopicClient topicClient(adminDriver);
+        result = topicClient.CreateTopic("/Root/private/topic", NTopic::TCreateTopicSettings()
+            .PartitioningSettings(NTopic::TPartitioningSettings(1, 1))).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        result = adminScheme.ModifyPermissions("/Root/private/topic", TModifyPermissionsSettings()
+            .AddGrantPermissions(TPermissions("dump@builtin", {"ydb.granular.describe_schema"}))).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("dump@builtin"));
+        TSchemeClient schemeClient(driver);
+        const auto parent = schemeClient.DescribePath("/Root/private").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(parent.GetStatus(), EStatus::UNAUTHORIZED, parent.GetIssues().ToString());
+        const auto topic = schemeClient.DescribePath("/Root/private/topic").ExtractValueSync();
+        UNIT_ASSERT_C(topic.IsSuccess(), topic.GetIssues().ToString());
+
+        TTempDir tempDir;
+        NDump::TClient backupClient(driver);
+        const auto dump = backupClient.Dump("/Root/private/topic", tempDir.Path(),
+            NDump::TDumpSettings().Database("/Root").SchemaOnly(true));
+        UNIT_ASSERT_C(dump.IsSuccess(), dump.GetIssues().ToString());
+        UNIT_ASSERT(tempDir.Path().Child("topic").Child(NDump::NFiles::CreateTopic().FileName).Exists());
+        UNIT_ASSERT(tempDir.Path().Child("topic").Child(NDump::NFiles::Permissions().FileName).Exists());
+    }
+
     Y_UNIT_TEST(OmittedTablesAndChangefeedsAreNotDumped) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));

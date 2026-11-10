@@ -1,4 +1,4 @@
-* `ydb export s3` skips objects marked with `__omit_backup = "true"` through server-side filtering; `ydb tools dump` honors the attribute on tables and changefeeds using existing describe APIs. Directory-like objects cannot carry the attribute. Existing replication exclusions remain in effect independently of it.
+* `export s3`, `export nfs` and `export yt` now honor `__omit_backup = "true"`; `tools dump` honors it for tables and changefeeds. S3 export/import now skip async replication changefeeds.
 * Added `ydb admin cluster bridge rollback` command to roll a cluster converted into a bridged one back to ordinary mode (asks for confirmation unless `-y` is given), and `ydb admin cluster bridge rollback-status` command to show the progress of the rollback.
 * Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.
 * Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--target-database`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.

@@ -443,6 +443,9 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             for (const auto& [groupId, iter] : GroupToWaitingSelectGroupsItem) {
                 groupsToCheck.insert(groupId);
             }
+            if (Loaded) {
+                UpdateDatabaseSpaceOnPileChanges();
+            }
         }
     }
 

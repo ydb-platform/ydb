@@ -162,6 +162,15 @@ Y_UNIT_TEST_SUITE(TColumnShardNotProposedTransactions) {
         UNIT_ASSERT_VALUES_EQUAL(shard.CountInsertedPortions(), 0);
     }
 
+    Y_UNIT_TEST(AbortCountedAsAbortLock) {
+        TShardFixture shard;
+        Y_UNUSED(shard.WriteUnderLock());
+        shard.NotifyTransactionGone();
+        shard.WaitTransactionsAborted();
+
+        UNIT_ASSERT_GT(GetTabletTxCompleted(shard.Runtime, TTestTxConfig::TxTablet0, "ColumnShard/TxAbortLock"), 0);
+    }
+
     Y_UNIT_TEST(RollbackAfterRestartIsAccepted) {
         TShardFixture shard;
         Y_UNUSED(shard.WriteUnderLock());

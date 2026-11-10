@@ -52,11 +52,13 @@ public:
 class TManagerProbe : public TActorBootstrapped<TManagerProbe> {
     ui32& Started;
     ui32& Finished;
+    ui32& ConfigUpdates;
 
 public:
-    TManagerProbe(ui32& started, ui32& finished)
+    TManagerProbe(ui32& started, ui32& finished, ui32& configUpdates)
         : Started(started)
         , Finished(finished)
+        , ConfigUpdates(configUpdates)
     {}
 
     void Bootstrap() {
@@ -66,10 +68,12 @@ public:
 private:
     void HandleStarted() { ++Started; }
     void HandleFinished() { ++Finished; }
+    void HandleConfig() { ++ConfigUpdates; }
 
     STRICT_STFUNC(StateFunc,
         cFunc(TEvGRpcServersManager::EvDisconnectRequestStarted, HandleStarted)
         cFunc(TEvGRpcServersManager::EvDisconnectRequestFinished, HandleFinished)
+        cFunc(TEvNodeWardenStorageConfig::EventType, HandleConfig)
     )
 };
 
@@ -79,6 +83,8 @@ struct TUpdateOptions {
     // the local snapshot of the receiving node
     ui64 ConfigGeneration = 1;
     NKikimrBridge::TClusterState::EPileState SecondaryState = NKikimrBridge::TClusterState::SYNCHRONIZED;
+    Ydb::Bridge::PileState::State RequestedState = Ydb::Bridge::PileState::DISCONNECTED;
+    bool PublishConfigBeforeReply = false;
 };
 
 struct TGetOptions {
@@ -92,12 +98,13 @@ struct TSetup {
     TActorId NodeWarden;
     ui32 Started = 0;
     ui32 Finished = 0;
+    ui32 ConfigUpdates = 0;
 
     TSetup() {
         Runtime.Initialize(TAppPrepare().Unwrap());
         NodeWarden = Runtime.AllocateEdgeActor();
         Runtime.RegisterService(MakeBlobStorageNodeWardenID(Runtime.GetNodeId(0)), NodeWarden);
-        const auto manager = Runtime.Register(new TManagerProbe(Started, Finished));
+        const auto manager = Runtime.Register(new TManagerProbe(Started, Finished, ConfigUpdates));
         Runtime.RegisterService(MakeGRpcServersManagerId(Runtime.GetNodeId(0)), manager);
     }
 
@@ -106,7 +113,7 @@ struct TSetup {
         NRpcService::SetRequestSyncOperationMode(request);
         auto *update = request.add_updates();
         update->set_pile_name("secondary");
-        update->set_state(Ydb::Bridge::PileState::DISCONNECTED);
+        update->set_state(options.RequestedState);
         if (options.BadQuorum) {
             request.add_quorum_piles("unknown");
         }
@@ -165,6 +172,22 @@ struct TSetup {
             response->Record.SetErrorReason(errorReason);
         }
         Runtime.Send(new IEventHandle(rpc, NodeWarden, response.release()), 0, true);
+    }
+
+    void PublishConfig(NKikimrBridge::TClusterState::EPileState secondaryState) {
+        auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+        auto *state = config->MutableClusterState();
+        state->SetGeneration(2);
+        state->AddPerPileState(NKikimrBridge::TClusterState::SYNCHRONIZED);
+        state->AddPerPileState(secondaryState);
+        auto bridge = std::make_shared<TBridgeInfo>();
+        bridge->Piles.resize(2);
+        bridge->Piles[0].State = NKikimrBridge::TClusterState::SYNCHRONIZED;
+        bridge->Piles[1].State = secondaryState;
+        bridge->SelfNodePile = &bridge->Piles[1];
+        Runtime.Send(new IEventHandle(MakeGRpcServersManagerId(Runtime.GetNodeId(0)), NodeWarden,
+            new TEvNodeWardenStorageConfig(config, true, bridge, config)), 0, true);
+        Runtime.WaitFor("configuration publication", [&] { return ConfigUpdates == 1; }, TDuration::Seconds(1));
     }
 
     TActorId ReplyWithConfig(std::optional<ui64> generation = 1,
@@ -1311,7 +1334,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
     }
 }
 
-Y_UNIT_TEST_SUITE(BridgeUpdateClusterStateExpectedGeneration) {
+Y_UNIT_TEST_SUITE(BridgeUpdateClusterState) {
     using EInvokeStatus = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
     // The request is rejected by the receiving node: nothing is sent to distconf and no server is held.
@@ -1319,7 +1342,7 @@ Y_UNIT_TEST_SUITE(BridgeUpdateClusterStateExpectedGeneration) {
         TSetup setup;
         auto [rpc, future] = setup.Start(options);
         const auto invoke = setup.GrabInvoke(rpc, TDuration::MilliSeconds(10));
-        UNIT_ASSERT_C(!invoke, "stale expected_generation must not reach distconf: "
+        UNIT_ASSERT_C(!invoke, "rejected request must not reach distconf: "
             << (invoke ? invoke->ShortDebugString() : TString()));
         const auto reply = setup.Runtime.WaitFuture(future);
         UNIT_ASSERT_VALUES_EQUAL_C(reply.operation().status(), expected, reply.operation().DebugString());
@@ -1338,7 +1361,8 @@ Y_UNIT_TEST_SUITE(BridgeUpdateClusterStateExpectedGeneration) {
     Y_UNIT_TEST(StaleRequestIsAbortedBeforeValidation) {
         // the pile became suspended meanwhile: replan (ABORTED), not a malformed request (BAD_REQUEST)
         TestRejectedLocally({.ExpectedGeneration = 10, .ConfigGeneration = 14,
-            .SecondaryState = NKikimrBridge::TClusterState::SUSPENDED}, Ydb::StatusIds::ABORTED);
+            .SecondaryState = NKikimrBridge::TClusterState::SUSPENDED,
+            .RequestedState = Ydb::Bridge::PileState::SYNCHRONIZED}, Ydb::StatusIds::ABORTED);
     }
 
     // The request reaches distconf and the root answers with the given status.
@@ -1355,12 +1379,24 @@ Y_UNIT_TEST_SUITE(BridgeUpdateClusterStateExpectedGeneration) {
         if (checkCommand) {
             checkCommand(invoke->GetSwitchBridgeClusterState());
         }
+        const bool guarded = options.RequestedState == Ydb::Bridge::PileState::DISCONNECTED ||
+            options.RequestedState == Ydb::Bridge::PileState::NOT_SYNCHRONIZED ||
+            options.RequestedState == Ydb::Bridge::PileState::SUSPENDED;
+        if (options.PublishConfigBeforeReply) {
+            UNIT_ASSERT(guarded);
+            setup.Runtime.WaitFor("disconnect request start", [&] { return setup.Started == 1; },
+                TDuration::Seconds(1));
+            setup.PublishConfig(invoke->GetSwitchBridgeClusterState().GetNewClusterState().GetPerPileState(1));
+            UNIT_ASSERT(!future.HasValue());
+        }
         setup.ReplyToInvoke(rpc, status, errorReason);
         auto reply = setup.Runtime.WaitFuture(future);
-        setup.Runtime.WaitFor("disconnect request completion", [&] { return setup.Finished == 1; },
-            TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(setup.Started, 1);
-        UNIT_ASSERT_VALUES_EQUAL(setup.Finished, 1);
+        if (guarded) {
+            setup.Runtime.WaitFor("disconnect request completion", [&] { return setup.Finished == 1; },
+                TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(setup.Started, guarded ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(setup.Finished, guarded ? 1 : 0);
         return reply;
     }
 
@@ -1400,6 +1436,37 @@ Y_UNIT_TEST_SUITE(BridgeUpdateClusterStateExpectedGeneration) {
             });
         UNIT_ASSERT_VALUES_EQUAL_C(reply.operation().status(), Ydb::StatusIds::INTERNAL_ERROR,
             reply.operation().DebugString());
+    }
+
+    Y_UNIT_TEST(SuspendedPileCanBeDisconnected) {
+        const auto reply = TestForwarded({.SecondaryState = NKikimrBridge::TClusterState::SUSPENDED},
+            EInvokeStatus::OK, {}, [](const auto& cmd) {
+                UNIT_ASSERT(cmd.GetNewClusterState().GetPerPileState(1) ==
+                    NKikimrBridge::TClusterState::DISCONNECTED);
+            });
+        UNIT_ASSERT_VALUES_EQUAL_C(reply.operation().status(), Ydb::StatusIds::SUCCESS,
+            reply.operation().DebugString());
+    }
+
+    Y_UNIT_TEST(SuspendedPileRejoinIsGuardedDuringConfigPublication) {
+        const auto reply = TestForwarded({.SecondaryState = NKikimrBridge::TClusterState::SUSPENDED,
+                .RequestedState = Ydb::Bridge::PileState::NOT_SYNCHRONIZED,
+                .PublishConfigBeforeReply = true}, EInvokeStatus::OK, {},
+            [](const auto& cmd) {
+                UNIT_ASSERT(cmd.GetNewClusterState().GetPerPileState(1) ==
+                    NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+            });
+        UNIT_ASSERT_VALUES_EQUAL_C(reply.operation().status(), Ydb::StatusIds::SUCCESS,
+            reply.operation().DebugString());
+    }
+
+    Y_UNIT_TEST(SuspendedPileRejectsOtherUpdates) {
+        for (const auto state : {Ydb::Bridge::PileState::PRIMARY, Ydb::Bridge::PileState::PROMOTED,
+                Ydb::Bridge::PileState::SYNCHRONIZED, Ydb::Bridge::PileState::SUSPENDED,
+                Ydb::Bridge::PileState::INACTIVE}) {
+            TestRejectedLocally({.SecondaryState = NKikimrBridge::TClusterState::SUSPENDED,
+                .RequestedState = state}, Ydb::StatusIds::BAD_REQUEST);
+        }
     }
 }
 

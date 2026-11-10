@@ -94,6 +94,7 @@ public:
     class TTxMonEvent_SetDown;
     class TTxMonEvent_GetDown;
     class TTxUpdateDiskMetrics;
+    class TTxUpdateDatabaseSpace;
     class TTxGroupMetricsExchange;
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
@@ -2499,7 +2500,10 @@ private:
     void CommitDatabaseSpaceChanges(NIceDb::TNiceDb& db);
     void PersistDatabaseSpaceLatches(NIceDb::TNiceDb& db, const std::map<TBoxStoragePoolId, bool>& latches);
     void SendDatabaseSpaceState(TNodeId nodeId, TDatabaseSpaceTracker::TScope scope);
+    void UpdateDatabaseSpaceOnPileChanges();
     void UpdateDatabaseSpaceGroup(const TGroupInfo& group);
+    void UpdateDatabaseSpaceGroup(const TGroupInfo& group, const TGroupInfo::TGroupFinder& finder,
+        const TBridgeInfo *bridgeInfo);
     void UpdateDatabaseSpacePool(const TBoxStoragePoolId& poolId, const TStoragePoolInfo& pool);
     void RenderDatabaseSpace(IOutputStream& out);
 

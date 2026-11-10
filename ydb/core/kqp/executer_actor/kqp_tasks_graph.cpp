@@ -2853,6 +2853,9 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     NKikimrKqp::TKqpFullTextSourceSettings* settings = input.Meta.FullTextSourceSettings;
 
     settings->SetIndex(fullTextSource.GetIndex());
+    if (fullTextSource.HasMainTableCovered()) {
+        settings->SetMainTableCovered(fullTextSource.GetMainTableCovered());
+    }
     settings->SetDatabase(GetMeta().Database);
 
     const auto& poolId = GetMeta().UserRequestContext->PoolId;

@@ -181,13 +181,15 @@ private:
             updates[pileId] = update.state();
         }
 
-        // prohibit updates to suspended piles and to the ones not added to the cluster
+        // Suspended piles may only be failed over or rejoined; piles not added to the cluster cannot be updated.
         for (const auto& [pileId, state] : updates) {
-            if (currentClusterState.GetPerPileState(pileId.GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED) {
+            const auto currentState = currentClusterState.GetPerPileState(pileId.GetPileIndex());
+            if (currentState == NKikimrBridge::TClusterState::SUSPENDED &&
+                    state != Ydb::Bridge::PileState::DISCONNECTED && state != Ydb::Bridge::PileState::NOT_SYNCHRONIZED) {
                 self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "cannot update suspended pile: " << pileId,
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                 return;
-            } else if (currentClusterState.GetPerPileState(pileId.GetPileIndex()) == NKikimrBridge::TClusterState::INACTIVE) {
+            } else if (currentState == NKikimrBridge::TClusterState::INACTIVE) {
                 self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "pile is not added to the cluster: "
                     << bridgeInfo->GetPile(pileId)->Name, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                 return;
@@ -302,6 +304,7 @@ private:
         if (selfNodePileId.GetPileIndex() < newClusterState.PerPileStateSize()) {
             const auto newSelfState = newClusterState.GetPerPileState(selfNodePileId.GetPileIndex());
             if (newSelfState == NKikimrBridge::TClusterState::DISCONNECTED ||
+                newSelfState == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 ||
                 newSelfState == NKikimrBridge::TClusterState::SUSPENDED) {
                 IsDisconnectingRequest = true;
                 self->ActorContext().Send(NKikimr::MakeGRpcServersManagerId(self->SelfId().NodeId()),

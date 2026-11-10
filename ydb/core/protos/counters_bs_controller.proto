@@ -309,4 +309,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_BRIDGE_GROUP_MODES = 42 [(TxTypeOpts) = {Name: "TTxUpdateBridgeGroupModes"}];
     TXTYPE_BRIDGE_ROLLBACK = 43 [(TxTypeOpts) = {Name: "TTxBridgeRollback"}];
     TXTYPE_UPDATE_PILE_OVERRIDES = 44 [(TxTypeOpts) = {Name: "TTxUpdatePileOverrides"}];
+    TXTYPE_UPDATE_DATABASE_SPACE = 45 [(TxTypeOpts) = {Name: "TTxUpdateDatabaseSpace"}];
 }

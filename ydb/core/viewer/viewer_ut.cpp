@@ -4330,6 +4330,58 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckStorageGroupsNodeDisconnect(EStorageGroupsDisconnect::ControllerDisksRequest);
     }
 
+    void CheckStorageGroupsNotAppliedCase(TTestActorRuntime& runtime, const TString& query,
+                                          bool needFilter, bool needGroup, bool needSort) {
+        const TActorId sender = runtime.AllocateEdgeActor();
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /storage/groups?whiteboard_only=true" << query << " HTTP/1.1\r\n\r\n", endpoint, {});
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response->Response->Body, &json, true);
+        const TString context = TStringBuilder() << query << ": " << NJson::WriteJson(json, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["NeedFilter"].GetBoolean(), needFilter, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["NeedGroup"].GetBoolean(), needGroup, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["NeedSort"].GetBoolean(), needSort, context);
+        // every operation that could not be applied is also named in Problems
+        UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "filter-not-applied"), needFilter, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "group-not-applied"), needGroup, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "sort-not-applied"), needSort, context);
+    }
+
+    Y_UNIT_TEST(StorageGroupsReportsNotAppliedOperations) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TNodeId nodeId = runtime.GetNodeId(0);
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
+                SetWhiteboardGroupsForTest(reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev), nodeId);
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse) {
+                SetWhiteboardVDisksForTest(reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev));
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // Without BSC the groups come from whiteboard, which knows the pool name of a group
+        // but not the kind of the pool: an operation on Kind can not be applied.
+        CheckStorageGroupsNotAppliedCase(runtime, "&filter_group_by=Kind&filter_group=ssd", true, false, false);
+        CheckStorageGroupsNotAppliedCase(runtime, "&group=Kind", false, true, false);
+        CheckStorageGroupsNotAppliedCase(runtime, "&sort=Kind", false, false, true);
+        // The same operations on the fields whiteboard does provide are applied and nothing is reported.
+        CheckStorageGroupsNotAppliedCase(runtime, "&filter_group_by=PoolName&filter_group=whiteboard-pool", false, false, false);
+        CheckStorageGroupsNotAppliedCase(runtime, "&group=PoolName", false, false, false);
+        CheckStorageGroupsNotAppliedCase(runtime, "&sort=GroupId", false, false, false);
+    }
+
     void CheckPDiskControllerStatuses(bool groups, bool whiteboardAvailable = true, TStringBuf pdisksSort = {}) {
         // Controller statuses are joined by NodeId/PDiskId even when GUIDs differ.
         // The response keeps the Whiteboard disk identity and the BSC statuses.
@@ -4991,9 +5043,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL_C(vslotsResponses > 0, expectVSlots, context);
         bool hasVSlotsError = false;
         bool hasFilterNotApplied = false;
+        bool hasGroupOrSortNotApplied = false;
         for (const auto& problem : json["Problems"].GetArray()) {
             hasVSlotsError |= problem.GetString() == "bsc-storage-slots-no-data";
             hasFilterNotApplied |= problem.GetString() == "filter-not-applied";
+            hasGroupOrSortNotApplied |= problem.GetString() == "group-not-applied" || problem.GetString() == "sort-not-applied";
         }
         UNIT_ASSERT_VALUES_EQUAL_C(hasVSlotsError, expectVSlots && !vslotsAvailable, context);
         // a group or pool filter that could not be resolved to nodes must not be dropped silently
@@ -5001,6 +5055,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(expectedNodeIds.size()), context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["FoundNodes"].GetString(), ToString(expectedNodeIds.size()), context);
         UNIT_ASSERT_C(!json["NeedFilter"].GetBoolean(), context);
+        // the requested sorting is applied in every case, so it must not be reported as not applied
+        UNIT_ASSERT_C(!json["NeedSort"].GetBoolean(), context);
+        UNIT_ASSERT_C(!hasGroupOrSortNotApplied, context);
         const auto& nodes = json["Nodes"].GetArray();
         UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), expectedNodeIds.size(), context);
         for (size_t i = 0; i < nodes.size(); ++i) {
@@ -5090,6 +5147,77 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(NodesPageKeepsNodeIdFilterWhenVSlotsUnavailable) {
         CheckNodesStorageFilter(false);
+    }
+
+    // type=storage keeps the nodes that have disks, and that is known only from the PDisks of BSC.
+    // Without them the filter can not be applied, and the sorting and the grouping wait for the filter.
+    void CheckNodesNotAppliedOperations(bool pdisksAvailable) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        size_t pdisksResponses = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetPDisksResponse) {
+                ++pdisksResponses;
+                if (!pdisksAvailable) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                (*x)->Get()->Record.ClearEntries();
+                AddSysViewPDisk(x, runtime.GetNodeId(0), 1);
+                AddSysViewPDisk(x, runtime.GetNodeId(1), 1);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        for (const bool group : {false, true}) {
+            pdisksResponses = 0;
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /viewer/json/nodes?type=storage&fields_required=NodeId&offload_merge=false"
+                    << "&use_cache=false&timeout=1000&limit=20&offset=0" << (group ? "&group=NodeId" : "&sort=NodeId")
+                    << " HTTP/1.1\r\n\r\n", endpoint, {});
+            const TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
+            const TString context = TStringBuilder() << (group ? "group: " : "sort: ") << NJson::WriteJson(json, false);
+
+            UNIT_ASSERT_C(pdisksResponses > 0, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["NeedFilter"].GetBoolean(), !pdisksAvailable, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["NeedGroup"].GetBoolean(), group && !pdisksAvailable, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["NeedSort"].GetBoolean(), !group && !pdisksAvailable, context);
+            // every operation that could not be applied is also named in Problems
+            UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "filter-not-applied"), !pdisksAvailable, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "group-not-applied"), group && !pdisksAvailable, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "sort-not-applied"), !group && !pdisksAvailable, context);
+            if (!group) {
+                const size_t nodes = json["Nodes"].GetArray().size();
+                if (pdisksAvailable) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(nodes, 2, context);
+                } else {
+                    // without the filter the nodes that have no disks are returned too
+                    UNIT_ASSERT_C(nodes > 2, context);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NodesPageReportsNotAppliedOperations) {
+        CheckNodesNotAppliedOperations(false);
+    }
+
+    Y_UNIT_TEST(NodesPageAppliesOperationsWithStorageData) {
+        CheckNodesNotAppliedOperations(true);
     }
 
     void TestNodesCpuSortWithMissingStats(bool offloadMerge) {

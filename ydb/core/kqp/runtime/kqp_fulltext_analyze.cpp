@@ -27,11 +27,14 @@ class TFulltextAnalyzeWrapper : public TMutableComputationNode<TFulltextAnalyzeW
     };
 
 public:
-    TFulltextAnalyzeWrapper(TComputationMutables& mutables, IComputationNode* textArg, IComputationNode* settingsArg, IComputationNode* modeArg)
+    TFulltextAnalyzeWrapper(TComputationMutables& mutables, IComputationNode* textArg, IComputationNode* settingsArg,
+        IComputationNode* modeArg, IComputationNode* patternModeArg, IComputationNode* escapeArg)
         : TBaseComputation(mutables)
         , TextArg(textArg)
         , SettingsArg(settingsArg)
         , ModeArg(modeArg)
+        , PatternModeArg(patternModeArg)
+        , EscapeArg(escapeArg)
         , CachedSettingsIndex(mutables.CurValueIndex++)
     {
     }
@@ -45,6 +48,8 @@ public:
 
         TVector<TString> tokens;
         const auto mode = GetMode(ctx);
+        MKQL_ENSURE(!PatternModeArg || mode == NFulltext::EIndexMode::FulltextQuery,
+            "String patterns require FulltextQuery mode");
         switch (mode) {
             case NFulltext::EIndexMode::Fulltext:
             case NFulltext::EIndexMode::FulltextQuery: {
@@ -54,8 +59,17 @@ public:
                     return ctx.HolderFactory.GetEmptyContainerLazy();
                 }
                 if (mode == NFulltext::EIndexMode::FulltextQuery) {
-                    for (auto& term : BuildSearchTermsStructured(TString(text.AsStringRef()), settings.Analyzers)) {
-                        tokens.push_back(std::move(term.Token));
+                    if (PatternModeArg) {
+                        const auto patternMode = PatternModeArg->GetValue(ctx);
+                        const auto escapeValue = EscapeArg->GetValue(ctx);
+                        const auto escape = escapeValue.AsStringRef();
+                        MKQL_ENSURE(escape.Size() <= 1, "Expected an optional single-byte LIKE escape");
+                        tokens = BuildStringMatchTerms(text.AsStringRef(), patternMode.AsStringRef(),
+                            escape.Size() ? std::optional<char>(escape.Data()[0]) : std::nullopt, settings.Analyzers);
+                    } else {
+                        for (auto& term : BuildSearchTermsStructured(TString(text.AsStringRef()), settings.Analyzers)) {
+                            tokens.push_back(std::move(term.Token));
+                        }
                     }
                 } else {
                     tokens = Analyze(TString(text.AsStringRef()), settings.Analyzers);
@@ -136,23 +150,32 @@ private:
         DependsOn(TextArg);
         DependsOn(SettingsArg);
         DependsOn(ModeArg);
+        if (PatternModeArg) {
+            DependsOn(PatternModeArg);
+            DependsOn(EscapeArg);
+        }
     }
 
     IComputationNode* const TextArg;
     IComputationNode* const SettingsArg;
     IComputationNode* const ModeArg;
+    IComputationNode* const PatternModeArg;
+    IComputationNode* const EscapeArg;
     const ui32 CachedSettingsIndex;
 };
 
 } // namespace
 
 IComputationNode* WrapFulltextAnalyze(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 3, "FulltextAnalyze requires exactly 3 arguments");
+    MKQL_ENSURE(callable.GetInputsCount() == 3 || callable.GetInputsCount() == 5,
+        "FulltextAnalyze requires 3 or 5 arguments");
 
     auto textArg = LocateNode(ctx.NodeLocator, callable, 0);
     auto settingsArg = LocateNode(ctx.NodeLocator, callable, 1);
     auto modeArg = LocateNode(ctx.NodeLocator, callable, 2);
-    return new TFulltextAnalyzeWrapper(ctx.Mutables, textArg, settingsArg, modeArg);
+    auto patternModeArg = callable.GetInputsCount() == 5 ? LocateNode(ctx.NodeLocator, callable, 3) : nullptr;
+    auto escapeArg = callable.GetInputsCount() == 5 ? LocateNode(ctx.NodeLocator, callable, 4) : nullptr;
+    return new TFulltextAnalyzeWrapper(ctx.Mutables, textArg, settingsArg, modeArg, patternModeArg, escapeArg);
 }
 
 } // namespace NMiniKQL

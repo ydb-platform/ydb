@@ -3,7 +3,6 @@
 #include <ydb/core/tablet_flat/flat_comp_gen.h>
 #include <ydb/core/tablet_flat/flat_ops_compact.h>
 #include <ydb/core/tablet_flat/flat_scan_events.h>
-#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
 #include <algorithm>
@@ -225,105 +224,5 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringConcurrency) {
         CheckRows(env);
     }
 
-    Y_UNIT_TEST(AConflictingEpochClosureDrainsToAnExclusiveTac) {
-        TEnv env;
-        // The cold generation brackets the hot generation in epoch order.
-        // Its initial inputs therefore need both already reserved hot parts.
-        for (ui64 key : {10, 20, 21, 11}) {
-            env.Write({TRow{.Key = key, .Time = 0, .Value = ToString(key)}});
-            env.Flush();
-        }
-        auto parts = env.Parts();
-        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 4);
-        std::sort(parts.begin(), parts.end(), [](const auto& a, const auto& b) {
-            return a->Epoch < b->Epoch;
-        });
-        auto levels = env.Levels();
-        levels[parts[0]->Label] = 4;
-        levels[parts[1]->Label] = 1;
-        levels[parts[2]->Label] = 1;
-        levels[parts[3]->Label] = 4;
-        env.SeedLevels(levels);
-        auto policy = MakePolicy();
-        policy->TieringCompactionConflictLimit = 1;
-        policy->Generations[0].ForceCountToCompact = 2;
-        policy->Generations[3].ForceCountToCompact = 2;
-        env.Enable(true);
-
-        TBlockEvents<NOps::TEvResult> blocked(env.Env);
-        // Delay submission of the cold task until the hot scan has finished
-        // writing but still owns its inputs. This makes the conflict deterministic.
-        TBlockEvents<NResourceBroker::TEvResourceBroker::TEvSubmitTask> coldSubmits(env.Env,
-            [](const NResourceBroker::TEvResourceBroker::TEvSubmitTask::TPtr& event) {
-                return event->Get()->Task.Name.StartsWith("gen4-table-101-");
-            });
-        env.Policy(*policy);
-        env->WaitFor("hot result and pending cold task", [&] {
-            return blocked.size() == 1 && coldSubmits.size() == 1;
-        });
-        UNIT_ASSERT_VALUES_EQUAL(Generation(blocked.front()), 1);
-        CheckArchiveOutputs(Product(blocked.front()));
-        TVector<TLogoBlobID> hotOutputs;
-        for (const auto& output : Product(blocked.front()).Results) {
-            hotOutputs.push_back(output.Part->Label);
-        }
-        UNIT_ASSERT(!hotOutputs.empty());
-        auto& strategy = static_cast<NTable::NCompGen::TGenCompactionStrategy&>(
-            *env.State->Tables.at(TableId).Strategy);
-
-        coldSubmits.Stop().Unblock();
-        env->WaitFor("cold input conflict enters exclusive retry", [&] {
-            return strategy.GetTierCompactionConflicts(4) == 1
-                && strategy.GetSerialTierCompactionGeneration() == 4;
-        });
-        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1);
-        env.CheckLevels(levels, "after restart");
-        CheckRows(env);
-
-        // The active hot operation publishes normally. Its success must not
-        // reset the cold generation's counter or bypass its priority.
-        blocked.Unblock(1);
-        env->WaitFor("exclusive cold retry result", [&] {
-            return blocked.size() == 1 && Generation(blocked.front()) == 4;
-        });
-        UNIT_ASSERT_VALUES_EQUAL(strategy.GetTierCompactionConflicts(4), 1);
-        UNIT_ASSERT(strategy.GetSerialTierCompactionGeneration() == 4);
-        const auto current = env.Levels();
-        for (const auto& label : hotOutputs) {
-            UNIT_ASSERT(current.contains(label));
-        }
-        const auto& exclusive = Product(blocked.front());
-        UNIT_ASSERT(exclusive.Params->Mode == NTable::TCompactionParams::EMode::TierAware);
-        CheckArchiveOutputs(exclusive);
-        UNIT_ASSERT(!exclusive.Params->Tiering->UseConservativeMasks);
-        UNIT_ASSERT_VALUES_EQUAL(exclusive.Params->Context->Inputs.size(), 3);
-        for (const auto& label : hotOutputs) {
-            UNIT_ASSERT(std::any_of(exclusive.Params->Context->Inputs.begin(),
-                exclusive.Params->Context->Inputs.end(), [&](const auto& part) {
-                    return part.Label() == label;
-                }));
-        }
-        TVector<TLogoBlobID> finalOutputs;
-        for (const auto& output : exclusive.Results) {
-            UNIT_ASSERT_VALUES_EQUAL(output.Part->Epoch, parts[3]->Epoch);
-            finalOutputs.push_back(output.Part->Label);
-        }
-        UNIT_ASSERT(!finalOutputs.empty());
-        CheckRows(env);
-
-        blocked.Stop().Unblock();
-        env->WaitFor("exclusive TAC publication releases serialized mode", [&] {
-            return strategy.GetTierCompactionConflicts(4) == 0
-                && !strategy.GetSerialTierCompactionGeneration();
-        });
-        const auto finalLevels = env.Levels();
-        for (const auto& label : finalOutputs) {
-            UNIT_ASSERT_VALUES_EQUAL(env.Tier(finalLevels.at(label)), ArchiveTier);
-        }
-        CheckRows(env);
-        env.Restart();
-        UNIT_ASSERT(env.Levels() == finalLevels);
-        CheckRows(env);
-    }
 }
 }

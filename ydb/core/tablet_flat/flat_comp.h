@@ -25,7 +25,7 @@ namespace NTable {
         bool AllowCooling = false;
         THashMap<ui32, ui32> OutputTiers;
         // Parallel scans pin an envelope of keys that other compactions may
-        // relocate. The exclusive retry can use the exact per-tier masks.
+        // relocate between tiers.
         bool UseConservativeMasks = false;
         bool HasUnknownRemaining = false;
         bool HasMemoryInputs = false;

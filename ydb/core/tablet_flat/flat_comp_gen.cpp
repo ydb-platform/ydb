@@ -355,8 +355,7 @@ void TGenCompactionStrategy::Stop() {
     TierManaged = false;
     TierCompactions.clear();
     BusyTierParts.clear();
-    TierConflicts.clear();
-    SerialTierGeneration.reset();
+    TierWaitRevisions.clear();
     TierOccupancyRevision = 0;
     TierSweepGeneration.reset();
     NextTierSweep = 0;
@@ -384,8 +383,7 @@ void TGenCompactionStrategy::ReflectSchema() {
     Policy = scheme->CompactionPolicy;
     TierManaged = tierManaged;
     if (!TierManaged) {
-        TierConflicts.clear();
-        SerialTierGeneration.reset();
+        TierWaitRevisions.clear();
     }
     Y_ENSURE(Generations.size() <= Policy->Generations.size(), "Cannot currently shrink the number of generations");
     Generations.resize(Policy->Generations.size());
@@ -453,7 +451,7 @@ ui64 TGenCompactionStrategy::BeginMemCompaction(TTaskId taskId, TSnapEdge edge, 
         // A conflicting flush is deferred by the caller, preserving its
         // snapshot/forced request until reservations become available.
         if (!CanStartTierCompaction(0)) {
-            TierConflicts[0].WaitRevision = TierOccupancyRevision;
+            DeferTierCompaction(0);
             return 0;
         }
         TExtraState extra;
@@ -949,12 +947,7 @@ void TGenCompactionStrategy::OutputHtml(IOutputStream& out) {
     HTML(out) {
         if (TierManaged) {
             DIV_CLASS("row") {
-                out << "Active tier compactions: " << TierCompactions.size()
-                    << ", Mem input conflicts: " << GetTierCompactionConflicts(0)
-                    << ", Final input conflicts: " << GetTierCompactionConflicts(255);
-                if (SerialTierGeneration) {
-                    out << ", Exclusive retry generation: " << *SerialTierGeneration;
-                }
+                out << "Active tier compactions: " << TierCompactions.size();
             }
         }
         ui32 nextGenerationId = 1;
@@ -966,9 +959,6 @@ void TGenCompactionStrategy::OutputHtml(IOutputStream& out) {
                                 << ", Epochs count: " << gen.PartEpochCount
                                 << ", Overload factor: " << gen.OverloadFactor
                                 << ", Compaction state: " << gen.State; }
-            if (TierManaged) {
-                out << ", Input conflicts: " << GetTierCompactionConflicts(generation);
-            }
             if (ForcedState != EForcedState::None && ForcedGeneration == generation) {
                 out << ", Forced compaction: " << ForcedState;
             }
@@ -1263,8 +1253,7 @@ void TGenCompactionStrategy::CheckGeneration(ui32 generation) {
     CheckOverload(generation);
 
     if (TierManaged && (!CanStartTierCompaction(generation)
-            || (!HasFreeTierInputs(generation) && !NeedToForceCompact(generation)
-                && SerialTierGeneration != generation))) {
+            || (!HasFreeTierInputs(generation) && !NeedToForceCompact(generation)))) {
         return;
     }
 
@@ -1516,20 +1505,12 @@ void TGenCompactionStrategy::RebuildTierStats() {
     UpdateOverload();
 }
 
-ui32 TGenCompactionStrategy::GetTierCompactionConflicts(ui32 generation) const {
-    const auto it = TierConflicts.find(generation);
-    return it == TierConflicts.end() ? 0 : it->second.Count;
-}
-
 bool TGenCompactionStrategy::CanStartTierCompaction(ui32 generation) const {
     if (TierCompactions.contains(generation)) {
         return false;
     }
-    if (SerialTierGeneration) {
-        return *SerialTierGeneration == generation && TierCompactions.empty();
-    }
-    const auto it = TierConflicts.find(generation);
-    return it == TierConflicts.end() || it->second.WaitRevision != TierOccupancyRevision;
+    const auto it = TierWaitRevisions.find(generation);
+    return it == TierWaitRevisions.end() || it->second != TierOccupancyRevision;
 }
 
 bool TGenCompactionStrategy::HasFreeTierInputs(ui32 generation) const {
@@ -1559,15 +1540,8 @@ bool TGenCompactionStrategy::HasFreeTierInputs(ui32 generation) const {
     return false;
 }
 
-void TGenCompactionStrategy::NoteTierCompactionConflict(ui32 generation) {
-    auto& conflicts = TierConflicts[generation];
-    if (conflicts.Count != Max<ui32>()) {
-        ++conflicts.Count;
-    }
-    conflicts.WaitRevision = TierOccupancyRevision;
-    if (!SerialTierGeneration && conflicts.Count >= Policy->TieringCompactionConflictLimit) {
-        SerialTierGeneration = generation;
-    }
+void TGenCompactionStrategy::DeferTierCompaction(ui32 generation) {
+    TierWaitRevisions[generation] = TierOccupancyRevision;
 }
 
 bool TGenCompactionStrategy::TryReserveCompaction(TCompactionParams& rawParams) {
@@ -1577,12 +1551,12 @@ bool TGenCompactionStrategy::TryReserveCompaction(TCompactionParams& rawParams) 
     auto& params = *CheckedCast<TGenCompactionParams*>(&rawParams);
     Y_ENSURE(params.Context, "Cannot reserve an unprepared compaction");
     if (!CanStartTierCompaction(params.Generation)) {
-        TierConflicts[params.Generation].WaitRevision = TierOccupancyRevision;
+        DeferTierCompaction(params.Generation);
         return false;
     }
     for (const auto& part : params.Context->Inputs) {
         if (BusyTierParts.contains(part.Label())) {
-            NoteTierCompactionConflict(params.Generation);
+            DeferTierCompaction(params.Generation);
             return false;
         }
     }
@@ -1593,12 +1567,12 @@ bool TGenCompactionStrategy::TryReserveCompaction(TCompactionParams& rawParams) 
                 && active.Context->Epochs->Min <= params.Context->Epochs->Max) {
             // Frozen/status sources can make intervals overlap even when no
             // existing disk label is shared. Their outputs must not overlap.
-            NoteTierCompactionConflict(params.Generation);
+            DeferTierCompaction(params.Generation);
             return false;
         }
     }
     auto& settings = *params.Tiering;
-    settings.UseConservativeMasks = !SerialTierGeneration.has_value();
+    settings.UseConservativeMasks = true;
     for (const auto& [generation, active] : TierCompactions) {
         if (active.Params->Tiering->HasMemoryInputs) {
             settings.HasUnknownRemaining = true;
@@ -1620,72 +1594,24 @@ bool TGenCompactionStrategy::TryReserveCompaction(TCompactionParams& rawParams) 
     return true;
 }
 
-void TGenCompactionStrategy::ReleaseTierCompaction(ui32 generation, ui64 compactionId, bool success) {
+void TGenCompactionStrategy::ReleaseTierCompaction(ui32 generation, ui64 compactionId) {
     const auto it = TierCompactions.find(generation);
     Y_ENSURE(it != TierCompactions.end() && it->second.CompactionId == compactionId,
         "Unexpected tier-managed compaction release");
-    const bool successfulTac = success
-        && it->second.Params->Mode == TCompactionParams::EMode::TierAware;
     for (const auto& part : it->second.Context->Inputs) {
         Y_ENSURE(BusyTierParts.erase(part.Label()) == 1, "Compaction input was not reserved");
     }
     TierCompactions.erase(it);
+    TierWaitRevisions.erase(generation);
+    // Both publication and cancellation change which inputs can be reserved.
     ++TierOccupancyRevision;
-    if (successfulTac) {
-        TierConflicts.erase(generation);
-        if (SerialTierGeneration == generation) {
-            SerialTierGeneration.reset();
-        }
-    } else if (success) {
-        // Regular completed its own request, but has not resolved TAC's
-        // accumulated conflicts. Retain the count without a stale wait marker.
-        const auto conflicts = TierConflicts.find(generation);
-        if (conflicts != TierConflicts.end()) {
-            conflicts->second.WaitRevision.reset();
-        }
-    }
 }
 
 void TGenCompactionStrategy::CheckTierGenerations() {
     if (!TierManaged) {
         return;
     }
-    if (SerialTierGeneration) {
-        // Drain running operations without preemption. Pending tasks must not
-        // take the newly available inputs before the starved generation.
-        const auto cancelPending = [&](ui32 generation, EState& state, TCompactionTask& task) {
-            if (generation != *SerialTierGeneration
-                    && (state == EState::Pending || state == EState::PendingBackground)) {
-                Broker->CancelTask(task.TaskId);
-                state = EState::Free;
-                task = {};
-            }
-        };
-        for (ui32 level = 1; level <= Generations.size(); ++level) {
-            cancelPending(level, Generations[level - 1].State, Generations[level - 1].Task);
-        }
-        cancelPending(255, FinalState.State, FinalState.Task);
-        if (!TierCompactions.empty()) {
-            return;
-        }
-        const ui32 generation = *SerialTierGeneration;
-        if (generation == 0) {
-            Backend->RequestMemCompactionRetry(Table);
-        } else {
-            auto& state = generation == 255 ? FinalState.State : Generations[generation - 1].State;
-            auto& task = generation == 255 ? FinalState.Task : Generations[generation - 1].Task;
-            if (state == EState::Free) {
-                const auto& type = generation == 255 ? Policy->InMemResourceBrokerTask
-                    : Policy->Generations[generation - 1].ResourceBrokerTask;
-                SubmitTask(task, type, Policy->DefaultTaskPriority, generation);
-                state = EState::Pending;
-            }
-        }
-        return;
-    }
-    const auto memory = TierConflicts.find(0);
-    if (memory != TierConflicts.end() && memory->second.WaitRevision
-            && CanStartTierCompaction(0)) {
+    if (TierWaitRevisions.contains(0) && CanStartTierCompaction(0)) {
         Backend->RequestMemCompactionRetry(Table);
     }
     if (ForcedState == EForcedState::Pending) {
@@ -1762,8 +1688,7 @@ void TGenCompactionStrategy::CancelTierCompactions() {
     TierCompactions.clear();
     BusyTierParts.clear();
     ++TierOccupancyRevision;
-    const auto memory = TierConflicts.find(0);
-    if (memory != TierConflicts.end() && memory->second.WaitRevision) {
+    if (TierWaitRevisions.contains(0)) {
         // ReflectSchema may switch back to the legacy path, which will no
         // longer call CheckTierGenerations to wake an already deferred flush.
         Backend->RequestMemCompactionRetry(Table);
@@ -1780,9 +1705,8 @@ void TGenCompactionStrategy::BeginTierGenCompaction(TTaskId taskId, ui32 generat
     }
     const bool forced = ForcedState == EForcedState::Pending && ForcedGeneration == generation;
     const bool sweep = TierSweepGeneration == generation;
-    const bool serial = SerialTierGeneration == generation;
     if (!CanStartTierCompaction(generation)
-            || (!forced && !serial && (!HasFreeTierInputs(generation)
+            || (!forced && (!HasFreeTierInputs(generation)
                 || (generation != 255 && !sweep && DesiredMode(generation) == EDesiredMode::None)))) {
         Broker->FinishTask(taskId, EResourceStatus::Cancelled);
         state = EState::Free;
@@ -1826,9 +1750,7 @@ ui64 TGenCompactionStrategy::PrepareTierCompaction(TTaskId taskId, TSnapEdge edg
     params->Tiering = MakeHolder<TTieringCompaction>();
     params->Tiering->PartLevels = KnownParts;
     const bool cool = Backend->IsDataTieringEnabled() && Backend->TableScheme(Table)->TieringPolicy;
-    // An exclusive retry must run TAC even when cooling is disabled: only a
-    // successful TAC resolves the accumulated conflicts and releases the mode.
-    params->Mode = sweep || cool || SerialTierGeneration == generation
+    params->Mode = sweep || cool
         ? TCompactionParams::EMode::TierAware : TCompactionParams::EMode::Regular;
     params->KeepInCache = generation == 0
         || (generation != 255 && Policy->Generations[generation - 1].KeepInCache);
@@ -1901,7 +1823,7 @@ ui64 TGenCompactionStrategy::PrepareTierCompaction(TTaskId taskId, TSnapEdge edg
 }
 
 void TGenCompactionStrategy::ScheduleTierSweep() {
-    if (SerialTierGeneration || TierSweepGeneration
+    if (TierSweepGeneration
             || ForcedState != EForcedState::None
             || !Backend->IsDataTieringEnabled() || !Backend->TableScheme(Table)->TieringPolicy) {
         return;
@@ -1995,7 +1917,7 @@ TCompactionChanges TGenCompactionStrategy::FinishTierCompaction(ui64 compactionI
         TGenCompactionParams& params, TCompactionResult& result)
 {
     Y_ENSURE(params.Context, "Tier-managed compaction has no prepared inputs");
-    ReleaseTierCompaction(params.Generation, compactionId, true);
+    ReleaseTierCompaction(params.Generation, compactionId);
     if (TierSweepGeneration == params.Generation) {
         TierSweepGeneration.reset();
     }
@@ -2142,7 +2064,7 @@ void TGenCompactionStrategy::CompactionCancelled(ui64 compactionId, const TCompa
     if (active == TierCompactions.end() || active->second.CompactionId != compactionId) {
         return;
     }
-    ReleaseTierCompaction(params.Generation, compactionId, false);
+    ReleaseTierCompaction(params.Generation, compactionId);
     if (params.Generation == 0) {
         MemCompactionId = 0;
         if (ForcedMemCompactionId == compactionId) {

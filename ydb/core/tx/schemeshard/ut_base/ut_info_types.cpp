@@ -13,6 +13,80 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
 
+    NKikimrSchemeOp::TPartitionConfig MakeCompactionTierConfig() {
+        NKikimrSchemeOp::TPartitionConfig config;
+        auto* generation = config.MutableCompactionPolicy()->AddGeneration();
+        generation->SetGenerationId(0);
+        generation->SetSizeToCompact(1000);
+        generation->SetCountToCompact(5);
+        generation->SetForceSizeToCompact(20000);
+        auto* family = config.AddColumnFamilies();
+        family->SetId(0);
+        family->MutableStorageConfig();
+        return config;
+    }
+
+    void AddCompactionTierFamily(NKikimrSchemeOp::TPartitionConfig& config) {
+        auto* family = config.AddColumnFamilies();
+        family->SetId(42);
+        family->SetName("archive");
+    }
+
+    Y_UNIT_TEST(CreateCompactionGenerationTierReferences) {
+        auto config = MakeCompactionTierConfig();
+        config.ClearColumnFamilies();
+        TString error;
+        // Both an omitted TierId and an explicit zero accept an implicit default family.
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(config, nullptr, false, error), error);
+        auto* generation = config.MutableCompactionPolicy()->MutableGeneration(0);
+        generation->SetTierId(0);
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(config, nullptr, false, error), error);
+
+        generation->SetTierId(42);
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyCreateParams(config, nullptr, false, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "Compaction generation 0 refers to tier 42");
+        UNIT_ASSERT_STRING_CONTAINS(error, "not a column family");
+
+        auto* family = config.AddColumnFamilies();
+        family->SetId(0);
+        family->MutableStorageConfig();
+        AddCompactionTierFamily(config);
+        error.clear();
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(config, nullptr, false, error), error);
+    }
+
+    Y_UNIT_TEST(AlterCompactionGenerationTierRequiresAMergedFamily) {
+        const auto source = MakeCompactionTierConfig();
+        NKikimrSchemeOp::TPartitionConfig changes;
+        changes.MutableCompactionPolicy()->CopyFrom(source.GetCompactionPolicy());
+        changes.MutableCompactionPolicy()->MutableGeneration(0)->SetTierId(42);
+        ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription> columns;
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, columns, nullptr, false, error), error);
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyAlterParams(source, result, nullptr, false, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "Compaction generation 0 refers to tier 42");
+
+        // A family and a policy referring to it may be introduced by the same ALTER.
+        AddCompactionTierFamily(changes);
+        error.clear();
+        UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, columns, nullptr, false, error), error);
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyAlterParams(source, result, nullptr, false, error), error);
+    }
+
+    Y_UNIT_TEST(AlterCompactionGenerationTierUsesInheritedFamilies) {
+        auto source = MakeCompactionTierConfig();
+        AddCompactionTierFamily(source);
+        NKikimrSchemeOp::TPartitionConfig changes;
+        changes.MutableCompactionPolicy()->CopyFrom(source.GetCompactionPolicy());
+        changes.MutableCompactionPolicy()->MutableGeneration(0)->SetTierId(42);
+        ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription> columns;
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, columns, nullptr, false, error), error);
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyAlterParams(source, result, nullptr, false, error), error);
+    }
+
     Y_UNIT_TEST_FLAG(VectorIndexDescriptionPersistence, Hnsw) {
         NKikimrSchemeOp::TIndexCreationConfig config;
         config.SetName("vidx");

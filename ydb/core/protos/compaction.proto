@@ -110,9 +110,6 @@ message TCompactionPolicy {
     optional bool KeepEraseMarkers = 22;
     optional uint32 MinBTreeIndexNodeSize = 23 [default = 7168];
     optional uint32 MinBTreeIndexNodeKeys = 24 [default = 6];
-    // Input conflicts before retrying a generation with exclusive TAC.
-    // Successful TAC resets the counter; regular compaction preserves it.
-    optional uint32 TieringCompactionConflictLimit = 25 [default = 5];
 
     repeated TGenerationPolicy Generation = 10;
 }

@@ -4166,6 +4166,170 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckStorageGroupsStateInfoFieldsRequired(true, true);
     }
 
+    bool HasProblem(const NJson::TJsonValue& json, TStringBuf problem) {
+        for (const auto& item : json["Problems"].GetArray()) {
+            if (item.GetString() == problem) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Two groups the way /storage/groups gets them from the whiteboard of a node when BSC is not used
+    void SetWhiteboardGroupsForTest(TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev, TNodeId nodeId) {
+        auto& record = (*ev)->Get()->Record;
+        record.ClearBSGroupStateInfo();
+        for (ui32 id : {1, 2}) {
+            auto* group = record.AddBSGroupStateInfo();
+            group->SetGroupID(id);
+            group->SetGroupGeneration(1);
+            group->SetErasureSpecies("mirror-3-dc");
+            group->SetStoragePoolName("whiteboard-pool");
+            group->AddVDiskNodeIds(nodeId);
+            for (ui32 slot = 0; slot < 5; ++slot) {
+                auto* disk = group->AddVDiskIds();
+                disk->SetGroupID(id);
+                disk->SetGroupGeneration(1);
+                disk->SetRing(slot < 3 ? 0 : (slot == 3 ? 2 : 1));
+                disk->SetDomain(slot < 3 ? slot : 0);
+                disk->SetVDisk(0);
+            }
+        }
+    }
+
+    // The disks of the groups from SetWhiteboardGroupsForTest
+    void SetWhiteboardVDisksForTest(TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev) {
+        auto& record = (*ev)->Get()->Record;
+        record.ClearVDiskStateInfo();
+        for (ui32 id : {1, 2}) {
+            for (ui32 slot = 0; slot < 5; ++slot) {
+                auto* disk = record.AddVDiskStateInfo();
+                disk->MutableVDiskId()->SetGroupID(id);
+                disk->MutableVDiskId()->SetGroupGeneration(1);
+                disk->MutableVDiskId()->SetRing(slot < 3 ? 0 : (slot == 3 ? 2 : 1));
+                disk->MutableVDiskId()->SetDomain(slot < 3 ? slot : 0);
+                disk->MutableVDiskId()->SetVDisk(0);
+                disk->SetPDiskId(id);
+                disk->SetVDiskSlotId(slot + 1);
+                disk->SetVDiskState(EVDiskState::OK);
+                disk->SetReplicated(true);
+            }
+        }
+    }
+
+    enum class EStorageGroupsDisconnect {
+        FallbackGroupsRequest, // BSC is not used, the node is lost before it reports its groups
+        FallbackDisksRequest, // BSC is not used, the node is lost before it reports its disks
+        ControllerDisksRequest, // BSC data is available, the node is lost before it reports its disks
+    };
+
+    void CheckStorageGroupsNodeDisconnect(EStorageGroupsDisconnect disconnectCase) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TNodeId nodeId = runtime.GetNodeId(0);
+        const bool fallback = disconnectCase != EStorageGroupsDisconnect::ControllerDisksRequest;
+        const bool disconnectOnGroups = disconnectCase == EStorageGroupsDisconnect::FallbackGroupsRequest;
+        ui32 disconnects = 0;
+
+        // The node "disconnects" instead of answering: its whiteboard request is lost and the handler
+        // gets the event that interconnect sends to the subscribers of a closed session.
+        auto disconnectNode = [&](TAutoPtr<IEventHandle>& ev) {
+            ++disconnects;
+            runtime.Send(new IEventHandle(
+                ev->Sender,
+                ev->Recipient,
+                new TEvInterconnect::TEvNodeDisconnected(nodeId),
+                0,
+                0));
+            return TTestActorRuntime::EEventAction::DROP;
+        };
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    record.ClearEntries();
+                    auto* group = record.AddEntries();
+                    group->MutableKey()->SetGroupId(0);
+                    group->MutableInfo()->SetGeneration(1);
+                    group->MutableInfo()->SetErasureSpeciesV2("none");
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    record.ClearEntries();
+                    for (ui32 i = 0; i < 5; ++i) {
+                        AddSysViewVDisk(x, nodeId, 1, i + 1, "READY");
+                        record.MutableEntries(i)->MutableInfo()->SetVDisk(i);
+                    }
+                    break;
+                }
+                case TEvWhiteboard::EvBSGroupStateRequest: {
+                    if (disconnectOnGroups) {
+                        return disconnectNode(ev);
+                    }
+                    break;
+                }
+                case TEvWhiteboard::EvBSGroupStateResponse: {
+                    SetWhiteboardGroupsForTest(reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev), nodeId);
+                    break;
+                }
+                case TEvWhiteboard::EvVDiskStateRequest:
+                case TEvWhiteboard::EvPDiskStateRequest: {
+                    if (!disconnectOnGroups) {
+                        return disconnectNode(ev);
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const TActorId sender = runtime.AllocateEdgeActor();
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /storage/groups?" << (fallback ? "whiteboard_only=true" : "fields_required=VDisk,Read")
+                << " HTTP/1.1\r\n\r\n", endpoint, {});
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response->Response->Body, &json, true);
+        const TString context = NJson::WriteJson(json, false);
+
+        UNIT_ASSERT_C(disconnects > 0, context);
+        // groups are requested from whiteboard only without BSC, so the groups of the lost node are missing
+        UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "wb-incomplete-groups"), disconnectOnGroups, context);
+        // with BSC data the disks of the lost node are still listed from BSC, so nothing is reported there
+        UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "wb-incomplete-disks"),
+            disconnectCase == EStorageGroupsDisconnect::FallbackDisksRequest, context);
+        if (!disconnectOnGroups) {
+            // the groups themselves were received before the node was lost
+            UNIT_ASSERT_VALUES_EQUAL_C(json["StorageGroups"].GetArray().size(), fallback ? 2 : 1, context);
+        }
+    }
+
+    Y_UNIT_TEST(StorageGroupsReportsNodeLostBeforeGroupsInWhiteboardFallback) {
+        CheckStorageGroupsNodeDisconnect(EStorageGroupsDisconnect::FallbackGroupsRequest);
+    }
+
+    Y_UNIT_TEST(StorageGroupsReportsNodeLostBeforeDisksInWhiteboardFallback) {
+        CheckStorageGroupsNodeDisconnect(EStorageGroupsDisconnect::FallbackDisksRequest);
+    }
+
+    Y_UNIT_TEST(StorageGroupsKeepsQuietAboutNodeLostWithControllerData) {
+        CheckStorageGroupsNodeDisconnect(EStorageGroupsDisconnect::ControllerDisksRequest);
+    }
+
     void CheckPDiskControllerStatuses(bool groups, bool whiteboardAvailable = true, TStringBuf pdisksSort = {}) {
         // Controller statuses are joined by NodeId/PDiskId even when GUIDs differ.
         // The response keeps the Whiteboard disk identity and the BSC statuses.

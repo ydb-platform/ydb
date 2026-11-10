@@ -22,6 +22,7 @@
 #include <ydb/library/actors/core/executor_pool_base.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/scope.h>
@@ -312,6 +313,19 @@ TReplication::EDstState ReadPersistedDstState(
     const auto result = ReadControllerQuery(runtime, controllerId, query);
     const auto& row = result.GetValue().GetStruct(0).GetOptional().GetOptional();
     return static_cast<TReplication::EDstState>(row.GetStruct(0).GetOptional().GetUint32());
+}
+
+bool HasPersistedWorker(TTestActorRuntime& runtime, ui64 controllerId, const TWorkerId& worker) {
+    const auto query = Sprintf(
+        R"((
+            (let key '('('ReplicationId (Uint64 '%lu)) '('TargetId (Uint64 '%lu)) '('WorkerId (Uint64 '%lu))))
+            (return (AsList (SetResult 'Worker (SelectRow 'Workers key '('WorkerId)))))
+        ))",
+        worker.ReplicationId(),
+        worker.TargetId(),
+        worker.WorkerId());
+    const auto result = ReadControllerQuery(runtime, controllerId, query);
+    return result.GetValue().GetStruct(0).GetOptional().HasOptional();
 }
 
 NYdb::NTable::TSession CreateTableSession(TTestEnv& env, NYdb::NTable::TTableClient& client) {
@@ -2499,6 +2513,122 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         }
     }
 
+}
+
+namespace {
+
+ui64 AssignGlobalTx(TTestEnv& env, const TReplicationTestInfo& info, ui64 step) {
+    const auto result = env.Send<TEvService::TEvTxIdResult>(
+        info.ControllerId,
+        new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(step, 0)}));
+    return result->Get()->Record.GetVersionTxIds(0).GetTxId();
+}
+
+void SendWorkerHeartbeat(
+        TTestEnv& env,
+        const TReplicationTestInfo& info,
+        const TWorkerId& worker,
+        const TRowVersion& version)
+{
+    auto heartbeat = MakeHolder<TEvService::TEvHeartbeat>(version);
+    worker.Serialize(*heartbeat->Record.MutableWorker());
+    env.SendAsync(info.ControllerId, std::move(heartbeat));
+    DescribeReplication(env, info);
+}
+
+TEvTxUserProxy::TEvProposeTransaction::TPtr GrabCommit(TTestEnv& env, const char* phase) {
+    const auto proposal = env.GetRuntime().GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransaction>(
+        env.GetSender(),
+        TDuration::Seconds(30));
+    UNIT_ASSERT_C(proposal, "GLOBAL commit was not proposed " << phase << " within the bound");
+    UNIT_ASSERT(proposal->Get()->Record.GetTransaction().HasCommitWrites());
+    return proposal;
+}
+
+void CompleteCommit(TTestEnv& env, const TReplicationTestInfo& info, ui64 txId) {
+    auto status = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>();
+    status->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+    env.GetRuntime().Send(new IEventHandle(
+        ResolveTablet(env.GetRuntime(), info.ControllerId),
+        env.GetSender(),
+        status.Release(),
+        0,
+        txId));
+    UNIT_ASSERT(WaitFor([&] {
+        return DescribeReplication(env, info)->Get()->Record.GetTransactions().assigned_size() == 0;
+    }));
+}
+
+void ResumeReplication(TTestEnv& env, const TReplicationTestInfo& info, ui64 txId) {
+    auto request = MakeAlterReplicationRequest(info, txId);
+    request->Record.MutableSwitchState()->MutableStandBy();
+    const auto result = env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId, std::move(request));
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+}
+
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE(WorkerHeartbeatLifecycle) {
+    Y_UNIT_TEST(GlobalCommitProgressesAfterPauseResume) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const auto info = StartReplication(env, 1, "root@builtin", true);
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {worker});
+
+        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
+        runtime.RegisterService(
+            MakeTxProxyID(),
+            runtime.Register(new TCommitWritesRecorder(txProxy, env.GetSender())));
+        Y_DEFER {
+            runtime.RegisterService(MakeTxProxyID(), txProxy);
+        };
+
+        const auto firstTxId = AssignGlobalTx(env, info, 1);
+        SendWorkerHeartbeat(env, info, worker, TRowVersion(10000, 0));
+        const auto firstCommit = GrabCommit(env, "before PAUSE");
+        UNIT_ASSERT_VALUES_EQUAL(firstCommit->Get()->Record.GetTransaction().GetCommitWrites().GetWriteTxId(), firstTxId);
+        CompleteCommit(env, info, firstTxId);
+
+        RequestPause(env, info, 701);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender(), TDuration::Seconds(30)));
+        SendWorkerStopped(env, info.ControllerId, worker);
+        WaitForPaused(env, info);
+        ResumeReplication(env, info, 702);
+        const auto restarted = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender(), TDuration::Seconds(30));
+        UNIT_ASSERT(restarted);
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(restarted->Get()->Record.GetWorker()), worker);
+
+        const auto secondTxId = AssignGlobalTx(env, info, 10001);
+        UNIT_ASSERT_VALUES_UNEQUAL(secondTxId, firstTxId);
+        SendWorkerHeartbeat(env, info, worker, TRowVersion(20000, 0));
+        const auto secondCommit = GrabCommit(env, "after PAUSE/STANDBY");
+        UNIT_ASSERT_VALUES_EQUAL(secondCommit->Get()->Record.GetTransaction().GetCommitWrites().GetWriteTxId(), secondTxId);
+        CompleteCommit(env, info, secondTxId);
+    }
+
+    Y_UNIT_TEST(RemovedWorkerDoesNotReappearAfterRestart) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const auto info = StartReplication(env);
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {worker});
+
+        SendWorkerHeartbeat(env, info, worker, TRowVersion(10000, 0));
+        UNIT_ASSERT(HasPersistedWorker(runtime, info.ControllerId, worker));
+
+        RequestPause(env, info, 703);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender(), TDuration::Seconds(30)));
+        SendWorkerStopped(env, info.ControllerId, worker);
+        WaitForPaused(env, info);
+
+        RestartController(env, info.ControllerId);
+        UNIT_ASSERT_C(
+            !HasPersistedWorker(runtime, info.ControllerId, worker),
+            "A worker removed during PAUSE was resurrected from its persisted heartbeat");
+    }
 }
 
 } // namespace NKikimr::NReplication::NController

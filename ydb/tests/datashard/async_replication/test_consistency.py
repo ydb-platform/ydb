@@ -10,6 +10,8 @@ import yatest.common
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.multicluster_test_base import MulticlusterTestBase
 from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.sql.lib.test_query import Query
 
 
@@ -163,12 +165,22 @@ class TestAuthenticationRecovery(MulticlusterTestBase):
     def get_extra_feature_flags(cls):
         return [*super().get_extra_feature_flags(), "enable_schema_secrets"]
 
+    @classmethod
+    def build_cluster(cls):
+        # This regression restarts every process; the default fixture uses RAM disks.
+        cluster = KiKiMR(KikimrConfigGenerator(
+            erasure=cls.get_cluster_configuration(), use_in_memory_pdisks=False,
+            extra_feature_flags=cls.get_extra_feature_flags(),
+            extra_grpc_services=cls.get_extra_grpc_services()))
+        cluster.start()
+        return cluster
+
     @pytest.mark.parametrize("consistency_level", ["ROW", "GLOBAL"])
     def test_schema_secret_change_recovers_without_pause(self, consistency_level):
         source_cluster, destination_cluster = self.clusters
         source = Query.create(self.get_database(), self.get_endpoint(source_cluster))
         destination = Query.create(self.get_database(), self.get_endpoint(destination_cluster))
-        name = f"auth_{self.hash_short}"
+        name = f"auth{self.hash_short}"
         path = f"{self.get_database()}/{name}"
         replication = f"{path}_replication"
         secret = f"{path}_secret"
@@ -214,8 +226,13 @@ class TestAuthenticationRecovery(MulticlusterTestBase):
         for node in destination_cluster.nodes.values():
             node.start()
         source.query(f"UPSERT INTO `{path}` (key,value) VALUES (2u,'while-failed');")
-        assert wait_for(lambda: "error" in self.describe(destination_cluster, replication),
-                        timeout_seconds=120), "Rejected Login did not become public Error"
+        def has_error():
+            try:
+                return "error" in self.describe(destination_cluster, replication)
+            except yatest.common.ExecutionError:
+                return False  # The endpoint may still be starting after the restart.
+
+        assert wait_for(has_error, timeout_seconds=120), "Rejected Login did not become public Error"
         error = self.describe(destination_cluster, replication)["error"]
         assert old_password not in str(error) and new_password not in str(error)
         destination.query(f"ALTER SECRET `{secret}` WITH (value='{new_password}');")

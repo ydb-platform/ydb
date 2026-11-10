@@ -18,7 +18,6 @@
 #include <util/generic/typetraits.h>
 
 #include <atomic>
-#include <condition_variable>
 #include <mutex>
 
 namespace NKikimr::NWrappers::NExternalStorage {
@@ -92,17 +91,13 @@ public:
     };
 
 private:
-    THolder<Aws::S3::S3Client> Client;
+    std::shared_ptr<Aws::S3::S3Client> Client;
     const Aws::Client::ClientConfiguration Config;
     const Aws::Auth::AWSCredentials Credentials;
     const TString Bucket;
     const Aws::S3::Model::StorageClass StorageClass = Aws::S3::Model::StorageClass::STANDARD;
     bool Verbose = false;
     TS3CountersRoot Counters;
-
-    mutable std::mutex RunningQueriesMutex;
-    mutable std::condition_variable RunningQueriesNotifier;
-    mutable int RunningQueriesCount = 0;
 
     template <typename TRequest, typename TOutcome>
     using THandler = std::function<void(const Aws::S3::S3Client*, const TRequest&, const TOutcome&, const std::shared_ptr<const Aws::Client::AsyncCallerContext>&)>;
@@ -121,23 +116,16 @@ private:
         ev->Get()->MutableRequest().WithBucket(Bucket);
 
         auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext(), StorageClass, ReplyAdapter, GetRequestCounters<TEvRequest>());
-        auto callback = [this](
+        auto callback = [client = Client, verbose = Verbose](
             const Aws::S3::S3Client*,
             const typename TEvRequest::TRequest& request,
             const typename TEvResponse::TOutcome& outcome,
             const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context)
         {
+            Y_UNUSED(client);
             const auto* ctx = static_cast<const TCtx*>(context.get());
 
-            Y_DEFER {
-                std::unique_lock guard(RunningQueriesMutex);
-                --RunningQueriesCount;
-                if (RunningQueriesCount == 0) {
-                    RunningQueriesNotifier.notify_all();
-                }
-            };
-
-            if (Verbose) {
+            if (verbose) {
                 YDB_LOG_NOTICE_CTX_COMP(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response",
                     {"uuid", ctx->GetUUID()},
                     {"response", outcome});
@@ -158,10 +146,8 @@ private:
                 {"uuid", ctx->GetUUID()},
                 {"request", ev->Get()->GetRequest()});
         }
-        func(Client.Get(), ctx->PrepareRequest(ev), callback, ctx);
 
-        std::unique_lock guard(RunningQueriesMutex);
-        ++RunningQueriesCount;
+        func(Client.get(), ctx->PrepareRequest(ev), callback, ctx);
     }
 
 public:
@@ -173,7 +159,7 @@ public:
             const Aws::S3::Model::StorageClass storageClass,
             bool verbose = false,
             bool useVirtualAddressing = true)
-        : Client(new Aws::S3::S3Client(
+        : Client(std::make_shared<Aws::S3::S3Client>(
             credentials,
             config,
             Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,

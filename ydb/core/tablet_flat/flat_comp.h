@@ -121,6 +121,9 @@ namespace NTable {
         TVector<TChangeSlices> SliceChanges;
 
         // When nonempty, covers every new part and overrides NewPartsLevel.
+        // The producing strategy must keep its live placement and
+        // SnapshotState().PartLevels consistent with these levels.
+        // The backend only persists this metadata.
         THashMap<TLogoBlobID, ui32> NewPartLevels;
     };
 

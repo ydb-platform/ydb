@@ -11275,6 +11275,57 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             { NKikimrScheme::StatusInvalidParameter });
     }
 
+    Y_UNIT_TEST(CreateTableRejectsInterleavedGenerationTiers) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: [ "key" ]
+            PartitionConfig {
+                CompactionPolicy {
+                    Generation { SizeToCompact: 1000 CountToCompact: 5 TierId: 42 }
+                    Generation { SizeToCompact: 10000 CountToCompact: 5 TierId: 7 }
+                    Generation { SizeToCompact: 100000 CountToCompact: 5 TierId: 42 }
+                }
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter,
+              "generations of each tier must form a contiguous block"}});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(CreateTableAcceptsOmittedAndExplicitDefaultGenerationTiers) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: [ "key" ]
+            PartitionConfig {
+                CompactionPolicy {
+                    Generation { SizeToCompact: 1000 CountToCompact: 5 }
+                    Generation { SizeToCompact: 10000 CountToCompact: 5 TierId: 0 }
+                    Generation { SizeToCompact: 100000 CountToCompact: 5 TierId: 0 }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::IsTable, NLs::Finished});
+        const auto policy = GetCompactionPolicy(runtime, TTestTxConfig::FakeHiveTablets, 1001);
+        UNIT_ASSERT_VALUES_EQUAL(policy->Generations.size(), 3);
+        UNIT_ASSERT(!policy->Generations[0].TierId);
+        UNIT_ASSERT(policy->Generations[1].TierId);
+        UNIT_ASSERT_VALUES_EQUAL(*policy->Generations[1].TierId, 0);
+        UNIT_ASSERT(policy->Generations[2].TierId);
+        UNIT_ASSERT_VALUES_EQUAL(*policy->Generations[2].TierId, 0);
+    }
+
     Y_UNIT_TEST(AlterTableWithCompactionStrategies) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

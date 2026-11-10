@@ -10,6 +10,7 @@ import urllib.request
 import uuid
 
 import grpc
+import pytest
 import yatest.common
 import ydb
 from library.python.port_manager import PortManager
@@ -19,6 +20,7 @@ from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness import daemon
 
 
@@ -351,3 +353,42 @@ class TestSkipperSuspended(RealSkipperCluster):
         assert blocked["last_mutation"] is None, blocked
         assert blocked["view"]["generation"] == before["view"]["generation"], blocked
         assert not blocked["decision"]["plan"], blocked
+
+
+class TestSkipperFailoverLatency(RealSkipperCluster):
+    erasure = Erasure.NONE
+    pile_names = ("r1", "r2")
+    nodes_count = 6
+    use_in_memory_pdisks = True
+
+    @pytest.mark.parametrize("fault", ("kill_two", "kill_all", "freeze_all"))
+    def test_default_failover_commits_within_20_seconds(self, fault):
+        self.create_data()
+        before = self.start_skipper()
+        self.skipper.mode("auto")
+        generation = int(before["view"]["generation"])
+        affected = self.pile_nodes["r1"][:2] if fault == "kill_two" else self.pile_nodes["r1"]
+        if fault == "freeze_all":
+            for node in affected:
+                self.cleanup.callback(lambda node=node: node.unfreeze() if node.is_alive() else None)
+        started = time.monotonic()
+        with ThreadPoolExecutor(max_workers=len(affected)) as executor:
+            list(executor.map(lambda node: node.freeze() if fault == "freeze_all" else daemon.Daemon.kill(node), affected))
+        expected = {"r1": "DISCONNECTED", "r2": "PRIMARY"}
+        state = self.wait_snapshot(
+            lambda s: s["view"] and {pile["name"]: pile["state"] for pile in s["view"]["piles"]} == expected,
+            "default automatic failover within 20 seconds", timeout=max(0, 20 - (time.monotonic() - started)))
+        elapsed = time.monotonic() - started
+        assert elapsed <= 20, (elapsed, state)
+        self.logger.info("Skipper committed failover after %.3f seconds (%s)", elapsed, fault)
+        attempt = state["last_mutation"]
+        assert int(attempt["expected_generation"]) == generation, attempt
+        assert attempt["update"] == expected, attempt
+        self.check_data("r2")
+        self.write_after_fault("r2")
+        # A completed failover must not produce another update on later polls.
+        time.sleep(3)
+        records = [json.loads(line) for line in (self.skipper.directory / "skipper.log").read_text().splitlines()]
+        sends = [record for record in records if record.get("event") == "mutation_sent"]
+        assert len(sends) == 1, sends
+        assert int(sends[0]["expected_generation"]) == generation, sends

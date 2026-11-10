@@ -86,6 +86,7 @@ class BridgeKiKiMRTest(object):
     use_config_store = True
     separate_node_configs = True
     nodes_count = 16
+    use_in_memory_pdisks = False
     pile_names = ("r1", "r2")
     bridge_rpc_timeout = 10
     cms_config = None
@@ -117,7 +118,7 @@ class BridgeKiKiMRTest(object):
         self.configurator = KikimrConfigGenerator(
             self.erasure,
             nodes=self.nodes_count,
-            use_in_memory_pdisks=False,
+            use_in_memory_pdisks=self.use_in_memory_pdisks,
             use_config_store=self.use_config_store,
             metadata_section=self.metadata_section,
             separate_node_configs=self.separate_node_configs,

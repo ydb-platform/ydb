@@ -35,6 +35,31 @@ operations.
 - A generation guard cannot choose between divergent histories after a partition.
 - Known policy limits are listed in the [implementation guide](IMPLEMENTATION-index.md#observation-and-policy-invariants).
 
+## Failover timing
+
+The defaults target a committed failover within 20 seconds of a provable failure
+in a previously healthy cluster with a surviving commit quorum. State and health
+rounds run every second, GetClusterState has a 1-second deadline, SelfCheck has a
+4-second operation timeout (6-second client deadline), evidence expires after
+8 seconds, and supporting failure evidence must span 2 seconds. BSC receives
+half the SelfCheck operation timeout. Fresh BSC failures can be confirmed in a
+few seconds; a lost primary can first require cached positive claims to expire.
+A qualifying fresh fallback failure takes precedence over retained settled
+connectivity loss. Otherwise a cached loss sample can stall confirmation until
+its TTL expires, despite advancing failure evidence from SelfCheck.
+
+`confirm_seconds` is a minimum evidence span, not a total failover deadline.
+Increasing TTL, sampling intervals or confirmation extends failover latency.
+Existing deployments that explicitly configure the old values retain them and
+must update their configuration to use the new budget. Partial overrides must
+still satisfy the freshness constraints: explicitly increase `evidence_ttl_seconds`
+when retaining longer RPC timeouts or sampling intervals. More frequent SelfCheck
+requests and its shorter BSC budget require qualification under deployment load.
+The 30-second BSC warm-up is unchanged: startup and recent role changes may take
+longer. GREY or missing evidence, history conflicts, no eligible survivor and
+unavailable commit quorums still block automation; the time budget never forces
+an unsafe mutation. This is not a bound on a stalled server's response time.
+
 ## Required builds and release checklist
 
 No released numeric minimum version is established here. Pin actual server,
@@ -68,7 +93,7 @@ and retain:
 - [ ] Record real SelfCheck replies and connectivity reports from a bridge
   cluster with at least two piles, using the request Skipper sends
   (`return_verbose_status = false`, `merge_records = false`,
-  `do_not_cache = true`, no `minimum_status`/`maximum_level`, 12 s operation
+  `do_not_cache = true`, no `minimum_status`/`maximum_level`, 4 s operation
   timeout) from a node of a surviving pile, through the CLI's raw healthcheck
   output or a short SDK program printing `SelfCheckResult` in protobuf text
   format. Store each as `domain/ut/fixtures/real_<case>.pbtxt`, add the server
@@ -96,7 +121,7 @@ and retain:
   above assumes settled reports keep arriving.
 - [ ] M2, SelfCheck reply time: same fault as M1. From the controller host send
   the same SelfCheck request 20 times, 15 s apart, against a surviving node
-  with a 12 s operation timeout and a 14 s client deadline; record each
+  with a 4 s operation timeout and a 6 s client deadline; record each
   duration and whether the reply is BSC mode or fallback. Alternatively sample
   `/api/state` every 250 ms and take, per endpoint,
   `endpoints[].selfcheck_age_ms` right after it drops. Report min, median and
@@ -113,9 +138,8 @@ and retain:
 - [ ] M4, time to committed DISCONNECTED: default timing, `auto` mode.
   Black-hole a non-primary pile at T0 and record the time of the
   `mutation_outcome` log record with `outcome=SUCCESS` and of the generation
-  bump in `/api/state`; expect about 60 s with the defaults (the time for BSC
-  or settled connectivity reports to show the pile down, then
-  `confirm_seconds` and one round); record the measured value. Repeat with the
+  bump in `/api/state`; check the 20-second default failover target for a provable failure with a
+  surviving commit quorum (evidence expiry, confirmation, sampling and commit); record the measured value. Repeat with the
   primary pile black-holed. Record both as the release-note numbers.
 - [ ] Measure BSC recovery/status-publication delay on a loaded cluster and
   justify `bsc_warmup_seconds`. Its 30 s default is based on a nominal 15 s

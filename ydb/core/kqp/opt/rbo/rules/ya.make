@@ -7,6 +7,7 @@ SRCS(
     propagate_topsort_through_stage.cpp
     pull_up_map_over_cbo.cpp
     push_map_elements_through_input.cpp
+    reduce_left_join.cpp
 )
 
 JOIN_SRCS(

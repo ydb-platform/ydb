@@ -2351,7 +2351,7 @@ def build_html_dashboard(
           ax.range = [new Date(ms[0] - pad).toISOString(), new Date(ms[ms.length - 1] + pad).toISOString()];
         }}
       }}
-      Plotly.newPlot(divId, traces, {{
+      return Plotly.newPlot(divId, traces, {{
         title: false,
         xaxis: Object.assign(ax, {{
           titlefont: {{size: 11, color: '#8c959f'}},
@@ -3239,22 +3239,24 @@ def build_html_dashboard(
         ['measuredWrite', built.write, 'Layered measured disk write' + suffix, 'MB/s'],
         ['measuredRead', built.read, 'Layered measured disk read' + suffix, 'MB/s'],
       ];
-      charts.forEach(([divId, layer, title, unit]) => {{
+      const pending = charts.map(([divId, layer, title, unit]) => {{
         const tracks = topMeasuredTracks(layer.tracks, 50);
         Object.keys(tracks).forEach((name, i) => {{
           _measuredColors[name] = name === 'other' ? '#bdbdbd' : MEASURED_PALETTE[i % MEASURED_PALETTE.length];
         }});
-        stackedArea(divId, layer.xs || [], tracks, title, unit, false, true);
+        return Promise.resolve(stackedArea(divId, layer.xs || [], tracks, title, unit, false, true));
       }});
-      attachMeasuredHover('measuredCpu', 'measuredCpuHover', 'cores');
-      attachMeasuredHover('measuredRam', 'measuredRamHover', 'GB');
-      attachMeasuredHover('measuredWrite', 'measuredWriteHover', 'MB/s');
-      attachMeasuredHover('measuredRead', 'measuredReadHover', 'MB/s');
+      return Promise.all(pending).then(() => {{
+        attachMeasuredHover('measuredCpu', 'measuredCpuHover', 'cores');
+        attachMeasuredHover('measuredRam', 'measuredRamHover', 'GB');
+        attachMeasuredHover('measuredWrite', 'measuredWriteHover', 'MB/s');
+        attachMeasuredHover('measuredRead', 'measuredReadHover', 'MB/s');
+      }});
     }}
     function plotMeasuredPressureFromRows(rows, titleSuffix) {{
       const el = document.getElementById('measuredPressure');
       const panel = document.getElementById('measuredPressureHover');
-      if (!el || !window.Plotly) return;
+      if (!el || !window.Plotly) return Promise.resolve();
       if ((rows || []).length === 0 || (rows || []).length > MEASURED_PRESSURE_MAX_ROWS) {{
         el.style.display = 'none';
         if (panel) {{
@@ -3263,7 +3265,7 @@ def build_html_dashboard(
             ? 'Select one chunk (or a small suite) to inspect cgroup throttling / PSI'
             : 'Hover to inspect per-chunk throttling and PSI';
         }}
-        return;
+        return Promise.resolve();
       }}
       const pressureFields = [
         ['cpu_throttled_pct', 'CPU throttled'],
@@ -3295,7 +3297,7 @@ def build_html_dashboard(
       if (!names.length || !xs.length) {{
         el.style.display = 'none';
         if (panel) panel.style.display = 'none';
-        return;
+        return Promise.resolve();
       }}
       el.style.display = '';
       if (panel) panel.style.display = '';
@@ -3316,19 +3318,20 @@ def build_html_dashboard(
         line: {{ width: 2, color: MEASURED_PALETTE[i % MEASURED_PALETTE.length] }},
         hovertemplate: '%{{fullData.name}}: %{{y:.2f}}%<extra></extra>',
       }}));
-      Plotly.newPlot(el, traces, {{
+      return Plotly.newPlot(el, traces, {{
         title: 'Cgroup throttling and pressure' + titleSuffix,
         xaxis: pressAx,
         yaxis: {{ title: 'Interval time (%)', rangemode: 'tozero' }},
         hovermode: 'x unified',
         hoverlabel: {{ namelength: -1 }},
         margin: {{ t: 48, r: 20, b: 30, l: 52 }},
-      }}, {{ responsive: true }});
-      el.on('plotly_hover', (ev) => {{
-        if (!panel || !ev || !ev.points || !ev.points.length) return;
-        panel.textContent = ev.points.map(p => `${{p.data.name}}: ${{Number(p.y).toFixed(2)}}%`).join(' · ');
+      }}, {{ responsive: true }}).then(() => {{
+        el.on('plotly_hover', (ev) => {{
+          if (!panel || !ev || !ev.points || !ev.points.length) return;
+          panel.textContent = ev.points.map(p => `${{p.data.name}}: ${{Number(p.y).toFixed(2)}}%`).join(' · ');
+        }});
+        el.on('plotly_unhover', () => {{ if (panel) panel.textContent = 'Hover to inspect per-chunk throttling and PSI'; }});
       }});
-      el.on('plotly_unhover', () => {{ if (panel) panel.textContent = 'Hover to inspect per-chunk throttling and PSI'; }});
     }}
     let _measuredActiveTests = [];
     function testAtSec(tSec) {{
@@ -3503,12 +3506,12 @@ def build_html_dashboard(
     function plotMeasuredTestLane(tests) {{
       const el = document.getElementById('measuredTestsLane');
       const list = document.getElementById('measuredTestsList');
-      if (!el) return;
+      if (!el) return Promise.resolve();
       if (!tests || !tests.length) {{
         _measuredActiveTests = [];
         el.style.display = 'none';
         if (list) {{ list.style.display = 'none'; list.innerHTML = ''; }}
-        return;
+        return Promise.resolve();
       }}
       el.style.display = '';
       el.style.height = '90px';
@@ -3532,32 +3535,6 @@ def build_html_dashboard(
           showlegend: false,
         }};
       }});
-      if (window.Plotly) {{
-        const laneXs = xs.map(xToDisplay);
-        const laneAx = axisLayout(laneXs, false);
-        const laneMs = laneXs.map(_toMs).filter(v => v != null).sort((a, b) => a - b);
-        if (laneMs.length) {{
-          const pad = Math.max(1000, (laneMs[laneMs.length - 1] - laneMs[0]) * 0.05);
-          laneAx.range = [new Date(laneMs[0] - pad).toISOString(), new Date(laneMs[laneMs.length - 1] + pad).toISOString()];
-        }}
-        Plotly.newPlot(el, traces, {{
-          title: 'Tests in this chunk',
-          xaxis: laneAx,
-          yaxis: {{ visible: false, range: [0.4, 1.6] }},
-          hovermode: 'closest',
-          margin: {{ t: 36, r: 20, b: 24, l: 40 }},
-          height: 90,
-        }}, {{ responsive: true }});
-        el.on('plotly_hover', (ev) => {{
-          if (!ev || !ev.points || !ev.points.length) return;
-          measuredTestHoverLine(ev.points[0]);
-          showChartTip(ev);
-        }});
-        el.on('plotly_unhover', () => {{
-          highlightMeasuredTest('');
-          hideChartTipSoon();
-        }});
-      }}
       if (list) {{
         list.style.display = '';
         list.innerHTML = tests.map((t, i) => {{
@@ -3579,6 +3556,32 @@ def build_html_dashboard(
             ' · ' + Number(t.duration_sec || 0).toFixed(1) + 's</span></li>';
         }}).join('');
       }}
+      if (!window.Plotly) return Promise.resolve();
+      const laneXs = xs.map(xToDisplay);
+      const laneAx = axisLayout(laneXs, false);
+      const laneMs = laneXs.map(_toMs).filter(v => v != null).sort((a, b) => a - b);
+      if (laneMs.length) {{
+        const pad = Math.max(1000, (laneMs[laneMs.length - 1] - laneMs[0]) * 0.05);
+        laneAx.range = [new Date(laneMs[0] - pad).toISOString(), new Date(laneMs[laneMs.length - 1] + pad).toISOString()];
+      }}
+      return Plotly.newPlot(el, traces, {{
+        title: 'Tests in this chunk',
+        xaxis: laneAx,
+        yaxis: {{ visible: false, range: [0.4, 1.6] }},
+        hovermode: 'closest',
+        margin: {{ t: 36, r: 20, b: 24, l: 40 }},
+        height: 90,
+      }}, {{ responsive: true }}).then(() => {{
+        el.on('plotly_hover', (ev) => {{
+          if (!ev || !ev.points || !ev.points.length) return;
+          measuredTestHoverLine(ev.points[0]);
+          showChartTip(ev);
+        }});
+        el.on('plotly_unhover', () => {{
+          highlightMeasuredTest('');
+          hideChartTipSoon();
+        }});
+      }});
     }}
     function applyMeasuredTestBands(tests) {{
       const shapes = (tests || []).map((t, i) => {{
@@ -3596,10 +3599,16 @@ def build_html_dashboard(
           layer: 'below',
         }};
       }});
-      ['measuredCpu', 'measuredRam', 'measuredWrite', 'measuredRead', 'measuredPressure'].forEach(id => {{
+      if (!window.Plotly) return Promise.resolve();
+      // Wait until each Plotly graph finished newPlot; relayout during init hits
+      // Plotly's internal `_guiEditing` and blows up measured selection.
+      return Promise.all(['measuredCpu', 'measuredRam', 'measuredWrite', 'measuredRead', 'measuredPressure'].map(id => {{
         const plot = document.getElementById(id);
-        if (plot && window.Plotly) Plotly.relayout(plot, {{ shapes: shapes, annotations: [] }});
-      }});
+        if (!plot || !plot.data || plot.style.display === 'none') return Promise.resolve();
+        return Promise.resolve(Plotly.relayout(plot, {{ shapes: shapes, annotations: [] }})).catch(err => {{
+          console.warn('measured band relayout failed', id, err);
+        }});
+      }}));
     }}
     function measuredAgg(rows) {{
       let cpu = 0, ram = 0, write = 0, read = 0;
@@ -3748,17 +3757,25 @@ def build_html_dashboard(
         meta.innerHTML += '<div class="muted" style="margin-top:3px" id="measuredLoadStatus">Loading measured series…</div>';
       }}
       ensureMeasuredSeriesForRows(rows, sel).then(() => {{
-        if (window._measuredSelectToken !== token) return;
+        if (window._measuredSelectToken !== token) return null;
         const status = document.getElementById('measuredLoadStatus');
         if (status) status.remove();
-        plotMeasuredLayersFromRows(rows, suffix);
-        plotMeasuredPressureFromRows(rows, suffix);
-        plotMeasuredTestLane(chunkTests);
-        applyMeasuredTestBands(chunkTests);
+        return Promise.resolve(plotMeasuredLayersFromRows(rows, suffix))
+          .then(() => plotMeasuredPressureFromRows(rows, suffix))
+          .then(() => plotMeasuredTestLane(chunkTests))
+          .then(() => applyMeasuredTestBands(chunkTests));
       }}).catch((err) => {{
         if (window._measuredSelectToken !== token) return;
         const msg = (err && err.message) ? err.message : String(err);
+        // Fetch failures mention the URL/status; Plotly races (e.g. `_guiEditing`)
+        // should not look like a missing series payload.
+        const isFetch = /overview\\.json|suites\\/|Failed to fetch|NetworkError|status|HTTP/i.test(msg);
+        console.error(isFetch ? 'Failed to load measured series' : 'Measured plot failed', err);
         const status = document.getElementById('measuredLoadStatus');
+        if (!isFetch) {{
+          if (status) status.remove();
+          return;
+        }}
         if (status) {{
           status.style.color = '#b42318';
           status.textContent = 'Failed to load measured series: ' + msg;

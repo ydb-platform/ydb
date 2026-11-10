@@ -67,6 +67,9 @@ private:
 
                 Ydb::Table::DescribeExternalDataSourceResult describeResult;
                 FillExternalDataSourceDescription(describeResult, pathDescription.GetExternalDataSourceDescription(), pathDescription.GetSelf());
+                if (GetProtoRequest()->include_installation()) {
+                    describeResult.set_installation(pathDescription.GetExternalDataSourceDescription().GetInstallation());
+                }
 
                 return ReplyWithResult(
                     Ydb::StatusIds::SUCCESS,

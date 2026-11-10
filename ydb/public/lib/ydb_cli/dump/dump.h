@@ -42,6 +42,7 @@ struct TDumpSettings: public TOperationRequestSettings<TDumpSettings> {
     FLUENT_SETTING_DEFAULT(bool, SavePartialResult, false);
     FLUENT_SETTING_DEFAULT(bool, PreservePoolKinds, false);
     FLUENT_SETTING_DEFAULT(bool, Ordered, false);
+    FLUENT_SETTING_DEFAULT(bool, EnableDirectExternalDataSource, false);
 
     bool UseConsistentCopyTable() const {
         switch (ConsistencyLevel_) {

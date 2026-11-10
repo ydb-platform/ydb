@@ -672,6 +672,7 @@ TAsyncDescribeExternalDataSourceResult TTableClient::TImpl::DescribeExternalData
 
     auto request = MakeOperationRequest<Ydb::Table::DescribeExternalDataSourceRequest>(settings);
     request.set_path(path);
+    request.set_include_installation(settings.IncludeInstallation_);
 
     auto promise = NewPromise<TDescribeExternalDataSourceResult>();
 

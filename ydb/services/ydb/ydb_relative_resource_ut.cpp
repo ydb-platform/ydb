@@ -320,4 +320,55 @@ Y_UNIT_TEST(DescribeExternalObjectsWithRelativePaths) {
     UNIT_ASSERT_VALUES_EQUAL(description.location(), "folder");
 }
 
+Y_UNIT_TEST(DescribeExternalDataSourceInstallationIsOptIn) {
+    NKikimrConfig::TAppConfig config;
+    config.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+    TKikimrWithGrpcAndRootSchema server(config);
+    TDriver driver(TDriverConfig()
+        .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()).SetDatabase("/Root"));
+    NYdb::NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().GetValueSync();
+    AssertSuccess(sessionResult);
+    auto session = sessionResult.GetSession();
+
+    AssertSuccess(session.ExecuteSchemeQuery(R"(
+        CREATE EXTERNAL DATA SOURCE `/Root/withInstallation` WITH (
+            SOURCE_TYPE = "ObjectStorage", LOCATION = "localhost:1",
+            AUTH_METHOD = "NONE", INSTALLATION = "cloud"
+        );
+        CREATE EXTERNAL DATA SOURCE `/Root/emptyInstallation` WITH (
+            SOURCE_TYPE = "ObjectStorage", LOCATION = "localhost:1", AUTH_METHOD = "NONE"
+        );
+        CREATE EXTERNAL DATA SOURCE `/Root/ydbInstallation` WITH (
+            SOURCE_TYPE = "Ydb", LOCATION = "localhost:1", DATABASE_NAME = "/Root/test",
+            AUTH_METHOD = "NONE", INSTALLATION = "other-cloud"
+        );
+    )").GetValueSync());
+
+    for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
+            {"/Root/withInstallation", "cloud"},
+            {"/Root/emptyInstallation", ""},
+            {"/Root/ydbInstallation", "other-cloud"},
+        }) {
+        const auto legacy = session.DescribeExternalDataSource(path).GetValueSync();
+        AssertSuccess(legacy);
+        const auto legacyDescription = legacy.GetExternalDataSourceDescription();
+        UNIT_ASSERT(!legacyDescription.GetInstallation());
+        UNIT_ASSERT(!TProtoAccessor::GetProto(legacyDescription).has_installation());
+
+        const auto explicitDisabled = session.DescribeExternalDataSource(path,
+            NYdb::NTable::TDescribeExternalDataSourceSettings().IncludeInstallation(false)).GetValueSync();
+        AssertSuccess(explicitDisabled);
+        UNIT_ASSERT(!explicitDisabled.GetExternalDataSourceDescription().GetInstallation());
+
+        const auto result = session.DescribeExternalDataSource(path,
+            NYdb::NTable::TDescribeExternalDataSourceSettings().IncludeInstallation(true)).GetValueSync();
+        AssertSuccess(result);
+        const auto description = result.GetExternalDataSourceDescription();
+        UNIT_ASSERT(description.GetInstallation().has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*description.GetInstallation(), expected);
+        UNIT_ASSERT(TProtoAccessor::GetProto(description).has_installation());
+    }
+}
+
 } // YdbRelativeResourcePaths

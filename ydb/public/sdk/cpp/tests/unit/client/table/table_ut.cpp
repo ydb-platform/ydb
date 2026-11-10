@@ -152,8 +152,24 @@ namespace {
                                          Ydb::Table::RollbackTransactionResponse* response) override {
             return FinishTransaction(response);
         }
+
+        grpc::Status DescribeExternalDataSource(grpc::ServerContext*,
+            const Ydb::Table::DescribeExternalDataSourceRequest* request,
+            Ydb::Table::DescribeExternalDataSourceResponse* response) override {
+            LastIncludeInstallation.store(request->include_installation());
+            Ydb::Table::DescribeExternalDataSourceResult result;
+            if (request->include_installation() && request->path() != "/old") {
+                result.set_installation(request->path() == "/empty" ? "" : "cloud");
+            }
+            auto* operation = response->mutable_operation();
+            operation->set_ready(true);
+            operation->set_status(Ydb::StatusIds::SUCCESS);
+            operation->mutable_result()->PackFrom(result);
+            return grpc::Status::OK;
+        }
         Ydb::StatusIds::StatusCode TransactionStatus = Ydb::StatusIds::SUCCESS;
         grpc::StatusCode TransactionGrpcStatus = grpc::StatusCode::OK;
+        std::atomic_bool LastIncludeInstallation = false;
         std::atomic_uint CreateSessionRequests = 0;
         std::optional<Ydb::Table::CreateTableRequest> LastCreateTableRequest;
         std::optional<Ydb::Table::AlterTableRequest> LastAlterTableRequest;
@@ -239,6 +255,38 @@ namespace {
     }
 
 } // namespace <anonymous>
+
+TEST(TableTest, DescribeExternalDataSourceInstallationIsExplicitAndPreservesPresence) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> server;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> client;
+    std::unique_ptr<NTable::TSession> session;
+    StartServerWithTableService(tableService, server, driver, client, session);
+    ASSERT_TRUE(session);
+
+    const auto legacy = session->DescribeExternalDataSource("/cloud").GetValueSync();
+    ASSERT_TRUE(legacy.IsSuccess());
+    EXPECT_FALSE(tableService.LastIncludeInstallation.load());
+    EXPECT_FALSE(legacy.GetExternalDataSourceDescription().GetInstallation());
+
+    const auto settings = NTable::TDescribeExternalDataSourceSettings().IncludeInstallation(true);
+    const auto cloud = session->DescribeExternalDataSource("/cloud", settings).GetValueSync();
+    ASSERT_TRUE(cloud.IsSuccess());
+    EXPECT_TRUE(tableService.LastIncludeInstallation.load());
+    ASSERT_TRUE(cloud.GetExternalDataSourceDescription().GetInstallation());
+    EXPECT_EQ(*cloud.GetExternalDataSourceDescription().GetInstallation(), "cloud");
+
+    const auto empty = session->DescribeExternalDataSource("/empty", settings).GetValueSync();
+    ASSERT_TRUE(empty.IsSuccess());
+    ASSERT_TRUE(empty.GetExternalDataSourceDescription().GetInstallation());
+    EXPECT_EQ(*empty.GetExternalDataSourceDescription().GetInstallation(), "");
+
+    // An older server can ignore the request and omit the result field.
+    const auto oldServer = session->DescribeExternalDataSource("/old", settings).GetValueSync();
+    ASSERT_TRUE(oldServer.IsSuccess());
+    EXPECT_FALSE(oldServer.GetExternalDataSourceDescription().GetInstallation());
+}
 
 TEST(TableTest, FulltextSuperLemmerAnalyzerRoundTrip) {
     NTable::TFulltextIndexSettings settings;

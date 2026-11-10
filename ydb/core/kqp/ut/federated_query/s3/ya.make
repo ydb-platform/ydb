@@ -17,6 +17,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
     library/cpp/protobuf/interop
     library/cpp/testing/common

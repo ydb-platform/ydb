@@ -945,14 +945,34 @@ void CanonizeForBackup(Ydb::Table::DescribeExternalDataSourceResult& desc) {
 
 }
 
-void BackupExternalDataSource(TDriver driver, const TString& db, const TString& dbPath, const TFsPath& fsBackupFolder) {
+enum class EExternalSourceSelection {
+    Direct,
+    Recursive,
+};
+
+void BackupExternalDataSource(TDriver driver, const TString& db, const TString& dbPath, const TFsPath& fsBackupFolder,
+    EExternalSourceSelection selection) {
     Y_ENSURE(!dbPath.empty());
     LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
     Ydb::Table::DescribeExternalDataSourceResult description;
     NTable::TTableClient client(driver);
-    VerifyStatusOrSkip(NDump::DescribeExternalDataSource(client, dbPath, description), "error describing external data source");
+    const auto settings = NTable::TDescribeExternalDataSourceSettings()
+        .IncludeInstallation(selection == EExternalSourceSelection::Direct);
+    const auto status = NDump::DescribeExternalDataSource(client, dbPath, description, settings);
+    if (selection == EExternalSourceSelection::Direct) {
+        // A selected source must fail visibly, including on servers without Describe support.
+        VerifyStatus(status, "error describing selected external data source");
+    } else {
+        VerifyStatusOrSkip(status, "error describing external data source");
+    }
     CanonizeForBackup(description);
+    if (selection == EExternalSourceSelection::Direct) {
+        NYql::TIssues issues;
+        if (!NDump::ValidateDirectExternalDataSource(description, issues)) {
+            VerifyStatus(NDump::Result<TStatus>(EStatus::UNSUPPORTED, issues.ToString()), "unsupported selected external data source");
+        }
+    }
     const auto creationQuery = NDump::BuildCreateExternalDataSourceQuery(description, db);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalDataSource());
@@ -1076,7 +1096,9 @@ bool SkipItem(const TVector<TRegExMatch>& exclusionPatterns, const THashSet<TStr
 void BackupFolderImpl(TDriver driver, const TString& database, const TString& dbPrefix, const TString& backupPrefix,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
-        NYql::TIssues& issues
+        NYql::TIssues& issues,
+        EDirectExternalDataSourceDump directExternalDataSource = EDirectExternalDataSourceDump::Disabled,
+        TDbIterator<ETraverseType::Preordering>* initialIterator = nullptr
 ) {
     TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
@@ -1096,7 +1118,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
 
     // Copy all tables to temporal folder and backup other scheme objects along the way.
     {
-        TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
+        auto dbIt = initialIterator ? std::move(*initialIterator) : TDbIterator<ETraverseType::Preordering>(driver, dbPrefix);
         while (dbIt) {
             if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
                 LOG_D("Skip " << dbIt.GetFullPath().Quote());
@@ -1140,7 +1162,16 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 } else if (dbIt.IsReplication()) {
                     BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 } else if (dbIt.IsExternalDataSource()) {
-                    BackupExternalDataSource(driver, database, dbIt.GetFullPath(), childFolderPath);
+                    const auto selection = dbIt.GetTraverseRoot() == dbPrefix
+                        ? EExternalSourceSelection::Recursive : EExternalSourceSelection::Direct;
+                    if (selection == EExternalSourceSelection::Direct) {
+                        // Recheck after listing: the selected path may have been recreated since preflight.
+                        Y_ENSURE(directExternalDataSource == EDirectExternalDataSourceDump::Enabled,
+                            "Direct external data source dump requires EnableDirectExternalDataSource(true)");
+                        NYql::TIssues pathIssues;
+                        Y_ENSURE(NDump::ValidateDirectExternalDataSourcePath(dbIt.GetFullPath(), pathIssues), pathIssues.ToString());
+                    }
+                    BackupExternalDataSource(driver, database, dbIt.GetFullPath(), childFolderPath, selection);
                 } else if (dbIt.IsExternalTable()) {
                     BackupExternalTable(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 } else if (dbIt.IsSystemView()) {
@@ -1554,14 +1585,28 @@ void CheckedCreateBackupFolder(const TFsPath& folderPath) {
 // folderPath - relative path to folder in local filesystem where backup will be stored
 void BackupFolder(const TDriver& driver, const TString& database, const TString& relDbPath, TFsPath folderPath,
         const TVector<TRegExMatch>& exclusionPatterns,
-        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool savePartialResult, bool preservePoolKinds, bool ordered) {
+        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool savePartialResult, bool preservePoolKinds, bool ordered,
+        EDirectExternalDataSourceDump directExternalDataSource) {
+    const TString dbPrefix = JoinDatabasePath(database, relDbPath);
+    TDbIterator<ETraverseType::Preordering> initialIterator(driver, dbPrefix);
+    const bool isDirectExternalSource = initialIterator && initialIterator.IsExternalDataSource()
+        && initialIterator.GetTraverseRoot() != dbPrefix;
+    if (isDirectExternalSource) {
+        Y_ENSURE(directExternalDataSource == EDirectExternalDataSourceDump::Enabled,
+            "Direct external data source dump is disabled; opt in with EnableDirectExternalDataSource(true) "
+            "or --enable-direct-external-data-source");
+        NYql::TIssues issues;
+        Y_ENSURE(NDump::ValidateDirectExternalDataSourcePath(dbPrefix, issues), issues.ToString());
+        // Only a definition and ACL are dumped; this operation must not require database root writes.
+        avoidCopy = true;
+    }
+
     TString temporalBackupPostfix = CreateTemporalBackupName();
     if (!folderPath) {
         folderPath = temporalBackupPostfix;
     }
     CheckedCreateBackupFolder(folderPath);
 
-    TString dbPrefix = JoinDatabasePath(database, relDbPath);
     LOG_I("Backup " << dbPrefix.Quote() << " to " << folderPath.GetPath().Quote());
 
     // full path to temporal directory in database
@@ -1575,7 +1620,7 @@ void BackupFolder(const TDriver& driver, const TString& database, const TString&
 
         NYql::TIssues issues;
         BackupFolderImpl(driver, database, dbPrefix, tmpDbFolder, folderPath, exclusionPatterns,
-            schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, issues
+            schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, issues, directExternalDataSource, &initialIterator
         );
 
         if (issues) {

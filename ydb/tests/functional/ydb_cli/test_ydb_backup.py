@@ -2310,3 +2310,45 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
             self.scheme_listdir('/Root/restored'),
             contains_inanyorder('folder')
         )
+
+
+class TestDirectExternalDataSourceDump(BaseTestBackupInFiles):
+    @classmethod
+    def get_cluster_configurator(cls):
+        return KikimrConfigGenerator(extra_feature_flags=["enable_external_data_sources"])
+
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_direct_source_requires_explicit_cli_opt_in(self, enabled):
+        session = self.driver.table_client.session().create()
+        source_name = "directSource" + str(int(enabled))
+        source = "/Root/" + source_name
+        session.execute_scheme(f"""
+            CREATE EXTERNAL DATA SOURCE `{source}` WITH (
+                SOURCE_TYPE = "Ydb", LOCATION = "remote.example.test:2135",
+                DATABASE_NAME = "/Remote/database", AUTH_METHOD = "NONE"
+            );
+        """)
+        original = self.driver.scheme_client.describe_path(source)
+        archive = output_path(self.test_name, "direct_eds_" + str(enabled))
+        command = [backup_bin(), "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                   "--database", "/Root", "tools", "dump", "--path", source, "--output", archive,
+                   "--save-partial-result"]
+        if enabled:
+            command.append("--enable-direct-external-data-source")
+        result = yatest.common.execute(command, check_exit_code=False)
+        if not enabled:
+            assert result.exit_code != 0
+            assert "EnableDirectExternalDataSource" in result.std_err.decode("utf-8")
+            assert os.listdir(archive) == []
+            assert self.driver.scheme_client.describe_path(source).type == original.type
+            return
+        assert result.exit_code == 0, result.std_err.decode("utf-8")
+        with open(os.path.join(archive, source_name, "create_external_data_source.sql")) as definition:
+            sql = definition.read()
+        assert "remote.example.test:2135" in sql
+        assert "/Remote/database" in sql
+        assert os.path.exists(os.path.join(archive, source_name, "permissions.pb"))
+        session.execute_scheme(f"DROP EXTERNAL DATA SOURCE `{source}`;")
+        yatest.common.execute([backup_bin(), "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                               "--database", "/Root", "tools", "restore", "--path", "/Root", "--input", archive])
+        assert self.driver.scheme_client.describe_path(source).type == original.type

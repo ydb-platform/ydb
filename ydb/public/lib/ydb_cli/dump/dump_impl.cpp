@@ -26,7 +26,9 @@ TDumpResult TDumpClient::Dump(const TString& dbPath, const TString& fsPath, cons
             settings.AvoidCopy_,
             settings.SavePartialResult_,
             settings.PreservePoolKinds_,
-            settings.Ordered_);
+            settings.Ordered_,
+            settings.EnableDirectExternalDataSource_ ? NBackup::EDirectExternalDataSourceDump::Enabled
+                : NBackup::EDirectExternalDataSourceDump::Disabled);
         return Result<TDumpResult>();
     } catch (NBackup::TYdbErrorException& e) {
         return TDumpResult(std::move(e.Status));

@@ -2,9 +2,13 @@
 #include "query_utils.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
+#include <util/generic/hash_set.h>
 #include <util/string/join.h>
+#include <google/protobuf/unknown_field_set.h>
 
+#include <cctype>
 #include <format>
 #include <ranges>
 
@@ -19,6 +23,79 @@ std::string PropertyToString(const std::pair<TString, TString>& property) {
 
 }
 
+bool ValidateDirectExternalDataSourcePath(const TString& path, NYql::TIssues& issues) {
+    // Old restore embeds the complete destination in backticks without escaping. Validate every
+    // original component, not just the basename, so an in-place restore has a representable path.
+    for (const unsigned char c : path) {
+        if (c == '`' || c == '\\' || c == '\0' || std::isspace(c)) {
+            issues.AddIssue("Direct external data source dump supports only source paths without whitespace, "
+                "backticks, backslashes or NUL; this includes every parent component");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ValidateDirectExternalDataSource(
+    const Ydb::Table::DescribeExternalDataSourceResult& description,
+    NYql::TIssues& issues)
+{
+    if (!description.has_installation()) {
+        issues.AddIssue("Direct external data source dump requires a server that supports IncludeInstallation; "
+            "the installation field is absent, so a complete definition cannot be backed up");
+        return false;
+    }
+    const auto reject = [&issues]() {
+        issues.AddIssue("Direct external data source dump supports only Ydb/YdbExternal/ObjectStorage sources with known properties "
+            "and AUTH_METHOD NONE; non-NONE authentication modes, unknown formats "
+            "and values requiring SQL escaping are unsupported");
+        return false;
+    };
+    const bool ydb = description.source_type() == "Ydb";
+    const bool objectStorage = description.source_type() == "ObjectStorage";
+    if ((!ydb && description.source_type() != "YdbExternal" && !objectStorage)
+        || description.GetReflection()->GetUnknownFields(description).field_count()) {
+        return reject();
+    }
+
+    // Ydb properties are defined in core/external_sources/external_source_factory.cpp.
+    // ObjectStorage rejects all provider properties in core/external_sources/object_storage.cpp;
+    // only the AUTH_METHOD synthesized by Describe is accepted after REFERENCES is removed.
+    // Fail closed on additions: Describe flattens provider properties and auth into one map.
+    static const THashSet<TString> commonProperties = {"AUTH_METHOD", "DATABASE_NAME", "USE_TLS"};
+    static const THashSet<TString> ydbProperties = {"DATABASE_ID", "SHARED_READING", "SHARED_READING_GROUP"};
+    const auto isLiteral = [](std::string_view value) {
+        return value.find_first_of("'\\\r\n") == std::string_view::npos && value.find('\0') == std::string_view::npos;
+    };
+    // The existing serializer embeds the source name in backticks without escaping.
+    const auto& name = description.self().name();
+    if (name.find_first_of("`\\\r\n") != TString::npos || name.find('\0') != TString::npos
+        || !isLiteral(description.location()) || !isLiteral(description.installation())) {
+        return reject();
+    }
+    // Old restore matches the archived identifier as a single non-whitespace token.
+    for (const unsigned char c : name) {
+        if (std::isspace(c)) {
+            return reject();
+        }
+    }
+    const auto& properties = description.properties();
+    for (const auto& [key, value] : properties) {
+        const bool supportedProperty = key == "AUTH_METHOD" || (!objectStorage && commonProperties.contains(key))
+            || (ydb && ydbProperties.contains(key));
+        if (!supportedProperty || !isLiteral(value)) {
+            return reject();
+        }
+    }
+    const auto auth = properties.find("AUTH_METHOD");
+    // Named-secret restore requires ownership, while EDS use also permits a shared-secret grantee.
+    // Reject every credential mode: dump cannot establish the privileges of a future restoring principal.
+    if (auth == properties.end() || auth->second != "NONE") {
+        return reject();
+    }
+    return true;
+}
+
 TString BuildCreateExternalDataSourceQuery(
     const Ydb::Table::DescribeExternalDataSourceResult& description,
     const TString& db)
@@ -29,12 +106,16 @@ TString BuildCreateExternalDataSourceQuery(
         "WITH (\n"
         "{},\n"
         "{}"
+        "{}"
         "{}\n"
         ");",
         db.c_str(),
         description.self().name().c_str(),
         KeyValueToString("SOURCE_TYPE", description.source_type()),
         KeyValueToString("LOCATION", description.location()),
+        description.has_installation() && !description.installation().empty()
+            ? std::string(",\n") + KeyValueToString("INSTALLATION", description.installation())
+            : "",
         description.properties().empty()
             ? ""
             : std::string(",\n") +

@@ -1924,7 +1924,9 @@ public:
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
-        if (replacing) { ScheduleHnswInitialBuilds(); }
+        if (replacing && !tableInfo->HnswIndexes.empty()) {
+            ScheduleHnswInitialBuilds();
+        }
     }
 
     void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {

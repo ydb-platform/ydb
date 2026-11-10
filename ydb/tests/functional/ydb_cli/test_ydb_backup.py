@@ -2141,6 +2141,10 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
         except yatest.common.process.ExecutionError as exception:
             return False, exception.execution_result.std_err.decode('utf-8')
 
+    def _remove_test_directories(self):
+        for path in ('/Root/restored/folder', '/Root/restored', '/Root/folder'):
+            self.driver.scheme_client.remove_directory(path)
+
     def test_disabled_option(self):
         # Create folder
         self.driver.scheme_client.make_directory('/Root/folder')
@@ -2222,6 +2226,8 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
             contains_inanyorder('folder')
         )
 
+        self._remove_test_directories()
+
     def test_enabled_option(self):
         # Create folder
         self.driver.scheme_client.make_directory('/Root/folder')
@@ -2239,7 +2245,7 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
         sysview_dumped_owner = sysview_desc.owner
 
         # Backup the domain
-        backup_files_dir = output_path(self.test_name, 'test_replace_sys_acl_disabled', 'backup_files_dir')
+        backup_files_dir = output_path(self.test_name, 'test_replace_sys_acl_enabled', 'backup_files_dir')
         self.ydb_cli(['tools', 'dump', '--path', '/Root', '--output', backup_files_dir])
         assert_that(os.listdir(backup_files_dir), contains_inanyorder('.sys', 'folder'))
 
@@ -2310,3 +2316,5 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
             self.scheme_listdir('/Root/restored'),
             contains_inanyorder('folder')
         )
+
+        self._remove_test_directories()

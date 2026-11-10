@@ -191,6 +191,10 @@ runs:
         mkdir -p $TMP_DIR
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
 
+        # protoc must not see generated inputs underneath the source-root -I path.
+        LINK_BUILD_DIR=$(mktemp -d "${RUNNER_TEMP:-/tmp}/ydbd-link.XXXXXX")
+        echo "LINK_BUILD_DIR=$LINK_BUILD_DIR" >> "$GITHUB_ENV"
+
         # The whole dir will be uploaded to s3 with public (=wild internet) ACL
         export PUBLIC_DIR=$TMP_DIR/results
         echo "PUBLIC_DIR=$PUBLIC_DIR" >> $GITHUB_ENV
@@ -319,7 +323,7 @@ runs:
 
         params=(
           # Experimental PR: build only ydbd, without tests or incremental selection.
-          --keep-temps --build-dir "$TMP_DIR/link-build-root"
+          --keep-temps --build-dir "$LINK_BUILD_DIR"
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
@@ -840,10 +844,10 @@ runs:
       run: |
         dest="$PUBLIC_DIR/ydbd-link"
         mkdir -p "$dest"
-        if [ -d "$TMP_DIR/link-build-root" ]; then
-          find "$TMP_DIR/link-build-root" -path '*/ydb/apps/ydbd/ydbd.link-stats.json' -exec cp {} "$dest/" \;
-          find "$TMP_DIR/link-build-root" -path '*/ydb/apps/ydbd/ydbd.linker.log' -exec cp {} "$dest/" \;
-          find "$TMP_DIR/link-build-root" -path '*/ydb/apps/ydbd/ydbd.time_trace.json' -exec cp {} "$dest/" \;
+        if [ -d "$LINK_BUILD_DIR" ]; then
+          find "$LINK_BUILD_DIR" -path '*/ydb/apps/ydbd/ydbd.link-stats.json' -exec cp {} "$dest/" \;
+          find "$LINK_BUILD_DIR" -path '*/ydb/apps/ydbd/ydbd.linker.log' -exec cp {} "$dest/" \;
+          find "$LINK_BUILD_DIR" -path '*/ydb/apps/ydbd/ydbd.time_trace.json' -exec cp {} "$dest/" \;
         fi
         binary="$TMP_DIR/out/ydb/apps/ydbd/ydbd"
         if [ -f "$binary" ]; then
@@ -1031,6 +1035,9 @@ runs:
         set -x
         if [ -n "${TMP_DIR:-}" ]; then
           rm -rf "$TMP_DIR"
+        fi
+        if [ -n "${LINK_BUILD_DIR:-}" ]; then
+          rm -rf "$LINK_BUILD_DIR"
         fi
         # mktemp / graph_compare leftovers; does not match /tmp/systemd-private-*
         rm -rf /tmp/tmp*

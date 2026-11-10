@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -167,7 +169,41 @@ class MeasuredLabelTest(unittest.TestCase):
         self.assertEqual(rows[0]["cpu_nr_throttled_delta"], 3)
         self.assertEqual(rows[0]["memory_high_events_delta"], 1)
         self.assertNotIn("measured_layers", overlay)
-        self.assertEqual(overlay.get("measured_series_url"), "resources_tests.json")
+        self.assertEqual(overlay.get("measured_series_dir"), "resources_tests")
+        self.assertEqual(overlay.get("measured_series_overview_url"), "resources_tests/overview.json")
+        self.assertEqual(
+            overlay.get("measured_series_suite_url_template"),
+            "resources_tests/suites/{suite}.json",
+        )
+
+    def test_measured_series_written_as_suite_shards(self):
+        overlay = {
+            "ref_start_ev": 100.0,
+            "ref_report_ts": 100.0,
+            "evlog_range_sec": [90.0, 120.0],
+        }
+        records = [
+            {
+                "kind": "test", "ts": 101.0, "cgroup": "ya-test-1", "suite": "ydb/core/foo", "chunk": 2,
+                "cpu_used_cores": 2.0, "ram_kb": 2048, "disk_read_mbps": 0, "disk_write_mbps": 0,
+            },
+            {
+                "kind": "test", "ts": 102.0, "cgroup": "ya-test-2", "suite": "ydb/core/bar", "chunk": 1,
+                "cpu_used_cores": 1.0, "ram_kb": 1024, "disk_read_mbps": 0, "disk_write_mbps": 0,
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            out_json = Path(tmp) / "resources_tests.json"
+            rows = _build_measured_tests(records, overlay, runs=[], chunk_tests={}, chunks={}, out_json=out_json)
+            pointer = json.loads(out_json.read_text(encoding="utf-8"))
+            self.assertTrue(pointer.get("sharded"))
+            overview = json.loads((Path(tmp) / "resources_tests" / "overview.json").read_text(encoding="utf-8"))
+            self.assertEqual(set(overview), {row["key"] for row in rows})
+            foo = json.loads((Path(tmp) / "resources_tests" / "suites" / "ydb.core.foo.json").read_text(encoding="utf-8"))
+            bar = json.loads((Path(tmp) / "resources_tests" / "suites" / "ydb.core.bar.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(foo), 1)
+            self.assertEqual(len(bar), 1)
+            self.assertEqual(next(iter(foo.values()))["suite"], "ydb/core/foo")
 
     def test_places_named_tests_end_to_end(self):
         placed = place_chunk_tests(

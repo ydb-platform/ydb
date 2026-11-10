@@ -1533,10 +1533,15 @@ def _build_measured_tests(
             values.append(float(rec[field]) if rec.get(field) is not None else None)
     match_measured_to_runs(grouped, runs or [])
     # Dense measured_layers (all cgroups × common axis × pressure) used to inflate
-    # dashboard_data.json to hundreds of MB. Charts lazy-load sparse series from
-    # resources_tests.json instead; only the summary tree stays in the main payload.
+    # dashboard_data.json to hundreds of MB. Charts lazy-load sparse per-suite
+    # shards from resources_tests/ instead; only the summary tree stays in the
+    # main payload. A single monolithic resources_tests.json is avoided because
+    # browsers (esp. Safari) often fail fetching the ~10–20MB blob.
     overlay.pop("measured_layers", None)
-    overlay["measured_series_url"] = out_json.name if out_json is not None else "resources_tests.json"
+    overlay.pop("measured_series_url", None)
+    overlay["measured_series_dir"] = "resources_tests"
+    overlay["measured_series_overview_url"] = "resources_tests/overview.json"
+    overlay["measured_series_suite_url_template"] = "resources_tests/suites/{suite}.json"
     overlay["measured_chunk_tests"] = measured_chunk_tests_by_label(
         grouped, runs or [], chunk_tests or {}, chunks
     )
@@ -1598,7 +1603,42 @@ def _build_measured_tests(
         summary.append(summary_row)
     summary.sort(key=lambda row: (-float(row["max_cpu"]), str(row["label"])))
     if out_json is not None:
-        out_json.write_text(json.dumps(series_out, ensure_ascii=False), encoding="utf-8")
+        # Keep a tiny pointer file so older links/scripts still resolve the name.
+        out_json.write_text(
+            json.dumps(
+                {
+                    "sharded": True,
+                    "dir": "resources_tests",
+                    "overview": "resources_tests/overview.json",
+                    "suite_template": "resources_tests/suites/{suite}.json",
+                    "series_count": len(series_out),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        series_root = out_json.with_name("resources_tests")
+        suites_dir = series_root / "suites"
+        suites_dir.mkdir(parents=True, exist_ok=True)
+        by_suite: dict[str, dict[str, Any]] = defaultdict(dict)
+        for key, series in series_out.items():
+            suite = str(series.get("suite") or "unknown")
+            by_suite[suite][key] = series
+        for suite, payload in by_suite.items():
+            shard_name = suite.replace("/", ".") + ".json"
+            (suites_dir / shard_name).write_text(
+                json.dumps(payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        overview: dict[str, Any] = {}
+        for row in summary[:80]:
+            key = str(row.get("key") or "")
+            if key and key in series_out:
+                overview[key] = series_out[key]
+        (series_root / "overview.json").write_text(
+            json.dumps(overview, ensure_ascii=False),
+            encoding="utf-8",
+        )
     return summary
 
 

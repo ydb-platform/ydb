@@ -3056,16 +3056,21 @@ def build_html_dashboard(
 
     const measuredList = (data.resources_overlay && data.resources_overlay.measured_tests) || [];
     const measuredChunkTests = (data.resources_overlay && data.resources_overlay.measured_chunk_tests) || {{}};
-    const measuredSeriesUrl = (data.resources_overlay && data.resources_overlay.measured_series_url)
-      || String(dataUrl || '').replace(/[^/]+$/, 'resources_tests.json');
+    const measuredSeriesDir = (data.resources_overlay && data.resources_overlay.measured_series_dir)
+      || 'resources_tests';
+    const measuredOverviewUrl = (data.resources_overlay && data.resources_overlay.measured_series_overview_url)
+      || (measuredSeriesDir + '/overview.json');
+    const measuredSuiteUrlTemplate = (data.resources_overlay && data.resources_overlay.measured_series_suite_url_template)
+      || (measuredSeriesDir + '/suites/{{suite}}.json');
     const measuredWrap = document.getElementById('measuredWrap');
     const MEASURED_PALETTE = ['#d97706','#7c3aed','#0284c7','#65a30d','#dc2626','#0f766e','#c026d3','#1d4ed8','#b45309','#15803d','#be123c','#4338ca'];
     const MEASURED_CHART_TOP_N = 40;
     const MEASURED_PRESSURE_MAX_ROWS = 8;
     const MEASURED_AXIS_MAX_POINTS = 2500;
     const _measuredColors = {{}};
-    let _measuredSeriesByKey = null;
-    let _measuredSeriesPromise = null;
+    const _measuredSeriesByKey = {{}};
+    const _measuredLoadedSuites = new Set();
+    let _measuredOverviewPromise = null;
     let _measuredPlotXs = [];
     const _origColorForTrack = colorForTrack;
     colorForTrack = function(trackName) {{
@@ -3075,24 +3080,57 @@ def build_html_dashboard(
     function measuredPeak(track) {{
       return (track || []).reduce((m, v) => Math.max(m, Number(v) || 0), 0);
     }}
-    function ensureMeasuredSeries() {{
-      if (_measuredSeriesByKey) return Promise.resolve(_measuredSeriesByKey);
-      if (_measuredSeriesPromise) return _measuredSeriesPromise;
-      _measuredSeriesPromise = fetch(measuredSeriesUrl)
+    function measuredSuiteShardUrl(suite) {{
+      const name = String(suite || 'unknown').replaceAll('/', '.');
+      return String(measuredSuiteUrlTemplate).replaceAll('{{suite}}', name);
+    }}
+    function mergeMeasuredSeries(obj) {{
+      Object.keys(obj || {{}}).forEach(key => {{ _measuredSeriesByKey[key] = obj[key]; }});
+    }}
+    function loadMeasuredOverview() {{
+      if (_measuredOverviewPromise) return _measuredOverviewPromise;
+      _measuredOverviewPromise = fetch(measuredOverviewUrl)
         .then(resp => {{
-          if (!resp.ok) throw new Error(resp.status + ' ' + resp.statusText);
+          if (!resp.ok) throw new Error(measuredOverviewUrl + ': ' + resp.status + ' ' + resp.statusText);
           return resp.json();
         }})
         .then(obj => {{
-          _measuredSeriesByKey = obj || {{}};
-          return _measuredSeriesByKey;
+          mergeMeasuredSeries(obj);
+          return obj;
         }})
         .catch(err => {{
-          _measuredSeriesPromise = null;
-          console.error('Failed to load measured series', measuredSeriesUrl, err);
+          _measuredOverviewPromise = null;
           throw err;
         }});
-      return _measuredSeriesPromise;
+      return _measuredOverviewPromise;
+    }}
+    function loadMeasuredSuiteShard(suite) {{
+      const name = String(suite || 'unknown');
+      if (_measuredLoadedSuites.has(name)) return Promise.resolve();
+      const url = measuredSuiteShardUrl(name);
+      return fetch(url)
+        .then(resp => {{
+          if (!resp.ok) throw new Error(url + ': ' + resp.status + ' ' + resp.statusText);
+          return resp.json();
+        }})
+        .then(obj => {{
+          mergeMeasuredSeries(obj);
+          _measuredLoadedSuites.add(name);
+        }});
+    }}
+    function ensureMeasuredSeriesForRows(rows, sel) {{
+      const picked = measuredRowsForChart(rows).rows;
+      const missing = () => picked.filter(row => row && row.key && !_measuredSeriesByKey[row.key]);
+      let chain = Promise.resolve();
+      if ((!sel || sel.kind === 'all') && missing().length) {{
+        chain = chain.then(() => loadMeasuredOverview());
+      }}
+      return chain.then(() => {{
+        const needSuites = [...new Set(
+          missing().map(row => row.suite).filter(Boolean)
+        )];
+        return Promise.all(needSuites.map(loadMeasuredSuiteShard));
+      }}).then(() => _measuredSeriesByKey);
     }}
     function alignMeasuredSeries(xsOut, xsSrc, ysSrc, fillZero) {{
       if (!xsOut.length) return [];
@@ -3709,7 +3747,7 @@ def build_html_dashboard(
       if (meta) {{
         meta.innerHTML += '<div class="muted" style="margin-top:3px" id="measuredLoadStatus">Loading measured series…</div>';
       }}
-      ensureMeasuredSeries().then(() => {{
+      ensureMeasuredSeriesForRows(rows, sel).then(() => {{
         if (window._measuredSelectToken !== token) return;
         const status = document.getElementById('measuredLoadStatus');
         if (status) status.remove();
@@ -3719,13 +3757,14 @@ def build_html_dashboard(
         applyMeasuredTestBands(chunkTests);
       }}).catch((err) => {{
         if (window._measuredSelectToken !== token) return;
+        const msg = (err && err.message) ? err.message : String(err);
         const status = document.getElementById('measuredLoadStatus');
         if (status) {{
           status.style.color = '#b42318';
-          status.textContent = 'Failed to load ' + measuredSeriesUrl + ': ' + (err && err.message ? err.message : err);
+          status.textContent = 'Failed to load measured series: ' + msg;
         }} else if (meta) {{
-          meta.innerHTML += '<div class="muted" style="margin-top:3px;color:#b42318">Failed to load ' +
-            escapeHtml(measuredSeriesUrl) + '</div>';
+          meta.innerHTML += '<div class="muted" style="margin-top:3px;color:#b42318">Failed to load measured series: ' +
+            escapeHtml(msg) + '</div>';
         }}
       }});
     }}

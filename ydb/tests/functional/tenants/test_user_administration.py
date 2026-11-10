@@ -196,6 +196,18 @@ class YDB:
             ydb.ModifyPermissionsSettings().clear_permissions())
 
 
+@contextmanager
+def session_with_sync_cleanup(pool):
+    with pool.checkout() as session:
+        try:
+            yield session
+        finally:
+            # Pool.stop() deletes sessions asynchronously. Finish deletion here
+            # so no deletion callbacks outlive fixture teardown.
+            if session.initialized():
+                session.delete()
+
+
 @pytest.fixture
 def prepared_database(ydb_endpoint, builtin_users, cluster_admin_login):
     @contextmanager
@@ -219,7 +231,7 @@ def prepared_database(ydb_endpoint, builtin_users, cluster_admin_login):
         with ydb.Driver(db.create_driver_config(credentials)) as driver:
             driver.wait()
             with ydb.SessionPool(driver) as pool:
-                with pool.checkout() as session:
+                with session_with_sync_cleanup(pool) as session:
                     try:
                         if root_db:
                             db.create_user(session, users.cluster_admin)
@@ -265,193 +277,155 @@ def prepared_tenant_db(prepared_database, ydb_database_module_scope):
         yield db
 
 
+@contextmanager
+def expect_access(allowed):
+    if allowed:
+        yield
+    else:
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            yield
+        assert exc_info.type is ydb.issues.Unauthorized
+        assert 'Access denied' in exc_info.value.message
+
+
+@pytest.mark.parametrize('subject_permissions', POSSIBLE_PERMISSIONS_SETS,
+                         ids=['no_permissions', 'connect_permissions', 'alter_permissions'])
+@pytest.mark.parametrize('subject', [CLUSTER_ADMIN, DB_ADMIN, ORDINARY_USER])
 class TestUserAdministration:
-    def set_db_owner(self, root_db, current_db, owner):
-        root_admin_creds = root_db.get_user_creds(root_db.builtin_users.root)
-        driver_config = current_db.create_driver_config(root_admin_creds)
-        with ydb.Driver(driver_config) as driver:
-            driver.wait()
-            YDB.change_db_owner(driver, owner)
+    @pytest.fixture(params=[True, False], ids=['local', 'builtin'])
+    def local_domain(self, request):
+        return request.param
 
-    def set_db_subject_permissions(self, root_db, current_db, subject_login, subject_permissions):
-        root_admin_creds = root_db.get_user_creds(root_db.builtin_users.root)
-        driver_config = current_db.create_driver_config(root_admin_creds)
-        with ydb.Driver(driver_config) as driver:
-            driver.wait()
-            YDB.change_db_permissions(driver, subject_login, subject_permissions)
+    @pytest.fixture(params=['root', 'tenant'])
+    def current_db(self, request, prepared_root_db):
+        if request.param == 'root':
+            return prepared_root_db
+        return request.getfixturevalue('prepared_tenant_db')
 
-    def user_administration_action_wrapper(self, expected_result, func, *args):
-        if not expected_result:
-            with pytest.raises(ydb.issues.Error) as exc_info:
-                func(*args)
-
-            assert exc_info.type is ydb.issues.Unauthorized
-            assert 'Access denied' in exc_info.value.message
-        else:
-            func(*args)
-
-    def check_users_managment(self, auth_db, current_db, subject_login, test_params):
-        expected_result = False
-        if test_params['enable_strict_user_management']:
-            if test_params['subject'] == CLUSTER_ADMIN:
-                expected_result = True
-            elif test_params['subject'] == DB_ADMIN:
-                if test_params['enable_database_admin']:
-                    expected_result = True
-
-        else:
-            permissions = test_params['subject_permissions']
-            if DB_ALTER_SCHEMA_PERMISSION in permissions and DB_CONNECT_PERMISSION in permissions:
-                expected_result = True
-            elif test_params['subject'] == DB_ADMIN:
-                expected_result = True
-
-        subject_creds = auth_db.get_user_creds(subject_login)
-        driver_config = current_db.create_driver_config(subject_creds)
-        with ydb.Driver(driver_config) as driver:
-            driver.wait()
-            pool = ydb.SessionPool(driver)
-            with pool.checkout() as session:
-                self.user_administration_action_wrapper(expected_result, YDB.create_user, session, current_db.users.new_user)
-                self.user_administration_action_wrapper(expected_result, YDB.modify_user, session, current_db.users.existing_user)
-                self.user_administration_action_wrapper(expected_result, YDB.drop_user, session, current_db.users.existing_user)
-
-    def check_local_user_can_change_own_password(self, auth_db, subject_login):
-        expected_result = True
-
-        subject_creds = auth_db.get_user_creds(subject_login)
-        driver_config = auth_db.create_driver_config(subject_creds)
-        with ydb.Driver(driver_config) as driver:
-            driver.wait()
-            pool = ydb.SessionPool(driver)
-            with pool.checkout() as session:
-                self.user_administration_action_wrapper(expected_result, YDB.modify_user, session, subject_login)
-
-        new_subject_creds = auth_db.get_user_creds(subject_login, 'passwd1235')
-        driver_config = auth_db.create_driver_config(new_subject_creds)
-        with ydb.Driver(driver_config) as driver:
-            driver.wait()
-            pool = ydb.SessionPool(driver)
-            with pool.checkout() as session:
-                self.user_administration_action_wrapper(expected_result, YDB.modify_user, session, subject_login, True)
-
-    def check_changing_db_owner(self, auth_db, current_db, subject_login, test_params):
-        expected_result = False
-        if test_params['subject'] == CLUSTER_ADMIN:
-            expected_result = True
-        elif test_params['subject'] == DB_ADMIN:
-            if current_db.database_path == '/Root':
-                expected_result = True
-            elif not (test_params['enable_strict_user_management'] and test_params['enable_database_admin']):
-                expected_result = True
-
-        subject_creds = auth_db.get_user_creds(subject_login)
-        driver_config = current_db.create_driver_config(subject_creds)
-        with ydb.Driver(driver_config) as driver:
-            driver.wait()
-            self.user_administration_action_wrapper(expected_result, YDB.change_db_owner, driver, current_db.users.reserve_admin)
-
-    def check_changing_db_owner_group(self, auth_db, current_db, subject_login, test_params):
-        expected_result = False
-        if test_params['subject'] == CLUSTER_ADMIN:
-            expected_result = True
-        elif subject_login == current_db.users.db_admin:
-            if current_db.database_path == '/Root':
-                expected_result = True
-            elif not (test_params['enable_strict_user_management'] and test_params['enable_database_admin']):
-                expected_result = True
-
-        subject_creds = auth_db.get_user_creds(subject_login)
-        driver_config = current_db.create_driver_config(subject_creds)
-        with ydb.Driver(driver_config) as driver:
-            driver.wait()
-            self.user_administration_action_wrapper(expected_result, YDB.change_db_owner, driver, current_db.users.ordinary_user)
-
-    def check_modification_db_owner_group(self, auth_db, current_db, subject_login, test_params):
-        expected_result = False
-        if test_params['enable_strict_user_management']:
-            if test_params['subject'] == CLUSTER_ADMIN:
-                expected_result = True
-
-        else:
-            permissions = test_params['subject_permissions']
-            if DB_ALTER_SCHEMA_PERMISSION in permissions and DB_CONNECT_PERMISSION in permissions:
-                expected_result = True
-            elif subject_login == current_db.users.db_admin:
-                expected_result = True
-
-        subject_creds = auth_db.get_user_creds(subject_login)
-        driver_config = current_db.create_driver_config(subject_creds)
-        with ydb.Driver(driver_config) as driver:
-            driver.wait()
-            pool = ydb.SessionPool(driver)
-            with pool.checkout() as session:
-                self.user_administration_action_wrapper(expected_result, YDB.add_user_to_group, session, current_db.groups.admins,
-                                                        current_db.users.ordinary_user)
-                self.user_administration_action_wrapper(expected_result, YDB.delete_user_from_group, session, current_db.groups.admins,
-                                                        current_db.users.db_admin)
-                self.user_administration_action_wrapper(expected_result, YDB.delete_user_from_group, session, current_db.groups.admins,
-                                                        current_db.users.reserve_admin)
-                self.user_administration_action_wrapper(expected_result, YDB.add_user_to_group, session, current_db.groups.admins,
-                                                        current_db.groups.ordinary)
-                self.user_administration_action_wrapper(expected_result, YDB.delete_user_from_group, session, current_db.groups.admins,
-                                                        current_db.groups.subadmins)
-                self.user_administration_action_wrapper(expected_result, YDB.rename_group, session, current_db.groups.admins,
-                                                        current_db.groups.renamed_admins)
-                if expected_result:
-                    self.user_administration_action_wrapper(expected_result, YDB.rename_group, session, current_db.groups.renamed_admins,
-                                                            current_db.groups.admins)
-                if not expected_result:
-                    self.user_administration_action_wrapper(expected_result, YDB.drop_group, session, current_db.groups.admins)
-
-    def proceed_users_management_test(self, root_db, current_db, subject, local_domain, subject_permissions, test_params):
+    @pytest.fixture
+    def subject_user(self, current_db, prepared_root_db, subject, local_domain):
         users = current_db.users if local_domain else current_db.builtin_users
-        subject_login = getattr(users, subject)
-        db_owner = users.db_admin
-        self.set_db_owner(root_db, current_db, db_owner)
-        self.set_db_subject_permissions(root_db, current_db, subject_login, subject_permissions)
+        return SimpleNamespace(
+            name=getattr(users, subject),
+            auth_db=prepared_root_db if subject == CLUSTER_ADMIN else current_db,
+        )
 
-        subject_auth_db = root_db if subject == CLUSTER_ADMIN else current_db
-        self.check_users_managment(subject_auth_db, current_db, subject_login, test_params)
-
-        if local_domain:
-            self.check_local_user_can_change_own_password(subject_auth_db, subject_login)
-
-    def proceed_db_owners_modification_test(self, root_db, current_db, subject, local_domain, subject_permissions, test_params):
+    @pytest.fixture(params=['user'])
+    def database_owner(self, request, current_db, local_domain):
+        if request.param == 'group':
+            return current_db.groups.admins
         users = current_db.users if local_domain else current_db.builtin_users
-        subject_login = getattr(users, subject)
-        db_owner = users.db_admin
-        self.set_db_owner(root_db, current_db, db_owner)
-        self.set_db_subject_permissions(root_db, current_db, subject_login, subject_permissions)
+        return users.db_admin
 
-        subject_auth_db = root_db if subject == CLUSTER_ADMIN else current_db
-        self.check_changing_db_owner(subject_auth_db, current_db, subject_login, test_params)
+    @pytest.fixture
+    def configured_db(self, current_db, database_owner, subject_user, subject_permissions, ydb_client):
+        credentials = current_db.get_user_creds(current_db.builtin_users.root)
+        driver = ydb_client(current_db.database_path, credentials=credentials)
+        driver.wait()
+        YDB.change_db_owner(driver, database_owner)
+        YDB.change_db_permissions(driver, subject_user.name, subject_permissions)
+        return current_db
 
-        if local_domain:
-            self.set_db_owner(root_db, current_db, current_db.groups.admins)
-            self.check_changing_db_owner_group(subject_auth_db, current_db, subject_login, test_params)
+    @pytest.fixture
+    def subject_driver(self, configured_db, subject_user, ydb_client):
+        credentials = subject_user.auth_db.get_user_creds(subject_user.name)
+        driver = ydb_client(configured_db.database_path, credentials=credentials)
+        driver.wait()
+        return driver
 
-        self.set_db_owner(root_db, current_db, current_db.groups.admins)
-        self.check_modification_db_owner_group(subject_auth_db, current_db, subject_login, test_params)
+    @pytest.fixture
+    def subject_session(self, subject_driver):
+        with ydb.SessionPool(subject_driver) as pool:
+            with session_with_sync_cleanup(pool) as session:
+                yield session
 
-    @pytest.mark.parametrize('subject_permissions', POSSIBLE_PERMISSIONS_SETS, ids=['no_permissions', 'connect_permissions', 'alter_permissions'])
-    @pytest.mark.parametrize('subject', [CLUSTER_ADMIN, DB_ADMIN, ORDINARY_USER])
-    @pytest.mark.parametrize('local_domain', [True, False], ids=['local', 'builtin'])
-    def test_root_db(self, request, prepared_root_db, subject, local_domain, subject_permissions):
-        self.proceed_users_management_test(prepared_root_db, prepared_root_db, subject, local_domain, subject_permissions,
-                                           request.node.callspec.params)
-        self.proceed_db_owners_modification_test(prepared_root_db, prepared_root_db, subject, local_domain, subject_permissions,
-                                                 request.node.callspec.params)
+    @pytest.fixture
+    def login_session(self, configured_db, subject_user, ydb_client):
+        @contextmanager
+        def connect(password='passwd1234'):
+            # Cluster administrators change their own password in /Root,
+            # even when the target of the administration test is a tenant.
+            db = subject_user.auth_db
+            credentials = db.get_user_creds(subject_user.name, password)
+            driver = ydb_client(db.database_path, credentials=credentials)
+            driver.wait()
+            with ydb.SessionPool(driver) as pool:
+                with session_with_sync_cleanup(pool) as session:
+                    yield session
 
-    @pytest.mark.parametrize('subject_permissions', POSSIBLE_PERMISSIONS_SETS, ids=['no_permissions', 'connect_permissions', 'alter_permissions'])
-    @pytest.mark.parametrize('subject', [CLUSTER_ADMIN, DB_ADMIN, ORDINARY_USER])
-    @pytest.mark.parametrize('local_domain', [True, False], ids=['local', 'builtin'])
-    def test_tenant_db(self, request, prepared_root_db, prepared_tenant_db, subject, local_domain, subject_permissions):
-        self.proceed_users_management_test(prepared_root_db, prepared_tenant_db, subject, local_domain, subject_permissions,
-                                           request.node.callspec.params)
+        return connect
 
-        self.proceed_db_owners_modification_test(prepared_root_db, prepared_tenant_db, subject, local_domain, subject_permissions,
-                                                 request.node.callspec.params)
+    @pytest.fixture
+    def can_manage_users(self, subject, subject_permissions, enable_strict_user_management, enable_database_admin):
+        if enable_strict_user_management:
+            return subject == CLUSTER_ADMIN or (subject == DB_ADMIN and enable_database_admin)
+        return subject == DB_ADMIN or (
+            DB_CONNECT_PERMISSION in subject_permissions and DB_ALTER_SCHEMA_PERMISSION in subject_permissions
+        )
+
+    @pytest.fixture
+    def can_change_owner(self, subject, current_db, ydb_root, enable_strict_user_management, enable_database_admin):
+        if subject == CLUSTER_ADMIN:
+            return True
+        return subject == DB_ADMIN and (
+            current_db.database_path == ydb_root
+            or not (enable_strict_user_management and enable_database_admin)
+        )
+
+    @pytest.fixture
+    def can_modify_owner_group(self, subject, local_domain, subject_permissions, enable_strict_user_management):
+        if enable_strict_user_management:
+            return subject == CLUSTER_ADMIN
+        return (subject == DB_ADMIN and local_domain) or (
+            DB_CONNECT_PERMISSION in subject_permissions and DB_ALTER_SCHEMA_PERMISSION in subject_permissions
+        )
+
+    def test_manage_users(self, configured_db, subject_session, can_manage_users):
+        users = configured_db.users
+        with expect_access(can_manage_users):
+            YDB.create_user(subject_session, users.new_user)
+        with expect_access(can_manage_users):
+            YDB.modify_user(subject_session, users.existing_user)
+        with expect_access(can_manage_users):
+            YDB.drop_user(subject_session, users.existing_user)
+
+    @pytest.mark.parametrize('local_domain', [True], ids=['local'])
+    def test_change_own_password(self, subject_user, login_session):
+        with login_session() as session:
+            YDB.modify_user(session, subject_user.name)
+        with login_session(password='passwd1235') as session:
+            YDB.modify_user(session, subject_user.name, reset_password=True)
+
+    def test_change_database_owner(self, configured_db, subject_driver, can_change_owner):
+        with expect_access(can_change_owner):
+            YDB.change_db_owner(subject_driver, configured_db.users.reserve_admin)
+
+    @pytest.mark.parametrize('local_domain', [True], ids=['local'])
+    @pytest.mark.parametrize('database_owner', ['group'], indirect=True)
+    def test_change_database_owner_from_group(self, configured_db, subject_driver, can_change_owner):
+        with expect_access(can_change_owner):
+            YDB.change_db_owner(subject_driver, configured_db.users.ordinary_user)
+
+    @pytest.mark.parametrize('database_owner', ['group'], indirect=True)
+    def test_modify_database_owner_group(self, configured_db, subject_session, can_modify_owner_group):
+        users, groups = configured_db.users, configured_db.groups
+        with expect_access(can_modify_owner_group):
+            YDB.add_user_to_group(subject_session, groups.admins, users.ordinary_user)
+        with expect_access(can_modify_owner_group):
+            YDB.delete_user_from_group(subject_session, groups.admins, users.db_admin)
+        with expect_access(can_modify_owner_group):
+            YDB.delete_user_from_group(subject_session, groups.admins, users.reserve_admin)
+        with expect_access(can_modify_owner_group):
+            YDB.add_user_to_group(subject_session, groups.admins, groups.ordinary)
+        with expect_access(can_modify_owner_group):
+            YDB.delete_user_from_group(subject_session, groups.admins, groups.subadmins)
+        with expect_access(can_modify_owner_group):
+            YDB.rename_group(subject_session, groups.admins, groups.renamed_admins)
+        if can_modify_owner_group:
+            YDB.rename_group(subject_session, groups.renamed_admins, groups.admins)
+        else:
+            with expect_access(can_modify_owner_group):
+                YDB.drop_group(subject_session, groups.admins)
 
 
 @pytest.mark.parametrize('enforce_user_token_requirement', [True], indirect=True)
@@ -468,7 +442,7 @@ class TestTenantDatabaseAdmin:
         with ydb.Driver(db.create_driver_config(credentials)) as driver:
             driver.wait()
             with ydb.SessionPool(driver) as pool:
-                with pool.checkout() as session:
+                with session_with_sync_cleanup(pool) as session:
                     try:
                         session.execute_scheme(f"create user {db.users.blocked_admin} password 'passwd1234' nologin")
                         YDB.create_user(session, db.users.password_admin)
@@ -504,7 +478,7 @@ class TestTenantDatabaseAdmin:
         def connect(username, password='passwd1234'):
             driver = tenant_user_driver(username, password)
             with ydb.SessionPool(driver) as pool:
-                with pool.checkout() as session:
+                with session_with_sync_cleanup(pool) as session:
                     yield session
 
         return connect

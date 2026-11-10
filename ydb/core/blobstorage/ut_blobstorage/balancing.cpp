@@ -463,6 +463,94 @@ struct TTwoPartsOnOneNodeTest {
 
 Y_UNIT_TEST_SUITE(VDiskBalancing) {
 
+    Y_UNIT_TEST(SenderSkipsUnreadableHandoffPart) {
+        // PDisk answers a read with bad sectors as OK with gaps. The balancing sender must not use such data:
+        // TBufferWithGaps::ToString() aborts the process when the buffer has gaps.
+        std::optional<TDiskPart> unreadable;
+        ui32 unreadableNodeId = 0;
+        ui32 unreadableReadsServed = 0;
+        THashSet<TActorId> statusRequesters;
+
+        TEnvironmentSetup env({
+            .NodeCount = 9,
+            .VDiskReplPausedAtStart = true, // only balancing may move the handoff part to its main replica
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+            .ConfigPreprocessor = [](ui32, TNodeWardenConfig& config) {
+                auto* balancing = config.BlobStorageConfig.MutableVDiskBalancingConfig();
+                balancing->SetEnableSend(true);
+                balancing->SetSecondsToSleepIfNothingToDo(1);
+            },
+        });
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvBlobStorage::EvVStatus) {
+                statusRequesters.insert(event->Sender);
+            } else if (event->GetTypeRewrite() == TEvBlobStorage::EvVStatusResult
+                    && statusRequesters.contains(event->Recipient)) {
+                // repl is paused, so report every VDisk as replicated to let balancing run
+                NKikimrBlobStorage::TEvVStatusResult& record = event->Get<TEvBlobStorage::TEvVStatusResult>()->Record;
+                record.SetReplicated(true);
+            } else if (event->GetTypeRewrite() == NPDisk::TEvChunkReadResult::EventType && unreadable
+                    && event->Recipient.NodeId() == unreadableNodeId) {
+                auto *msg = event->Get<NPDisk::TEvChunkReadResult>();
+                if (msg->Status == NKikimrProto::OK && msg->ChunkIdx == unreadable->ChunkIdx
+                        && msg->Offset == unreadable->Offset) {
+                    msg->Data.AddGap(msg->Offset, msg->Offset + msg->Data.Size());
+                    ++unreadableReadsServed;
+                }
+            }
+            return true;
+        };
+
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Minutes(1));
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const auto info = env.GetGroupInfo(groups.front());
+
+        // A huge blob whose first main replica is not on the node that writes it.
+        const TString data = GenRandomBuffer(521_KB);
+        TLogoBlobID id;
+        TBlobStorageGroupInfo::TOrderNums orderNums;
+        for (ui32 step = 1; !id; ++step) {
+            const TLogoBlobID candidate(1, 1, step, 0, data.size(), 0);
+            orderNums.clear();
+            info->GetTopology().PickSubgroup(candidate.Hash(), orderNums);
+            if (info->GetActorId(orderNums[0]).NodeId() != env.Settings.ControllerNodeId) {
+                id = candidate;
+            }
+        }
+
+        // Write the blob while the node of its first main replica is down, so that this part lands on a handoff.
+        const ui32 mainNodeId = info->GetActorId(orderNums[0]).NodeId();
+        env.StopNode(mainNodeId);
+        env.PutBlob(info->GroupID.GetRawId(), id, data);
+        env.Sim(TDuration::Seconds(10));
+
+        for (ui32 i = info->Type.TotalPartCount(); i < orderNums.size(); ++i) {
+            const TActorId actorId = info->GetActorId(orderNums[i]);
+            if (actorId.NodeId() == mainNodeId) {
+                continue;
+            }
+            const auto layout = env.SyncQuery<TEvBlobStorage::TEvCaptureVDiskLayoutResult,
+                TEvBlobStorage::TEvCaptureVDiskLayout>(actorId);
+            for (const auto& item : layout->Layout) {
+                if (item.BlobId == id
+                        && item.RecordType == TEvBlobStorage::TEvCaptureVDiskLayoutResult::ERecordType::HugeBlob) {
+                    UNIT_ASSERT(!unreadable);
+                    unreadable = item.Location;
+                    unreadableNodeId = actorId.NodeId();
+                }
+            }
+        }
+        UNIT_ASSERT_C(unreadable, "the part was not written to a handoff");
+
+        // Bring the main replica back; balancing on the handoff reads the part to send it there.
+        env.StartNode(mainNodeId);
+        env.Sim(TDuration::Minutes(2));
+        UNIT_ASSERT_C(unreadableReadsServed, "balancing never read the handoff part");
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(TestStopOneNode_Block42) {
         TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(100)}.RunTest();
     }

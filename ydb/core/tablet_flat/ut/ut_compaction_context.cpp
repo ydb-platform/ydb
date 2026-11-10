@@ -223,6 +223,7 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(parts.size(), 6);
         for (const auto& part : parts) {
+            UNIT_ASSERT_VALUES_EQUAL(part.HasUnknownPlacement, part.Label() == unloadedArchive->Label);
             if (part.Label() == coldPart->Label) {
                 UNIT_ASSERT_VALUES_EQUAL(part.TierId, 42);
                 UNIT_ASSERT_VALUES_EQUAL(part.Level, 2);
@@ -302,7 +303,7 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
         UNIT_ASSERT(context->IsCurrent(inventory));
     }
 
-    Y_UNIT_TEST(DefaultUnloadedRemainingSourcesKeepCapAndGarbageConservative) {
+    Y_UNIT_TEST(UnloadedUnknownPlacementKeepsCapAndGarbageConservative) {
         TFixture f;
         const auto unloaded = f.Cold(10);
         auto policy = NLocalDb::CreateDefaultUserTablePolicy();
@@ -317,17 +318,18 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
         UNIT_ASSERT_VALUES_EQUAL(context->Remaining.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(context->Remaining.front().TierId, 0);
         UNIT_ASSERT_VALUES_EQUAL(context->Remaining.front().Level, 255);
+        UNIT_ASSERT(context->Remaining.front().HasUnknownPlacement);
 
         TCompactionTierCap exact(f.Layout.RowScheme()->Keys, context->Remaining, {0, 42, 7});
         TCompactionTierCap parallel(f.Layout.RowScheme()->Keys, context->Remaining, {0, 42, 7}, true);
         const auto key = TCell::Make(ui32(20));
-        // The default source is not an intermediate tier. A parallel scan must
-        // still account for another operation relocating any of its unknown keys.
-        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 0, 7), 7);
+        // Its logical tier is default, but the conflicting recorded placement
+        // cannot prove that the key is absent from an intermediate tier.
+        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 0, 7), 42);
         UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 0, 7), 42);
         exact.Reset();
         parallel.Reset();
-        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 7, 0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 7, 0), 42);
         UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 7, 0), 42);
 
         auto garbage = MakeCompactionGarbageConf(f.Layout.RowScheme()->Keys, context->Remaining, false);
@@ -335,6 +337,59 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
         UNIT_ASSERT(garbage.UnderlayMask);
         UNIT_ASSERT(Has(*garbage.UnderlayMask, 0));
         UNIT_ASSERT(Has(*garbage.UnderlayMask, Max<ui32>()));
+    }
+
+    Y_UNIT_TEST(DefaultUnloadedRemainingSourcesDoNotBlockExactTierJumps) {
+        TFixture f;
+        const auto unloaded = f.Cold(10);
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        UNIT_ASSERT(policy->Generations.size() >= 3);
+        policy->Generations[1].TierId = 42;
+        policy->Generations[2].TierId = 7;
+        const TVector<TIntrusiveConstPtr<TColdPart>> coldParts{unloaded};
+
+        for (ui32 level : {ui32(255), ui32(1)}) {
+            TCompactionState state;
+            state.PartLevels[unloaded->Label] = level;
+            const auto inventory = DescribeCompactionParts({}, coldParts, state, *policy);
+            UNIT_ASSERT_VALUES_EQUAL(inventory.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(inventory.front().TierId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(inventory.front().Level, level);
+            UNIT_ASSERT(!inventory.front().HasUnknownPlacement);
+
+            TCompactionTierCap exact(f.Layout.RowScheme()->Keys, inventory, {0, 42, 7});
+            TCompactionTierCap parallel(f.Layout.RowScheme()->Keys, inventory, {0, 42, 7}, true);
+            const auto key = TCell::Make(ui32(20));
+            UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 0, 7), 7);
+            UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 0, 7), 42);
+            exact.Reset();
+            parallel.Reset();
+            UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 7, 0), 0);
+            UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 7, 0), 42);
+        }
+    }
+
+    Y_UNIT_TEST(UnloadedPlacementUncertaintyInvalidatesContext) {
+        TFixture f;
+        const auto unloaded = f.Cold(10);
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        UNIT_ASSERT(policy->Generations.size() >= 2);
+        policy->Generations[1].TierId = 42;
+        TCompactionState state;
+        state.PartLevels[unloaded->Label] = 2;
+        const TVector<TIntrusiveConstPtr<TColdPart>> coldParts{unloaded};
+        const auto inventory = DescribeCompactionParts({}, coldParts, state, *policy);
+        auto context = MakeContext(inventory, {});
+        UNIT_ASSERT(context->IsCurrent(inventory));
+        UNIT_ASSERT(inventory.front().HasUnknownPlacement);
+
+        state.PartLevels[unloaded->Label] = 255;
+        const auto updated = DescribeCompactionParts({}, coldParts, state, *policy);
+        UNIT_ASSERT_VALUES_EQUAL(updated.front().Level, inventory.front().Level);
+        UNIT_ASSERT_VALUES_EQUAL(updated.front().TierId, inventory.front().TierId);
+        UNIT_ASSERT_VALUES_EQUAL(updated.front().ColdPart.Get(), inventory.front().ColdPart.Get());
+        UNIT_ASSERT(!updated.front().HasUnknownPlacement);
+        UNIT_ASSERT(!context->IsCurrent(updated));
     }
 
     Y_UNIT_TEST(ExtraSourcesExtendBothIntervalBounds) {
@@ -581,6 +636,64 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
         UNIT_ASSERT(checkedNegative);
     }
 
+    Y_UNIT_TEST(PartBloomChecksRespectAvailableCellsAndExplicitLimit) {
+        NTest::TLayoutCook layout;
+        layout.Col(0, 0, NScheme::NTypeIds::Uint32)
+            .Col(0, 1, NScheme::NTypeIds::Uint32)
+            .Col(0, 8, NScheme::NTypeIds::Uint32)
+            .Key({0, 1});
+        NPage::TConf conf;
+        conf.ByKeyFilterPrefixes.push_back({1, 0.000001});
+        conf.ByKeyFilterPrefixes.push_back({2, 0.000001});
+        const auto part = NTest::TPartCook(layout, conf).AddN(ui32(10), ui32(100), ui32(1))
+            .Finish().ToPartView();
+        UNIT_ASSERT_VALUES_EQUAL(part->ByKeyPrefixes.size(), 2);
+        const auto& [shortLength, shortBloom] = part->ByKeyPrefixes.front();
+        const auto& [fullLength, fullBloom] = part->ByKeyPrefixes.back();
+        UNIT_ASSERT_VALUES_EQUAL(shortLength, 1);
+        UNIT_ASSERT_VALUES_EQUAL(fullLength, 2);
+        UNIT_ASSERT(shortBloom);
+        UNIT_ASSERT(fullBloom);
+
+        const TCell storedKey[] = {TCell::Make(ui32(10)), TCell::Make(ui32(100))};
+        const NBloom::TPrefix stored(storedKey);
+        UNIT_ASSERT_VALUES_EQUAL(stored.Size(), 2);
+        UNIT_ASSERT(part->MightHaveKeyPrefix(stored));
+        const NBloom::TPrefix shortStored({storedKey, 1});
+        UNIT_ASSERT_VALUES_EQUAL(shortStored.Size(), 1);
+        // The full-key bloom cannot be queried with just one key cell.
+        UNIT_ASSERT(part->MightHaveKeyPrefix(shortStored));
+
+        bool checkedShortNegative = false;
+        for (ui32 value = 11; value < 1000; ++value) {
+            const auto cell = TCell::Make(value);
+            const NBloom::TPrefix prefix({&cell, 1});
+            if (!shortBloom->MightHave(prefix.Get(1))) {
+                UNIT_ASSERT(!part->MightHaveKeyPrefix(prefix));
+                UNIT_ASSERT(part->MightHaveKeyPrefix(prefix, 0));
+                checkedShortNegative = true;
+                break;
+            }
+        }
+        UNIT_ASSERT(checkedShortNegative);
+
+        bool checkedFullNegative = false;
+        for (ui32 value = 101; value < 1000; ++value) {
+            const TCell key[] = {TCell::Make(ui32(10)), TCell::Make(value)};
+            const NBloom::TPrefix prefix(key);
+            if (!fullBloom->MightHave(prefix.Get(2))) {
+                // The first key cell is present, so only the full-key bloom
+                // can reject this key unless its length exceeds the limit.
+                UNIT_ASSERT(!part->MightHaveKeyPrefix(prefix));
+                UNIT_ASSERT(part->MightHaveKeyPrefix(prefix, 1));
+                UNIT_ASSERT(part->MightHaveKeyPrefix(prefix, 0));
+                checkedFullNegative = true;
+                break;
+            }
+        }
+        UNIT_ASSERT(checkedFullNegative);
+    }
+
     Y_UNIT_TEST(PrefixBloomPositiveRemainsConservative) {
         NTest::TLayoutCook layout;
         layout.Col(0, 0, NScheme::NTypeIds::Uint32)
@@ -629,6 +742,21 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
         UNIT_ASSERT(!Has(*mask, 10));
         UNIT_ASSERT(Has(*mask, 20));
         UNIT_ASSERT(!Has(*mask, 30));
+    }
+
+    Y_UNIT_TEST(UnknownUnloadedPlacementIsIncludedInEveryTierAndGenerationMask) {
+        TFixture f;
+        const auto unloaded = f.Cold(10);
+        const TVector<TCompactionPartInfo> remaining{{unloaded, 255, 0, true}};
+        for (ui32 tierId : {ui32(0), ui32(42), ui32(7)}) {
+            auto mask = MakeCompactionKeySpace(f.Layout.RowScheme()->Keys, remaining, tierId, 2);
+            UNIT_ASSERT(Has(*mask, 0));
+            UNIT_ASSERT(Has(*mask, Max<ui32>()));
+        }
+
+        const TVector<TCompactionPartInfo> defaultRemaining{{unloaded, 255, 0}};
+        auto mask = MakeCompactionKeySpace(f.Layout.RowScheme()->Keys, defaultRemaining, 42, 2);
+        UNIT_ASSERT(!Has(*mask, 20));
     }
 
     Y_UNIT_TEST(IndependentCursorsCanResetSeparately) {
@@ -682,6 +810,36 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
         UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 0, 9), 42);
         const auto absent = TCell::Make(ui32(30));
         UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&absent, 1}, 0, 9), 7);
+    }
+
+    Y_UNIT_TEST(CapChecksAllGenerationsInBothDirections) {
+        TFixture f;
+        const TVector<TCompactionPartInfo> remaining{
+            {f.Part(80, 1, 1), 1, 0}, {f.Part(70, 2, 2), 2, 0},
+            {f.Part(60, 10, 10), 3, 42}, {f.Part(50, 50, 50), 4, 42},
+            {f.Part(40, 30, 30), 5, 7}, {f.Part(30, 50, 50), 6, 7},
+            {f.Part(20, 70, 70), 7, 9}, {f.Part(10, 80, 80), 8, 9},
+        };
+        TCompactionTierCap cap(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7, 9});
+        struct TCase {
+            ui32 Key;
+            ui32 CoolingTier;
+            ui32 WarmingTier;
+        };
+        const TCase cases[] = {
+            {10, 42, 42},
+            {30, 7, 7},
+            // The same key in both intermediate tiers stops at the nearest one.
+            {50, 42, 7},
+            {90, 9, 0},
+        };
+        for (const auto& test : cases) {
+            const auto key = TCell::Make(test.Key);
+            cap.Reset();
+            UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 0, 9), test.CoolingTier);
+            cap.Reset();
+            UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 9, 0), test.WarmingTier);
+        }
     }
 
     Y_UNIT_TEST(ParallelCapCoversKeysThatAnotherCompactionMayRelocate) {

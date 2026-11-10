@@ -38,10 +38,11 @@ namespace {
     }
 
     TCompactionPartInfo::TCompactionPartInfo(TIntrusiveConstPtr<TColdPart> part,
-            ui32 level, ui32 tierId)
+            ui32 level, ui32 tierId, bool hasUnknownPlacement)
         : ColdPart(std::move(part))
         , Level(level)
         , TierId(tierId)
+        , HasUnknownPlacement(hasUnknownPlacement)
     {
         Y_ENSURE(ColdPart, "Missing unloaded compaction part");
         Y_ENSURE(level > 0, "Invalid compaction part level");
@@ -59,6 +60,7 @@ namespace {
 
     bool TCompactionPartInfo::SameState(const TCompactionPartInfo& other) const {
         return Level == other.Level && TierId == other.TierId
+            && HasUnknownPlacement == other.HasUnknownPlacement
             && Part.Part.Get() == other.Part.Part.Get()
             && Part.Screen.Get() == other.Part.Screen.Get()
             && Part.Slices.Get() == other.Part.Slices.Get()
@@ -97,8 +99,9 @@ namespace {
         }
         for (const auto& part : coldParts) {
             Y_ENSURE(part, "Missing unloaded compaction part");
-            const ui32 level = ResolveColdPartLevel(state.PartLevels.Value(part->Label, 255), policy);
-            result.emplace_back(part, level, 0);
+            const ui32 savedLevel = state.PartLevels.Value(part->Label, 255);
+            const ui32 level = ResolveColdPartLevel(savedLevel, policy);
+            result.emplace_back(part, level, 0, level != savedLevel);
         }
         return result;
     }

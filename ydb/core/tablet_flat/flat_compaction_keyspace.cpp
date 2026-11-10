@@ -18,9 +18,19 @@ namespace {
             : Keys(std::move(keys))
         {
             Y_ENSURE(Keys, "Compaction key space requires a key schema");
+            // Equal PG values may have different binary encodings. Only raw
+            // bloom prefixes before the first PG column can prove absence.
+            for (const auto& type : Keys->Types) {
+                if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    break;
+                }
+                ++BloomPrefixLimit;
+            }
             Parts.reserve(parts.size());
             for (const auto& part : parts) {
-                if ((!tierId || part.TierId == *tierId) && (!level || part.Level == *level)) {
+                if (part.HasUnknownPlacement ||
+                    ((!tierId || part.TierId == *tierId) && (!level || part.Level == *level)))
+                {
                     Y_ENSURE(bool(part.Part) != bool(part.ColdPart),
                         "Compaction key space requires exactly one part representation");
                     Parts.emplace_back(part);
@@ -64,21 +74,13 @@ namespace {
                     }
                 }
 
-                bool rejected = false;
-                for (auto it = part->ByKeyPrefixes.rbegin(); it != part->ByKeyPrefixes.rend(); ++it) {
-                    const auto& [length, bloom] = *it;
-                    if (!bloom || length == 0 || length > key.size()) {
-                        continue;
-                    }
-                    if (!prefix) {
-                        prefix.emplace(key);
-                    }
-                    if (!bloom->MightHave(prefix->Get(length))) {
-                        rejected = true;
-                        break;
-                    }
+                if (part->ByKeyPrefixes.empty() || BloomPrefixLimit == 0) {
+                    return true;
                 }
-                if (!rejected) {
+                if (!prefix) {
+                    prefix.emplace(key);
+                }
+                if (part->MightHaveKeyPrefix(*prefix, BloomPrefixLimit)) {
                     return true;
                 }
             }
@@ -96,6 +98,7 @@ namespace {
         };
 
         const TIntrusiveConstPtr<TKeyCellDefaults> Keys;
+        ui32 BloomPrefixLimit = 0;
         TVector<TPartCursor> Parts;
     };
 

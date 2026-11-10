@@ -4157,7 +4157,12 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
-            const ui32 level = levels.empty() ? logicResult.Changes.NewPartsLevel : levels.at(newPart->Label);
+            ui32 level = logicResult.Changes.NewPartsLevel;
+            if (!levels.empty()) {
+                const auto* partLevel = levels.FindPtr(newPart->Label);
+                Y_ENSURE(partLevel, "Compaction levels do not cover all output parts: missing level for part " << newPart->Label);
+                level = *partLevel;
+            }
             TPageCollectionProtoHelper::Snap(snap, newPart, tableId, level);
             if (!levels.empty()) {
                 snap->MutableBundles(snap->BundlesSize() - 1)->SetCompactionLevel(level);

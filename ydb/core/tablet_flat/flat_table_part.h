@@ -179,12 +179,16 @@ namespace NTable {
                 << Stat.Coded << "b " << Stat.Rows << "r}";
         }
 
-        bool MightHaveKeyPrefix(const NBloom::TPrefix& prefix) const
+        // Longer filters cannot prove absence from a shorter query prefix.
+        // The caller may further restrict which prefix lengths are safe to use.
+        bool MightHaveKeyPrefix(const NBloom::TPrefix& prefix,
+                ui32 maxPrefixLength = Max<ui32>()) const
         {
             // Check from the longest (most selective) prefix first
             for (auto it = ByKeyPrefixes.rbegin(); it != ByKeyPrefixes.rend(); ++it) {
                 const auto& [prefixLen, bloom] = *it;
-                if (bloom && prefixLen > 0) {
+                if (bloom && prefixLen > 0 && prefixLen <= prefix.Size()
+                        && prefixLen <= maxPrefixLength) {
                     if (!bloom->MightHave(prefix.Get(prefixLen))) {
                         return false;
                     }

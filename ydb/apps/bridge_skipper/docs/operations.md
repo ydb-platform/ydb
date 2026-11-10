@@ -99,6 +99,13 @@ null, duplicate or malformed Origin and duplicate Host are rejected. Forwarded
 headers do not establish trust. Every response sends `X-Frame-Options: DENY` and
 `Content-Security-Policy: frame-ancestors 'none'`.
 
+The default [failover timing budget](../README.md#failover-timing) uses an
+8-second evidence TTL and 2-second confirmation. Explicit settings retain their
+values; an old configuration with TTL 30, confirmation 20 and 10-second rounds
+continues to use that slower profile. Review timing overrides when upgrading.
+Partial overrides with longer RPC budgets or rounds may require an explicit
+larger TTL to satisfy validation; larger values also extend failover latency.
+
 ## Observe, Manual and Auto
 
 Open `/` or read `/api/state`. Confirm the cluster ID, acknowledged mode,

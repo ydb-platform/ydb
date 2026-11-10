@@ -110,6 +110,27 @@ Y_UNIT_TEST_SUITE(BridgeSkipperHealth) {
         UNIT_ASSERT(Classify("fallback_red").Parts.at("b") == EPart::FallbackRed);
     }
 
+    Y_UNIT_TEST(FreshFallbackFailureTakesPrecedenceOverRetainedSettledLoss) {
+        TScenario s;
+        s.Replies.SelfChecks.clear();
+        auto raw = Fixture("fallback_red");
+        raw.mutable_issue_log(1)->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name("a");
+        s.AddSelfCheck("b", ClassifySelfCheck(raw));
+        s.AddConnectivity("b", false, true);
+        s.Now = TMonotonic::Seconds(101);
+        s.AddConnectivity("b", false, true);
+        s.Replies.Connectivity.back().Report.BindingInProgress = true;
+        for (const ui64 now : {101u, 103u}) {
+            s.Now = TMonotonic::Seconds(now);
+            s.Replies.SelfChecks.back().SentAt = s.Now;
+            s.Replies.Connectivity.back().Report.SentAt = s.Now;
+            const auto evaluation = s.Evaluate();
+            AssertVerdict(evaluation, "a", EPileVerdict::Failed);
+            UNIT_ASSERT(evaluation.Piles.at("a").FallbackFailure);
+            UNIT_ASSERT(evaluation.Piles.at("a").NewestEvidenceSentAt == s.Now);
+        }
+    }
+
     Y_UNIT_TEST(ValidatedConnectivityKeepsQueriedEndpointForRouting) {
         for (const unsigned invalid : {0u, 1u, 2u, 3u}) {
             TScenario s;

@@ -446,8 +446,16 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
                 TResolvedBinding resolved;
                 resolved.Bytes = binding.Endpoint.size();
                 for (const auto& [name, value] : binding.Headers) {
-                    Y_ENSURE(!name.empty() && name.find_first_of("\r\n:") == TString::npos && value.find_first_of("\r\n") == TString::npos,
-                        "Invalid trusted transport header");
+                    Y_ENSURE(!name.empty() && name.find_first_of("\r\n:") == TString::npos, "Invalid trusted transport header");
+                    if (binding.Protocol == EProtocol::Grpc) {
+                        // gRPC asserts on invalid non-binary metadata when starting
+                        // the call. Reject it here without exposing credential bytes.
+                        Y_ENSURE(name.EndsWith("-bin") || std::all_of(value.begin(), value.end(), [](unsigned char c) {
+                            return c >= 0x20 && c <= 0x7e;
+                        }), "Invalid gRPC metadata value");
+                    } else {
+                        Y_ENSURE(value.find_first_of("\r\n") == TString::npos, "Invalid trusted transport header");
+                    }
                     resolved.Bytes += name.size() + value.size() + 4;
                 }
                 Y_ENSURE(resolved.Bytes <= Limits.MaxPayloadBytes, "Binding exceeds transport quota");

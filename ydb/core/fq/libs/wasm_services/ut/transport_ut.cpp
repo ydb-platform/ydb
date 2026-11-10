@@ -91,6 +91,65 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         env.Clean(call);
     }
 
+    Y_UNIT_TEST(GrpcMetadataRejectsInvalidValuesBeforeDispatch) {
+        TGrpcMock server;
+        TExecutorFixture fixture;
+        TBinding binding;
+        binding.Protocol = EProtocol::Grpc;
+        binding.Endpoint = server.Endpoint();
+        binding.GrpcCredentials = grpc::InsecureChannelCredentials();
+        for (unsigned byte = 0; byte <= 255; ++byte) {
+            if (byte >= 0x20 && byte <= 0x7e) {
+                continue;
+            }
+            binding.Headers = { { "authorization", TString("Bearer ") + char(byte) } };
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TTransport({ binding }, fixture.Executor), yexception, "Invalid gRPC metadata value");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(server.State->Count(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Executor->Stats().Operations, 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Executor->Stats().ReservedBytes, 0);
+    }
+
+    Y_UNIT_TEST(GrpcMetadataPreservesBinaryAndPrintableValues) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TString binary, printable;
+        for (unsigned byte = 0; byte <= 255; ++byte) {
+            binary.push_back(char(byte));
+            if (byte >= 0x20 && byte <= 0x7e) {
+                printable.push_back(char(byte));
+            }
+        }
+        auto bindings = Bindings(http, grpc);
+        bindings[1].Headers = { { "opaque-bin", binary }, { "printable", printable }, { "empty", "" } };
+        TEnv env(std::move(bindings));
+        const auto call = env.Start(0, 1);
+        UNIT_ASSERT(env.Runtime->Poll(call).Status == ECallStatus::Waiting);
+        auto request = grpc.State->Wait();
+        UNIT_ASSERT(HasHeader(*request, "opaque-bin", binary));
+        UNIT_ASSERT(HasHeader(*request, "printable", printable));
+        UNIT_ASSERT(HasHeader(*request, "empty", ""));
+        grpc.State->Reply(0, "answer", 0);
+        const auto result = env.Resume(call);
+        UNIT_ASSERT(result.Status == ECallStatus::Completed);
+        UNIT_ASSERT_VALUES_EQUAL(Value(ReplyBody(result, 0, 0)), "answer");
+        env.Clean(call);
+    }
+
+    Y_UNIT_TEST(HttpMetadataStillRejectsHeaderInjection) {
+        THttpMock server;
+        TExecutorFixture fixture;
+        TBinding binding;
+        binding.Endpoint = server.Url();
+        for (const auto* name : { "authorization", "opaque-bin" }) {
+            for (const auto* value : { "value\rinjected", "value\ninjected" }) {
+                binding.Headers = { { name, value } };
+                UNIT_ASSERT_EXCEPTION_CONTAINS(TTransport({ binding }, fixture.Executor), yexception, "Invalid trusted transport header");
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(server.State->Count(), 0);
+    }
+
     Y_UNIT_TEST(SequentialHttpThenGrpcUsesFirstResponse) {
         THttpMock http;
         TGrpcMock grpc;

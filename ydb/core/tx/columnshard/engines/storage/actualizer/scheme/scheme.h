@@ -12,6 +12,8 @@ class TSchemeActualizer: public IActualizer {
 private:
     const TSchemeCounters Counters;
     THashMap<TRWAddress, THashSet<ui64>> PortionsToActualizeScheme;
+    // handed to rewrite tasks: not finished until the rewrite replaces (or returns) them
+    THashSet<ui64> PortionsInFlight;
     std::shared_ptr<ISnapshotSchema> TargetSchema;
     const TInternalPathId PathId;
     const TVersionedIndex& VersionedIndex;
@@ -68,6 +70,10 @@ protected:
 
 public:
     void Refresh(const TAddExternalContext& externalContext);
+
+    bool IsFinished() const {
+        return PortionsInfo.empty() && PortionsInFlight.empty();
+    }
 
     TSchemeActualizer(const TInternalPathId pathId, const TVersionedIndex& versionedIndex);
 };

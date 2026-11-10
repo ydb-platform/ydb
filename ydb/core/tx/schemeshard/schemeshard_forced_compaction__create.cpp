@@ -87,9 +87,8 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         }
 
         if (tablePath.Base()->IsColumnTable()) {
-            if (settings.cascade()) {
-                return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, "Cascade compaction is not supported for column tables");
-            }
+            // Column tables have no index impl tables to cascade into; CASCADE instead makes the shards also
+            // rewrite every portion to the current schema (see TEvCompactTable::ActualizeSchema).
             // Only standalone column tables are supported. Tables that belong to a column store share
             // their shards, so forced compaction of a single such table is not supported (and enumerating
             // its owned shards below would fail).

@@ -26,6 +26,7 @@ std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualization
 }
 
 void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& addContext) {
+    PortionsInFlight.erase(info.GetPortionId());
     if (!TargetSchema) {
         TSchemeGlobalCounters::OnEmptyTargetSchema();
         return;
@@ -49,6 +50,7 @@ void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExterna
 }
 
 void TSchemeActualizer::DoRemovePortion(const ui64 portionId) {
+    PortionsInFlight.erase(portionId);
     auto it = PortionsInfo.find(portionId);
     if (it == PortionsInfo.end()) {
         TSchemeGlobalCounters::OnSkipPortionToRemove();
@@ -110,6 +112,7 @@ void TSchemeActualizer::DoExtractTasks(
                 case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:
                     break;
                 case TTieringProcessContext::EAddPortionResult::SUCCESS:
+                    PortionsInFlight.emplace(portion->GetPortionId());
                     portionsToRemove.emplace(portion->GetPortionId());
                     break;
             }
@@ -140,14 +143,15 @@ void TSchemeActualizer::DoExtractTasks(
 
 void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
     TargetSchema = VersionedIndex.GetLastCriticalSchema();
+    NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1 * PortionsInfo.size());
+    PortionsInfo.clear();
+    PortionsToActualizeScheme.clear();
+    PortionsInFlight.clear();
     if (!TargetSchema) {
+        // SchemeNeedActualization set back to false: the actualization stops
         TSchemeGlobalCounters::OnRefreshEmpty();
-        AFL_VERIFY(PortionsInfo.empty());
     } else {
         TSchemeGlobalCounters::OnRefreshValue();
-        NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1 * PortionsInfo.size());
-        PortionsInfo.clear();
-        PortionsToActualizeScheme.clear();
         for (auto&& i : externalContext.GetPortions()) {
             AddPortion(i.second, externalContext);
         }

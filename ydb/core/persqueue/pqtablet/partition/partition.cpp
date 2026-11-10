@@ -731,7 +731,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     AutopartitioningManager->CleanUp();
 
-    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob()) {
+    // HandlePendingRequests does not run retention while the database is out of space.
+    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob() || WaitingForSubDomainQuota()) {
         ProcessTxsAndUserActs(ctx);
     }
 }

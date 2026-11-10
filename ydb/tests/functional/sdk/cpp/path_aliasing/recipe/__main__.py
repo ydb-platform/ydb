@@ -29,7 +29,7 @@ def start(args):
     recipe = cmds.Recipe(cmds.EmptyArguments())
     work_dir = recipe.generate_data_path()
     configuration = KikimrConfigGenerator(
-        binary_paths=[yatest.common.binary_path("ydb/apps/ydbd/ydbd")],
+        binary_paths=[yatest.common.binary_path(os.getenv("YDB_DRIVER_BINARY", "ydb/apps/ydbd/ydbd"))],
         output_path=work_dir,
         domain_name="failover",
         nodes=1,

@@ -649,6 +649,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
     output = RBO.Optimize(Roots, rboCtx);
     traceOutput.Flush();
     AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
+    TransformCtx->CacheOutput = std::move(KqpCtx.CacheOutput);
     return TStatus::Ok;
 } catch (const std::exception& e) {
     ctx.AddError(ExceptionToIssue(e, ctx.GetPosition(input->Pos())));

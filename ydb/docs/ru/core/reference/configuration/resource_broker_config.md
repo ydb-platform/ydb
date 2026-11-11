@@ -1,4 +1,4 @@
-# resource_broker_config {#resource-broker-config}
+# resource_broker_config
 
 Секция `resource_broker_config` настраивает брокер ресурсов — [акторный сервис](../../concepts/glossary.md#actor-service), контролирующий потребление ресурсов [узла](../../concepts/glossary.md#node) {{ ydb-short-name }}, таких как:
 

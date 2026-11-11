@@ -63,7 +63,7 @@ For example, version `25.1` ships with new functionality disabled, and can be gr
 
 #### General scheme of working with branches {#release_branch_scheme}
 
-![General scheme of working with branches](_assets/major_release_branches.svg)
+![General scheme of working with branches](_assets/major_release_branches.svg){inline=false}
 
 The release cycle for an odd major release begins with the branching of a major branch from `main` by a member of the [{{ ydb-short-name }} team](https://github.com/orgs/ydb-platform/teams/engineering). The name of the release branch starts with the prefix `stable-`, followed by the major version with dots replaced by hyphens (for example, `stable-25-1`).
 

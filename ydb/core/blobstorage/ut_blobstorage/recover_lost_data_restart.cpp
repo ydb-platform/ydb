@@ -175,6 +175,99 @@ void TestRestart(ERestartPoint point) {
     UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetResult(0).GetStatus(), NKikimrProto::OK);
 }
 
+void TestRollingWipe(bool delaySelf) {
+    TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+        .NodeCount = 8,
+        .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+    });
+    env.CreateBoxAndPool(1, 1);
+    env.Sim(TDuration::Minutes(1));
+    const ui32 groupId = env.GetGroups().front();
+    const auto info = env.GetGroupInfo(groupId);
+    const TString data(1024, 'W');
+    TLogoBlobID blob(1, 1, 1, 0, data.size(), 0);
+    TBlobStorageGroupInfo::TOrderNums subgroup;
+    do {
+        blob = TLogoBlobID(1, 1, blob.Step() + 1, 0, data.size(), 0);
+        info->GetTopology().PickSubgroup(blob.Hash(), subgroup);
+    } while (info->GetActorId(subgroup.front()).NodeId() == env.Settings.ControllerNodeId);
+    const ui32 unavailableOrder = subgroup.front();
+    const TVDiskID unavailableDisk = info->GetVDiskId(unavailableOrder);
+    const TActorId unavailableActor = info->GetActorId(unavailableOrder);
+    const ui32 unavailableNode = unavailableActor.NodeId();
+    env.StopNode(unavailableNode);
+    env.PutBlob(groupId, blob, data);
+    env.Sim(TDuration::Seconds(30));
+
+    std::set<ui32> recoveredNodes;
+    std::optional<NSyncer::EDecision> decision;
+    bool returning = false;
+    env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        const ui32 type = ev->GetTypeRewrite();
+        if (type == TEvBlobStorage::EvSyncGuidRecoveryDone) {
+            if (nodeId != unavailableNode) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvSyncGuidRecoveryDone>()->Status, NKikimrProto::OK);
+            }
+            recoveredNodes.insert(nodeId);
+        }
+        if (returning && nodeId == unavailableNode) {
+            if (type == TEvBlobStorage::EvVDiskGuidObtained) {
+                const ui32 order = info->GetOrderNumber(ev->Get<TEvVDiskGuidObtained>()->VDiskId);
+                // Select the first survey quorum without changing any reply contents.
+                if (delaySelf ? order == unavailableOrder :
+                        order == (unavailableOrder + 1) % 8 || order == (unavailableOrder + 2) % 8) {
+                    return false;
+                }
+            } else if (type == TEvBlobStorage::EvVDiskGuidRecovered) {
+                decision = ev->Get<TEvVDiskGuidRecovered>()->Outcome.Decision;
+            }
+        }
+        return true;
+    };
+    auto waitUntil = [&](auto predicate, const char* phase) {
+        for (ui32 i = 0; i != 600 && !predicate(); ++i) {
+            env.Sim(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(predicate(), phase);
+    };
+    const auto config = env.FetchBaseConfig();
+    for (const auto& slot : config.GetVSlot()) {
+        if (slot.GetGroupId() != groupId || slot.GetVSlotId().GetNodeId() == unavailableNode) {
+            continue;
+        }
+        const TVDiskID disk(slot.GetGroupId(), slot.GetGroupGeneration(), slot.GetFailRealmIdx(),
+            slot.GetFailDomainIdx(), slot.GetVDiskIdx());
+        const auto& location = slot.GetVSlotId();
+        recoveredNodes.erase(location.GetNodeId());
+        env.Wipe(location.GetNodeId(), location.GetPDiskId(), location.GetVSlotId(), disk);
+        // Do not mistake the old actor's Replicated status for completion of this wipe.
+        waitUntil([&] { return recoveredNodes.contains(location.GetNodeId()); }, "Wiped peer must recover");
+        env.WaitForVDiskRepl(info->GetActorId(info->GetOrderNumber(disk)), disk);
+        env.Sim(TDuration::Seconds(30));
+    }
+
+    returning = true;
+    env.StartNode(unavailableNode);
+    waitUntil([&] { return decision.has_value(); }, "Returning VDisk must reach a GUID decision");
+    UNIT_ASSERT_C(*decision == NSyncer::EDecision::Good, NSyncer::EDecisionToStr(*decision));
+    waitUntil([&] { return recoveredNodes.contains(unavailableNode); }, "Returning VDisk must start");
+    env.Sim(TDuration::Minutes(1));
+    env.WaitForVDiskRepl(unavailableActor, unavailableDisk);
+    env.Runtime->FilterFunction = {};
+
+    // The blob was written while this VDisk was offline. Read its own main part directly.
+    const TActorId queue = env.CreateQueueActor(unavailableDisk, NKikimrBlobStorage::GetFastRead, 0);
+    const TActorId edge = env.Runtime->AllocateEdgeActor(unavailableNode);
+    auto query = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(unavailableDisk, TInstant::Max(),
+        NKikimrBlobStorage::FastRead);
+    query->AddExtremeQuery(TLogoBlobID(blob, 1), 0, 0);
+    env.Runtime->Send(new IEventHandle(queue, edge, query.release()), unavailableNode);
+    auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.ResultSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetResult(0).GetStatus(), NKikimrProto::OK);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(RecoverLostDataRestart) {
@@ -185,4 +278,6 @@ Y_UNIT_TEST_SUITE(RecoverLostDataRestart) {
     Y_UNIT_TEST(DuringGuidPublicationBeforeLostCommit) { TestRestart(ERestartPoint::GuidPublicationBeforeLost); }
     Y_UNIT_TEST(DuringGuidPublicationWithPersistedLost) { TestRestart(ERestartPoint::GuidPublicationWithLost); }
     Y_UNIT_TEST(GuidPublicationPreservesDbBirthLsn) { TestRestart(ERestartPoint::GuidPublicationWithFinal); }
+    Y_UNIT_TEST(RollingWipeWithDelayedSelfGuid) { TestRollingWipe(true); }
+    Y_UNIT_TEST(RollingWipeWithPreservedLocalState) { TestRollingWipe(false); }
 }

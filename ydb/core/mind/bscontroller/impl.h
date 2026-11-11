@@ -3114,6 +3114,8 @@ public:
         TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const TStoragePoolPileOverrideRules *rules);
     TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const;
     const TStoragePoolPileOverrideRules *GetPileOverrideRules() const; // the rules BSC follows, if any
+    // the rules BSC would follow having got this StorageConfig: its ones, unless the groups don't fit them
+    const TStoragePoolPileOverrideRules *GetPileOverrideRulesWith(const NKikimrBlobStorage::TStorageConfig& config) const;
     std::optional<TString> CheckGroupsAgainstPileOverrides(const TStoragePoolPileOverrideRules& rules) const;
     std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrBlobStorage::TStorageConfig& config) const;
     void UpdatePileOverrides(); // adopt the overrides of StorageConfig, if they differ and fit the groups

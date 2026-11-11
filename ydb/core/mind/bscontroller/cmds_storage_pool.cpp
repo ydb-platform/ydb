@@ -66,6 +66,13 @@ namespace NKikimr::NBsController {
             : nullptr;
     }
 
+    const TStoragePoolPileOverrideRules *TBlobStorageController::GetPileOverrideRulesWith(
+            const NKikimrBlobStorage::TStorageConfig& config) const {
+        // the same choice TTxUpdatePileOverrides makes
+        const auto& rules = config.GetBlobStorageConfig().GetStoragePoolPileOverrides();
+        return AppliedPileOverrides && CheckGroupsAgainstPileOverrides(rules) ? &AppliedPileOverrides->GetRule() : &rules;
+    }
+
     std::optional<TString> TBlobStorageController::ValidateStoragePoolPileOverrides(
             const NKikimrBlobStorage::TStorageConfig& config) const {
         if (auto error = NKikimr::ValidateStoragePoolPileOverrides(config.GetBlobStorageConfig())) {
@@ -249,7 +256,7 @@ namespace NKikimr::NBsController {
             const auto [erasure, inserted] = erasures.try_emplace(group->BridgePileId);
             if (inserted) {
                 erasure->second = Self.ResolveStoragePoolForPile(id, storagePool, group->BridgePileId,
-                    BridgeInfo.get(), Self.GetPileOverrideRules()).ErasureSpecies;
+                    BridgeInfo.get(), GetPileOverrideRules()).ErasureSpecies;
             }
             if (group->ErasureSpecies != erasure->second) {
                 throw TExError() << "GroupId# " << it->second << " has different erasure species";

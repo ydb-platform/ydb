@@ -675,7 +675,7 @@ namespace NKikimr::NBsController {
             // while converting to bridged cluster, watch for groups that have to be converted or stop blocking conversion
             if (StorageConfig && StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {
                 for (const auto& [base, overlay] : state.Groups.Diff()) {
-                    const TGroupInfo *prev = base ? base->second.Get() : nullptr;
+                    const TGroupInfo *prev = base ? &*base->second : nullptr;
                     const TGroupInfo *cur = overlay->second.Get();
                     if ((cur && cur->IsBridgeConversionCandidate()) ||
                             (prev && prev->BlocksBridgeConversion() && !(cur && cur->BlocksBridgeConversion()))) {
@@ -685,9 +685,26 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            // the groups that didn't let BSC adopt storage pool pile overrides of StorageConfig may be gone now
-            if (PileOverridesError && (state.Groups.Changed() || state.StoragePools.Changed())) {
-                state.Callbacks.push_back([this] { UpdatePileOverrides(); });
+            // the groups that didn't let BSC adopt storage pool pile overrides of StorageConfig may be gone now; only
+            // the changes able to make them fit are of interest (see CheckGroupsAgainstPileOverrides), as groups change
+            // all the time for other reasons (e.g. sync stages)
+            if (PileOverridesError) {
+                bool recheck = state.StoragePools.Changed();
+                if (!recheck) {
+                    for (const auto& [base, overlay] : state.Groups.Diff()) {
+                        const TGroupInfo *prev = base ? &*base->second : nullptr;
+                        const TGroupInfo *cur = overlay->second ? &*overlay->second : nullptr;
+                        if (prev && (!cur || cur->StoragePoolId != prev->StoragePoolId ||
+                                cur->BridgePileId != prev->BridgePileId ||
+                                cur->VDisksInGroup.empty() != prev->VDisksInGroup.empty())) {
+                            recheck = true;
+                            break;
+                        }
+                    }
+                }
+                if (recheck) {
+                    state.Callbacks.push_back([this] { UpdatePileOverrides(); });
+                }
             }
 
             // groups relying on single parts get synced or lose their parts, see if they are done with it

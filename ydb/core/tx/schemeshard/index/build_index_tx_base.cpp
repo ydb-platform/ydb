@@ -7,6 +7,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/metering/metering.h>
+#include <util/generic/hash_set.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
@@ -263,16 +264,20 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         index.SetUserSID(*indexInfo.UserSID);
     }
 
+    THashSet<TStringBuf> reportedAdmissionIssues;
     for (const auto& item: indexInfo.Shards) {
         const TShardIdx& shardIdx = item.first;
         const TIndexBuildShardStatus& status = item.second;
 
         if (indexInfo.IsBuildVectorIndex() && indexInfo.State == TIndexBuildInfo::EState::Filling &&
-            status.Status == NKikimrIndexBuilder::ABORTED && status.DebugMessage) {
-            // Memory pressure may recover, but a permanently small budget
-            // must not leave an apparently healthy build waiting silently.
-            AddIssue(index.MutableIssues(), TStringBuilder() << "Retrying index scan: " << status.DebugMessage,
-                NYql::TSeverityIds::S_WARNING);
+            status.Status == NKikimrIndexBuilder::ABORTED && status.AdmissionRetryAt && status.DebugMessage &&
+            (status.UploadStatus == Ydb::StatusIds::SUCCESS || status.UploadStatus == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)) {
+            // Retry hints identify admission-aware peers; preserve real upload
+            // failures as errors and report each shared admission reason once.
+            if (reportedAdmissionIssues.emplace(status.DebugMessage).second) {
+                AddIssue(index.MutableIssues(), TStringBuilder() << "Retrying index scan on shard " << shardIdx
+                    << ": " << status.DebugMessage, NYql::TSeverityIds::S_WARNING);
+            }
         } else if (status.Status != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
             if (status.UploadStatus != Ydb::StatusIds::SUCCESS) {
                 if (status.DebugMessage) {

@@ -210,8 +210,8 @@ namespace NTabletFlatExecutor {
             THolder<TScanSnapshot> Snapshot;
             EState State = EState::None;
             bool NeedsReadmission = false;
-            // Bounds the entire volatile wait and readmission, without
-            // evicting ordinary queued scans which have not chosen a version.
+            // Bounds the volatile wait, while broker queue waits retain
+            // their FIFO position.
             TInstant ReadinessDeadline;
             ui64 TimeoutGeneration = 0;
             TActorId Actor;     /* Valid just after EState::Scan*/
@@ -250,6 +250,8 @@ namespace NTabletFlatExecutor {
         };
 
     public:
+        enum class EReadiness { Ready, Waiting, TimedOut };
+
         /**
          * followerId must outlive TScans, it is read on every task submission
          * since executor learns its follower id only during boot.
@@ -362,12 +364,13 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        bool AwaitReadiness(ui64 serial) {
+        EReadiness AwaitReadiness(ui64 serial) {
             auto& one = *Lookup(serial, true);
-            Y_ENSURE(!one.ReadinessDeadline || TActivationContext::Now() < one.ReadinessDeadline,
-                "Timed out waiting for scan readiness and readmission");
+            if (one.ReadinessDeadline && TActivationContext::Now() >= one.ReadinessDeadline) {
+                return EReadiness::TimedOut;
+            }
             if (!one.Options.OnAdmissionReady) {
-                return true;
+                return EReadiness::Ready;
             }
             auto resume = std::make_unique<IEventHandle>(BrokerClient, TActorId(), new NOps::TEvResumeScan(serial));
             if (!one.Options.OnAdmissionReady(one.Options, std::move(resume))) {
@@ -381,18 +384,19 @@ namespace NTabletFlatExecutor {
                     }
                     ScheduleAdmissionTimeout(one);
                 }
-                return false;
+                return EReadiness::Waiting;
             }
             if (one.NeedsReadmission) {
                 // Updating the same task preserves its original submit time,
                 // unlike cancelling it and submitting a new request.
                 one.Lease->Readmit();
                 one.NeedsReadmission = false;
+                one.ReadinessDeadline = {};
                 one.State = EState::Task;
                 ScheduleAdmissionTimeout(one);
-                return false;
+                return EReadiness::Waiting;
             }
-            return true;
+            return EReadiness::Ready;
         }
 
         TAcquired Resume(ui64 serial) {
@@ -447,8 +451,9 @@ namespace NTabletFlatExecutor {
                 one->TimeoutGeneration != generation) {
                 return {};
             }
-            if (one->ReadinessDeadline && TActivationContext::Now() >= one->ReadinessDeadline) {
-                return AdmissionFailed(serial, "Timed out waiting for scan readiness and readmission");
+            if (one->State == EState::Ready && one->ReadinessDeadline &&
+                TActivationContext::Now() >= one->ReadinessDeadline) {
+                return AdmissionFailed(serial, "Timed out waiting for scan readiness");
             }
             if (one->State == EState::Task && one->Options.OnAdmissionTimeout && one->Options.OnAdmissionTimeout()) {
                 // A heartbeat must not cancel and reinsert a queued task: that
@@ -465,7 +470,9 @@ namespace NTabletFlatExecutor {
                 // task by id, ignoring errors for running or unrelated work.
                 for (const auto& [serial, one] : Scans) {
                     if (one.TaskId == error.TaskId && one.Lease && one.Options.Factory && one.State <= EState::Ready) {
-                        return AdmissionFailed(serial, error.Status.Message, false);
+                        // A delayed error may refer to an earlier update, while
+                        // the broker still owns this task. Always send FinishTask.
+                        return AdmissionFailed(serial, error.Status.Message);
                     }
                 }
             }

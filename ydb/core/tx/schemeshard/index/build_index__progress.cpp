@@ -4293,6 +4293,7 @@ public:
             return true;
         }
         case NKikimrIndexBuilder::EBuildStatus::ABORTED: {
+            shardStatus.AdmissionRetryAt = {};
             if constexpr (requires { record.GetRetryAfterMs(); }) {
                 if (record.GetRequiredRowBytes() > shardStatus.RequiredRowBytes) {
                     shardStatus.RequiredRowBytes = record.GetRequiredRowBytes();

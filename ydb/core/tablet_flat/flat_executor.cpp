@@ -3766,7 +3766,11 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
         return;
     }
     try {
-        if (!Scans->AwaitReadiness(serial)) {
+        const auto readiness = Scans->AwaitReadiness(serial);
+        if (readiness != TScans::EReadiness::Ready) {
+            if (readiness == TScans::EReadiness::TimedOut) {
+                ReleaseScanLocks(Scans->AdmissionFailed(serial, "Timed out waiting for scan readiness").Snapshot);
+            }
             return;
         }
         if (!Scans->Initialize(serial)) {

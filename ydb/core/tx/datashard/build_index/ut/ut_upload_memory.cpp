@@ -885,10 +885,12 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
     }
 
     Y_UNIT_TEST(SuspendedHeadScanBoundsVersionLifetimeAndRecovers) {
-        enum class EFailure { LostWakeup, ReadmissionTimeout, LateGrant, LostBrokerTask };
-        for (auto failure : {EFailure::LostWakeup, EFailure::ReadmissionTimeout, EFailure::LateGrant, EFailure::LostBrokerTask}) {
+        enum class EFailure { LostWakeup, ExpiredResume, QueuedReadmission, LateGrant, LostBrokerTask, StaleBrokerError };
+        for (auto failure : {EFailure::LostWakeup, EFailure::ExpiredResume, EFailure::QueuedReadmission,
+                EFailure::LateGrant, EFailure::LostBrokerTask, EFailure::StaleBrokerError}) {
             TAdmissionFixture fixture;
             fixture.InsertRow("old");
+            fixture.SetMemoryBudget(256_MB, 128_MB);
             CreateShardedTable(fixture.Server, fixture.Sender, "/Root", "table-side", 1);
             fixture.Runtime.GetAppData().FeatureFlags.SetEnableDataShardVolatileTransactions(true);
             fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexQueueTimeoutMs(1000);
@@ -902,7 +904,22 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
                 return resource && resource->Source == TResource::ESource::Scan;
             });
             bool suspended = false;
+            bool readmitted = false;
+            ui32 submissions = 0;
+            auto submitted = fixture.Runtime.AddObserver<TBroker::TEvSubmitTask>([&](auto& event) {
+                if (event->Get()->Task.Type == "build_index" && event->Get()->Task.RequiredResources[NKikimrResourceBroker::CPU]) {
+                    ++submissions;
+                }
+            });
+            auto responses = fixture.Runtime.AddObserver<TEvDataShard::TEvReshuffleKMeansResponse>([&](auto& event) {
+                if (event->Get()->Record.GetStatus() == NKikimrIndexBuilder::ACCEPTED) {
+                    event.Reset();
+                }
+            });
             auto updates = fixture.Runtime.AddObserver<TBroker::TEvUpdateTask>([&](auto& event) {
+                if (event->Get()->Type == "build_index" && event->Get()->Resubmit) {
+                    readmitted = true;
+                }
                 if (event->Get()->Type == "build_index" && !event->Get()->RequiredResources[NKikimrResourceBroker::MEMORY]) {
                     suspended = true;
                 }
@@ -925,13 +942,13 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
             const auto suspendedAt = fixture.Runtime.GetCurrentTime();
             UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 1);
             TBlockEvents<NOps::TEvResumeScan> resumes(fixture.Runtime, [&](const auto&) {
-                return failure == EFailure::LostWakeup;
+                return failure == EFailure::LostWakeup || failure == EFailure::ExpiredResume;
             });
             TBlockEvents<TBroker::TEvResourceAllocated> readmission(fixture.Runtime, [&](const auto&) {
-                return failure == EFailure::ReadmissionTimeout || failure == EFailure::LateGrant;
+                return failure == EFailure::LateGrant || failure == EFailure::StaleBrokerError;
             });
             TBlockEvents<NOps::TEvAdmissionTimeout> timeouts(fixture.Runtime, [&](const auto&) {
-                return failure == EFailure::LateGrant;
+                return failure == EFailure::LateGrant || failure == EFailure::ExpiredResume;
             });
             if (failure == EFailure::LostBrokerTask) {
                 // Lose the task before UpdateTask(resubmit=true). The broker's
@@ -939,25 +956,67 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
                 fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), client,
                     new TBroker::TEvFinishTask(taskId, true)));
             }
+            if (failure == EFailure::QueuedReadmission) {
+                fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender,
+                    new TBroker::TEvSubmitTask(900, "hold readmission memory", {{0, 128_MB}}, "build_index", 0, nullptr)));
+                fixture.Runtime.GrabEdgeEventRethrow<TBroker::TEvResourceAllocated>(fixture.Sender);
+            }
             fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(600));
             readSets.Stop().Unblock();
-            if (failure == EFailure::LostWakeup) {
+            if (failure == EFailure::LostWakeup || failure == EFailure::ExpiredResume) {
                 fixture.Runtime.WaitFor("resume event held", [&] { return !resumes.empty(); });
+            } else if (failure == EFailure::QueuedReadmission) {
+                fixture.Runtime.WaitFor("scan queues for readmission", [&] { return readmitted; });
             } else if (failure != EFailure::LostBrokerTask) {
                 fixture.Runtime.WaitFor("readmission grant held", [&] { return !readmission.empty(); });
             }
-            if (failure != EFailure::LostBrokerTask) {
+            if (failure == EFailure::QueuedReadmission) {
+                fixture.Runtime.SimulateSleep(TDuration::Seconds(3));
+                UNIT_ASSERT_VALUES_EQUAL(submissions, 1);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 1);
+                UNIT_ASSERT(shard->GetScanManager().Get(1));
+                UNIT_ASSERT(shard->GetScanManager().GetMinReadVersion().IsMax());
+                fixture.InsertRow("latest");
+                fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender,
+                    new TBroker::TEvFinishTask(900, true)));
+                fixture.Reply(NKikimrIndexBuilder::DONE);
+                UNIT_ASSERT_STRING_CONTAINS(ReadShardedTable(fixture.Server, "/Root/table-posting"), "data = latest");
+                UNIT_ASSERT_VALUES_EQUAL(submissions, 1);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+                continue;
+            }
+            if (failure == EFailure::StaleBrokerError) {
+                auto error = MakeHolder<TBroker::TEvTaskOperationError>();
+                error->TaskId = taskId;
+                error->Status.Code = TBroker::TStatus::UNKNOWN_TASK;
+                error->Status.Message = "stale unknown task reply";
+                fixture.Runtime.Send(new IEventHandle(client, NResourceBroker::MakeResourceBrokerID(), error.Release()));
+            }
+            if (failure != EFailure::LostBrokerTask && failure != EFailure::StaleBrokerError) {
                 fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(600));
             }
             if (failure == EFailure::LateGrant) {
-                // The grant wins delivery against the delayed timeout event,
-                // but the absolute version deadline must still be enforced.
+                // An overdue grant refreshes HEAD and completes the same task,
+                // instead of reporting an initialization exception or requeueing.
+                fixture.InsertRow("latest");
                 readmission.Stop().Unblock();
+                fixture.Reply(NKikimrIndexBuilder::DONE);
+                UNIT_ASSERT_STRING_CONTAINS(ReadShardedTable(fixture.Server, "/Root/table-posting"), "data = latest");
+                UNIT_ASSERT_VALUES_EQUAL(submissions, 1);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+                continue;
+            }
+            if (failure == EFailure::ExpiredResume) {
+                resumes.Stop().Unblock();
             }
             const auto retry = fixture.Reply(NKikimrIndexBuilder::ABORTED);
             UNIT_ASSERT_GT(retry->Get()->Record.GetRetryAfterMs(), 0);
-            UNIT_ASSERT_STRING_CONTAINS(retry->Get()->Record.ShortDebugString(),
-                failure == EFailure::LostBrokerTask ? "unknown task" : "scan readiness and readmission");
+            if (failure == EFailure::LostBrokerTask || failure == EFailure::StaleBrokerError) {
+                UNIT_ASSERT_STRING_CONTAINS(retry->Get()->Record.ShortDebugString(), "unknown task");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(retry->Get()->Record.IssuesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(retry->Get()->Record.GetIssues(0).message(), "Timed out waiting for scan readiness");
+            }
             UNIT_ASSERT(fixture.Runtime.GetCurrentTime() <= suspendedAt + TDuration::MilliSeconds(1300));
             UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
             UNIT_ASSERT(!shard->GetScanManager().Get(1));
@@ -965,6 +1024,13 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
             resumes.Stop().Unblock();
             readmission.Stop().Unblock();
             timeouts.Stop().Unblock();
+            // A stale UNKNOWN_TASK must not disarm cleanup of the still-live
+            // full reservation. A probe consuming the whole queue must fit.
+            fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender,
+                new TBroker::TEvSubmitTask(900, "verify released reservation", {{0, 128_MB}}, "build_index", 0, nullptr)));
+            fixture.Runtime.GrabEdgeEventRethrow<TBroker::TEvResourceAllocated>(fixture.Sender);
+            fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender,
+                new TBroker::TEvFinishTask(900, true)));
             fixture.Send(fixture.Shards[0]);
             fixture.Reply(NKikimrIndexBuilder::DONE);
             UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);

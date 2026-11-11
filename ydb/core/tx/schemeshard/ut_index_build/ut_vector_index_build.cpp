@@ -7,6 +7,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -498,13 +499,42 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         replies.Stop().Unblock();
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(probes, 1);
+        auto* ss = dynamic_cast<TSchemeShard*>(runtime.FindActor(ResolveTablet(runtime, schemeShard)));
+        UNIT_ASSERT(ss);
+        auto& info = *ss->IndexBuilds.at(TIndexBuildId(build));
+        UNIT_ASSERT_VALUES_EQUAL(info.Shards.size(), 1);
+        const auto idx = info.Shards.begin()->first;
+        const auto retryAt = info.Shards.at(idx).AdmissionRetryAt;
+        info.Shards.at(idx).UploadStatus = Ydb::StatusIds::SUCCESS;
         for (ui32 poll = 0; poll < 2; ++poll) {
             const auto pending = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
             UNIT_ASSERT_VALUES_EQUAL(pending.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
             UNIT_ASSERT_VALUES_EQUAL(pending.GetIndexBuild().IssuesSize(), 1);
             UNIT_ASSERT_STRING_CONTAINS(pending.GetIndexBuild().GetIssues(0).message(), reason);
+            UNIT_ASSERT_STRING_CONTAINS(pending.GetIndexBuild().GetIssues(0).message(), "on shard");
             UNIT_ASSERT_VALUES_EQUAL(pending.GetIndexBuild().GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_WARNING));
         }
+        // Serialize the same budget reason from two shards only once.
+        const TShardIdx duplicate(idx.GetOwnerId(), TLocalShardIdx(ui64(idx.GetLocalId()) + 1));
+        info.Shards.emplace(duplicate, info.Shards.at(idx));
+        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build)
+            .GetIndexBuild().IssuesSize(), 1);
+        info.Shards.erase(duplicate);
+        for (auto uploadStatus : {Ydb::StatusIds::OVERLOADED, Ydb::StatusIds::SCHEME_ERROR,
+                Ydb::StatusIds::STATUS_CODE_UNSPECIFIED}) {
+            info.Shards.at(idx).UploadStatus = uploadStatus;
+            if (uploadStatus == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+                // A legacy ABORTED reply has no admission retry hint.
+                info.Shards.at(idx).AdmissionRetryAt = {};
+            }
+            const auto aborted = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
+            UNIT_ASSERT_VALUES_EQUAL(aborted.GetIndexBuild().IssuesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(aborted.GetIndexBuild().GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+            UNIT_ASSERT_STRING_CONTAINS(aborted.GetIndexBuild().GetIssues(0).message(), "ShardIdx:");
+            UNIT_ASSERT_STRING_CONTAINS(aborted.GetIndexBuild().GetIssues(0).message(), "UploadStatus:");
+        }
+        info.Shards.at(idx).AdmissionRetryAt = retryAt;
+        info.Shards.at(idx).UploadStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         env.TestWaitNotification(runtime, build, schemeShard);
         UNIT_ASSERT_VALUES_EQUAL(probes, 2);
         UNIT_ASSERT(retriedAt >= rejectedAt + TDuration::Seconds(30));

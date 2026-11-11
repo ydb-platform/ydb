@@ -880,7 +880,18 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
         generation = admission.GetBrokerLimitGeneration()](ui64 limit) {
         quota->RestrictBrokerLimit(limit, generation);
     };
-    options.OnAdmissionTimeout = [self, pending, memory, pendingBytes, quota = AppData()->BuildIndexScanAdmission]() {
+    struct TReadState {
+        TRowVersion Version = TRowVersion::Max();
+        TInstant Deadline;
+    };
+    auto readState = std::make_shared<TReadState>();
+    options.OnAdmissionTimeout = [self, pending, memory, pendingBytes, readState, quota = AppData()->BuildIndexScanAdmission]() {
+        // Expire a queued readmission's version without evicting its broker
+        // task. The next grant chooses a fresh HEAD cut before construction.
+        if (readState->Deadline && TActivationContext::Now() >= readState->Deadline) {
+            readState->Version = TRowVersion::Max();
+            readState->Deadline = {};
+        }
         const auto& config = AppData()->DataShardConfig;
         if (memory > Min(config.GetBuildIndexScanMemoryLimit(),
                 quota->GetActiveByteLimit(config.GetBuildIndexPendingBytesLimit())) ||
@@ -905,20 +916,19 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
         TlsActivationContext->Send(new IEventHandle(pending->Event->Sender, self->SelfId(), accepted.Release()));
         return true;
     };
-    auto readVersion = std::make_shared<TRowVersion>(TRowVersion::Max());
-    options.OnAdmissionReady = [self, readVersion, explicitSnapshot = bool(pending->SnapshotReference), chosen = false](
-        TScanOptions& opts, std::unique_ptr<IEventHandle> resume) mutable {
-        if (!chosen) {
+    options.OnAdmissionReady = [self, readState, explicitSnapshot = bool(pending->SnapshotReference)](
+        TScanOptions& opts, std::unique_ptr<IEventHandle> resume) {
+        if (readState->Version.IsMax() || TActivationContext::Now() >= readState->Deadline) {
             if (!explicitSnapshot) {
                 opts.SetSnapshotRowVersion(self->GetMvccTxVersion(EMvccTxMode::ReadOnly));
             }
             const auto* version = std::get_if<TScanOptions::TSnapshotByRowVersion>(&opts.Snapshot);
             Y_ENSURE(version);
-            *readVersion = version->RowVersion;
-            chosen = true;
+            readState->Version = version->RowVersion;
+            readState->Deadline = TActivationContext::Now() + opts.QueueTimeout;
         }
-        if (self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(*readVersion)) {
-            self->GetVolatileTxManager().AttachWaitingSnapshotEvent(*readVersion, std::move(resume));
+        if (self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(readState->Version)) {
+            self->GetVolatileTxManager().AttachWaitingSnapshotEvent(readState->Version, std::move(resume));
             return false;
         }
         return true;
@@ -961,7 +971,7 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
     };
     const ui64 serial = self->QueueScan(tableId, {}, 0, options);
     manager.Set(id, seqNo).push_back(serial);
-    manager.HoldReadVersion(id, seqNo, readVersion);
+    manager.HoldReadVersion(id, seqNo, std::shared_ptr<TRowVersion>(readState, &readState->Version));
 }
 
 template<typename TResponse>

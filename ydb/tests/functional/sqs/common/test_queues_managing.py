@@ -4,7 +4,7 @@ import time
 import logging
 
 import pytest
-from hamcrest import assert_that, equal_to, greater_than, not_none, none, has_item, has_items, raises, empty, instance_of
+from hamcrest import assert_that, equal_to, not_none, none, has_item, has_items, raises, empty, instance_of
 
 from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 

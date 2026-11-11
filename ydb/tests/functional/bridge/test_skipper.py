@@ -23,6 +23,7 @@ from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
 from ydb.public.api.protos.draft import ydb_tablet_pb2 as tablet
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.common.types import Erasure, TabletTypes
 from ydb.tests.library.harness import daemon
 
@@ -144,6 +145,21 @@ class RealSkipperCluster(BridgeKiKiMRTest):
         self.output.mkdir(parents=True, exist_ok=True)
         try:
             super().setup_method()
+            # The harness can attempt binding before SchemeShard is ready and
+            # ignore its error. Check the stored binding and repair it if needed.
+            pools = {pool["name"]: pool["kind"] for pool in self.configurator.dynamic_storage_pools}
+            token = self.cluster.root_token or self.configurator.default_clusteradmin
+
+            def storage_bound():
+                response = self.cluster.client.describe("/" + self.cluster.domain_name, token or "")
+                assert response.Status == MessageBusStatus.MSTATUS_OK, response
+                actual = {pool.Name: pool.Kind for pool in response.PathDescription.DomainDescription.StoragePools}
+                if actual == pools:
+                    return True
+                self.cluster.client.bind_storage_pools(self.cluster.domain_name, pools, token=token)
+                return False
+
+            eventually(storage_bound, "storage pool binding before table creation")
         except BaseException:
             self.cleanup.close()
             raise

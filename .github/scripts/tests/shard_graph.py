@@ -661,6 +661,7 @@ def build_plan(
     history_nodes = 0
     timeout_nodes = 0
     history_slot_seconds = 0.0
+    timeout_slot_seconds = 0.0
     observed_by_uid: dict[str, float | None] = {}
     path_by_uid: dict[str, str | None] = {}
     size_by_result: dict[str, str] = {}
@@ -729,11 +730,17 @@ def build_plan(
             continue
         weight, size, units = uid_weight(uid, node, nodes_by_uid, result_set, size_by_uid, threads)
         observed = observed_by_uid[uid]
-        if observed is not None:
+        if observed is not None and observed > 0:
             weight = observed * float(cpu_slots(node, threads))
             history_slot_seconds += weight
             history_nodes += 1
+        elif observed is None:
+            timeout_slot_seconds += weight
+            timeout_nodes += 1
+        elif path and p90_by_suite and _size_seconds(p90_by_suite, path, size) is not None:
+            weight = 0.0
         else:
+            timeout_slot_seconds += weight
             timeout_nodes += 1
         weights[uid] = weight
         size_counts[size] += 1
@@ -775,6 +782,7 @@ def build_plan(
             "history_nodes": history_nodes,
             "timeout_nodes": timeout_nodes,
             "history_slot_seconds": round(history_slot_seconds, 1),
+            "timeout_slot_seconds": round(timeout_slot_seconds, 1),
             "expected_wall_min": round(history_slot_seconds / 60.0 / float(threads), 1),
             "timeout_budget_units": total_units,
             "size_small": size_counts["small"],
@@ -977,11 +985,18 @@ def render_summary(plan: dict[str, Any]) -> str:
     ]
     weighting = plan.get("weighting") or {}
     if "history_nodes" in weighting:
+        total_weight = float(plan.get("total_weight") or 0)
+        timeout_slots = float(weighting.get("timeout_slot_seconds") or 0)
+        if total_weight > 0:
+            timeout_share = f"{round(100.0 * timeout_slots / total_weight, 1)}% of weight"
+        else:
+            timeout_share = "0% of weight"
         lines.insert(
             5,
             f"**Expected:** {weighting.get('expected_wall_min', 0)} min on one host "
             f"from {weighting['history_nodes']} suites matched to p90, "
-            f"timeout fallback {weighting['timeout_nodes']}",
+            f"timeout fallback {weighting['timeout_nodes']} ({timeout_share}, "
+            f"{timeout_slots} slot-sec)",
         )
     policy = plan.get("host_policy") or {}
     if policy:
@@ -1066,7 +1081,10 @@ _HISTORY_DAYS = 14
 
 
 def suite_p90_query(table: str, build_type: str, branch: str) -> str:
-    """Sum of per-test p90 durations for each suite. Lint and chunk duplicates are left out."""
+    """Sum of per-test p90 durations for each suite.
+
+    Lint rows, chunk duplicates, and non-test entity types are left out.
+    """
     if not _BUILD_TYPE_RE.fullmatch(build_type):
         raise ValueError(f"build type is not safe to interpolate: {build_type!r}")
     if not _BRANCH_RE.fullmatch(branch):
@@ -1099,6 +1117,7 @@ def suite_p90_query(table: str, build_type: str, branch: str) -> str:
                   AND test_name IS NOT NULL
                   AND test_name != ''
                   AND JSON_VALUE(metadata, "$.size") IN ("small", "medium", "large")
+                  AND COALESCE(JSON_VALUE(metadata, "$.entity_type"), "test") = "test"
                   AND String::Contains(test_name, '.flake8') = FALSE
                   AND String::Contains(test_name, 'clang-format') = FALSE
                   AND String::Contains(test_name, 'clang_format') = FALSE

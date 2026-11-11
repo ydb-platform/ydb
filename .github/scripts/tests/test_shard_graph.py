@@ -361,9 +361,9 @@ class HostCountTest(unittest.TestCase):
             _node("large", path="ydb/sql/large", timeout="600"),
         ]
         plan = shard_graph.build_plan(_graph(nodes), 1, threads=4, p90_by_suite={"ydb/sql": {"small": 10.0}})
-        self.assertEqual(plan["weighting"]["history_nodes"], 2)
-        self.assertEqual(plan["weighting"]["timeout_nodes"], 0)
-        self.assertEqual(plan["total_weight"], 10.0)
+        self.assertEqual(plan["weighting"]["history_nodes"], 1)
+        self.assertEqual(plan["weighting"]["timeout_nodes"], 1)
+        self.assertEqual(plan["total_weight"], 610.0)
 
     def test_exact_suite_also_includes_longer_history(self) -> None:
         nodes = [_node("t2", path="ydb/t1/t2", timeout="600")]
@@ -453,6 +453,7 @@ class HostCountTest(unittest.TestCase):
         self.assertIn("PERCENTILE(duration, 0.9)", sql)
         self.assertIn("SUM(test_p90)", sql)
         self.assertIn(".flake8", sql)
+        self.assertIn('COALESCE(JSON_VALUE(metadata, "$.entity_type"), "test") = "test"', sql)
         with self.assertRaises(ValueError):
             shard_graph.suite_p90_query("test_results/test_runs_column", "relwith;drop", "main")
         with self.assertRaises(ValueError):

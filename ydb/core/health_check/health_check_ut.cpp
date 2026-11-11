@@ -1396,7 +1396,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                                 UNIT_ASSERT_VALUES_EQUAL(pool.overall(), Ydb::Monitoring::StatusFlag::GREY);
                                 UNIT_ASSERT_VALUES_EQUAL(db.storage().overall(), Ydb::Monitoring::StatusFlag::GREY);
                                 for (const auto& group : pool.groups()) {
-                                    UNIT_ASSERT_VALUES_EQUAL(group.overall(), group.id() == ToString(GROUP_START_ID)
+                                    UNIT_ASSERT_VALUES_EQUAL(group.overall(), group.id() == ToString(static_cast<ui32>(GROUP_START_ID))
                                         ? Ydb::Monitoring::StatusFlag::GREY : Ydb::Monitoring::StatusFlag::GREEN);
                                 }
                             } else if (pool.id() == "/Root:ordinary") {

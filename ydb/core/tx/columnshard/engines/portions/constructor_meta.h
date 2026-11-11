@@ -57,6 +57,10 @@ public:
         CompactionLevel = level;
     }
 
+    bool HasCompactionLevel() const {
+        return CompactionLevel.has_value();
+    }
+
     void SetTierName(const TString& tierName);
 
     void ResetTierName(const TString& tierName) {

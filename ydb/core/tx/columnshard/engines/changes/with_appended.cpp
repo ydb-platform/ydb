@@ -86,7 +86,13 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     for (auto&& i : AppendedPortions) {
         auto& constructor = i.GetPortionConstructor().MutablePortionConstructor();
         constructor.SetPortionId(context.NextPortionId());
-        constructor.MutableMeta().SetCompactionLevel(GetPortionsToMove().GetTargetCompactionLevel().value_or(0));
+        if (const auto& targetLevel = GetPortionsToMove().GetTargetCompactionLevel()) {
+            constructor.MutableMeta().SetCompactionLevel(*targetLevel);
+        } else if (!constructor.MutableMeta().HasCompactionLevel()) {
+            // a portion rewritten in place (schema actualization, tiering) keeps the level of its source: the key range
+            // is the same, so the planner must not treat it as freshly written
+            constructor.MutableMeta().SetCompactionLevel(0);
+        }
     }
 }
 

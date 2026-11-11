@@ -1340,9 +1340,7 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
             ctx.Send(waiter.Sender, response.Release(), 0, waiter.Cookie);
         }
-        if (*status == NKikimrTxDataShard::TEvCompactTableResult::OK) {
-            FinishForcedCompactionActualization();
-        }
+        FinishForcedCompactionActualization();   // the request is over whatever the answer
         finished.push_back(internalPathId);
     }
     for (const auto& internalPathId : finished) {

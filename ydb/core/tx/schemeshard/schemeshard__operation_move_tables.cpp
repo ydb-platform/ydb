@@ -46,6 +46,15 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         if (srcPath.Base()->IsColumnTable() && !AppData()->FeatureFlags.GetEnableMoveColumnTable()) {
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "RENAME is prohibited for column tables")};
         }
+        if (srcPath.Base()->IsColumnTable()) {
+            // ALTER TABLE ... COMPACT WITH (CASCADE = true) refuses option changes by the table path, which a move
+            // would change under it
+            auto* compaction = context.SS->InProgressForcedCompactionsByTable.FindPtr(srcPath.Base()->PathId);
+            if (compaction && (*compaction)->Cascade) {
+                return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
+                    "Table cannot be moved while a cascade compaction of the table is in progress")};
+            }
+        }
     }
 
     {

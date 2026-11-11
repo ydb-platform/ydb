@@ -2693,13 +2693,15 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
         UNIT_ASSERT_EQUAL(portionSchemaVersions(), std::set<ui64>({ 1 }));
 
-        // Registers schema version `version` = the previous one plus a column; SCHEME_NEED_ACTUALIZATION stays off.
+        // Registers schema version `version` = the previous one plus a column; SCHEME_NEED_ACTUALIZATION is off unless
+        // asked for.
         auto schemaVN = schema;
-        const auto alterSchema = [&](const ui32 version) {
+        const auto alterSchema = [&](const ui32 version, const bool needActualization = false) {
             schemaVN.emplace_back("extra" + ToString(version), TTypeInfo(NTypeIds::Uint64));
             NKikimrTxColumnShard::TSchemaTxBody tx;
             UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(tableId, /*standalone=*/true, version, schemaVN, pk, specials)));
             tx.MutableAlterTable()->MutableSchema()->SetVersion(version);
+            tx.MutableAlterTable()->MutableSchema()->MutableOptions()->SetSchemeNeedActualization(needActualization);
             Y_UNUSED(SetupSchema(runtime, sender, tx.SerializeAsString(), ++txId));
         };
 
@@ -2759,6 +2761,28 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
         UNIT_ASSERT(versionsOnReply);
         UNIT_ASSERT_EQUAL(*versionsOnReply, std::set<ui64>({ 4 }));
+
+        // SCHEME_NEED_ACTUALIZATION arrives while a CASCADE is held: the stop of the CASCADE must not switch off the
+        // rewrite asked for by the option (the schemeshard refuses the combination, but an ALTER in flight or a lost
+        // stop can still produce it).
+        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::TTL);
+        alterSchema(5);
+        sendCompact(true, 7);
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_GT(queuedForActualization(), 0);
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
+        alterSchema(6, /*needActualization=*/true);
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_GT(queuedForActualization(), 0);
+        sendCompact(false, 8);
+        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        UNIT_ASSERT_GT(queuedForActualization(), 0);
+        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::TTL);
+        for (int i = 0; i < 120 && portionSchemaVersions() != std::set<ui64>({ 6 }); ++i) {
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_EQUAL(portionSchemaVersions(), std::set<ui64>({ 6 }));
     }
 
     Y_UNIT_TEST(WriteReadDuplicate) {

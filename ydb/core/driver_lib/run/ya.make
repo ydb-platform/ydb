@@ -130,6 +130,7 @@ PEERDIR(
     ydb/core/tx/priorities/usage
     ydb/core/tx/replication/controller
     ydb/core/tx/replication/service
+    ydb/core/tx/cdc_aggregator/service
     ydb/core/tx/scheme_board
     ydb/core/tx/schemeshard
     ydb/core/tx/sequenceproxy

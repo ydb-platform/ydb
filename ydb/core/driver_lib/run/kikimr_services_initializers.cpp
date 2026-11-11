@@ -183,6 +183,8 @@
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/replication/service/service.h>
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
+#include <ydb/core/tx/cdc_aggregator/service/service.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
@@ -3413,6 +3415,10 @@ void TReplicationServiceInitializer::InitializeServices(NActors::TActorSystemSet
     setup->LocalServices.emplace_back(
         NReplication::MakeReplicationServiceId(NodeId),
         TActorSetupCmd(NReplication::CreateReplicationService(), TMailboxType::HTSwap, appData->UserPoolId)
+    );
+    setup->LocalServices.emplace_back(
+        NCdcAggregator::MakeCdcAggregatorServiceId(NodeId),
+        TActorSetupCmd(NCdcAggregator::CreateCdcAggregatorService(), TMailboxType::HTSwap, appData->UserPoolId)
     );
 }
 

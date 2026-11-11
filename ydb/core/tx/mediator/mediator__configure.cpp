@@ -27,7 +27,7 @@ struct TTxMediator::TTxConfigure : public TTransactionBase<TTxMediator> {
         Y_ABORT_UNLESS(TimeCastBuketsPerMediator);
     }
 
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
+    TTxType GetTxType() const override { return TXTYPE_CONFIGURE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);

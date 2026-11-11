@@ -5,6 +5,8 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
@@ -25,6 +27,7 @@ public:
 
 private:
     bool CheckSchemeTx(TActiveTransaction *activeTx);
+    bool IsDatabaseFreezeUnfreeze(const NKikimrSchemeOp::TTableDescription& alter) const;
     bool CheckCreate(TActiveTransaction *activeTx);
     bool CheckDrop(TActiveTransaction *activeTx);
     bool CheckAlter(TActiveTransaction *activeTx);
@@ -73,6 +76,55 @@ bool TCheckSchemeTxUnit::IsReadyToExecute(TOperation::TPtr) const
     return true;
 }
 
+bool TCheckSchemeTxUnit::IsDatabaseFreezeUnfreeze(const NKikimrSchemeOp::TTableDescription& alter) const {
+    const auto pathId = alter.HasPathId() ? TPathId::FromProto(alter.GetPathId())
+        : TPathId(DataShard.GetPathOwnerId(), alter.GetId_Deprecated());
+    if (pathId.OwnerId != DataShard.GetPathOwnerId()) {
+        return false;
+    }
+    const auto table = DataShard.FindUserTable(pathId);
+    if (!table) {
+        return false;
+    }
+    NKikimrSchemeOp::TTableDescription current;
+    table->GetSchema(current);
+    auto delta = alter;
+    delta.ClearName();
+    delta.ClearId_Deprecated();
+    delta.ClearPathId();
+    delta.ClearPath();
+    delta.ClearTableSchemaVersion();
+    delta.MutablePartitionConfig()->ClearFreezeState();
+    current.MutablePartitionConfig()->ClearFreezeState();
+
+    // SchemeShard repeats the full partition config, while DataShard expands
+    // default family settings. Only FreezeState may change during this unfreeze.
+    if (delta.GetPartitionConfig().ByteSizeLong()) {
+        google::protobuf::util::MessageDifferencer configDiff;
+        configDiff.set_message_field_comparison(google::protobuf::util::MessageDifferencer::EQUIVALENT);
+        const auto* config = delta.GetPartitionConfig().GetDescriptor();
+        configDiff.TreatAsSet(config->FindFieldByName("ColumnFamilies"));
+        configDiff.TreatAsSet(config->FindFieldByName("StorageRooms"));
+        if (!configDiff.Compare(delta.GetPartitionConfig(), current.GetPartitionConfig())) {
+            return false;
+        }
+    }
+    delta.ClearPartitionConfig();
+    const auto* reflection = delta.GetReflection();
+    if (!reflection->GetUnknownFields(delta).empty()) {
+        return false;
+    }
+    std::vector<const google::protobuf::FieldDescriptor*> fields;
+    reflection->ListFields(delta, &fields);
+    for (const auto* field : fields) {
+        if (!field->is_repeated() && !reflection->HasField(current, field)) {
+            return false;
+        }
+    }
+    google::protobuf::util::MessageDifferencer diff;
+    return diff.CompareWithFields(delta, current, fields, fields);
+}
+
 EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
@@ -94,7 +146,15 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     }
 
     // Check state is proper for scheme transactions.
-    if (!DataShard.IsStateActive() || (DataShard.IsStateFrozen() && !unfreezeTx)) {
+    const bool finishCdcScan = tx.HasAlterCdcStreamNotice()
+        && tx.GetAlterCdcStreamNotice().GetStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateReady;
+    // Finalization changes CDC metadata only. Its retries must also work after
+    // DRAIN_CDC, when the shard is ready but SchemeShard may still await its ACK.
+    const bool databaseFreezeUnfreeze = DataShard.IsDatabaseFrozen() && unfreezeTx
+        && IsDatabaseFreezeUnfreeze(tx.GetAlterTable());
+    if (!DataShard.IsStateActive() || (DataShard.IsStateFrozen() && !unfreezeTx)
+        || (DataShard.IsDatabaseFrozen() && !finishCdcScan && !databaseFreezeUnfreeze))
+    {
         TString error = TStringBuilder()
             << "Wrong shard state for scheme transaction at tablet "
             << DataShard.TabletID() << " state: " << DataShard.GetState() << " txId: "
@@ -865,4 +925,3 @@ THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard,
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

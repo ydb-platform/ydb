@@ -3,7 +3,6 @@
 
 import boto3
 import io
-import json
 import logging
 import yatest
 
@@ -11,19 +10,15 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
 import ydb.public.api.protos.ydb_value_pb2 as ydb
-import ydb.public.api.protos.draft.fq_pb2 as fq
 
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, yq_v2
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
 
 from datetime import datetime
-from google.protobuf import struct_pb2
 
 
-class TestS3(TestYdsBase):
+class TestS3:
     def check_large_parquet_timestamp_to_string(self, kikimr, s3, client, storage_connection_name, target_type):
         # One decoded row group expands beyond the 240 KiB string builder limit.
         row_count = 30000
@@ -63,27 +58,22 @@ class TestS3(TestYdsBase):
                 FROM `{storage_connection_name}`.`/{input_filename}`
                 WITH (FORMAT="parquet", SCHEMA=(id Int64 NOT NULL, ts {target_type}{not_null}));
             '''
-            query_id = client.create_query(
-                "large_timestamp", sql, type=fq.QueryContent.QueryType.ANALYTICS
-            ).result.query_id
-            client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-            rows = client.get_result_data(query_id, limit=1).result.result_set.rows
+            query = client.execute(sql)
+            query.check()
+            rows = query.result_set(index=0, limit=1).rows
             assert len(rows) == 1
-            items = rows[0].items
-            assert items[0].uint64_value == row_count
-            assert items[1].uint64_value == row_count - expected_nulls
+            items = rows[0]
+            assert items[0] == row_count
+            assert items[1] == row_count - expected_nulls
             for index, expected in ((2, "2024-04-02T12:01:00.000000Z"), (3, "2024-04-02T12:01:00.029999Z")):
-                actual = items[index].bytes_value.decode() if target_type == 'String' else items[index].text_value
+                actual = items[index].decode() if target_type == 'String' else items[index]
                 assert actual == expected
-            assert items[4].int64_value == row_count * (row_count - 1) // 2
-            assert items[5].uint64_value == (row_count - expected_nulls) * 27
+            assert items[4] == row_count * (row_count - 1) // 2
+            assert items[5] == (row_count - expected_nulls) * 27
 
     def create_bucket_and_upload_file(self, filename, s3, kikimr):
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_settings")
-        kikimr.control_plane.wait_bootstrap(1)
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_interval_unit(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -101,32 +91,31 @@ Banana;3;100
 Apple;2;22
 Pear;15;33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         intervalType = ydb.Column(name="Duration", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INTERVAL))
         storage_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path="fruits.csv",
             format="csv_with_names",
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[fruitType, priceType, intervalType],
             format_setting={"data.interval.unit": "SECONDS", "csv_delimiter": ";"},
         )
 
         sql = fR'''
             SELECT *
-            FROM bindings.`{storage_binding_name}`;
+            FROM `{storage_binding_name}`;
             '''
 
-        query_id = client.create_query("simple", sql).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
         assert result_set.columns[0].name == "Duration"
@@ -136,36 +125,33 @@ Pear;15;33'''
         assert result_set.columns[2].name == "Price"
         assert result_set.columns[2].type.type_id == ydb.Type.INT32
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].int64_value == 100000000
-        assert result_set.rows[0].items[1].bytes_value == b"Banana"
-        assert result_set.rows[0].items[2].int32_value == 3
-        assert result_set.rows[1].items[0].int64_value == 22000000
-        assert result_set.rows[1].items[1].bytes_value == b"Apple"
-        assert result_set.rows[1].items[2].int32_value == 2
-        assert result_set.rows[2].items[0].int64_value == 33000000
-        assert result_set.rows[2].items[1].bytes_value == b"Pear"
-        assert result_set.rows[2].items[2].int32_value == 15
+        assert result_set.rows[0][0] == 100000000
+        assert result_set.rows[0][1] == b"Banana"
+        assert result_set.rows[0][2] == 3
+        assert result_set.rows[1][0] == 22000000
+        assert result_set.rows[1][1] == b"Apple"
+        assert result_set.rows[1][2] == 2
+        assert result_set.rows[2][0] == 33000000
+        assert result_set.rows[2][1] == b"Pear"
+        assert result_set.rows[2][2] == 15
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_bad_format_setting(self, kikimr, client, unique_prefix):
-        kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         intervalType = ydb.Column(name="Duration", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INTERVAL))
-        binding_response = client.create_object_storage_binding(
+        binding_response = client.create_external_table(
             name=unique_prefix + "my_binding",
             path="fruits.csv",
             format="csv_with_names",
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[fruitType, priceType, intervalType],
             format_setting={"data.interval.unit": "SEKUNDA"},
-            check_issues=False,
+            expect_error=True,
         )
-        assert "unknown value for data.interval.unit SEKUNDA" in str(binding_response.issues), str(
-            binding_response.issues
+        assert "unknown value for data.interval.unit SEKUNDA" in str(binding_response.error), str(
+            binding_response.error
         )
 
     def validate_timestamp_iso_result(self, result_set):
@@ -181,25 +167,25 @@ Pear;15;33'''
         assert result_set.columns[3].type.type_id == ydb.Type.INT32
 
         assert len(result_set.rows) == 4
-        assert result_set.rows[0].items[0].bytes_value == b"Banana"
-        assert result_set.rows[0].items[1].int32_value == 3
-        assert result_set.rows[0].items[2].uint64_value == 1666197647218000
-        assert result_set.rows[0].items[3].int32_value == 100
+        assert result_set.rows[0][0] == b"Banana"
+        assert result_set.rows[0][1] == 3
+        assert result_set.rows[0][2] == 1666197647218000
+        assert result_set.rows[0][3] == 100
 
-        assert result_set.rows[1].items[0].bytes_value == b"Apple"
-        assert result_set.rows[1].items[1].int32_value == 2
-        assert result_set.rows[1].items[2].uint64_value == 1666186847000000
-        assert result_set.rows[1].items[3].int32_value == 22
+        assert result_set.rows[1][0] == b"Apple"
+        assert result_set.rows[1][1] == 2
+        assert result_set.rows[1][2] == 1666186847000000
+        assert result_set.rows[1][3] == 22
 
-        assert result_set.rows[2].items[0].bytes_value == b"Pear"
-        assert result_set.rows[2].items[1].int32_value == 15
-        assert result_set.rows[2].items[2].uint64_value == 1666197647000000
-        assert result_set.rows[2].items[3].int32_value == 33
+        assert result_set.rows[2][0] == b"Pear"
+        assert result_set.rows[2][1] == 15
+        assert result_set.rows[2][2] == 1666197647000000
+        assert result_set.rows[2][3] == 33
 
-        assert result_set.rows[3].items[0].bytes_value == b"Orange"
-        assert result_set.rows[3].items[1].int32_value == 1
-        assert result_set.rows[3].items[2].uint64_value == 1666197647218000
-        assert result_set.rows[3].items[3].int32_value == 2
+        assert result_set.rows[3][0] == b"Orange"
+        assert result_set.rows[3][1] == 1
+        assert result_set.rows[3][2] == 1666197647218000
+        assert result_set.rows[3][3] == 2
 
     def validate_timestamp_posix_result(self, result_set):
         logging.debug(str(result_set))
@@ -214,15 +200,15 @@ Pear;15;33'''
         assert result_set.columns[3].type.type_id == ydb.Type.INT32
 
         assert len(result_set.rows) == 2
-        assert result_set.rows[0].items[0].bytes_value == b"Banana"
-        assert result_set.rows[0].items[1].int32_value == 3
-        assert result_set.rows[0].items[2].uint64_value == 1666197647000000
-        assert result_set.rows[0].items[3].int32_value == 100
+        assert result_set.rows[0][0] == b"Banana"
+        assert result_set.rows[0][1] == 3
+        assert result_set.rows[0][2] == 1666197647000000
+        assert result_set.rows[0][3] == 100
 
-        assert result_set.rows[1].items[0].bytes_value == b"Apple"
-        assert result_set.rows[1].items[1].int32_value == 2
-        assert result_set.rows[1].items[2].uint64_value == 1666197707000000
-        assert result_set.rows[1].items[3].int32_value == 22
+        assert result_set.rows[1][0] == b"Apple"
+        assert result_set.rows[1][1] == 2
+        assert result_set.rows[1][2] == 1666197707000000
+        assert result_set.rows[1][3] == 22
 
     def validate_date_time_iso_result(self, result_set):
         logging.debug(str(result_set))
@@ -237,20 +223,20 @@ Pear;15;33'''
         assert result_set.columns[3].type.type_id == ydb.Type.INT32
 
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].bytes_value == b"Banana"
-        assert result_set.rows[0].items[1].int32_value == 3
-        assert result_set.rows[0].items[2].uint32_value == 1666197647
-        assert result_set.rows[0].items[3].int32_value == 100
+        assert result_set.rows[0][0] == b"Banana"
+        assert result_set.rows[0][1] == 3
+        assert result_set.rows[0][2] == 1666197647
+        assert result_set.rows[0][3] == 100
 
-        assert result_set.rows[1].items[0].bytes_value == b"Apple"
-        assert result_set.rows[1].items[1].int32_value == 2
-        assert result_set.rows[1].items[2].uint32_value == 1666186847
-        assert result_set.rows[1].items[3].int32_value == 22
+        assert result_set.rows[1][0] == b"Apple"
+        assert result_set.rows[1][1] == 2
+        assert result_set.rows[1][2] == 1666186847
+        assert result_set.rows[1][3] == 22
 
-        assert result_set.rows[2].items[0].bytes_value == b"Pear"
-        assert result_set.rows[2].items[1].int32_value == 15
-        assert result_set.rows[2].items[2].uint32_value == 1666197647
-        assert result_set.rows[2].items[3].int32_value == 33
+        assert result_set.rows[2][0] == b"Pear"
+        assert result_set.rows[2][1] == 15
+        assert result_set.rows[2][2] == 1666197647
+        assert result_set.rows[2][3] == 33
 
     def validate_date_time_posix_result(self, result_set):
         logging.debug(str(result_set))
@@ -265,15 +251,15 @@ Pear;15;33'''
         assert result_set.columns[3].type.type_id == ydb.Type.INT32
 
         assert len(result_set.rows) == 2
-        assert result_set.rows[0].items[0].bytes_value == b"Banana"
-        assert result_set.rows[0].items[1].int32_value == 3
-        assert result_set.rows[0].items[2].uint32_value == 1666197647
-        assert result_set.rows[0].items[3].int32_value == 100
+        assert result_set.rows[0][0] == b"Banana"
+        assert result_set.rows[0][1] == 3
+        assert result_set.rows[0][2] == 1666197647
+        assert result_set.rows[0][3] == 100
 
-        assert result_set.rows[1].items[0].bytes_value == b"Apple"
-        assert result_set.rows[1].items[1].int32_value == 2
-        assert result_set.rows[1].items[2].uint32_value == 1666197707
-        assert result_set.rows[1].items[3].int32_value == 22
+        assert result_set.rows[1][0] == b"Apple"
+        assert result_set.rows[1][1] == 2
+        assert result_set.rows[1][2] == 1666197707
+        assert result_set.rows[1][3] == 22
 
     def validate_date_simple_result(self, result_set):
         logging.debug(str(result_set))
@@ -288,15 +274,15 @@ Pear;15;33'''
         assert result_set.columns[3].type.type_id == ydb.Type.INT32
 
         assert len(result_set.rows) == 2
-        assert result_set.rows[0].items[0].bytes_value == b"Banana"
-        assert result_set.rows[0].items[1].int32_value == 3
-        assert result_set.rows[0].items[2].uint32_value == 19284
-        assert result_set.rows[0].items[3].int32_value == 100
+        assert result_set.rows[0][0] == b"Banana"
+        assert result_set.rows[0][1] == 3
+        assert result_set.rows[0][2] == 19284
+        assert result_set.rows[0][3] == 100
 
-        assert result_set.rows[1].items[0].bytes_value == b"Apple"
-        assert result_set.rows[1].items[1].int32_value == 2
-        assert result_set.rows[1].items[2].uint32_value == 19285
-        assert result_set.rows[1].items[3].int32_value == 22
+        assert result_set.rows[1][0] == b"Apple"
+        assert result_set.rows[1][1] == 2
+        assert result_set.rows[1][2] == 19285
+        assert result_set.rows[1][3] == 22
 
     def canonize_result(self, s3, s3_path, filename):
         resource = boto3.resource(
@@ -318,7 +304,7 @@ Pear;15;33'''
                 return yatest.common.canonical_file(canonical_path, local=True)
 
     def create_source_timestamp_binding(
-        self, unique_prefix, client, connection_id, filename, type_format, format_name=None, format=None
+        self, unique_prefix, client, data_source, filename, type_format, format_name=None, format=None
     ):
         timeType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.TIMESTAMP))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
@@ -329,18 +315,18 @@ Pear;15;33'''
         else:
             format_setting = {"data.timestamp.format": format}
         storage_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path=filename,
             format=type_format,
-            connection_id=connection_id,
+            data_source=data_source,
             columns=[timeType, fruitType, priceType, weightType],
             format_setting=format_setting,
         )
         return storage_binding_name
 
     def create_sink_timestamp_binding(
-        self, unique_prefix, client, connection_id, prefix, type_format, format_name=None, format=None
+        self, unique_prefix, client, data_source, prefix, type_format, format_name=None, format=None
     ):
         timeType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.TIMESTAMP))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
@@ -351,18 +337,18 @@ Pear;15;33'''
         else:
             format_setting = {"data.timestamp.format": format}
         storage_binding_name = unique_prefix + "insert_my_binding"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path=prefix,
             format=type_format,
-            connection_id=connection_id,
+            data_source=data_source,
             columns=[timeType, fruitType, priceType, weightType],
             format_setting=format_setting,
         )
         return storage_binding_name
 
     def create_source_date_time_binding(
-        self, unique_prefix, client, connection_id, filename, type_format, format_name=None, format=None
+        self, unique_prefix, client, data_source, filename, type_format, format_name=None, format=None
     ):
         timeType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
@@ -373,18 +359,18 @@ Pear;15;33'''
         else:
             format_setting = {"data.datetime.format": format}
         storage_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path=filename,
             format=type_format,
-            connection_id=connection_id,
+            data_source=data_source,
             columns=[timeType, fruitType, priceType, weightType],
             format_setting=format_setting,
         )
         return storage_binding_name
 
     def create_sink_date_time_binding(
-        self, unique_prefix, client, connection_id, prefix, type_format, format_name=None, format=None
+        self, unique_prefix, client, data_source, prefix, type_format, format_name=None, format=None
     ):
         timeType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
@@ -395,17 +381,17 @@ Pear;15;33'''
         else:
             format_setting = {"data.datetime.format": format}
         storage_binding_name = unique_prefix + "insert_my_binding"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path=prefix,
             format=type_format,
-            connection_id=connection_id,
+            data_source=data_source,
             columns=[timeType, fruitType, priceType, weightType],
             format_setting=format_setting,
         )
         return storage_binding_name
 
-    def create_source_date_binding(self, unique_prefix, client, connection_id, filename, type_format, format):
+    def create_source_date_binding(self, unique_prefix, client, data_source, filename, type_format, format):
         dateType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -413,17 +399,17 @@ Pear;15;33'''
 
         format_setting = {"data.date.format": format}
         storage_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path=filename,
             format=type_format,
-            connection_id=connection_id,
+            data_source=data_source,
             columns=[dateType, fruitType, priceType, weightType],
             format_setting=format_setting,
         )
         return storage_binding_name
 
-    def create_sink_date_binding(self, unique_prefix, client, connection_id, prefix, type_format, format):
+    def create_sink_date_binding(self, unique_prefix, client, data_source, prefix, type_format, format):
         dateType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -431,17 +417,16 @@ Pear;15;33'''
 
         format_setting = {"data.date.format": format}
         storage_binding_name = unique_prefix + "insert_my_binding"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_binding_name,
             path=prefix,
             format=type_format,
-            connection_id=connection_id,
+            data_source=data_source,
             columns=[dateType, fruitType, priceType, weightType],
             format_setting=format_setting,
         )
         return storage_binding_name
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -453,25 +438,24 @@ Pear;15;33'''
     )
     def test_date_simple(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_date_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "%m/%d/%Y"
+            unique_prefix, client, connection_response.name, filename, type_format, "%m/%d/%Y"
         )
 
         sql = f'''
             SELECT *
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         self.validate_date_simple_result(result_set)
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -483,42 +467,41 @@ Pear;15;33'''
     )
     def test_date_simple_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_date_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "%m/%d/%Y"
+            unique_prefix, client, connection_response.name, filename, type_format, "%m/%d/%Y"
         )
         storage_sink_binding_name = self.create_sink_date_binding(
             unique_prefix,
             client,
-            connection_response.result.connection_id,
+            connection_response.name,
             "date/simple/" + type_format + "/",
             type_format,
             "%m/%d/%Y",
         )
 
         sql = f'''
-            INSERT INTO bindings.`{storage_sink_binding_name}`
+            INSERT INTO `{storage_sink_binding_name}`
             SELECT Time, Fruit, Price, Weight
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
         sql = f'''
             SELECT *
-            FROM bindings.`{storage_sink_binding_name}`
+            FROM `{storage_sink_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         self.validate_date_simple_result(result_set)
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -530,25 +513,24 @@ Pear;15;33'''
     )
     def test_timestamp_simple_iso(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_timestamp_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+            unique_prefix, client, connection_response.name, filename, type_format, "ISO"
         )
 
         sql = f'''
             SELECT *
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         self.validate_timestamp_iso_result(result_set)
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -560,32 +542,31 @@ Pear;15;33'''
     )
     def test_timestamp_simple_iso_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_timestamp_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+            unique_prefix, client, connection_response.name, filename, type_format, "ISO"
         )
         storage_sink_binding_name = self.create_sink_timestamp_binding(
             unique_prefix,
             client,
-            connection_response.result.connection_id,
+            connection_response.name,
             "timestamp/simple_iso/" + type_format + "/",
             type_format,
             "ISO",
         )
 
         sql = f'''
-            INSERT INTO bindings.`{storage_sink_binding_name}`
+            INSERT INTO `{storage_sink_binding_name}`
             SELECT Unwrap(Time + Interval("P1D")) as Time, Fruit, Price, Weight
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
         return self.canonize_result(s3, "timestamp/simple_iso/" + type_format + "/", filename.replace('/', '_'))
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -597,25 +578,24 @@ Pear;15;33'''
     )
     def test_timestamp_simple_posix(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_timestamp_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX"
+            unique_prefix, client, connection_response.name, filename, type_format, "POSIX"
         )
 
         sql = f'''
             SELECT *
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         self.validate_timestamp_posix_result(result_set)
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -627,32 +607,31 @@ Pear;15;33'''
     )
     def test_timestamp_simple_posix_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_timestamp_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX"
+            unique_prefix, client, connection_response.name, filename, type_format, "POSIX"
         )
         storage_sink_binding_name = self.create_sink_timestamp_binding(
             unique_prefix,
             client,
-            connection_response.result.connection_id,
+            connection_response.name,
             "timestamp/simple_posix/" + type_format + "/",
             type_format,
             "POSIX",
         )
 
         sql = f'''
-            INSERT INTO bindings.`{storage_sink_binding_name}`
+            INSERT INTO `{storage_sink_binding_name}`
             SELECT Unwrap(Time + Interval("P1D")) as Time, Fruit, Price, Weight
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
         return self.canonize_result(s3, "timestamp/simple_posix/" + type_format + "/", filename.replace('/', '_'))
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -664,25 +643,24 @@ Pear;15;33'''
     )
     def test_date_time_simple_iso(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_date_time_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+            unique_prefix, client, connection_response.name, filename, type_format, "ISO"
         )
 
         sql = f'''
             SELECT *
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         self.validate_date_time_iso_result(result_set)
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -694,32 +672,31 @@ Pear;15;33'''
     )
     def test_date_time_simple_iso_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_date_time_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+            unique_prefix, client, connection_response.name, filename, type_format, "ISO"
         )
         storage_sink_binding_name = self.create_sink_date_time_binding(
             unique_prefix,
             client,
-            connection_response.result.connection_id,
+            connection_response.name,
             "date_time/simple_iso/" + type_format + "/",
             type_format,
             "ISO",
         )
 
         sql = f'''
-            INSERT INTO bindings.`{storage_sink_binding_name}`
+            INSERT INTO `{storage_sink_binding_name}`
             SELECT Unwrap(Time + Interval("P1D")) as Time, Fruit, Price, Weight
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
         return self.canonize_result(s3, "date_time/simple_iso/" + type_format + "/", filename.replace('/', '_'))
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -731,25 +708,24 @@ Pear;15;33'''
     )
     def test_date_time_simple_posix(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_date_time_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX"
+            unique_prefix, client, connection_response.name, filename, type_format, "POSIX"
         )
 
         sql = f'''
             SELECT *
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         self.validate_date_time_posix_result(result_set)
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -761,32 +737,31 @@ Pear;15;33'''
     )
     def test_date_time_simple_posix_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_date_time_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX"
+            unique_prefix, client, connection_response.name, filename, type_format, "POSIX"
         )
         storage_sink_binding_name = self.create_sink_date_time_binding(
             unique_prefix,
             client,
-            connection_response.result.connection_id,
+            connection_response.name,
             "datetime/simple_posix/" + type_format + "/",
             type_format,
             "POSIX",
         )
 
         sql = f'''
-            INSERT INTO bindings.`{storage_sink_binding_name}`
+            INSERT INTO `{storage_sink_binding_name}`
             SELECT Unwrap(Time + Interval("P1D")) as Time, Fruit, Price, Weight
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
         return self.canonize_result(s3, "datetime/simple_posix/" + type_format + "/", filename.replace('/', '_'))
 
-    @yq_all
     @pytest.mark.parametrize(
         "timestamp_format", ["UNIX_TIME_SECONDS", "UNIX_TIME_MICROSECONDS", "UNIX_TIME_MILLISECONDS"]
     )
@@ -803,34 +778,33 @@ Pear;15;33'''
         self, kikimr, s3, client, filename, type_format, timestamp_format, unique_prefix
     ):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_timestamp_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, timestamp_format
+            unique_prefix, client, connection_response.name, filename, type_format, timestamp_format
         )
         storage_sink_binding_name = self.create_sink_timestamp_binding(
             unique_prefix,
             client,
-            connection_response.result.connection_id,
+            connection_response.name,
             "timestamp/unix_time/" + type_format + "/",
             type_format,
             timestamp_format,
         )
 
         sql = f'''
-            INSERT INTO bindings.`{storage_sink_binding_name}`
+            INSERT INTO `{storage_sink_binding_name}`
             SELECT Unwrap(Time + Interval("P1D")) as Time, Fruit, Price, Weight
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
         return self.canonize_result(
             s3, "timestamp/unix_time/" + type_format + "/", timestamp_format + "_" + filename.replace('/', '_')
         )
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -842,34 +816,33 @@ Pear;15;33'''
     )
     def test_timestamp_simple_format_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_timestamp_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, format="%Y-%m-%d"
+            unique_prefix, client, connection_response.name, filename, type_format, format="%Y-%m-%d"
         )
         storage_sink_binding_name = self.create_sink_timestamp_binding(
             unique_prefix,
             client,
-            connection_response.result.connection_id,
+            connection_response.name,
             "common/simple_format/" + type_format + "/",
             type_format,
             format="%Y-%m-%d",
         )
 
         sql = f'''
-            INSERT INTO bindings.`{storage_sink_binding_name}`
+            INSERT INTO `{storage_sink_binding_name}`
             SELECT Unwrap(Time + Interval("P1D")) as Time, Fruit, Price, Weight
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
         return self.canonize_result(
             s3, "common/simple_format/" + type_format + "/", "timestamp_format_" + filename.replace('/', '_')
         )
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -881,34 +854,33 @@ Pear;15;33'''
     )
     def test_date_time_simple_format_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_date_time_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, format="%Y-%m-%d"
+            unique_prefix, client, connection_response.name, filename, type_format, format="%Y-%m-%d"
         )
         storage_sink_binding_name = self.create_sink_date_time_binding(
             unique_prefix,
             client,
-            connection_response.result.connection_id,
+            connection_response.name,
             "common/simple_format/" + type_format + "/",
             type_format,
             format="%Y-%m-%d",
         )
 
         sql = f'''
-            INSERT INTO bindings.`{storage_sink_binding_name}`
+            INSERT INTO `{storage_sink_binding_name}`
             SELECT Unwrap(Time + Interval("P1D")) as Time, Fruit, Price, Weight
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
         return self.canonize_result(
             s3, "common/simple_format/" + type_format + "/", "date_time_format_" + filename.replace('/', '_')
         )
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format, format_name",
         [
@@ -921,16 +893,16 @@ Pear;15;33'''
         self, kikimr, s3, client, filename, type_format, format_name, unique_prefix
     ):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         a = ydb.Column(name="tpep_pickup_datetime", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))
         b = ydb.Column(name="tpep_dropoff_datetime", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))
         storage_source_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=storage_source_binding_name,
             path=filename,
             format=type_format,
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[a, b],
             format_setting={
                 (
@@ -943,14 +915,12 @@ Pear;15;33'''
 
         sql = f'''
             SELECT *
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("pg_types", [False, True], ids=["yql_types", "pg_types"])
     def test_precompute_with_pg_binding(self, kikimr, s3, client, pg_types, unique_prefix):
         test_suffix = "_{}".format(1 if pg_types else 0)
@@ -976,16 +946,16 @@ Pear;15;33'''
         ids_data = R'''{"id": 42}'''
 
         s3_client.put_object(Body=ids_data, Bucket=bucket_name, Key='ids.json', ContentType='text/json')
-        connection_response = client.create_storage_connection(
+        connection_response = client.create_external_data_source(
             unique_prefix + "precompute_with_pg" + test_suffix, bucket_name
         )
 
         binding_for_ids_name = unique_prefix + "binding_for_ids" + test_suffix
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=binding_for_ids_name,
             path="ids.json",
             format="json_each_row",
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[idType],
         )
 
@@ -996,65 +966,62 @@ Pear;15;33'''
 
         s3_client.put_object(Body=names_data, Bucket=bucket_name, Key='names.json', ContentType='text/json')
         binding_for_names_name = unique_prefix + "binding_for_names" + test_suffix
-        client.create_object_storage_binding(
+        client.create_external_table(
             name=binding_for_names_name,
             path="names.json",
             format="json_each_row",
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[idType, nameType],
         )
 
-        kikimr.control_plane.wait_bootstrap(1)
-
         sql = R'''
             SELECT *
-            FROM bindings.{}
+            FROM {}
             WHERE id IN (
                 SELECT
                     id
-                FROM bindings.{}
+                FROM {}
             )
             '''.format(binding_for_names_name, binding_for_ids_name)
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 2
         assert len(result_set.rows) == 1
         if pg_types:
             assert result_set.columns[0].type.pg_type.oid == 23
             assert result_set.columns[1].type.pg_type.oid == 25
-            assert result_set.rows[0].items[0].text_value == "42"
-            assert result_set.rows[0].items[1].text_value == "hello"
+            assert result_set.rows[0][0] == "42"
+            assert result_set.rows[0][1] == "hello"
         else:
             assert result_set.columns[0].type.type_id == ydb.Type.INT32
             assert result_set.columns[1].type.type_id == ydb.Type.STRING
-            assert result_set.rows[0].items[0].int32_value == 42
-            assert result_set.rows[0].items[1].bytes_value == b"hello"
+            assert result_set.rows[0][0] == 42
+            assert result_set.rows[0][1] == b"hello"
 
-    @yq_all
     @pytest.mark.parametrize("filename, type_format", [("timestamp/completeness_iso/test.csv", "csv_with_names")])
     def test_timestamp_completeness_iso(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_timestamp_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+            unique_prefix, client, connection_response.name, filename, type_format, "ISO"
         )
 
         sql = f'''
             SELECT *
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id, limit=50)
-        result_set = data.result.result_set
+        data = query.result_set(index=0, limit=50)
+        result_set = data
 
         logging.debug(str(result_set))
         assert len(result_set.columns) == 4
@@ -1069,7 +1036,6 @@ Pear;15;33'''
 
         assert len(result_set.rows) == 36
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -1078,22 +1044,22 @@ Pear;15;33'''
     )
     def test_date_time_completeness_iso(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")
 
         storage_source_binding_name = self.create_source_date_time_binding(
-            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+            unique_prefix, client, connection_response.name, filename, type_format, "ISO"
         )
 
         sql = f'''
             SELECT *
-            FROM bindings.`{storage_source_binding_name}`
+            FROM `{storage_source_binding_name}`
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id, limit=50)
-        result_set = data.result.result_set
+        data = query.result_set(index=0, limit=50)
+        result_set = data
 
         logging.debug(str(result_set))
         assert len(result_set.columns) == 4
@@ -1108,12 +1074,11 @@ Pear;15;33'''
 
         assert len(result_set.rows) == 6
 
-    @yq_all
     @pytest.mark.parametrize("filename", [("date_null/as_default/test.csv"), ("date_null/parse_error/test.csv")])
     def test_date_null(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "hcpp"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "hcpp")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT
@@ -1128,19 +1093,16 @@ Pear;15;33'''
             LIMIT 10;
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(
-            data.result.result_set
-        )
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        assert data.rows[0][0] is None, str(data)
 
-    @yq_all
     @pytest.mark.parametrize("filename", [("date_null/as_default/test.csv"), ("date_null/parse_error/test.csv")])
     def test_date_null_with_not_null_type(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "hcpp"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "hcpp")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT
@@ -1155,22 +1117,21 @@ Pear;15;33'''
             LIMIT 10;
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
-        issues = describe_result.query.issue[0].issues
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
+        issues = describe_result.error
         assert "Invalid data format" in str(issues), str(describe_result)
         assert "name: put, type: Date, ERROR: text " in str(issues), str(describe_result)
         assert "is not like Date" in str(issues), str(describe_result)
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename", [("date_null/as_default/multi_null.csv"), ("date_null/parse_error/multi_null.csv")]
     )
     def test_date_null_multi(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "hcpp"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "hcpp")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT
@@ -1187,27 +1148,20 @@ Pear;15;33'''
             LIMIT 10;
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(
-            data.result.result_set
-        )
-        assert data.result.result_set.rows[0].items[1].null_flag_value == struct_pb2.NULL_VALUE, str(
-            data.result.result_set
-        )
-        assert data.result.result_set.rows[0].items[2].null_flag_value == struct_pb2.NULL_VALUE, str(
-            data.result.result_set
-        )
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        assert data.rows[0][0] is None, str(data)
+        assert data.rows[0][1] is None, str(data)
+        assert data.rows[0][2] is None, str(data)
 
-    @yq_all
     @pytest.mark.parametrize(
         "filename", [("date_null/as_default/multi_null.csv"), ("date_null/parse_error/multi_null.csv")]
     )
     def test_string_not_null_multi(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "hcpp"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "hcpp")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT
@@ -1224,14 +1178,13 @@ Pear;15;33'''
             LIMIT 10;
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        assert data.result.result_set.rows[0].items[0].bytes_value == b"", str(data.result.result_set)
-        assert data.result.result_set.rows[0].items[1].bytes_value == b"", str(data.result.result_set)
-        assert data.result.result_set.rows[0].items[2].bytes_value == b"", str(data.result.result_set)
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        assert data.rows[0][0] == b"", str(data)
+        assert data.rows[0][1] == "", str(data)
+        assert data.rows[0][2] == b"", str(data)
 
-    @yq_all
     def test_parquet_converters_to_timestamp(self, kikimr, s3, client, unique_prefix):
         # timestamp[ms] -> Timestamp
         # 2024-04-02T12:01:00.000Z
@@ -1245,9 +1198,8 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "hcpp"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "hcpp")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT
@@ -1261,13 +1213,13 @@ Pear;15;33'''
                 ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # timestamp[us] -> Timestamp
 
@@ -1281,13 +1233,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # string -> Timestamp
 
@@ -1301,13 +1253,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # utf8 -> Timestamp
 
@@ -1321,13 +1273,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # timestamp[s] -> Timestamp
 
@@ -1341,13 +1293,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # timestamp[ns] -> Timestamp
 
@@ -1361,13 +1313,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # date64 -> Timestamp
 
@@ -1381,13 +1333,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T00:00:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T00:00:00Z"
 
         # date32 -> Timestamp
 
@@ -1401,13 +1353,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T00:00:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T00:00:00Z"
 
         # int32 [UNIX_TIME_SECONDS] -> Timestamp
 
@@ -1434,13 +1386,13 @@ Pear;15;33'''
                 `data.timestamp.format_name`="UNIX_TIME_SECONDS");
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # int64 [UNIX_TIME_SECONDS] -> Timestamp
 
@@ -1467,13 +1419,13 @@ Pear;15;33'''
                 `data.timestamp.format_name`="UNIX_TIME_SECONDS");
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # int64 [UNIX_TIME_MILLISECONDS] -> Timestamp
 
@@ -1500,13 +1452,13 @@ Pear;15;33'''
                 `data.timestamp.format_name`="UNIX_TIME_MILLISECONDS");
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # int64 [UNIX_TIME_MICROSECONDS] -> Timestamp
 
@@ -1533,13 +1485,13 @@ Pear;15;33'''
                 `data.timestamp.format_name`="UNIX_TIME_MICROSECONDS");
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # uint32 [UNIX_TIME_SECONDS] -> Timestamp
 
@@ -1566,13 +1518,13 @@ Pear;15;33'''
                 `data.timestamp.format_name`="UNIX_TIME_SECONDS");
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # uint64 [UNIX_TIME_SECONDS] -> Timestamp
 
@@ -1586,13 +1538,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # uint64 [UNIX_TIME_MILLISECONDS] -> Timestamp
 
@@ -1619,13 +1571,13 @@ Pear;15;33'''
                 `data.timestamp.format_name`="UNIX_TIME_MILLISECONDS");
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # uint64 [UNIX_TIME_MICROSECONDS] -> Timestamp
 
@@ -1652,13 +1604,13 @@ Pear;15;33'''
                 `data.timestamp.format_name`="UNIX_TIME_MICROSECONDS");
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # uint16 [default] -> Timestamp
 
@@ -1684,15 +1636,14 @@ Pear;15;33'''
                 ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T00:00:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T00:00:00Z"
 
-    @yq_all
     def test_parquet_converters_to_datetime(self, kikimr, s3, client, unique_prefix):
         # timestamp[ms] -> Datetime
         # 2024-04-02T12:01:00.000Z
@@ -1706,9 +1657,8 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "hcpp"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "hcpp")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT
@@ -1722,13 +1672,13 @@ Pear;15;33'''
                 ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # timestamp[us] -> Timestamp
 
@@ -1742,13 +1692,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # timestamp[s] -> Timestamp
 
@@ -1762,13 +1712,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # timestamp[ns] -> Timestamp
 
@@ -1782,13 +1732,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # date64 -> Timestamp
 
@@ -1802,13 +1752,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T00:00:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T00:00:00Z"
 
         # date32 -> Timestamp
 
@@ -1822,13 +1772,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T00:00:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T00:00:00Z"
 
         # int32 -> Timestamp
 
@@ -1842,13 +1792,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # int64 -> Timestamp
 
@@ -1862,10 +1812,10 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        assert len(data.rows) == 1, "invalid count rows"
 
         # uint32 -> Timestamp
 
@@ -1879,13 +1829,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # uint64 -> Timestamp
 
@@ -1899,13 +1849,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00Z"
 
         # uint16 [default] -> Timestamp
 
@@ -1919,16 +1869,15 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T00:00:00Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T00:00:00Z"
 
-    @yq_all
     def test_parquet_converters_to_string(self, kikimr, s3, client, unique_prefix):
         # timestamp[ms] -> String
         # 2024-04-02T12:01:00.000000Z
@@ -1942,9 +1891,8 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "hcpp"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "hcpp")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT
@@ -1958,13 +1906,13 @@ Pear;15;33'''
                 ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00.000000Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00.000000Z"
 
         # timestamp[us] -> String
 
@@ -1978,13 +1926,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00.000000Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00.000000Z"
 
         # timestamp[s] -> String
 
@@ -1998,13 +1946,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00.000000Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00.000000Z"
 
         # timestamp[ns] -> String
 
@@ -2018,13 +1966,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00.000000Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02T12:01:00.000000Z"
 
         # date64 -> String
 
@@ -2038,13 +1986,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02"
 
         # date32 -> String
 
@@ -2058,17 +2006,16 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02"
 
         self.check_large_parquet_timestamp_to_string(kikimr, s3, client, storage_connection_name, 'String')
 
-    @yq_all
     def test_parquet_converters_to_utf8(self, kikimr, s3, client, unique_prefix):
         # timestamp[ms] -> Utf8
         # 2024-04-02T12:01:00.000000Z
@@ -2082,9 +2029,8 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "hcpp"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "hcpp")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT
@@ -2098,13 +2044,13 @@ Pear;15;33'''
                 ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].text_value == "2024-04-02T12:01:00.000000Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == "2024-04-02T12:01:00.000000Z"
 
         # timestamp[us] -> Utf8
 
@@ -2118,13 +2064,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].text_value == "2024-04-02T12:01:00.000000Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == "2024-04-02T12:01:00.000000Z"
 
         # timestamp[s] -> Utf8
 
@@ -2138,13 +2084,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].text_value == "2024-04-02T12:01:00.000000Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == "2024-04-02T12:01:00.000000Z"
 
         # timestamp[ns] -> Utf8
 
@@ -2158,13 +2104,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].text_value == "2024-04-02T12:01:00.000000Z"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == "2024-04-02T12:01:00.000000Z"
 
         # date64 -> Utf8
 
@@ -2178,13 +2124,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].text_value == "2024-04-02"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == "2024-04-02"
 
         # date32 -> Utf8
 
@@ -2198,17 +2144,16 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].text_value == "2024-04-02"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == "2024-04-02"
 
         self.check_large_parquet_timestamp_to_string(kikimr, s3, client, storage_connection_name, 'Utf8')
 
-    @yq_all
     def test_parquet_converters_to_date(self, kikimr, s3, client, unique_prefix):
         # date32 -> Date
 
@@ -2223,9 +2168,8 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "evanevannnn"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "evanevannnn")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT
@@ -2239,13 +2183,13 @@ Pear;15;33'''
                 ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02"
 
         # string -> Date
 
@@ -2272,13 +2216,13 @@ Pear;15;33'''
                 ));
             '''
 
-        query_id = client.create_query("simple", format_sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(format_sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02"
 
         # uint16 -> Date
 
@@ -2292,13 +2236,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02"
 
         # int32 -> Date
 
@@ -2312,13 +2256,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02"
 
         # uint32 -> Date
 
@@ -2332,13 +2276,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02"
 
         # int64 -> Date
 
@@ -2352,13 +2296,13 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02"
 
         # uint64 -> Date
 
@@ -2372,15 +2316,14 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02"
+        assert rows[0][0] == "apple"
+        assert rows[0][1] == b"2024-04-02"
 
-    @yq_v2
     def test_s3_push_down_parquet(self, kikimr, s3, client, unique_prefix):
         data = [
             [
@@ -2400,9 +2343,8 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename), row_group_size=2)
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "hcpp"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "hcpp")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT
@@ -2417,31 +2359,30 @@ Pear;15;33'''
             WHERE Timestamp("2024-06-14T00:00:00Z") <= ts and ts < Timestamp("2024-06-15T00:00:00Z")
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        query = client.execute(sql)
 
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "watermelon"
-        assert rows[0].items[1].text_value == "2024-06-14T00:00:00Z"
+        assert rows[0][0] == "watermelon"
+        assert rows[0][1] == "2024-06-14T00:00:00Z"
 
-        stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
+        stat = query.statistics
 
-        graph_name = "ResultSet"
-        without_predicate_ingress_bytes = int(stat[graph_name]["IngressBytes"]["sum"])
+        without_predicate_ingress_bytes = int(query.metric('IngressBytes'))
 
         sql = 'pragma s3.UsePredicatePushdown = "true";\n' + sql
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        query = client.execute(sql)
 
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id, limit=50)
-        rows = data.result.result_set.rows
+        query.check()
+        data = query.result_set(index=0, limit=50)
+        rows = data.rows
         assert len(rows) == 1, "invalid count rows"
-        assert rows[0].items[0].text_value == "watermelon"
-        assert rows[0].items[1].text_value == "2024-06-14T00:00:00Z"
+        assert rows[0][0] == "watermelon"
+        assert rows[0][1] == "2024-06-14T00:00:00Z"
 
-        stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
-        with_predicate_ingress_bytes = int(stat[graph_name]["IngressBytes"]["sum"])
+        stat = query.statistics
+        with_predicate_ingress_bytes = int(query.metric('IngressBytes'))
 
         assert without_predicate_ingress_bytes > with_predicate_ingress_bytes, stat

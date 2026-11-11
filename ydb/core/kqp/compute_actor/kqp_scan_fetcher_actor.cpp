@@ -569,6 +569,11 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
         ev->Record.SetReverse(Meta.GetReverse());
     }
     ev->Record.SetItemsLimit(Meta.GetItemsLimit());
+    if (Meta.GetRequireSortedRead()) {
+        YQL_ENSURE(Meta.HasOptionalSorting() && Meta.GetOptionalSorting() != (ui32)ERequestSorting::NONE);
+        YQL_ENSURE(Meta.ReadsSize() == 1 && ComputeActorIds.size() == 1);
+        ev->Record.SetCSScanPolicy("PLAIN");
+    }
 
     if (Meta.GroupByColumnNamesSize()) {
         ev->Record.MutableComputeShardingPolicy()->SetShardsCount(ComputeActorIds.size());

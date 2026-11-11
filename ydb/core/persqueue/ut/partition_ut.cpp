@@ -100,6 +100,10 @@ public:
         return partition.BlobEncoder;
     }
 
+    static ui64 GetCumulativeCounter(TPartition& partition, ui32 counter) {
+        return partition.TabletCounters.Cumulative()[counter].Get();
+    }
+
     static void SetMirrorConsumerOffsets(TPartition& partition, bool enabled) {
         partition.Config.MutablePartitionConfig()->MutableMirrorFrom()->SetMirrorConsumerOffsets(enabled);
     }
@@ -446,6 +450,11 @@ protected:
 
     std::shared_ptr<TTabletCountersBase> TabletCounters;
 
+    // The partition resets its cumulative counters each time it flushes them to the tablet
+    ui64 GetCumulativeCounter(TPartition& partition, ui32 counter);
+
+    THashMap<TActorId, THashMap<ui32, ui64>> FlushedCumulativeCounters;
+    TTestActorRuntimeBase::TEventObserverHolder FlushedCountersObserver;
 };
 
 void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
@@ -455,6 +464,21 @@ void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
 
     Ctx->Prepare();
     Ctx->Runtime->SetScheduledLimit(5'000);
+
+    FlushedCountersObserver = Ctx->Runtime->AddObserver<TEvPQ::TEvPartitionCounters>([this](auto& ev) {
+        auto& flushed = FlushedCumulativeCounters[ev->Sender];
+        auto& counters = ev->Get()->Counters.Cumulative();
+        for (ui32 i = 0; i < counters.Size(); ++i) {
+            flushed[i] += counters[i].Get();
+        }
+        // Events parked in an edge mailbox are observed again on every dispatch
+        counters.ResetCounters();
+    });
+}
+
+ui64 TPartitionFixture::GetCumulativeCounter(TPartition& partition, ui32 counter)
+{
+    return FlushedCumulativeCounters[partition.SelfId()][counter] + TPartitionTestWrapper::GetCumulativeCounter(partition, counter);
 }
 
 TActorId TPartitionFixture::CreateFakePartition() const {
@@ -2279,7 +2303,7 @@ Y_UNIT_TEST_F(UserActCount, TPartitionFixture)
 
 Y_UNIT_TEST_F(Batching, TPartitionFixture)
 {
-    CreatePartition();
+    auto* partition = CreatePartition();
 
     SendCreateSession(4, "client-1", "session-id-1", 2, 3);
 
@@ -2319,6 +2343,24 @@ Y_UNIT_TEST_F(Batching, TPartitionFixture)
     WaitErrorResponse({.Cookie=9, .ErrorCode=NPersQueue::NErrorCode::WRONG_COOKIE});
     WaitProxyResponse({.Cookie=10, .Status=NMsgBusProxy::MSTATUS_OK});
     WaitErrorResponse({.Cookie=11, .ErrorCode=NPersQueue::NErrorCode::WRONG_COOKIE});
+
+    UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(*partition, COUNTER_PQ_CREATE_SESSION_ERROR), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(*partition, COUNTER_PQ_SET_CLIENT_OFFSET_ERROR), 1);
+}
+
+Y_UNIT_TEST_F(DropSessionErrorCounter, TPartitionFixture)
+{
+    auto* partition = CreatePartition();
+    CreateSession("client-1", "session-id-1");
+
+    SendEvent(new TEvPQ::TEvSetClientInfo(2, "client-1", 0, "session-id-2", 0, 0, 0, TActorId{},
+                                          TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitErrorResponse({.Cookie=2, .ErrorCode=NPersQueue::NErrorCode::WRONG_COOKIE});
+
+    UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(*partition, COUNTER_PQ_DELETE_SESSION_ERROR), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(*partition, COUNTER_PQ_SET_CLIENT_OFFSET_ERROR), 0);
 }
 
 Y_UNIT_TEST_F(SetOffset, TPartitionFixture)
@@ -4118,6 +4160,29 @@ Y_UNIT_TEST_F(KillReadSessionFailsPendingHasData, TPartitionFixture)
             UNIT_FAIL("timeout waiting for SessionInvalidated HasData response and TxDone");
         }
     }
+}
+
+Y_UNIT_TEST_F(ExpiredHasDataDeadlineIsAnsweredImmediately, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const ui64 end = 10;
+    const ui64 hasDataCookie = 42;
+
+    CreatePartition({.Partition=partition, .Begin=0, .End=end});
+
+    auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+    event->Record.SetPartition(partition.InternalPartitionId);
+    event->Record.SetOffset(end);
+    event->Record.SetDeadline(0);
+    event->Record.SetCookie(hasDataCookie);
+    ActorIdToProto(Ctx->Edge, event->Record.MutableSender());
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::Seconds(2));
+    UNIT_ASSERT_C(response, "Expired HasData deadline must not wait for the periodic partition wakeup");
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), hasDataCookie);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetEndOffset(), end);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSizeLag(), 0);
 }
 
 // Commit without session clears pending.Session before UsersInfoStorage is updated.

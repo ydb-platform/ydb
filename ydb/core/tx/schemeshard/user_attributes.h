@@ -21,11 +21,7 @@ constexpr TStringBuf ATTR_DOCUMENT_API_VERSION = "__document_api_version";
 constexpr TStringBuf ATTR_ASYNC_REPLICATION = "__async_replication";
 constexpr TStringBuf ATTR_ASYNC_REPLICA = "__async_replica";
 constexpr TStringBuf ATTR_INCREMENTAL_BACKUP = "__incremental_backup";
-<<<<<<< HEAD
-=======
 constexpr TStringBuf ATTR_OMIT_BACKUP = "__omit_backup"; // see ydb/core/backup/common/omit_backup.h
-constexpr TStringBuf ATTR_MONITORING_PROJECT_ID = "monitoring_project_id";
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
 
 enum class EAttribute {
     USER,

@@ -5,11 +5,8 @@
 #include "util.h"
 
 #include <ydb/core/base/appdata.h>
-<<<<<<< HEAD
 #include <ydb/core/base/path.h>
-=======
 #include <ydb/core/backup/common/omit_backup.h>
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/util/proto_duration.h>
@@ -32,13 +29,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             const TDuration& retentionPeriod,
             const std::optional<TDuration>& resolvedTimestamps,
             const NJson::TJsonMap& attrs,
-<<<<<<< HEAD
-            bool initialScan)
-=======
-            bool schemaChanges,
             bool initialScan,
             bool enableOmitBackupAttribute)
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
     {
         using namespace NYdb::NTable;
 
@@ -376,15 +368,8 @@ public:
         , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
             {"path", config->GetDstPath()},
             {"id", ToString(rid)},
-<<<<<<< HEAD
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning},
-        }, initialScan))
-=======
-            // A schema barrier snapshots its partition membership, so topic
-            // repartitioning is unsupported for schema-aware streams.
-            {"supports_topic_autopartitioning", supportsTopicAutopartitioning && !schemaChanges},
-        }, schemaChanges, initialScan, enableOmitBackupAttribute))
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
+        }, initialScan, enableOmitBackupAttribute))
         , StreamRetentionPeriod(streamRetentionPeriod)
         , ConsumerAvailabilityPeriod(consumerAvailabilityPeriod)
         , ConsumerImportant(consumerImportant)
@@ -470,22 +455,12 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
         const TReplication::ITarget::IConfig::TPtr& config,
         const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
-<<<<<<< HEAD
         bool supportsTopicAutopartitioning, bool needCreate, bool initialScan,
-        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant)
-{
-    return new TStreamCreator(parent, proxy, rid, tid, config,
-        streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
-        needCreate, initialScan, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant);
-=======
-        bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
         TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant, bool enableOmitBackupAttribute)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
-        streamName, streamPath, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
-        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant,
-        enableOmitBackupAttribute);
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
+        streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
+        needCreate, initialScan, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant, enableOmitBackupAttribute);
 }
 
 }

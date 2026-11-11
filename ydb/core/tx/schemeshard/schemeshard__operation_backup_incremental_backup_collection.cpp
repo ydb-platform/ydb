@@ -4,18 +4,12 @@
 #include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
 
-<<<<<<< HEAD
+#include <ydb/core/backup/common/omit_backup.h>
+
 #define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_E(stream) LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-=======
-#include <ydb/core/backup/common/omit_backup.h>
-
-#include <ydb/library/actors/core/log.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
 
 namespace NKikimr::NSchemeShard {
 
@@ -206,9 +200,6 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 return result;
             }
         }
-<<<<<<< HEAD
-        
-=======
 
         if (::NKikimr::NBackup::IsOmittedFromBackup(tablePath.Base()->UserAttrs->Attrs)) {
             result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
@@ -217,7 +208,6 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
             return result;
         }
 
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
         std::pair<TString, TString> paths;
         TString err;
         if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {

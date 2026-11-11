@@ -7168,9 +7168,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ChangefeedsExportRestore(false);
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(ShouldSucceedImportTableWithUniqueIndex) {
-=======
     // Async replication manages its own changefeed and consumer on the source
     // table. Replication keeps reading the source feed, so a restored copy of
     // that feed is never consumed; its important consumer would retain every
@@ -7285,7 +7282,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         THashMap<TString, TTestDataWithScheme> bucketContent;
@@ -7366,8 +7363,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -7526,8 +7523,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(!s3Mock.GetData().empty());
     }
 
-    Y_UNIT_TEST_FLAG(ShouldSucceedImportTableWithUniqueIndex, EnableDataShardDirectPartImport) {
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
+    Y_UNIT_TEST(ShouldSucceedImportTableWithUniqueIndex) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;

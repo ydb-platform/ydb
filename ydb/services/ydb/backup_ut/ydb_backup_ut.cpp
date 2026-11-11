@@ -11,6 +11,7 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
@@ -3696,68 +3697,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-<<<<<<< HEAD
-=======
-    Y_UNIT_TEST(OlapColumnTableContentPreservedThroughFsBackupRestore) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        TKikimrWithGrpcAndRootSchema server(appConfig);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
-        NQuery::TQueryClient queryClient(driver);
-        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
-        constexpr const char* table = "/Root/olap_table";
-
-        for (auto mode : {NDump::TRestoreSettings::EMode::BulkUpsert, NDump::TRestoreSettings::EMode::ImportData}) {
-            TTempDir tempDir;
-            TestTableContentIsPreserved(
-                table,
-                session,
-                CreateBackupLambda(driver, tempDir.Path(), "/Root", "/Root", NDump::TDumpSettings().AvoidCopy(true)),
-                CreateRestoreLambda(driver, tempDir.Path(), "/Root",
-                    NDump::TRestoreSettings().Mode(mode)),
-                /* isOlap */ true
-            );
-            ExecuteQuery(session, Sprintf(R"(
-                    DROP TABLE `%s`;
-                )", table
-            ), true);
-        }
-    }
-
-    Y_UNIT_TEST(EmptyColumnTableBackupLeavesNoIncompleteDataFile) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        TKikimrWithGrpcAndRootSchema server(appConfig);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
-        NQuery::TQueryClient queryClient(driver);
-        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
-        TTempDir tempDir;
-        const auto& pathToBackup = tempDir.Path();
-        constexpr const char* table = "/Root/empty_olap_table";
-
-        ExecuteQuery(session, Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint32 NOT NULL,
-                    Value Utf8,
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    STORE = COLUMN
-                );
-            )", table
-        ), true);
-
-        NDump::TClient backupClient(driver);
-        const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().AvoidCopy(true).Database("/Root"));
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-        TVector<TFsPath> children;
-        pathToBackup.Child("empty_olap_table").List(children);
-        for (const auto& child : children) {
-            UNIT_ASSERT_C(child.GetName() != NDump::NFiles::IncompleteData().FileName,
-                "Stray incomplete data file left behind after backing up an empty column table: " << child.GetPath());
-        }
-    }
-
     Y_UNIT_TEST(OmittedColumnTableIsNotDumped) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
@@ -3796,75 +3735,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         const auto unmarked = session.DescribeTable("/Root/olap_table").ExtractValueSync();
         UNIT_ASSERT_C(unmarked.IsSuccess(), unmarked.GetIssues().ToString());
         UNIT_ASSERT(!unmarked.GetTableDescription().GetAttributes().contains("__omit_backup"));
-        TTempDir tempDir;
-        const auto result = backupClient.Dump("/Root", tempDir.Path(), NDump::TDumpSettings().AvoidCopy(true).Database("/Root"));
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT(tempDir.Path().Child("olap_table").Child("scheme.pb").Exists());
-        UNIT_ASSERT(tempDir.Path().Child("olap_table").Child("data_00.csv").Exists());
     }
 
-    Y_UNIT_TEST(ColumnTableSkippedWhenCopyTableFallbackTriggered) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        TKikimrWithGrpcAndRootSchema server(appConfig);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
-        NQuery::TQueryClient queryClient(driver);
-        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
-        TTempDir tempDir;
-        const auto& pathToBackup = tempDir.Path();
-
-        constexpr const char* rowTable = "/Root/row_table";
-        constexpr const char* columnTable = "/Root/column_table";
-
-        ExecuteQuery(session, Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint32,
-                    Value Utf8,
-                    PRIMARY KEY (Key)
-                );
-            )", rowTable
-        ), true);
-        ExecuteQuery(session, Sprintf(R"(
-                UPSERT INTO `%s` (Key, Value) VALUES (1, "one"), (2, "two");
-            )", rowTable
-        ));
-
-        ExecuteQuery(session, Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint32 NOT NULL,
-                    Value Utf8,
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    STORE = COLUMN
-                );
-            )", columnTable
-        ), true);
-        ExecuteQuery(session, Sprintf(R"(
-                UPSERT INTO `%s` (Key, Value) VALUES (1u, "a");
-            )", columnTable
-        ));
-
-        const auto originalRowTableContent = GetTableContent(session, rowTable);
-
-        NDump::TClient backupClient(driver);
-        const auto dumpResult = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
-        UNIT_ASSERT_C(dumpResult.IsSuccess(), dumpResult.GetIssues().ToString());
-
-        UNIT_ASSERT_C(!pathToBackup.Child("column_table").Exists(),
-            "Column table directory should not be present in the backup after the CopyTable fallback skipped it");
-        UNIT_ASSERT_C(pathToBackup.Child("row_table").Exists(),
-            "Row table should still be backed up via the fallback CopyTables call");
-
-        ExecuteQuery(session, Sprintf(R"(DROP TABLE `%s`;)", rowTable), true);
-
-        NDump::TClient restoreClient(driver);
-        const auto restoreResult = restoreClient.Restore(pathToBackup, "/Root");
-        UNIT_ASSERT_C(restoreResult.IsSuccess(), restoreResult.GetIssues().ToString());
-
-        CompareResults(GetTableContent(session, rowTable), originalRowTableContent);
-    }
-
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
         TestReplicationBackupRestore(/* tokenSecretType */ Nothing());
     }

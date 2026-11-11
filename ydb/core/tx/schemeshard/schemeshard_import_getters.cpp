@@ -852,12 +852,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 continue;
             }
 
-            YDB_LOG_INFO("Skip changefeed omitted from export",
-                {"self", SelfId()},
-                {"importId", ImportInfo->Id},
-                {"itemIdx", ItemIdx},
-                {"changefeed", changefeeds.Get(i).GetChangefeed().name()},
-            );
+            LOG_I("Skip changefeed omitted from export"
+                << ": self# " << SelfId()
+                << ", importId# " << ImportInfo->Id
+                << ", itemIdx# " << ItemIdx
+                << ", changefeed# " << changefeeds.Get(i).GetChangefeed().name());
             changefeeds.DeleteSubrange(i, 1);
         }
     }

@@ -22,6 +22,8 @@
 
 #include <library/cpp/json/json_writer.h>
 
+#include <optional>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
 
 namespace NKikimr::NDataShard {
@@ -554,7 +556,7 @@ class TCdcChangeSenderMain
 
         if (!IsHeartbeatAggregated() && Heartbeats) {
             RemoveHeartbeats(Heartbeats.end());
-            WritingHeartbeat = false;
+            WritingHeartbeat.reset();
         }
 
         Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
@@ -765,9 +767,10 @@ class TCdcChangeSenderMain
         ev->SourceDataShardId = DataShard.TabletId;
         ev->Heartbeat = NPQ::THeartbeat::Parse(cmd.GetHeartbeat());
 
-        WritingHeartbeat = true;
-        WritingHeartbeatOrder = order;
-        WritingHeartbeatVersion = ev->Heartbeat.Version;
+        WritingHeartbeat = TWritingHeartbeat{
+            .Order = order,
+            .Version = ev->Heartbeat.Version,
+        };
 
         YDB_LOG_DEBUG("Send heartbeat to CdcAggregatorService",
             {"eventDetails", ev->ToString()},
@@ -806,14 +809,14 @@ class TCdcChangeSenderMain
 
         switch (result.Status) {
         case EStatus::Written:
-            if (result.WrittenVersion >= WritingHeartbeatVersion) {
-                RemoveHeartbeats(Heartbeats.upper_bound(WritingHeartbeatOrder));
-                WritingHeartbeat = false;
+            if (result.WrittenVersion >= WritingHeartbeat->Version) {
+                RemoveHeartbeats(Heartbeats.upper_bound(WritingHeartbeat->Order));
+                WritingHeartbeat.reset();
                 WriteHeartbeatBackoff.Reset();
                 return WriteHeartbeat();
             }
             YDB_LOG_WARN("CdcAggregatorService written version is behind the heartbeat, retrying",
-                {"heartbeatVersion", WritingHeartbeatVersion},
+                {"heartbeatVersion", WritingHeartbeat->Version},
                 {"writtenVersion", result.WrittenVersion});
             return RetryWriteHeartbeat(WriteHeartbeatBackoff.Next());
         case EStatus::Retry:
@@ -842,7 +845,7 @@ class TCdcChangeSenderMain
             return;
         }
 
-        WritingHeartbeat = false;
+        WritingHeartbeat.reset();
         WriteHeartbeat();
     }
 
@@ -925,10 +928,13 @@ private:
     static constexpr TDuration WriteHeartbeatTimeout = TDuration::Seconds(30);
     static constexpr TDuration RejectedHeartbeatRetryDelay = TDuration::Minutes(1);
 
+    struct TWritingHeartbeat {
+        ui64 Order = 0;
+        TRowVersion Version = TRowVersion::Min();
+    };
+
     TMap<ui64, NChangeExchange::IChangeRecord::TPtr> Heartbeats;
-    bool WritingHeartbeat = false;
-    ui64 WritingHeartbeatOrder = 0;
-    TRowVersion WritingHeartbeatVersion = TRowVersion::Min();
+    std::optional<TWritingHeartbeat> WritingHeartbeat;
     ui64 WriteHeartbeatCookie = 0;
     TBackoff WriteHeartbeatBackoff = TBackoff(TDuration::MilliSeconds(100), TDuration::Seconds(10));
 

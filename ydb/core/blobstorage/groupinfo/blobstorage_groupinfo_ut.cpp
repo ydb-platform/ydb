@@ -72,6 +72,62 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 
 
 
+    Y_UNIT_TEST(ParityBlockIntegrityRestoreLimit) {
+        for (auto species : {TErasureType::Erasure4Plus2Block, TErasureType::Erasure8Plus2Block}) {
+            const TBlobStorageGroupInfo info(species);
+            const auto& checker = info.GetTopology().GetDataIntegrityChecker();
+            const ui32 totalParts = info.Type.TotalPartCount();
+            const TLogoBlobID id(1, 1, 1, 0, 640, 0);
+            TDataPartSet encoded;
+            info.Type.SplitData(TErasureType::CrcModeNone, TString(id.BlobSize(), 'x'), encoded);
+            TBlobStorageGroupInfo::IDataIntegrityChecker::TPartsData parts;
+            parts.Parts.resize(totalParts);
+            for (ui32 part = 0; part < totalParts; ++part) {
+                parts.Parts[part].emplace_back(part, encoded.Parts[part].OwnedString);
+            }
+            const auto healthy = checker.GetDataState(id, parts, '\n', 1);
+            UNIT_ASSERT_C(healthy.IsOk, healthy.DataInfo);
+            UNIT_ASSERT(!healthy.DataInfo.Contains("truncated"));
+
+            TString bad = encoded.Parts[0].OwnedString.ConvertToString();
+            bad.Detach()[0] ^= 1;
+            parts.Parts[0].front().second = TRope(bad);
+            const auto corrupted = checker.GetDataState(id, parts, '\n', 1);
+            UNIT_ASSERT(!corrupted.IsOk);
+            UNIT_ASSERT_STRING_CONTAINS(corrupted.DataInfo, "Erasure diagnostics truncated after 1 restores");
+            parts.Parts[0].front().second = encoded.Parts[0].OwnedString;
+            parts.Parts[0].emplace_back(totalParts, TRope(bad));
+            const auto unlimited = checker.GetDataState(id, parts, '\n');
+            UNIT_ASSERT(!unlimited.IsOk);
+            UNIT_ASSERT_VALUES_EQUAL(checker.GetDataState(id, parts, '\n', 0).DataInfo, unlimited.DataInfo);
+            // Each omitted pair needs one restore, plus one more if part 1 is among the inputs.
+            const ui32 restores = (totalParts - 1) * (totalParts - 1);
+            for (ui32 limit : {1u, restores - 1, restores, restores + 1}) {
+                const auto result = checker.GetDataState(id, parts, '\n', limit);
+                UNIT_ASSERT(!result.IsOk);
+                if (limit < restores) {
+                    UNIT_ASSERT_STRING_CONTAINS(result.DataInfo,
+                        TStringBuilder() << "Erasure diagnostics truncated after " << limit << " restores");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(result.DataInfo, unlimited.DataInfo);
+                }
+            }
+
+            // Three distinct copies of every part exercise truncation inside the recursive version search.
+            for (ui32 part = 0; part < totalParts; ++part) {
+                parts.Parts[part].resize(1);
+                for (ui32 version : {1u, 2u}) {
+                    bad = encoded.Parts[part].OwnedString.ConvertToString();
+                    bad.Detach()[0] ^= version;
+                    parts.Parts[part].emplace_back(totalParts + version - 1, TRope(bad));
+                }
+            }
+            const auto result = checker.GetDataState(id, parts, '\n', 100);
+            UNIT_ASSERT(!result.IsOk);
+            UNIT_ASSERT_STRING_CONTAINS(result.DataInfo, "Erasure diagnostics truncated after 100 restores");
+        }
+    }
+
     Y_UNIT_TEST(FailRealmStateDefaults) {
         using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);

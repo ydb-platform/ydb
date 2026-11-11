@@ -432,6 +432,8 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(result->DataInfo.Contains("Erasure diagnostics truncated after 100 restores"),
+            erasure.GetErasure() == TBlobStorageGroupType::Erasure8Plus2Block);
 
         Cerr << result->DataInfo << Endl;
     }

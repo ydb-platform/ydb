@@ -16,10 +16,12 @@ class TDataIntegrityCheckerTrivial : public TDataIntegrityCheckerBase {
 public:
     using TDataIntegrityCheckerBase::TDataIntegrityCheckerBase;
 
-    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const override {
+    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator,
+            ui32 maxRestores = 0) const override {
         Y_UNUSED(id);
         Y_UNUSED(partsData);
         Y_UNUSED(separator);
+        Y_UNUSED(maxRestores);
         return {};
     }
 };
@@ -28,7 +30,8 @@ class TDataIntegrityCheckerParityBlock : public TDataIntegrityCheckerBase {
 public:
     using TDataIntegrityCheckerBase::TDataIntegrityCheckerBase;
 
-    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const override {
+    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator,
+            ui32 maxRestores = 0) const override {
         const auto& type = Top->GType;
         const ui32 dataParts = type.DataParts();
         const ui32 totalParts = type.TotalPartCount();
@@ -109,15 +112,24 @@ public:
         std::vector<ui32> partIds;
         partIds.reserve(totalParts);
         bool erasureError = false;
+        ui32 restores = 0;
+        bool restoresTruncated = false;
 
         auto checkCombination = [&]() {
             TStackVec<const TSeenPart*, TErasureType::MaxTotalParts> versions(dataParts);
             // iterate over combinations of part versions
             auto checkVersions = [&](auto&& self, ui32 part) -> void {
+                if (maxRestores && restores == maxRestores) {
+                    restoresTruncated = true;
+                    return;
+                }
                 if (part < dataParts) {
                     for (const auto& seen : seenParts[partIds[part]]) {
                         versions[part] = &seen;
                         self(self, part + 1);
+                        if (restoresTruncated) {
+                            return;
+                        }
                     }
                     return;
                 }
@@ -133,6 +145,7 @@ public:
                     restoreMask |= (1 << partIds[dataParts + 1]);
                 }
 
+                ++restores;
                 ErasureRestore(crcMode, type, id.BlobSize(), nullptr, data, restoreMask);
 
                 auto checkOnePart = [&](ui32 partId) {
@@ -192,8 +205,8 @@ public:
             checkCombination();
         } else { // partIds.size() == totalParts
             // iterate over different combinations to find good parts
-            for (ui8 gap1 = 0; gap1 < totalParts - 1; ++gap1) {
-                for (ui8 gap2 = gap1 + 1; gap2 < totalParts; ++gap2) {
+            for (ui8 gap1 = 0; gap1 < totalParts - 1 && !restoresTruncated; ++gap1) {
+                for (ui8 gap2 = gap1 + 1; gap2 < totalParts && !restoresTruncated; ++gap2) {
                     ui8 idx = 0;
                     for (ui8 p = 0; p < totalParts; ++p) {
                         if (p == gap1) {
@@ -215,6 +228,9 @@ public:
             erasureReport << "ERROR: There are erasure restore fails" << separator;
         }
 
+        if (restoresTruncated) {
+            erasureReport << "Erasure diagnostics truncated after " << restores << " restores" << separator;
+        }
         partsState.DataInfo += erasureReport.Str();
         return partsState;
     }
@@ -227,8 +243,10 @@ private:
 public:
     using TDataIntegrityCheckerBase::TDataIntegrityCheckerBase;
 
-    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const override {
+    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator,
+            ui32 maxRestores = 0) const override {
         Y_UNUSED(id);
+        Y_UNUSED(maxRestores);
         Y_ABORT_UNLESS(partsData.Parts.size() == 3);
 
         TPartsState partsState;

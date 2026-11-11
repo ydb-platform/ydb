@@ -203,7 +203,9 @@ public:
             TString DataInfo;
         };
 
-        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const = 0;
+        // maxRestores limits ErasureRestore calls; zero means unlimited.
+        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator,
+            ui32 maxRestores = 0) const = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

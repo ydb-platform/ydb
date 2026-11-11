@@ -11298,7 +11298,8 @@ enum class EIncompleteIndexStage {
     BeforeBackup,
 };
 
-void CheckIncompleteVectorIndexExport(bool isFs, bool prefixed, EIncompleteIndexStage stage, bool isYt = false) {
+void CheckIncompleteVectorIndexExport(bool isFs, bool prefixed, EIncompleteIndexStage stage,
+        bool isYt = false, bool encrypted = true, bool includeIndexData = true) {
     TBackupStorage storage(isFs);
     TTestBasicRuntime runtime;
     TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
@@ -11365,27 +11366,40 @@ void CheckIncompleteVectorIndexExport(bool isFs, bool prefixed, EIncompleteIndex
         return stage == EIncompleteIndexStage::BeforeBackup && copyTxId
             && ev->Get()->Record.GetTxId() == copyTxId;
     });
-    // YT does not convert index settings. Inspect its proposal and emulate a
-    // failed upload so this regression test needs no external YT cluster.
-    TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> ytBackup(runtime, [&](const auto& ev) {
+    // Other export modes must still propose the table backup. Stop at that
+    // boundary: this test checks SchemeShard validation, not the uploader.
+    const bool expectBackupProposal = isYt || !encrypted || !includeIndexData;
+    TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> backupProposals(runtime, [&](const auto& ev) {
         const auto& record = ev->Get()->Record;
-        if (!isYt || !record.TransactionSize()
+        if (!expectBackupProposal || !record.TransactionSize()
             || record.GetTransaction(0).GetOperationType() != NKikimrSchemeOp::ESchemeOpBackup) {
             return false;
         }
         const auto& backup = record.GetTransaction(0).GetBackup();
-        UNIT_ASSERT(backup.HasYTSettings());
+        if (backup.GetTableName() != "0") {
+            return false;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(backup.HasYTSettings(), isYt);
+        UNIT_ASSERT_VALUES_EQUAL(backup.HasS3Settings(), !isYt && !isFs);
+        UNIT_ASSERT_VALUES_EQUAL(backup.HasFSSettings(), !isYt && isFs);
+        UNIT_ASSERT_VALUES_EQUAL(backup.HasEncryptionSettings(), !isYt && encrypted);
         UNIT_ASSERT_VALUES_EQUAL(backup.GetTable().GetTable().GetTableIndexes(0)
             .IndexImplTableDescriptionsSize(), 1);
         runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
             new TEvSchemeShard::TEvModifySchemeTransactionResult(NKikimrScheme::StatusSchemeError,
-                record.GetTxId(), TTestTxConfig::SchemeShard, "YT backup proposal received")));
+                record.GetTxId(), TTestTxConfig::SchemeShard, "Backup proposal received")));
         return true;
     });
 
     if (stage == EIncompleteIndexStage::BeforeExport) {
         removeImplTable();
     }
+    const TString encryptionSettings = encrypted ? R"(
+        encryption_settings {
+            encryption_algorithm: "AES-128-GCM"
+            symmetric_key { key: "0123456789012345" }
+        }
+    )" : "";
     const ui64 exportTxId = ++txId;
     AsyncExport(runtime, exportTxId, "/MyRoot", isYt ? TString(R"(
         ExportToYtSettings {
@@ -11395,15 +11409,13 @@ void CheckIncompleteVectorIndexExport(bool isFs, bool prefixed, EIncompleteIndex
         %s {
             %s
             %s
-            encryption_settings {
-                encryption_algorithm: "AES-128-GCM"
-                symmetric_key { key: "0123456789012345" }
-            }
-            include_index_data: true
+            %s
+            include_index_data: %s
             items { source_path: "/MyRoot/Table" %s: "backup" }
         }
     )", isFs ? "ExportToFsSettings" : "ExportToS3Settings", storage.Settings().c_str(),
-        isFs ? "" : "destination_prefix: \"export\"", isFs ? "destination_path" : "destination_prefix"));
+        isFs ? "" : "destination_prefix: \"export\"", encryptionSettings.c_str(),
+        includeIndexData ? "true" : "false", isFs ? "destination_path" : "destination_prefix"));
     TAutoPtr<IEventHandle> handle;
     const auto* response = runtime.GrabEdgeEvent<TEvExport::TEvCreateExportResponse>(handle);
     const auto& entry = response->Record.GetResponse().GetEntry();
@@ -11423,9 +11435,9 @@ void CheckIncompleteVectorIndexExport(bool isFs, bool prefixed, EIncompleteIndex
         const auto result = TestGetExport(runtime, exportTxId, "/MyRoot", Ydb::StatusIds::CANCELLED);
         issues = NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues());
     }
-    if (isYt) {
-        UNIT_ASSERT_VALUES_EQUAL(ytBackup.size(), 1);
-        UNIT_ASSERT_STRING_CONTAINS(issues, "YT backup proposal received");
+    if (expectBackupProposal) {
+        UNIT_ASSERT_VALUES_EQUAL(backupProposals.size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Backup proposal received");
     } else {
         UNIT_ASSERT_STRING_CONTAINS(issues, "Incomplete description of index 'vector_idx'");
         UNIT_ASSERT_STRING_CONTAINS(issues, prefixed
@@ -12093,6 +12105,16 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
 
     Y_UNIT_TEST(YtBackupDuringVectorIndexRebuild) {
         CheckIncompleteVectorIndexExport(false, false, EIncompleteIndexStage::BeforeBackup, true);
+    }
+
+    Y_UNIT_TEST_QUAD(BackupWithoutIndexDataDuringVectorIndexRebuild, IsFs, Encrypted) {
+        CheckIncompleteVectorIndexExport(IsFs, false, EIncompleteIndexStage::BeforeBackup,
+            false, Encrypted, false);
+    }
+
+    Y_UNIT_TEST_FLAG(UnencryptedIndexBackupDuringVectorIndexRebuild, IsFs) {
+        CheckIncompleteVectorIndexExport(IsFs, false, EIncompleteIndexStage::BeforeBackup,
+            false, false, true);
     }
 
     Y_UNIT_TEST_QUAD(RejectIncompleteVectorIndex, IsFs, Prefixed) {

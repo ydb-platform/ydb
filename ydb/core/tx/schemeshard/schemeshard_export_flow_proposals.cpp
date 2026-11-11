@@ -381,9 +381,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), parentPath.Child(childName));
     }
 
-    // S3/FS convert the full scheme on DataShard. YT only exports the columns
-    // and does not need implementation table descriptions.
+    // Only encrypted exports with materialized index data require this check.
     if (exportInfo.Kind != TExportInfo::EKind::YT
+        && exportInfo.IncludeIndexData
+        && exportInfo.ExportMetadata.HasIV()
         && !ValidateIndexImplTableDescriptions(task.GetTable().GetTable(), error)) {
         return nullptr;
     }

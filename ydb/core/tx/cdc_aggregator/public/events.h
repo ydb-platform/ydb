@@ -72,6 +72,8 @@ namespace TEvCdcAggregatorService {
         ui64 RecipientTabletId = 0;
         ui64 SourceDataShardId = 0;
         NPQ::THeartbeat Heartbeat;
+
+        TString ToString() const override;
     };
 
     struct TEvWriteHeartbeatResult
@@ -86,6 +88,8 @@ namespace TEvCdcAggregatorService {
         EStatus Status = EStatus::Retry;
         TRowVersion WrittenVersion = TRowVersion::Min();
         TString Error;
+
+        TString ToString() const override;
     };
 } // namespace TEvCdcAggregatorService
 

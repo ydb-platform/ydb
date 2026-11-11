@@ -14,6 +14,7 @@ message TTrackingConfig {
     optional NKikimrProto.TPathID StreamPathId = 1;
     repeated fixed64 SourceDataShardIds = 2;
     repeated TPartition TargetPartitions = 3;
+    optional string StreamPath = 4;
 }
 
 message TEvConfigureTracking {

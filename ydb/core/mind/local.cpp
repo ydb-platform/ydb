@@ -400,6 +400,16 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             return;
         }
 
+        if (HiveGeneration && hiveGen > HiveGeneration) {
+            // The new Hive is already reachable. Discard the retry delay
+            // accumulated while reconnecting to its predecessor.
+            HiveGeneration = hiveGen;
+            if (HivePipeClient) {
+                NTabletPipe::CloseClient(ctx, HivePipeClient);
+                HandlePipeDestroyed(ctx);
+            }
+        }
+
         if (!HivePipeClient) {
             TryToRegister(ctx);
             return;

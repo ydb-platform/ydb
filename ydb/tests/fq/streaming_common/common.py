@@ -169,7 +169,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         },
         replication_config=replication_config,
         default_clusteradmin="root@builtin",
-        use_in_memory_pdisks=False,
+        use_in_memory_pdisks=True,
     )
 
     if enable_fq_connector:
@@ -609,8 +609,7 @@ class Kikimr:
         enable_discovery: bool = True,
         tenant_database: str = "/Root/my_tenant",
     ):
-        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
-        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+        # Skip ydbd -V: logging-only full process start.
 
         full_yaml_config = copy.deepcopy(config.yaml_config)
 
@@ -629,8 +628,8 @@ class Kikimr:
         self.cluster.start(timeout_seconds=timeout_seconds)
 
         token = config.default_clusteradmin
-        logger.info("Sleep")
-        time.sleep(10)
+        # Was sleep(10) before create_database; CMS/tenant wait below is enough.
+        logger.info("Skip fixed sleep before tenant create")
         logger.info(f"Creating tenant {tenant_database} with token={token!r}")
         self.cluster.create_database(
             tenant_database,

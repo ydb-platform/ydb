@@ -170,6 +170,8 @@ protected:
         IChangeSenderFactory* const senderFactory,
         const TActorId changeServer);
 
+    virtual ~TChangeSender() = default;
+
     void RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
     inline bool IsAllSendersReady() {
@@ -182,6 +184,12 @@ protected:
 
     inline bool HasPendingRecords() const {
         return !Enqueued.empty() || !PendingBody.empty() || !PendingSent.empty();
+    }
+
+    ui64 GetMinPendingOrder() const;
+
+    virtual bool DivertBroadcast(const IChangeRecord::TPtr&) {
+        return false;
     }
 
     void SetPartitionResolver(IPartitionResolverVisitor* partitionResolver) {

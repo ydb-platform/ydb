@@ -473,6 +473,7 @@ PEERDIR(
     ydb/core/split
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx/cdc_aggregator/public
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/locks
     ydb/core/tx/sequenceproxy/public

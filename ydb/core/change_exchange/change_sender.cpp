@@ -219,7 +219,7 @@ void TChangeSender::SendRecords() {
             if (sender.Ready) {
                 sendTo.insert(partitionId);
             }
-        } else {
+        } else if (!DivertBroadcast(it->second)) {
             auto& broadcast = EnsureBroadcast(it->second);
             EraseNodesIf(broadcast.PendingPartitions, [&](ui64 partitionId) {
                 if (Senders.contains(partitionId)) {
@@ -460,6 +460,38 @@ void TChangeSender::ProcessBroadcasting(std::function<bool(TChangeSender*, ui64,
     if (remove) {
         RemoveRecords(std::move(remove));
     }
+}
+
+ui64 TChangeSender::GetMinPendingOrder() const {
+    ui64 result = Max<ui64>();
+
+    if (Enqueued) {
+        result = Min(result, Enqueued.begin()->Order);
+    }
+
+    if (PendingBody) {
+        result = Min(result, PendingBody.begin()->Order);
+    }
+
+    if (PendingSent) {
+        result = Min(result, PendingSent.begin()->first);
+    }
+
+    for (const auto& [order, _] : Broadcasting) {
+        result = Min(result, order);
+    }
+
+    for (const auto& [_, sender] : Senders) {
+        for (const auto& record : sender.Pending) {
+            result = Min(result, record.Order);
+        }
+
+        for (const auto& record : sender.Prepared) {
+            result = Min(result, record->GetOrder());
+        }
+    }
+
+    return result;
 }
 
 void TChangeSender::RemoveRecords() {

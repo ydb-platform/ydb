@@ -76,6 +76,6 @@ You can collect column statistics manually with [ANALYZE](../../yql/reference/sy
 
 ### Cost Optimization Levels
 
-In {{ ydb-short-name }}, you can configure the cost optimization level via the [CostBasedOptimizationLevel](../../yql/reference/syntax/pragma.md#costbasedoptimizationlevel) pragma.
+In {{ ydb-short-name }}, you can configure the cost optimization level via the [CostBasedOptimizationLevel](../../yql/reference/syntax/pragma.md) pragma.
 
 To force the cost-based optimizer to be enabled for the current query, set the pragma `PRAGMA ydb.CostBasedOptimization = "on";`. To disable the cost-based optimizer, set the pragma to `off`.

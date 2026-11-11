@@ -1,10 +1,8 @@
 #include "query_plan.h"
 
-#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
-#include <ydb/library/yql/utils/plan/plan_utils.h>
 
 #include <yql/essentials/utils/log/log.h>
 

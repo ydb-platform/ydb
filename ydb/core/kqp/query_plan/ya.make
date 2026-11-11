@@ -11,7 +11,6 @@ PEERDIR(
     ydb/core/protos
     ydb/library/actors/core
     ydb/library/yql/dq/actors/protos
-    ydb/library/yql/utils/plan
     yql/essentials/utils/log
 )
 

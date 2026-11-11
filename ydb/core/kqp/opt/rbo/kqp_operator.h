@@ -1210,6 +1210,9 @@ public:
 
     // Make private.
     TExpression LimitCond;
+    // Whether the rows of the limit depend on the order of its input. A limit of a select without ORDER BY
+    // takes any rows, so the order of a subquery below it is not needed.
+    bool OrderedInput = true;
 
 protected:
     TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;

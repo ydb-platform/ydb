@@ -1,5 +1,4 @@
 RECURSE(
     public
-    stream
     tablet
 )

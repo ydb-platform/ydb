@@ -32,6 +32,11 @@ public:
     //! Does not modify SystemModulePaths: FindUdfPath may still return a system
     //! catalog path after unload (same as for never-loaded system modules).
     virtual void RemoveModule(const TStringBuf& moduleName) = 0;
+
+    //! Removes a registration only if its loaded library path matches the owner.
+    //! Check and removal are atomic with respect to other registry mutations.
+    //! A system-catalog path alone does not establish ownership of a loaded UDF.
+    virtual void RemoveModuleIfOwned(const TStringBuf& moduleName, const TStringBuf& libraryPath) = 0;
 };
 
 //! Creates a dynamic registry (full mutable UDF registry + RemoveModule).

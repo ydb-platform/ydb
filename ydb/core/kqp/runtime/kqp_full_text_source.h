@@ -16,6 +16,9 @@ class TKqpReadRangesSourceSettings;
 
 namespace NKikimr::NKqp {
 
+// Byte quota for full-text TEvReads when the full-text source runs with LIMIT. Exposed for tests.
+extern ui32 gFulltextPostingReadMaxBytesWithLimit;
+
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSearchSource(NKikimrKqp::TKqpFullTextSourceSettings&& settings,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena, // Arena for settings
     const NActors::TActorId& computeActorId,

@@ -130,8 +130,13 @@ callbacks never access an actor object.
    one outside report exists, every outside report shows the pile in config
    quorum without node quorum, and no inside report shows its node quorum;
    fallback Failed only for the BSC-host pile (PROMOTED, else PRIMARY), with no
-   fresh BSC reply anywhere, no self quorum, and every current outside
-   fallback reply reporting a decisive RED static part without truncation;
+   fresh BSC reply anywhere and every current outside fallback reply reporting
+   a decisive RED static part without truncation. Own node quorum vetoes this
+   generic rule. It does not veto a separate storage proof when every outside
+   reply names a RED static group whose complete unique reason graph consists
+   only of RED VDisks caused by same-node, same-pile PDisk `DeviceIoError`.
+   Mixed transport/replication reasons, missing IDs and ambiguous IDs do not
+   establish this proof;
    Replicating when every BSC reply has a RED or replication-only part and one
    is replication-only; Healthy after the warm-up; otherwise Unknown, which an
    incomplete part also gives. SUSPENDED gets only the Lost rule;
@@ -165,7 +170,8 @@ callbacks never access an actor object.
    elsewhere); any other change restarts it. Every Down pile must confirm
    before acting. Fallback failure is confined to one observed generation:
    its confirmation restarts even on a no-op bump and when switching to or
-   from the BSC/Lost failure source. Only fallback requests sent at or after
+   from the BSC/Lost failure source, or between generic fallback and the
+   storage proof. Only fallback requests sent at or after
    the generation observation and, after a role change, observation plus
    `bsc_warmup_seconds` can establish this failure. Cached earlier sends cannot
    seed it or supply conflicting evidence for that new epoch.

@@ -2,8 +2,8 @@
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/persqueue/common/heartbeat.h>
 #include <ydb/core/protos/cdc_aggregator.pb.h>
-#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -13,111 +13,92 @@ namespace NKikimr::NCdcAggregator {
 
 namespace TEvCdcAggregator {
     enum EEv {
-        // CdcAggregator tablet protocol, sent over tablet pipes.
-        EvConfigure = EventSpaceBegin(TKikimrEvents::ES_CDC_AGGREGATOR),
-        EvConfigureResult,
-        EvActivate,
-        EvActivateResult,
-        EvReportDeliveredBatch,
-        EvReportDeliveredBatchResult,
-        EvReplaceSource,
-        EvReplaceSourceResult,
-        EvDescribeStream,
-        EvDescribeStreamResult,
-
-        // CdcAggregatorService protocol, local to a node.
-        EvReportDelivered = EvConfigure + 512,
-        EvReportDeliveredResult,
+        EvConfigureTracking = EventSpaceBegin(TKikimrEvents::ES_CDC_AGGREGATOR),
+        EvConfigureTrackingResult,
+        EvWriteHeartbeats,
+        EvWriteHeartbeatsResult,
+        EvPartitioningChanged,
+        EvPartitioningChangedAck,
+        EvDescribeTracking,
+        EvDescribeTrackingResult,
 
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_CDC_AGGREGATOR),
-        "Expected EvEnd < EventSpaceEnd(TKikimrEvents::ES_CDC_AGGREGATOR)");
-
-    struct TEvConfigure
-        : public TEventPB<TEvConfigure, NKikimrCdcAggregator::TEvConfigure, EvConfigure>
+    struct TEvConfigureTracking
+        : public TEventPB<TEvConfigureTracking, NKikimrCdcAggregator::TEvConfigureTracking, EvConfigureTracking>
     {};
 
-    struct TEvConfigureResult
-        : public TEventPB<TEvConfigureResult, NKikimrCdcAggregator::TEvConfigureResult, EvConfigureResult>
+    struct TEvConfigureTrackingResult
+        : public TEventPB<TEvConfigureTrackingResult, NKikimrCdcAggregator::TEvConfigureTrackingResult, EvConfigureTrackingResult>
     {};
 
-    struct TEvActivate
-        : public TEventPB<TEvActivate, NKikimrCdcAggregator::TEvActivate, EvActivate>
+    struct TEvWriteHeartbeats
+        : public TEventPB<TEvWriteHeartbeats, NKikimrCdcAggregator::TEvWriteHeartbeats, EvWriteHeartbeats>
     {};
 
-    struct TEvActivateResult
-        : public TEventPB<TEvActivateResult, NKikimrCdcAggregator::TEvActivateResult, EvActivateResult>
+    struct TEvWriteHeartbeatsResult
+        : public TEventPB<TEvWriteHeartbeatsResult, NKikimrCdcAggregator::TEvWriteHeartbeatsResult, EvWriteHeartbeatsResult>
     {};
 
-    struct TEvReportDeliveredBatch
-        : public TEventPB<TEvReportDeliveredBatch, NKikimrCdcAggregator::TEvReportDeliveredBatch, EvReportDeliveredBatch>
+    struct TEvPartitioningChanged
+        : public TEventPB<TEvPartitioningChanged, NKikimrCdcAggregator::TEvPartitioningChanged, EvPartitioningChanged>
     {};
 
-    struct TEvReportDeliveredBatchResult
-        : public TEventPB<TEvReportDeliveredBatchResult, NKikimrCdcAggregator::TEvReportDeliveredBatchResult, EvReportDeliveredBatchResult>
+    struct TEvPartitioningChangedAck
+        : public TEventPB<TEvPartitioningChangedAck, NKikimrCdcAggregator::TEvPartitioningChangedAck, EvPartitioningChangedAck>
     {};
 
-    struct TEvReplaceSource
-        : public TEventPB<TEvReplaceSource, NKikimrCdcAggregator::TEvReplaceSource, EvReplaceSource>
+    struct TEvDescribeTracking
+        : public TEventPB<TEvDescribeTracking, NKikimrCdcAggregator::TEvDescribeTracking, EvDescribeTracking>
     {};
 
-    struct TEvReplaceSourceResult
-        : public TEventPB<TEvReplaceSourceResult, NKikimrCdcAggregator::TEvReplaceSourceResult, EvReplaceSourceResult>
+    struct TEvDescribeTrackingResult
+        : public TEventPB<TEvDescribeTrackingResult, NKikimrCdcAggregator::TEvDescribeTrackingResult, EvDescribeTrackingResult>
     {};
+} // namespace TEvCdcAggregator
 
-    struct TEvDescribeStream
-        : public TEventPB<TEvDescribeStream, NKikimrCdcAggregator::TEvDescribeStream, EvDescribeStream>
-    {};
+namespace TEvCdcAggregatorService {
+    enum EEv {
+        EvWriteHeartbeat = EventSpaceBegin(TKikimrEvents::ES_CDC_AGGREGATOR) + 512,
+        EvWriteHeartbeatResult,
 
-    struct TEvDescribeStreamResult
-        : public TEventPB<TEvDescribeStreamResult, NKikimrCdcAggregator::TEvDescribeStreamResult, EvDescribeStreamResult>
-    {};
-
-    // CDC sender -> local CdcAggregatorService.
-    //
-    // The sender may report Version only after every change of this source
-    // below Version is durably written to the topic and no new change below
-    // Version can appear. The sender keeps the heartbeat until it receives
-    // Persisted with PersistedVersion >= Version and retries otherwise; the
-    // service keeps reports in memory only. The request cookie correlates the
-    // response.
-    struct TEvReportDelivered
-        : public TEventLocal<TEvReportDelivered, EvReportDelivered>
-    {
-        TPathId StreamPathId;
-        ui64 AggregatorTabletId = 0;
-        ui64 SourceTabletId = 0;
-        TRowVersion Version = TRowVersion::Min();
-        // Serialized NKikimrPQClient::TDataChunk of the heartbeat record.
-        TString Payload;
+        EvEnd
     };
 
-    struct TEvReportDeliveredResult
-        : public TEventLocal<TEvReportDeliveredResult, EvReportDeliveredResult>
+    struct TEvWriteHeartbeat
+        : public TEventLocal<TEvWriteHeartbeat, EvWriteHeartbeat>
+    {
+        ui64 RecipientTabletId = 0;
+        ui64 SourceDataShardId = 0;
+        NPQ::THeartbeat Heartbeat;
+
+        TString ToString() const override;
+    };
+
+    struct TEvWriteHeartbeatResult
+        : public TEventLocal<TEvWriteHeartbeatResult, EvWriteHeartbeatResult>
     {
         enum class EStatus {
-            // The aggregator committed PersistedVersion for this source.
-            Persisted,
-            // Not configured, overloaded or unavailable: retry later.
+            Written,
             Retry,
-            // The source was replaced by split/merge: stop reporting.
-            Retired,
-            // Wrong stream, unknown source or malformed report: the report
-            // can never succeed, the configuration must be fixed.
             Rejected,
         };
 
-        TPathId StreamPathId;
-        ui64 SourceTabletId = 0;
         EStatus Status = EStatus::Retry;
-        TRowVersion PersistedVersion = TRowVersion::Min();
+        TRowVersion WrittenVersion = TRowVersion::Min();
         TString Error;
-    };
-} // namespace TEvCdcAggregator
 
-// One CdcAggregatorService per node serves all local sources of all streams.
+        TString ToString() const override;
+    };
+} // namespace TEvCdcAggregatorService
+
+static_assert(static_cast<ui32>(TEvCdcAggregator::EvEnd) <= static_cast<ui32>(TEvCdcAggregatorService::EvWriteHeartbeat),
+    "Expected TEvCdcAggregator::EvEnd <= TEvCdcAggregatorService::EvWriteHeartbeat");
+
+static_assert(TEvCdcAggregatorService::EvEnd < EventSpaceEnd(TKikimrEvents::ES_CDC_AGGREGATOR),
+    "Expected TEvCdcAggregatorService::EvEnd < EventSpaceEnd(TKikimrEvents::ES_CDC_AGGREGATOR)");
+
 inline TActorId MakeCdcAggregatorServiceId(ui32 nodeId) {
     return TActorId(nodeId, TStringBuf("cdcaggr_svc"));
 }

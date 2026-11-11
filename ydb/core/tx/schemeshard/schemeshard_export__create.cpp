@@ -7,6 +7,7 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/tx/datashard/export_data_format.h>
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
@@ -351,6 +352,14 @@ private:
 
                 if (!checks) {
                     explain = checks.GetError();
+                    return false;
+                }
+
+                // The gRPC layer drops omitted paths it expanded itself; an
+                // item that still arrives here was named explicitly.
+                if (::NKikimr::NBackup::IsOmittedFromBackup(path.Base()->UserAttrs->Attrs)) {
+                    explain = TStringBuilder() << "path '" << item.source_path()
+                        << "' is marked with " << ::NKikimr::NBackup::OMIT_BACKUP_ATTRIBUTE << " and cannot be exported";
                     return false;
                 }
             }

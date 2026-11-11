@@ -305,10 +305,13 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         for (const auto result : query.Results()) {
             auto value = result.Value().Ptr();
             TExprNode::TPtr rowsLimit;
+            bool unordered = false;
             while (TCoUnordered::Match(value.Get()) || TCoTake::Match(value.Get())) {
                 if (auto take = TMaybeNode<TCoTake>(value)) {
                     Y_ENSURE(!rowsLimit, "Nested result limits are not supported");
                     rowsLimit = take.Cast().Count().Ptr();
+                } else if (TCoUnordered::Match(value.Get())) {
+                    unordered = true;
                 }
                 value = value->HeadPtr();
             }
@@ -322,7 +325,9 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
                 // Ordinary result limits were pushed into their logical root
                 // during rewriting. Only RETURNING keeps a post-write limit.
                 Y_ENSURE(!rowsLimit, "Unexpected result limit outside an RBO root");
-                addRoot(value, result.ColumnHints().Ptr())->PlanProps.ResultIndex = resultIndex;
+                auto& planProps = addRoot(value, result.ColumnHints().Ptr())->PlanProps;
+                planProps.ResultIndex = resultIndex;
+                planProps.UnorderedResult = unordered;
             }
             ++resultIndex;
         }
@@ -813,6 +818,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Push map elements", std::move(pushMapRules)));
+    RBO.AddStage(std::make_unique<TRemoveRedundantSortsStage>("Remove redundant sorts"));
 
     // Logical state I
     TVector<std::unique_ptr<IRule>> logicalStage_I_Rules;

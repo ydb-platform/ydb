@@ -98,8 +98,10 @@ TEST(TFSTest, TestGetDeviceId)
     auto dir = TTempDir{};
     auto path = std::string(dir.Name()) + "/file";
     auto file = TFile(path.c_str(), CreateAlways | WrOnly);
+    struct stat status{};
+    ASSERT_EQ(::stat(path.c_str(), &status), 0);
     auto deviceId = GetDeviceId(path);
-    EXPECT_EQ(deviceId, GetDeviceId(std::string(dir.Name())));
+    EXPECT_EQ(static_cast<dev_t>(makedev(deviceId.first, deviceId.second)), status.st_dev);
 }
 
 TEST(TFSTest, TestGetDeviceIdMatchesStat)

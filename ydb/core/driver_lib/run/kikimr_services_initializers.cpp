@@ -174,6 +174,7 @@
 
 #include <ydb/core/tracing/tablet_info.h>
 
+#include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -186,7 +187,6 @@
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
-#include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
 #include <ydb/core/tx/sequenceshard/sequenceshard.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx.h>

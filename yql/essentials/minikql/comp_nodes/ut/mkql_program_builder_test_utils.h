@@ -14,6 +14,7 @@
 
 namespace NKikimr::NMiniKQL::NTest {
 
+using NYql::NUdf::NTest::ETag;
 using NYql::NUdf::NTest::TDecimalLiteral;
 using NYql::NUdf::NTest::TPgInt;
 using NYql::NUdf::NTest::TSingularNull;
@@ -22,7 +23,6 @@ using NYql::NUdf::NTest::TStructMember;
 using NYql::NUdf::NTest::TStructMemberName;
 using NYql::NUdf::NTest::TStructType;
 using NYql::NUdf::NTest::TStructVariant;
-using NYql::NUdf::NTest::TTag;
 using NYql::NUdf::NTest::TTagged;
 using NYql::NUdf::NTest::TTestDyNumber;
 using NYql::NUdf::NTest::TUtf8;
@@ -145,7 +145,7 @@ TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TDecimalLitera
     return pb.NewDecimalLiteral(decimalNode.Value, Precision, Scale);
 }
 
-template <typename T, TTag Tag>
+template <typename T, ETag Tag>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TTagged<T, Tag>& taggedNode) {
     auto node = ConvertValueToLiteralNode(pb, taggedNode.Value());
     return pb.Nop(node, pb.NewTaggedType(node.GetStaticType(), taggedNode.Tag()));

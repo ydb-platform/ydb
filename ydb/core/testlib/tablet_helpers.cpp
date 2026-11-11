@@ -15,7 +15,6 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/mind/local.h>
 #include <ydb/core/scheme/tablet_scheme.h>
-#include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
@@ -585,8 +584,6 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &NGraph::CreateGraphShard, DataGroupErasure);
                 } else if (type == TTabletTypes::WasmCompileController) {
                     bootstrapperActorId = Boot(ctx, type, &NUdfStore::CreateWasmCompileController, DataGroupErasure);
-                } else if (type == TTabletTypes::CdcAggregator) {
-                    bootstrapperActorId = Boot(ctx, type, &NCdcAggregator::CreateCdcAggregator, DataGroupErasure);
                 } else {
                     status = NKikimrProto::ERROR;
                 }

@@ -4,10 +4,12 @@ SRCS(
     events.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(events.h)
+
 PEERDIR(
     ydb/core/base
+    ydb/core/persqueue/common
     ydb/core/protos
-    ydb/core/scheme
     ydb/library/actors/core
 )
 

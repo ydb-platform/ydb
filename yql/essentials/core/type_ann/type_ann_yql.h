@@ -81,14 +81,6 @@ IGraphTransformer::TStatus ValidateYqlWarnShadow(
 IGraphTransformer::TStatus YqlColumnOrTypeWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
-TExprNode::TPtr BuildYqlColumnOrAccessRef(
-    const TExprNode::TPtr& node,
-    const THashSet<TString>& possibleAliases,
-    TExprContext& ctx);
-
-IGraphTransformer::TStatus YqlColumnRefOrAccessWrapper(
-    const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-
 IGraphTransformer::TStatus FinalizeYqlColumnRefs(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 

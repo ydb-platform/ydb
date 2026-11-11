@@ -9,7 +9,6 @@ allowCustomResources: true
 included: true
 singlePage: true
 strict: false
-svgMaxEntityCount: 250000
 
 resources:
   style:

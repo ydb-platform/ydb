@@ -696,8 +696,6 @@ Release date: May 14, 2024.
 
 ## Version 23.3 {#23-3}
 
-### Version 23.3.17 {#23-3-17}
-
 Release date: October 12, 2023.
 
 ### Functionality

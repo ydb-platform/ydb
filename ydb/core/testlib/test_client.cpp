@@ -1279,7 +1279,8 @@ namespace Tests {
         }
         if (Settings->IsEnableMetadataProvider()) {
             NKikimrConfig::TMetadataProviderConfig cfgProto;
-            cfgProto.SetRefreshPeriodSeconds(1);
+            // Match proto default (10s); 1s refresh is a CI tax on every TServer.
+            cfgProto.SetRefreshPeriodSeconds(10);
             cfgProto.SetEnabled(true);
             cfgProto.MutableRequestConfig()->SetRetryPeriodStartSeconds(1);
             cfgProto.MutableRequestConfig()->SetRetryPeriodFinishSeconds(30);

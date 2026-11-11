@@ -661,7 +661,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_SESSION, NLog::EPriority::PRI_DEBUG)
             .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_PROXY, NLog::EPriority::PRI_DEBUG)
             .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_EXECUTER, NLog::EPriority::PRI_DEBUG);
-        TKikimrRunner kikimr(TKikimrSettings().SetLogSettings(std::move(logSettings)));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetLogSettings(std::move(logSettings)));
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         TScriptingClient client(kikimr.GetDriver());

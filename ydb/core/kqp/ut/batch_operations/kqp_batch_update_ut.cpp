@@ -20,7 +20,7 @@ TKikimrSettings GetTestSettings(size_t maxBatchSize = 10000, size_t partitionLim
         .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_COMPUTE, NLog::EPriority::PRI_INFO);
 
     logConfig.DefaultLogPriority = NLog::EPriority::PRI_CRIT;
-    return TKikimrSettings(std::move(app)).SetLogSettings(std::move(logConfig));
+    return TKikimrSettings(std::move(app)).SetWithSampleTables(true).SetLogSettings(std::move(logConfig));
 }
 
 void TestSimpleOnePartition(size_t maxBatchSize) {

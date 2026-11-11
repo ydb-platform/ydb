@@ -227,6 +227,7 @@ static TParams NoParams = TParamsBuilder().Build();
 Y_UNIT_TEST_SUITE(KqpJoin) {
     Y_UNIT_TEST(IdxLookupLeftPredicate) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -265,6 +266,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
     Y_UNIT_TEST(IndexLoookupJoinStructJoin) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -286,6 +288,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
     Y_UNIT_TEST(IdxLookupPartialLeftPredicate) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -482,6 +485,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
     Y_UNIT_TEST(LeftJoinWithNull) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -650,6 +654,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
      Y_UNIT_TEST(LeftJoinPushdownPredicate_NestedJoin) {
         TKikimrSettings appsettings;
 
+        appsettings.SetWithSampleTables(true);
         TKikimrRunner kikimr(appsettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1662,6 +1667,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
     Y_UNIT_TEST(AllowJoinsForComplexPredicates) {
         TKikimrSettings appsettings;
+        appsettings.SetWithSampleTables(true);
         appsettings.AppConfig.MutableTableServiceConfig()->SetIdxLookupJoinPointsLimit(10);
 
         TKikimrRunner kikimr(appsettings);

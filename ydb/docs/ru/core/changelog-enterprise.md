@@ -410,7 +410,7 @@
 ### Функциональность
 
 * Добавлена возможность [задать приоритеты](./devops/deployment-options/manual/maintenance.md#rolling-restart) задачам обслуживания в [системе управления кластером](./concepts/glossary.md#cms).
-* Добавлена [настройка стабильных имён](reference/configuration/node_broker_config.md#node_broker_config) для узлов кластера в рамках тенанта.
+* Добавлена [настройка стабильных имён](reference/configuration/node_broker_config.md) для узлов кластера в рамках тенанта.
 * Добавлено получение вложенных групп от [LDAP-сервера](./security/authentication.md#ldap), в [LDAP-конфигурации](reference/configuration/auth_config.md#ldap-auth-config) улучшен парсинг хостов и добавлена настройка для отключения встроенной аутентификацию по логину и паролю.
 * Добавлена возможность аутентификации [динамических узлов](./concepts/glossary.md#dynamic) по SSL-сертификату.
 * Реализовано удаление неактивных узлов из [Hive](./concepts/glossary.md#hive) без его перезапуска.

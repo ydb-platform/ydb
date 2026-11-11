@@ -251,6 +251,206 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         TestImpl(values, codec);
     }
 
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST(TestDeltaVarIntUi64Codec) {
+        // Mirrors batch WTime/CTime/SeqNo packing (ui64 delta varint).
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint64::TypeId));
+
+        TReallyFastRng32 rand(100500);
+        TVector<TDataRef> values;
+        ui64 value = 1'700'000'000'000ull;
+        for (int i = 0; i < 500; ++i) {
+            value += rand.Uniform(10'000);
+            values.push_back(TDataRef((const char*)&value, sizeof(value), true));
+        }
+
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::DeltaVarInt, false));
+        TestImpl(values, codec);
+    }
+
+    Y_UNIT_TEST(TestVarLenEmptyAndNulls) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+
+        TVector<TDataRef> values;
+        values.push_back(TDataRef("", 0, true));
+        values.push_back(TDataRef("x", 1, true));
+        values.push_back(TDataRef());
+        values.push_back(TDataRef("", 0, true));
+        values.push_back(TDataRef("hello", 5, true));
+        values.push_back(TDataRef());
+
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::VarLen, true));
+        TestImpl(values, codec);
+    }
+
+    Y_UNIT_TEST(TestBidirIterator) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
+        TVector<ui32> raw = {1, 2, 3, 4, 5};
+        TVector<TDataRef> values;
+        for (ui32 v : raw) {
+            values.push_back(TDataRef((const char*)&v, sizeof(v), true));
+        }
+
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::VarInt, false));
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        for (const auto& value : values) {
+            chunk->AddData(value.Data(), value.Size());
+        }
+        chunk->Seal();
+
+        auto reading = codec->ReadChunk(output);
+        auto bidir = reading->MakeBidirIterator();
+        UNIT_ASSERT(bidir);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            UNIT_ASSERT_EQUAL(values[i], bidir->Next());
+        }
+        for (size_t i = values.size(); i > 0; --i) {
+            bidir->Back();
+            UNIT_ASSERT_EQUAL(values[i - 1], bidir->Peek());
+        }
+    }
+
+    Y_UNIT_TEST(TestDefaultCodecResolves) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint64::TypeId));
+        UNIT_ASSERT(codecs->GetDefaultCodec<false>() != nullptr);
+        UNIT_ASSERT(codecs->GetDefaultCodec<true>() != nullptr);
+        UNIT_ASSERT(codecs->Has(TCodecSig(TCodecType::DeltaVarInt, false)));
+        UNIT_ASSERT(codecs->Has(TCodecSig(TCodecType::VarInt, false)));
+    }
+
+    Y_UNIT_TEST(TestEstimatedSizeAtLeastActual) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::VarLen, false));
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        for (int i = 0; i < 20; ++i) {
+            TString s = "value-" + ToString(i);
+            chunk->AddData(s.data(), s.size());
+        }
+        size_t estimated = chunk->GetEstimatedSize();
+        chunk->Seal();
+        UNIT_ASSERT(estimated >= output.Size() || estimated > 0);
+        UNIT_ASSERT(output.Size() > 0);
+    }
+
+    const ICodec* VarLenCodec(TTypeCodecs* codecs) {
+        return codecs->GetCodec(TCodecSig(TCodecType::VarLen, false));
+    }
+
+    // YDBBUGS-1116: a corrupted trailing data size word used to produce a wild
+    // offsets pointer and a SEGV on the first iterator step.
+    Y_UNIT_TEST(TestVarLenDecoderRejectsInvalidDataSize) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = VarLenCodec(codecs.Get());
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        chunk->AddData("aaa", 3);
+        chunk->AddData("bb", 2);
+        chunk->Seal();
+
+        WriteUnaligned<ui32>(output.Data() + output.Size() - sizeof(ui32), Max<ui32>() - 7);
+        UNIT_ASSERT_EXCEPTION(codec->ReadChunk(output), yexception);
+    }
+
+    // YDBBUGS-1116: reading more values than encoded used to read past the
+    // end of the offsets table.
+    Y_UNIT_TEST(TestVarLenDecoderRejectsIterationPastOffsets) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = VarLenCodec(codecs.Get());
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        chunk->AddData("aaa", 3);
+        chunk->AddData("bb", 2);
+        chunk->Seal();
+
+        auto iter = codec->ReadChunk(output)->MakeIterator();
+        UNIT_ASSERT_VALUES_EQUAL(iter->Next().Size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(iter->Next().Size(), 2u);
+        UNIT_ASSERT_EXCEPTION(iter->Next(), yexception);
+    }
+
+    // YDBBUGS-1116: decreasing cumulative offsets used to underflow the value
+    // size and produce wild pointer arithmetic in
+    // TVarLenDecoder::TChunkIterator::Next.
+    Y_UNIT_TEST(TestVarLenDecoderRejectsNonMonotonicOffsets) {
+        TBuffer output;
+        TCodecSig sig(TCodecType::VarLen, false);
+        output.Append((const char*)&sig, sizeof(sig));
+        output.Append("aaaab", 5);
+        const ui32 offsets[] = {4u, 3u, 5u};
+        output.Append((const char*)offsets, sizeof(offsets));
+
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = VarLenCodec(codecs.Get());
+        auto reading = codec->ReadChunk(output);
+
+        auto iter = reading->MakeIterator();
+        UNIT_ASSERT_VALUES_EQUAL(iter->Next().Size(), 4u);
+        UNIT_ASSERT_EXCEPTION(iter->Next(), yexception);
+
+        UNIT_ASSERT_EXCEPTION(reading->GetValue(1), yexception);
+    }
+
+    Y_UNIT_TEST(TestVarLenDecoderRejectsValueIndexPastOffsets) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = VarLenCodec(codecs.Get());
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        chunk->AddData("aaa", 3);
+        chunk->AddData("bb", 2);
+        chunk->Seal();
+
+        auto reading = codec->ReadChunk(output);
+        UNIT_ASSERT_VALUES_EQUAL(reading->GetValue(0).Size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(reading->GetValue(1).Size(), 2u);
+        UNIT_ASSERT_EXCEPTION(reading->GetValue(2), yexception);
+    }
+
+    // YDBBUGS-1116: reading more values than encoded used to run in_long past
+    // the end of the chunk buffer.
+    Y_UNIT_TEST(TestVarIntDecoderRejectsIterationPastValues) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::VarInt, false));
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        ui32 value = 100;
+        chunk->AddData((const char*)&value, sizeof(value));
+        value = 200;
+        chunk->AddData((const char*)&value, sizeof(value));
+        chunk->Seal();
+
+        auto iter = codec->ReadChunk(output)->MakeIterator();
+        UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<ui32>(iter->Next().Data()), 100u);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<ui32>(iter->Next().Data()), 200u);
+        UNIT_ASSERT_EXCEPTION(iter->Next(), yexception);
+    }
+
+    // YDBBUGS-1116: a corrupted mask size word used to produce a wild mask
+    // pointer.
+    Y_UNIT_TEST(TestVarLenNullableRejectsInvalidMaskSize) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::VarLen, true));
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        chunk->AddData("aaa", 3);
+        chunk->AddNull();
+        chunk->AddData("bb", 2);
+        chunk->Seal();
+
+        WriteUnaligned<ui32>(output.Data() + output.Size() - sizeof(ui32), Max<ui32>() - 5);
+        UNIT_ASSERT_EXCEPTION(codec->ReadChunk(output), yexception);
+    }
+
+>>>>>>> 68a78bb0d67 (YDBBUGS-1116 Fix PersQueue blob decoding crash in chunk decoders)
 }
 
 } // namespace NKikimr::NPQ

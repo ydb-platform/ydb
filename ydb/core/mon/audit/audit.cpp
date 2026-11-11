@@ -134,18 +134,16 @@ void TAuditCtx::AddAuditLogParts(const TAuditParts& parts) {
         return;
     }
     for (const auto& [name, value] : parts) {
-        // Preserve explicitly empty values; absent optional fields remain empty.
-        const TString& normalizedValue = value.empty() ? EMPTY_VALUE : value;
         if (name == "subject") {
-            Subject = normalizedValue;
+            Subject = value;
         } else if (name == "sanitized_token") {
-            SanitizedToken = normalizedValue;
+            SanitizedToken = value;
         } else if (name == "cloud_id") {
-            CloudId = normalizedValue;
+            CloudId = value;
         } else if (name == "folder_id") {
-            FolderId = normalizedValue;
+            FolderId = value;
         } else if (name == "resource_id") {
-            ResourceId = normalizedValue;
+            ResourceId = value;
         }
     }
 }

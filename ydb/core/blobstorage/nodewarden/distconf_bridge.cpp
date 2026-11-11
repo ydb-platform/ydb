@@ -578,7 +578,7 @@ namespace NKikimr::NStorage {
 
         config->ClearClusterState();
         config->ClearClusterStateDetails();
-        return ForEachStateStorageConfig(config, [](NKikimrConfig::TStateStorageConfig *pb) -> std::optional<TString> {
+        return ForEachStateStorageConfig(config, [](NKikimrConfig::TDomainsConfig::TStateStorage *pb) -> std::optional<TString> {
             for (auto& ringGroup : *pb->MutableRingGroups()) {
                 ringGroup.ClearBridgePileId(); // ring groups of the ordinary cluster have no piles
             }

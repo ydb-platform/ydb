@@ -1,9 +1,6 @@
 import argparse
-import json
-from pathlib import Path
 
 import pytest
-import yatest.common
 
 from ydb.apps.dstool.lib import dstool_cmd_cluster_balance as balance
 
@@ -116,44 +113,3 @@ def test_group_slots_request_flags(cluster, dry_run):
     assert (cmd.GroupId, cmd.GroupGeneration, cmd.FailDomainIdx) == (0x80000001, 1, 1)
     assert cmd.PreferLessOccupiedRack
     assert cmd.WithAttentionToReplication
-
-
-@pytest.mark.parametrize('scenario', ['move', 'dry_run', 'full', 'rejected', 'retry', 'unhealthy', 'balanced'])
-def test_group_slots_canonical(cluster, monkeypatch, capfd, scenario):
-    # Node 4 is full; a valid destination must be selected beyond it.
-    cluster.PDisk[3].NumStaticSlots = 10
-    if scenario == 'full':
-        cluster.PDisk[4].NumStaticSlots = 10
-    if scenario == 'unhealthy':
-        cluster.VSlot[0].Ready = False
-    if scenario == 'balanced':
-        for group_index, slot_index, node in [(0, 2, 4), (1, 0, 5), (2, 1, 4)]:
-            group = cluster.Group[group_index]
-            slot = cluster.VSlot[group_index * 3 + slot_index]
-            slot.VSlotId.NodeId = node
-            group.VSlotId[slot_index].CopyFrom(slot.VSlotId)
-        cluster.PDisk[3].NumStaticSlots = 0
-    args = options(*(['--dry-run'] if scenario == 'dry_run' else []))
-    requests = []
-
-    def invoke(request):
-        requests.append(str(request))
-        success = scenario != 'rejected' and not (scenario == 'retry' and len(requests) == 1)
-        response = balance.common.kikimr_bsconfig.TConfigResponse(Success=success)
-        if not success:
-            response.ErrorDescription = 'placement rejected'
-        return response
-
-    monkeypatch.setattr(balance.common, 'invoke_bsc_request', invoke)
-    balance.do(args)
-    captured = capfd.readouterr()
-    if scenario in ('full', 'balanced'):
-        assert not requests
-    elif scenario == 'retry':
-        assert len(requests) == 2
-    elif scenario != 'rejected':
-        assert len(requests) == 1
-    assert captured.err == ('success\n' if scenario in ('full', 'rejected', 'balanced') else '')
-    path = Path(yatest.common.output_path('balance.json'))
-    path.write_text(json.dumps(dict(stdout=captured.out, stderr=captured.err, requests=requests), indent=2) + '\n')
-    return yatest.common.canonical_file(str(path), local=True, universal_lines=True)

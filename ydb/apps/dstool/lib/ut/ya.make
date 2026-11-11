@@ -17,7 +17,6 @@ TEST_SRCS(
 PEERDIR(
     contrib/python/PyYAML
     contrib/python/pytest
-    library/python/testing/yatest_common
     ydb/apps/dstool/lib
 )
 

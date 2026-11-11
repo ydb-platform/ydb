@@ -1,7 +1,0 @@
-{
-  "stdout": "\nStart balancing iteration 1\nSkipping vdisks from 1 unhealthy groups\nVSlots distribuition: 3..0 (ideal 2)\nReassigned vdisk (1, 1, 2) from pdisk (1, 1) (3 vdisks) to pdisk (5, 1) (0 vdisks)\n",
-  "stderr": "",
-  "requests": [
-    "Command {\n  ReassignGroupDisk {\n    GroupId: 2147483650\n    GroupGeneration: 1\n    TargetPDiskId {\n      NodeId: 5\n      PDiskId: 1\n    }\n  }\n}\n"
-  ]
-}

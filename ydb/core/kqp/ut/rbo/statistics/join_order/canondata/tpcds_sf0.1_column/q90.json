@@ -1,0 +1,74 @@
+{
+  "op_name":"CrossJoin",
+  "args":
+    [
+      {
+        "op_name":"InnerJoin (BlockHash)",
+        "args":
+          [
+            {
+              "op_name":"InnerJoin (BlockHash)",
+              "args":
+                [
+                  {
+                    "op_name":"InnerJoin (BlockHash)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"web_sales"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"household_demographics"
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"time_dim"
+                  }
+                ]
+            },
+            {
+              "op_name":"TableFullScan",
+              "table":"web_page"
+            }
+          ]
+      },
+      {
+        "op_name":"InnerJoin (BlockHash)",
+        "args":
+          [
+            {
+              "op_name":"InnerJoin (BlockHash)",
+              "args":
+                [
+                  {
+                    "op_name":"InnerJoin (BlockHash)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"web_sales"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"household_demographics"
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"time_dim"
+                  }
+                ]
+            },
+            {
+              "op_name":"TableFullScan",
+              "table":"web_page"
+            }
+          ]
+      }
+    ]
+}

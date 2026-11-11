@@ -465,6 +465,7 @@ void TDataShard::Handle(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, const TA
 
 void TDataShard::HandleSafe(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
+    const auto sender = ev->Sender;
     auto& request = ev->Get()->Record;
     const ui64 id = request.GetId();
     auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
@@ -559,7 +560,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, cons
                 return new TFilterKMeansScan(tabletId, table, req, sender, std::move(reply));
             });
     } catch (const std::exception& exc) {
-        FailScan<TEvDataShard::TEvFilterKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TFilterKMeansScan");
+        FailScan<TEvDataShard::TEvFilterKMeansResponse>(id, TabletID(), sender, seqNo, exc, "TFilterKMeansScan");
     }
 }
 

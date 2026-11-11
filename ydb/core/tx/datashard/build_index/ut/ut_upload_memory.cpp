@@ -885,9 +885,9 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
     }
 
     Y_UNIT_TEST(SuspendedHeadScanBoundsVersionLifetimeAndRecovers) {
-        enum class EFailure { LostWakeup, ExpiredResume, QueuedReadmission, LateGrant, LostBrokerTask, StaleBrokerError };
+        enum class EFailure { LostWakeup, ExpiredResume, QueuedReadmission, LateGrant, LostBrokerTask, StaleBrokerError, BrokerLimitDrop };
         for (auto failure : {EFailure::LostWakeup, EFailure::ExpiredResume, EFailure::QueuedReadmission,
-                EFailure::LateGrant, EFailure::LostBrokerTask, EFailure::StaleBrokerError}) {
+                EFailure::LateGrant, EFailure::LostBrokerTask, EFailure::StaleBrokerError, EFailure::BrokerLimitDrop}) {
             TAdmissionFixture fixture;
             fixture.InsertRow("old");
             fixture.SetMemoryBudget(256_MB, 128_MB);
@@ -928,6 +928,12 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
             fixture.Runtime.WaitFor("initial scan grant held", [&] { return initialGrant.size() == 1; });
             const auto client = initialGrant.front()->Recipient;
             const ui64 taskId = initialGrant.front()->Get()->TaskId;
+            bool taskFinished = false;
+            auto finishes = fixture.Runtime.AddObserver<TBroker::TEvFinishTask>([&](auto& event) {
+                if (event->Sender == client && event->Get()->TaskId == taskId) {
+                    taskFinished = true;
+                }
+            });
             TBlockEvents<TEvTxProcessing::TEvReadSet> readSets(fixture.Runtime);
             SendSQL(fixture.Server, fixture.Runtime.AllocateEdgeActor(), R"(
                 UPSERT INTO `/Root/table-main` (key, data) VALUES (1, 'committed');
@@ -956,6 +962,17 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
                 fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), client,
                     new TBroker::TEvFinishTask(taskId, true)));
             }
+            if (failure == EFailure::BrokerLimitDrop) {
+                // Leave admission's capacity view stale: readmission must get
+                // the actual broker limit and teach the next request to re-fit.
+                auto configure = MakeHolder<TBroker::TEvConfigure>();
+                configure->Merge = true;
+                auto* queue = configure->Record.AddQueues();
+                queue->SetName("queue_build_index");
+                queue->MutableLimit()->SetMemory(32_MB);
+                fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender, configure.Release()));
+                UNIT_ASSERT(fixture.Runtime.GrabEdgeEventRethrow<TBroker::TEvConfigureResult>(fixture.Sender)->Get()->Record.GetSuccess());
+            }
             if (failure == EFailure::QueuedReadmission) {
                 fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender,
                     new TBroker::TEvSubmitTask(900, "hold readmission memory", {{0, 128_MB}}, "build_index", 0, nullptr)));
@@ -967,7 +984,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
                 fixture.Runtime.WaitFor("resume event held", [&] { return !resumes.empty(); });
             } else if (failure == EFailure::QueuedReadmission) {
                 fixture.Runtime.WaitFor("scan queues for readmission", [&] { return readmitted; });
-            } else if (failure != EFailure::LostBrokerTask) {
+            } else if (failure != EFailure::LostBrokerTask && failure != EFailure::BrokerLimitDrop) {
                 fixture.Runtime.WaitFor("readmission grant held", [&] { return !readmission.empty(); });
             }
             if (failure == EFailure::QueuedReadmission) {
@@ -994,7 +1011,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
                 error->Status.Message = "stale unknown task reply";
                 fixture.Runtime.Send(new IEventHandle(client, NResourceBroker::MakeResourceBrokerID(), error.Release()));
             }
-            if (failure != EFailure::LostBrokerTask && failure != EFailure::StaleBrokerError) {
+            if (failure != EFailure::LostBrokerTask && failure != EFailure::StaleBrokerError && failure != EFailure::BrokerLimitDrop) {
                 fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(300));
             }
             if (failure == EFailure::LateGrant) {
@@ -1015,6 +1032,11 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
             UNIT_ASSERT_GT(retry->Get()->Record.GetRetryAfterMs(), 0);
             if (failure == EFailure::LostBrokerTask || failure == EFailure::StaleBrokerError) {
                 UNIT_ASSERT_STRING_CONTAINS(retry->Get()->Record.ShortDebugString(), "unknown task");
+            } else if (failure == EFailure::BrokerLimitDrop) {
+                UNIT_ASSERT_STRING_CONTAINS(retry->Get()->Record.ShortDebugString(), "current broker limit");
+                UNIT_ASSERT(fixture.Runtime.GetCurrentTime() < suspendedAt + TDuration::Seconds(1));
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GetAppData().BuildIndexScanAdmission->GetActiveByteLimit(256_MB), 32_MB);
+                fixture.Runtime.WaitFor("rejected readmission releases its broker task", [&] { return taskFinished; });
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(retry->Get()->Record.IssuesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(retry->Get()->Record.GetIssues(0).message(), "Timed out waiting for scan readiness");
@@ -1029,7 +1051,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
             // A stale UNKNOWN_TASK must not disarm cleanup of the still-live
             // full reservation. A probe consuming the whole queue must fit.
             fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender,
-                new TBroker::TEvSubmitTask(900, "verify released reservation", {{0, 128_MB}}, "build_index", 0, nullptr)));
+                new TBroker::TEvSubmitTask(900, "verify released reservation", {{0, failure == EFailure::BrokerLimitDrop ? 32_MB : 128_MB}}, "build_index", 0, nullptr)));
             fixture.Runtime.GrabEdgeEventRethrow<TBroker::TEvResourceAllocated>(fixture.Sender);
             fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender,
                 new TBroker::TEvFinishTask(900, true)));

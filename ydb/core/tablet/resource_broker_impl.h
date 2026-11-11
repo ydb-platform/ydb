@@ -328,11 +328,11 @@ public:
     /**
      * Create new task and queue it. Return true on success, and false if task with the same id already exists.
      */
-    bool FitsMemoryLimit(const TEvResourceBroker::TTask& task) const {
-        const auto& queue = TaskConfig(task.Type).Queue;
-        const auto bytes = task.RequiredResources[NKikimrResourceBroker::MEMORY];
+    bool FitsMemoryLimit(const TString& type, const TResourceValues& resources) const {
+        const auto& queue = TaskConfig(type).Queue;
+        const auto bytes = resources[NKikimrResourceBroker::MEMORY];
         return !queue->StrictMemoryLimit ||
-            bytes <= GetMemoryLimit(task.Type);
+            bytes <= GetMemoryLimit(type);
     }
 
     ui64 GetMemoryLimit(const TString& type) const {

@@ -972,7 +972,7 @@ TResourceBroker::TOpError TResourceBroker::SubmitTask(const TEvResourceBroker::T
             error->Cookie = ev.Task.Cookie;
             return error;
         }
-        if (!Scheduler.FitsMemoryLimit(ev.Task)) {
+        if (!Scheduler.FitsMemoryLimit(ev.Task.Type, ev.Task.RequiredResources)) {
             auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
             error->TaskId = ev.Task.TaskId;
             error->Status.Code = TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED;
@@ -1006,7 +1006,7 @@ bool TResourceBroker::SubmitTaskInstant(const TEvResourceBroker::TEvSubmitTask& 
         bool success = false;
 
         Scheduler.UpdateTime(ActorSystem->Timestamp());
-        if (!Scheduler.FitsMemoryLimit(ev.Task)) {
+        if (!Scheduler.FitsMemoryLimit(ev.Task.Type, ev.Task.RequiredResources)) {
             return false;
         }
         if (Scheduler.SubmitTask(ev.Task, sender, *ActorSystem)) {
@@ -1033,6 +1033,18 @@ TResourceBroker::TOpError TResourceBroker::UpdateTask(const TEvResourceBroker::T
 {
     with_lock(Lock) {
         Scheduler.UpdateTime(ActorSystem->Timestamp());
+        const auto* task = Scheduler.FindTask(ev.TaskId, sender);
+        // Validate new admissions, including readmission after a zero-resource
+        // wait. Running tasks must still charge payloads they already own.
+        if (task && (ev.Resubmit || !task->InFly) && !Scheduler.FitsMemoryLimit(ev.Type, ev.RequiredResources)) {
+            auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
+            error->TaskId = ev.TaskId;
+            error->Status.Code = TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED;
+            error->Status.Message = "scan memory reservation exceeds the current broker limit";
+            error->Status.MemoryLimit = Scheduler.GetMemoryLimit(ev.Type);
+            error->Cookie = task->Cookie;
+            return error;
+        }
         if (Scheduler.UpdateTask(ev.TaskId, sender, ev.RequiredResources, ev.Priority, ev.Type, ev.Resubmit, *ActorSystem)) {
             Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
                 ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));

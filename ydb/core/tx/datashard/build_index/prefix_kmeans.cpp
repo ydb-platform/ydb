@@ -699,6 +699,7 @@ void TDataShard::Handle(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TA
 
 void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
+    const auto sender = ev->Sender;
     auto& request = ev->Get()->Record;
     const ui64 id = request.GetId();
     TRowVersion rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
@@ -822,7 +823,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
                 return new TPrefixKMeansScan(tabletId, table, req, sender, std::move(reply), std::move(clusters));
             });
     } catch (const std::exception& exc) {
-        FailScan<TEvDataShard::TEvPrefixKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TPrefixKMeansScan");
+        FailScan<TEvDataShard::TEvPrefixKMeansResponse>(id, TabletID(), sender, seqNo, exc, "TPrefixKMeansScan");
     }
 }
 

@@ -74,7 +74,6 @@ namespace NTabletFlatExecutor {
                 ui64 ChargedMemory;
                 ui64 ChargedCpu = 1;
                 bool Running = true;
-                bool Armed = true;
                 bool OverrunReported = false;
                 std::atomic<bool> Cancel{true};
 
@@ -84,16 +83,14 @@ namespace NTabletFlatExecutor {
                 {}
 
                 ~TState() {
-                    if (Armed) {
-                        System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
-                            new TEvResourceBroker::TEvFinishTask(TaskId, Cancel.load(std::memory_order_acquire))));
-                    }
+                    System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
+                        new TEvResourceBroker::TEvFinishTask(TaskId, Cancel.load(std::memory_order_acquire))));
                 }
 
                 void UpdateRetained() {
                     const ui64 memory = Running ? Max(Memory, Retained) : Retained;
                     const ui64 cpu = Running ? 1 : 0;
-                    if (Armed && memory && (memory != ChargedMemory || cpu != ChargedCpu)) {
+                    if (memory && (memory != ChargedMemory || cpu != ChargedCpu)) {
                         System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
                             new TEvResourceBroker::TEvUpdateTask(TaskId, {{cpu, memory}}, Type, Priority)));
                         ChargedMemory = memory;
@@ -438,13 +435,10 @@ namespace NTabletFlatExecutor {
             Lookup(serial, true)->Snapshot = std::move(snapshot);
         }
 
-        TCancelled AdmissionFailed(ui64 serial, const TString& reason, bool submitted = true, bool retry = true) {
+        TCancelled AdmissionFailed(ui64 serial, const TString& reason, bool retry = true) {
             auto* one = Lookup(serial, false);
             if (!one || one->State > EState::Ready) {
                 return {};
-            }
-            if (!submitted && one->Lease) {
-                one->Lease->State->Armed = false;
             }
             auto callback = std::move(one->Options.OnAdmissionFailure);
             auto cancelled = Cancel(serial);
@@ -497,7 +491,9 @@ namespace NTabletFlatExecutor {
                     }
                     // Limits may be applied asynchronously. Teach admission the
                     // actual capacity, then retry fitting against that value.
-                    return AdmissionFailed(serial, error.Status.Message, false);
+                    // A rejected readmission still owns its broker task, so
+                    // keep cleanup armed even when no resources were granted.
+                    return AdmissionFailed(serial, error.Status.Message);
                 }
             }
             return {};

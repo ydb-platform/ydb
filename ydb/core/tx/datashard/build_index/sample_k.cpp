@@ -339,6 +339,7 @@ void TDataShard::Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorC
 }
 
 void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx) {
+    const auto sender = ev->Sender;
     auto& request = ev->Get()->Record;
     const ui64 id = request.GetId();
     auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
@@ -460,7 +461,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
                 return new TSampleKScan(tabletId, table, req, sender, std::move(reply), range, std::move(clusters));
             });
     } catch (const std::exception& exc) {
-        FailScan<TEvDataShard::TEvSampleKResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TSampleKScan");
+        FailScan<TEvDataShard::TEvSampleKResponse>(id, TabletID(), sender, seqNo, exc, "TSampleKScan");
     }
 }
 

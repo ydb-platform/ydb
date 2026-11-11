@@ -263,6 +263,58 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         FinishTask(runtime, broker, sender, 6);
     }
 
+    Y_UNIT_TEST(StrictMemoryUpdateRejectsOversizeWithoutChangingTask) {
+        for (const bool resubmit : {false, true}) {
+            TTestBasicRuntime runtime;
+            SetupTabletServices(runtime);
+            const auto sender = runtime.AllocateEdgeActor();
+            auto config = MakeTestConfig();
+            auto* queue = config.MutableQueues(3);
+            queue->SetStrictMemoryLimit(true);
+            queue->MutableLimit()->SetMemory(100);
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            const auto broker = runtime.Register(CreateResourceBrokerActor(config, counters));
+            WaitForBootstrap(runtime);
+            auto cookie = MakeIntrusive<TThrRefBase>();
+            if (!resubmit) {
+                SubmitTask(runtime, broker, sender, 2, 1, 100, "scan", 5);
+                WaitForResourceAllocation(runtime, 2);
+            }
+            SubmitTask(runtime, broker, sender, 1, 1, 60, "scan", 5, cookie);
+            if (resubmit) {
+                WaitForResourceAllocation(runtime, 1, cookie);
+                UpdateTask(runtime, broker, sender, 1, 0, 0, 5, "scan");
+            }
+            GetInstantResourceBroker(runtime, broker, sender);
+            queue->MutableLimit()->SetMemory(40);
+            CheckConfigure(runtime, broker, sender, config, true);
+            UpdateTask(runtime, broker, sender, 1, 1, 80, 5, "scan", resubmit);
+            TAutoPtr<IEventHandle> handle;
+            const auto* rejected = runtime.GrabEdgeEventRethrow<TEvResourceBroker::TEvTaskOperationError>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(rejected->TaskId, 1);
+            UNIT_ASSERT_VALUES_EQUAL(rejected->Status.Code, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
+            UNIT_ASSERT_VALUES_EQUAL(rejected->Cookie, cookie);
+            UNIT_ASSERT(rejected->Status.MemoryLimit);
+            UNIT_ASSERT_VALUES_EQUAL(*rejected->Status.MemoryLimit, 40);
+            CheckCounters(counters, "queue", "queue_scan", resubmit ? 0 : 1, resubmit ? 0 : 100, 0, resubmit ? 0 : 1, 1);
+            if (resubmit) {
+                // An existing payload must remain accounted even above the new limit.
+                UpdateTask(runtime, broker, sender, 1, 0, 60, 5, "scan");
+                GetInstantResourceBroker(runtime, broker, sender);
+                CheckCounters(counters, "queue", "queue_scan", 0, 60, 0, 0, 1);
+            }
+            // Rejection preserves the original task and cookie for a smaller retry.
+            UpdateTask(runtime, broker, sender, 1, 1, 20, 5, "scan", resubmit);
+            if (!resubmit) {
+                FinishTask(runtime, broker, sender, 2);
+            }
+            WaitForResourceAllocation(runtime, 1, cookie);
+            FinishTask(runtime, broker, sender, 1);
+            GetInstantResourceBroker(runtime, broker, sender);
+            CheckCounters(counters, "queue", "queue_scan", 0, 0, resubmit ? 1 : 2, 0, 0);
+        }
+    }
+
     Y_UNIT_TEST(StrictMemoryWaitPreservesFairnessAcrossQueues) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);

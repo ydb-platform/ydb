@@ -51,7 +51,6 @@ public:
             auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
             auto blobDepotDeleteQueue = db.Table<Schema::BlobDepotDeleteQueue>().Select();
             auto bridgeSyncState = db.Table<Schema::BridgeSyncState>().Select();
-            auto bridgeSyncProgress = db.Table<Schema::BridgeSyncProgress>().Select();
             auto databaseSpaceExhaustedPool = db.Table<Schema::DatabaseSpaceExhaustedPool>().Select();
             if (!state.IsReady()
                     || !nodes.IsReady()
@@ -75,7 +74,6 @@ public:
                     || !pdiskSerial.IsReady()
                     || !blobDepotDeleteQueue.IsReady()
                     || !bridgeSyncState.IsReady()
-                    || !bridgeSyncProgress.IsReady()
                     || !databaseSpaceExhaustedPool.IsReady()) {
                 return false;
             }
@@ -687,24 +685,6 @@ public:
             }
         }
 
-        Self->BridgeSyncProgress.clear();
-        {
-            using Table = Schema::BridgeSyncProgress;
-            auto progress = db.Table<Table>().Select();
-            if (!progress.IsReady()) {
-                return false;
-            }
-            while (progress.IsValid()) {
-                Self->BridgeSyncProgress[TGroupId::FromValue(progress.GetKey())] = {
-                    .BecameUnsyncedGeneration = progress.GetValue<Table::BecameUnsyncedGeneration>(),
-                    .LastConfirmedProgressAt = progress.GetValue<Table::LastConfirmedProgressAt>(),
-                };
-                if (!progress.Next()) {
-                    return false;
-                }
-            }
-        }
-
         std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, TGroupGeometryInfo> cache;
 
         // fill in correct relations between bridged groups
@@ -825,20 +805,6 @@ public:
         for (TGroupId groupId : groupsToErase) {
             Self->BridgeSyncState.erase(groupId);
             db.Table<Schema::BridgeSyncState>().Key(groupId.GetRawId()).Delete();
-        }
-
-        groupsToErase.clear();
-        for (const auto& [targetGroupId, progress] : Self->BridgeSyncProgress) {
-            ui64 currentRound = 0;
-            const auto* pile = Self->FindBridgeSyncPile(targetGroupId, &currentRound);
-            if (!pile || pile->GetBecameUnsyncedGeneration() != currentRound ||
-                    progress.BecameUnsyncedGeneration != currentRound) {
-                groupsToErase.push_back(targetGroupId);
-            }
-        }
-        for (TGroupId groupId : groupsToErase) {
-            Self->BridgeSyncProgress.erase(groupId);
-            db.Table<Schema::BridgeSyncProgress>().Key(groupId.GetRawId()).Delete();
         }
 
         // start syncers for unsynced groups

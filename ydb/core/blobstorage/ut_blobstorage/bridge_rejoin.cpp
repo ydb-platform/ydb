@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         mark("restarting BSC");
         env.RebootTablet(env.TabletId);
         env.Sim(TDuration::Seconds(15));
-        UNIT_ASSERT_VALUES_EQUAL(checkRemaining(expected).GetBridgeSyncLastProgressTimestamp(), stageProgress);
+        UNIT_ASSERT(!checkRemaining(expected).HasBridgeSyncLastProgressTimestamp());
         UNIT_ASSERT(heldPuts.empty());
 
         // the syncer of the data stage finds the same with its own scan
@@ -613,6 +613,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         env.Sim(TDuration::Seconds(11)); // NodeWarden reports the progress every 10 s
         const auto scanned = checkRemaining(expected);
         UNIT_ASSERT_VALUES_EQUAL(scanned.GetBridgeSyncCopyBytesPerSecond(), 0);
+        UNIT_ASSERT(scanned.HasBridgeSyncLastProgressTimestamp());
         const ui64 scanProgress = scanned.GetBridgeSyncLastProgressTimestamp();
         UNIT_ASSERT_GT(scanProgress, stageProgress);
 
@@ -663,7 +664,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         env.Sim(TDuration::Seconds(15));
         const auto replayed = checkRemaining(0);
         UNIT_ASSERT_VALUES_EQUAL(replayed.GetBridgeSyncCopyBytesPerSecond(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(replayed.GetBridgeSyncLastProgressTimestamp(), idle.GetBridgeSyncLastProgressTimestamp());
+        UNIT_ASSERT(!replayed.HasBridgeSyncLastProgressTimestamp());
         UNIT_ASSERT_VALUES_EQUAL(poolCounter("SyncBytesCopied"), 0);
 
         mark("finishing");
@@ -681,7 +682,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         mark("restarting after synchronization");
         env.RebootTablet(env.TabletId);
         env.Sim(TDuration::Seconds(15));
-        UNIT_ASSERT_VALUES_EQUAL(groupSysView().GetBridgeSyncLastProgressTimestamp(), finishedProgress);
+        UNIT_ASSERT(!groupSysView().HasBridgeSyncLastProgressTimestamp());
 
         mark("starting a new round");
         holdAssimilation = true;

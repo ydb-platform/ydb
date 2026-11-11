@@ -2460,8 +2460,8 @@ private:
         NKikimrBridge::TGroupState::EStage stage) const;
     const NKikimrBridge::TGroupState::TPile* FindBridgeSyncPile(TGroupId targetGroupId, ui64* currentRound = nullptr);
     std::optional<TInstant> GetBridgeSyncLastProgressTimestamp(TGroupId targetGroupId);
-    void RecordBridgeSyncProgress(NIceDb::TNiceDb& db, TGroupId targetGroupId, ui64 round, TInstant timestamp);
-    void ForgetBridgeSyncProgress(NIceDb::TNiceDb& db, TGroupId targetGroupId, ui64 round);
+    void RecordBridgeSyncProgress(TGroupId targetGroupId, ui64 round, TInstant timestamp);
+    void ForgetBridgeSyncProgress(TGroupId targetGroupId, ui64 round);
     // the stage of the target group of a pile, if it is one
     std::optional<NKikimrBridge::TGroupState::EStage> GetBridgeSyncStage(TGroupId targetGroupId);
     // returns the bytes copied since the previous report

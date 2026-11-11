@@ -2912,7 +2912,7 @@ public:
             "Last synchronization error reported by the storage controller. Omitted when no error text is available.";
         storageGroupProperties["BridgeSyncLastProgressTimestamp"]["description"] =
             "Unix microseconds when BSC last confirmed scan/data progress or a committed stage advance in this synchronization round. "
-            "Omitted until progress is observed. Unchanged reports do not advance this timestamp.";
+            "Omitted until progress is observed after a BSC restart. Unchanged reports do not advance this timestamp.";
         storageGroupProperties["BridgeSyncCopyBytesPerSecond"]["description"] =
             "Average copy rate over the last minute, in blob bytes per second.";
         storageGroupProperties["BridgeSyncRemainingBytes"]["description"] =

@@ -203,17 +203,9 @@ public:
         TString Error;
     };
 
-    struct TRecordProgress {
-        ui64 Round;
-    };
-
-    struct TForgetProgress {
-        ui64 Round;
-    };
-
     struct TGroupStateUpdate {
         TGroupId TargetGroupId;
-        std::variant<TChangeStage, TRegisterError, TRecordProgress, TForgetProgress> Operation;
+        std::variant<TChangeStage, TRegisterError> Operation;
     };
 
 private:
@@ -276,16 +268,6 @@ public:
                         NIceDb::TUpdate<Schema::BridgeSyncState::LastErrorTimestamp>(item.LastErrorTimestamp),
                         NIceDb::TUpdate<Schema::BridgeSyncState::ErrorCount>(item.ErrorCount)
                     );
-                },
-                [&](TRecordProgress& progress) {
-                    ui64 currentRound = 0;
-                    const auto* pile = Self->FindBridgeSyncPile(update.TargetGroupId, &currentRound);
-                    if (pile && pile->GetBecameUnsyncedGeneration() == progress.Round && currentRound == progress.Round) {
-                        Self->RecordBridgeSyncProgress(db, update.TargetGroupId, progress.Round, Timestamp);
-                    }
-                },
-                [&](TForgetProgress& progress) {
-                    Self->ForgetBridgeSyncProgress(db, update.TargetGroupId, progress.Round);
                 }
             }, update.Operation);
             Self->SysViewChangedGroups.insert(update.TargetGroupId);
@@ -1196,25 +1178,24 @@ std::optional<TInstant> TBlobStorageController::GetBridgeSyncLastProgressTimesta
     return it->second.LastConfirmedProgressAt;
 }
 
-void TBlobStorageController::RecordBridgeSyncProgress(NIceDb::TNiceDb& db, TGroupId targetGroupId,
-        ui64 round, TInstant timestamp) {
+void TBlobStorageController::RecordBridgeSyncProgress(TGroupId targetGroupId, ui64 round, TInstant timestamp) {
+    ui64 currentRound = 0;
+    const auto* pile = FindBridgeSyncPile(targetGroupId, &currentRound);
+    if (!pile || pile->GetBecameUnsyncedGeneration() != round || currentRound != round) {
+        return;
+    }
     auto& progress = BridgeSyncProgress[targetGroupId];
     if (progress.BecameUnsyncedGeneration == round && progress.LastConfirmedProgressAt >= timestamp) {
         return;
     }
     progress = {round, timestamp};
-    using Table = Schema::BridgeSyncProgress;
-    db.Table<Table>().Key(targetGroupId.GetRawId()).Update(
-        NIceDb::TUpdate<Table::BecameUnsyncedGeneration>(round),
-        NIceDb::TUpdate<Table::LastConfirmedProgressAt>(timestamp));
     SysViewChangedGroups.insert(targetGroupId);
 }
 
-void TBlobStorageController::ForgetBridgeSyncProgress(NIceDb::TNiceDb& db, TGroupId targetGroupId, ui64 round) {
+void TBlobStorageController::ForgetBridgeSyncProgress(TGroupId targetGroupId, ui64 round) {
     const auto it = BridgeSyncProgress.find(targetGroupId);
     if (it != BridgeSyncProgress.end() && it->second.BecameUnsyncedGeneration == round) {
         BridgeSyncProgress.erase(it);
-        db.Table<Schema::BridgeSyncProgress>().Key(targetGroupId.GetRawId()).Delete();
         SysViewChangedGroups.insert(targetGroupId);
     }
 }
@@ -1443,8 +1424,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             // First reports establish baselines, and replays preserve high-water marks.
             perNodeInfo.ProgressBaselineFields |= reportedFields;
             if (advanced && !reset && targetPile) {
-                updates.push_back({targetGroupId, TTxUpdateBridgeSyncState::TRecordProgress{
-                    targetPile->GetBecameUnsyncedGeneration()}});
+                RecordBridgeSyncProgress(targetGroupId, targetPile->GetBecameUnsyncedGeneration(), TActivationContext::Now());
             }
 
             if (targetPile) {
@@ -2169,11 +2149,9 @@ void TBlobStorageController::ApplyStaticGroupUpdateForSyncers(std::map<TGroupId,
                 const auto targetGroupId = TGroupId::FromProto(&previous, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                 const auto* current = FindBridgeSyncPile(targetGroupId);
                 if (!current || current->GetBecameUnsyncedGeneration() != previous.GetBecameUnsyncedGeneration()) {
-                    syncStateUpdates.push_back({targetGroupId, TTxUpdateBridgeSyncState::TForgetProgress{
-                        previous.GetBecameUnsyncedGeneration()}});
+                    ForgetBridgeSyncProgress(targetGroupId, previous.GetBecameUnsyncedGeneration());
                 } else if (current->GetStage() > previous.GetStage()) {
-                    syncStateUpdates.push_back({targetGroupId, TTxUpdateBridgeSyncState::TRecordProgress{
-                        current->GetBecameUnsyncedGeneration()}});
+                    RecordBridgeSyncProgress(targetGroupId, current->GetBecameUnsyncedGeneration(), TActivationContext::Now());
                 }
             });
         }
@@ -2207,7 +2185,6 @@ void TBlobStorageController::CommitSyncerUpdates(TConfigState& state, TTransacti
     // BridgePileId, which is checked when loading
     THashSet<TGroupId> targetGroupIds;
     THashSet<TGroupId> proxyGroupsWithNewGeneration;
-    NIceDb::TNiceDb db(txc.DB);
     for (const auto& [base, overlay] : state.Groups.Diff()) {
         if (base && base->second->BridgeGroupInfo) {
             const auto* nextState = overlay->second && overlay->second->BridgeGroupInfo
@@ -2218,9 +2195,11 @@ void TBlobStorageController::CommitSyncerUpdates(TConfigState& state, TTransacti
                 const auto* next = nextState ? NBridge::GetGroupPile(*nextState, pileId) : nullptr;
                 if (!next || next->GetGroupId() != previous.GetGroupId() ||
                         next->GetBecameUnsyncedGeneration() != previous.GetBecameUnsyncedGeneration()) {
-                    ForgetBridgeSyncProgress(db, targetGroupId, previous.GetBecameUnsyncedGeneration());
+                    ForgetBridgeSyncProgress(targetGroupId, previous.GetBecameUnsyncedGeneration());
                 } else if (next->GetStage() > previous.GetStage()) {
-                    RecordBridgeSyncProgress(db, targetGroupId, next->GetBecameUnsyncedGeneration(), state.Timestamp);
+                    state.Callbacks.push_back([this, targetGroupId, round = next->GetBecameUnsyncedGeneration()] {
+                        RecordBridgeSyncProgress(targetGroupId, round, TActivationContext::Now());
+                    });
                 }
             });
         }
@@ -2266,10 +2245,10 @@ void TBlobStorageController::CommitSyncerUpdates(TConfigState& state, TTransacti
             TargetGroupToSyncerState.erase(it);
         }
         if (BridgeSyncState.erase(groupId)) {
-            db.Table<Schema::BridgeSyncState>().Key(groupId.GetRawId()).Delete();
+            NIceDb::TNiceDb(txc.DB).Table<Schema::BridgeSyncState>().Key(groupId.GetRawId()).Delete();
         }
         if (const auto it = BridgeSyncProgress.find(groupId); it != BridgeSyncProgress.end()) {
-            ForgetBridgeSyncProgress(db, groupId, it->second.BecameUnsyncedGeneration);
+            ForgetBridgeSyncProgress(groupId, it->second.BecameUnsyncedGeneration);
         }
     }
 

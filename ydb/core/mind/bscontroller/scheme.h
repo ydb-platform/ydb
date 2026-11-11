@@ -533,15 +533,6 @@ struct Schema : NIceDb::Schema {
     };
 
 
-    struct BridgeSyncProgress : Table<137> {
-        struct TargetGroupId : Column<1, NScheme::NTypeIds::Uint32> {};
-        struct BecameUnsyncedGeneration : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct LastConfirmedProgressAt : Column<3, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
-
-        using TKey = TableKey<TargetGroupId>;
-        using TColumns = TableColumns<TargetGroupId, BecameUnsyncedGeneration, LastConfirmedProgressAt>;
-    };
-
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -570,8 +561,7 @@ struct Schema : NIceDb::Schema {
         DirectBlockGroupTabletState,
         DirectBlockGroupClaims,
         DatabaseSpaceExhaustedPool,
-        BoxStoragePoolPDiskFilterV2,
-        BridgeSyncProgress
+        BoxStoragePoolPDiskFilterV2
     >;
 
     using TSettings = SchemaSettings<

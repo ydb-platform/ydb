@@ -1,8 +1,6 @@
 GTEST(topic_it)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/integration/tests_common.inc)
-ENV(YDB_ENABLE_PQ="true")
-
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 REQUIREMENTS(ram:32 cpu:1)

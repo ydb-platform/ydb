@@ -399,6 +399,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"][disabled_feature_flag] = False
         if enable_alter_database_create_hive_first:
             self.yaml_config["feature_flags"]["enable_alter_database_create_hive_first"] = enable_alter_database_create_hive_first
+        env_pq = os.getenv("YDB_ENABLE_PQ")
+        if env_pq is not None:
+            enable_pq = env_pq == "true"
         if enable_sqs:
             enable_pq = True
         self.yaml_config['pqconfig']['enabled'] = enable_pq

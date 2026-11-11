@@ -125,6 +125,14 @@ ui64 MaxInFlightLocksStreamLookup() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxInFlightLocksStreamLookup;
 }
 
+ui64 MaxReadRequestEntriesStreamLookup() {
+    return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxReadRequestEntriesStreamLookup;
+}
+
+ui64 MaxReadRequestBytesStreamLookup() {
+    return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxReadRequestBytesStreamLookup;
+}
+
 void TReadLockInfo::Add(const NKikimrTxDataShard::TEvReadResult& record) {
     for (auto& lock : record.GetTxLocks()) {
         Locks.push_back(lock);

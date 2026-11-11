@@ -1,5 +1,11 @@
 PROGRAM()
 
+IF (OS_LINUX)
+    # Relink with a trace to compare the cost of generating the GDB index.
+    ENABLE(LINKER_TIME_TRACE)
+    LDFLAGS(-Wl,--gdb-index)
+ENDIF()
+
 SRCS(
     main.cpp
     proxy.cpp

@@ -1,5 +1,11 @@
 PROGRAM(pdisktool)
 
+IF (OS_LINUX)
+    # Relink with a trace to compare the cost of generating the GDB index.
+    ENABLE(LINKER_TIME_TRACE)
+    LDFLAGS(-Wl,--gdb-index)
+ENDIF()
+
 PEERDIR(
     library/cpp/getopt
     ydb/apps/version

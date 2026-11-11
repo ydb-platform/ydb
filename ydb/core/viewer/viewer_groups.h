@@ -181,6 +181,7 @@ public:
     TString Filter;
     std::unordered_set<TString> DatabaseStoragePools; // storage pools of the requested database
     bool DatabaseStoragePoolsApplied = false; // the pre-filter by DatabaseStoragePools is already applied
+    bool DatabaseDescriptionReceived = false; // the description of the requested database (with its storage pools) was received
     std::unordered_set<TString> FilterStoragePools;
     TIdsFilter<TGroupId> FilterGroupIds;
     TIdsFilter<TNodeId> FilterNodeIds;
@@ -1936,6 +1937,7 @@ public:
                     }
                 }
                 if (Database && firstNavigate) { // filter by database
+                    DatabaseDescriptionReceived = true;
                     for (const auto& storagePool : domainDescription->Description.GetStoragePools()) {
                         TString storagePoolName = storagePool.GetName();
                         DatabaseStoragePools.emplace(storagePoolName);
@@ -2571,6 +2573,14 @@ public:
         }
         if (NeedSort) {
             AddProblem("sort-not-applied");
+        }
+        // The groups of a database are the groups of its storage pools, which are taken from the description
+        // of the database. Without the description the pre-filter is skipped and NeedFilter is recalculated
+        // without it, so the groups of the whole cluster are returned. A database whose description was
+        // received and has no storage pools is not such a case.
+        if (Database && !DatabaseDescriptionReceived) {
+            AddProblem("no-database-info");
+            AddProblem("filter-not-applied");
         }
     }
 

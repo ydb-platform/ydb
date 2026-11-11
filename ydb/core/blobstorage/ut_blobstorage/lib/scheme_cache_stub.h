@@ -33,14 +33,17 @@ public:
     )
 };
 
-inline void SetupSchemeCacheStub(TEnvironmentSetup& env) {
+inline void SetupSchemeCacheStub(TEnvironmentSetup& env, std::vector<TString> pools = {}) {
     NKikimrSubDomains::TDomainDescription description;
     auto *key = description.MutableDomainKey();
     key->SetSchemeShard(env.Runtime->GetDomainsInfo()->GetDomain()->SchemeRoot);
     key->SetPathId(1);
-    auto *pool = description.AddStoragePools();
-    pool->SetName(env.StoragePoolName);
-    pool->SetKind(env.StoragePoolName);
+    pools.push_back(env.StoragePoolName);
+    for (const TString& name : pools) {
+        auto *pool = description.AddStoragePools();
+        pool->SetName(name);
+        pool->SetKind(name);
+    }
 
     for (ui32 nodeId : env.Runtime->GetNodes()) {
         env.Runtime->RegisterService(MakeSchemeCacheID(), env.Runtime->Register(new TSchemeCacheStub(description),

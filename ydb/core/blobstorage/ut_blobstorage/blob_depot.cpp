@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/scheme_cache_stub.h>
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -855,6 +856,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             }
             return ev->GetTypeRewrite() != TEvBlobStorage::EvGetResult || ev->GetRecipientRewrite() != assimilator;
         };
+        SetupSchemeCacheStub(env, {DecommitBlobDepotPool});
         DecommitGroup(tenv, groupId);
 
         std::optional<ui64> blobDepotTabletId;

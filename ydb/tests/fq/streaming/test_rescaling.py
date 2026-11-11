@@ -149,13 +149,16 @@ class TestRescaling(StreamingTestBase):
         finally:
             self._cleanup_query(kikimr, query_name, [])
 
-    @pytest.mark.parametrize("kikimr", [{"enable_exactly_once_topics_writing": True}], indirect=True)
     def test_pq_source_rescaling_skips_deferred_publication(
         self,
         kikimr: Kikimr,
         entity_name: Callable[[str], str],
     ) -> None:
         """Keep the saved graph and sink state when deferred publication is enabled."""
+        kikimr.set_feature_flags({
+            "enable_exactly_once_topics_writing": True,
+            "enable_topic_deferred_publish": True,
+        })
         partitions_count = 100
         query_name = entity_name("pq_source_rescaling_skips_deferred_publication")
         inp, out, _ = self.get_io_names(
@@ -413,7 +416,6 @@ class TestRescaling(StreamingTestBase):
         finally:
             self._cleanup_query(kikimr, query_name, [])
 
-    @pytest.mark.parametrize("kikimr", [{"enable_streaming_query_state_recompute": True}], indirect=True)
     @pytest.mark.parametrize("local_topics", [True, False], ids=["local", "external"])
     def test_pq_source_continuation_scale_up_and_down(
         self,
@@ -422,6 +424,7 @@ class TestRescaling(StreamingTestBase):
         local_topics: bool,
     ) -> None:
         """Continue from checkpoints through 1 -> 2 -> 4 -> 1 direct readers."""
+        kikimr.set_feature_flags({"enable_streaming_query_state_recompute": True})
         partitions_count = 8
         query_name = entity_name("pq_source_continuation_scale_up_and_down")
         inp, out, _ = self.get_io_names(

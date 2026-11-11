@@ -25,6 +25,17 @@ def kikimr(request):
     kikimr.stop()
 
 
+@pytest.fixture(autouse=True)
+def restore_config(request):
+    if "kikimr" not in request.fixturenames:
+        yield
+        return
+
+    kikimr = request.getfixturevalue("kikimr")
+    with kikimr.preserve_config():
+        yield
+
+
 @pytest.fixture
 def wait_initial_resources(kikimr: Kikimr) -> None:
     # A partial planner snapshot can place all readers on one node, causing

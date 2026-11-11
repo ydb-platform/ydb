@@ -135,13 +135,6 @@ class TestIamAuthGeneric(StreamingTestBase):
         kikimr.ydb_client.query(f"DROP EXTERNAL DATA SOURCE `{source_name}`;")
 
     @pytest.mark.parametrize(
-        "kikimr",
-        [
-            {"enable_dq_source_stream_lookup_join": True},
-        ],
-        indirect=["kikimr"],
-    )
-    @pytest.mark.parametrize(
         "service_account_id", [FAKE_SERVICE_ACCOUNT_ID, "bad", "bad-token", "bad-skip-1", "bad-token-skip-1"]
     )
     def test_generic_lookup_iam_auth(
@@ -152,6 +145,7 @@ class TestIamAuthGeneric(StreamingTestBase):
     ) -> None:
         """Creates and populates local table, and read it from query
         via an IAM-auth external data source."""
+        kikimr.set_config({"table_service_config": {"enable_dq_source_stream_lookup_join": True}})
 
         endpoint = self.get_endpoint(kikimr, local_topics=True)
         source_name = entity_name("iam_source")

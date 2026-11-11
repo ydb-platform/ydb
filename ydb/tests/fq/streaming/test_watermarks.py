@@ -738,7 +738,6 @@ class TestWatermarksInYdb(StreamingTestBase):
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("local_topics", [True, False])
-    @pytest.mark.parametrize("kikimr", [{"enable_kqp_constraints_transformer": False}], indirect=["kikimr"])
     def test_watermarks_kqp_slj(
         self: StreamingTestBase,
         kikimr: Kikimr,
@@ -749,6 +748,8 @@ class TestWatermarksInYdb(StreamingTestBase):
     ) -> None:
         if local_topics and shared_reading:
             pytest.skip("Shared reading is not supported for local topics: YQ-5036")
+
+        kikimr.set_feature_flags({"enable_kqp_constraints_transformer": False})
 
         endpoint = self.get_endpoint(kikimr, local_topics)
         query_name = f"test_watermarks_kqp_slj_{shared_reading}{tasks}{local_topics}"

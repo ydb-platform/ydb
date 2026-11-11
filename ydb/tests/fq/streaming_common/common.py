@@ -13,6 +13,7 @@ import requests
 import re
 
 from collections import defaultdict
+from contextlib import contextmanager
 from typing import List, Dict, Optional, Self
 
 from ydb.tests.library.common.wait_for import wait_for
@@ -256,7 +257,7 @@ def wait_completed_checkpoints(
 
 
 class YdbClient:
-    WAIT_TIMEOUT: int = 5
+    WAIT_TIMEOUT: int = 30
 
     def __fail_retry_callback(self, e):
         self.retry_settings.on_ydb_error_callback(e)
@@ -391,14 +392,16 @@ _SECTIONS_FOR_CMS = [
 ]
 
 
-def _replace_config_via_cms(cluster, full_yaml_config):
-    """Wrap *full_yaml_config* in the MainConfig envelope and upload via CMS."""
-    wrapped = {
-        "metadata": {
+def _replace_config_via_cms(cluster, full_yaml_config, metadata=None):
+    """Upload using current CMS metadata, or initial metadata for the first upload."""
+    if metadata is None:
+        metadata = {
             "kind": "MainConfig",
             "version": 0,
             "cluster": "",
-        },
+        }
+    wrapped = {
+        "metadata": metadata,
         "config": full_yaml_config,
     }
     logger.info("Config to be uploaded to CMS:\n%s", yaml.safe_dump(wrapped, default_flow_style=False))
@@ -413,8 +416,10 @@ def _replace_config_via_cms(cluster, full_yaml_config):
         os.unlink(tmp_path)
 
 
-def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 30) -> None:
-    expected_sections = {section: full_yaml_config[section] for section in _SECTIONS_FOR_CMS}
+def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 30, sections=None) -> None:
+    if sections is None:
+        sections = _SECTIONS_FOR_CMS
+    expected_sections = {section: full_yaml_config.get(section) for section in sections}
     deadline = time.monotonic() + timeout
     attempt = 0
 
@@ -613,6 +618,7 @@ class Kikimr:
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 
         full_yaml_config = copy.deepcopy(config.yaml_config)
+        self._full_yaml_config = full_yaml_config
 
         for section in _SECTIONS_FOR_CMS:
             config.yaml_config.pop(section, None)
@@ -680,6 +686,132 @@ class Kikimr:
 
     def get_database_name(self) -> str:
         return self.endpoint.database
+
+    def _replace_config(self, full_yaml_config) -> None:
+        current_config = self.cluster.fetch_config()
+        if not current_config:
+            raise RuntimeError("Failed to fetch current CMS config before updating config")
+        metadata = yaml.safe_load(current_config)["metadata"]
+        _replace_config_via_cms(self.cluster, full_yaml_config, metadata=metadata)
+        # Keep the uploaded config even if waiting fails, so teardown can restore it.
+        self._full_yaml_config = full_yaml_config
+
+    @contextmanager
+    def preserve_config(self):
+        """Restore changes made through this helper when leaving the context."""
+        original_config = copy.deepcopy(self._full_yaml_config)
+        try:
+            yield
+        finally:
+            if self._full_yaml_config != original_config:
+                changed_sections = [
+                    name
+                    for name in original_config.keys() | self._full_yaml_config.keys()
+                    if original_config.get(name) != self._full_yaml_config.get(name)
+                ]
+                original_flags = original_config.get("feature_flags", {})
+                current_flags = self._full_yaml_config.get("feature_flags", {})
+                flags_to_restore = {
+                    name: original_flags.get(name)
+                    for name in original_flags.keys() | current_flags.keys()
+                    if original_flags.get(name) != current_flags.get(name)
+                }
+                self._replace_config(original_config)
+                _wait_cms_config_applied(self.cluster, original_config, sections=changed_sections)
+                self._wait_feature_flags_applied(flags_to_restore)
+
+    def set_config(self, sections: dict, timeout_seconds: int = 60) -> None:
+        """Update fields in CMS sections and wait for their application on tenant nodes."""
+        if not sections:
+            return
+        if not self.cluster.slots:
+            raise ValueError("No dynamic nodes to check config on")
+
+        full_yaml_config = copy.deepcopy(self._full_yaml_config)
+        for section, fields in sections.items():
+            full_yaml_config.setdefault(section, {}).update(copy.deepcopy(fields))
+        self._replace_config(full_yaml_config)
+        _wait_cms_config_applied(self.cluster, full_yaml_config, timeout=timeout_seconds, sections=sections)
+        self._wait_feature_flags_applied(sections.get("feature_flags", {}), timeout_seconds)
+
+    def set_log_levels(self, levels: Dict[str, int], timeout_seconds: int = 60) -> None:
+        """Update component log levels without discarding other logging settings."""
+        if not levels:
+            return
+        entries = {
+            entry["component"]: copy.deepcopy(entry)
+            for entry in self._full_yaml_config.get("log_config", {}).get("entry", [])
+        }
+        for component, level in levels.items():
+            entries.setdefault(component, {"component": component})["level"] = level
+        self.set_config({"log_config": {"entry": list(entries.values())}}, timeout_seconds)
+
+    def set_feature_flags(self, flags: Dict[str, bool], timeout_seconds: int = 60) -> None:
+        """Update runtime boolean feature flags by snake_case name and wait for all tenant nodes."""
+        if not flags:
+            return
+        if any(not isinstance(value, bool) for value in flags.values()):
+            raise TypeError("Feature flag values must be bool")
+        if not self.cluster.slots:
+            raise ValueError("No dynamic nodes to check feature flags on")
+
+        self.set_config({"feature_flags": flags}, timeout_seconds)
+
+    def _wait_feature_flags_applied(self, flags: Dict[str, Optional[bool]], timeout_seconds: int = 60) -> None:
+        """Wait for runtime values; None means the protobuf default after removing an override."""
+        if not flags:
+            return
+        if not self.cluster.slots:
+            raise ValueError("No dynamic nodes to check feature flags on")
+
+        deadline = time.monotonic() + timeout_seconds
+        observed = {}
+        while True:
+            observed.clear()
+            pending_nodes = set(self.cluster.slots)
+            for node_id, node in self.cluster.slots.items():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                try:
+                    response = requests.get(
+                        f"http://{node.host}:{node.mon_port}/viewer/feature_flags",
+                        params={"database": self.get_database_name(), "direct": "true"},
+                        headers={"Authorization": "root@builtin"},
+                        timeout=min(5, remaining),
+                        allow_redirects=False,
+                    )
+                    response.raise_for_status()
+                    runtime_flags = {
+                        flag["Name"].lower(): flag
+                        for database in response.json().get("Databases", [])
+                        if database["Name"] == self.get_database_name()
+                        for flag in database.get("FeatureFlags", [])
+                    }
+                    node_flags = {}
+                    expected_flags = {}
+                    for name, value in flags.items():
+                        # Viewer uses protobuf names (including acronyms); YAML uses snake_case.
+                        flag = runtime_flags[name.replace("_", "").lower()]
+                        default = flag.get("Default", False)
+                        node_flags[name] = flag.get("Current", default)
+                        expected_flags[name] = default if value is None else value
+                    observed[node_id] = node_flags
+                    if node_flags == expected_flags:
+                        pending_nodes.remove(node_id)
+                except (KeyError, TypeError, ValueError, requests.RequestException) as error:
+                    observed[node_id] = str(error)
+
+            if not pending_nodes:
+                logger.info("Feature flags applied on all dynamic nodes: %s", flags)
+                return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AssertionError(
+                    f"Feature flags {flags!r} were not applied on all dynamic nodes within {timeout_seconds}s; "
+                    f"last observed values: {observed!r}"
+                )
+            time.sleep(min(0.2, remaining))
 
     def wait_kqp_node_count(self, expected_count: int, timeout_seconds: int = 60) -> None:
         node_counts = {}

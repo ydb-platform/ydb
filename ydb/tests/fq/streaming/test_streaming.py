@@ -476,19 +476,8 @@ class TestStreamingInYdb(StreamingTestBase):
         kikimr.ydb_client.query(sql_drop.format(query_name=query_name1))
         kikimr.ydb_client.query(sql_drop.format(query_name=query_name2))
 
-    @pytest.mark.parametrize(
-        "kikimr",
-        [
-            {"enable_user_attributes_in_topic_query": True},
-            {"enable_user_attributes_in_topic_query": False},
-        ],
-        ids=["ua_on", "ua_off"],
-        indirect=["kikimr"],
-    )
-    def test_read_user_attributes(self, kikimr, entity_name, request):
-        cfg = request.node.callspec.params["kikimr"]
-        enable_message_meta_flag = cfg["enable_user_attributes_in_topic_query"]
-
+    @pytest.mark.parametrize("enable_message_meta_flag", [True, False], ids=["ua_on", "ua_off"])
+    def test_read_user_attributes(self, kikimr, entity_name, enable_message_meta_flag):
         inp, endpoint = self.get_input_name(
             kikimr,
             "ua",
@@ -511,6 +500,7 @@ class TestStreamingInYdb(StreamingTestBase):
             LIMIT 1
         """
 
+        kikimr.set_feature_flags({"enable_user_attributes_in_topic_query": enable_message_meta_flag})
         if not enable_message_meta_flag:
             with pytest.raises(ydb.issues.GenericError) as excinfo:
                 kikimr.ydb_client.query(sql)
@@ -530,19 +520,8 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["field2"] == 105
         assert row["trace_id"] == b"tid-a"
 
-    @pytest.mark.parametrize(
-        "kikimr",
-        [
-            {"enable_user_attributes_in_topic_query": True},
-            {"enable_user_attributes_in_topic_query": False},
-        ],
-        ids=["ua_on", "ua_off"],
-        indirect=["kikimr"],
-    )
-    def test_read_user_attributes_in_streaming_query(self, kikimr, entity_name, request):
-        cfg = request.node.callspec.params["kikimr"]
-        enable_message_meta_flag = cfg["enable_user_attributes_in_topic_query"]
-
+    @pytest.mark.parametrize("enable_message_meta_flag", [True, False], ids=["ua_on", "ua_off"])
+    def test_read_user_attributes_in_streaming_query(self, kikimr, entity_name, enable_message_meta_flag):
         inp, out, endpoint = self.get_io_names(
             kikimr,
             "ua_sq",
@@ -568,6 +547,7 @@ class TestStreamingInYdb(StreamingTestBase):
                 );
             END DO;'''
 
+        kikimr.set_feature_flags({"enable_user_attributes_in_topic_query": enable_message_meta_flag})
         if not enable_message_meta_flag:
             with pytest.raises(ydb.issues.GenericError) as excinfo:
                 kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
@@ -576,18 +556,19 @@ class TestStreamingInYdb(StreamingTestBase):
             return
 
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
-        self.wait_completed_checkpoints(kikimr, query_name)
+        try:
+            self.wait_completed_checkpoints(kikimr, query_name)
 
-        rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-sq"})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
-        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
-        assert json.loads(result) == {
-            "field1": "value1",
-            "field2": 105,
-            "trace_id": "tid-sq",
-        }
-
-        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+            rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-sq"})]
+            self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+            result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+            assert json.loads(result) == {
+                "field1": "value1",
+                "field2": 105,
+                "trace_id": "tid-sq",
+            }
+        finally:
+            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
     # --- Issue #40506: Missing key in non-empty dictionary ---
     def test_ua_missing_key_in_nonempty_dict(self, kikimr, entity_name):
@@ -1975,22 +1956,17 @@ FROM `{table_name}`"""
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
-    @pytest.mark.parametrize(
-        "kikimr",
-        [
-            {"enable_shared_reading_in_streaming_queries": False},
-            {"enable_shared_reading_in_streaming_queries": True},
-        ],
-        indirect=["kikimr"],
-    )
+    @pytest.mark.parametrize("shared_reading_enabled", [False, True], ids=["disabled", "enabled"])
     def test_check_shared_reading_disabled(
-        self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], request
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        shared_reading_enabled: bool,
     ) -> None:
-        cfg = request.node.callspec.params["kikimr"]
-        enable_shared_reading_in_streaming_queries = cfg["enable_shared_reading_in_streaming_queries"]
+        kikimr.set_feature_flags({"enable_shared_reading_in_streaming_queries": shared_reading_enabled})
         source_name = entity_name("MyEDS")
 
-        if enable_shared_reading_in_streaming_queries:
+        if shared_reading_enabled:
             self.create_source(kikimr, source_name, shared=True)
             kikimr.ydb_client.query(f"DROP EXTERNAL DATA SOURCE `{source_name}`;")
         else:
@@ -2000,18 +1976,12 @@ FROM `{table_name}`"""
             ):
                 self.create_source(kikimr, source_name, shared=True)
 
-    @pytest.mark.parametrize(
-        "kikimr",
-        [
-            {
-                "enable_streaming_queries": False,
-                "enable_external_data_sources": False,
-                "enable_shared_reading_in_streaming_queries": False,
-            }
-        ],
-        indirect=["kikimr"],
-    )
     def test_table_mode(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
+        kikimr.set_feature_flags({
+            "enable_streaming_queries": False,
+            "enable_external_data_sources": False,
+            "enable_shared_reading_in_streaming_queries": False,
+        })
         input_name, endpoint = self.get_input_name(kikimr, "test_table_mode", True, entity_name)
 
         message = b'{"time": "lunch time"}'
@@ -3029,15 +2999,14 @@ FROM `{table_name}`"""
         check_issues(get_issues(client=second_ydb_client), "Lease expired")
 
     @pytest.mark.parametrize(
-        argnames="table_role,table_store,kikimr",
+        argnames="table_role,table_store",
         argvalues=[
-            ("join", "row", {}),
-            ("join", "column", {}),
-            ("native_join", "row", {"enable_kqp_constraints_transformer": False}),
-            ("output", "row", {}),
-            ("output", "column", {}),
+            ("join", "row"),
+            ("join", "column"),
+            ("native_join", "row"),
+            ("output", "row"),
+            ("output", "column"),
         ],
-        indirect=["kikimr"],
         ids=[
             "join-row",
             "join-column",
@@ -3111,6 +3080,8 @@ FROM `{table_name}`"""
 
         create_table()
         try:
+            if table_role == "native_join":
+                kikimr.set_feature_flags({"enable_kqp_constraints_transformer": False})
             fill_join_table(value="before")
             pragma = ""
             if table_role == "output":

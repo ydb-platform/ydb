@@ -212,15 +212,12 @@ class TestStreamingAggregation(StreamingTestBase):
         """
         return names, endpoint, body
 
-    @pytest.mark.parametrize(
-        "kikimr,enabled",
-        [({"enable_streaming_aggregation": enabled}, enabled) for enabled in (False, True)],
-        indirect=["kikimr"],
-        ids=["disabled", "enabled"],
-    )
+    @pytest.mark.parametrize("enabled", [False, True], ids=["disabled", "enabled"])
     @pytest.mark.parametrize("keyed", [False, True], ids=["keyless", "keyed"])
-    def test_finite_input_is_not_streaming(self, kikimr, enabled, keyed):
+    def test_finite_input_is_not_streaming(self, kikimr, entity_name, enabled, keyed):
+        kikimr.set_feature_flags({"enable_streaming_aggregation": enabled})
         query = f"""
+            -- {entity_name("finite_input")}
             PRAGMA EmitAggApply;
             PRAGMA ydb.StreamingAggregationStateTablePath = '/Root/nonexistent';
             $input = AsList(AsStruct('a' AS key, 2l AS value), AsStruct('a' AS key, 3l AS value));
@@ -263,14 +260,10 @@ class TestStreamingAggregation(StreamingTestBase):
         future.result(timeout=120)
         self.check_rows(kikimr, f"SELECT key, value FROM `{table}` ORDER BY key;", [("a", 5), ("b", 7)])
 
-    @pytest.mark.parametrize(
-        "kikimr,enabled",
-        [({"enable_streaming_aggregation": enabled}, enabled) for enabled in (False, True)],
-        indirect=["kikimr"],
-        ids=["disabled", "enabled"],
-    )
+    @pytest.mark.parametrize("enabled", [False, True], ids=["disabled", "enabled"])
     @pytest.mark.parametrize("keyed", [False, True], ids=["keyless", "keyed"])
     def test_feature_flag_controls_rewrite(self, kikimr, entity_name, enabled, keyed):
+        kikimr.set_feature_flags({"enable_streaming_aggregation": enabled})
         source, output, endpoint = self.get_io_names(kikimr, "rewrite", False, entity_name)
         query = entity_name("query")
         body = f"""
@@ -291,14 +284,10 @@ class TestStreamingAggregation(StreamingTestBase):
             self.write_stream([json.dumps(dict(key="a", value=v)) for v in (2, 3)], endpoint=endpoint)
             assert self.read_stream(2, endpoint=endpoint) == ["2", "5"]
 
-    @pytest.mark.parametrize(
-        "kikimr,advanced",
-        [({"enable_streaming_aggregation_advanced": enabled}, enabled) for enabled in (False, True)],
-        indirect=["kikimr"],
-        ids=["disabled", "enabled"],
-    )
+    @pytest.mark.parametrize("advanced", [False, True], ids=["disabled", "enabled"])
     @pytest.mark.parametrize("use_state_table", [False, True], ids=["memory", "explicit_state"])
     def test_explicit_state_table_requires_advanced_flag(self, kikimr, entity_name, advanced, use_state_table):
+        kikimr.set_feature_flags({"enable_streaming_aggregation_advanced": advanced})
         source, output, endpoint = self.get_io_names(kikimr, "advanced_aggregation", False, entity_name)
         query, table = entity_name("query"), entity_name("state")
         state_path = f"{kikimr.get_database_name()}/{table}" if use_state_table else ""
@@ -519,9 +508,9 @@ class TestStreamingAggregation(StreamingTestBase):
     # The read actor's TRACE cell formatter does not support parameterized Decimal types.
     # Remove this workaround after https://github.com/ydb-platform/ydb/issues/54964 is fixed.
     # Limit KQP_COMPUTE to DEBUG even if the global log level is set to TRACE.
-    @pytest.mark.parametrize("kikimr", [{"log_levels": {"KQP_COMPUTE": 7}}], indirect=True)
     @pytest.mark.parametrize("nullable", [False, True])
     def test_standard_aggregates_use_defaults(self, kikimr, entity_name, nullable):
+        kikimr.set_log_levels({"KQP_COMPUTE": 7})
         source, endpoint = self.get_input_name(kikimr, "standard_aggregation", False, entity_name)
         table, query = entity_name("result"), entity_name("query")
         fields = {
@@ -655,8 +644,8 @@ class TestStreamingAggregation(StreamingTestBase):
             self.write_stream([json.dumps(dict(key=key, value=5)) for key in keys], endpoint=endpoint)
             self.check_rows(kikimr, result, [(key, 4, 11) for key in keys])
 
-    @pytest.mark.parametrize("kikimr", [{"enable_streaming_query_state_recompute": True}], indirect=True)
     def test_alter_text_preserves_output_state(self, kikimr, entity_name):
+        kikimr.set_feature_flags({"enable_streaming_query_state_recompute": True})
         names, endpoint, body = self.setup_validation(kikimr, entity_name, ValidationCase("alter"))
         query, table = names["query"], names["first"]
         body = """

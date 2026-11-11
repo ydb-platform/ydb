@@ -1,6 +1,6 @@
 # ALTER TABLE
 
-Using the `ALTER TABLE` command, you can change the column composition and additional parameters {% if backend_name == "YDB" and oss == true %} [row](../../../../concepts/datamodel/table.md#row-tables) and [column](../../../../concepts/datamodel/table.md#colums-tables) tables{% else %}tables {% endif %}. You can specify multiple actions in a single command. In general, the `ALTER TABLE` command looks like this:
+Using the `ALTER TABLE` command, you can change the column composition and additional parameters {% if backend_name == "YDB" and oss == true %} [row](../../../../concepts/datamodel/table.md#row-oriented-tables) and [column](../../../../concepts/datamodel/table.md#column-oriented-tables) tables{% else %}tables {% endif %}. You can specify multiple actions in a single command. In general, the `ALTER TABLE` command looks like this:
 
 
 ```yql

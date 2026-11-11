@@ -83,7 +83,7 @@ If you have existing queries without an explicit index (without the `VIEW` secti
 
 {% endnote %}
 
-### Automatic index usage in queries
+### Automatic index usage in queries {#automatic-use}
 
 Explicitly specifying the `VIEW` section takes precedence over the optimizer's decision to use secondary indexes. That is, the query
 

@@ -169,7 +169,7 @@ All commands for working with configuration are described in the [{#T}](../../..
 
 ## Implementation
 
-### Configuration Update from Administrator Perspective
+### Configuration Update from Administrator Perspective {#updating-dynamic-configuration}
 
 1. The configuration file is loaded by the user using a [grpc call](https://github.com/ydb-platform/ydb/blob/5251c9ace0a7617c25d50f1aa4d0f13e3d56f985/ydb/public/api/grpc/draft/ydb_dynamic_config_v1.proto#L22) or [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/index.md) into the cluster.
 2. The file is checked for validity, basic constraints are checked, version correctness, cluster name correctness, correctness of configurations obtained after DSL transformation.
@@ -180,7 +180,7 @@ All commands for working with configuration are described in the [{#T}](../../..
 ### Configuration Update from Cluster Node Perspective
 
 1. Each node requests full configuration at startup.
-2. Upon receiving configuration, the node [generates final configuration](dynamic-config-selectors.md#selectors-resolve) for its set of [labels](dynamic-config-selectors.md#selectors-intro).
+2. Upon receiving configuration, the node [generates final configuration](dynamic-config-selectors.md#selectors-resolve) for its set of [labels](dynamic-config-selectors.md#labels).
 3. The node subscribes to configuration updates by registering with the [Console tablet](../../../concepts/glossary.md#console).
 4. In case of configuration update, the local service receives it and transforms it for the node's labels.
 5. All local services subscribed to updates receive the updated configuration.

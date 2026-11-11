@@ -205,6 +205,7 @@ namespace NKikimr {
             std::optional<TDuration> RoutingBudget;
 
             TDynBitMap Processed; // a set of piles we already got main reply from
+            bool RestartNeeded = false; // set while processing a response: the request has to start over by current routing
 
             template<typename TEvRequest>
             TRequest(TActorId sender, ui64 cookie, std::unique_ptr<TEvRequest>&& request, TIntrusivePtr<TBlobStorageGroupInfo> info,
@@ -574,6 +575,11 @@ namespace NKikimr {
 
                     if (item.Buffer && item.Buffer.size() == item.Id.BlobSize()) {
                         IssueRestorePut(self, RestoreIndex);
+                    } else if (!self.IsPileInDataQuorum(item.ReadFrom)) {
+                        // the pile to read the blob from has left data quorum since it answered, so it may never answer
+                        // again; the request is restarted to find the blob in the piles still there
+                        RestartNeeded = true;
+                        return nullptr;
                     } else {
                         auto get = std::make_unique<TEvBlobStorage::TEvGet>(item.Id, 0, 0, Deadline,
                             GetHandleClass);
@@ -613,14 +619,10 @@ namespace NKikimr {
             // now wouldn't touch it, it gets synced when it is back, and it may be gone for good (so that the write would
             // just fail the read of the blob other piles have).
             static void DropRestoreTargetsOutOfDataQuorum(TThis& self, TRestoreItem& item) {
-                TDynBitMap out;
                 Y_FOR_EACH_BIT(i, item.WriteTo) {
                     if (!self.IsPileInDataQuorum(TBridgePileId::FromPileIndex(i))) {
-                        out.Set(i);
+                        item.WriteTo.Reset(i);
                     }
-                }
-                Y_FOR_EACH_BIT(i, out) {
-                    item.WriteTo.Reset(i);
                 }
             }
 
@@ -1524,6 +1526,16 @@ namespace NKikimr {
                         Y_ABORT_UNLESS(originalCommon);
                         SetExecutionRelay(*response, std::exchange(originalCommon->ExecutionRelay, {}));
                         Send(request->Sender, response.release(), 0, request->Cookie);
+                        request->Finished = true;
+                    } else if (request->RestartNeeded) {
+                        STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB13, "request restarted as its restoration source is out of"
+                            " data quorum", (RequestId, request->RequestId), (GroupId, GroupId));
+                        auto [handle, common] = MakeRestartHandle(*request);
+                        if (common->RestartCounter >= MaxRestarts) {
+                            ReplyWithError(*handle, "too many restarts of the request racing with cluster state");
+                        } else {
+                            redispatch = std::move(handle);
+                        }
                         request->Finished = true;
                     }
                 }

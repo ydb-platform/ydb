@@ -658,7 +658,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Ydb::Monitoring::SelfCheckResult RequestHcWithBridgeVdisks(const TVector<TVDisks>& groupVdisks,
             size_t bridgeGroupCount = 1, bool ordinary = false,
             std::array<NKikimrBridge::TClusterState::EPileState, 2> pileStates = {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::SYNCHRONIZED},
-            bool inlinePile = false, bool bridgeModeEnabled = false, bool removedSecondPile = false)
+            bool inlinePile = false, bool bridgeModeEnabled = false)
     {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -681,14 +681,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
         bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "pile0", .State = pileStates[0]});
         bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "pile1", .State = pileStates[1]});
-        if (removedSecondPile) {
-            bridgeInfo->Piles.pop_back();
-        }
         bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(0)] = &bridgeInfo->Piles[0];
-        if (!removedSecondPile) {
-            bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(1)] = &bridgeInfo->Piles[1];
-        }
+        bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(1)] = &bridgeInfo->Piles[1];
 
         auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, nullptr);
         nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
@@ -1295,25 +1290,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 3);
-    }
-
-    Y_UNIT_TEST(BridgeGroupIgnoresRemovedPileInLaggingBscStatistics) {
-        // BSC sysview still includes pile1 after the current registry dropped it.
-        for (bool inlinePile : {false, true}) {
-            for (bool liveCopyFailed : {false, true}) {
-                const auto result = RequestHcWithBridgeVdisks(
-                    {TVDisks{8, liveCopyFailed ? NKikimrBlobStorage::ERROR : NKikimrBlobStorage::READY},
-                     TVDisks{8, liveCopyFailed ? NKikimrBlobStorage::READY : NKikimrBlobStorage::ERROR}},
-                    1, false,
-                    {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::SYNCHRONIZED},
-                    inlinePile, true, /*removedSecondPile=*/true);
-                CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED,
-                    liveCopyFailed ? 1 : 0, TLocationFilter().Pool("/Root:test"));
-                for (const auto& issue : result.issue_log()) {
-                    UNIT_ASSERT_UNEQUAL(issue.location().storage().pool().group().pile().name(), "pile1");
-                }
-            }
-        }
     }
 
     Y_UNIT_TEST(BridgeGroupNoIssues) {
@@ -2925,7 +2901,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         std::vector<EWhiteboardReply> VDiskReplies; // per static node
         std::vector<EWhiteboardReply> PDiskReplies; // per static node
         bool Bridge = false;
-        ui32 GroupBridgePileId = 1; // proto ID; the fixture registry contains only pile0 (ID 1)
         bool MergeRecords = false;
         TDuration OperationTimeout; // zero means the server default, 20 s
     };
@@ -3065,7 +3040,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                         id->set_vdisk(0);
                     }
                     if (scenario.Bridge) {
-                        group.set_bridgepileid(scenario.GroupBridgePileId);
+                        group.set_bridgepileid(1);
                     }
                 }
             }
@@ -3548,25 +3523,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 1, pool);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, pool);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 0, pool);
-    }
-
-    Y_UNIT_TEST(BridgeWhiteboardRemovedPileDoesNotCrashOrBlameCurrentPile) {
-        TStaticWhiteboardScenario scenario;
-        scenario.Bridge = true;
-        scenario.GroupBridgePileId = 2;
-        scenario.Disks = Block42Disks();
-        for (auto& disk : scenario.Disks) {
-            MakeFailed(disk);
-        }
-        scenario.VDiskReplies = {EWhiteboardReply::Received};
-        scenario.PDiskReplies = {EWhiteboardReply::Received};
-        const auto result = RequestHcWithStaticWhiteboard(scenario);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1,
-            TLocationFilter().Pool("static"));
-        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::RED, "Pool failed");
-        for (const auto& issue : result.issue_log()) {
-            UNIT_ASSERT_UNEQUAL(issue.location().storage().pool().group().pile().name(), "pile0");
-        }
     }
 
     Y_UNIT_TEST(BridgeWhiteboardMissingRepliesDoNotBlamePile) {
@@ -4372,7 +4328,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
     }
 
-    void TestStateStorage(ui32 deadNodes, std::optional<Ydb::Monitoring::StatusFlag::Status> expectedStatus, bool removedPile = false) {
+    void TestStateStorage(ui32 deadNodes, std::optional<Ydb::Monitoring::StatusFlag::Status> expectedStatus) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -4394,28 +4350,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         info->RingGroups.back().NToSelect = 9;
         for (ui32 i = 0; i < 9; ++i) {
             info->RingGroups.back().Rings[i].Replicas.emplace_back(runtime.GetNodeId(i), "FAKE");
-        }
-
-        auto bridgeInfo = std::make_shared<TBridgeInfo>();
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0),
-            .Name = "pile0", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
-        bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
-        for (ui32 node = 0; node < 9; ++node) {
-            bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(node)] = &bridgeInfo->Piles[0];
-        }
-        auto configObserver = runtime.AddObserver<TEvNodeWardenStorageConfig>([&](auto&& ev) {
-            if (removedPile) {
-                ev->Get()->BridgeInfo = bridgeInfo;
-            }
-        });
-        if (removedPile) {
-            // Ring data may still reference the pile removed from the registry.
-            info->RingGroups.back().BridgePileId = TBridgePileId::FromPileIndex(1);
-            // The removed pile's nodes are no longer in the nameservice and
-            // have no whiteboard replies. Current pile nodes remain available.
-            for (ui32 i = 0; i < 9; ++i) {
-                info->RingGroups.back().Rings[i].Replicas.front() = TActorId(runtime.GetNodeId(0) + 9 + i, "FAKE");
-            }
         }
 
         auto ssObserver = runtime.AddObserver<TEvStateStorage::TEvListStateStorageResult>([&](auto&& ev) { ev->Get()->Info = info; });
@@ -4464,18 +4398,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         };
 
-        if (removedPile) {
-            for (const auto& issue : result.issue_log()) {
-                for (const TString& type : {"STATE_STORAGE", "SCHEME_BOARD", "BOARD"}) {
-                    UNIT_ASSERT_C(!issue.type().Contains(type), issue.ShortDebugString());
-                }
-            }
-        }
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), statusToResult(expectedStatus));
-    }
-
-    Y_UNIT_TEST(TestStateStorageRemovedPile) {
-        TestStateStorage(0, {}, true);
     }
 
     Y_UNIT_TEST(TestStateStorageOk) {

@@ -19,6 +19,7 @@ if str(_REPO) not in sys.path:
 from ydb.tools.include_sanitizer.timing.parse import parse_trace  # noqa: E402
 from ydb.tools.include_sanitizer.timing.aggregate import (  # noqa: E402
     collect_traces,
+    event_histogram,
     write_reports,
 )
 
@@ -73,6 +74,36 @@ class ParseTraceTest(unittest.TestCase):
         self.assertEqual(t.file_us.get(f'/w/{_TEST_YDB_ROOT}/core/base/defs.h'), 30000)
         # The type-detail instantiation must NOT be mistaken for a file.
         self.assertNotIn("std::map<int, int>", t.file_us)
+
+    def test_async_source_events(self) -> None:
+        # LLVM emits the child's complete pair before the parent's pair,
+        # reusing id=0. End events do not carry the header detail.
+        common = {"pid": 1, "tid": 2, "cat": "Source", "id": 0, "name": "Source"}
+        events = []
+        for header, start, end in (("child.h", 20, 30), ("parent.h", 0, 50),
+                                   ("child.h", 60, 80)):
+            events.extend([
+                dict(common, ph="b", ts=start, args={"detail": header}),
+                dict(common, ph="e", ts=end),
+            ])
+        events.append({"ph": "X", "name": "Total Source", "dur": 70})
+        p = self.tmp / "async.json"
+        p.write_text(json.dumps(_trace(events)))
+        timing = parse_trace(p)
+        self.assertEqual(timing.source_us, {"child.h": 30, "parent.h": 50})
+        self.assertEqual(timing.totals["Total Source"], 70)
+        self.assertEqual(event_histogram(self.tmp)["Source"], (3, 80))
+
+    def test_incomplete_async_events_are_ignored(self) -> None:
+        common = {"pid": 1, "tid": 2, "cat": "Source", "id": 0, "name": "Source"}
+        p = self.tmp / "incomplete.json"
+        p.write_text(json.dumps(_trace([
+            dict(common, ph="e", ts=10),
+            dict(common, ph="b", ts=30, args={"detail": "negative.h"}),
+            dict(common, ph="e", ts=20),
+            dict(common, ph="b", ts=40, args={"detail": "unfinished.h"}),
+        ])))
+        self.assertEqual(parse_trace(p).source_us, {})
 
     def test_location_parser_handles_macro_spelling(self) -> None:
         from ydb.tools.include_sanitizer.timing.parse import _file_from_location

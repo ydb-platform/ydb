@@ -14,12 +14,12 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from .parse import TuTiming, parse_trace
+from .parse import TuTiming, duration_events, parse_trace
 
 
 log = logging.getLogger("timing.aggregate")
 
-_AGG_CACHE_VERSION = 4
+_AGG_CACHE_VERSION = 5
 
 _BUILD_ROOT_RE = re.compile(r"^.*?/build_root/[^/]+/[^/]+/")
 
@@ -168,9 +168,7 @@ def event_histogram(trace_dir: Path, sample: int = 300) -> Dict[str, Tuple[int, 
                 data = _json.load(fh)
         except (OSError, ValueError):
             continue
-        for e in data.get("traceEvents") or []:
-            if e.get("ph") != "X":
-                continue
+        for e in duration_events(data.get("traceEvents") or []):
             name = e.get("name") or "?"
             slot = hist.setdefault(name, [0, 0])
             slot[0] += 1

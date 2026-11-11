@@ -29,6 +29,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/library/backup/backup.h>
+
+#include <util/string/join.h>
 #include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/regex/pcre/regexp.h>
@@ -3864,6 +3866,89 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                     DROP TABLE `%s`;
                 )", table
             ), true);
+        }
+    }
+
+    Y_UNIT_TEST(ColumnTableReadResumesAfterNullKeyCell) {
+        // The column table dump reads rows in key order and, after a failed attempt, resumes strictly after the last
+        // written key. With nullable key columns that key may contain NULL cells; the resume condition must still
+        // select exactly the rows that follow (NULL sorts first).
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        constexpr const char* table = "/Root/olap_nullable_key";
+
+        ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    a Int64,
+                    b Int32 NOT NULL,
+                    v Utf8,
+                    PRIMARY KEY (a, b)
+                )
+                PARTITION BY HASH(b)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )", table
+        ), true);
+        ExecuteQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (a, b, v) VALUES
+                    (NULL, 1, "r0"), (NULL, 2, "r1"), (1, 1, "r2"), (1, 2, "r3"), (2, 1, "r4");
+            )", table
+        ));
+
+        const auto describe = tableSession.DescribeTable(table).ExtractValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        const auto desc = describe.GetTableDescription();
+
+        // runs the dump's read query and returns the values and the keys of the rows it produced, in order
+        const auto readFrom = [&](const TMaybe<TValue>& lastWrittenPK) {
+            const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, table, lastWrittenPK);
+            const auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "query:\n" << query << "\nissues:\n" << result.GetIssues().ToString());
+            TVector<TString> values;
+            TVector<TValue> keys;
+            TResultSetParser parser(result.GetResultSet(0));
+            while (parser.TryNextRow()) {
+                values.emplace_back(*parser.ColumnParser("v").GetOptionalUtf8());
+                TValueBuilder key;
+                key.BeginTuple();
+                for (const auto& column : desc.GetPrimaryKeyColumns()) {
+                    key.AddElement(parser.GetValue(column));
+                }
+                key.EndTuple();
+                keys.push_back(key.Build());
+            }
+            return std::make_pair(values, keys);
+        };
+
+        const auto [allValues, allKeys] = readFrom(Nothing());
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", allValues), "r0,r1,r2,r3,r4");
+
+        for (size_t i = 0; i < allKeys.size(); ++i) {
+            const auto [values, keys] = readFrom(allKeys[i]);
+            const TVector<TString> expected(allValues.begin() + i + 1, allValues.end());
+            UNIT_ASSERT_VALUES_EQUAL_C(JoinSeq(",", values), JoinSeq(",", expected), "resume after row " << i);
+        }
+
+        // the whole table, nullable key included, survives dump and restore
+        const auto originalContent = GetTableContent(session, table, "a, b");
+        TTempDir tempDir;
+        CreateBackupLambda(driver, tempDir.Path(), "/Root", "/Root", NDump::TDumpSettings().AvoidCopy(true))();
+        ExecuteQuery(session, Sprintf("DROP TABLE `%s`;", table), true);
+        CreateRestoreLambda(driver, tempDir.Path(), "/Root", NDump::TRestoreSettings().Mode(NDump::TRestoreSettings::EMode::BulkUpsert))();
+        CompareResults(GetTableContent(session, table, "a, b"), originalContent);
+
+        const auto restored = tableSession.DescribeTable(table).ExtractValueSync();
+        UNIT_ASSERT_C(restored.IsSuccess(), restored.GetIssues().ToString());
+        for (const auto& column : restored.GetTableDescription().GetColumns()) {
+            if (column.Name == "a") {
+                UNIT_ASSERT_C(TTypeParser(column.Type).GetKind() == TTypeParser::ETypeKind::Optional, "key column 'a' must stay nullable");
+            }
         }
     }
 

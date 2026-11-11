@@ -419,6 +419,30 @@ TString BuildQuotedIdentifierList(const std::vector<std::string>& names) {
     return JoinSeq(", ", quoted);
 }
 
+// Builds the "key > $pk" condition for resuming a read after lastWrittenPK, where $pk is the saved key tuple.
+// NULL is the smallest value here, the same as in ORDER BY. A plain tuple comparison "(k0, k1) > $pk" evaluates
+// to NULL as soon as a compared cell on either side is NULL, and WHERE drops such rows: a retry that resumed after
+// a key with a NULL cell would silently skip the rest of the table. So the comparison is expanded by hand:
+//   gt(k, p) = COALESCE(k > p, false) OR (p IS NULL AND k IS NOT NULL)
+//   eq(k, p) = k IS NOT DISTINCT FROM p
+//   key > $pk = gt(k0, p0) OR (eq(k0, p0) AND gt(k1, p1)) OR (eq(k0, p0) AND eq(k1, p1) AND gt(k2, p2)) ...
+TString BuildResumeCondition(const std::vector<std::string>& pkColumns) {
+    TVector<TString> alternatives;
+    TVector<TString> equalPrefix;
+    for (size_t i = 0; i < pkColumns.size(); ++i) {
+        const TString column = TStringBuilder() << '`' << pkColumns[i] << '`';
+        const TString saved = TStringBuilder() << "$pk." << i;
+        TVector<TString> conditions = equalPrefix;
+        conditions.push_back(TStringBuilder() << "(COALESCE(" << column << " > " << saved << ", false) OR ("
+            << saved << " IS NULL AND " << column << " IS NOT NULL))");
+        alternatives.push_back(TStringBuilder() << '(' << JoinSeq(" AND ", conditions) << ')');
+        equalPrefix.push_back(TStringBuilder() << column << " IS NOT DISTINCT FROM " << saved);
+    }
+    return JoinSeq(" OR ", alternatives);
+}
+
+} // anonymous namespace
+
 std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescription& desc,
         const TString& fullTablePath, TMaybe<TValue> lastWrittenPK)
 {
@@ -440,7 +464,7 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
     query << "SELECT " << BuildQuotedIdentifierList(columnNames)
         << " FROM `" << fullTablePath << '`';
     if (lastWrittenPK) {
-        query << " WHERE (" << quotedPkList << ") > $pk";
+        query << " WHERE " << BuildResumeCondition(desc.GetPrimaryKeyColumns());
     }
     // lastWrittenPK is only a valid resume point if every attempt, including the first,
     // returns rows in PK order - otherwise a retry can both skip and duplicate rows.
@@ -450,6 +474,8 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
     query << ';';
     return {query.Str(), paramsBuilder.Build()};
 }
+
+namespace {
 
 TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::TTableDescription& desc,
         const TString& fullTablePath, const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32* fileCounter)

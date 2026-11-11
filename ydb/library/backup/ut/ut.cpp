@@ -21,6 +21,51 @@
 
 namespace NYdb {
 
+Y_UNIT_TEST_SUITE(BackupToolColumnTableReadQuery) {
+
+Y_UNIT_TEST(FirstReadHasNoCondition) {
+    const auto desc = NTable::TTableBuilder()
+        .AddNullableColumn("a", EPrimitiveType::Int64)
+        .AddNonNullableColumn("b", EPrimitiveType::Int32)
+        .AddNullableColumn("v", EPrimitiveType::Utf8)
+        .SetPrimaryKeyColumns({"a", "b"})
+        .Build();
+
+    const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", Nothing());
+    UNIT_ASSERT_VALUES_EQUAL(query, "SELECT `a`, `b`, `v` FROM `/Root/t` ORDER BY `a`, `b`;");
+    UNIT_ASSERT(params.GetValues().empty());
+}
+
+Y_UNIT_TEST(ResumeConditionIsNullSafe) {
+    // a plain "(a, b) > $pk" is NULL, hence false, for a NULL cell on either side; the generated condition
+    // treats NULL as the smallest value instead, consistently with ORDER BY
+    const auto desc = NTable::TTableBuilder()
+        .AddNullableColumn("a", EPrimitiveType::Int64)
+        .AddNonNullableColumn("b", EPrimitiveType::Int32)
+        .AddNullableColumn("v", EPrimitiveType::Utf8)
+        .SetPrimaryKeyColumns({"a", "b"})
+        .Build();
+
+    const auto lastPK = TValueBuilder()
+        .BeginTuple()
+            .AddElement().EmptyOptional(EPrimitiveType::Int64)
+            .AddElement().Int32(5)
+        .EndTuple()
+        .Build();
+
+    const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", lastPK);
+    UNIT_ASSERT_C(query.StartsWith("DECLARE $pk AS Tuple<"), query);
+    UNIT_ASSERT_VALUES_EQUAL(
+        query.substr(query.find("SELECT")),
+        "SELECT `a`, `b`, `v` FROM `/Root/t`"
+        " WHERE ((COALESCE(`a` > $pk.0, false) OR ($pk.0 IS NULL AND `a` IS NOT NULL)))"
+        " OR (`a` IS NOT DISTINCT FROM $pk.0 AND (COALESCE(`b` > $pk.1, false) OR ($pk.1 IS NULL AND `b` IS NOT NULL)))"
+        " ORDER BY `a`, `b`;");
+    UNIT_ASSERT(params.GetValue("$pk").has_value());
+}
+
+}
+
 Y_UNIT_TEST_SUITE(BackupToolValuePrintParse) {
 
 void TestResultSetParsedOk(const TString& protoStr, const TString& expect) {

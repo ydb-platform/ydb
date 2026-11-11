@@ -2705,13 +2705,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto consumerName = [](int i) { return std::format("ydb-sqs-consumer-{}", i); };
         auto queueUrlForConsumer = [&](int i) { return std::format("/v1/{}/{}/{}/{}/{}/{}", database.size(), database.c_str(), topicName.size(), topicName.c_str(), consumerName(i).size(), consumerName(i).c_str()); };
         const TDuration retentionPeriod = TDuration::Hours(10);
-<<<<<<< HEAD
-=======
         const TDuration expectedRetention = params.RetentionPeriod != TDuration::Zero() ? params.RetentionPeriod : retentionPeriod;
-        if (params.Dlq) {
-            UNIT_ASSERT(CreateDlqTopic(driver));
-        }
->>>>>>> ac4de4b13ff (Use availability period for SQS message retetion (#58361))
         {
             NYdb::NTopic::TCreateTopicSettings settings;
             settings.RetentionPeriod(retentionPeriod);

@@ -18,10 +18,12 @@ from library.python.port_manager import PortManager
 
 from common import BridgeKiKiMRTest
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc
+from ydb.public.api.grpc.draft import ydb_tablet_v1_pb2_grpc as tablet_grpc
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
+from ydb.public.api.protos.draft import ydb_tablet_pb2 as tablet
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
-from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.types import Erasure, TabletTypes
 from ydb.tests.library.harness import daemon
 
 
@@ -438,10 +440,12 @@ class TestSkipperLiveStorageFailure(RealSkipperCluster):
         assert all(node.is_alive() and node.pid == pids[node_id]
                    for node_id, node in self.cluster.nodes.items()), pids
 
-    def test_primary_storage_error_fails_over_with_live_nodes(self):
+    @pytest.mark.parametrize("prepare_fallback", (False, True), ids=("auto_before_fault", "fallback_before_auto"))
+    def test_primary_storage_error_fails_over_with_live_nodes(self, prepare_fallback):
         self.create_data()
         before = self.start_skipper()
-        self.skipper.mode("auto")
+        if not prepare_fallback:
+            self.skipper.mode("auto")
         generation = int(before["view"]["generation"])
         pids = {node_id: node.pid for node_id, node in self.cluster.nodes.items()}
         started = time.monotonic()
@@ -452,6 +456,26 @@ class TestSkipperLiveStorageFailure(RealSkipperCluster):
         report = state_rpc(self.pile_nodes["r1"][0])
         assert report.generation == generation and report.pile_connectivity.generation == generation, report
         assert any(p.pile_name == "r1" and p.has_node_quorum for p in report.pile_connectivity.piles), report
+        if prepare_fallback:
+            # BSC may keep serving RED from memory after disk failure. Restart
+            # just that tablet so this case must use the new fallback proof.
+            # One bounded call: an uncertain poison must not be retried.
+            node = self.pile_nodes["r2"][0]
+            with grpc.insecure_channel(node.endpoint) as channel:
+                response = tablet_grpc.TabletServiceStub(channel).RestartTablet(
+                    tablet.RestartTabletRequest(tablet_id=TabletTypes.FLAT_BS_CONTROLLER.tablet_id_for(0)),
+                    metadata=TOKEN, timeout=5)
+            assert response.status in (StatusIds.SUCCESS, StatusIds.UNAVAILABLE), response
+
+            def storage_failed(state):
+                self.check_processes(pids)
+                primary = next((pile for pile in state["piles"] if pile["name"] == "r1"), {})
+                return primary.get("verdict") == "FAILED" and primary.get("self_quorum") and any(
+                    "PDisk DeviceIoError" in reason for reason in primary.get("reasons", []))
+
+            self.wait_snapshot(storage_failed, "explicit storage proof with live primary quorum",
+                               timeout=max(0, 20 - (time.monotonic() - started)))
+            self.skipper.mode("auto")
         expected = {"r1": "DISCONNECTED", "r2": "PRIMARY"}
 
         def committed(state):

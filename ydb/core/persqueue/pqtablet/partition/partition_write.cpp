@@ -2058,9 +2058,9 @@ void TPartition::EmitHeartbeat(const THeartbeat& heartbeat, ProcessParameters& p
         {"version", heartbeat.Version}
     );
 
-    auto hbMsg = TWriteMsg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
+    auto hbMsg = TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
         .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletId)),
-        .SeqNo = 0,
+        .SeqNo = 0, // we don't use SeqNo because we disable deduplication
         .PartNo = 0,
         .TotalParts = 1,
         .TotalSize = static_cast<ui32>(heartbeat.Data.size()),

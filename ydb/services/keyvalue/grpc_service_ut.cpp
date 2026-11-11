@@ -16,10 +16,16 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/logger/backend.h>
+#include <library/cpp/threading/future/async.h>
 
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
 
+<<<<<<< HEAD
+=======
+#include <atomic>
+#include <chrono>
+>>>>>>> b92ff4a0b95 ([YDBBUGS-1075] (+) Add deterministic KV proxy status regression coverage (#59019))
 #include <util/string/builder.h>
 
 
@@ -155,11 +161,18 @@ class TKikimrWithGrpcAndRootSchema {
 public:
     TKikimrWithGrpcAndRootSchema(
             NKikimrConfig::TAppConfig appConfig = {},
+<<<<<<< HEAD
             TAutoPtr<TLogBackend> logBackend = {})
+=======
+            TAutoPtr<TLogBackend> logBackend = {},
+            const NKikimrBlobDepot::TS3BackendSettings* s3Settings = nullptr,
+            bool useRealThreads = true)
+>>>>>>> b92ff4a0b95 ([YDBBUGS-1075] (+) Add deterministic KV proxy status regression coverage (#59019))
     {
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
         ServerSettings = new Tests::TServerSettings(port);
+        ServerSettings->SetUseRealThreads(useRealThreads);
         ServerSettings->SetGrpcPort(grpc);
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
@@ -207,7 +220,70 @@ public:
         if (ServerSettings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             annoyingClient.SetSecurityToken("root@builtin");
         }
+<<<<<<< HEAD
         annoyingClient.InitRootScheme("Root");
+=======
+        if (useRealThreads) {
+            annoyingClient.InitRootScheme("Root");
+        } else {
+            TThreadPool threadPool;
+            threadPool.Start(1);
+            Server_->GetRuntime()->WaitFuture(NThreading::Async([&] {
+                annoyingClient.InitRootScheme("Root");
+            }, threadPool));
+        }
+        if (s3Settings) {
+            auto* runtime = Server_->GetRuntime();
+            auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+            auto* config = request->Record.MutableRequest();
+            config->AddCommand()->MutableDefineStoragePool()->CopyFrom(ServerSettings->StoragePoolTypes.at("s3"));
+            auto* group = config->AddCommand()->MutableAllocateVirtualGroup();
+            group->SetName("kv-s3-group");
+            group->SetHiveId(runtime->GetAppData().DomainsInfo->GetHive());
+            group->SetStoragePoolName("s3-pool");
+            auto* profile = group->AddChannelProfiles();
+            profile->SetStoragePoolName("ssd-pool");
+            profile->SetCount(2);
+            profile = group->AddChannelProfiles();
+            profile->SetStoragePoolName("ssd-pool");
+            profile->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
+            group->MutableS3BackendSettings()->CopyFrom(*s3Settings);
+
+            const auto edge = runtime->AllocateEdgeActor();
+            NTabletPipe::TClientConfig pipeConfig;
+            pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+            runtime->SendToPipe(MakeBSControllerID(), edge, request.Release(), 0, pipeConfig);
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime->GrabEdgeEvent<TEvBlobStorage::TEvControllerConfigResponse>(handle);
+            UNIT_ASSERT_C(response->Record.GetResponse().GetSuccess(), response->Record.DebugString());
+            const ui32 groupId = response->Record.GetResponse().GetStatus(1).GetGroupId(0);
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+            for (;;) {
+                auto query = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+                query->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
+                runtime->SendToPipe(MakeBSControllerID(), edge, query.Release(), 0, pipeConfig);
+                response = runtime->GrabEdgeEvent<TEvBlobStorage::TEvControllerConfigResponse>(handle);
+                UNIT_ASSERT_C(response->Record.GetResponse().GetSuccess(), response->Record.DebugString());
+                bool ready = false;
+                for (const auto& item : response->Record.GetResponse().GetStatus(0).GetBaseConfig().GetGroup()) {
+                    if (item.GetGroupId() == groupId) {
+                        const auto& info = item.GetVirtualGroupInfo();
+                        UNIT_ASSERT_C(info.GetState() != NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED,
+                            info.DebugString());
+                        ready = info.GetState() == NKikimrBlobStorage::EVirtualGroupState::WORKING;
+                    }
+                }
+                if (ready) {
+                    break;
+                }
+                UNIT_ASSERT_C(TInstant::Now() < deadline, response->Record.DebugString());
+                Sleep(TDuration::MilliSeconds(10));
+            }
+            runtime->Send(CreateEventForBSProxy(edge, groupId, new TEvBlobStorage::TEvStatus(deadline), 0));
+            auto* status = runtime->GrabEdgeEvent<TEvBlobStorage::TEvStatusResult>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(status->Status, NKikimrProto::OK, status->ToString());
+        }
+>>>>>>> b92ff4a0b95 ([YDBBUGS-1075] (+) Add deterministic KV proxy status regression coverage (#59019))
         GRpcPort_ = grpc;
     }
 
@@ -728,6 +804,267 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         });
     }
 
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST_BOTH_VERSION(ExecuteTransactionStatusMapping) {
+        // Use a simulated runtime so each tablet response can be replaced before
+        // the real RPC actor handles it, without depending on concurrent writes.
+        TKikimrWithGrpcAndRootSchema server({}, {}, nullptr, false);
+        auto& runtime = *server.GetRuntime();
+        const TString tablePath = "/Root/mydb/kvtable";
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GetPort()), grpc::InsecureChannelCredentials());
+        TThreadPool threadPool;
+        threadPool.Start(1);
+        runtime.WaitFuture(NThreading::Async([&] {
+            MakeDirectory(channel, "/Root/mydb");
+            MakeTable(channel, tablePath);
+        }, threadPool));
+        WaitTableCreation(server, tablePath);
+        auto stub = std::make_unique<Stub<StubVersion>>(channel);
+
+        auto execute = [&] {
+            return runtime.WaitFuture(NThreading::Async([&] {
+                Ydb::KeyValue::ExecuteTransactionRequest request;
+                request.set_path(tablePath);
+                request.set_partition_id(0);
+                typename RequestToResponse<StubVersion, Ydb::KeyValue::ExecuteTransactionRequest>::type response;
+                grpc::ClientContext ctx;
+                AdjustCtxForDB(ctx);
+                ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+                const auto status = stub->ExecuteTransaction(&ctx, request, &response);
+                UNIT_ASSERT_C(status.ok(), status.error_message());
+                return response;
+            }, threadPool));
+        };
+        UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(execute()), Ydb::StatusIds::SUCCESS);
+
+        struct TCase {
+            NKikimrKeyValue::Statuses::ReplyStatus TabletStatus;
+            TString Message;
+            Ydb::StatusIds::StatusCode ExpectedStatus;
+        };
+        const TCase cases[] = {
+            {NKikimrKeyValue::Statuses::RSTATUS_BLOCKED, TEvKeyValue::RequestInFlightLimitReached, Ydb::StatusIds::OVERLOADED},
+            {NKikimrKeyValue::Statuses::RSTATUS_BLOCKED, "Tablet is blocked for another reason", Ydb::StatusIds::UNAVAILABLE},
+            {NKikimrKeyValue::Statuses::RSTATUS_BLOCKED, TString(TEvKeyValue::RequestInFlightLimitReached) + " (another reason)", Ydb::StatusIds::UNAVAILABLE},
+            {NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION, TEvKeyValue::RequestInFlightLimitReached, Ydb::StatusIds::PRECONDITION_FAILED},
+        };
+        for (const auto& testCase : cases) {
+            ui32 responses = 0;
+            auto observer = runtime.AddObserver<TEvKeyValue::TEvExecuteTransactionResponse>(
+                [&](TEvKeyValue::TEvExecuteTransactionResponse::TPtr& event) {
+                    auto& record = event->Get()->Record;
+                    record.set_status(testCase.TabletStatus);
+                    record.set_msg(testCase.Message);
+                    ++responses;
+                });
+            // Call once: retrying UNAVAILABLE would hide a proxy status regression.
+            const auto response = execute();
+            observer.Remove();
+            UNIT_ASSERT_VALUES_EQUAL(responses, 1);
+            UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(response), testCase.ExpectedStatus);
+            const auto& issues = [&]() -> const auto& {
+                if constexpr (StubVersion == Version::V1) {
+                    return response.operation().issues();
+                } else {
+                    return response.issues();
+                }
+            }();
+            if (testCase.ExpectedStatus == Ydb::StatusIds::OVERLOADED) {
+                UNIT_ASSERT_VALUES_EQUAL(issues.size(), 0);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(issues.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(issues.Get(0).message(), testCase.Message);
+            }
+            // Ordinary errors must return after Reply(), without a second reply
+            // or PassAway(). A subsequent request must still succeed.
+            UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(execute()), Ydb::StatusIds::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST_BOTH_VERSION(TabletErrorInIssues) {
+        TKikimrWithGrpcAndRootSchema server;
+        const TString tablePath = "/Root/mydb/kvtable";
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GetPort()), grpc::InsecureChannelCredentials());
+        MakeDirectory(channel, "/Root/mydb");
+        MakeTable(channel, tablePath);
+        WaitTableCreation(server, tablePath);
+        auto stub = std::make_unique<Stub<StubVersion>>(channel);
+        Write<StubVersion>(tablePath, 0, "key", "value", 0, stub);
+
+        auto checkResponse = [](const auto &response) {
+            UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(response), Ydb::StatusIds::PRECONDITION_FAILED);
+            const auto &issues = [&]() -> const auto& {
+                if constexpr (StubVersion == Version::V1) {
+                    return response.operation().issues();
+                } else {
+                    return response.issues();
+                }
+            }();
+            UNIT_ASSERT_VALUES_EQUAL(issues.size(), 1);
+            UNIT_ASSERT_STRING_CONTAINS(issues.Get(0).message(), "Generation mismatch! Requested# 42");
+        };
+
+        {
+            Ydb::KeyValue::ReadRequest request;
+            request.set_path(tablePath);
+            request.set_lock_generation(42);
+            request.set_key("key");
+            typename RequestToResponse<StubVersion, Ydb::KeyValue::ReadRequest>::type response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            UNIT_ASSERT(stub->Read(&ctx, request, &response).ok());
+            checkResponse(response);
+        }
+        {
+            Ydb::KeyValue::ReadRangeRequest request;
+            request.set_path(tablePath);
+            request.set_lock_generation(42);
+            request.mutable_range()->set_from_key_inclusive("key");
+            request.mutable_range()->set_to_key_inclusive("key");
+            typename RequestToResponse<StubVersion, Ydb::KeyValue::ReadRangeRequest>::type response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            UNIT_ASSERT(stub->ReadRange(&ctx, request, &response).ok());
+            checkResponse(response);
+        }
+        {
+            Ydb::KeyValue::ExecuteTransactionRequest request;
+            request.set_path(tablePath);
+            request.set_lock_generation(42);
+            auto *write = request.add_commands()->mutable_write();
+            write->set_key("key");
+            write->set_value("value");
+            typename RequestToResponse<StubVersion, Ydb::KeyValue::ExecuteTransactionRequest>::type response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            UNIT_ASSERT(stub->ExecuteTransaction(&ctx, request, &response).ok());
+            checkResponse(response);
+        }
+    }
+
+#ifndef KIKIMR_DISABLE_S3_OPS
+    Y_UNIT_TEST_BOTH_VERSION(S3ErrorInIssues) {
+        using TS3Mock = NWrappers::NTestHelpers::TS3Mock;
+        const TString errorMessage = "Access to KV test objects is denied by S3";
+        const TString errorBody = TStringBuilder()
+            << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            << "<Error><Code>AccessDenied</Code><Message>" << errorMessage << "</Message></Error>";
+        const TString errorResponse = TStringBuilder()
+            << "HTTP/1.1 403 Forbidden\r\nContent-Type: application/xml\r\n"
+            << "Content-Length: " << errorBody.size() << "\r\nConnection: close\r\n\r\n" << errorBody;
+        std::atomic<bool> failPuts{true};
+        std::atomic<bool> failGets{false};
+        std::atomic<ui32> failedPuts{0};
+        std::atomic<ui32> failedGets{0};
+        TPortManager portManager;
+        const ui16 s3Port = portManager.GetPort();
+        TS3Mock::TSettings mockSettings(s3Port);
+        mockSettings.ErrorResponse = [&](TStringBuf method, TStringBuf path) -> TString {
+            // Leave bucket listing and garbage collection available to BlobDepot.
+            if (path.StartsWith("/kv-test/objects/")) {
+                if (method == "PUT" && failPuts.load()) {
+                    ++failedPuts;
+                    return errorResponse;
+                }
+                if (method == "GET" && failGets.load()) {
+                    ++failedGets;
+                    return errorResponse;
+                }
+            }
+            return {};
+        };
+        TS3Mock s3(mockSettings);
+        UNIT_ASSERT_C(s3.Start(), s3.GetError());
+
+        NKikimrBlobDepot::TS3BackendSettings s3Settings;
+        s3Settings.MutableSyncMode();
+        auto* settings = s3Settings.MutableSettings();
+        settings->SetEndpoint(TStringBuilder() << "localhost:" << s3Port);
+        settings->SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+        settings->SetBucket("kv-test");
+        settings->SetObjectKeyPattern("objects");
+        settings->SetAccessKey("test-access-key");
+        settings->SetSecretKey("test-secret-key");
+        settings->SetRegion("us-east-1");
+        settings->SetUseVirtualAddressing(false);
+        TKikimrWithGrpcAndRootSchema server({}, {}, &s3Settings);
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GetPort()), grpc::InsecureChannelCredentials());
+        const TString tablePath = "/Root/mydb/kvtable";
+        MakeDirectory(channel, "/Root/mydb");
+        MakeTable(channel, tablePath, "s3");
+        WaitTableCreation(server, tablePath);
+        auto stub = std::make_unique<Stub<StubVersion>>(channel);
+
+        auto checkError = [&](const auto& response) {
+            UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(response), Ydb::StatusIds::INTERNAL_ERROR);
+            const auto& issues = [&]() -> const auto& {
+                if constexpr (StubVersion == Version::V1) {
+                    return response.operation().issues();
+                } else {
+                    return response.issues();
+                }
+            }();
+            UNIT_ASSERT_VALUES_EQUAL(issues.size(), 1);
+            UNIT_ASSERT_STRING_CONTAINS(issues.Get(0).message(), errorMessage);
+        };
+
+        const TString value(16 * 1024, 'x');
+        {
+            Ydb::KeyValue::ExecuteTransactionRequest request;
+            request.set_path(tablePath);
+            request.set_partition_id(0);
+            auto* write = request.add_commands()->mutable_write();
+            write->set_key("key");
+            write->set_value(value);
+            write->set_storage_channel(2);
+            typename RequestToResponse<StubVersion, Ydb::KeyValue::ExecuteTransactionRequest>::type response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            UNIT_ASSERT(stub->ExecuteTransaction(&ctx, request, &response).ok());
+            UNIT_ASSERT_GT_C(failedPuts.load(), 0, response.ShortDebugString());
+            checkError(response);
+        }
+
+        failPuts = false;
+        Write<StubVersion>(tablePath, 0, "key", value, 2, stub);
+
+        Ydb::KeyValue::ReadRequest readRequest;
+        readRequest.set_path(tablePath);
+        readRequest.set_partition_id(0);
+        readRequest.set_key("key");
+        UNIT_ASSERT_VALUES_EQUAL(Read<StubVersion>(readRequest, stub).value(), value);
+
+        failGets = true;
+        {
+            typename RequestToResponse<StubVersion, Ydb::KeyValue::ReadRequest>::type response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            UNIT_ASSERT(stub->Read(&ctx, readRequest, &response).ok());
+            UNIT_ASSERT_GT(failedGets.load(), 0);
+            checkError(response);
+        }
+        {
+            const ui32 previousFailedGets = failedGets.load();
+            Ydb::KeyValue::ReadRangeRequest request;
+            request.set_path(tablePath);
+            request.set_partition_id(0);
+            request.mutable_range()->set_from_key_inclusive("key");
+            request.mutable_range()->set_to_key_inclusive("key");
+            typename RequestToResponse<StubVersion, Ydb::KeyValue::ReadRangeRequest>::type response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            UNIT_ASSERT(stub->ReadRange(&ctx, request, &response).ok());
+            UNIT_ASSERT_GT(failedGets.load(), previousFailedGets);
+            checkError(response);
+        }
+
+        failGets = false;
+        UNIT_ASSERT_VALUES_EQUAL(Read<StubVersion>(readRequest, stub).value(), value);
+    }
+#endif
+
+>>>>>>> b92ff4a0b95 ([YDBBUGS-1075] (+) Add deterministic KV proxy status regression coverage (#59019))
     Y_UNIT_TEST(SimpleWriteReadRangeV2WithUsePayloadControl) {
         TString tablePath = "/Root/mydb/kvtable";
         NKikimrConfig::TAppConfig appConfig;

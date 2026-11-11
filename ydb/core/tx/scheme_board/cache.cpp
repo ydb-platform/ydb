@@ -20,6 +20,7 @@
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/resolver.h>
 #include <ydb/core/tx/locks/sys_tables.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/core/tx/sharding/sharding.h>
@@ -907,6 +908,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 if (columnDesc.HasDefaultValue() && columnDesc.GetDefaultValue().HasScalar()) {
                     NOlap::TColumnDefaultScalarValue scalar;
                     if (scalar.DeserializeFromProto(columnDesc.GetDefaultValue()).IsSuccess()) {
+                        const auto arrowType = NArrow::GetArrowType(column.PType);
+                        if (arrowType.ok()) {
+                            scalar.AlignToColumnType(*arrowType);
+                        }
                         auto typed = scalar.SerializeToTypedValue(column.PType);
                         if (typed.IsSuccess()) {
                             column.SetDefaultFromLiteral();

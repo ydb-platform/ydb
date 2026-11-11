@@ -4,7 +4,10 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
@@ -1806,6 +1809,25 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
         Stream << " NOT NULL";
     }
 
+    if (olapColumnDesc.HasDefaultValue() && olapColumnDesc.GetDefaultValue().HasScalar()) {
+        NOlap::TColumnDefaultScalarValue scalar;
+        if (scalar.DeserializeFromProto(olapColumnDesc.GetDefaultValue()).IsFail() || !scalar.GetValue()) {
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported default value");
+        }
+        const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(olapColumnDesc.GetTypeId(),
+            olapColumnDesc.HasTypeInfo() ? &olapColumnDesc.GetTypeInfo() : nullptr);
+        const auto arrowType = NArrow::GetArrowType(typeInfoMod.TypeInfo);
+        if (arrowType.ok()) {
+            scalar.AlignToColumnType(*arrowType);
+        }
+        auto typed = scalar.SerializeToTypedValue(typeInfoMod.TypeInfo);
+        if (typed.IsFail()) {
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, typed.GetErrorMessage());
+        }
+        Stream << " DEFAULT ";
+        Format(typed.GetResult());
+    }
+
     if (olapColumnDesc.HasStorageId() && !olapColumnDesc.GetStorageId().empty()) {
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
     }
@@ -2014,16 +2036,6 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
 void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc) {
     TStringStream paramsStr;
     TString del = "";
-
-    if (columnDesc.HasDefaultValue()) {
-        auto defaultValue = ValueToString(columnDesc.GetDefaultValue());
-        if (defaultValue) {
-            EscapeName("DEFAULT_VALUE", paramsStr);
-            paramsStr << "=";
-            EscapeValue(defaultValue, paramsStr);
-            del = ", ";
-        }
-    }
 
     if (columnDesc.HasStorageId() && !columnDesc.GetStorageId().empty()) {
         paramsStr << del;

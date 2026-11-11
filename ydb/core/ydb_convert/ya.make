@@ -18,6 +18,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/engine
+    ydb/core/formats/arrow
     ydb/core/formats/arrow/switch
     yql/essentials/core
     ydb/core/local_indexes/bloom

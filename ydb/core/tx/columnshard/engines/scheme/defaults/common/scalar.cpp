@@ -358,6 +358,16 @@ TConclusion<Ydb::TypedValue> TColumnDefaultScalarValue::SerializeToTypedValue(co
     if (!Value) {
         return TConclusionStatus::Fail("empty default");
     }
+    if (type.GetTypeId() != 0) {
+        const auto arrowType = NArrow::GetArrowType(type);
+        if (arrowType.ok()) {
+            TColumnDefaultScalarValue aligned(*this);
+            aligned.AlignToColumnType(*arrowType);
+            if (aligned.GetValue() && !aligned.GetValue()->type->Equals(Value->type)) {
+                return aligned.SerializeToTypedValue(type);
+            }
+        }
+    }
     auto* outType = result.mutable_type();
     auto* value = result.mutable_value();
     const auto typeIdOr = [&](Ydb::Type::PrimitiveTypeId fallback) {

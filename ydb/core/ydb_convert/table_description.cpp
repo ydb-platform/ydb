@@ -11,6 +11,7 @@
 #include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
@@ -1215,10 +1216,19 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
         if (column.HasDefaultValue() && column.GetDefaultValue().HasScalar()) {
             NOlap::TColumnDefaultScalarValue scalar;
             if (scalar.DeserializeFromProto(column.GetDefaultValue()).IsSuccess()) {
-                NYql::NProto::TypeIds protoType;
                 NScheme::TTypeInfo typeInfo;
-                if (NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
-                    typeInfo = NScheme::TTypeInfo(static_cast<NScheme::TTypeId>(protoType));
+                if (column.GetTypeId()) {
+                    typeInfo = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+                        column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr).TypeInfo;
+                } else {
+                    NYql::NProto::TypeIds protoType;
+                    if (NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
+                        typeInfo = NScheme::TTypeInfo(static_cast<NScheme::TTypeId>(protoType));
+                    }
+                }
+                const auto arrowType = NArrow::GetArrowType(typeInfo);
+                if (arrowType.ok()) {
+                    scalar.AlignToColumnType(*arrowType);
                 }
                 auto typed = scalar.SerializeToTypedValue(typeInfo);
                 if (typed.IsSuccess()) {

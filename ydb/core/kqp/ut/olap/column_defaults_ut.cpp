@@ -405,6 +405,56 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         CompareYson(R"([[4u]])", SelectYson(db, "SELECT Value FROM `/Root/CsBulkNn` WHERE Key = 1;"));
     }
 
+    Y_UNIT_TEST(ShowCreatePrintsSqlDefault) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/CsShow` (
+                Key Uint32 NOT NULL,
+                Name Utf8 DEFAULT 'aba',
+                Value Uint32 NOT NULL DEFAULT 5,
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )");
+        auto result = db.GetSession().GetValueSync().GetSession().ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/CsShow`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto yson = FormatResultSetYson(result.GetResultSet(0));
+        UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT 'aba'");
+        UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT 5");
+        UNIT_ASSERT(!yson.Contains("DEFAULT_VALUE"));
+        UNIT_ASSERT(!yson.Contains("ALTER OBJECT"));
+    }
+
+    Y_UNIT_TEST(AddColumnNotNullDefault) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/DsAddNn` (
+                Key Uint32 NOT NULL,
+                PRIMARY KEY (Key)
+            );
+        )");
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/CsAddNn` (
+                Key Uint32 NOT NULL,
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )");
+        ExecDml(db, "INSERT INTO `/Root/DsAddNn` (Key) VALUES (1);");
+        ExecDml(db, "INSERT INTO `/Root/CsAddNn` (Key) VALUES (1);");
+        ExpectSchemeError(db, "ALTER TABLE `/Root/CsAddNn` ADD COLUMN Extra Utf8 NOT NULL;",
+            "Cannot add not null column without default value");
+        ExecScheme(db, "ALTER TABLE `/Root/DsAddNn` ADD COLUMN Extra Utf8 NOT NULL DEFAULT 'born';");
+        ExecScheme(db, "ALTER TABLE `/Root/CsAddNn` ADD COLUMN Extra Utf8 NOT NULL DEFAULT 'born';");
+        CompareYson(SelectYson(db, "SELECT Extra FROM `/Root/DsAddNn` WHERE Key = 1;"),
+            SelectYson(db, "SELECT Extra FROM `/Root/CsAddNn` WHERE Key = 1;"));
+        ExecDml(db, "INSERT INTO `/Root/DsAddNn` (Key) VALUES (2);");
+        ExecDml(db, "INSERT INTO `/Root/CsAddNn` (Key) VALUES (2);");
+        CompareYson(SelectYson(db, "SELECT Key, Extra FROM `/Root/DsAddNn` ORDER BY Key;"),
+            SelectYson(db, "SELECT Key, Extra FROM `/Root/CsAddNn` ORDER BY Key;"));
+    }
+
     Y_UNIT_TEST(SparsedSetDefaultRejected) {
         TKikimrRunner kikimr(DefaultsSettings());
         auto db = kikimr.GetQueryClient();

@@ -2174,12 +2174,17 @@ public:
                                     hasDefaultValue = true;
 
                                 } else if (constraint.Name().Value() == "not_null") {
+                                    hasNotNull = true;
+                                    if (table.Metadata->IsOlap()) {
+                                        // Column tables fill the new column from its creation default.
+                                        // A DataShard column-build scan is not used.
+                                        continue;
+                                    }
                                     if (columnBuild == nullptr) {
                                         columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
                                     }
 
                                     columnBuild->SetNotNull(true);
-                                    hasNotNull = true;
                                 }
                             }
                         }

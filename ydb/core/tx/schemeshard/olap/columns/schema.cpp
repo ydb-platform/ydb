@@ -30,7 +30,7 @@ bool TOlapColumnsDescription::ApplyUpdate(
             return false;
         }
         if (hasColumnsBefore) {
-            if (column.IsNotNull()) {
+            if (column.IsNotNull() && !column.GetDefaultValue().GetValue()) {
                 errors.AddError(NKikimrScheme::StatusSchemeError, "Cannot add new not null column currently (not supported yet)");
                 return false;
             }

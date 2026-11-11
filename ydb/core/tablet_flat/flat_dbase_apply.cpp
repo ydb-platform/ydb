@@ -79,10 +79,22 @@ namespace {
         return PageSettingFromProto<NPage::ECacheMode>(value, "Invalid cache mode value");
     }
 
+    void ValidateTieringGenerations(const TTieringPolicy& tieringPolicy, const TCompactionPolicy& compactionPolicy) {
+        THashSet<ui32> tiers;
+        for (const ui32 tier : compactionPolicy.GetTierIds()) {
+            tiers.insert(tier);
+        }
+        for (const auto& rule : tieringPolicy.Rules) {
+            Y_ENSURE(tiers.contains(rule.TierId),
+                "Tiering policy refers to tier " << rule.TierId << " that has no compaction generation");
+        }
+    }
+
     /**
      * Checks the dropped families and the tiering policy of a SetTable record
-     * against the families and the policy they produce, so that an invalid record
-     * is rejected before it changes anything. Returns the policy set by the record, if any.
+     * against the resulting families, policy and existing compaction generations,
+     * so that an invalid record is rejected before it changes anything.
+     * Returns the policy set by the record, if any.
      */
     std::optional<TTieringPolicy> ValidateTiering(const TScheme::TTableInfo& tableInfo, const TAlterRecord& delta) {
         // TAlter writes every change as a separate record, so a record never both sets and resets the policy
@@ -117,10 +129,19 @@ namespace {
                 Y_ENSURE(families.contains(rule.TierId),
                     "Tiering policy refers to tier " << rule.TierId << " that is not a family of the table");
             }
+            ValidateTieringGenerations(*newPolicy, *tableInfo.CompactionPolicy);
         } else if (tableInfo.TieringPolicy && !delta.GetResetTieringPolicy()) {
             for (const auto& rule : tableInfo.TieringPolicy->Rules) {
                 Y_ENSURE(families.contains(rule.TierId),
                     "Cannot drop family " << rule.TierId << " used by the tiering policy as a tier");
+            }
+            ValidateTieringGenerations(*tableInfo.TieringPolicy, *tableInfo.CompactionPolicy);
+        }
+
+        for (const ui32 family : delta.GetDropFamilies()) {
+            for (size_t index = 0; index < tableInfo.CompactionPolicy->Generations.size(); ++index) {
+                Y_ENSURE(tableInfo.CompactionPolicy->Generations[index].TierId.value_or(0) != family,
+                    "Cannot drop family " << family << " used by compaction generation " << index + 1);
             }
         }
 
@@ -582,6 +603,15 @@ bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrCompaction::TCo
     TIntrusiveConstPtr<TCompactionPolicy> policy(new TCompactionPolicy(proto));
     TString err;
     Y_ENSURE(NLocalDb::ValidateCompactionPolicy(*policy, err), "Invalid compaction policy: " << err);
+    for (size_t index = 0; index < policy->Generations.size(); ++index) {
+        const ui32 tier = policy->Generations[index].TierId.value_or(0);
+        Y_ENSURE(table->Families.contains(tier),
+            "Compaction generation " << index + 1 << " refers to tier " << tier
+                << " that is not a family of the table");
+    }
+    if (table->TieringPolicy) {
+        ValidateTieringGenerations(*table->TieringPolicy, *policy);
+    }
     if (table->CompactionPolicy && *(table->CompactionPolicy) == *policy)
         return false;
     PreserveTable(tid);

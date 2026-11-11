@@ -150,7 +150,7 @@ namespace NTable {
      * working on.
      */
     struct TCompactionChanges {
-        // Legacy level where just compacted parts are placed
+        // Placement code: ordinary generation or 255 - the tier's stable slot.
         ui32 NewPartsLevel = 255;
 
         // State changes to save in the log (binary data unique to strategy)
@@ -173,7 +173,7 @@ namespace NTable {
      * Generic state for compactions
      */
     struct TCompactionState {
-        // Legacy part level for each known part
+        // Placement code for each known part: ordinary generation or the tier's final level.
         // It is ok to leave this empty, missing labels will get level 255.
         // This map is implicitly cleared on every strategy change.
         THashMap<TLogoBlobID, ui32> PartLevels;

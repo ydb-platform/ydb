@@ -68,12 +68,9 @@ namespace {
     }
 
     ui32 ResolveColdPartLevel(ui32 level, const NLocalDb::TCompactionPolicy& policy) {
-        if (level == 255) {
-            return level;
-        }
-        Y_ENSURE(level > 0 && level <= policy.Generations.size(),
-            "Unloaded compaction part refers to an unknown generation");
-        return policy.Generations[level - 1].TierId.value_or(0) == 0 ? level : 255;
+        Y_ENSURE(level > 0, "Invalid unloaded compaction part level");
+        return policy.GetTierForLevel(level) == 0
+            ? level : NLocalDb::TCompactionPolicy::DefaultFinalLevel;
     }
 
     TVector<TCompactionPartInfo> DescribeCompactionParts(
@@ -81,25 +78,19 @@ namespace {
             TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts,
             const TCompactionState& state, const NLocalDb::TCompactionPolicy& policy)
     {
-        auto tierForLevel = [&](ui32 level) {
-            if (level == 255) {
-                return ui32(0);
-            }
-            Y_ENSURE(level > 0 && level <= policy.Generations.size(),
-                "Compaction part refers to an unknown generation");
-            return policy.Generations[level - 1].TierId.value_or(0);
-        };
-
         TVector<TCompactionPartInfo> result;
         result.reserve(parts.size() + coldParts.size());
         for (const auto& part : parts) {
             Y_ENSURE(part, "Missing compaction part");
-            const ui32 level = state.PartLevels.Value(part->Label, 255);
-            result.emplace_back(part, level, tierForLevel(level));
+            const ui32 level = state.PartLevels.Value(part->Label,
+                NLocalDb::TCompactionPolicy::DefaultFinalLevel);
+            Y_ENSURE(level > 0, "Invalid compaction part level");
+            result.emplace_back(part, level, policy.GetTierForLevel(level));
         }
         for (const auto& part : coldParts) {
             Y_ENSURE(part, "Missing unloaded compaction part");
-            const ui32 savedLevel = state.PartLevels.Value(part->Label, 255);
+            const ui32 savedLevel = state.PartLevels.Value(part->Label,
+                NLocalDb::TCompactionPolicy::DefaultFinalLevel);
             const ui32 level = ResolveColdPartLevel(savedLevel, policy);
             result.emplace_back(part, level, 0, level != savedLevel);
         }

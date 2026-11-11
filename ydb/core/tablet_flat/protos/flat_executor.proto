@@ -50,8 +50,10 @@ message TBundle {
 
     optional int64 Epoch = 5;
 
-    // Overrides TLogTableSnap.CompactionLevel for outputs placed in different
-    // generations by the same atomic part switch. Absent on legacy bundles.
+    // Overrides TLogTableSnap.CompactionLevel for outputs placed at different
+    // levels by the same atomic part switch. Ordinary levels are generations;
+    // 255 minus the stable tier slot denotes that tier's final parts.
+    // Slot 0 is default. Absent on legacy bundles.
     optional uint32 CompactionLevel = 6;
 }
 

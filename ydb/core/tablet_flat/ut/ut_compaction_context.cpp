@@ -1,5 +1,6 @@
 #include <ydb/core/tablet_flat/flat_comp.h>
 #include <ydb/core/tablet_flat/flat_compaction_context.h>
+#include <ydb/core/tablet_flat/flat_compaction_prepare.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -38,6 +39,17 @@ namespace {
             return new TColdPart(TLogoBlobID(2, 1, Serial++, 1, 0, 0), TEpoch::FromIndex(epoch));
         }
     };
+
+    NLocalDb::TCompactionPolicyPtr TieredPolicy() {
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        const auto generation = policy->Generations.front();
+        policy->Generations.assign(6, generation);
+        const ui32 tiers[] = {0, 0, 42, 42, 7, 7};
+        for (size_t index = 0; index < policy->Generations.size(); ++index) {
+            policy->Generations[index].TierId = tiers[index];
+        }
+        return policy;
+    }
 
     TIntrusiveConstPtr<TCompactionContext> MakeContext(
             TVector<TCompactionPartInfo> parts, std::initializer_list<TLogoBlobID> selected,
@@ -257,6 +269,57 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
         UNIT_ASSERT_EXCEPTION(DescribeCompactionParts({}, coldParts, state, *policy), yexception);
         state.PartLevels[unloaded->Label] = policy->Generations.size() + 1;
         UNIT_ASSERT_EXCEPTION(DescribeCompactionParts({}, coldParts, state, *policy), yexception);
+        for (ui32 level : {ui32(254), ui32(256), Max<ui32>()}) {
+            state.PartLevels[part->Label] = level;
+            UNIT_ASSERT_EXCEPTION(DescribeCompactionParts(loaded, {}, state, *policy), yexception);
+            state.PartLevels[unloaded->Label] = level;
+            UNIT_ASSERT_EXCEPTION(DescribeCompactionParts({}, coldParts, state, *policy), yexception);
+        }
+    }
+
+    Y_UNIT_TEST(DecodesEveryTierFinalAndNormalizesUnloadedNonDefaultFinals) {
+        TFixture f;
+        const auto policy = TieredPolicy();
+        struct TCase {
+            ui32 Level;
+            ui32 TierId;
+        };
+        const TCase cases[] = {
+            {1, 0}, {2, 0}, {3, 42}, {4, 42}, {5, 7}, {6, 7},
+            {255, 0}, {254, 42}, {253, 7},
+        };
+        TVector<TPartView> loaded;
+        TVector<TIntrusiveConstPtr<TColdPart>> unloaded;
+        TCompactionState state;
+        for (const auto& test : cases) {
+            auto part = f.Part(10);
+            auto cold = f.Cold(20);
+            state.PartLevels[part->Label] = test.Level;
+            state.PartLevels[cold->Label] = test.Level;
+            loaded.push_back(part);
+            unloaded.push_back(cold);
+        }
+        const auto inventory = DescribeCompactionParts(loaded, unloaded, state, *policy);
+        UNIT_ASSERT_VALUES_EQUAL(inventory.size(), loaded.size() + unloaded.size());
+        for (size_t index = 0; index < loaded.size(); ++index) {
+            const auto& test = cases[index];
+            const auto& part = inventory[index];
+            UNIT_ASSERT_VALUES_EQUAL(part.Label(), loaded[index]->Label);
+            UNIT_ASSERT_VALUES_EQUAL(part.Level, test.Level);
+            UNIT_ASSERT_VALUES_EQUAL(part.TierId, test.TierId);
+            UNIT_ASSERT(!part.HasUnknownPlacement);
+
+            const auto& cold = inventory[loaded.size() + index];
+            UNIT_ASSERT_VALUES_EQUAL(cold.Label(), unloaded[index]->Label);
+            UNIT_ASSERT_VALUES_EQUAL(cold.TierId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(cold.Level, test.TierId == 0 ? test.Level : 255);
+            UNIT_ASSERT_VALUES_EQUAL(cold.HasUnknownPlacement, test.TierId != 0);
+        }
+        state.PartLevels[loaded.front()->Label] = 252;
+        UNIT_ASSERT_EXCEPTION(DescribeCompactionParts(loaded, unloaded, state, *policy), yexception);
+        state.PartLevels[loaded.front()->Label] = 1;
+        state.PartLevels[unloaded.front()->Label] = 252;
+        UNIT_ASSERT_EXCEPTION(DescribeCompactionParts(loaded, unloaded, state, *policy), yexception);
     }
 
     Y_UNIT_TEST(UnloadedColdBindingsDoNotHideDefaultInputsFromTheEpochClosure) {
@@ -552,6 +615,91 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
 
 }
 
+Y_UNIT_TEST_SUITE(TCompactionPlacementTest) {
+
+    Y_UNIT_TEST(ForeignOutputsTryEveryDestinationGenerationBeforeItsFinal) {
+        TFixture f;
+        const auto policy = TieredPolicy();
+        // The same destination rule applies when cooling into 42 or 7, and
+        // when warming into 42 or default. Other tiers' epochs do not constrain it.
+        const TVector<TCompactionPartInfo> remaining{
+            {f.Part(90), 1, 0}, {f.Part(50), 2, 0}, {f.Part(30), 255, 0},
+            {f.Part(90), 3, 42}, {f.Part(50), 4, 42}, {f.Part(30), 254, 42},
+            {f.Part(90), 5, 7}, {f.Part(50), 6, 7}, {f.Part(30), 253, 7},
+        };
+        struct TCase {
+            ui32 TierId;
+            ui32 FirstLevel;
+            ui32 SecondLevel;
+            ui32 FinalLevel;
+        };
+        const TCase cases[] = {{0, 1, 2, 255}, {42, 3, 4, 254}, {7, 5, 6, 253}};
+        for (const auto& test : cases) {
+            const auto first = FindTierCompactionLevel(*policy, remaining,
+                test.TierId, TEpoch::FromIndex(70));
+            const auto second = FindTierCompactionLevel(*policy, remaining,
+                test.TierId, TEpoch::FromIndex(40));
+            const auto final = FindTierCompactionLevel(*policy, remaining,
+                test.TierId, TEpoch::FromIndex(20));
+            UNIT_ASSERT(first);
+            UNIT_ASSERT(second);
+            UNIT_ASSERT(final);
+            UNIT_ASSERT_VALUES_EQUAL(*first, test.FirstLevel);
+            UNIT_ASSERT_VALUES_EQUAL(*second, test.SecondLevel);
+            UNIT_ASSERT_VALUES_EQUAL(*final, test.FinalLevel);
+        }
+        UNIT_ASSERT(!FindTierCompactionLevel(*policy, remaining, 999, TEpoch::FromIndex(20)));
+    }
+
+    Y_UNIT_TEST(PreferredFinalMustBelongToTheDestinationTier) {
+        TFixture f;
+        const auto policy = TieredPolicy();
+        const TVector<TCompactionPartInfo> remaining{
+            {f.Part(90), 1, 0}, {f.Part(90), 3, 42}, {f.Part(90), 5, 7},
+        };
+        const ui32 tiers[] = {0, 42, 7};
+        const ui32 firstLevels[] = {1, 3, 5};
+        const ui32 finals[] = {255, 254, 253};
+        for (size_t index = 0; index < 3; ++index) {
+            for (size_t preferred = 0; preferred < 3; ++preferred) {
+                const auto level = FindTierCompactionLevel(*policy, remaining,
+                    tiers[index], TEpoch::FromIndex(20), finals[preferred]);
+                UNIT_ASSERT(level);
+                UNIT_ASSERT_VALUES_EQUAL(*level,
+                    index == preferred ? finals[index] : firstLevels[index]);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(FinalPlacementChecksEveryRemainingGenerationOfItsTier) {
+        TFixture f;
+        const auto policy = TieredPolicy();
+        const TVector<TCompactionPartInfo> remaining{
+            {f.Part(90), 1, 0}, {f.Part(50), 2, 0},
+            {f.Part(90), 3, 42}, {f.Part(50), 4, 42},
+            {f.Part(90), 5, 7}, {f.Part(50), 6, 7},
+        };
+        const ui32 tiers[] = {0, 42, 7};
+        const ui32 firstLevels[] = {1, 3, 5};
+        const ui32 finals[] = {255, 254, 253};
+        for (size_t index = 0; index < 3; ++index) {
+            const auto newer = FindTierCompactionLevel(*policy, remaining,
+                tiers[index], TEpoch::FromIndex(70), finals[index]);
+            const auto equal = FindTierCompactionLevel(*policy, remaining,
+                tiers[index], TEpoch::FromIndex(50), finals[index]);
+            const auto older = FindTierCompactionLevel(*policy, remaining,
+                tiers[index], TEpoch::FromIndex(20), finals[index]);
+            UNIT_ASSERT(newer);
+            UNIT_ASSERT(equal);
+            UNIT_ASSERT(older);
+            UNIT_ASSERT_VALUES_EQUAL(*newer, firstLevels[index]);
+            UNIT_ASSERT_VALUES_EQUAL(*equal, finals[index]);
+            UNIT_ASSERT_VALUES_EQUAL(*older, finals[index]);
+        }
+    }
+
+}
+
 Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
 
     Y_UNIT_TEST(RespectsInclusiveAndExclusiveSliceBounds) {
@@ -744,6 +892,24 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
         UNIT_ASSERT(!Has(*mask, 30));
     }
 
+    Y_UNIT_TEST(PerTierFinalsParticipateInTierAndGenerationMasks) {
+        TFixture f;
+        const TVector<TCompactionPartInfo> remaining{
+            {f.Part(10, 10, 10), 255, 0},
+            {f.Part(20, 20, 20), 254, 42},
+            {f.Part(30, 30, 30), 253, 7},
+        };
+        auto mask = MakeCompactionKeySpace(f.Layout.RowScheme()->Keys, remaining, 42, 254);
+        UNIT_ASSERT(!Has(*mask, 10));
+        UNIT_ASSERT(Has(*mask, 20));
+        UNIT_ASSERT(!Has(*mask, 30));
+        TCompactionTierCap cap(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7});
+        const auto key = TCell::Make(ui32(20));
+        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 0, 7), 42);
+        cap.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 7, 0), 42);
+    }
+
     Y_UNIT_TEST(UnknownUnloadedPlacementIsIncludedInEveryTierAndGenerationMask) {
         TFixture f;
         const auto unloaded = f.Cold(10);
@@ -925,6 +1091,28 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
             UNIT_ASSERT_VALUES_EQUAL(eggs.Written->Rows, 1);
             UNIT_ASSERT_VALUES_EQUAL(eggs.Written->Drops, 1);
         }
+    }
+
+    Y_UNIT_TEST(NewerKeysInNonDefaultFinalsRetainEraseMarkers) {
+        TFixture f;
+        const TVector<TCompactionPartInfo> remaining{
+            {f.Part(5, 10, 10), 255, 0},
+            {f.Part(100, 30, 30), 254, 42},
+            {f.Part(200, 50, 50), 253, 7},
+        };
+        auto garbage = MakeCompactionGarbageConf(f.Layout.RowScheme()->Keys, remaining, false);
+        UNIT_ASSERT(!garbage.Final);
+        UNIT_ASSERT(garbage.UnderlayMask);
+        NPage::TConf conf;
+        conf.Final = garbage.Final;
+        conf.UnderlayMask = garbage.UnderlayMask.Get();
+        const auto eggs = NTest::TPartCook(f.Layout, conf)
+            .AddOpN(ERowOp::Erase, ui32(20))
+            .AddOpN(ERowOp::Erase, ui32(30))
+            .AddOpN(ERowOp::Erase, ui32(50)).Finish();
+        UNIT_ASSERT(eggs.Written);
+        UNIT_ASSERT_VALUES_EQUAL(eggs.Written->Rows, 2);
+        UNIT_ASSERT_VALUES_EQUAL(eggs.Written->Drops, 2);
     }
 
 }

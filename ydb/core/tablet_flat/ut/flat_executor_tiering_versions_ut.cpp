@@ -94,7 +94,8 @@ namespace {
         THashMap<TLogoBlobID, ui32> OutputTiers;
     };
 
-    TCompacted CompactGeneration(TEnv& env, ui32 generation) {
+    TCompacted CompactGeneration(TEnv& env, ui32 generation,
+            NTable::TCompactionParams::EMode mode = NTable::TCompactionParams::EMode::TierAware) {
         NActors::TBlockEvents<NOps::TEvResult> blocked(env.Env,
             [generation](const NOps::TEvResult::TPtr& ev) {
                 const auto* compact = dynamic_cast<const TProdCompact*>(ev->Get()->Result.Get());
@@ -110,7 +111,7 @@ namespace {
         const auto* compact = dynamic_cast<const TProdCompact*>(blocked.front()->Get()->Result.Get());
         UNIT_ASSERT(compact);
         UNIT_ASSERT(compact->Success);
-        UNIT_ASSERT(compact->Params->Mode == NTable::TCompactionParams::EMode::TierAware);
+        UNIT_ASSERT(compact->Params->Mode == mode);
         TCompacted result;
         result.Context = compact->Params->Context;
         for (const auto& output : compact->Results) {
@@ -245,6 +246,47 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringVersions) {
+
+    Y_UNIT_TEST(RegularTierFinalizationKeepsErasesForOtherTierFinals) {
+        for (ui32 tier : {0u, ColdTier, ArchiveTier}) {
+            TEnv env;
+            auto policy = MakePolicy();
+            policy->KeepEraseMarkers = true;
+            env.Policy(*policy);
+            const auto older = env.FlushPart({{1, 0, "older-value", 7, TRowVersion(1, 10)}});
+            const auto erased = env.FlushPart({{1, std::nullopt, {}, 0, TRowVersion(2, 20), true}});
+            UNIT_ASSERT(older->Epoch < erased->Epoch);
+            const ui32 generation = tier == 0 ? 3 : tier == ColdTier ? 5 : 7;
+            const ui32 olderTier = tier == ArchiveTier ? ColdTier : ArchiveTier;
+            const ui32 olderFinal = policy->GetFinalLevel(olderTier);
+            const ui32 ownFinal = policy->GetFinalLevel(tier);
+            env.SeedLevels({{older->Label, olderFinal}, {erased->Label, generation}});
+
+            // Only the erase's tier is compacted. The older value in another
+            // final is still capable of resurrecting the key if it is dropped.
+            const auto compacted = CompactGeneration(env, generation,
+                NTable::TCompactionParams::EMode::Regular);
+            UNIT_ASSERT_VALUES_EQUAL(compacted.Context->Inputs.size(), 1);
+            UNIT_ASSERT(Includes(compacted, erased->Label));
+            UNIT_ASSERT(!Includes(compacted, older->Label));
+            UNIT_ASSERT_VALUES_EQUAL(compacted.Context->Remaining.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(compacted.Context->Remaining.front().Label(), older->Label);
+            UNIT_ASSERT_VALUES_EQUAL(compacted.Context->Remaining.front().Level, olderFinal);
+            UNIT_ASSERT_VALUES_EQUAL(compacted.Outputs.size(), 1);
+            const auto& output = compacted.Outputs.front();
+            UNIT_ASSERT_VALUES_EQUAL(compacted.OutputTiers.at(output->Label), tier);
+            const auto placement = env.Levels();
+            UNIT_ASSERT_VALUES_EQUAL(placement.at(older->Label), olderFinal);
+            UNIT_ASSERT_VALUES_EQUAL(placement.at(output->Label), ownFinal);
+            CheckMissing(env, 1);
+            env.Read(1, "older-value", TRowVersion(1, 15));
+
+            env.Restart();
+            env.CheckLevels(placement, "after erase finalization/restart");
+            CheckMissing(env, 1);
+            env.Read(1, "older-value", TRowVersion(1, 15));
+        }
+    }
 
     Y_UNIT_TEST(ColdEpochIntervalIncludesTheNewerHotVersionBeforePromotion) {
         TEnv env;

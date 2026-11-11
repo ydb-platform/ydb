@@ -210,6 +210,11 @@ namespace NCompGen {
             TCompactionTask Task;
         };
 
+        struct TFinalTier {
+            TFinalState State;
+            TList<TPartInfo> Parts;
+        };
+
         struct TPartAggregator;
         struct TExtraState;
 
@@ -250,6 +255,10 @@ namespace NCompGen {
             TExtraState& extra);
 
         ui32 TierForLevel(ui32 level) const;
+        TList<TPartInfo>& GetFinalParts(ui32 level);
+        const TList<TPartInfo>& GetFinalParts(ui32 level) const;
+        TFinalState& GetFinalState(ui32 level);
+        const TFinalState& GetFinalState(ui32 level) const;
         bool IsLastTierGeneration(ui32 generation) const;
         size_t UnloadedPartsAtLevel(ui32 level) const;
         void ValidateTierEpochs() const;
@@ -316,6 +325,7 @@ namespace NCompGen {
         TVector<TGeneration> Generations;
         TFinalState FinalState;
         TList<TPartInfo> FinalParts;
+        THashMap<ui32, TFinalTier> TierFinals;
         TList<TIntrusiveConstPtr<TColdPart>> ColdParts;
         THashMap<TLogoBlobID, ui32> KnownParts;
         TStats Stats;

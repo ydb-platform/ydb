@@ -5,7 +5,8 @@
 namespace NKikimr::NTable {
 
     // Find a level that preserves epoch ordering within the destination tier.
-    // Level 255 is the default tier's final list; it is never a cold tier.
+    // Each tier's final list follows its ordinary generations and accepts an
+    // epoch no newer than any of that tier's remaining ordinary parts.
     std::optional<ui32> FindTierCompactionLevel(
         const NLocalDb::TCompactionPolicy& policy,
         TConstArrayRef<TCompactionPartInfo> remaining, ui32 tierId, TEpoch epoch,

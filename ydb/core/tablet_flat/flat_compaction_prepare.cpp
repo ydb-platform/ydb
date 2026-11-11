@@ -2,21 +2,29 @@
 
 #include <util/generic/hash_set.h>
 
+#include <algorithm>
+
 namespace NKikimr::NTable {
 
 std::optional<ui32> FindTierCompactionLevel(const NLocalDb::TCompactionPolicy& policy,
         TConstArrayRef<TCompactionPartInfo> remaining, ui32 tierId, TEpoch epoch,
         ui32 preferredLevel)
 {
+    const auto tierOrder = policy.GetTierIds();
+    if (std::find(tierOrder.begin(), tierOrder.end(), tierId) == tierOrder.end()) {
+        return std::nullopt;
+    }
     const auto canInsert = [&](ui32 level) {
-        if (level == 255) {
-            if (tierId != 0) {
+        if (policy.IsFinalLevel(level)) {
+            if (policy.GetTierForLevel(level) != tierId) {
                 return false;
             }
         } else if (level == 0 || level > policy.Generations.size()
                 || policy.Generations[level - 1].TierId.value_or(0) != tierId) {
             return false;
         }
+        // Every final code follows every ordinary generation. Within this
+        // tier, the same ordering therefore also checks the final epoch bound.
         for (const auto& part : remaining) {
             if (part.TierId != tierId || part.Level == level) {
                 continue;
@@ -36,8 +44,9 @@ std::optional<ui32> FindTierCompactionLevel(const NLocalDb::TCompactionPolicy& p
             return level;
         }
     }
-    if (canInsert(255)) {
-        return 255;
+    const ui32 finalLevel = policy.GetFinalLevel(tierId);
+    if (canInsert(finalLevel)) {
+        return finalLevel;
     }
     return std::nullopt;
 }
@@ -72,16 +81,10 @@ void PrepareTieringCompaction(TCompactionParams& params,
     settings.Schema = std::move(schema);
     settings.RowScheme = std::move(rowScheme);
     settings.Now = now;
-    settings.TierOrder.clear();
+    settings.TierOrder = table.CompactionPolicy->GetTierIds();
     THashSet<ui32> tiers;
-    auto addTier = [&](ui32 tier) {
-        if (tiers.insert(tier).second) {
-            settings.TierOrder.push_back(tier);
-        }
-    };
-    addTier(0);
-    for (const auto& generation : table.CompactionPolicy->Generations) {
-        addTier(generation.TierId.value_or(0));
+    for (ui32 tier : settings.TierOrder) {
+        tiers.insert(tier);
     }
     const auto selectMode = [&] {
         if (params.Context->RequiresTierAware()) {

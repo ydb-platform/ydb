@@ -93,7 +93,7 @@ namespace {
         }
 
         ui32 Tier(ui32 level) const {
-            return level == 255 ? 0 : Policy->Generations.at(level - 1).TierId.value_or(0);
+            return Policy->GetTierForLevel(level);
         }
 
         THolder<TCompactionParams> Params(ui32 sourceTier = 0) const {
@@ -778,9 +778,113 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         const auto changes = f.Complete(id, {0});
         UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 1);
         for (const auto& [label, level] : changes.NewPartLevels) {
-            UNIT_ASSERT_VALUES_EQUAL(f.Tier(level), 0);
+            UNIT_ASSERT_VALUES_EQUAL(level, f.Policy->GetFinalLevel(0));
             UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(label), level);
         }
+    }
+
+    Y_UNIT_TEST(EachColdTierProgressesThroughItsGenerationsIntoItsOwnFinal) {
+        for (ui32 firstLevel : {3, 5}) {
+            TStrategyFixture f;
+            f.Policy->Generations.push_back(f.Policy->Generations.back());
+            const ui32 tier = f.Tier(firstLevel);
+            const ui32 lastLevel = firstLevel + 1;
+            const ui32 foreignLevel = firstLevel == 3 ? 5 : 3;
+            const auto first = f.AddPart(10, firstLevel);
+            const auto second = f.AddPart(20, firstLevel, 2);
+            const auto foreign = f.AddPart(30, foreignLevel, 3);
+            f.Policy->Generations[firstLevel - 1].ForceCountToCompact = 2;
+            f.Policy->Generations[lastLevel - 1].ForceCountToCompact = 1;
+            f.Start();
+
+            UNIT_ASSERT(f.Broker.RunPending(firstLevel));
+            const ui64 firstId = f.Backend.StartedGeneration(firstLevel);
+            const auto& firstParams = *f.Backend.Started.at(firstId);
+            UNIT_ASSERT(firstParams.Mode == TCompactionParams::EMode::Regular);
+            UNIT_ASSERT_VALUES_EQUAL(firstParams.TierId, tier);
+            UNIT_ASSERT_VALUES_EQUAL(firstParams.Context->Inputs.size(), 2);
+            UNIT_ASSERT(Contains(firstParams.Parts, first->Label));
+            UNIT_ASSERT(Contains(firstParams.Parts, second->Label));
+            UNIT_ASSERT(!Contains(firstParams.Parts, foreign->Label));
+            const auto intermediate = f.Complete(firstId, {tier});
+            UNIT_ASSERT_VALUES_EQUAL(intermediate.NewPartLevels.size(), 1);
+            const auto label = intermediate.NewPartLevels.begin()->first;
+            UNIT_ASSERT_VALUES_EQUAL(intermediate.NewPartLevels.at(label), lastLevel);
+            UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(foreign->Label), foreignLevel);
+
+            UNIT_ASSERT(f.Broker.RunPending(lastLevel));
+            const ui64 lastId = f.Backend.StartedGeneration(lastLevel);
+            const auto& lastParams = *f.Backend.Started.at(lastId);
+            UNIT_ASSERT(lastParams.Mode == TCompactionParams::EMode::Regular);
+            UNIT_ASSERT_VALUES_EQUAL(lastParams.TierId, tier);
+            UNIT_ASSERT_VALUES_EQUAL(lastParams.Context->Inputs.size(), 1);
+            UNIT_ASSERT(Contains(lastParams.Parts, label));
+            UNIT_ASSERT(!Contains(lastParams.Parts, foreign->Label));
+            const auto final = f.Complete(lastId, {tier});
+            UNIT_ASSERT_VALUES_EQUAL(final.NewPartLevels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(final.NewPartLevels.begin()->second, f.Policy->GetFinalLevel(tier));
+            UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(foreign->Label), foreignLevel);
+            UNIT_ASSERT(f.Backend.Started.empty());
+            UNIT_ASSERT(!f.Broker.HasPending());
+        }
+    }
+
+    Y_UNIT_TEST(ColdTerminalBacklogsStopOverloadingAfterFinalizationAndRestart) {
+        TStrategyFixture f;
+        f.Policy->Generations.push_back(f.Policy->Generations.back());
+        const auto hot = f.AddPart(90, 2);
+        const auto upperCold = f.AddPart(30, 3, 2);
+        const auto upperArchive = f.AddPart(80, 5, 3);
+        const auto coldFinal = f.AddPart(5, f.Policy->GetFinalLevel(ColdTier), 4);
+        const auto archiveFinal = f.AddPart(55, f.Policy->GetFinalLevel(ArchiveTier), 5);
+        for (ui32 level : {4, 6}) {
+            ui64 backing = 0;
+            for (ui32 index = 0; index != 4; ++index) {
+                const auto part = f.AddPart((level == 4 ? 10 : 60) + index, level, 10 + index);
+                backing += part->BackingSize();
+            }
+            auto& generation = f.Policy->Generations[level - 1];
+            generation.ForceSizeToCompact = backing / 4;
+            UNIT_ASSERT(generation.ForceSizeToCompact > 0);
+            UNIT_ASSERT(backing > 3 * generation.ForceSizeToCompact);
+        }
+        f.Start();
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetOverloadFactor(), 1.0f);
+
+        for (ui32 level : {4, 6}) {
+            UNIT_ASSERT(f.Broker.RunPending(level));
+            const ui64 id = f.Backend.StartedGeneration(level);
+            const auto& params = *f.Backend.Started.at(id);
+            const ui32 tier = f.Tier(level);
+            const ui32 ownFinal = f.Policy->GetFinalLevel(tier);
+            UNIT_ASSERT(params.Mode == TCompactionParams::EMode::Regular);
+            UNIT_ASSERT_VALUES_EQUAL(params.TierId, tier);
+            UNIT_ASSERT_VALUES_EQUAL(params.Context->Inputs.size(), 5);
+            UNIT_ASSERT(Contains(params.Parts, level == 4 ? coldFinal->Label : archiveFinal->Label));
+            for (const auto& part : params.Context->Inputs) {
+                UNIT_ASSERT_VALUES_EQUAL(part.TierId, tier);
+                UNIT_ASSERT(part.Level == level || part.Level == ownFinal);
+            }
+            const auto changes = f.Complete(id, {tier});
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.begin()->second, ownFinal);
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetOverloadFactor(), level == 4 ? 1.0f : 0.0f);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(hot->Label), 2);
+        UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(upperCold->Label), 3);
+        UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(upperArchive->Label), 5);
+        UNIT_ASSERT(!f.State.PartLevels.contains(coldFinal->Label));
+        UNIT_ASSERT(!f.State.PartLevels.contains(archiveFinal->Label));
+        UNIT_ASSERT(f.Strategy->GetBackingSize() > 0);
+        UNIT_ASSERT(!f.Broker.HasPending());
+        const auto before = f.State.PartLevels;
+        f.Strategy->Stop();
+        f.Strategy->Start(f.State);
+        UNIT_ASSERT(f.Strategy->SnapshotState().PartLevels == before);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetOverloadFactor(), 0.0f);
+        UNIT_ASSERT(!f.Broker.HasPending());
+        UNIT_ASSERT(f.Backend.Started.empty());
     }
 
     Y_UNIT_TEST(ColdCompactionExpandsToMaintenanceTacWhenTheFlagIsOff) {
@@ -825,6 +929,35 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         f.Strategy->Stop();
         f.Strategy->Start(f.State);
         UNIT_ASSERT(f.Strategy->SnapshotState().PartLevels == before);
+    }
+
+    Y_UNIT_TEST(CoolingAndWarmingKeepNewerOutputsAboveAnOlderColdGeneration) {
+        for (ui32 sourceLevel : {1, 5}) {
+            TStrategyFixture f;
+            f.Backend.Enabled = true;
+            const auto upper = f.AddPart(40, 3);
+            const auto lower = f.AddPart(20, 4, 2);
+            const auto source = f.AddPart(30, sourceLevel, 3);
+            f.Policy->Generations[sourceLevel - 1].ForceCountToCompact = 1;
+            f.Start();
+            UNIT_ASSERT(f.Broker.RunPending(sourceLevel));
+            const ui64 id = f.Backend.StartedGeneration(sourceLevel);
+            const auto& params = *f.Backend.Started.at(id);
+            UNIT_ASSERT(params.Mode == TCompactionParams::EMode::TierAware);
+            UNIT_ASSERT(params.Tiering->AllowCooling);
+            UNIT_ASSERT_VALUES_EQUAL(params.Context->Inputs.size(), 1);
+            UNIT_ASSERT(Contains(params.Parts, source->Label));
+            const auto changes = f.Complete(id, {ColdTier});
+
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.begin()->second, 3);
+            UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(upper->Label), 3);
+            UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(lower->Label), 4);
+            const auto before = f.State.PartLevels;
+            f.Strategy->Stop();
+            f.Strategy->Start(f.State);
+            UNIT_ASSERT(f.Strategy->SnapshotState().PartLevels == before);
+        }
     }
 
     Y_UNIT_TEST(OldWarmOutputIsPlacedBelowNewHotEpochs) {
@@ -891,7 +1024,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
     }
 
     Y_UNIT_TEST(UnloadedPartsRestoreAndRewriteIntoDefaultDespiteSavedColdGenerations) {
-        for (ui32 savedLevel : {3, 4, 5}) {
+        for (ui32 savedLevel : {3, 4, 5, 254, 253}) {
             TStrategyFixture f;
             const auto hot = f.AddPart(20, 1);
             const auto loadedCold = f.AddPart(30, 3, 2);
@@ -1149,6 +1282,40 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         f.Complete(retryId, {0});
     }
 
+    Y_UNIT_TEST(ALateFinalCancellationKeepsOtherTierFinalReservations) {
+        TStrategyFixture f;
+        const ui32 coldLevel = f.Policy->GetFinalLevel(ColdTier);
+        const ui32 archiveLevel = f.Policy->GetFinalLevel(ArchiveTier);
+        f.AddPart(40, coldLevel, 100);
+        f.AddPart(41, coldLevel, 101);
+        f.AddPart(10, archiveLevel, 100);
+        f.AddPart(11, archiveLevel, 101);
+        f.Start();
+        UNIT_ASSERT(f.Broker.RunPending(coldLevel));
+        const ui64 originalId = f.Backend.StartedGeneration(coldLevel);
+        UNIT_ASSERT(f.Broker.RunPending(archiveLevel));
+        const ui64 archiveId = f.Backend.StartedGeneration(archiveLevel);
+        f.Cancel(originalId);
+
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), archiveId);
+        UNIT_ASSERT(f.Broker.RunPending(coldLevel));
+        const ui64 retryId = f.Backend.StartedGeneration(coldLevel);
+        UNIT_ASSERT(retryId != originalId);
+        f.Strategy->CompactionCancelled(originalId, *f.Backend.Cancelled.at(originalId));
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(coldLevel), retryId);
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(archiveLevel), archiveId);
+        const auto archive = f.Complete(archiveId, {ArchiveTier});
+        UNIT_ASSERT_VALUES_EQUAL(archive.NewPartLevels.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(archive.NewPartLevels.begin()->second, archiveLevel);
+        UNIT_ASSERT(f.Current(*f.Backend.Started.at(retryId)));
+        const auto cold = f.Complete(retryId, {ColdTier});
+        UNIT_ASSERT_VALUES_EQUAL(cold.NewPartLevels.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cold.NewPartLevels.begin()->second, coldLevel);
+        UNIT_ASSERT(f.Backend.Started.empty());
+        UNIT_ASSERT(!f.Broker.HasPending());
+    }
+
     Y_UNIT_TEST(BusyExtraInputsCancelOnlyTheRequestingGenerationUntilOccupancyChanges) {
         TStrategyFixture f;
         f.AddPart(40, 1);
@@ -1195,7 +1362,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         UNIT_ASSERT(Contains(f.Backend.Started.at(hotId)->Parts, reserved->Label));
 
         // This task was queued before gen1 reserved one of its two epochs.
-        // Only epoch10 remains free, so the last cold generation must decline it.
+        // Only epoch10 remains free, below the compaction thresholds.
         UNIT_ASSERT(f.Broker.RunPending(4));
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), hotId);
         UNIT_ASSERT(f.Backend.Rejected.empty());
@@ -1279,29 +1446,34 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
     }
 
     Y_UNIT_TEST(ACancelledSingletonFinalSweepIsRetriedWithoutAnotherTick) {
-        TStrategyFixture f;
-        f.Backend.Enabled = true;
-        const auto final = f.AddPart(10, 255);
-        f.Start();
-        UNIT_ASSERT(!f.Broker.HasPending());
-        f.Strategy->UpdateCompactions();
-        const ui64 id = f.RunPending();
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(255), id);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(id)->Context->Inputs.size(), 1);
-        f.Cancel(id);
+        for (ui32 tier : {0u, ColdTier, ArchiveTier}) {
+            TStrategyFixture f;
+            f.Backend.Enabled = true;
+            const ui32 level = f.Policy->GetFinalLevel(tier);
+            const auto final = f.AddPart(10, level);
+            f.Start();
+            UNIT_ASSERT(!f.Broker.HasPending());
+            f.Strategy->UpdateCompactions();
+            const ui64 id = f.RunPending();
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(level), id);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(id)->Context->Inputs.size(), 1);
+            f.Cancel(id);
 
-        UNIT_ASSERT(f.Backend.Started.empty());
-        UNIT_ASSERT(f.State.PartLevels.contains(final->Label));
-        UNIT_ASSERT(f.Broker.RunPending(255));
-        const ui64 retryId = f.Backend.OnlyStarted();
-        UNIT_ASSERT(retryId != id);
-        UNIT_ASSERT(f.Backend.Started.at(retryId)->Mode == TCompactionParams::EMode::TierAware);
-        UNIT_ASSERT(Contains(f.Backend.Started.at(retryId)->Parts, final->Label));
-        f.Complete(retryId, {0});
+            UNIT_ASSERT(f.Backend.Started.empty());
+            UNIT_ASSERT(f.State.PartLevels.contains(final->Label));
+            UNIT_ASSERT(f.Broker.RunPending(level));
+            const ui64 retryId = f.Backend.OnlyStarted();
+            UNIT_ASSERT(retryId != id);
+            UNIT_ASSERT(f.Backend.Started.at(retryId)->Mode == TCompactionParams::EMode::TierAware);
+            UNIT_ASSERT(Contains(f.Backend.Started.at(retryId)->Parts, final->Label));
+            const auto changes = f.Complete(retryId, {tier});
 
-        UNIT_ASSERT(!f.State.PartLevels.contains(final->Label));
-        UNIT_ASSERT(f.Backend.Started.empty());
-        UNIT_ASSERT(!f.Broker.HasPending());
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.begin()->second, level);
+            UNIT_ASSERT(!f.State.PartLevels.contains(final->Label));
+            UNIT_ASSERT(f.Backend.Started.empty());
+            UNIT_ASSERT(!f.Broker.HasPending());
+        }
     }
 
     Y_UNIT_TEST(TheFlagOffDoesNotScheduleAnIdleCoolingSweep) {

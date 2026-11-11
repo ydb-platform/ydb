@@ -244,10 +244,9 @@ public:
     }
 
     void Policy(const NLocalDb::TCompactionPolicy& policy) {
-        TierIds.clear();
-        for (const auto& generation : policy.Generations) {
-            TierIds.push_back(generation.TierId.value_or(0));
-        }
+        NKikimrCompaction::TCompactionPolicy serialized;
+        policy.Serialize(serialized);
+        LevelsPolicy = new NLocalDb::TCompactionPolicy(serialized);
         Exec([&](TTransactionContext& txc) {
             txc.DB.Alter().SetCompactionPolicy(TableId, policy);
             return true;
@@ -288,7 +287,7 @@ public:
     }
 
     ui32 Tier(ui32 level) const {
-        return level == 255 ? 0 : TierIds.at(level - 1);
+        return LevelsPolicy->GetTierForLevel(level);
     }
 
     void CheckLevels(const THashMap<TLogoBlobID, ui32>& expected, TStringBuf stage = {}) {
@@ -342,7 +341,7 @@ public:
     }
 
     TCompactionLogicState* State = nullptr;
-    TVector<ui32> TierIds = {0, 0, 0, ColdTier, ColdTier, ArchiveTier, ArchiveTier};
+    NLocalDb::TCompactionPolicyPtr LevelsPolicy = MakePolicy();
 };
 
 }

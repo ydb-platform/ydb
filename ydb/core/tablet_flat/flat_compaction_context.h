@@ -34,12 +34,13 @@ namespace NKikimr::NTable {
     };
 
     // Preserve unloaded parts' existing default-generation placement, but move
-    // references to non-default generations to the final default level (255).
+    // references to non-default generations or finals to the default final (255).
     // DescribeCompactionParts also marks the latter as unknown placement.
     ui32 ResolveColdPartLevel(ui32 level, const NLocalDb::TCompactionPolicy& policy);
 
     // Resolve placement using the existing part -> level -> generation binding.
-    // Missing levels, FinalParts (level 255), and unloaded parts belong to default.
+    // Final levels are decoded using the policy's stable tier slots. Missing
+    // bindings and unloaded parts belong to the default tier.
     TVector<TCompactionPartInfo> DescribeCompactionParts(
         TConstArrayRef<TPartView> parts,
         TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts,

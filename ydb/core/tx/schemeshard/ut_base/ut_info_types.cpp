@@ -32,6 +32,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
         family->SetName("archive");
     }
 
+    void AppendCompactionTierGeneration(NKikimrSchemeOp::TPartitionConfig& config, ui32 tierId) {
+        auto* policy = config.MutableCompactionPolicy();
+        const ui32 generationId = policy->GenerationSize();
+        auto* generation = policy->AddGeneration();
+        generation->CopyFrom(policy->GetGeneration(0));
+        generation->SetGenerationId(generationId);
+        generation->SetTierId(tierId);
+    }
+
     Y_UNIT_TEST(CreateCompactionGenerationTierReferences) {
         auto config = MakeCompactionTierConfig();
         config.ClearColumnFamilies();
@@ -59,13 +68,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
         const auto source = MakeCompactionTierConfig();
         NKikimrSchemeOp::TPartitionConfig changes;
         changes.MutableCompactionPolicy()->CopyFrom(source.GetCompactionPolicy());
-        changes.MutableCompactionPolicy()->MutableGeneration(0)->SetTierId(42);
+        AppendCompactionTierGeneration(changes, 42);
         ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription> columns;
         NKikimrSchemeOp::TPartitionConfig result;
         TString error;
         UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, columns, nullptr, false, error), error);
         UNIT_ASSERT(!TPartitionConfigMerger::VerifyAlterParams(source, result, nullptr, false, error));
-        UNIT_ASSERT_STRING_CONTAINS(error, "Compaction generation 0 refers to tier 42");
+        UNIT_ASSERT_STRING_CONTAINS(error, "Compaction generation 1 refers to tier 42");
 
         // A family and a policy referring to it may be introduced by the same ALTER.
         AddCompactionTierFamily(changes);
@@ -79,12 +88,56 @@ Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
         AddCompactionTierFamily(source);
         NKikimrSchemeOp::TPartitionConfig changes;
         changes.MutableCompactionPolicy()->CopyFrom(source.GetCompactionPolicy());
-        changes.MutableCompactionPolicy()->MutableGeneration(0)->SetTierId(42);
+        AppendCompactionTierGeneration(changes, 42);
         ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription> columns;
         NKikimrSchemeOp::TPartitionConfig result;
         TString error;
         UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, columns, nullptr, false, error), error);
         UNIT_ASSERT_C(TPartitionConfigMerger::VerifyAlterParams(source, result, nullptr, false, error), error);
+    }
+
+    Y_UNIT_TEST(AlterCompactionGenerationTierRejectsMovingAnExistingBoundary) {
+        auto source = MakeCompactionTierConfig();
+        AppendCompactionTierGeneration(source, 0);
+        AppendCompactionTierGeneration(source, 42);
+        AppendCompactionTierGeneration(source, 42);
+        AddCompactionTierFamily(source);
+
+        NKikimrSchemeOp::TPartitionConfig changes;
+        changes.MutableCompactionPolicy()->CopyFrom(source.GetCompactionPolicy());
+        changes.MutableCompactionPolicy()->MutableGeneration(1)->SetTierId(42);
+        ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription> columns;
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, columns, nullptr, false, error), error);
+        // Both policies have contiguous blocks, the same tier slots, and all
+        // referenced families. The existing generation's binding must remain fixed.
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(result, nullptr, false, error), error);
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyAlterParams(source, result, nullptr, false, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "Changing TierId of existing generation 2");
+    }
+
+    Y_UNIT_TEST(AlterCompactionGenerationTierAcceptsEquivalentDefaultBindings) {
+        for (const bool explicitDefault : {false, true}) {
+            auto source = MakeCompactionTierConfig();
+            if (explicitDefault) {
+                source.MutableCompactionPolicy()->MutableGeneration(0)->SetTierId(0);
+            }
+            NKikimrSchemeOp::TPartitionConfig changes;
+            changes.MutableCompactionPolicy()->CopyFrom(source.GetCompactionPolicy());
+            auto* generation = changes.MutableCompactionPolicy()->MutableGeneration(0);
+            if (explicitDefault) {
+                generation->ClearTierId();
+            } else {
+                generation->SetTierId(0);
+            }
+            ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription> columns;
+            NKikimrSchemeOp::TPartitionConfig result;
+            TString error;
+            UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, columns, nullptr, false, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetCompactionPolicy().GetGeneration(0).HasTierId(), !explicitDefault);
+            UNIT_ASSERT_C(TPartitionConfigMerger::VerifyAlterParams(source, result, nullptr, false, error), error);
+        }
     }
 
     Y_UNIT_TEST_FLAG(VectorIndexDescriptionPersistence, Hnsw) {

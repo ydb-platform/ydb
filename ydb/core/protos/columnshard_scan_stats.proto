@@ -1,0 +1,368 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NKikimr.NColumnShardStats;
+option java_package = "ru.yandex.kikimr.proto";
+
+enum EApplicability {
+    APPLICABILITY_UNKNOWN = 0;
+    APPLICABLE = 1;
+    NOT_APPLICABLE = 2;
+}
+
+enum EMissingReason {
+    MISSING_NONE = 0;
+    NOT_REPORTED = 1;
+    UNAVAILABLE = 2;
+    NOT_MATERIALIZED = 3;
+    UNSUPPORTED = 4;
+    OBSERVATION_LOST = 5;
+    BUDGET_EXCEEDED = 6;
+}
+
+enum EExecutionObservation {
+    EXECUTION_UNOBSERVED = 0;
+    EXECUTION_OBSERVED = 1;
+    NOT_EXECUTED = 2;
+}
+
+enum EReaderKind {
+    READER_UNKNOWN = 0;
+    SIMPLE = 1;
+    TRIVIAL = 2;
+    PLAIN = 3;
+}
+
+enum EFinality {
+    FINALITY_UNKNOWN = 0;
+    OPEN = 1;
+    FINAL = 2;
+}
+
+enum EFinalizationCause {
+    FINALIZATION_NONE = 0;
+    COMPLETED = 1;
+    FINALIZATION_OBSERVATION_LOST = 2;
+    EXPIRED = 3;
+    COLLECTOR_FAILURE = 4;
+}
+
+enum EExecutionOutcome {
+    OUTCOME_UNKNOWN = 0;
+    SUCCESS = 1;
+    CANCELLED = 2;
+    FAILED = 3;
+}
+
+enum ESourceKind {
+    SOURCE_UNKNOWN = 0;
+    BLOB_STORAGE = 1;
+    EXTERNAL_STORAGE = 2;
+    BLOB_CACHE = 3;
+    COLUMN_CACHE = 4;
+    METADATA_CACHE = 5;
+    INLINE_INDEX = 6;
+    SYSTEM_VIEW = 7;
+    MEMORY = 8;
+}
+
+enum EReadBoundary {
+    BOUNDARY_UNKNOWN = 0;
+    PHYSICAL_ATTEMPT = 1;
+    LOGICAL_DELIVERY = 2;
+}
+
+enum EByteRepresentation {
+    REPRESENTATION_UNKNOWN = 0;
+    ENCODED_PAYLOAD = 1;
+    ARROW_LOGICAL = 2;
+    ARROW_BUFFERS = 3;
+    METADATA_FOOTPRINT = 4;
+}
+
+enum EFilterKind {
+    FILTER_UNKNOWN = 0;
+    PREDICATE = 1;
+    PRIMARY_KEY_RANGE = 2;
+    SNAPSHOT = 3;
+    DELETION = 4;
+    DUPLICATES = 5;
+    INDEX_MASK = 6;
+}
+
+message TVolumeCoverageDescription {
+    optional uint64 Measured = 1;
+    optional uint64 Applicable = 2;
+    optional EMissingReason MissingReason = 3;
+}
+
+message TNumericObservation {
+    optional EApplicability Applicability = 1;
+    optional uint64 Value = 2;
+    optional TVolumeCoverageDescription Coverage = 3;
+}
+
+message TBooleanObservation {
+    optional EApplicability Applicability = 1;
+    optional uint64 TrueCount = 2;
+    optional uint64 FalseCount = 3;
+    optional TVolumeCoverageDescription Coverage = 4;
+}
+
+message TReadBytesDescription {
+    optional uint64 Value = 1;
+    optional EReadBoundary Boundary = 2;
+    optional EByteRepresentation Representation = 3;
+}
+
+message TDataSource {
+    optional string StorageId = 1;
+    optional ESourceKind Kind = 2;
+    optional TVolumeCoverageDescription VolumeCoverage = 3;
+    optional TReadBytesDescription ReadBytes = 4;
+    optional uint64 Reads = 5;
+}
+
+message TTabletsDescription {
+    optional EExecutionObservation Execution = 1;
+}
+
+message TStatisticsDescription {
+    optional TNumericObservation ActiveTimeUs = 1;
+    optional TNumericObservation WaitTimeUs = 2;
+    optional TNumericObservation InputRows = 3;
+    optional TNumericObservation OutputRows = 4;
+    optional TNumericObservation InputBytes = 5;
+    optional TNumericObservation OutputBytes = 6;
+    repeated TDataSource DataSources = 7;
+    optional EByteRepresentation InputRepresentation = 8;
+    optional EByteRepresentation OutputRepresentation = 9;
+}
+
+message TRowFilterDescription {
+    optional TNumericObservation InputRows = 1;
+    optional TNumericObservation OutputRows = 2;
+}
+
+enum EIndexType {
+    INDEX_UNKNOWN = 0;
+    BLOOM_FILTER = 1;
+    BLOOM_NGRAMM_FILTER = 2;
+    CATEGORY_BLOOM_FILTER = 3;
+    COUNT_MIN_SKETCH = 4;
+    MAX = 5;
+    MIN_MAX = 6;
+}
+
+message TIndexDescription {
+    optional uint64 TableId = 1;
+    optional uint64 SchemaVersion = 2;
+    optional uint64 IndexId = 3;
+    optional string Name = 4;
+    optional EIndexType Type = 5;
+    repeated string Columns = 6;
+}
+
+message TReaderDetails {
+    optional EReaderKind Kind = 1;
+}
+
+message TPreparationDetails {
+    optional string TablePath = 1;
+    optional TNumericObservation SelectedPortions = 2;
+    optional TNumericObservation SelectedSources = 3;
+}
+
+message TPKFilterDetails {
+    repeated string KeyColumns = 1;
+    optional TRowFilterDescription PKRange = 2;
+    optional TRowFilterDescription Snapshot = 3;
+    optional TRowFilterDescription Deletion = 4;
+    optional TRowFilterDescription Duplicates = 5;
+}
+
+message TIndexFilterDetails {
+    optional TIndexDescription Index = 1;
+    optional uint32 ApplicationOrder = 2;
+    optional string Predicate = 3;
+}
+
+message TFilterDetails {
+    optional EFilterKind Kind = 1;
+    optional string Predicate = 2;
+}
+
+message TFetchColumnsDetails {
+    repeated string Columns = 1;
+}
+
+message TReserveMemoryDetails {
+    optional TNumericObservation QuotaBytes = 1;
+}
+
+message TFetchingDetails {
+    repeated string Columns = 1;
+    optional TNumericObservation RequestedBytes = 2;
+}
+
+message TStorageReadDetails {
+    optional string StorageId = 1;
+}
+
+message TAssembleDetails {
+    repeated string Columns = 1;
+}
+
+message TDecodeDetails {
+    repeated string Columns = 1;
+    optional string Codec = 2;
+}
+
+enum EIndexCheckerType {
+    CHECKER_UNKNOWN = 0;
+    EQUALS = 1;
+    STARTS_WITH = 2;
+    ENDS_WITH = 3;
+    CONTAINS = 4;
+    LESS = 5;
+    GREATER = 6;
+    LESS_OR_EQUAL = 7;
+    GREATER_OR_EQUAL = 8;
+}
+
+message TIndexCheckDetails {
+    optional TIndexDescription Index = 1;
+    optional uint32 ApplicationOrder = 2;
+    optional EIndexCheckerType CheckerType = 3;
+    optional TBooleanObservation IndexAvailable = 4;
+    optional TBooleanObservation DataAvailable = 5;
+    optional TBooleanObservation Matched = 6;
+    optional TBooleanObservation MaskApplied = 7;
+}
+
+message TCalculationDetails {
+    repeated string Expressions = 1;
+    repeated string InputColumns = 2;
+    repeated string OutputColumns = 3;
+}
+
+message TAggregationDetails {
+    repeated string Keys = 1;
+    repeated string Expressions = 2;
+    repeated string InputColumns = 3;
+    repeated string OutputColumns = 4;
+}
+
+message TProjectionDetails {
+    repeated string Columns = 1;
+    optional uint64 Limit = 2;
+}
+
+message TMergeDetails {
+    repeated string KeyColumns = 1;
+    optional TNumericObservation Sources = 2;
+    optional TNumericObservation Intervals = 3;
+}
+
+enum EPrepareResultAction {
+    PREPARE_RESULT_UNKNOWN = 0;
+    PREPARE_RESULT = 1;
+    BUILD_STAGE_RESULT = 2;
+}
+
+message TPrepareResultDetails {
+    optional EPrepareResultAction Action = 1;
+}
+
+message TBuildResultDetails {
+    repeated string Columns = 1;
+    optional TNumericObservation Batches = 2;
+}
+
+message TOutputDetails {
+    optional uint64 Limit = 1;
+}
+
+message TSendDetails {
+    optional TNumericObservation Batches = 1;
+}
+
+message TAckDetails {
+    optional TNumericObservation GrantedBytes = 1;
+    optional TNumericObservation GrantedBatches = 2;
+}
+
+message TLimitDetails {
+    optional uint64 Limit = 1;
+}
+
+message TReadyDetails {
+    optional TNumericObservation Intervals = 1;
+}
+
+message TFinishDetails {
+}
+
+message TOperation {
+    optional string Key = 1;
+    optional string Name = 2;
+    optional TTabletsDescription Tablets = 3;
+    optional uint64 CallsCount = 4;
+    optional TStatisticsDescription Statistics = 5;
+    optional EMissingReason DetailsMissingReason = 6;
+    oneof details {
+        TReaderDetails Reader = 7;
+        TPreparationDetails Preparation = 8;
+        TPKFilterDetails PKFilter = 9;
+        TIndexFilterDetails IndexFilter = 10;
+        TFilterDetails Filter = 11;
+        TFetchColumnsDetails FetchColumns = 12;
+        TReserveMemoryDetails ReserveMemory = 13;
+        TFetchingDetails Fetching = 14;
+        TStorageReadDetails StorageRead = 15;
+        TAssembleDetails Assemble = 16;
+        TDecodeDetails Decode = 17;
+        TIndexCheckDetails IndexCheck = 18;
+        TCalculationDetails Calculation = 19;
+        TAggregationDetails Aggregation = 20;
+        TProjectionDetails Projection = 21;
+        TMergeDetails Merge = 22;
+        TBuildResultDetails BuildResult = 23;
+        TOutputDetails Output = 24;
+        TSendDetails Send = 25;
+        TAckDetails Ack = 26;
+        TLimitDetails Limit = 27;
+        TReadyDetails Ready = 28;
+        TFinishDetails Finish = 29;
+        TPrepareResultDetails PrepareResult = 30;
+    }
+    // Proto field index capacity for future more details variants.
+    repeated TOperation SubOperations = 50;
+}
+
+message TStageIdentity {
+    optional string QueryExecutionId = 1;
+    optional uint32 PhysicalTxIndex = 2;
+    optional uint32 StageIndex = 3;
+}
+
+message TScanIdentity {
+    optional TStageIdentity Stage = 1;
+    optional uint64 TabletId = 2;
+    optional string ScanAttemptId = 3;
+}
+
+message TStageParticipants {
+    optional TStageIdentity Stage = 1;
+    optional uint64 PlannedTabletsCount = 2;
+}
+
+message TReport {
+    optional TScanIdentity Identity = 1;
+    optional uint64 Sequence = 2;
+    repeated TOperation Operations = 3;
+    repeated TDataSource DataSources = 4;
+    optional EFinality Finality = 5;
+    optional EFinalizationCause FinalizationCause = 6;
+    optional EExecutionOutcome ExecutionOutcome = 7;
+}

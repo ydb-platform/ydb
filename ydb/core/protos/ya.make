@@ -38,6 +38,7 @@ SRCS(
     channel_purpose.proto
     cms.proto
     cluster_state_info.proto
+    columnshard_scan_stats.proto
     compaction.proto
     compile_service_config.proto
     config.proto

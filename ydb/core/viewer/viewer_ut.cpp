@@ -3274,6 +3274,21 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     entry->MutableInfo()->SetBoxId(1);
                     entry->MutableInfo()->SetStoragePoolId(7 + i);
                 }
+            } else if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySetResult) {
+                auto* event = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                auto& resultSet = (*event)->Get()->Request->ResultSet;
+                if (!resultSet.empty() && CanonizePath(resultSet.front().Path) == "/Root") {
+                    // the database owns the only mocked storage pool
+                    TSchemeCacheNavigate::TEntry& entry(resultSet.front());
+                    auto description = MakeIntrusive<TSchemeCacheNavigate::TDomainDescription>();
+                    if (entry.DomainDescription) {
+                        description->Kind = entry.DomainDescription->Kind;
+                        description->Description = entry.DomainDescription->Description;
+                    }
+                    description->Description.ClearStoragePools();
+                    description->Description.AddStoragePools()->SetName("test-pool");
+                    entry.DomainDescription = description;
+                }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -3303,6 +3318,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     TStringBuilder() << fields << filter << "&node_id=" << firstNodeId << ',' << secondNodeId,
                     vslotsAvailable ? groupNodeIds : selectedNodeIds, true);
             }
+            // The storage nodes of a database are the nodes of its storage pools, whether disks are requested or not:
+            // requesting VSlots for the disks must not replace the pool filter of the database.
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                fields + "&database=/Root", vslotsAvailable ? groupNodeIds : allNodeIds, true);
         }
     }
 

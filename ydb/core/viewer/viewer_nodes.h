@@ -1425,7 +1425,11 @@ public:
             FilterStorageStage = EFilterStorageStage::Pools;
         } else if (!FilterGroupIds.empty() || FieldsRequired.test(+ENodeFields::VDisks)) {
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
-            FilterStorageStage = EFilterStorageStage::VSlots;
+            if (FilterStorageStage == EFilterStorageStage::None) {
+                // the storage pools of a database (the Pools stage set above) are resolved first,
+                // the VSlots are processed when the stages get to them
+                FilterStorageStage = EFilterStorageStage::VSlots;
+            }
         }
         if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
             if (!StoragePoolsResponse) {
@@ -2449,6 +2453,12 @@ public:
             DDiskGroupsProcessed = true;
         }
 
+        if (FilterStorageStage == EFilterStorageStage::Pools && FilterStoragePools.empty()) {
+            // The pools were to be taken from the database (all navigate requests are processed by now),
+            // and it gave none: no domain description, or no storage pools of its own.
+            // There is nothing to filter by, so go on without the pool filter instead of waiting forever.
+            FilterStorageStage = VSlotsResponse ? EFilterStorageStage::VSlots : EFilterStorageStage::None;
+        }
         if (FilterStorageStage == EFilterStorageStage::Pools && StoragePoolsResponse && StoragePoolsResponse->IsDone()) {
             if (StoragePoolsResponse->IsOk()) {
                 for (const auto& storagePoolEntry : StoragePoolsResponse->Get()->Record.GetEntries()) {

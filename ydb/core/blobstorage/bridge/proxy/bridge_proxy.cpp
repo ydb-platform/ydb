@@ -1055,8 +1055,11 @@ namespace NKikimr {
                 }
             }
             for (const auto& request : requests) {
-                STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB12, "request restarted as it waits for pile out of data quorum",
-                    (RequestId, request->RequestId), (GroupId, GroupId));
+                YDB_LOG_INFO("Request restarted as it waits for pile out of data quorum",
+                    {"marker", "BPB12"},
+                    {RequestId, request->RequestId},
+                    {GroupId, GroupId});
+
                 for (ui64 cookie : std::exchange(request->CookiesInFlight, {})) {
                     RequestsInFlight.erase(cookie); // the responses of the subrequests are of no use anymore
                 }

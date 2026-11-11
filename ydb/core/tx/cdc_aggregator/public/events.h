@@ -93,7 +93,7 @@ namespace TEvCdcAggregatorService {
     };
 } // namespace TEvCdcAggregatorService
 
-static_assert(TEvCdcAggregator::EvEnd <= TEvCdcAggregatorService::EvWriteHeartbeat,
+static_assert(static_cast<ui32>(TEvCdcAggregator::EvEnd) <= static_cast<ui32>(TEvCdcAggregatorService::EvWriteHeartbeat),
     "Expected TEvCdcAggregator::EvEnd <= TEvCdcAggregatorService::EvWriteHeartbeat");
 
 static_assert(TEvCdcAggregatorService::EvEnd < EventSpaceEnd(TKikimrEvents::ES_CDC_AGGREGATOR),

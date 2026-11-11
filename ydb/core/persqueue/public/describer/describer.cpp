@@ -1,6 +1,5 @@
 #include "describer.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
@@ -52,36 +51,27 @@ public:
         RetryWithSyncVersion = Settings.ForceSyncVersion;
         UsedSyncVersion = Settings.ForceSyncVersion;
 
-        const TString lbRoot = AppData()->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
         for (const auto& topic : TopicPaths) {
-            TString resolvedPath;
-            TString navigateDatabase;
+            std::expected<NNameResolver::TResolvedName, TString> resolved;
             if (Settings.ResolvedPaths) {
-                resolvedPath = CanonizePath(topic);
-                navigateDatabase = DatabasePath;
-                if (auto target = NNameResolver::TryFederationAccountTarget(resolvedPath, lbRoot)) {
-                    resolvedPath = target->Path;
-                    navigateDatabase = target->AccountDatabase;
-                }
+                resolved = NNameResolver::ResolveSchemePath(DatabasePath, topic);
             } else {
-                auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
-                if (!resolved) {
-                    LOG_D("Name resolve failed",
-                        {"topic", topic},
-                        {"reason", resolved.error()});
-                    SetErrorResult(topic, EStatus::BadRequest);
-                    continue;
-                }
-                resolvedPath = resolved->Path;
-                navigateDatabase = resolved->NavigateDatabase;
+                resolved = NNameResolver::ResolveName(DatabasePath, topic);
+            }
+            if (!resolved) {
+                LOG_D("Name resolve failed",
+                    {"topic", topic},
+                    {"reason", resolved.error()});
+                SetErrorResult(topic, EStatus::BadRequest);
+                continue;
             }
             LOG_D("Name resolved",
                 {"topic", topic},
-                {"resolvedPath", resolvedPath},
-                {"navigateDatabase", navigateDatabase},
+                {"resolvedPath", resolved->Path},
+                {"navigateDatabase", resolved->NavigateDatabase},
                 {"resolvedPaths", Settings.ResolvedPaths});
-            PathToOriginalPaths[resolvedPath].push_back(topic);
-            PendingByDatabase[navigateDatabase].insert(resolvedPath);
+            PathToOriginalPaths[resolved->Path].push_back(topic);
+            PendingByDatabase[resolved->NavigateDatabase].insert(resolved->Path);
         }
 
         if (PendingByDatabase.empty()) {

@@ -495,6 +495,28 @@ SELECT
 
 ### Variant over a tuple
 
+#### Tuple: several values together
+
+A tuple (`Tuple`) combines several values into one. For example, you can pass a user ID and a name together as a single record:
+
+```yql
+$user = (42, "Alice");
+
+SELECT
+    $user.0 AS user_id,    -- 42
+    $user.1 AS user_name;  -- "Alice"
+```
+
+`$user` holds both the number `42` and the string `"Alice"` at the same time. The parentheses create a tuple, and the order of the values determines their indexes: `.0` accesses the first element and `.1` accesses the second. Indexes start at zero.
+
+`AS user_id` and `AS user_name` name the result columns. These names were chosen for the example: the tuple elements themselves have indexes, not these names.
+
+Tuple elements can have different types. For example, `Tuple<Int32, String>` describes a tuple with two elements: an `Int32` number followed by a `String` value. This is a type description, while `(42, "Alice")` creates a concrete value.
+
+#### Variant: one of the allowed values
+
+Use a tuple when you need all the values at once. To store either a number or a string, use `Variant`.
+
 `Variant` lets a variable hold a value of one of several predefined types. For example, a worker thread count setting could contain the number `8` or the string `"auto"`. The number specifies how many threads to use, while `"auto"` tells the application to choose automatically. This is an example of an application setting, not a built-in YDB setting.
 
 The type `Variant<Int32, String>` can represent this value. It holds either a number or a string, along with an index identifying the selected type. The allowed choices are called alternatives and are numbered from zero: `0` corresponds to `Int32`, and `1` corresponds to `String`.

@@ -1,6 +1,6 @@
   * общие параметры для всех векторных индексов:
     * `vector_dimension` - размерность вектора эмбеддинга (значение от 1 до 65536);
-    * `vector_type` - тип значений вектора (`float`, [float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format), [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format), `uint8`, `int8` или `bit`);
+    * `vector_type` - тип значений вектора (`float`, [float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format), [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format), [`float8_e4m3`](../../udf/list/knn.md#fp8-formats), [`float8_e5m2`](../../udf/list/knn.md#fp8-formats), `uint8`, `int8` или `bit`);
     * `distance` - [функция расстояния](../../udf/list/knn.md#functions-distance) (`cosine`, `manhattan` или `euclidean`), взаимосключающий с `similarity`;
     * `similarity` - [функция схожести](../../udf/list/knn.md#functions-distance) (`inner_product` или `cosine`), взаимосключающий с `distance`;
   * специфичные параметры для `vector_kmeans_tree`{% if backend_name == "YDB" and oss == true %} ([подробнее о типе индекса](../../../../dev/vector-indexes.md#kmeans-tree-type)){% endif %}:

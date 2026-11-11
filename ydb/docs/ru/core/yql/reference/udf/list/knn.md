@@ -40,7 +40,7 @@
 
 {% note info %}
 
-В настоящий момент {{ ydb-short-name }} не поддерживает хранение `Tagged` типов и поэтому перед сохранением бинарного представления векторов нужно извлечь `String` с помощью функции [Untag](../../builtins/basic#as-tagged).
+В настоящий момент {{ ydb-short-name }} не поддерживает хранение `Tagged` типов и поэтому перед сохранением бинарного представления векторов нужно извлечь `String` с помощью функции [Untag](../../builtins/basic.md#as-tagged).
 
 {% endnote %}
 
@@ -54,6 +54,8 @@
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
 Knn::ToBinaryStringFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "Float16Vector">
 Knn::ToBinaryStringBFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "BFloat16Vector">
+Knn::ToBinaryStringFloat8E4M3(List<Float>{Flags:AutoMap})->Tagged<String, "Float8E4M3Vector">
+Knn::ToBinaryStringFloat8E5M2(List<Float>{Flags:AutoMap})->Tagged<String, "Float8E5M2Vector">
 Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
 Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
 Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
@@ -74,6 +76,8 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
   - `3` — `Int8` (1 байт на элемент);
   - `4` — `Float16` (2 байта на элемент, [IEEE-754 binary16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format));
   - `5` — `BFloat16` (2 байта на элемент, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format));
+  - `6`: `Float8E4M3` (1 байт на элемент, E4M3FN);
+  - `7`: `Float8E5M2` (1 байт на элемент, E5M2);
   - `10` — `Bit` (1 бит на элемент).
 
 Например, вектор из 5 элементов типа `Float` сериализуется в строку длиной 21 байт: 4 байта × 5 элементов (основная часть) + 1 байт (тип) = 21 байт.
@@ -85,6 +89,23 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 `ToBinaryStringFloat16` и `ToBinaryStringBFloat16` округляют координаты `Float` до ближайшего представимого значения, при равенстве расстояний — до чётного. `FloatFromBinaryString` преобразует их обратно в `Float`. Для векторных индексов с такими форматами укажите `vector_type=float16` или `vector_type=bfloat16`.
 
 `ToBinaryStringBit` преобразует в `1` все координаты, которые больше `0`. Остальные координаты преобразуются в `0`.
+
+#### Форматы FP8 {#fp8-formats}
+
+FP8 хранит каждую координату с плавающей точкой в одном байте. `ToBinaryStringFloat8E4M3` и `ToBinaryStringFloat8E5M2` преобразуют `List<Float>` в следующие форматы без применения масштабного коэффициента:
+
+| Тип вектора | Формат | Биты экспоненты | Биты мантиссы | Максимальное конечное значение по модулю |
+| --- | --- | --- | --- | --- |
+| `Float8E4M3` | E4M3FN | 4 | 3 | 448 |
+| `Float8E5M2` | E5M2 | 5 | 2 | 57344 |
+
+E4M3FN обеспечивает большую точность, а E5M2 поддерживает более широкий диапазон значений. Эти форматы используют кодировки, отличающиеся от вариантов FNUZ. Оба формата поддерживают знаковый ноль, субнормальные значения и NaN. В E4M3FN нет представления бесконечности, а в E5M2 оно есть.
+
+Обе функции преобразования округляют до ближайшего представимого значения, при равенстве расстояний выбирается чётное. При переполнении и для бесконечностей результат ограничивается максимальным конечным значением с тем же знаком. Входные NaN преобразуются в каноническое представление NaN. `FloatFromBinaryString` декодирует оба формата в `List<Float>` с квантованными координатами, не восстанавливая исходную точность.
+
+Для векторных индексов с такими форматами укажите `vector_type="float8_e4m3"` или `vector_type="float8_e5m2"`. Сериализуйте векторы запросов в тот же формат, что и хранимые векторы. Все функции расстояния и сходства поддерживают оба формата и выполняют вычисления в `Float`.
+
+По сравнению с `Float`, FP8 сокращает объём хранения координат в четыре раза без учёта служебных данных сериализации. Перед выбором формата измерьте точность/полноту поиска на своих данных.
 
 ### Функции расстояния и сходства {#functions-distance}
 
@@ -121,7 +142,7 @@ Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 
 {% note info %}
 
-Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Float8E4M3Vector">`, `Tagged<String, "Float8E5M2Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
 
 Если оба аргумента `Tagged`, то значение тега должно совпадать, иначе запрос завершится с ошибкой.
 
@@ -278,7 +299,18 @@ $facts = AsList(
 
 ML модель может выполнять квантование или это можно сделать вручную с помощью YQL.
 
-Ниже приведен пример квантования в YQL.
+Ниже приведены примеры квантования в FP8 и `Int8` на YQL.
+
+#### Float -> FP8 {#approximate-vector-search-scalar-quantization-fp8}
+
+Функции преобразования в FP8 позволяют напрямую квантовать координаты с плавающей точкой. В этом примере значение `1.0625` округляется до `1.0` в E4M3FN, после чего вектор декодируется обратно в `Float`:
+
+```yql
+$vector = Knn::ToBinaryStringFloat8E4M3([1.0625f, 2.0f]);
+SELECT Knn::FloatFromBinaryString($vector); -- [1.0, 2.0]
+```
+
+Для использования E5M2 замените `ToBinaryStringFloat8E4M3` на `ToBinaryStringFloat8E5M2`. Перед сохранением сериализованного вектора в колонку `String` вызовите `Untag($vector, "Float8E4M3Vector")` или `Untag($vector, "Float8E5M2Vector")` соответственно.
 
 #### Float -> Int8 {#approximate-vector-search-scalar-quantization-map}
 

@@ -1,6 +1,6 @@
   * common parameters for all vector indexes:
     * `vector_dimension` - embedding vector dimensionality (should be between 1 and 65536)
-    * `vector_type` - vector value type (`float`, [float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format), [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format), `uint8`, `int8`, or `bit`)
+    * `vector_type` - vector value type (`float`, [float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format), [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format), [`float8_e4m3`](../../udf/list/knn.md#fp8-formats), [`float8_e5m2`](../../udf/list/knn.md#fp8-formats), `uint8`, `int8`, or `bit`)
     * `distance` - [distance function](../../../reference/udf/list/knn.md#functions-distance) (`cosine`, `manhattan`, or `euclidean`), mutually exclusive with `similarity`
     * `similarity` - [similarity function](../../../reference/udf/list/knn.md#functions-distance) (`inner_product` or `cosine`), mutually exclusive with `distance`
   * specific parameters for `vector_kmeans_tree` ([read more about the index type](../../../../dev/vector-indexes.md#kmeans-tree-type)):

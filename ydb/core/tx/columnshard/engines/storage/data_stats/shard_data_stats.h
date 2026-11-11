@@ -31,10 +31,10 @@ private:
     const std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     const ui64 TabletId;
     const TEngineLogsCounters Counters;
-    ui64 SmallBlobThresholdBytes = 0;
 
     THashMap<TInternalPathId, TGranuleDataStats> Granules;
-    TGranuleDataStats Total;
+    THashMap<TString, TStorageStats> StorageStats;
+    THashMap<TString, ui64> SmallBlobThresholds;
     // RAM taken by the metadata of the shard's portions; writes are rejected when the sum over all shards reaches a limit
     i64 PortionsMetadataRamBytes = 0;
     static inline TAtomicCounter AllShardsPortionsMetadataRamBytes = 0;
@@ -47,19 +47,17 @@ private:
 
     const std::optional<TBlobStorageGroupType>& GetBlobStorageLayout();
     ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
+    ui64 GetSmallBlobThreshold(const TString& storageId);
 
 public:
     TShardDataStats(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
     ~TShardDataStats();
 
-    void SetSmallBlobThresholdBytes(const ui64 value) {
-        SmallBlobThresholdBytes = value;
-    }
-
     void AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
     void RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
 
-    const TGranuleDataStats& GetGranule(const TInternalPathId pathId) const;
+    const TGranuleDataStats& GetGranuleStats(const TInternalPathId pathId) const;
+    const TStorageStats& GetStorageStats(const TString& storageId) const;
     bool HasSchemaVersion(const ui64 fromVersion, const ui64 version) const;
 
     static ui64 GetAllShardsPortionsMetadataRamBytes() {
@@ -70,7 +68,7 @@ public:
     // also counts the small blobs waiting for deletion
     void FillTotalTableStats(NKikimrTableStats::TTableStats& tableStats);
     void UpdateTabletCounters(const TTabletCountersHandle& counters) const;
-    ui64 GetStorageBytes() const;
+    ui64 GetBlobStorageBytes() const;
 };
 
 }   // namespace NKikimr::NColumnShard

@@ -167,9 +167,8 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     YDB_LOG_VERIFY(PrioritiesAllocationGuard);
     TBase::DoStart(self);
-    auto& g = *GranuleMeta;
-    self.Counters.GetCSCounters().OnSplitCompactionInfo(
-        g.GetDataStats().GetActiveCompacted().GetBlobBytes(), g.GetDataStats().GetActiveCompacted().GetCount());
+    const TSimplePortionsGroupInfo compacted = GranuleMeta->GetDataStats().GetCompacted();
+    self.Counters.GetCSCounters().OnSplitCompactionInfo(compacted.GetBlobBytes(), compacted.GetCount());
 }
 
 NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

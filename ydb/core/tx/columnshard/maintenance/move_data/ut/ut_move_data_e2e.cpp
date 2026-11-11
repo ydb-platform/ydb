@@ -12,6 +12,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/maintenance/move_data/move_data.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
@@ -68,7 +69,7 @@ const TEvPrivate::TEvWriteIndex* AsWriteIndex(IEventHandle::TPtr& ev) {
 // The runtime drops scheduled events unless the recipient opted in, and the driver's cadence is a Schedule: without this it never ticks.
 static void DeliverMoveDataWakeups(TTestBasicRuntime& runtime) {
     runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
-        if (event->GetTypeRewrite() == TEvPrivate::EvMoveDataWakeup) {
+        if (event->HasEvent() && dynamic_cast<const TEvMoveData::TEvWakeup*>(event->GetBase())) {
             return false;
         }
         return TTestActorRuntime::DefaultScheduledFilterFunc(r, event, delay, deadline);
@@ -385,13 +386,13 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.StartMove();
         TActorId driver;
         f.Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->HasEvent() && (dynamic_cast<const TEvPrivate::TEvMoveDataWakeup*>(ev->GetBase()) ||
-                                      dynamic_cast<const TEvPrivate::TEvMoveDataPoke*>(ev->GetBase()))) {
+            if (ev->HasEvent() &&
+                (dynamic_cast<const TEvMoveData::TEvWakeup*>(ev->GetBase()) || dynamic_cast<const TEvMoveData::TEvPoke*>(ev->GetBase()))) {
                 driver = ev->GetRecipientRewrite();
             }
             // Delivered before the tablet handles its death: the poke lands ahead of the poison from CleanupActors.
             if (ev->GetTypeRewrite() == TEvTablet::EvTabletDead && driver) {
-                f.Runtime.Send(new IEventHandle(driver, f.Sender, new TEvPrivate::TEvMoveDataPoke()));
+                f.Runtime.Send(new IEventHandle(driver, f.Sender, new TEvMoveData::TEvPoke()));
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -422,8 +423,8 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         bool holdMetadata = true;
         bool injected = false;
         f.Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->HasEvent() && (dynamic_cast<const TEvPrivate::TEvMoveDataWakeup*>(ev->GetBase()) ||
-                                      dynamic_cast<const TEvPrivate::TEvMoveDataPoke*>(ev->GetBase()))) {
+            if (ev->HasEvent() &&
+                (dynamic_cast<const TEvMoveData::TEvWakeup*>(ev->GetBase()) || dynamic_cast<const TEvMoveData::TEvPoke*>(ev->GetBase()))) {
                 driver = ev->GetRecipientRewrite();
             }
             if (holdMetadata && ev->HasEvent() && dynamic_cast<const TEvPrivate::TEvMetadataAccessorsInfo*>(ev->GetBase())) {
@@ -614,8 +615,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         bool holdGate = false;
         auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
             if (holdGate && ev->HasEvent() &&
-                (dynamic_cast<const TEvPrivate::TEvMoveDataWakeup*>(ev->GetBase()) ||
-                    dynamic_cast<const TEvPrivate::TEvMoveDataPoke*>(ev->GetBase()))) {
+                (dynamic_cast<const TEvMoveData::TEvWakeup*>(ev->GetBase()) || dynamic_cast<const TEvMoveData::TEvPoke*>(ev->GetBase()))) {
                 heldGateEvents.emplace_back(ev.Release());
                 return;
             }

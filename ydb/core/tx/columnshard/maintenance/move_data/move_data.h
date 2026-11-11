@@ -1,13 +1,16 @@
 #pragma once
 
-#include "columnshard_private_events.h"
-
-#include "resource_subscriber/task.h"
-
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/queue_sizes.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+
+#include <util/generic/hash_set.h>
+#include <util/generic/refcount.h>
+
+#include <memory>
 
 namespace NKikimrTabletBase {
 class TEvMoveData;
@@ -16,6 +19,22 @@ class TEvMoveData;
 namespace NKikimr::NColumnShard {
 
 class TColumnShard;
+
+struct TEvMoveData {
+    enum EEv {
+        EvWakeup = EventSpaceBegin(TEvents::ES_PRIVATE),
+        EvPoke,
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE));
+
+    // The move's own cadence, so it no longer rides the tablet's periodic wakeup.
+    struct TEvWakeup: public NActors::TEventLocal<TEvWakeup, EvWakeup> {};
+
+    // Run one driver turn now instead of waiting for the cadence tick.
+    struct TEvPoke: public NActors::TEventLocal<TEvPoke, EvPoke> {};
+};
 
 // The driver and tablet share a mailbox; synchronous admission precedes queued gate checks.
 class TMoveDataDriver: public TActorBootstrapped<TMoveDataDriver> {
@@ -36,7 +55,7 @@ private:
     static constexpr TDuration Cadence = TDuration::Seconds(5);
 
     void ScheduleWakeup(const TActorContext& ctx) {
-        ctx.Schedule(Cadence, new TEvPrivate::TEvMoveDataWakeup());
+        ctx.Schedule(Cadence, new TEvMoveData::TEvWakeup());
     }
 
     void AcceptRequest(const TActorId& sender, const THashSet<ui32>& requested, const TActorContext& ctx);
@@ -48,8 +67,8 @@ private:
     void StartPortionRewrites();
     void RunMigrationStep(const TActorContext& ctx);
 
-    void Handle(TEvPrivate::TEvMoveDataWakeup::TPtr&, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvMoveDataPoke::TPtr&, const TActorContext& ctx);
+    void Handle(TEvMoveData::TEvWakeup::TPtr&, const TActorContext& ctx);
+    void Handle(TEvMoveData::TEvPoke::TPtr&, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx);
 
 public:
@@ -68,8 +87,8 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPrivate::TEvMoveDataWakeup, Handle);
-            HFunc(TEvPrivate::TEvMoveDataPoke, Handle);
+            HFunc(TEvMoveData::TEvWakeup, Handle);
+            HFunc(TEvMoveData::TEvPoke, Handle);
             HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:

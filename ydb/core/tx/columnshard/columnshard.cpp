@@ -1,5 +1,4 @@
 #include "columnshard_impl.h"
-#include "columnshard_move_data.h"
 
 #include "bg_tasks/manager/manager.h"
 #include "blobs_reader/actor.h"
@@ -7,6 +6,7 @@
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor2.h"
 #include "hooks/abstract/abstract.h"
+#include "maintenance/move_data/move_data.h"
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
 

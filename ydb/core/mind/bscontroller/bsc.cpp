@@ -14,7 +14,6 @@
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
-#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
@@ -424,20 +423,9 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
     }
 
-    if (Loaded && prevStorageConfig) {
-        const auto& previous = prevStorageConfig->GetBlobStorageConfig().GetStoragePoolPileOverrides();
-        const auto& current = StorageConfig->GetBlobStorageConfig().GetStoragePoolPileOverrides();
-        if (!std::equal(previous.begin(), previous.end(), current.begin(), current.end(), [](const auto& a, const auto& b) {
-                return google::protobuf::util::MessageDifferencer::Equals(a, b);
-            })) {
-            for (auto& [groupId, group] : GroupMap) {
-                group->CalculateLayoutStatus(this, group->Topology.get(), [&] {
-                    return TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
-                        GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
-                });
-            }
-            InitializeSelfHealState();
-        }
+    if (Loaded) {
+        // goes before any other transaction this config makes BSC issue, so they follow the overrides adopted from it
+        UpdatePileOverrides();
     }
 
     if (!isFirstStorageConfig) {
@@ -870,6 +858,19 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
             }
             // the transaction replies when it is done
             Execute(CreateTxValidateRemoveBridgePile(pileId, std::exchange(h, {})));
+            return;
+        }
+
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateBridgeRollback: {
+            const auto pileId = TBridgePileId::FromProto(&record,
+                &NKikimrBlobStorage::TEvControllerDistconfRequest::GetBridgePileId);
+            if (!BridgeInfo || !BridgeInfo->FindPile(pileId)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("unknown pile");
+                break;
+            }
+            // the transaction replies when it is done
+            Execute(CreateTxValidateBridgeRollback(pileId, std::exchange(h, {})));
             return;
         }
 

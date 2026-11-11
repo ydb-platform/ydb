@@ -107,6 +107,8 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Bridge.AddPile", ERequestType::BRIDGE_ADDPILE},
     {"Bridge.RemovePile", ERequestType::BRIDGE_REMOVEPILE},
     {"Bridge.SetDatabaseBridgeMode", ERequestType::BRIDGE_SETDATABASEBRIDGEMODE},
+    {"Bridge.GetRollbackStatus", ERequestType::BRIDGE_GETROLLBACKSTATUS},
+    {"Bridge.Rollback", ERequestType::BRIDGE_ROLLBACK},
 };
 
 extern const THashSet<ERequestType> NoDefaultSamplingRequestTypes = {

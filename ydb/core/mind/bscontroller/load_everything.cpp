@@ -101,6 +101,9 @@ public:
                 Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
                 Self->BridgeSyncTotalRate = state.GetValue<T::BridgeSyncTotalRate>();
                 Self->BridgeSyncMaxSyncers = state.GetValue<T::BridgeSyncMaxSyncers>();
+                if (state.HaveValue<T::AppliedPileOverrides>()) {
+                    Self->AppliedPileOverrides = state.GetValue<T::AppliedPileOverrides>();
+                }
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;

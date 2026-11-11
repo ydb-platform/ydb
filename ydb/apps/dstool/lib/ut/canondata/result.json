@@ -1,0 +1,23 @@
+{
+    "test_group_slots_balance.test_group_slots_canonical[balanced]": {
+        "uri": "file://test_group_slots_balance.test_group_slots_canonical_balanced_/balance.json"
+    },
+    "test_group_slots_balance.test_group_slots_canonical[dry_run]": {
+        "uri": "file://test_group_slots_balance.test_group_slots_canonical_dry_run_/balance.json"
+    },
+    "test_group_slots_balance.test_group_slots_canonical[full]": {
+        "uri": "file://test_group_slots_balance.test_group_slots_canonical_full_/balance.json"
+    },
+    "test_group_slots_balance.test_group_slots_canonical[move]": {
+        "uri": "file://test_group_slots_balance.test_group_slots_canonical_move_/balance.json"
+    },
+    "test_group_slots_balance.test_group_slots_canonical[rejected]": {
+        "uri": "file://test_group_slots_balance.test_group_slots_canonical_rejected_/balance.json"
+    },
+    "test_group_slots_balance.test_group_slots_canonical[retry]": {
+        "uri": "file://test_group_slots_balance.test_group_slots_canonical_retry_/balance.json"
+    },
+    "test_group_slots_balance.test_group_slots_canonical[unhealthy]": {
+        "uri": "file://test_group_slots_balance.test_group_slots_canonical_unhealthy_/balance.json"
+    }
+}

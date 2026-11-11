@@ -6,8 +6,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/interconnect/events_local.h>
-#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/address/interconnect_address.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <ydb/core/audit/audit_log.h>
@@ -18,9 +17,10 @@ namespace {
 
 class THeartbeatActor : public NActors::TActorBootstrapped<THeartbeatActor> {
 public:
-    explicit THeartbeatActor(const TAuditConfig& auditConfig)
+    explicit THeartbeatActor(const TAuditConfig& auditConfig, TNetworkInterfacesProvider networkInterfacesProvider)
         : HeartbeatInterval(GetInterval(auditConfig))
         , EnableLogging(auditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::AuditHeartbeat, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed, NACLibProto::SUBJECT_TYPE_ANONYMOUS))
+        , NetworkInterfacesProvider(std::move(networkInterfacesProvider))
     {
     }
 
@@ -35,39 +35,39 @@ public:
             return;
         }
 
-        Become(&THeartbeatActor::StateResolveAddress);
-        Send(NActors::GetNameserviceActorId(),
-            new NActors::TEvInterconnect::TEvResolveNode(SelfId().NodeId(),
-                NActors::TActivationContext::Monotonic() + TDuration::Seconds(5)),
-            NActors::IEventHandle::FlagTrackDelivery);
-    }
-
-    void Handle(NActors::TEvLocalNodeInfo::TPtr& ev) {
-        for (const auto& address : ev->Get()->Addresses) {
-            const TString ip = address.GetAddress();
-            if (ip && ip != "0.0.0.0" && ip != "::") {
-                NodeAddress = ip;
-                break;
-            }
-        }
-        StartHeartbeat();
-    }
-
-    void StartHeartbeat() {
         Become(&THeartbeatActor::StateFunc);
         PerformHeartbeat();
     }
 
-    STRICT_STFUNC(StateResolveAddress,
-        hFunc(NActors::TEvLocalNodeInfo, Handle)
-        sFunc(NActors::TEvResolveError, StartHeartbeat)
-        sFunc(NActors::TEvents::TEvUndelivered, StartHeartbeat)
-    )
+    TString GetNodeAddress() const {
+        TString ipv6;
+        for (const auto& interface : NetworkInterfacesProvider()) {
+            if (!interface.Address || NAddr::IsLoopback(*interface.Address)) {
+                continue;
+            }
+            const NInterconnect::TAddress address(*interface.Address);
+            if (address.IsLinkLocal()) {
+                continue;
+            }
+            const TString ip = address.GetAddress();
+            if (ip.empty() || ip == "0.0.0.0" || ip == "::") {
+                continue;
+            }
+            if (address.GetFamily() == AF_INET) {
+                return ip;
+            }
+            if (ipv6.empty()) {
+                ipv6 = ip;
+            }
+        }
+        return ipv6.empty() ? TString("{none}") : ipv6;
+    }
 
     void HeartbeatLog() {
+        const TString nodeAddress = GetNodeAddress();
         AUDIT_LOG(
             AUDIT_PART("component", "audit-service")
-            AUDIT_PART("remote_address", NodeAddress)
+            AUDIT_PART("remote_address", nodeAddress)
             AUDIT_PART("subject", "metadata@system")
             AUDIT_PART("sanitized_token", "{none}")
             AUDIT_PART("operation", "HEARTBEAT")
@@ -92,13 +92,14 @@ public:
 private:
     const TDuration HeartbeatInterval;
     const bool EnableLogging;
-    TString NodeAddress = "{none}";
+    const TNetworkInterfacesProvider NetworkInterfacesProvider;
 };
 
 }
 
-std::unique_ptr<NActors::IActor> CreateHeartbeatActor(const TAuditConfig& auditConfig) {
-    return std::make_unique<THeartbeatActor>(auditConfig);
+std::unique_ptr<NActors::IActor> CreateHeartbeatActor(const TAuditConfig& auditConfig,
+        TNetworkInterfacesProvider networkInterfacesProvider) {
+    return std::make_unique<THeartbeatActor>(auditConfig, std::move(networkInterfacesProvider));
 }
 
 } // namespace NKikimr::NAudit

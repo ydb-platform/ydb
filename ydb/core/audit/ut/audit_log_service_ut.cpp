@@ -5,7 +5,7 @@
 #include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/address/interconnect_address.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/logger/stream.h>
@@ -127,18 +127,9 @@ public:
         return LogQueue->Pop();
     }
 
-    NActors::TActorId MakeHeartbeatActor(const TAuditConfig& auditConfig, const TString& nodeAddress,
-            const TString& resolveHost = {}, bool nameserviceAvailable = true) {
-        if (nameserviceAvailable) {
-            auto setup = MakeIntrusive<NActors::TTableNameserverSetup>();
-            if (nodeAddress || resolveHost) {
-                setup->StaticNodeTable[Runtime.GetNodeId()] = NActors::TTableNameserverSetup::TNodeInfo(
-                    nodeAddress, resolveHost, resolveHost, 2135, NActors::TNodeLocation());
-            }
-            Runtime.RegisterService(NActors::GetNameserviceActorId(),
-                Runtime.Register(NActors::CreateNameserverTable(setup)));
-        }
-        auto actor = CreateHeartbeatActor(auditConfig);
+    NActors::TActorId MakeHeartbeatActor(const TAuditConfig& auditConfig,
+            TNetworkInterfacesProvider networkInterfacesProvider) {
+        auto actor = CreateHeartbeatActor(auditConfig, std::move(networkInterfacesProvider));
         return Runtime.Register(actor.release());
     }
 
@@ -253,8 +244,19 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
 }
 
 Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
-    void CheckHeartbeat(const TString& nodeAddress, const TString& expectedAddress,
-            const TString& resolveHost = {}, bool nameserviceAvailable = true) {
+    NAddr::TNetworkInterfaceList MakeInterfaces(std::initializer_list<TString> addresses) {
+        NAddr::TNetworkInterfaceList interfaces;
+        for (const auto& ip : addresses) {
+            const NInterconnect::TAddress address(ip, 2135);
+            NAddr::TNetworkInterface interface;
+            interface.Address = new NAddr::TOpaqueAddr(address.SockAddr());
+            interfaces.push_back(std::move(interface));
+        }
+        return interfaces;
+    }
+
+    void CheckHeartbeat(TNetworkInterfacesProvider networkInterfacesProvider,
+            std::initializer_list<TString> expectedAddresses) {
         NKikimrConfig::TAuditConfig protoCfg;
         protoCfg.MutableHeartbeat()->SetIntervalSeconds(1);
         auto* logClassSettings = protoCfg.AddLogClassConfig();
@@ -262,9 +264,9 @@ Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
         logClassSettings->SetEnableLogging(true);
         TAuditConfig cfg(protoCfg);
         TTestAuditLogService test(NKikimrConfig::TAuditConfig::TXT);
-        const auto heartbeatId = test.MakeHeartbeatActor(cfg, nodeAddress, resolveHost, nameserviceAvailable);
+        const auto heartbeatId = test.MakeHeartbeatActor(cfg, std::move(networkInterfacesProvider));
 
-        auto waitAndCheckLog = [&]() {
+        for (const auto& expectedAddress : expectedAddresses) {
             const TString log = test.WaitAuditLog();
             UNIT_ASSERT_STRING_CONTAINS(log, "component=audit-service");
             UNIT_ASSERT_STRING_CONTAINS(log, "remote_address=" + expectedAddress + ",");
@@ -273,11 +275,12 @@ Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
             UNIT_ASSERT_STRING_CONTAINS(log, "operation=HEARTBEAT");
             UNIT_ASSERT_STRING_CONTAINS(log, "status=SUCCESS");
             UNIT_ASSERT_STRING_CONTAINS(log, "node_id=" + ToString(heartbeatId.NodeId()));
-        };
+        }
+    }
 
-        waitAndCheckLog();
-        waitAndCheckLog();
-        waitAndCheckLog();
+    void CheckHeartbeat(std::initializer_list<TString> addresses, const TString& expectedAddress) {
+        CheckHeartbeat([interfaces = MakeInterfaces(addresses)] { return interfaces; },
+            {expectedAddress, expectedAddress, expectedAddress});
     }
 
     Y_UNIT_TEST(LoggingHeartbeat) {
@@ -285,28 +288,30 @@ Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
     }
 
     Y_UNIT_TEST(LoggingHeartbeatIPv4) {
-        CheckHeartbeat("192.0.2.10", "192.0.2.10");
+        CheckHeartbeat({"192.0.2.10"}, "192.0.2.10");
     }
 
     Y_UNIT_TEST(LoggingHeartbeatIPv6) {
-        CheckHeartbeat("2001:db8::10", "2001:db8::10");
+        CheckHeartbeat({"2001:db8::10"}, "2001:db8::10");
     }
 
-    Y_UNIT_TEST(LoggingHeartbeatWildcardIPv4) {
-        CheckHeartbeat("0.0.0.0", "{none}");
+    Y_UNIT_TEST(LoggingHeartbeatPrefersIPv4) {
+        CheckHeartbeat({"2001:db8::10", "192.0.2.10"}, "192.0.2.10");
     }
 
-    Y_UNIT_TEST(LoggingHeartbeatWildcardIPv6) {
-        CheckHeartbeat("::", "{none}");
+    Y_UNIT_TEST(LoggingHeartbeatSkipsSpecialAddresses) {
+        CheckHeartbeat({"127.0.0.1", "::1", "0.0.0.0", "::", "169.254.1.1", "fe80::1", "2001:db8::10"},
+            "2001:db8::10");
     }
 
-    Y_UNIT_TEST(LoggingHeartbeatResolveError) {
-        // There is no DNS resolver in this runtime; nameservice reports an error.
-        CheckHeartbeat({}, "{none}", "unresolvable.invalid");
+    Y_UNIT_TEST(LoggingHeartbeatOnlySpecialAddresses) {
+        CheckHeartbeat({"127.0.0.1", "::1", "0.0.0.0", "::", "169.254.1.1", "fe80::1"}, "{none}");
     }
 
-    Y_UNIT_TEST(LoggingHeartbeatWithoutNameservice) {
-        CheckHeartbeat({}, "{none}", {}, false);
+    Y_UNIT_TEST(LoggingHeartbeatRecoversInterfaceAddress) {
+        CheckHeartbeat([calls = 0, interfaces = MakeInterfaces({"192.0.2.10"})]() mutable {
+            return calls++ == 0 ? NAddr::TNetworkInterfaceList() : interfaces;
+        }, {"{none}", "192.0.2.10", "192.0.2.10"});
     }
 }
 

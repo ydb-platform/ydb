@@ -28,6 +28,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/psutil
     ydb/tests/library
     ydb/tests/library/fixtures
     ydb/tests/oss/ydb_sdk_import

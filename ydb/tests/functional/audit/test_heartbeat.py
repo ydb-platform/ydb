@@ -4,6 +4,7 @@ import socket
 import time
 import unittest
 
+import psutil
 import requests
 
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
@@ -49,20 +50,22 @@ class TestHeartbeat(unittest.TestCase):
         info, = response.json()['SystemStateInfo']
         return int(info['NodeId']), info['Host']
 
-    def connected_addresses(self, host, port, family):
-        # Obtain the peer IP from real connections to ydbd, independently of audit/config.
-        addresses = set()
-        for af, socktype, proto, _, endpoint in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-            with socket.socket(af, socktype, proto) as connection:
-                connection.settimeout(10)
-                connection.connect(endpoint)
-                addresses.add(ipaddress.ip_address(connection.getpeername()[0]))
-        self.assertTrue(addresses)
-        return addresses
+    def local_addresses(self):
+        # Inspect the host independently of the audit log and the node's nameservice config.
+        addresses = {4: set(), 6: set()}
+        for interface_addresses in psutil.net_if_addrs().values():
+            for interface_address in interface_addresses:
+                if interface_address.family not in (socket.AF_INET, socket.AF_INET6):
+                    continue
+                address = ipaddress.ip_address(interface_address.address.split('%', 1)[0])
+                if address.is_loopback or address.is_link_local or address.is_unspecified:
+                    continue
+                addresses[address.version].add(address)
+        return addresses[4] or addresses[6]
 
-    def check_heartbeat(self, cluster, node, host, family):
+    def check_heartbeat(self, cluster, node):
         node_id, _ = self.node_identity(node)
-        addresses = self.connected_addresses(host, node.ic_port, family)
+        addresses = self.local_addresses()
         deadline = time.monotonic() + plain_or_under_sanitizer(30, 120)
         records = []
         while time.monotonic() < deadline:
@@ -82,22 +85,29 @@ class TestHeartbeat(unittest.TestCase):
         for record in records:
             self.assertEqual(record['component'], 'audit-service')
             self.assertEqual(record['status'], 'SUCCESS')
-            self.assertIn(ipaddress.ip_address(record['remote_address']), addresses, record)
+            if not addresses:
+                self.assertEqual(record['remote_address'], '{none}')
+                continue
+            address = ipaddress.ip_address(record['remote_address'])
+            self.assertIn(address, addresses, record)
+            # Also verify the address against a real TCP connection to this ydbd.
+            with socket.create_connection((str(address), node.port), timeout=10) as connection:
+                self.assertEqual(ipaddress.ip_address(connection.getpeername()[0]), address)
 
     def test_static_node_ipv4(self):
         cluster = self.start_cluster(socket.AF_INET)
         node = cluster.nodes[1]
-        self.check_heartbeat(cluster, node, node.host, socket.AF_INET)
+        self.check_heartbeat(cluster, node)
 
     def test_static_node_ipv6(self):
         cluster = self.start_cluster(socket.AF_INET6)
         node = cluster.nodes[1]
-        self.check_heartbeat(cluster, node, node.host, socket.AF_INET6)
+        self.check_heartbeat(cluster, node)
 
     def test_static_node_hostname(self):
         cluster = self.start_cluster(hostname_only=True)
         node = cluster.nodes[1]
-        self.check_heartbeat(cluster, node, node.host, socket.AF_INET6)
+        self.check_heartbeat(cluster, node)
 
     def test_dynamic_node(self):
         cluster = self.start_cluster()
@@ -105,5 +115,4 @@ class TestHeartbeat(unittest.TestCase):
         cluster.create_database(database, storage_pool_units_count={'hdd': 1})
         node, = cluster.register_and_start_slots(database, count=1)
         cluster.wait_tenant_up(database)
-        _, host = self.node_identity(node)
-        self.check_heartbeat(cluster, node, host, socket.AF_UNSPEC)
+        self.check_heartbeat(cluster, node)

@@ -3670,9 +3670,18 @@ public:
     }
 
     void AddNotAppliedProblems() {
+        // An empty list can be neither unfiltered nor unsorted. It is also what is returned when the information
+        // about the database is not available (no-database-info), and "not applied" would only mislead there.
+        if (NodeView.empty()) {
+            return;
+        }
         // a flag is still set here when the requested operation could not be applied, usually because
         // the data it needs was not received, so the response is a page of unfiltered / ungrouped / unsorted data
-        if (NeedFilter) {
+        //
+        // NeedFilter does not cover the pre-filters (the database, the role of the peers, the storage pools,
+        // groups and disks): while one of them is pending, ApplyFilter() returns before the other filters
+        // and the nodes are returned as they are
+        if (NeedFilter || !PreFilterDone() || FilterStorageStage != EFilterStorageStage::None) {
             AddProblem("filter-not-applied");
         }
         if (NeedGroup) {

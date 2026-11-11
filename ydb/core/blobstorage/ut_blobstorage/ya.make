@@ -58,6 +58,7 @@ SRCS(
     validation.cpp
     vdisk_malfunction.cpp
     virtual_group.cpp
+    vrestore_part.cpp
     group_size_in_units.cpp
     pdisk_status_flags.cpp
     retro_tracing.cpp

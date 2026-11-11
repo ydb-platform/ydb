@@ -5,6 +5,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/helpers.h>
 
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
@@ -42,6 +43,8 @@ class TBoardSubscriberTestBase : public NUnitTest::TTestBase {
         Context->EnableScheduleForActor(publisher);
         return publisher;
     }
+
+    void CheckRepublishAfterUndelivered(bool remote);
 
     void Send(
             const TActorId& recipient,
@@ -92,6 +95,8 @@ public:
         Context.Reset();
     }
 
+    void RepublishAfterUndeliveredLocal();
+    void RepublishAfterUndeliveredRemote();
     void SimpleSubscriber();
     void EmptyPayloadAddition();
     void ManySubscribersManyPublisher();
@@ -109,6 +114,8 @@ protected:
 
 class TBoardSubscriberTest : public TBoardSubscriberTestBase {
     UNIT_TEST_SUITE(TBoardSubscriberTest);
+    UNIT_TEST(RepublishAfterUndeliveredLocal);
+    UNIT_TEST(RepublishAfterUndeliveredRemote);
     UNIT_TEST(SimpleSubscriber);
     UNIT_TEST(EmptyPayloadAddition);
     UNIT_TEST(ManySubscribersManyPublisher);
@@ -596,6 +603,63 @@ void TBoardSubscriberTestBase::ReturnNotAvailableWithoutReadableRingGroup() {
     auto result = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edgeLookup);
     UNIT_ASSERT_EQUAL(result->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable);
     UNIT_ASSERT_VALUES_EQUAL(result->Get()->Path, "path");
+}
+
+
+void TBoardSubscriberTestBase::CheckRepublishAfterUndelivered(bool remote) {
+    const auto replicas = ResolveReplicas();
+    UNIT_ASSERT(!replicas.empty());
+    const TActorId replica = replicas.front();
+    const ui32 replicaNodeIdx = replica.NodeId() - Context->GetNodeId(0);
+    const ui32 publisherNodeIdx = remote ? (replicaNodeIdx + 1) % Context->GetNodeCount() : replicaNodeIdx;
+
+    // The config may reach a publisher before the replica service is registered.
+    auto* actorSystem = Context->GetActorSystem(replicaNodeIdx);
+    const TActorId replicaActor = actorSystem->RegisterLocalService(replica, TActorId());
+    UNIT_ASSERT(replicaActor);
+
+    size_t undelivered = 0;
+    auto deliveryObserver = Context->AddObserver<TEvents::TEvUndelivered>(
+        [&](TEvents::TEvUndelivered::TPtr& ev) {
+            if (ev->Sender == replica
+                    && ev->Get()->SourceType == TEvStateStorage::TEvReplicaBoardPublish::EventType) {
+                ++undelivered;
+            }
+        });
+    const auto edgePublisher = Context->AllocateEdgeActor(publisherNodeIdx);
+    const TActorId publisher = CreatePublisher("path", "test", edgePublisher, publisherNodeIdx);
+    Context->WaitFor("retry while replica is unavailable", [&] { return undelivered >= 2; }, TDuration::Seconds(10));
+
+    bool acknowledged = false;
+    auto ackObserver = Context->AddObserver<TEvStateStorage::TEvReplicaBoardPublishAck>(
+        [&](TEvStateStorage::TEvReplicaBoardPublishAck::TPtr& ev) {
+            if (ev->Sender == replicaActor) {
+                acknowledged = true;
+            }
+        });
+    actorSystem->RegisterLocalService(replica, replicaActor);
+    Context->WaitFor("publication after replica starts", [&] { return acknowledged; }, TDuration::Seconds(10));
+
+    const auto edgeLookup = Context->AllocateEdgeActor(publisherNodeIdx);
+    Send(replica, edgeLookup, new TEvStateStorage::TEvReplicaBoardLookup("path", false, 0, 0), publisherNodeIdx, true);
+    auto result = Context->GrabEdgeEvent<TEvStateStorage::TEvReplicaBoardInfo>(edgeLookup);
+    UNIT_ASSERT(!result->Get()->Record.GetDropped());
+    bool found = false;
+    for (const auto& entry : result->Get()->Record.GetInfo()) {
+        if (ActorIdFromProto(entry.GetOwner()) == publisher) {
+            UNIT_ASSERT_VALUES_EQUAL(entry.GetPayload(), "test");
+            found = true;
+        }
+    }
+    UNIT_ASSERT(found);
+}
+
+void TBoardSubscriberTestBase::RepublishAfterUndeliveredLocal() {
+    CheckRepublishAfterUndelivered(false);
+}
+
+void TBoardSubscriberTestBase::RepublishAfterUndeliveredRemote() {
+    CheckRepublishAfterUndelivered(true);
 }
 
 } // NKikimr

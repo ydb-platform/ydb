@@ -61,7 +61,7 @@ TMaybe<TValue> ProcessResultSet(
 
 // For unit-tests only
 // The query that reads a column table in primary key order. With lastWrittenPK set, the query returns only the rows
-// strictly after that key, NULL key cells included (NULL sorts first, as in ORDER BY).
+// strictly after that key; a saved key with NULL cells is handled too (NULL sorts first, as in ORDER BY).
 std::pair<TString, TParams> BuildSelectQueryAndParams(
     const NTable::TTableDescription& desc,
     const TString& fullTablePath,

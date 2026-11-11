@@ -697,13 +697,14 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
                 TTabletTypes::SequenceShard,
                 TTabletTypes::ReplicationController,
                 TTabletTypes::BlobDepot,
+                TTabletTypes::CdcAggregator,
                 // New tablet types are introduced by renaming one of these
                 // reserved values, which must force this classification test
                 // to be updated.
-                TTabletTypes::Reserved48,
                 TTabletTypes::Reserved49,
                 TTabletTypes::Reserved50,
                 TTabletTypes::Reserved51,
+                TTabletTypes::Reserved52,
             })
         {
             TClusterInfoPtr cluster(new TClusterInfo);

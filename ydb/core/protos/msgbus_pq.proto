@@ -170,6 +170,10 @@ message TPersQueuePartitionRequest {
     message TCmdAbortDeferredStaging {
     }
 
+    message TCmdEmitHeartbeat {
+        optional NKikimrPQ.THeartbeat Heartbeat = 1;
+    }
+
     optional string Topic = 1; //mandatory for request for partitions
     optional int32 Partition = 2; //mandatory for request for partitions
     optional string OwnerCookie = 3; //mandatory for write
@@ -194,6 +198,7 @@ message TPersQueuePartitionRequest {
     optional TCmdSplitMessageGroup CmdSplitMessageGroup = 22;
     optional TCmdUpdateReadMetrics CmdUpdateReadMetrics = 29;
     optional TCmdAbortDeferredStaging CmdAbortDeferredStaging = 30;
+    optional TCmdEmitHeartbeat CmdEmitHeartbeat = 31;
 
     optional NActorsProto.TActorId PipeClient = 15;
 
@@ -550,6 +555,11 @@ message TPersQueuePartitionResponse {
     message TCmdAbortDeferredStagingResult {
     }
 
+    message TCmdEmitHeartbeatResult {
+        optional uint64 Step = 1;
+        optional uint64 TxId = 2;
+    }
+
     repeated TCmdWriteResult CmdWriteResult = 1;
     optional TCmdGetMaxSeqNoResult CmdGetMaxSeqNoResult = 2;
     optional TCmdReadResult CmdReadResult = 3;
@@ -560,6 +570,7 @@ message TPersQueuePartitionResponse {
     optional TCmdPublishDirectReadResult CmdForgetReadResult = 9;
     optional TCmdRestoreDirectReadSessionResult CmdRestoreDirectReadResult = 10;
     optional TCmdAbortDeferredStagingResult CmdAbortDeferredStagingResult = 11;
+    optional TCmdEmitHeartbeatResult CmdEmitHeartbeatResult = 12;
 
     optional uint64 Cookie = 6;
 }

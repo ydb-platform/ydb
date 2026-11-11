@@ -435,12 +435,13 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         GetInstantResourceBroker(runtime, broker, sender);
         CheckCounters(counters, "queue", "queue_scan", 400, 100, 0, 0, 1);
         runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(2, true)));
+        WaitForError(runtime, 2, TEvResourceBroker::TStatus::UNKNOWN_TASK);
         runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(1, true)));
         GetInstantResourceBroker(runtime, broker, sender);
         CheckCounters(counters, "queue", "queue_scan", 0, 0, 1, 0, 0);
     }
 
-    Y_UNIT_TEST(CancellationOfMissingTaskIsIdempotent) {
+    Y_UNIT_TEST(CancellationErrorsPreserveTaskOwnership) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         const auto sender = runtime.AllocateEdgeActor();
@@ -448,28 +449,35 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         const auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters));
         WaitForBootstrap(runtime);
-        ui32 errors = 0;
-        auto observer = runtime.AddObserver<TEvResourceBroker::TEvTaskOperationError>([&](auto&) { ++errors; });
         SubmitTask(runtime, broker, sender, 1, 1, 100, "scan", 5);
         WaitForResourceAllocation(runtime, 1);
         runtime.Send(new IEventHandle(broker, other, new TEvResourceBroker::TEvFinishTask(1, true)));
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::UNKNOWN_TASK);
         auto rb = GetInstantResourceBroker(runtime, broker, sender);
-        runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(errors, 0);
+        UNIT_ASSERT(!rb->FinishTaskInstant({1, true}, other));
         CheckCounters(counters, "queue", "queue_scan", 1, 100, 0, 0, 1);
-        for (ui32 attempt = 0; attempt < 2; ++attempt) {
-            runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(1, true)));
-        }
+        runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(1, true)));
         GetInstantResourceBroker(runtime, broker, sender);
-        runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(errors, 0);
         CheckCounters(counters, "queue", "queue_scan", 0, 0, 1, 0, 0);
-        UNIT_ASSERT(rb->FinishTaskInstant({1, true}, sender));
-        // Ordinary completion still diagnoses unknown tasks.
+        runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(1, true)));
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::UNKNOWN_TASK);
+        UNIT_ASSERT(!rb->FinishTaskInstant({1, true}, sender));
         FinishTask(runtime, broker, sender, 1);
         WaitForError(runtime, 1, TEvResourceBroker::TStatus::UNKNOWN_TASK);
         UNIT_ASSERT(!rb->FinishTaskInstant({1, false}, sender));
         CheckCounters(counters, "queue", "queue_scan", 0, 0, 1, 0, 0);
+        SubmitTask(runtime, broker, sender, 2, 400, 100, "scan", 5);
+        WaitForResourceAllocation(runtime, 2);
+        SubmitTask(runtime, broker, sender, 3, 1, 100, "scan", 5);
+        runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(3, true)));
+        WaitForError(runtime, 3, TEvResourceBroker::TStatus::TASK_IN_QUEUE);
+        UNIT_ASSERT(!rb->FinishTaskInstant({3, true}, sender));
+        CheckCounters(counters, "queue", "queue_scan", 400, 100, 1, 1, 1);
+        FinishTask(runtime, broker, sender, 2);
+        WaitForResourceAllocation(runtime, 3);
+        FinishTask(runtime, broker, sender, 3);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 3, 0, 0);
     }
 
     Y_UNIT_TEST(TestErrors) {

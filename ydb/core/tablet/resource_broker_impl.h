@@ -366,7 +366,6 @@ public:
     TTerminateTaskResult RemoveQueuedTask(ui64 taskId, const TActorId &client, const TActorSystem &as);
     /**
      * Finish/cancel task and release its resources. Return <true, task> on success, and <false, task> otherwise.
-     * Cancelling an absent task succeeds with a null task.
      */
     TTerminateTaskResult FinishTask(ui64 taskId, const TActorId &client, bool cancel, const TActorSystem &as);
 

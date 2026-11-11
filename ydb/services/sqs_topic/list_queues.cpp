@@ -113,7 +113,6 @@ namespace NKikimr::NSqsTopic::V1 {
         NPQ::NDescriber::TDescribeSettings settings = {
             .UserToken = MakeIntrusive<NACLib::TUserToken>(this->Request_->GetSerializedToken()),
             .AccessRights = NACLib::EAccessRights::DescribeSchema,
-            .EnableRelativePaths = true,
         };
         absl::flat_hash_set<TString> topicsSet;
         topicsSet.reserve(topics.size());

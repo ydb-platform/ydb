@@ -37,8 +37,7 @@ void TReaderActor::DoDescribe() {
 
     NDescriber::TDescribeSettings settings = {
         .UserToken = Settings.UserToken,
-        .AccessRights = NACLib::EAccessRights::SelectRow,
-        .EnableRelativePaths = true,
+        .AccessRights = NACLib::EAccessRights::SelectRow
     };
     ChildActorId = RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.DatabasePath, { Settings.TopicName }, settings));
 }

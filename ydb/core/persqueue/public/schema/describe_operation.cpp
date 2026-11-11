@@ -73,7 +73,6 @@ public:
                 .UserToken = Settings.UserToken,
                 .AccessRights = Settings.AccessRights,
                 .ForceSyncVersion = Settings.ForceSyncVersion,
-                .EnableRelativePaths = true,
             }));
     }
 

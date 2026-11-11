@@ -294,22 +294,21 @@ TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
 }
 
 void TDiscoveryConverter::BuildFstClassNames(bool enableRelativePaths) {
+    TStringBuf normTopic(OriginalTopic);
+    normTopic.SkipPrefix("/");
     if (enableRelativePaths) {
         PrimaryPath = NKikimr::PrependDomainIfNeeded(
             NKikimr::CanonizePath(Database.GetOrElse(TString())), OriginalTopic);
-    } else {
-        TStringBuf normTopic(OriginalTopic);
+    } else if (Database.Defined()) {
+
+        TStringBuf normDb(*Database);
+        normDb.SkipPrefix("/");
+        normDb.ChopSuffix("/");
+        normTopic.SkipPrefix(normDb);
         normTopic.SkipPrefix("/");
-        if (Database.Defined()) {
-            TStringBuf normDb(*Database);
-            normDb.SkipPrefix("/");
-            normDb.ChopSuffix("/");
-            normTopic.SkipPrefix(normDb);
-            normTopic.SkipPrefix("/");
-            PrimaryPath = NKikimr::JoinPath({TString(normDb), TString(normTopic)});
-        } else {
-            PrimaryPath = TString(normTopic);
-        }
+        PrimaryPath = NKikimr::JoinPath({TString(normDb), TString(normTopic)});
+    } else {
+        PrimaryPath = TString(normTopic);
     }
     if (!Database.Defined()) {
         Database = "";

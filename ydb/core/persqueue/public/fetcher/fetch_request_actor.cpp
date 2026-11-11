@@ -187,8 +187,7 @@ public:
 
         NDescriber::TDescribeSettings settings = {
             .UserToken = Settings.UserToken,
-            .AccessRights = NACLib::EAccessRights::SelectRow,
-            .EnableRelativePaths = true,
+            .AccessRights = NACLib::EAccessRights::SelectRow
         };
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, std::move(topics), settings));
     }

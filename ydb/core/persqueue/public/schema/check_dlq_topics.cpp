@@ -101,6 +101,7 @@ public:
                     NACLib::EAccessRights::UpdateRow
                 ),
                 .ForceSyncVersion = true,
+                .EnableRelativePaths = false,
             }
         ));
     }

@@ -180,11 +180,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
     // and yielded to process other events.
     bool LimitDecreaseScheduled = false;
 
+    ui64 GetLimitCeiling() const {
+        return Config.HasMemoryLimit() ? Config.GetMemoryLimit() : std::numeric_limits<ui64>::max();
+    }
+
     ui64 GetTargetCacheLimitBytes() const {
-        if (Config.HasMemoryLimit()) {
-            return Min(MemLimitBytes, Config.GetMemoryLimit());
-        }
-        return MemLimitBytes;
+        return Min(MemLimitBytes, GetLimitCeiling());
     }
 
     ui64 GetInMemoryLimitBytes() {
@@ -273,6 +274,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         }
 
         if (MemoryConsumer) {
+            MemoryConsumer->SetLimitCeiling(GetLimitCeiling());
             MemoryConsumer->SetConsumption(GetStatAllBytes());
         }
 
@@ -1749,7 +1751,7 @@ public:
             : 128_MB; // soon will be updated by MemoryController
         ActualizeCacheSizeLimit();
         
-        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache));
+        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache, Cache.GetLimit(), GetLimitCeiling()));
 
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({

@@ -226,6 +226,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
 
         auto registerEvent = runtime.GrabEdgeEvent<NMemory::TEvConsumerRegister>(memoryController);
         UNIT_ASSERT_EQUAL(registerEvent->Get()->Kind, NMemory::EMemoryConsumerKind::QueryExecution);
+        UNIT_ASSERT_VALUES_EQUAL(registerEvent->Get()->InitialLimitBytes, scheduler->GetTotalMemoryLimit());
 
         struct TRecorder : public NMemory::IMemoryConsumer {
             void SetReport(NMemory::TConsumerReport report) override {
@@ -278,7 +279,8 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         runtime.RegisterService(NMemory::MakeMemoryControllerId(), memoryController);
 
         const TActorId service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::MilliSeconds(100)));
-        runtime.GrabEdgeEvent<NMemory::TEvConsumerRegister>(memoryController);
+        const auto registration = runtime.GrabEdgeEvent<NMemory::TEvConsumerRegister>(memoryController);
+        UNIT_ASSERT_VALUES_EQUAL(registration->Get()->InitialLimitBytes, 1000_MB);
 
         NResourcePool::TPoolSettings poolSettings;
         poolSettings.TotalMemoryLimitPercentPerNode = 30;

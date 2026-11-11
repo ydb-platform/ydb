@@ -3248,7 +3248,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
             TStringBuilder() << "GET /viewer/json/nodes?type=static&sort=-NodeId&offload_merge=false"
-                << "&use_cache=false&timeout=1000&with=all&database=/Root" << fields
+                << "&use_cache=false&timeout=1000&with=all&database=/Root&direct=1" << fields
                 << (page ? "&offset=1&limit=2" : "&offset=0&limit=20") << " HTTP/1.1\r\n\r\n", endpoint, {});
         const TActorId sender = runtime.AllocateEdgeActor();
         runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
@@ -3366,8 +3366,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
             }
             // The storage nodes of a database are the nodes of its storage pools, whether disks are requested or not:
             // requesting VSlots for the disks must not replace the pool filter of the database.
+            // direct=1: the request is not redirected to a node of the database.
             CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
-                fields + "&database=/Root", vslotsAvailable ? groupNodeIds : allNodeIds, true);
+                fields + "&database=/Root&direct=1", vslotsAvailable ? groupNodeIds : allNodeIds, true);
         }
 
         // A database without a description or without storage pools has nothing to filter the nodes by:

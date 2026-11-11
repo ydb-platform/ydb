@@ -2145,6 +2145,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
         UNIT_ASSERT_VALUES_EQUAL(registry.PilesSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(registry.GetPiles(0).GetName(), "pile0");
+        UNIT_ASSERT(registry.GetPiles(0).GetOriginal());
         UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&registry, &NKikimrBridge::TPileRegistry::GetImplicitPileId),
             TBridgePileId::FromPileIndex(0));
         // nodes of older versions, which don't handle inline piles, neither get the config nor connect
@@ -2342,11 +2343,17 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         pile1.CopyToProto(clusterState, &NKikimrBridge::TClusterState::SetPromotedPile);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
         check(config, nullptr);
+        // Emulate a configuration written before Original was added: removal must persist the identity before the
+        // operational implicit id is cleared.
+        config.MutableClusterStateDetails()->MutablePileRegistry()->MutablePiles(0)->ClearOriginal();
         prev = config;
         if (const auto error = NStorage::TDistributedConfigKeeper::RemoveBridgePileFromConfig(&config, pile0)) {
             UNIT_FAIL(*error);
         }
         UNIT_ASSERT(!config.GetClusterStateDetails().GetPileRegistry().GetImplicitPileId());
+        UNIT_ASSERT(config.GetClusterStateDetails().GetPileRegistry().GetPiles(0).GetOriginal());
+        UNIT_ASSERT_GE(config.GetClusterStateDetails().GetPileRegistry().GetRequiredFeatureLevel(),
+            NStorage::BridgeFeatureLevelRestoreOriginalPile);
         const auto& group = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
         UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), 3);
         UNIT_ASSERT(!group.RingsSize());
@@ -10515,6 +10522,26 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             .BaseConfig = &baseConfig,
             .IgnoreVSlotQuotaCheck = true,
         }));
+
+        auto configWithEmptyGroup = config;
+        auto *emptyGroup = configWithEmptyGroup.MutableBlobStorageConfig()->MutableServiceSet()->AddGroups();
+        emptyGroup->SetGroupID(0);
+        emptyGroup->SetGroupGeneration(7);
+        emptyGroup->SetErasureSpecies(TBlobStorageGroupType::ErasureMirror3dc);
+        UNIT_ASSERT_NO_EXCEPTION(keeper.AllocateStaticGroup({
+            .Config = &configWithEmptyGroup,
+            .GroupId = TGroupId::Zero(),
+            .GroupGeneration = 7,
+            .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+            .BaseConfig = &baseConfig,
+            .IgnoreVSlotQuotaCheck = true,
+            .RecreateEmptyGroup = true,
+        }));
+        const auto& recreatedGroup = configWithEmptyGroup.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(recreatedGroup.GetGroupGeneration(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(recreatedGroup.GetErasureSpecies(), TBlobStorageGroupType::ErasureNone);
+        UNIT_ASSERT_VALUES_EQUAL(recreatedGroup.RingsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(configWithEmptyGroup.GetBlobStorageConfig().GetServiceSet().VDisksSize(), 1);
     }
 
     Y_UNIT_TEST(AllocateStaticGroupOnFreshDrivesWithExpectedSlotSize) {

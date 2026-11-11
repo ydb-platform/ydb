@@ -835,11 +835,55 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         checker.Write(groupId);
         checker.CheckAll();
 
+        // The original pile may be removed and added back repeatedly during bridge chaos. Its operational implicit id
+        // is absent while the pile is INACTIVE, but has to return with the pile so rollback remains possible.
+        for (ui32 cycle = 0; cycle < 2; ++cycle) {
+            auto clusterState = QueryStorageConfig(env).GetClusterState();
+            clusterState.SetGeneration(clusterState.GetGeneration() + 1);
+            TBridgePileId::FromPileIndex(1).CopyToProto(&clusterState,
+                &NKikimrBridge::TClusterState::SetPrimaryPile);
+            TBridgePileId::FromPileIndex(1).CopyToProto(&clusterState,
+                &NKikimrBridge::TClusterState::SetPromotedPile);
+            clusterState.SetPerPileState(0, NKikimrBridge::TClusterState::DISCONNECTED);
+            res = InvokeDistconf(env, [&](auto& record) {
+                record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(clusterState);
+            });
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+            RemovePileAndWait(env, "pile_1");
+            UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetPileRegistry().GetImplicitPileId());
+
+            AddPileAndWait(env, "pile_1");
+            RejoinPile(env, 0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                QueryStorageConfig(env).GetClusterStateDetails().GetPileRegistry().GetImplicitPileId(), 1);
+        }
+
         // the pile is removed along with its nodes
-        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        auto clusterState = QueryStorageConfig(env).GetClusterState();
+        clusterState.SetGeneration(clusterState.GetGeneration() + 1);
+        TBridgePileId::FromPileIndex(0).CopyToProto(&clusterState, &NKikimrBridge::TClusterState::SetPrimaryPile);
+        TBridgePileId::FromPileIndex(0).CopyToProto(&clusterState, &NKikimrBridge::TClusterState::SetPromotedPile);
+        clusterState.SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
+        res = InvokeDistconf(env, [&](auto& record) {
+            record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(clusterState);
+        });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
         RemovePileAndWait(env, "pile_2");
         for (ui32 nodeId = 10; nodeId <= 17; ++nodeId) {
             env.StopNode(nodeId);
+        }
+        // Stopping half of the configured nodes may invalidate the current distconf root. Wait for a new root backed by
+        // the remaining original pile before fetching and replacing the main YAML configuration.
+        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+        for (;;) {
+            const auto response = InvokeDistconf(env, [](auto& record) {
+                record.MutableQueryConfig();
+            }, 1, deadline);
+            if (response.GetStatus() == TResult::OK && response.HasScepter()) {
+                break;
+            }
+            UNIT_ASSERT_C(env.Runtime->GetClock() < deadline, response.DebugString());
+            env.Sim(TDuration::Seconds(1));
         }
         env.ConfiguredNodeCount = 9;
         res = DropPileFromConfig(env, "pile_2");

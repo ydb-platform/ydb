@@ -55,7 +55,7 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
             const NKikimrBlobStorage::TNodeWardenServiceSet& proposed, const THashSet<ui32>& invalidatedNodeIds,
-            const THashSet<TBridgePileId>& removedPileIds) {
+            const THashSet<TBridgePileId>& removedPileIds, const THashSet<TBridgePileId>& addedPileIds) {
         THashMap<std::tuple<ui32, ui32>, std::tuple<TString, ui64>> pdisks;
         for (const auto& pdisk : current.GetPDisks()) {
             if (const auto [_, inserted] = pdisks.try_emplace(std::tuple(pdisk.GetNodeID(), pdisk.GetPDiskID()),
@@ -149,11 +149,20 @@ namespace NKikimr::NStorage {
         for (const auto& group : proposed.GetGroups()) {
             if (const auto it = groupInfo.find(group.GetGroupID()); it != groupInfo.end()) {
                 const auto& currentGroup = *it->second;
+                const auto bridgePileId = TBridgePileId::FromProto(&group,
+                    &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+                const bool restoredInlinePart = addedPileIds.contains(bridgePileId) &&
+                    group.HasBridgeProxyGroupId() && group.GetBridgeProxyGroupId() == group.GetGroupID() &&
+                    currentGroup.HasBridgeGroupState() && !currentGroup.RingsSize() &&
+                    bridgePileId.GetPileIndex() < currentGroup.GetBridgeGroupState().PileSize() &&
+                    currentGroup.GetBridgeGroupState().GetPile(bridgePileId.GetPileIndex()).GetAbsent();
                 if (group.GetGroupGeneration() != currentGroup.GetGroupGeneration() &&
                         group.GetGroupGeneration() != currentGroup.GetGroupGeneration() + 1) {
                     return "incorrect group generation change";
                 } else if (removedPartGroupIds.contains(group.GetGroupID()) && !group.RingsSize()) {
                     // inline pile of the pile being removed, the group stays as bridge proxy one only
+                } else if (restoredInlinePart) {
+                    // the inline pile being added back restores physical metadata and VDisks of its proxy group
                 } else if (group.GetErasureSpecies() != currentGroup.GetErasureSpecies()) {
                     return "sudden group ErasureSpecies change";
                 } else if (group.RingsSize() != currentGroup.RingsSize()) {
@@ -177,10 +186,10 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> ValidateConfigUpdate(const NKikimrConfig::TBlobStorageConfig& current,
             const NKikimrConfig::TBlobStorageConfig& proposed, const THashSet<ui32>& invalidatedNodeIds,
-            const THashSet<TBridgePileId>& removedPileIds) {
+            const THashSet<TBridgePileId>& removedPileIds, const THashSet<TBridgePileId>& addedPileIds) {
         if (current.HasServiceSet() && proposed.HasServiceSet()) {
             if (auto error = ValidateConfigUpdate(current.GetServiceSet(), proposed.GetServiceSet(), invalidatedNodeIds,
-                    removedPileIds)) {
+                    removedPileIds, addedPileIds)) {
                 return error;
             }
         } else if (current.HasServiceSet()) {
@@ -230,20 +239,24 @@ namespace NKikimr::NStorage {
 
         // piles becoming INACTIVE are removed from the cluster along with their parts of static groups
         THashSet<TBridgePileId> removedPileIds;
+        THashSet<TBridgePileId> addedPileIds;
         if (current.HasClusterState() && proposed.HasClusterState()) {
             for (size_t i = 0; i < current.GetClusterState().PerPileStateSize(); ++i) {
                 const auto pileId = TBridgePileId::FromPileIndex(i);
                 using TClusterState = NKikimrBridge::TClusterState;
-                if (NBridge::GetPileState(current.GetClusterState(), pileId) != TClusterState::INACTIVE &&
-                        NBridge::GetPileState(proposed.GetClusterState(), pileId) == TClusterState::INACTIVE) {
+                const auto currentState = NBridge::GetPileState(current.GetClusterState(), pileId);
+                const auto proposedState = NBridge::GetPileState(proposed.GetClusterState(), pileId);
+                if (currentState != TClusterState::INACTIVE && proposedState == TClusterState::INACTIVE) {
                     removedPileIds.insert(pileId);
+                } else if (currentState == TClusterState::INACTIVE && proposedState != TClusterState::INACTIVE) {
+                    addedPileIds.insert(pileId);
                 }
             }
         }
 
         if (current.HasBlobStorageConfig() && proposed.HasBlobStorageConfig()) {
             if (auto error = ValidateConfigUpdate(current.GetBlobStorageConfig(), proposed.GetBlobStorageConfig(),
-                    invalidatedNodeIds, removedPileIds)) {
+                    invalidatedNodeIds, removedPileIds, addedPileIds)) {
                 return error;
             }
         } else if (current.HasBlobStorageConfig()) {

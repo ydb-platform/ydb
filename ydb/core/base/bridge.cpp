@@ -50,6 +50,7 @@ namespace NKikimr {
             if (const auto index = GetImplicitPileIndex(bridgeConfig.PilesSize())) {
                 TBridgePileId::FromPileIndex(*index).CopyToProto(&registry,
                     &NKikimrBridge::TPileRegistry::SetImplicitPileId);
+                registry.MutablePiles(*index)->SetOriginal(true);
             }
             return registry;
         }

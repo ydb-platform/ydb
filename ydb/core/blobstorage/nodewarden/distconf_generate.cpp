@@ -436,6 +436,7 @@ namespace NKikimr::NStorage {
         // then all existing drives from the current storage config; also extract group definition, if it exists
         TVector<NBsController::TGroupMapper::TVDiskPlacement> groupDisks;
         bool existingGroup = false;
+        bool groupRecordFound = false;
         ui32 groupGeneration = 0;
         THashSet<TPDiskId> addedPDisks;
         THashMap<TVDiskIdShort, NKikimrBlobStorage::TVDiskLocation> vdiskLocations;
@@ -449,10 +450,15 @@ namespace NKikimr::NStorage {
 
             for (const auto& group : ss.GetGroups()) {
                 if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) == params.GroupId) {
-                    if (group.GetErasureSpecies() != params.GroupType.GetErasure()) {
+                    groupRecordFound = true;
+                    if (params.RecreateEmptyGroup && group.RingsSize()) {
+                        throw TExConfigError() << "can't recreate non-empty static group";
+                    }
+                    if (!params.RecreateEmptyGroup &&
+                            group.GetErasureSpecies() != params.GroupType.GetErasure()) {
                         throw TExConfigError() << "can't change erasure of existing static group";
                     }
-                    existingGroup = true;
+                    existingGroup = !params.RecreateEmptyGroup;
                     groupGeneration = group.GetGroupGeneration();
                     generation.emplace(group.GetGroupGeneration());
 
@@ -505,7 +511,12 @@ namespace NKikimr::NStorage {
             for (const auto& vdisk : ss.GetVDisks()) {
                 const TVDiskID vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
                 if (vdiskId.GroupID == params.GroupId) {
-                    if (!generation) {
+                    if (params.RecreateEmptyGroup) {
+                        if (vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                            throw TExConfigError() << "can't recreate static group with live VDisks";
+                        }
+                        continue;
+                    } else if (!generation) {
                         throw TExConfigError() << "missing record for group being reconfigured";
                     } else if (vdiskId.GroupGeneration == *generation && !replacedDisks.contains(vdiskId)) {
                         Y_ABORT_UNLESS(vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY);
@@ -540,6 +551,10 @@ namespace NKikimr::NStorage {
             }
 
             AddServiceSetToPlacementSnapshot(placementSnapshot, ss);
+        }
+
+        if (params.RecreateEmptyGroup && !groupRecordFound) {
+            throw TExConfigError() << "static group to recreate not found";
         }
 
         for (const auto& vslot : placementSnapshot.VSlots) {
@@ -711,6 +726,9 @@ namespace NKikimr::NStorage {
             sGroup->SetErasureSpecies(params.GroupType.GetErasure());
         } else {
             sGroup->ClearRings();
+            if (params.RecreateEmptyGroup) {
+                sGroup->SetErasureSpecies(params.GroupType.GetErasure());
+            }
         }
         sGroup->SetGroupGeneration(params.GroupGeneration);
 

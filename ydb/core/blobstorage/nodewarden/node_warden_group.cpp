@@ -245,6 +245,8 @@ namespace NKikimr::NStorage {
             }
         } else if (groupChanged) {
             // group has changed; obtain main encryption key for this group and try to parse group info from the protobuf
+            const bool wasBridgeProxyWithoutInlinePile = group.Info && group.Info->IsBridged() &&
+                !group.Info->IsInlinePile();
             auto& mainKey = GetGroupMainKey(groupId);
             TStringStream err;
             group.Info = TBlobStorageGroupInfo::Parse(*currentGroup, &mainKey, &err);
@@ -270,15 +272,23 @@ namespace NKikimr::NStorage {
                     group.InlinePileProxy = false;
                 }
                 if (info && info->IsInlinePile() && !group.InlinePileProxy) {
-                    // the group has just been converted into the bridged one, it becomes an inline pile; put bridge
-                    // proxy in front of the running DS proxy, the latter will serve the inline pile; this also happens
-                    // when the proxy was started before the group info arrived
                     Y_ABORT_UNLESS(!group.AgentProxy);
-                    group.InlinePileProxy = true;
-                    TActorSystem *as = TActivationContext::ActorSystem();
-                    group.ProxyId = Register(CreateInlinePileBridgeProxyActor(info, group.ProxyId), TMailboxType::ReadAsFilled,
-                        AppData()->SystemPoolId);
-                    as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
+                    if (wasBridgeProxyWithoutInlinePile) {
+                        // The inline pile was removed earlier, and its physical DS proxy was stopped by the bridge proxy.
+                        // Recreate the complete proxy stack; wrapping the bridge-only proxy as a physical one would leave
+                        // two bridge proxies nested and make the restored inline pile unusable.
+                        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.ProxyId, {}, nullptr, 0));
+                        group.ProxyId = {};
+                        StartLocalProxy(groupId);
+                    } else {
+                        // The group has just been converted into the bridged one, or its proxy was started before group
+                        // info arrived. The running ordinary DS proxy becomes the physical proxy of the inline pile.
+                        group.InlinePileProxy = true;
+                        TActorSystem *as = TActivationContext::ActorSystem();
+                        group.ProxyId = Register(CreateInlinePileBridgeProxyActor(info, group.ProxyId),
+                            TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+                        as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
+                    }
                 }
                 if (info && info->BlobDepotId.value_or(0) && !group.AgentProxy) {
                     // re-register proxy as an agent; for inline pile, the agent is put in front of the bridge proxy

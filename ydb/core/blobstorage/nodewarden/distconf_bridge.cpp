@@ -616,7 +616,16 @@ namespace NKikimr::NStorage {
         if (pileRegistry->PilesSize() <= pileId.GetPileIndex()) {
             return "pile registry doesn't list the pile";
         }
-        pileRegistry->MutablePiles(pileId.GetPileIndex())->SetAddedGeneration(generation);
+        auto *pile = pileRegistry->MutablePiles(pileId.GetPileIndex());
+        const bool restoringOriginalPile = pile->GetOriginal();
+        if (restoringOriginalPile) {
+            // removing the original pile clears its operational implicit id while it is INACTIVE; restore the id when
+            // the same pile is added back, so the cluster can be rolled back to ordinary mode again
+            pileId.CopyToProto(pileRegistry, &NKikimrBridge::TPileRegistry::SetImplicitPileId);
+            pileRegistry->SetRequiredFeatureLevel(Max<ui32>(pileRegistry->GetRequiredFeatureLevel(),
+                BridgeFeatureLevelRestoreOriginalPile));
+        }
+        pile->SetAddedGeneration(generation);
         op->SetOperationId(config->GetGeneration() + 1); // the generation of the config being proposed
 
         // allocate the part of every bridged static group in the pile; the part is unsynced, so it is synced from the
@@ -668,27 +677,30 @@ namespace NKikimr::NStorage {
                 }
                 groupType = TBlobStorageGroupType(species);
             }
-            ++nextGroupId;
+            auto *proxyGroup = findGroup(proxyGroupId);
+            const TGroupId pileGroupId = restoringOriginalPile ? proxyGroupId : ++nextGroupId;
+            const ui32 pileGroupGeneration = restoringOriginalPile ? proxyGroup->GetGroupGeneration() : 1;
             try {
                 AllocateStaticGroup({
                     .Config = config,
-                    .GroupId = nextGroupId,
-                    .GroupGeneration = 1,
+                    .GroupId = pileGroupId,
+                    .GroupGeneration = pileGroupGeneration,
                     .GroupType = *groupType,
                     .BaseConfig = baseConfig,
                     .BridgePileId = pileId,
                     .BridgeProxyGroupId = proxyGroupId,
+                    .RecreateEmptyGroup = restoringOriginalPile,
                 });
             } catch (const TExConfigError& ex) {
                 return TStringBuilder() << "failed to allocate part of static group GroupId# " << proxyGroupId
                     << " in the pile: " << ex.what();
             }
 
-            auto *proxyGroup = findGroup(proxyGroupId); // groups may have been reallocated by adding the new one
-            auto *pile = NBridge::AddGroupPile(proxyGroup->MutableBridgeGroupState(), pileId);
-            nextGroupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
-            pile->SetGroupGeneration(1);
-            pile->SetBecameUnsyncedGeneration(generation);
+            proxyGroup = findGroup(proxyGroupId); // groups may have been reallocated by adding the new one
+            auto *groupPile = NBridge::AddGroupPile(proxyGroup->MutableBridgeGroupState(), pileId);
+            pileGroupId.CopyToProto(groupPile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
+            groupPile->SetGroupGeneration(pileGroupGeneration);
+            groupPile->SetBecameUnsyncedGeneration(generation);
 
             // proxy group gets new generation to make its users pick up the new pile
             BumpBridgeProxyGroupGeneration(proxyGroup, bumpedGenerations);
@@ -753,6 +765,11 @@ namespace NKikimr::NStorage {
         details->ClearPendingPileOperation();
         auto *registry = details->MutablePileRegistry();
         if (TBridgePileId::FromProto(registry, &NKikimrBridge::TPileRegistry::GetImplicitPileId) == pileId) {
+            // Old configurations don't have Original set yet; remember the identity before clearing the operational
+            // implicit id, which must not point to an INACTIVE pile.
+            registry->MutablePiles(pileId.GetPileIndex())->SetOriginal(true);
+            registry->SetRequiredFeatureLevel(Max<ui32>(registry->GetRequiredFeatureLevel(),
+                BridgeFeatureLevelRestoreOriginalPile));
             registry->ClearImplicitPileId(); // nodes and groups of the cluster all have their piles now
         }
 

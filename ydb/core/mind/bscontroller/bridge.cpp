@@ -1691,6 +1691,10 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
                         {"marker", "BSCBR02"},
                         {"targetGroupId", targetGroupId},
                         {"sourceGroupId", *sourceGroupId});
+                    // The syncer remains queued, but node registration isn't guaranteed to produce another controller
+                    // event after this pass. Retry explicitly so a newly allocated or restored part starts syncing as
+                    // soon as one of its NodeWardens finishes registering.
+                    retryAt = Min(retryAt, now + TDuration::Seconds(1));
                     continue;
                 }
 

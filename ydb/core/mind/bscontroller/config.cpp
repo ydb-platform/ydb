@@ -375,6 +375,8 @@ namespace NKikimr::NBsController {
                     (cur.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) ||
                     // inline pile has been removed along with its pile, the group serves as bridge proxy only now
                     (cur.VDisksInGroup.empty() && prev.IsInlinePile() && !cur.BridgePileId && cur.BridgeGroupInfo) ||
+                    // the removed inline pile has been added back, the bridge proxy serves as its physical part again
+                    (prev.VDisksInGroup.empty() && !prev.BridgePileId && prev.BridgeGroupInfo && cur.IsInlinePile()) ||
                     (prev.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING));
                 for (size_t i = 0; i < Min(prev.VDisksInGroup.size(), cur.VDisksInGroup.size()); ++i) {
                     const TVSlotInfo& prevSlot = *prev.VDisksInGroup[i];

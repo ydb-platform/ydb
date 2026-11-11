@@ -277,7 +277,18 @@ namespace NKikimr {
                     return group != nullptr;
                 });
 
-                const TGroupId groupId = CreateGroup(bridgePileId, proxyGroupId, groupSizeInUnits);
+                const bool restoringInlinePile = State.BridgeInfo &&
+                    NBridge::GetImplicitPileId(State.BridgeInfo.get()) == bridgePileId;
+                TGroupId groupId;
+                if (restoringInlinePile) {
+                    TGroupInfo *mutableProxyGroup = State.Groups.FindForUpdate(proxyGroupId);
+                    mutableProxyGroup->BridgePileId = bridgePileId;
+                    mutableProxyGroup->BridgeProxyGroupId = proxyGroupId;
+                    FitExistingGroup(proxyGroupId, true, true, groupSizeInUnits);
+                    groupId = proxyGroupId;
+                } else {
+                    groupId = CreateGroup(bridgePileId, proxyGroupId, groupSizeInUnits);
+                }
 
                 TGroupInfo *mutableProxyGroup = State.Groups.FindForUpdate(proxyGroupId);
                 auto *state = mutableProxyGroup->BridgeGroupInfo->MutableBridgeGroupState();
@@ -288,7 +299,7 @@ namespace NKikimr {
                 }
                 auto *pile = NBridge::AddGroupPile(state, bridgePileId);
                 groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
-                pile->SetGroupGeneration(1); // gets adjusted along with generation bump on commit
+                pile->SetGroupGeneration(State.Groups.Find(groupId)->Generation); // adjusted along with the commit bump
                 pile->SetBecameUnsyncedGeneration(becameUnsyncedGeneration);
                 State.GroupContentChanged.insert(proxyGroupId);
                 return groupId;
@@ -366,7 +377,8 @@ namespace NKikimr {
                 return groupId;
             }
 
-            void FitExistingGroup(TGroupId groupId, bool allocate) {
+            void FitExistingGroup(TGroupId groupId, bool allocate, bool restorePhysicalMetadata = false,
+                    std::optional<ui32> groupSizeInUnitsOverride = std::nullopt) {
                 const TGroupInfo *groupInfo = State.Groups.Find(groupId);
                 if (!groupInfo) {
                     throw TExFitGroupError() << "GroupId# " << groupId << " not found";
@@ -380,6 +392,11 @@ namespace NKikimr {
                 if (allocate) {
                     TGroupInfo *groupInfo = State.Groups.FindForUpdate(groupId);
                     Y_ABORT_UNLESS(groupInfo);
+                    const TGroupSpecies oldSpecies = groupInfo->GetGroupSpecies();
+                    if (restorePhysicalMetadata) {
+                        groupInfo->GroupSizeInUnits = groupSizeInUnitsOverride.value_or(
+                            StoragePool.DefaultGroupSizeInUnits);
+                    }
                     groupInfo->Topology = Geometry.CreateTopology();
                     groupInfo->Topology->FinalizeConstruction();
                     groupInfo->VDisksInGroup.resize(groupInfo->Topology->GetTotalVDisksNum());
@@ -388,6 +405,47 @@ namespace NKikimr {
                     TGroupMapper::TGroupDefinition group;
                     Geometry.ResizeGroup(group);
                     AllocateNewGroup(groupId, group, groupInfo->GroupSizeInUnits, Min<i64>(), groupInfo->BridgePileId);
+                    if (restorePhysicalMetadata) {
+                        TMaybe<TPDiskCategory> desiredPDiskCategory;
+                        for (const auto& realm : group) {
+                            for (const auto& domain : realm) {
+                                for (const TPDiskId& disk : domain) {
+                                    if (const TPDiskInfo *pdisk = State.PDisks.Find(disk);
+                                            pdisk && !State.PDisksToRemove.contains(disk)) {
+                                        if (!desiredPDiskCategory) {
+                                            desiredPDiskCategory = pdisk->Kind;
+                                        } else if (*desiredPDiskCategory != pdisk->Kind) {
+                                            desiredPDiskCategory = 0;
+                                        }
+                                    } else {
+                                        throw TExFitGroupError() << "can't find PDisk# " << disk;
+                                    }
+                                }
+                            }
+                        }
+
+                        groupInfo->ErasureSpecies = Geometry.GetErasure();
+                        groupInfo->DesiredPDiskCategory = desiredPDiskCategory.GetOrElse(0);
+                        groupInfo->DesiredVDiskCategory = StoragePool.VDiskKind;
+                        groupInfo->EncryptionMode = StoragePool.EncryptionMode.GetOrElse(0);
+                        groupInfo->DDisk = DDisk;
+
+                        const TGroupSpecies newSpecies = groupInfo->GetGroupSpecies();
+                        if (oldSpecies != newSpecies) {
+                            auto& index = State.IndexGroupSpeciesToGroup.Unshare();
+                            const auto oldIndexIt = index.find(oldSpecies);
+                            Y_ABORT_UNLESS(oldIndexIt != index.end());
+                            auto& oldGroups = oldIndexIt->second;
+                            const auto oldGroupIt = std::find(oldGroups.begin(), oldGroups.end(), groupId);
+                            Y_ABORT_UNLESS(oldGroupIt != oldGroups.end());
+                            oldGroups.erase(oldGroupIt);
+                            if (oldGroups.empty()) {
+                                index.erase(oldIndexIt);
+                            }
+                            index[newSpecies].push_back(groupId);
+                        }
+                        State.GroupFailureModelChanged.insert(groupId);
+                    }
                     CreateVSlotsForGroup(groupInfo, group, {});
                     return;
                 }

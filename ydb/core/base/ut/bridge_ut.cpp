@@ -38,6 +38,7 @@ Y_UNIT_TEST_SUITE(BridgePileRegistry) {
         const auto single = NBridge::MakeImpliedPileRegistry(MakeBridgeConfig({"a"}));
         UNIT_ASSERT_VALUES_EQUAL(single.PilesSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(single.GetPiles(0).GetName(), "a");
+        UNIT_ASSERT(single.GetPiles(0).GetOriginal());
         UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&single, &NKikimrBridge::TPileRegistry::GetImplicitPileId),
             TBridgePileId::FromPileIndex(0));
         UNIT_ASSERT_EQUAL(NBridge::ResolvePileId(single, std::nullopt), TBridgePileId::FromPileIndex(0));
@@ -47,6 +48,7 @@ Y_UNIT_TEST_SUITE(BridgePileRegistry) {
         const auto multi = NBridge::MakeImpliedPileRegistry(MakeBridgeConfig({"a", "b", "c"}));
         UNIT_ASSERT_VALUES_EQUAL(multi.PilesSize(), 3);
         UNIT_ASSERT(!multi.GetImplicitPileId());
+        UNIT_ASSERT(!multi.GetPiles(0).GetOriginal());
         UNIT_ASSERT(!NBridge::ResolvePileId(multi, std::nullopt));
         UNIT_ASSERT_EQUAL(NBridge::ResolvePileId(multi, "a"), TBridgePileId::FromPileIndex(0));
         UNIT_ASSERT_EQUAL(NBridge::ResolvePileId(multi, "c"), TBridgePileId::FromPileIndex(2));

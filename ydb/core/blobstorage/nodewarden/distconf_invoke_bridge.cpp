@@ -551,7 +551,7 @@ namespace NKikimr::NStorage {
         return pileId;
     }
 
-    void TInvokeRequestHandlerActor::RequirePileOperationCapability(TBridgePileId leavingPileId,
+    void TInvokeRequestHandlerActor::RequirePileOperationCapability(TBridgePileId leavingPileId, ui32 minFeatureLevel,
             std::function<void()> callback) {
         // every node connected to the cluster has to support pile operations; nodes of INACTIVE piles (including the one
         // being added), of DISCONNECTED ones (including the one being removed) can't connect, and the ones of lower
@@ -566,13 +566,18 @@ namespace NKikimr::NStorage {
                 NBridge::GetPileState(config.GetClusterState(), *bridgePileId)).AllowsConnection;
             (outside ? ignoredNodeIds : requiredNodeIds).insert(node.GetNodeId());
         }
-        RequireBridgeCapability(BridgeFeatureLevelPileOps, std::move(requiredNodeIds), std::move(ignoredNodeIds),
-            std::move(callback));
+        RequireBridgeCapability(Max<ui32>(minFeatureLevel, GetRequiredBridgeFeatureLevel(config)),
+            std::move(requiredNodeIds), std::move(ignoredNodeIds), std::move(callback));
     }
 
     void TInvokeRequestHandlerActor::AddBridgePile(const TQuery::TAddBridgePile& cmd) {
         const TBridgePileId pileId = CheckPileOperation(cmd.GetPileName(), NKikimrBridge::TClusterState::INACTIVE, true);
-        RequirePileOperationCapability(TBridgePileId(), [this, pileId] {
+        const auto registry = Self->GetConfigPileRegistry(*Self->StorageConfig);
+        Y_ABORT_UNLESS(registry && pileId.GetPileIndex() < registry->PilesSize());
+        const ui32 minFeatureLevel = registry->GetPiles(pileId.GetPileIndex()).GetOriginal()
+            ? BridgeFeatureLevelRestoreOriginalPile
+            : BridgeFeatureLevelPileOps;
+        RequirePileOperationCapability(TBridgePileId(), minFeatureLevel, [this, pileId] {
             // PDisks of the new pile are already known to BSC, static groups have to be allocated on the same ones
             BridgePileOpPileId = pileId;
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryBaseConfig);
@@ -635,6 +640,7 @@ namespace NKikimr::NStorage {
         // nodes without pile name belong to the implicit pile, they can't be resolved without it
         const auto& config = *Self->StorageConfig;
         const auto registry = Self->GetConfigPileRegistry(config);
+        Y_ABORT_UNLESS(registry);
         for (const auto& node : config.GetAllNodes()) {
             if (const TNodeLocation location(node.GetLocation()); !location.GetBridgePileName() &&
                     ResolveNodePileId(registry, location) == pileId) {
@@ -662,7 +668,12 @@ namespace NKikimr::NStorage {
             }
         }
 
-        RequirePileOperationCapability(pileId, [this, pileId] {
+        const bool removingOriginalPile = TBridgePileId::FromProto(&*registry,
+            &NKikimrBridge::TPileRegistry::GetImplicitPileId) == pileId;
+        const ui32 minFeatureLevel = removingOriginalPile
+            ? BridgeFeatureLevelRestoreOriginalPile
+            : BridgeFeatureLevelPileOps;
+        RequirePileOperationCapability(pileId, minFeatureLevel, [this, pileId, removingOriginalPile, minFeatureLevel] {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
             auto *details = config.MutableClusterStateDetails();
             auto *op = details->MutablePendingPileOperation();
@@ -673,7 +684,10 @@ namespace NKikimr::NStorage {
             // nodes of older versions can't work with INACTIVE piles and removed static groups
             auto *registry = details->MutablePileRegistry();
             registry->SetPileListChanged(true);
-            registry->SetRequiredFeatureLevel(Max<ui32>(registry->GetRequiredFeatureLevel(), BridgeFeatureLevelPileOps));
+            registry->SetRequiredFeatureLevel(Max<ui32>(registry->GetRequiredFeatureLevel(), minFeatureLevel));
+            if (removingOriginalPile) {
+                registry->MutablePiles(pileId.GetPileIndex())->SetOriginal(true);
+            }
             ProposedStorageConfig = std::move(config);
 
             // BSC checks whether it can delete parts of its groups before anything is committed

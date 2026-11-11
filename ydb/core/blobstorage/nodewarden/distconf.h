@@ -642,6 +642,8 @@ namespace NKikimr::NStorage {
             std::optional<TGroupId> BridgeProxyGroupId;
             bool ApplySelfHealNodeAllowList = false;
             TStaticGroupReassignments *Reassignments = nullptr;
+            // Reallocate VDisks for an existing group record which deliberately has no physical part.
+            bool RecreateEmptyGroup = false;
         };
 
         static TAllocateStaticGroupParams BuildStaticGroupReassignParams(NKikimrBlobStorage::TStorageConfig *config,
@@ -997,10 +999,12 @@ namespace NKikimr::NStorage {
         // the bridged cluster may be rolled back: groups lose their bridge state while nodes run, the cluster state goes
         // away
         BridgeFeatureLevelRollback = 5,
+        // the original inline pile keeps its identity through removal and is recreated on the same group ids when added
+        BridgeFeatureLevelRestoreOriginalPile = 6,
     };
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
-    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelRollback;
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelRestoreOriginalPile;
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();

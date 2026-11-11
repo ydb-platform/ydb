@@ -2527,6 +2527,9 @@ message TEvApplyReplicationChanges {
     optional bytes Source = 2;
 
     repeated TChange Changes = 3;
+
+    // Database the table belongs to, used for example to resolve sequences
+    optional string DatabaseName = 4;
 }
 
 message TEvApplyReplicationChangesResult {

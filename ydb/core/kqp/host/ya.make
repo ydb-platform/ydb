@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/kqp/gateway/utils
     # The host owns both the standalone frontend and its optional RBO importer;
     # legacy translation dependencies remain necessary for explicit fallback.
+    ydb/core/kqp/host/lazy_provider
     ydb/core/kqp/host/new_parser
     ydb/core/kqp/host/new_parser/rbo
     ydb/core/kqp/opt
@@ -58,4 +59,4 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(ut lazy_provider/ut)

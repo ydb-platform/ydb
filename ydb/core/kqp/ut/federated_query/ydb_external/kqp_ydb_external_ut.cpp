@@ -203,19 +203,21 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
                 actorSystem.System.Get(), 0, counters, queryServiceConfig);
 
         // Query replay supplies only an HTTP gateway and uses the default query service config.
-        // Even queries without external sources initialize all enabled providers.
+        // Queries without external sources must not initialize unused providers.
         auto host = CreateKqpHost(gateway, cluster, database, config, moduleResolver,
             TKqpFederatedQuerySetup{ .HttpGateway = NYql::IHTTPGateway::Make() }, nullptr, std::make_shared<TGUCSettings>(), queryServiceConfig);
-        const TString query = "SELECT 1;";
-        auto preparing = Script ? host->PrepareGenericScript(query, {}) : host->PrepareGenericQuery(query, {});
-        while (!preparing->HasResult()) {
-            preparing->Continue().GetValueSync();
+        // Reuse the host to exercise disposal of the previous lazy registrations.
+        for (const TString query : {"SELECT 1;", "SELECT 2;", "SELECT 3;"}) {
+            auto preparing = Script ? host->PrepareGenericScript(query, {}) : host->PrepareGenericQuery(query, {});
+            while (!preparing->HasResult()) {
+                preparing->Continue().GetValueSync();
+            }
+            const auto result = preparing->GetResult();
+            UNIT_ASSERT_C(result.Success(), result.Issues().ToString());
+            UNIT_ASSERT(result.PreparingQuery);
+            UNIT_ASSERT(result.PreparingQuery->HasPhysicalQuery());
+            UNIT_ASSERT(!result.QueryPlan.empty());
         }
-        const auto result = preparing->GetResult();
-        UNIT_ASSERT_C(result.Success(), result.Issues().ToString());
-        UNIT_ASSERT(result.PreparingQuery);
-        UNIT_ASSERT(result.PreparingQuery->HasPhysicalQuery());
-        UNIT_ASSERT(!result.QueryPlan.empty());
     }
 
     Y_UNIT_TEST(ReadWithoutConnector) {

@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/opt/rbo/kqp_native_query.h>
 #include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "kqp_host_impl.h"
+#include "lazy_provider/kqp_lazy_provider.h"
 #include "new_parser/kqp_new_parser.h"
 #include "new_parser/kqp_name_resolver.h"
 #include "new_parser/kqp_type_annotation.h"
@@ -1776,7 +1777,7 @@ private:
             return nullptr;
         }
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, GetYqlTransformer(), Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -1844,8 +1845,8 @@ private:
             return nullptr;
         }
 
-        auto& yqlTransformer = NativeFrontendActive ? *NativeFrontendTransformer
-            : (SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer);
+        auto& yqlTransformer = NativeFrontendActive ? GetNativeFrontend()
+            : GetYqlTransformer(SessionCtx->Config().GetEnableNewRBO());
         return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
@@ -1881,7 +1882,7 @@ private:
         }
         YQL_ENSURE(!sqlVersion);
 
-        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExpr.Get(), ctx, *DataQueryAstTransformer,
+        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExpr.Get(), ctx, GetDataQueryAstTransformer(),
             SessionCtx, *ExecuteCtx, DataProvidersFinalizer);
     }
 
@@ -1937,13 +1938,13 @@ private:
                 if (!compileResult.QueryExpr) {
                     return nullptr;
                 }
-                auto& yqlTransformer = NativeFrontendActive ? *NativeFrontendTransformer
-            : (SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer);
+                auto& yqlTransformer = NativeFrontendActive ? GetNativeFrontend()
+            : GetYqlTransformer(SessionCtx->Config().GetEnableNewRBO());
                 return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
                     query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
             }
         } else {
-            return MakeIntrusive<TAsyncPrepareYqlResult>(expr, ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+            return MakeIntrusive<TAsyncPrepareYqlResult>(expr, ctx, GetYqlTransformer(), SessionCtx->QueryPtr(),
                 query.Text, sqlVersion, TransformCtx, false, Nothing(), DataProvidersFinalizer);
         }
     }
@@ -2015,8 +2016,8 @@ private:
             return nullptr;
         }
 
-        auto& yqlTransformer = NativeFrontendActive ? *NativeFrontendTransformer
-            : (SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer);
+        auto& yqlTransformer = NativeFrontendActive ? GetNativeFrontend()
+            : GetYqlTransformer(SessionCtx->Config().GetEnableNewRBO());
         return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
@@ -2041,7 +2042,7 @@ private:
             return nullptr;
         }
 
-        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExpr.Get(), ctx, *DataQueryAstTransformer,
+        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExpr.Get(), ctx, GetDataQueryAstTransformer(),
             SessionCtx, *ExecuteCtx, DataProvidersFinalizer);
     }
 
@@ -2069,7 +2070,7 @@ private:
 
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, GetYqlTransformer(), Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -2099,7 +2100,7 @@ private:
 
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, GetYqlTransformer(), Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -2152,15 +2153,34 @@ private:
             return nullptr;
         }
 
+        GetYqlTransformer();
         return MakeIntrusive<TAsyncExplainYqlResult>(compileResult.QueryExpr.Get(), SessionCtx, ctx, YqlTransformer,
             *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer, true /* UseDqExplain */);
     }
 
-    void InitS3Provider(EKikimrQueryType queryType) {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::S3ProviderName))) {
-            return;
-        }
+    static TDataProviderInfo MakeProviders(TIntrusivePtr<IDataProvider> source, TIntrusivePtr<IDataProvider> sink) {
+        TDataProviderInfo providers;
+        providers.Source = std::move(source);
+        providers.Sink = std::move(sink);
+        return providers;
+    }
 
+    void RegisterLazyProvider(TStringBuf name, TStringBuf callablePrefix,
+        std::function<TDataProviderInfo()> factory, bool hasLayers = false)
+    {
+        auto providers = CreateLazyProvider(name, callablePrefix, [this, name = TString(name), factory = std::move(factory)] {
+            TCompileTraceScope trace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Step,
+                TStringBuilder() << "Initialize " << name << " provider");
+            auto providers = factory();
+            YQL_ENSURE(providers.Source->Initialize(*ExprCtx));
+            YQL_ENSURE(providers.Sink->Initialize(*ExprCtx));
+            return providers;
+        }, hasLayers);
+        TypesCtx->AddDataSource(name, std::move(providers.Source));
+        TypesCtx->AddDataSink(name, std::move(providers.Sink));
+    }
+
+    TDataProviderInfo CreateS3Provider(EKikimrQueryType queryType) {
         auto state = MakeIntrusive<NYql::TS3State>(TypesCtx->StrictConfigValidation);
 
         auto& configuration = *state->Configuration;
@@ -2190,33 +2210,19 @@ private:
         auto dataSource = NYql::CreateS3DataSource(state);
         auto dataSink = NYql::CreateS3DataSink(state);
 
-        TypesCtx->AddDataSource(NYql::S3ProviderName, std::move(dataSource));
-        TypesCtx->AddDataSink(NYql::S3ProviderName, std::move(dataSink));
+        return MakeProviders(std::move(dataSource), std::move(dataSink));
     }
 
-    void InitYdbExternalProvider() {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YdbExternalProviderName))) {
-            return;
-        }
-
+    TDataProviderInfo CreateYdbExternalProvider() {
         const auto& resources = FederatedQuerySetup->YdbExternalResources;
         YQL_ENSURE(resources, "Missing YdbExternal resources");
         auto provider = NYql::CreateYdbExternalDataProviders(
             TypesCtx.Get(), [resources] { return resources->GetMetadataClientCache(); },
             FederatedQuerySetup->CredentialsFactory);
-        TypesCtx->AddDataSource(NYql::YdbExternalProviderName, std::move(provider.Source));
-        TypesCtx->AddDataSink(NYql::YdbExternalProviderName, std::move(provider.Sink));
+        return MakeProviders(std::move(provider.Source), std::move(provider.Sink));
     }
 
-    void InitGenericProvider() {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::GenericProviderName))) {
-            return;
-        }
-
-        if (!FederatedQuerySetup->ConnectorClient) {
-            return;
-        }
-
+    TDataProviderInfo CreateGenericProvider() {
         auto state = MakeIntrusive<NYql::TGenericState>(
             TypesCtx.Get(),
             FuncRegistry,
@@ -2226,15 +2232,10 @@ private:
             FederatedQuerySetup->GenericGatewayConfig
         );
 
-        TypesCtx->AddDataSource(NYql::GenericProviderName, NYql::CreateGenericDataSource(state));
-        TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
+        return MakeProviders(NYql::CreateGenericDataSource(state), NYql::CreateGenericDataSink(state));
     }
 
-    void InitYtProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
-            return;
-        }
-
+    TDataProviderInfo CreateYtProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
         TString userName = CreateGuidAsString();
         if (SessionCtx->GetUserToken() && SessionCtx->GetUserToken()->GetUserSID()) {
             userName = SessionCtx->GetUserToken()->GetUserSID();
@@ -2258,27 +2259,21 @@ private:
             ytSource = NYql::WrapYtDataSourceWithMessageStreams(std::move(ytSource),
                 NYql::CreateYtMessageStreamIntegration(FederatedQuerySetup->CredentialsFactory));
         }
-        TypesCtx->AddDataSource(YtProviderName, std::move(ytSource));
-        TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
 
         finalizers.emplace_back([ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {
             return ytGateway->CloseSession(NYql::IYtGateway::TCloseSessionOptions(sessionId));
         });
+        return MakeProviders(std::move(ytSource), CreateYtDataSink(ytState));
     }
 
-    void InitPgProvider() {
+    TDataProviderInfo CreatePgProvider() {
         auto state = MakeIntrusive<NYql::TPgState>();
         state->Types = TypesCtx.Get();
 
-        TypesCtx->AddDataSource(NYql::PgProviderName, NYql::CreatePgDataSource(state));
-        TypesCtx->AddDataSink(NYql::PgProviderName, NYql::CreatePgDataSink(state));
+        return MakeProviders(NYql::CreatePgDataSource(state), NYql::CreatePgDataSink(state));
     }
 
-    void InitSolomonProvider() {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::SolomonProviderName))) {
-            return;
-        }
-
+    TDataProviderInfo CreateSolomonProvider() {
         auto solomonState = MakeIntrusive<TSolomonState>(TypesCtx->StrictConfigValidation);
 
         solomonState->WriteThroughDqIntegration = true;
@@ -2289,16 +2284,10 @@ private:
         solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
         solomonState->ExecutorPoolId = AppData()->UserPoolId;
 
-        TypesCtx->AddDataSource(NYql::SolomonProviderName, NYql::CreateSolomonDataSource(solomonState));
-        TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
+        return MakeProviders(NYql::CreateSolomonDataSource(solomonState), NYql::CreateSolomonDataSink(solomonState));
     }
 
-    void InitPqProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))
-            && !AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations()) {
-            return;
-        }
-
+    TDataProviderInfo CreatePqProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
         TString sessionId = CreateGuidAsString();
         auto state = MakeIntrusive<TPqState>(sessionId, TypesCtx->StrictConfigValidation);
         state->SupportRtmrMode = false;
@@ -2337,18 +2326,24 @@ private:
             state->WatermarkLateEventsPolicy = requestContext->WatermarkLateEventsPolicy;
         }
 
-        TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
-        TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
-
         finalizers.emplace_back([pqGateway = state->Gateway, sessionId]() {
             return pqGateway->CloseSession(sessionId);
         });
+        return MakeProviders(NYql::CreatePqDataSource(state, state->Gateway), NYql::CreatePqDataSink(state, state->Gateway));
     }
 
     void Init(EKikimrQueryType queryType) {
         auto* trace = SessionCtx->Query().CompileTrace.Get();
-        std::optional<TCompileTraceScope> providersTrace(std::in_place, trace, TCompileTraceLevels::Step,
+        TCompileTraceScope providersTrace(trace, TCompileTraceLevels::Step,
             "Initialize compilation providers");
+        // A host can prepare more than one query. Retire the previous factories
+        // and registrations before creating this compilation's provider pairs.
+        TypesCtx->DataSources.clear();
+        TypesCtx->DataSinks.clear();
+        TypesCtx->DataSourceMap.clear();
+        TypesCtx->DataSinkMap.clear();
+        TypesCtx->LayersRegistry.Reset();
+        TypesCtx->InitializeResult.reset();
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem, UsePessimisticLocks);
 
@@ -2390,35 +2385,47 @@ private:
         bool isSupportedQueryType = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
             || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming;
         if (isSupportedQueryType && FederatedQuerySetup) {
-            TVector<std::function<TFuture<void>()>> finalizers;
+            // Metadata may activate a provider after the async result has copied
+            // its finalizer. Share the list so every opened session is closed.
+            auto finalizers = std::make_shared<TVector<std::function<TFuture<void>()>>>();
+            const auto available = [this](TStringBuf name) {
+                return ExternalSourceFactory->IsAvailableProvider(TString(name));
+            };
             if (AppData()->FeatureFlags.GetEnableExternalDataSources()) {
-                InitS3Provider(queryType);
-                InitGenericProvider();
-                InitYdbExternalProvider();
-                InitSolomonProvider();
-
-                if (FederatedQuerySetup->YtGateway) {
-                    InitYtProvider(finalizers);
+                if (available(S3ProviderName)) {
+                    RegisterLazyProvider(S3ProviderName, "S3", [this, queryType] { return CreateS3Provider(queryType); });
+                }
+                if (available(GenericProviderName) && FederatedQuerySetup->ConnectorClient) {
+                    RegisterLazyProvider(GenericProviderName, "Generic", [this] { return CreateGenericProvider(); });
+                }
+                if (available(YdbExternalProviderName)) {
+                    RegisterLazyProvider(YdbExternalProviderName, "YdbExternal", [this] { return CreateYdbExternalProvider(); });
+                }
+                if (available(SolomonProviderName)) {
+                    RegisterLazyProvider(SolomonProviderName, "So", [this] { return CreateSolomonProvider(); });
+                }
+                if (available(YtProviderName) && FederatedQuerySetup->YtGateway) {
+                    RegisterLazyProvider(YtProviderName, "Yt", [this, finalizers] { return CreateYtProvider(*finalizers); }, true);
                 }
             }
+            const bool topicsEnabled = AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations();
             if (FederatedQuerySetup->PqGatewayFactory
-                && (AppData()->FeatureFlags.GetEnableExternalDataSources() || AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations())) {
-                InitPqProvider(finalizers);
+                && (AppData()->FeatureFlags.GetEnableExternalDataSources() || topicsEnabled)
+                && (available(PqProviderName) || topicsEnabled)) {
+                RegisterLazyProvider(PqProviderName, "Pq", [this, finalizers] { return CreatePqProvider(*finalizers); });
             }
-
-            if (!finalizers.empty()) {
-                DataProvidersFinalizer = [finalizers = std::move(finalizers)](const NYql::IGraphTransformer::TStatus&) {
-                    TVector<TFuture<void>> futures;
-                    for (const auto& f : finalizers) {
-                        futures.push_back(f());
-                    }
-                    return WaitAll(futures);
-                };
-            }
+            DataProvidersFinalizer = [finalizers](const NYql::IGraphTransformer::TStatus&) {
+                TVector<TFuture<void>> futures;
+                for (const auto& finalize : *finalizers) {
+                    futures.push_back(finalize());
+                }
+                finalizers->clear();
+                return WaitAll(futures);
+            };
             TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
         }
 
-        InitPgProvider();
+        RegisterLazyProvider(PgProviderName, "Pg", [this] { return CreatePgProvider(); });
 
         TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
         TypesCtx->TimeProvider = TAppData::TimeProvider;
@@ -2463,8 +2470,17 @@ private:
         TypesCtx->MatchRecognize = QueryServiceConfig.GetEnableMatchRecognize();
 
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
-        providersTrace.reset();
-        TCompileTraceScope pipelinesTrace(trace, TCompileTraceLevels::Step, "Create frontend pipelines");
+    }
+
+    IGraphTransformer& GetYqlTransformer(bool newRbo = false) {
+        auto& transformer = newRbo ? YqlTransformerNewRBO : YqlTransformer;
+        if (transformer) {
+            return *transformer;
+        }
+        auto* trace = SessionCtx->Query().CompileTrace.Get();
+        TCompileTraceScope pipelinesTrace(trace, TCompileTraceLevels::Step,
+            newRbo ? "Create new RBO frontend pipeline" : "Create legacy frontend pipeline");
+        const auto queryType = SessionCtx->Query().Type;
 
         // Compilation spans of the pipeline phases. The logical phases run in a loop
         // that restarts until the query stops changing: a phase span covers the loop,
@@ -2485,33 +2501,42 @@ private:
         const auto endPass = [&](const TString& name) {
             return CreateCompileTraceEnd(getTrace, name, &passes);
         };
+        const auto providerPeephole = [this] {
+            TCompileTraceScope trace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Step,
+                "Create provider peephole pipeline");
+            return GetDqIntegrationPeepholeTransformer(true, TypesCtx);
+        };
 
-        YqlTransformer = TTransformationPipeline(TypesCtx)
-            .AddServiceTransformers()
-            .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
-                NYql::NLog::ELevel::TRACE), "LogYqlTransform")
-            .Add(beginTrace("Prepare logical query"), "TraceBeginPrepareLogicalQuery")
-            .Add(beginPass("Annotate IO"), "TraceBeginIOAnnotation")
-            .AddPreTypeAnnotation()
-            .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
-            .AddExpressionEvaluation(*FuncRegistry)
-            .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
-            .AddIOAnnotation(false)
-            .Add(endPass("Annotate IO"), "TraceEndIOAnnotation")
-            .Add(beginPass("Annotate types"), "TraceBeginTypeAnnotation")
-            .AddTypeAnnotation()
-            .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
-            .AddPostTypeAnnotation()
-            .Add(endPass("Annotate types"), "TraceEndTypeAnnotation")
-            .Add(beginPass("Apply provider optimizations"), "TraceBeginProviderOptimization")
-            .AddOptimization(true, false)
-            .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
-            .Add(endPass("Apply provider optimizations"), "TraceEndProviderOptimization")
-            .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
-            .Add(beginTrace("Prepare physical query"), "TraceBeginPreparePhysicalQuery")
-            .AddRun(&NullProgressWriter)
-            .Add(endTrace("Prepare physical query"), "TraceEndPreparePhysicalQuery")
-            .Build();
+        if (!newRbo) {
+            YqlTransformer = TTransformationPipeline(TypesCtx)
+                .AddServiceTransformers()
+                .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
+                    NYql::NLog::ELevel::TRACE), "LogYqlTransform")
+                .Add(beginTrace("Prepare logical query"), "TraceBeginPrepareLogicalQuery")
+                .Add(beginPass("Annotate IO"), "TraceBeginIOAnnotation")
+                .AddPreTypeAnnotation()
+                .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
+                .AddExpressionEvaluation(*FuncRegistry)
+                .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
+                .AddIOAnnotation(false)
+                .Add(endPass("Annotate IO"), "TraceEndIOAnnotation")
+                .Add(beginPass("Annotate types"), "TraceBeginTypeAnnotation")
+                .AddTypeAnnotation()
+                .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
+                .AddPostTypeAnnotation()
+                .Add(endPass("Annotate types"), "TraceEndTypeAnnotation")
+                .Add(beginPass("Apply provider optimizations"), "TraceBeginProviderOptimization")
+                .AddOptimization(true, false)
+                .Add(CreateLazyTransformer(providerPeephole), "DqIntegrationPeephole")
+                .Add(endPass("Apply provider optimizations"), "TraceEndProviderOptimization")
+                .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
+                .Add(beginTrace("Prepare physical query"), "TraceBeginPreparePhysicalQuery")
+                .AddRun(&NullProgressWriter)
+                .Add(endTrace("Prepare physical query"), "TraceEndPreparePhysicalQuery")
+                .Build();
+
+            return *YqlTransformer;
+        }
 
         auto typesCtx = TypesCtx;
         EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION;
@@ -2577,7 +2602,7 @@ private:
             .Add(beginPass("Apply provider optimizations"), "TraceBeginProviderOptimization")
             //.AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION)
             .Add(RBOOptimizationTransformer.Release(), "RBOOptimizationTransformer")
-            .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
+            .Add(CreateLazyTransformer(providerPeephole), "DqIntegrationPeephole")
             .Add(endPass("Apply provider optimizations"), "TraceEndProviderOptimization")
             .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
             .Add(beginTrace("Prepare physical query"), "TraceBeginPreparePhysicalQuery")
@@ -2585,6 +2610,15 @@ private:
             .Add(endTrace("Prepare physical query"), "TraceEndPreparePhysicalQuery")
             .Build();
 
+        return *YqlTransformerNewRBO;
+    }
+
+    IGraphTransformer& GetDataQueryAstTransformer() {
+        if (DataQueryAstTransformer) {
+            return *DataQueryAstTransformer;
+        }
+        TCompileTraceScope trace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Step,
+            "Create data query AST pipeline");
         DataQueryAstTransformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
             .AddIntentDeterminationTransformer()
@@ -2593,6 +2627,7 @@ private:
             .Add(new TPrepareDataQueryAstTransformer(Cluster, ExecuteCtx, SessionCtx->QueryPtr(), KqpRunner),
                 "PrepareDataQueryAst")
             .Build();
+        return *DataQueryAstTransformer;
     }
 
     void SetupSession(EKikimrQueryType queryType, TCompileTrace::TPtr trace = {}) {
@@ -2602,6 +2637,9 @@ private:
             TransformCtx->FrontendKeepInCache.Clear();
             TransformCtx->FrontendCommandTag.Clear();
         }
+        YqlTransformer.Destroy();
+        YqlTransformerNewRBO.Destroy();
+        DataQueryAstTransformer.Destroy();
         NativeFrontendTransformer.Destroy();
         NativeMetadataTransformer.Destroy();
         NativePrepareTransformer.Destroy();
@@ -2922,7 +2960,12 @@ private:
         }
     }
 
-    void SetupNativeFrontend() {
+    IGraphTransformer& GetNativeFrontend() {
+        if (NativeFrontendTransformer) {
+            return *NativeFrontendTransformer;
+        }
+        TCompileTraceScope trace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Step,
+            "Create native frontend pipeline");
         NativeMetadataTransformer = CreateCompileTraceTransformer(
             CreateKiSourceLoadTableMetadataTransformer(
                 CreateKqpGatewayProxy(Gateway, SessionCtx, ActorSystem), SessionCtx, *TypesCtx, ExternalSourceFactory, IsInternalCall),
@@ -2947,17 +2990,14 @@ private:
                 NewParserNames.reset();
                 input = LegacyCompile(ctx);
                 if (!input) { return {nullptr, false}; }
-                return {SessionCtx->Config().GetEnableNewRBO() ? YqlTransformerNewRBO.Get() : YqlTransformer.Get(), false};
+                return {&GetYqlTransformer(SessionCtx->Config().GetEnableNewRBO()), false};
             }
         });
+        return *NativeFrontendTransformer;
     }
 
     void SetupYqlTransformer(EKikimrQueryType queryType, TCompileTrace::TPtr trace = {}) {
         SetupSession(queryType, std::move(trace));
-
-        YqlTransformer->Rewind();
-        YqlTransformerNewRBO->Rewind();
-        SetupNativeFrontend();
 
         ResultProviderConfig->FillSettings = FillSettings;
         ResultProviderConfig->CommittedResults.clear();
@@ -2966,8 +3006,6 @@ private:
     void SetupDataQueryAstTransformer(const IKikimrQueryExecutor::TExecuteSettings& settings, EKikimrQueryType queryType,
         TCompileTrace::TPtr trace = {}) {
         SetupSession(queryType, std::move(trace));
-
-        DataQueryAstTransformer->Rewind();
 
         ExecuteCtx->Reset(settings);
     }

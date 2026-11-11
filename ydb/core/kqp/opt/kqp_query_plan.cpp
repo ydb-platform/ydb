@@ -35,7 +35,6 @@
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
-#include <util/generic/algorithm.h>
 #include <util/generic/queue.h>
 #include <util/string/hex.h>
 #include <util/string/strip.h>
@@ -850,20 +849,16 @@ private:
 
         TVector<TString> readColumns;
         TTableRead readInfo;
-        bool mainTableCovered = true;
         for(const auto& column: columns) {
             readColumns.push_back(TString(column.Value()));
             if (readColumns.back() == NTableIndex::NFulltext::FullTextRelevanceColumn) {
                 op.Properties["RelevanceQuery"] = "True";
             } else {
                 readInfo.Columns.push_back(readColumns.back());
-                // Match TMainTableReader::FromSettings: only primary keys and relevance
-                // can be returned without looking up documents in the main table.
-                mainTableCovered &= IsIn(tableData.Metadata->KeyColumnNames, readColumns.back());
             }
         }
 
-        if (!mainTableCovered) {
+        if (sourceSettings.MainTableCovered().Value() != "true") {
             readInfo.Type = EPlanTableReadType::Lookup;
             readInfo.LookupBy = tableData.Metadata->KeyColumnNames;
             SerializerCtx.Tables[TString(tablePath)].Reads.push_back(std::move(readInfo));
@@ -2414,6 +2409,9 @@ private:
             op.Properties["ReadLimit"] = limit;
         }
         readInfo.SetSorting(settings.GetSorting());
+        if (settings.RequireSortedRead) {
+            op.Properties["RequireSortedRead"] = true;
+        }
         if (settings.GetSorting() == ERequestSorting::DESC) {
             op.Properties["Reverse"] = true;
         } else if (settings.GetSorting() == ERequestSorting::ASC) {

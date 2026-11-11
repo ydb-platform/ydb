@@ -219,7 +219,7 @@ public:
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(*Self, &locksDb);
 
-        if (Self->State != TShardState::Ready) {
+        if (Self->State != TShardState::Ready || Self->IsDatabaseFrozen()) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_WRONG_STATE,
@@ -319,7 +319,10 @@ public:
         TDataShardChangeGroupProvider groupProvider(*Self, txc.DB);
         THolder<IDataShardChangeCollector> collector;
         if (userTable.HasAsyncIndexes()) {
-            collector.Reset(CreateChangeCollector(*Self, userDb, groupProvider, txc.DB, userTable));
+            const auto indexKeySizePolicy = userTable.IsReplicated()
+                ? EAsyncIndexKeySizePolicy::SkipOversizedIntermediateKeys
+                : EAsyncIndexKeySizePolicy::Reject;
+            collector.Reset(CreateChangeCollector(*Self, userDb, groupProvider, txc.DB, userTable, indexKeySizePolicy));
             // Previously staged base writes are the logical pre-image for new
             // global-consistency stream records, including after a shard reboot.
             for (ui64 openTxId : txc.DB.GetOpenTxs(userTable.LocalTid)) {

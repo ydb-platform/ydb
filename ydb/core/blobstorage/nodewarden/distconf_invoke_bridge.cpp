@@ -505,9 +505,10 @@ namespace NKikimr::NStorage {
         const auto& details = Self->StorageConfig->GetClusterStateDetails();
         if (!details.GetBscConversionPending()) {
             return Finish(TResult::OK, std::nullopt); // already cleared
-        } else if (cmd.GetBscConversionId() && cmd.GetBscConversionId() != details.GetBscConversionId()) {
-            // late notification of the conversion the cluster has been rolled back from; BSC performs the current one
-            // afterwards (older versions of BSC don't report the conversion they have performed)
+        } else if (cmd.GetBscConversionId() != details.GetBscConversionId()) {
+            // late notification of the conversion the cluster has been rolled back from, BSC performs the current one
+            // afterwards; BSC of older version reports no identity, but it can't take part in the conversion started by
+            // this version (which requires every node to support it), as it has 0 then
             return Finish(TResult::OK, std::nullopt);
         }
 

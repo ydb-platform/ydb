@@ -216,7 +216,7 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     }
     auto newRead =
         MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(), read->Limit,
-                               read->RangeInfo, originalPredicate, read->SortDir, read->Props, read->Pos);
+                               read->RangeInfo, originalPredicate, read->SortDir, read->Props, read->Pos, read->RequireSortedRead);
     if (IsValidPredicateToKeep(remainingFilter)) {
         // Part of the predicate could not be pushed down and the remaining TOpFilter survives.
         return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(remainingFilter.Cast().Ptr(), &ctx.ExprCtx, &props), true);

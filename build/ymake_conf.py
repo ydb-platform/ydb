@@ -1832,7 +1832,6 @@ class SwiftCompiler(object):
 class Linker(object):
     BFD = 'bfd'
     LLD = 'lld'
-    GOLD = 'gold'
     MOLD = 'mold'
 
     def __init__(self, tc, build):
@@ -1860,8 +1859,8 @@ class Linker(object):
             and self.build.target.is_rv32imc_zicsr_zifencei
             and (self.build.target.is_none or self.build.target.is_freertos)
         ):
-            # The ESP Clang SDK uses GNU ld, including its linker map format.
-            return Linker.BFD
+            # Use LLD shipped with the ESP Clang SDK.
+            return Linker.LLD
 
         if self.build.target.is_android:
             # Android toolchain is NDK, LLD works on all supported platforms
@@ -1928,7 +1927,7 @@ class LD(Linker):
 
         self.ld_flags = []
         if self.tc.is_clang and target.is_rv32imc_zicsr_zifencei:
-            self.ld_flags.append('--ld-path={}/esp-clang/bin/riscv32-esp-elf-clang-ld'.format(self.tc.name_marker))
+            self.ld_flags.append('--ld-path={}/esp-clang/bin/ld.lld'.format(self.tc.name_marker))
             if is_positive('NO_CXX_RTTI'):
                 self.ld_flags.append('-fno-rtti')
         if not self.build.is_release and target.is_linux:

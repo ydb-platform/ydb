@@ -50,6 +50,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     for (auto&& i : ActorsToStop) {
         ctx.Send(i, new TEvents::TEvPoisonPill);
     }
+    StopLocalDbBackup(ctx);
 
     StoragesManager->Stop();
     DataLocksManager->Stop();

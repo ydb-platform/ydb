@@ -519,6 +519,7 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta
 
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadOlapRanges>) {
         readProto.SetSorted(settings.IsSorted());
+        readProto.SetRequireSortedRead(settings.RequireSortedRead);
         if (settings.TabletId) {
             readProto.SetTabletId(*settings.TabletId);
         }
@@ -1426,6 +1427,7 @@ private:
 
             TString indexName = TString(settings.Index().Cast().StringValue());
             fullTextProto.SetIndex(settings.Index().Cast().StringValue());
+            fullTextProto.SetMainTableCovered(settings.MainTableCovered().Cast().Value() == "true");
 
             auto type = settings.Raw()->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
 

@@ -2,6 +2,7 @@
 
 #include "abortable_http_response.h"
 #include "core.h"
+#include "framing.h"
 #include "helpers.h"
 #include "http.h"
 
@@ -10,12 +11,13 @@
 #include <yt/cpp/mapreduce/common/halting_stream.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
-
 #include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
-#include <yt/yt/core/concurrency/thread_pool_poller.h>
+#include <yt/yt/core/actions/invoker_util.h>
+
 #include <yt/yt/core/concurrency/async_stream_helpers.h>
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/http/client.h>
 #include <yt/yt/core/http/compression.h>
@@ -26,7 +28,9 @@
 #include <yt/yt/core/https/config.h>
 
 #include <library/cpp/yson/node/node_io.h>
-#include <library/cpp/yt/logging/logger.h>
+
+#include <util/stream/str.h>
+#include <util/string/printf.h>
 
 namespace NYT::NHttpClient {
 
@@ -242,10 +246,13 @@ public:
             if (TConfig::Get()->UseHaltingResponse) {
                 asyncStream = NDetail::CreateHaltingAsyncStream(std::move(asyncStream), TConfig::Get()->HaltingResponseBytesLimit);
             }
-            auto stream = std::make_unique<TWrappedStream>(
+            std::unique_ptr<IAbortableInputStream> stream = std::make_unique<TWrappedStream>(
                 NDetail::CreateAbortableInputStreamAdapter(std::move(asyncStream)),
                 Response_,
                 Context_.RequestId);
+            if (Response_->GetHeaders()->Find("X-YT-Framing")) {
+                stream = CreateUnframingInputStream(std::move(stream));
+            }
             CheckErrorResponse(Context_.HostName, Context_.RequestId, Response_);
 
             if (TConfig::Get()->UseAbortableResponse) {
@@ -323,7 +330,6 @@ private:
         size_t DoRead(void* buf, size_t len) override
         {
             size_t read = Underlying_->Read(buf, len);
-
             if (read == 0 && len != 0) {
                 CheckTrailers(GetTrailers());
             }
@@ -561,17 +567,13 @@ class TCoreHttpClient
 {
 public:
     TCoreHttpClient(bool useTLS, const TConfigPtr& config)
-        : Poller_(NConcurrency::CreateThreadPoolPoller(1, "http_poller"))  // TODO(nadya73): YT-18363: move threads count to config
+        : Poller_(NConcurrency::CreateThreadPoolPoller(config->AsyncHttpClientThreads, "http_poller"))
     {
         if (useTLS) {
-            auto httpsConfig = NYT::New<NYT::NHttps::TClientConfig>();
-            httpsConfig->MaxIdleConnections = config->ConnectionPoolSize;
-            httpsConfig->DnsResolveOptions = GetDnsResolveOptions(config);
+            auto httpsConfig = CreateConfig<NYT::NHttps::TClientConfig>(config);
             Client_ = NHttps::CreateClient(httpsConfig, Poller_);
         } else {
-            auto httpConfig = NYT::New<NYT::NHttp::TClientConfig>();
-            httpConfig->MaxIdleConnections = config->ConnectionPoolSize;
-            httpConfig->DnsResolveOptions = GetDnsResolveOptions(config);
+            auto httpConfig = CreateConfig<NYT::NHttp::TClientConfig>(config);
             Client_ = NHttp::CreateClient(httpConfig, Poller_);
         }
     }
@@ -579,8 +581,6 @@ public:
     IHttpResponsePtr Request(const TString& url, const TString& requestId, const THttpConfig& /*config*/, const THttpHeader& header, TMaybe<TStringBuf> body) override
     {
         TCoreRequestContext context = CreateContext(url, requestId, header);
-
-        // TODO(nadya73): YT-18363: pass socket timeouts from THttpConfig
 
         NHttp::IResponsePtr response;
 
@@ -636,6 +636,15 @@ public:
     }
 
 private:
+    template <typename TClientConfig>
+    TIntrusivePtr<TClientConfig> CreateConfig(const TConfigPtr& config)
+    {
+        auto clientConfig = NYT::New<TClientConfig>();
+        clientConfig->MaxIdleConnections = config->ConnectionPoolSize;
+        clientConfig->DnsResolveOptions = GetDnsResolveOptions(config);
+        return clientConfig;
+    }
+
     TCoreRequestContext CreateContext(const TString& url, const TString& requestId, const THttpHeader& header)
     {
         TCoreRequestContext context;

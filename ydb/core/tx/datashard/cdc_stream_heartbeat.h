@@ -44,6 +44,8 @@ public:
     TRowVersion LowestVersion() const;
     bool ShouldEmitHeartbeat(const TRowVersion& edge) const;
     THashMap<TPathId, THeartbeatInfo> EmitHeartbeats(NTable::TDatabase& db, const TRowVersion& edge);
+    // The caller must fence and drain writers before using an unrounded edge.
+    THashMap<TPathId, THeartbeatInfo> EmitFinalHeartbeats(NTable::TDatabase& db, const TRowVersion& edge);
 
 private:
     THashMap<TPathId, THeartbeatInfo> CdcStreams;

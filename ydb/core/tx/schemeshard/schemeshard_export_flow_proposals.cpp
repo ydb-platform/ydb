@@ -89,6 +89,14 @@ static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const 
 }
 
 static TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(const NKikimrSchemeOp::TTableDescription& table, bool encrypted) {
+    for (const auto& index : table.GetTableIndexes()) {
+        // GetImplTables does not support HNSW, even when its description is complete.
+        if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            return TConclusionStatus::Fail(TStringBuilder()
+                << "Exporting materialized data for HNSW index '" << index.GetName() << "' is not supported");
+        }
+    }
+
     TString error;
     if (!ValidateIndexImplTableDescriptions(table, error)) {
         return TConclusionStatus::Fail(error);

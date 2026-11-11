@@ -19,6 +19,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
@@ -12432,6 +12433,88 @@ void ExportGlobalIndexWithLocalBloom(bool isFs) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
+    Y_UNIT_TEST_QUAD(RejectHnswIndex, IsFs, Prefixed) {
+        TBackupStorage storage(IsFs);
+        TTestBasicRuntime runtime;
+        TSchemeShard* schemeshard = nullptr;
+        const auto factory = [&](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true), factory);
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(IsFs);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "embedding" Type: "String" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "hnsw_idx"
+                Type: EIndexTypeGlobalVectorKmeansTree
+                KeyColumnNames: [%s "embedding"]
+                VectorIndexKmeansTreeDescription {
+                    Settings {
+                        settings { metric: DISTANCE_COSINE vector_type: VECTOR_TYPE_FLOAT vector_dimension: 2 }
+                        clusters: 2
+                        levels: 1
+                    }
+                }
+            }
+        )", Prefixed ? "\"key\"," : ""));
+        env.TestWaitNotification(runtime, txId);
+
+        // HNSW creation is currently disabled. Model an existing HNSW index
+        // using the complete implementation-table layout shared with KMeans.
+        runtime.RunCall([&] {
+            const auto indexPath = TPath::Resolve("/MyRoot/Table/hnsw_idx", schemeshard);
+            auto& index = *schemeshard->Indexes.at(indexPath.Base()->PathId);
+            NKikimrSchemeOp::THnswIndexDescription hnsw;
+            *hnsw.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+                index.SpecializedIndexDescription).GetSettings();
+            index.Type = NKikimrSchemeOp::EIndexTypeGlobalHnsw;
+            index.SpecializedIndexDescription = std::move(hnsw);
+            schemeshard->ClearDescribePathCaches(TPath::Resolve("/MyRoot/Table", schemeshard).Base(), true);
+            return true;
+        });
+        const auto description = DescribePath(runtime, "/MyRoot/Table");
+        const auto& table = description.GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(table.TableIndexesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table.GetTableIndexes(0).GetType(), NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+        UNIT_ASSERT_VALUES_EQUAL(table.GetTableIndexes(0).GetState(), NKikimrSchemeOp::EIndexStateReady);
+        UNIT_ASSERT_VALUES_EQUAL(table.GetTableIndexes(0).IndexImplTableDescriptionsSize(), Prefixed ? 3 : 2);
+        TString error;
+        UNIT_ASSERT_C(ValidateIndexImplTableDescriptions(table, error), error);
+
+        AsyncExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            %s {
+                %s
+                %s
+                encryption_settings {
+                    encryption_algorithm: "AES-128-GCM"
+                    symmetric_key { key: "0123456789012345" }
+                }
+                include_index_data: true
+                items { source_path: "/MyRoot/Table" %s: "backup" }
+            }
+        )", IsFs ? "ExportToFsSettings" : "ExportToS3Settings", storage.Settings().c_str(),
+            IsFs ? "" : "destination_prefix: \"export\"", IsFs ? "destination_path" : "destination_prefix"));
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = runtime.GrabEdgeEvent<TEvExport::TEvCreateExportResponse>(handle);
+        const auto& entry = response->Record.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL_C(entry.GetStatus(), Ydb::StatusIds::BAD_REQUEST, entry.GetIssues());
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(entry.GetIssues()),
+            "Exporting materialized data for HNSW index 'hnsw_idx' is not supported");
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "AfterRejectedExport");
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST_QUAD(VectorIndex, IsFs, Prefixed) {
         ExportImportComplexIndex(IsFs, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, Prefixed);
     }

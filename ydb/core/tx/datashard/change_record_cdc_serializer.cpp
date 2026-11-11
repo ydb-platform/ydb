@@ -10,6 +10,7 @@
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/uuid/uuid.h>
@@ -19,6 +20,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/streams/zstd/zstd.h>
 
 #include <util/charset/utf8.h>
 #include <util/stream/str.h>
@@ -325,10 +327,30 @@ protected:
         return str.Str();
     }
 
+    void SetJsonData(NKikimrPQClient::TDataChunk& data, TString json) const {
+        switch (Opts.Compression) {
+        case NKikimrSchemeOp::ECdcStreamCompressionNone:
+            data.SetData(std::move(json));
+            break;
+        case NKikimrSchemeOp::ECdcStreamCompressionZstd: {
+            TString compressed;
+            TStringOutput output(compressed);
+            TZstdCompress compressor(&output, Opts.CompressionLevel ? Opts.CompressionLevel : 3);
+            compressor.Write(json.data(), json.size());
+            compressor.Finish();
+            data.SetCodec(NPersQueueCommon::ZSTD);
+            data.SetData(std::move(compressed));
+            break;
+        }
+        default:
+            Y_ENSURE(false, "Unsupported changefeed compression");
+        }
+    }
+
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {
         NJson::TJsonValue json;
         SerializeToJson(json, record);
-        data.SetData(JsonToString(json));
+        SetJsonData(data, JsonToString(json));
     }
 
     virtual void SerializeToJson(NJson::TJsonValue& json, const TChangeRecord& record) = 0;
@@ -766,7 +788,7 @@ protected:
             messageMeta.set_key("__key");
             messageMeta.set_value(JsonToString(json["key"]));
         }
-        data.SetData(JsonToString(json["value"]));
+        SetJsonData(data, JsonToString(json["value"]));
     }
 
 public:

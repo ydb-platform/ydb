@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/kqp/query_data
     ydb/core/kqp/federated_query
     ydb/core/kqp/gateway/utils
+    ydb/core/kqp/host/lazy_provider
     ydb/core/kqp/opt
     ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/provider
@@ -54,3 +55,8 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    lazy_provider/ut
+    ut
+)

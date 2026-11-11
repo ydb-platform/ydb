@@ -182,21 +182,6 @@ There are two main approaches to representing tabular data in memory or on disks
 
 #### Primary key {#primary-key}
 
-<<<<<<< HEAD
-A **primary key** is an ordered list of columns, the values of which uniquely identify rows. It is used to build the [table's primary index](#primary-index). It is provided by the {{ ydb-short-name }} user during [table creation](../yql/reference/syntax/create_table/index.md) and dramatically impacts the performance of workloads interacting with that table.
-
-Guidance on choosing primary keys is provided in [{#T}](../dev/primary-key/index.md).
-
-#### Primary index {#primary-index}
-
-**Primary index** or **primary key index** is the main data structure used to find rows in a table. It is created based on the selected [primary key](#primary-key) and determines the physical order of rows in the table; thus, each table can have only one primary index. The primary index is unique.
-
-#### Secondary index {#secondary-index}
-
-A **secondary index** is an additional data structure used to find rows in a table, typically when this cannot be done efficiently using the [primary index](#primary-index). Unlike a primary index, secondary indexes are managed independently of the table's main data. Thus, a table can have multiple secondary indexes for different scenarios. The capabilities of {{ ydb-short-name }} regarding secondary indexes are described in a separate article [{#T}](query_execution/secondary_indexes.md). A secondary index can be either unique or non-unique.
-
-Special types of secondary indexes include [vector index](#vector-index), [full-text index](#fulltext-index), and [JSON index](#json-index).
-=======
 A **primary key** is an ordered list of columns whose values uniquely identify a row. It determines the physical order of rows in the table; thus, each table can have only one primary key. The primary key is set by the {{ ydb-short-name }} user when [creating a table](../yql/reference/syntax/create_table/index.md) and significantly affects the performance of operations on that table. The primary key is unique by its very definition.
 
 Guidance on choosing primary keys is provided in [{#T}](../dev/primary-key/index.md).
@@ -206,7 +191,6 @@ Guidance on choosing primary keys is provided in [{#T}](../dev/primary-key/index
 A **secondary index** is an additional data structure used to find rows in a table, typically when this cannot be done efficiently using the [primary key](#primary-key). Unlike the primary key, secondary indexes are managed independently of the table's underlying data. Thus, a table can have multiple secondary indexes for different scenarios. The capabilities of {{ ydb-short-name }} regarding secondary indexes are described in a separate article [{#T}](query_execution/secondary_indexes.md). A secondary index can be either unique or non-unique.
 
 Special types of secondary indexes are also available: [vector index](#vector-index), [full-text index](#fulltext-index), and [JSON index](#json-index).
->>>>>>> c521636e96a (docs: re-sync glossary (#58778))
 
 #### Vector Index {#vector-index}
 
@@ -297,7 +281,7 @@ However, subsets of data managed by a single [data shard](#data-shard) or [colum
 
 ### Query execution {#runtime-stats}
 
-The terms below describe the [query execution plan](../dev/optimization/structure.md) and the distributed execution of its stages.
+The terms below describe the [query execution plan](../dev/optimization/plans.md) and the distributed execution of its stages.
 
 #### Operator {#operator}
 
@@ -313,11 +297,11 @@ A **physical operator** describes **what** runs and **how**: the chosen algorith
 
 #### Communication channels {#channels}
 
-**Communication channels** are elements of the [query execution plan](../dev/optimization/structure.md) that transfer data between [processing stages](#processing-stage). A communication channel consists of an output channel, which sends data from one [processing stage](#processing-stage), and an input channel, which receives data into another [processing stage](#processing-stage). Communication channels carry data between compute stages and between storage stages and compute stages. Different connection types use different mechanisms, for example [hash shuffle](../dev/optimization/structure.md#connections) or a [merge operation](../dev/optimization/structure.md#connections).
+**Communication channels** are elements of the [query execution plan](../dev/optimization/plans.md) that transfer data between [processing stages](#processing-stage). A communication channel consists of an output channel, which sends data from one [processing stage](#processing-stage), and an input channel, which receives data into another [processing stage](#processing-stage). Communication channels carry data between compute stages and between storage stages and compute stages. Different connection types use different mechanisms, for example [hash shuffle](../dev/optimization/plans.md) or a [merge operation](../dev/optimization/plans.md).
 
 #### Processing stage {#processing-stage}
 
-**Processing stages** are blocks of the [query execution plan](../dev/optimization/structure.md) into which an SQL query is split during compilation. Stages process data sequentially: the data flow goes from storage to the query result and, in the general case, forms a [directed acyclic graph](https://en.wikipedia.org/wiki/Directed_acyclic_graph). Each stage consists of one or more [tasks](#task) executed in parallel on different [cluster nodes](#node) and contains [physical operators](#physical-operator).
+**Processing stages** are blocks of the [query execution plan](../dev/optimization/plans.md) into which an SQL query is split during compilation. Stages process data sequentially: the data flow goes from storage to the query result and, in the general case, forms a [directed acyclic graph](https://en.wikipedia.org/wiki/Directed_acyclic_graph). Each stage consists of one or more [tasks](#task) executed in parallel on different [cluster nodes](#node) and contains [physical operators](#physical-operator).
 
 There are two kinds of stages:
 
@@ -545,15 +529,11 @@ The optional suffix `@<auth-domain>` identifies the source of the access subject
 
 [**Query optimizer**](https://en.wikipedia.org/wiki/Query_optimization) is a set of {{ ydb-short-name }} components responsible for converting the logical representation of a query into a specific physically executable plan for obtaining the requested result. The main goal of the optimizer is to select, among all possible query execution plans, one that is sufficiently efficient in terms of predicted execution time and cluster resource consumption. It is described in more detail in a separate article [{#T}](query_execution/optimizer.md).
 
-<<<<<<< HEAD
-### Compilation cache {#compile-cache}
-=======
 #### Cardinality {#cardinality}
 
 **Cardinality** is the [query optimizer](#optimizer)'s estimate of the number of rows (records) at the output of an [operator](#operator) in the [query plan](../dev/optimization/index.md) or of a join of the given tables.
 
 ### Compile cache {#compile-cache}
->>>>>>> c521636e96a (docs: re-sync glossary (#58778))
 
 **compile cache** is a cache of compiled queries on each [node](#node) of the cluster. It is used to avoid recompilation: if the query text is already in the node's cache, no additional compilation is performed. For more details, see the [Query Compilation Cache](../dev/system-views.md#compile-cache-queries) section.
 

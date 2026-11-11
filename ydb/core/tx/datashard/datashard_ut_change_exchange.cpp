@@ -17,6 +17,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tablet_flat/flat_scan_events.h>
@@ -6180,6 +6182,102 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":30},"key":[3]})",
             R"({"resolved":"***"})",
             R"({"resolved":"***"})",
+        });
+    }
+
+    Y_UNIT_TEST(AggregatedHeartbeats) {
+        using TEvWriteHeartbeat = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeat;
+        using TEvWriteHeartbeatResult = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult;
+
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        const ui64 aggregatorTabletId = 1;
+        auto setAggregatedMode = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
+            for (auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.CdcStreamInfo) {
+                    auto info = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TCdcStreamInfo>(*entry.CdcStreamInfo);
+                    info->Description.SetHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated);
+                    info->Description.SetAggregatorTabletId(aggregatorTabletId);
+                    entry.CdcStreamInfo = info;
+                }
+            }
+        });
+
+        TBlockEvents<TEvWriteHeartbeat> heartbeats(runtime);
+        auto answerHeartbeats = [&]() {
+            TVector<TRowVersion> versions;
+            while (!heartbeats.empty()) {
+                auto ev = std::move(heartbeats.front());
+                heartbeats.pop_front();
+
+                auto result = MakeHolder<TEvWriteHeartbeatResult>();
+                result->Status = TEvWriteHeartbeatResult::EStatus::Written;
+                result->WrittenVersion = ev->Get()->Heartbeat.Version;
+                versions.push_back(result->WrittenVersion);
+                runtime.Send(new IEventHandle(ev->Sender, edgeActor, result.Release(), 0, ev->Cookie), 0, true);
+            }
+            return versions;
+        };
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        WaitFor(runtime, [&]{ return !heartbeats.empty(); }, "heartbeat");
+        UNIT_ASSERT_VALUES_EQUAL(heartbeats.front()->Get()->RecipientTabletId, aggregatorTabletId);
+        UNIT_ASSERT_VALUES_EQUAL(heartbeats.front()->Get()->SourceDataShardId, GetTableShards(server, edgeActor, "/Root/Table").at(0));
+
+        ExecSQL(server, edgeActor, R"(UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);)");
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+        });
+
+        WaitFor(runtime, [&]{ return heartbeats.size() > 1; }, "heartbeat resend");
+        answerHeartbeats();
+
+        TRowVersion dataVersion = TRowVersion::Min();
+        auto observeData = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>([&](auto& ev) {
+            for (const auto& record : ev->Get()->Records) {
+                if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcDataChange) {
+                    dataVersion = TRowVersion(record->GetStep(), record->GetTxId());
+                }
+            }
+        });
+
+        TBlockEvents<NPQ::TEvPartitionWriter::TEvWriteResponse> writeResponses(runtime);
+        ExecSQL(server, edgeActor, R"(UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);)");
+        WaitFor(runtime, [&]{ return !writeResponses.empty(); }, "write response");
+        UNIT_ASSERT(dataVersion != TRowVersion::Min());
+
+        for (int i = 0; i < 5; ++i) {
+            SimulateSleep(server, TDuration::Seconds(3));
+            for (const auto& version : answerHeartbeats()) {
+                UNIT_ASSERT_C(version < dataVersion, "Heartbeat " << version << " is written before data " << dataVersion);
+            }
+        }
+
+        writeResponses.Stop().Unblock();
+        answerHeartbeats();
+
+        WaitFor(runtime, [&]{
+            return AnyOf(heartbeats, [&](const auto& ev) {
+                return ev->Get()->Heartbeat.Version >= dataVersion;
+            });
+        }, "heartbeat after data");
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
         });
     }
 

@@ -21,6 +21,7 @@ class TScanAdmissionControl {
         ui64 TotalLimit = 512_MB;
         ui64 ActiveLimit = Max<ui64>();
         ui64 BrokerLimit = Max<ui64>();
+        ui64 BrokerLimitGeneration = 0;
         bool BrokerConfigurationPending = false;
         ::NMonitoring::TDynamicCounters::TCounterPtr CountCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr BytesCounter;
@@ -120,15 +121,26 @@ public:
         }
     }
 
-    void RestrictBrokerLimit(ui64 bytes) {
+    ui64 GetBrokerLimitGeneration() const {
         with_lock(State->Lock) {
-            State->BrokerLimit = Min(State->BrokerLimit, bytes);
+            return State->BrokerLimitGeneration;
+        }
+    }
+
+    void RestrictBrokerLimit(ui64 bytes, ui64 generation) {
+        with_lock(State->Lock) {
+            // A queued scan may receive its rejection after a newer broker
+            // configuration has already been acknowledged.
+            if (generation == State->BrokerLimitGeneration) {
+                State->BrokerLimit = Min(State->BrokerLimit, bytes);
+            }
         }
     }
 
     void ConfirmBrokerLimit(ui64 bytes) {
         with_lock(State->Lock) {
             State->BrokerLimit = bytes;
+            ++State->BrokerLimitGeneration;
             State->BrokerConfigurationPending = false;
         }
     }

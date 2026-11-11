@@ -585,7 +585,7 @@ Y_UNIT_TEST(IndexBuildBrokerCapacityRefreshWaitsForAcknowledgement) {
     fixture.Runtime.WaitFor("broker configuration acknowledgement held", [&] { return !acks.empty(); });
     auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
     const ui64 capacity = quota.GetActiveByteLimit(32_MB);
-    quota.RestrictBrokerLimit(1);
+    quota.RestrictBrokerLimit(1, quota.GetBrokerLimitGeneration());
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(32_MB), 1);
     acks.Stop().Unblock();

@@ -339,7 +339,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         TAdmissionFixture fixture;
         auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
         quota.SetTotalLimit(512_MB, 448_MB, true);
-        quota.RestrictBrokerLimit(1);
+        quota.RestrictBrokerLimit(1, quota.GetBrokerLimitGeneration());
         fixture.Send(fixture.Shards[0]);
         const auto pending = fixture.Reply(NKikimrIndexBuilder::ABORTED);
         UNIT_ASSERT_GT(pending->Get()->Record.GetRetryAfterMs(), 0);
@@ -347,6 +347,59 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         quota.ConfirmBrokerLimit(448_MB);
         fixture.Send(fixture.Shards[0]);
         fixture.Reply(NKikimrIndexBuilder::DONE);
+    }
+
+    Y_UNIT_TEST(LateBrokerRejectionCannotUndoConfirmedCapacity) {
+        TAdmissionFixture fixture;
+        fixture.SetMemoryBudget(256_MB, 64_MB);
+        auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
+        quota.SetTotalLimit(256_MB, 128_MB, true);
+        fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexRequestBytesLimit(32_MB);
+
+        auto request = MakeHolder<TEvDataShard::TEvRecomputeKMeansRequest>();
+        auto& rec = request->Record;
+        rec.SetAllowMemoryAdmission(true);
+        rec.SetId(1);
+        rec.SetSeqNoGeneration(1);
+        rec.SetSeqNoRound(1);
+        rec.SetTabletId(fixture.Shards[0]);
+        fixture.Table.PathId.ToProto(rec.MutablePathId());
+        rec.MutableSettings()->set_vector_dimension(4096);
+        rec.MutableSettings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        rec.MutableSettings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        rec.SetParent(0);
+        rec.SetEmbeddingColumn("embedding");
+        TString centroid(4096 * sizeof(float) + 1, '\0');
+        centroid.back() = 1;
+        for (ui32 i = 0; i < 1024; ++i) {
+            rec.AddClusters(centroid);
+        }
+        // Even the centroid/scratch state exceeds 64 MiB, so applying the
+        // stale hint would make the next fitting attempt permanently fail.
+        auto retry = MakeHolder<TEvDataShard::TEvRecomputeKMeansRequest>();
+        retry->Record.CopyFrom(rec);
+        retry->Record.SetSeqNoRound(2);
+        using TBroker = NResourceBroker::TEvResourceBroker;
+        TBlockEvents<TBroker::TEvTaskOperationError> errors(fixture.Runtime, [](const auto& event) {
+            return event->Get()->Status.Code == TBroker::TStatus::MEMORY_LIMIT_EXCEEDED;
+        });
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, request.Release(), 0, GetPipeConfigWithRetries());
+        fixture.Runtime.WaitFor("rejection under old broker configuration held", [&] { return errors.size() == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(*(*errors.begin())->Get()->Status.MemoryLimit, 64_MB);
+
+        fixture.SetMemoryBudget(256_MB, 128_MB);
+        quota.ConfirmBrokerLimit(128_MB);
+        errors.Stop().Unblock();
+        const auto rejected = fixture.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvRecomputeKMeansResponse>(fixture.Sender);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Record.GetStatus(), NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(rejected->Get()->Record.GetRetryAfterMs(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64_MB), 128_MB);
+        UNIT_ASSERT(!quota.IsBrokerConfigurationPending());
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, retry.Release(), 0, GetPipeConfigWithRetries());
+        const auto done = fixture.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvRecomputeKMeansResponse>(fixture.Sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(done->Get()->Record.GetStatus(), NKikimrIndexBuilder::DONE,
+            done->Get()->Record.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
     }
 
     Y_UNIT_TEST(RequiredRowCannotRetryBeyondScanCapacity) {

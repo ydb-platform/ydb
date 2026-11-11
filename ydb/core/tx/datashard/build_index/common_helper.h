@@ -870,8 +870,9 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
     options.PendingReservation = lease;
     options.QueueTimeout = TDuration::MilliSeconds(Max<ui32>(1, config.GetBuildIndexQueueTimeoutMs()));
     options.OnAdmissionFailure = fail;
-    options.OnMemoryLimitExceeded = [quota = AppData()->BuildIndexScanAdmission](ui64 limit) {
-        quota->RestrictBrokerLimit(limit);
+    options.OnMemoryLimitExceeded = [quota = AppData()->BuildIndexScanAdmission,
+        generation = admission.GetBrokerLimitGeneration()](ui64 limit) {
+        quota->RestrictBrokerLimit(limit, generation);
     };
     options.Factory = [self, pending, pathId, tableId, schemaVersion, rowLimit, makeScan, fail](TScanOptions& opts) mutable -> TAutoPtr<NTable::IScan> {
         try {

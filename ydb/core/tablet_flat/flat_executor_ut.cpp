@@ -1227,6 +1227,103 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         UNIT_ASSERT(destroyed);
     }
 
+    struct TRetainedScanPayloads {
+        std::shared_ptr<void> Upload;
+        std::shared_ptr<void> CompletedUpload;
+        std::shared_ptr<void> Response;
+        bool Finished = false;
+    };
+
+    class TRetainedPayloadOverrunScan : public NTable::IScan {
+    public:
+        explicit TRetainedPayloadOverrunScan(TRetainedScanPayloads& payloads)
+            : Payloads(payloads)
+        {}
+
+        void Describe(IOutputStream& out) const override {
+            out << "retained payload overrun";
+        }
+
+        TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) override {
+            Payloads.Upload = RetainResourceReservation(3_KB);
+            Payloads.CompletedUpload = RetainResourceReservation(3_KB);
+            // While running, charge the overrun and restore the original
+            // reservation when this temporary payload is released.
+            auto temporary = RetainResourceReservation(4_KB);
+            temporary.reset();
+            return {EScan::Final, {}};
+        }
+
+        EScan Seek(TLead&, ui64) override { return EScan::Final; }
+        EScan Feed(TArrayRef<const TCell>, const TRow&) override { return EScan::Final; }
+
+        TAutoPtr<IDestructable> Finish(EStatus status) override {
+            UNIT_ASSERT_VALUES_EQUAL(status, EStatus::Done);
+            // A response can overlap both uploads during teardown. Exceeding
+            // the estimate here must not escape from IScan::Finish().
+            Payloads.Response = RetainResourceReservation(4_KB);
+            Payloads.Finished = true;
+            delete this;
+            return nullptr;
+        }
+
+    private:
+        TRetainedScanPayloads& Payloads;
+    };
+
+    Y_UNIT_TEST(RetainedPayloadOverrunIsChargedDuringFinish) {
+        TMyEnvScans env;
+        TRetainedScanPayloads payloads;
+        TVector<TResourceValues> updates;
+        TActorId client;
+        ui64 taskId = 0;
+        bool finished = false;
+        auto submissions = env->AddObserver<TEvResourceBroker::TEvSubmitTask>([&](auto& event) {
+            if (event->Get()->Task.Type == "build_index") {
+                client = event->Sender;
+                taskId = event->Get()->Task.TaskId;
+            }
+        });
+        auto updateObserver = env->AddObserver<TEvResourceBroker::TEvUpdateTask>([&](auto& event) {
+            if (event->Sender == client && event->Get()->TaskId == taskId) {
+                updates.push_back(event->Get()->RequiredResources);
+            }
+        });
+        auto finishes = env->AddObserver<TEvResourceBroker::TEvFinishTask>([&](auto& event) {
+            if (event->Sender == client && event->Get()->TaskId == taskId) {
+                finished = true;
+            }
+        });
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 8_KB);
+            options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                return new TRetainedPayloadOverrunScan(payloads);
+            };
+            executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+        }));
+        env->WaitFor("finished scan retains its full payload charge without CPU", [&] { return updates.size() >= 4; });
+        UNIT_ASSERT(payloads.Finished);
+        UNIT_ASSERT_VALUES_EQUAL(updates[0][CPU], 1);
+        UNIT_ASSERT_VALUES_EQUAL(updates[0][MEMORY], 10_KB);
+        UNIT_ASSERT_VALUES_EQUAL(updates[1][CPU], 1);
+        UNIT_ASSERT_VALUES_EQUAL(updates[1][MEMORY], 8_KB);
+        UNIT_ASSERT_VALUES_EQUAL(updates[2][CPU], 1);
+        UNIT_ASSERT_VALUES_EQUAL(updates[2][MEMORY], 10_KB);
+        UNIT_ASSERT_VALUES_EQUAL(updates[3][CPU], 0);
+        UNIT_ASSERT_VALUES_EQUAL(updates[3][MEMORY], 10_KB);
+        UNIT_ASSERT(!finished);
+        payloads.Response.reset();
+        env->WaitFor("response memory released", [&] { return updates.size() >= 5; });
+        UNIT_ASSERT_VALUES_EQUAL(updates[4][CPU], 0);
+        UNIT_ASSERT_VALUES_EQUAL(updates[4][MEMORY], 6_KB);
+        payloads.CompletedUpload.reset();
+        env->WaitFor("completed upload memory released", [&] { return updates.size() >= 6; });
+        UNIT_ASSERT_VALUES_EQUAL(updates[5][MEMORY], 3_KB);
+        payloads.Upload.reset();
+        env->WaitFor("last payload finishes the broker task", [&] { return finished; });
+    }
+
     Y_UNIT_TEST_TWIN(ScanStartFailureReleasesPreparedSnapshot, Deferred) {
         TMyEnvScans env;
         env.SendSync(env.Rows.MakeRows(1));

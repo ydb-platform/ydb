@@ -66,12 +66,15 @@ namespace NTabletFlatExecutor {
                 const ui64 Memory;
                 TSpinLock Lock;
                 ui64 Retained = 0;
+                ui64 ChargedMemory;
+                ui64 ChargedCpu = 1;
                 bool Running = true;
                 bool Armed = true;
                 std::atomic<bool> Cancel{true};
 
                 TState(TActorSystem* system, TActorId client, ui64 taskId, TString type, ui32 priority, ui64 memory)
                     : System(system), Client(client), TaskId(taskId), Type(std::move(type)), Priority(priority), Memory(memory)
+                    , ChargedMemory(memory)
                 {}
 
                 ~TState() {
@@ -82,9 +85,13 @@ namespace NTabletFlatExecutor {
                 }
 
                 void UpdateRetained() {
-                    if (Armed && !Running && Retained) {
+                    const ui64 memory = Running ? Max(Memory, Retained) : Retained;
+                    const ui64 cpu = Running ? 1 : 0;
+                    if (Armed && memory && (memory != ChargedMemory || cpu != ChargedCpu)) {
                         System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
-                            new TEvResourceBroker::TEvUpdateTask(TaskId, {{0, Retained}}, Type, Priority)));
+                            new TEvResourceBroker::TEvUpdateTask(TaskId, {{cpu, memory}}, Type, Priority)));
+                        ChargedMemory = memory;
+                        ChargedCpu = cpu;
                     }
                 }
             };
@@ -125,10 +132,12 @@ namespace NTabletFlatExecutor {
             std::shared_ptr<void> Retain(ui64 bytes) {
                 auto payload = std::make_shared<TPayload>(State, bytes);
                 with_lock(State->Lock) {
-                    Y_ENSURE(State->Retained <= State->Memory && bytes <= State->Memory - State->Retained,
-                        "Retained scan payload exceeds its memory reservation");
+                    // The payload already exists, including when retained from
+                    // Finish(). Charge estimate overruns instead of throwing in
+                    // the scan's teardown path or hiding their memory usage.
                     State->Retained += bytes;
                     payload->Armed = true;
+                    State->UpdateRetained();
                 }
                 return payload;
             }

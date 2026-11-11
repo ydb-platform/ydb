@@ -7,6 +7,7 @@
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fcms_2eproto) || \
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fconfig_2eproto) || \
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fdatashard_5fconfig_2eproto) || \
+        defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fflat_5fscheme_5fop_2eproto) || \
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fkey_2eproto) || \
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fkqp_2eproto) || \
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fnetclassifier_2eproto) || \
@@ -52,6 +53,7 @@ namespace NKikimr {
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fcms_2eproto) || \
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fconfig_2eproto) || \
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fdatashard_5fconfig_2eproto) || \
+        defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fflat_5fscheme_5fop_2eproto) || \
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fkey_2eproto) || \
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fkqp_2eproto) || \
         defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fnetclassifier_2eproto) || \

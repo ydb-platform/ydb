@@ -7,12 +7,13 @@ SRCS(
 PEERDIR(
     library/cpp/protobuf/json
     ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/kqp/gateway/behaviour/streaming_query/common
     ydb/core/kqp/runtime
-    ydb/services/workload_manager/actors
     ydb/core/sys_view/common
     ydb/library/actors/core
     ydb/library/query_actor
+    ydb/services/workload_manager/actors
 )
 
 END()

@@ -25,6 +25,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/protobuf/json/util.h>
@@ -125,12 +126,14 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const NKikimrKqp::TKqpAlter
 
 namespace {
 
-std::pair<TString, TString> SplitPathIntoWorkingDirAndName(const TString& path) {
+bool SplitPathIntoWorkingDirAndName(const TString& path, std::pair<TString, TString>& result, TString& error) {
     auto splitPos = path.find_last_of('/');
     if (splitPos == path.npos || splitPos + 1 == path.size()) {
-        ythrow yexception() << "wrong path format '" << path << "'" ;
+        error = TStringBuilder() << "wrong path format '" << path << "'";
+        return false;
     }
-    return {path.substr(0, splitPos), path.substr(splitPos + 1)};
+    result = {path.substr(0, splitPos), path.substr(splitPos + 1)};
+    return true;
 }
 
 bool ValidateRenameIndexRequest(
@@ -410,11 +413,8 @@ static bool BuildAlterTableBloomFilterModifySchemeImpl(const TString& path, cons
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
     std::pair<TString, TString> pathPair;
-    try {
-        pathPair = SplitPathIntoWorkingDirAndName(path);
-    } catch (const std::exception&) {
+    if (!SplitPathIntoWorkingDirAndName(path, pathPair, error)) {
         code = Ydb::StatusIds::BAD_REQUEST;
-        error = "Invalid table path";
         return false;
     }
 
@@ -757,9 +757,7 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
 
     const auto OpType = *ops.begin();
 
-    try {
-        pathPair = SplitPathIntoWorkingDirAndName(path);
-    } catch (const std::exception&) {
+    if (!SplitPathIntoWorkingDirAndName(path, pathPair, error)) {
         code = Ydb::StatusIds::BAD_REQUEST;
         return false;
     }
@@ -1941,9 +1939,7 @@ static bool BuildAlterColumnTableModifySchemeImpl(const TString& path, const TRe
     const auto OpType = *ops.begin();
 
     std::pair<TString, TString> pathPair;
-    try {
-        pathPair = SplitPathIntoWorkingDirAndName(path);
-    } catch (const std::exception&) {
+    if (!SplitPathIntoWorkingDirAndName(path, pathPair, error)) {
         status = Ydb::StatusIds::BAD_REQUEST;
         return false;
     }
@@ -2424,24 +2420,30 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree: {
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw: {
+            auto* vectorIndex = tableIndex.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                ? index->mutable_global_hnsw_index()
+                : index->mutable_global_vector_kmeans_tree_index();
             FillGlobalIndexSettings(
-                *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
+                *vectorIndex->mutable_level_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::LevelTablePosition)
             );
             FillGlobalIndexSettings(
-                *index->mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings(),
+                *vectorIndex->mutable_posting_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PostingTablePosition)
             );
             const bool prefixVectorIndex = tableIndex.GetKeyColumnNames().size() > 1;
             if (prefixVectorIndex) {
                 FillGlobalIndexSettings(
-                    *index->mutable_global_vector_kmeans_tree_index()->mutable_prefix_table_settings(),
+                    *vectorIndex->mutable_prefix_table_settings(),
                     tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition)
                 );
             }
 
-            *index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
+            *vectorIndex->mutable_vector_settings() = tableIndex.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                ? tableIndex.GetHnswIndexDescription().GetSettings()
+                : tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
 
             break;
         }
@@ -2686,6 +2688,11 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
             *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+            break;
+
+        case Ydb::Table::TableIndex::kGlobalHnswIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw);
+            *indexDesc->MutableHnswIndexDescription()->MutableSettings() = index.global_hnsw_index().vector_settings();
             break;
 
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
@@ -3306,6 +3313,59 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 
     tableDesc->MutableKeyColumnNames()->CopyFrom(in.primary_key());
 
+    // A restored table describes its sequences from the backup separately (FillDefaultValues in the
+    // import flow), so nothing is derived here: the parameters must come from the backup verbatim.
+    if (indexedTable && !tableDesc->GetIsRestore()) {
+        // A column may default from a sequence (e.g. a serial column): the scheme description then
+        // needs the sequence itself, otherwise the column would reference a non-existent object.
+        // Parameters are copied from the request when present (a table described and serialized by
+        // the SDK, which keeps them in the column) and derived from the column type otherwise.
+        auto* indexed = out.MutableCreateIndexedTable();
+
+        for (int i = 0; i < in.columns_size(); ++i) {
+            const auto& column = in.columns(i);
+            if (!column.has_from_sequence()) {
+                continue;
+            }
+
+            const auto& fromSequence = column.from_sequence();
+            auto* sequence = indexed->AddSequenceDescription();
+            sequence->SetName(fromSequence.name());
+            if (fromSequence.has_min_value()) {
+                sequence->SetMinValue(fromSequence.min_value());
+            }
+            if (fromSequence.has_max_value()) {
+                sequence->SetMaxValue(fromSequence.max_value());
+            }
+            if (fromSequence.has_start_value()) {
+                sequence->SetStartValue(fromSequence.start_value());
+            }
+            if (fromSequence.has_cache()) {
+                sequence->SetCache(fromSequence.cache());
+            }
+            if (fromSequence.has_increment()) {
+                sequence->SetIncrement(fromSequence.increment());
+            }
+            if (fromSequence.has_cycle()) {
+                sequence->SetCycle(fromSequence.cycle());
+            }
+            if (fromSequence.has_set_val()) {
+                sequence->MutableSetVal()->SetNextValue(fromSequence.set_val().next_value());
+                sequence->MutableSetVal()->SetNextUsed(fromSequence.set_val().next_used());
+            }
+
+            // The sequence has to produce values the column can store: prefer the type the request
+            // carries (a restored table or a sequence provisioned for an index column) and fall
+            // back to the column type.
+            if (fromSequence.has_data_type() && fromSequence.data_type().has_type_id()) {
+                const auto typeId = static_cast<NScheme::TTypeId>(fromSequence.data_type().type_id());
+                sequence->SetDataType(NScheme::TypeName(NScheme::TTypeInfo(typeId)));
+            } else if ((size_t)i < tableDesc->ColumnsSize()) {
+                sequence->SetDataType(tableDesc->GetColumns((size_t)i).GetType());
+            }
+        }
+    }
+
     if (!profiles.ApplyTableProfile(in.profile(), *tableDesc, status, error)) {
         return false;
     }
@@ -3339,7 +3399,8 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 }
 
 bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
-        const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error)
+        const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error,
+        const TString& sourceDatabase, const TString& targetDatabase)
 {
     NKikimrSchemeOp::TColumnTableDescription& tableDesc = *out.MutableCreateColumnTable();
 
@@ -3360,6 +3421,16 @@ bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 
     if (!FillCreateTableSettingsDesc(tableDesc, in, status, error)) {
         return false;
+    }
+
+    if (sourceDatabase && tableDesc.GetTtlSettings().HasEnabled()) {
+        // Each conversion starts from the original backup scheme, so retries cannot rewrite paths twice.
+        for (auto& tier : *tableDesc.MutableTtlSettings()->MutableEnabled()->MutableTiers()) {
+            if (tier.HasEvictToExternalStorage()) {
+                auto* storage = tier.MutableEvictToExternalStorage();
+                storage->SetStorage(NYdb::NDump::RewriteAbsolutePath(storage->GetStorage(), sourceDatabase, targetDatabase));
+            }
+        }
     }
 
     if (!FillColumnTableIndexesFromCreateRequest(tableDesc, in, status, error)) {

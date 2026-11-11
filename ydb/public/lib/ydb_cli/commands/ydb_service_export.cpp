@@ -38,21 +38,31 @@ namespace {
         }, entry.Type);
     }
 
-    TStatus FilterAsyncReplicaTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
-        auto isAsyncReplicaTable = [&session](const NScheme::TSchemeEntry& entry) {
-            if (entry.Type != NScheme::ESchemeEntryType::Table) {
+    // The legacy replica-table rule is independent of __omit_backup.
+    TStatus FilterNotExportableTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
+        auto isNotExportable = [&session](const NScheme::TSchemeEntry& entry) {
+            if (entry.Type != NScheme::ESchemeEntryType::Table
+                && entry.Type != NScheme::ESchemeEntryType::ColumnTable)
+            {
+                // Other objects are filtered by the export service, which can
+                // read their scheme attributes without extending the public API.
                 return false;
             }
             auto describeResult = session.DescribeTable(entry.Name).ExtractValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
 
             const auto& attributes = describeResult.GetTableDescription().GetAttributes();
-            auto it = attributes.find("__async_replica");
-            return it != attributes.end() && it->second == "true";
+            for (const auto* name : {"__async_replica", "__omit_backup"}) {
+                auto it = attributes.find(name);
+                if (it != attributes.end() && it->second == "true") {
+                    return true;
+                }
+            }
+            return false;
         };
 
         try {
-            std::erase_if(entries, isAsyncReplicaTable);
+            std::erase_if(entries, isNotExportable);
         } catch (NStatusHelpers::TYdbErrorException& e) {
             return e.ExtractStatus();
         }
@@ -73,9 +83,10 @@ namespace {
         auto ret = RecursiveList(schemeClient, TString{srcPath}, TRecursiveListSettings().Filter(filter));
         NStatusHelpers::ThrowOnErrorOrPrintIssues(ret.Status);
 
-        tableClient.RetryOperationSync([&ret](NTable::TSession session) {
-            return FilterAsyncReplicaTables(session, ret.Entries);
+        const auto status = tableClient.RetryOperationSync([&ret](NTable::TSession session) {
+            return FilterNotExportableTables(session, ret.Entries);
         });
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
             return {{TString{srcPath}, TString{dstPath}}};
@@ -446,7 +457,6 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     TExportClient client(driver);
     TTableClient tableClient(driver);
 
-    auto originalItems = settings.Item_;
     if (expandItems) {
         ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
         if (settings.Item_.empty()) {
@@ -459,14 +469,10 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         }
     }
 
-    TResponse response = CallExport<TResponse>(client, settings).ExtractValueSync();
-    if (expandItems && response.Status().GetStatus() == EStatus::BAD_REQUEST) {
-        // Retry the export operation limiting the scope to tables only.
-        // This approach ensures compatibility with servers running an older version of YDB.
-        settings.Item_ = std::move(originalItems);
-        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterTables);
-        response = CallExport<TResponse>(client, settings).ExtractValueSync();
-    }
+    // BAD_REQUEST does not identify an old server: it can also mean that all
+    // requested objects were excluded. Retrying with fewer items could turn an
+    // empty selection into a request to export the entire source directory.
+    const TResponse response = CallExport<TResponse>(client, settings).ExtractValueSync();
     ThrowOnError(response);
     PrintOperation(response, OutputFormat);
 

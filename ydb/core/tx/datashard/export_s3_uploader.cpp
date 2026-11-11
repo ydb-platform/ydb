@@ -13,6 +13,7 @@
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -1138,9 +1139,11 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     TMetadata metadata;
     metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
     metadata.SetEnablePermissions(Task.GetEnablePermissions());
+    metadata.SetSourceDatabase(Task.GetSourceDatabase());
 
     TVector<TChangefeedExportDescriptions> changefeeds;
-    if (AppData()->FeatureFlags.GetEnableChangefeedsExport()) {
+    const bool exportChangefeeds = AppData()->FeatureFlags.GetEnableChangefeedsExport();
+    if (exportChangefeeds) {
         const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
         const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
         Y_ASSERT(persQueues.size() == cdcStreams.size());
@@ -1152,6 +1155,9 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
             Ydb::Table::ChangefeedDescription changefeed;
             const auto& cdcStream = cdcStreams.at(i);
             FillChangefeedDescription(changefeed, cdcStream);
+            if (NBackup::IsChangefeedOmittedFromBackup(changefeed)) {
+                continue;
+            }
 
             Ydb::Topic::DescribeTopicResult topic;
             const auto& pq = persQueues.at(i);
@@ -1167,7 +1173,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
             if (encrypted) {
                 // Anonymize changefeed name in export
                 std::stringstream prefix;
-                prefix << std::setfill('0') << std::setw(3) << std::right << (i + 1);
+                prefix << std::setfill('0') << std::setw(3) << std::right << changefeeds.size();
                 descr.Prefix = prefix.str();
             } else {
                 descr.Prefix = descr.Name;
@@ -1181,7 +1187,9 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     }
 
     if (scheme) {
-        int idx = changefeeds.size() + 1;
+        // Omitted feeds still reserve their slots before the indexes. This must
+        // match ComputeIndexItemSuffix in the SchemeShard export path.
+        int idx = exportChangefeeds ? Task.GetTable().GetTable().CdcStreamsSize() + 1 : 1;
         for (const auto& index : scheme->indexes()) {
             const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
             if (!indexType) {

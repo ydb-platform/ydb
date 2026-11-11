@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 
@@ -394,6 +395,8 @@ private:
     THashMap<TString, TTaskConfig> TaskConfigs;
     TResourceLimitPtr ResourceLimit;
     THashMap<std::pair<TActorId, ui64>, TTaskPtr> Tasks;
+    // Contains exactly the task IDs in Tasks for each client; empty clients are removed.
+    THashMap<TActorId, THashSet<ui64>> TasksByClient;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TQueueCountersPtr TotalCounters;
     ::NMonitoring::TDynamicCounters::TCounterPtr MissingTaskTypeCounter;

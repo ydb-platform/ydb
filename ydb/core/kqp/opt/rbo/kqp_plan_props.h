@@ -36,6 +36,9 @@ struct TSubplanEntry {
     std::optional<TInfoUnitId> ResultIU;
     ESubplanType Type;
     TUnorderedIUs DependentIUs; // Caller-scope IDs, not the subplan's local captures.
+    // IN only: the query typed the result as Bool?, for a nullable lookup or for ANSI IN over nullable items.
+    // A projection returns the result, so inlining must keep this type.
+    bool OptionalResult = false;
 };
 
 class TSubplans {
@@ -44,7 +47,7 @@ public:
     // referenced plan preserves that identity; changing it requires rewriting
     // every expression that names it and is intentionally unsupported here.
     void Add(TInfoUnitId binding, TIntrusivePtr<IOperator> plan, ESubplanType type,
-        TOrderedIUs<> tuple = {}, std::optional<TInfoUnitId> resultIU = std::nullopt);
+        TOrderedIUs<> tuple = {}, std::optional<TInfoUnitId> resultIU = std::nullopt, bool optionalResult = false);
 
     // Borrow the owning slot for an in-place rewrite, keeping the graph attached.
     TIntrusivePtr<IOperator>& MutablePlan(TInfoUnitId binding) Y_LIFETIME_BOUND {

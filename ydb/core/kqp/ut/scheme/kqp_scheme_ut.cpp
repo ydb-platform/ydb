@@ -10817,6 +10817,40 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateAsyncReplicationReportsTrailingSlashInSourcePath) {
+        TKikimrRunner kikimr;
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        TReplicationClient replication(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+
+        const auto tableQuery = "CREATE TABLE `/Root/table` (Key Uint64, PRIMARY KEY (Key));";
+        const auto table = session.ExecuteSchemeQuery(tableQuery).GetValueSync();
+        UNIT_ASSERT_C(table.IsSuccess(), table.GetIssues().ToString());
+
+        const auto query = Sprintf(R"(
+            --!syntax_v1
+            CREATE ASYNC REPLICATION `/Root/replication` FOR
+                `/Root/table/` AS `/Root/replica`
+            WITH (ENDPOINT = "%s", DATABASE = "/Root");
+        )", kikimr.GetEndpoint().c_str());
+        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto deadline = TInstant::Now() + TDuration::Minutes(1);
+        while (TInstant::Now() < deadline) {
+            const auto described = replication.DescribeReplication("/Root/replication").ExtractValueSync();
+            UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+            const auto& desc = described.GetReplicationDescription();
+            if (desc.GetState() == TReplicationDescription::EState::Error) {
+                UNIT_ASSERT_STRING_CONTAINS(desc.GetErrorState().GetIssues().ToOneLineString(),
+                                            "Error: wrong path format '/Root/table/'");
+                return;
+            }
+            Sleep(TDuration::Seconds(1));
+        }
+
+        UNIT_FAIL("Replication did not report the source path error");
+    }
+
     Y_UNIT_TEST_QUAD(AsyncReplicationYson, Global, BinaryInitial) {
         TKikimrRunner kikimr;
         auto& runtime = *kikimr.GetTestServer().GetRuntime();

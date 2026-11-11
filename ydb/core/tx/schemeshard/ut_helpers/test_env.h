@@ -223,6 +223,7 @@ namespace NSchemeShardUT_Private {
         const bool KillOnCommit;
         ui32 TotalBuckets = 0;
         ui32 Bucket = 0;
+        bool CreateDefaultDirectory = true;
 
         explicit TTestWithReboots(bool killOnCommit = false, TTestEnv::TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard);
         virtual ~TTestWithReboots() = default;

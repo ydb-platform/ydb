@@ -1,0 +1,46 @@
+cluster_id: production-bridge-01
+# Key each pile by the name its endpoints' SelfCheck reports, including an
+# implicit pile. Each endpoint must address exactly one YDB node, not a balancer.
+endpoints:
+  dc-a: [grpcs://ydb-a1.example:2135, grpcs://ydb-a2.example:2135]
+  dc-b: [grpcs://ydb-b1.example:2135, grpcs://ydb-b2.example:2135]
+auth:
+  # CA, cert and key are loaded once at startup; token_file is re-read before every
+  # UpdateClusterState and after any UNAUTHORIZED reply. Configure cert_file and
+  # key_file together. ca_file, cert_file and key_file require grpcs://
+  # endpoints.
+  ca_file: null
+  cert_file: null
+  key_file: null
+  token_file: null
+http:
+  listen: 127.0.0.1:8080
+  # Extra exact Host authorities for DNS aliases or a reverse proxy. A proxy
+  # must preserve the public Host. Ports are optional; no DNS lookup is made.
+  # trusted_authorities: [skipper.example, 'skipper.example:8443']
+  trusted_authorities: []
+# The SelfCheck and mutation client deadlines are their operation timeouts
+# + 2 s; GetClusterState uses read_timeout as both deadlines. Startup requires
+# state_poll_interval + read_timeout < evidence_ttl,
+# selfcheck_operation_timeout + 2 + round_interval < evidence_ttl and
+# bsc_warmup >= 20.
+# A SelfCheck still in flight at a round boundary is sent again as soon as it settles.
+# These defaults target a committed failover within 20 s once a previously healthy
+# cluster suffers a provable failure and a surviving quorum can commit the change.
+# BSC gets half the SelfCheck operation timeout (2 s here). A shorter budget can
+# produce more fallback replies under load. Larger explicit overrides increase
+# failover latency; qualification must use the deployed settings.
+# GREY/missing evidence, role warm-up, unresolved history or unavailable survivor
+# quorums never become an authorization merely because 20 s have elapsed.
+timing:
+  state_poll_interval_seconds: 1
+  read_timeout_seconds: 1
+  round_interval_seconds: 1
+  selfcheck_operation_timeout_seconds: 4
+  evidence_ttl_seconds: 8
+  confirm_seconds: 2
+  bsc_warmup_seconds: 30
+  mutation_operation_timeout_seconds: 25
+health_endpoints_per_pile: 2
+logging:
+  level: info

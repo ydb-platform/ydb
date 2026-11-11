@@ -76,6 +76,7 @@ NHttpClient::IHttpResponsePtr RequestWithoutRetry(
 
     if (context.ServiceTicketAuth) {
         header.SetServiceTicket(context.ServiceTicketAuth->Ptr->IssueServiceTicket());
+        header.SetUserTicket(context.UserTicket);
     } else {
         header.SetToken(context.Token);
     }
@@ -114,6 +115,7 @@ NHttpClient::IHttpRequestPtr StartRequestWithoutRetry(
 
     if (context.ServiceTicketAuth) {
         header.SetServiceTicket(context.ServiceTicketAuth->Ptr->IssueServiceTicket());
+        header.SetUserTicket(context.UserTicket);
     } else {
         header.SetToken(context.Token);
     }

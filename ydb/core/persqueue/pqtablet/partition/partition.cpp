@@ -731,7 +731,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     AutopartitioningManager->CleanUp();
 
-    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob()) {
+    // HandlePendingRequests does not run retention while the database is out of space.
+    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob() || WaitingForSubDomainQuota()) {
         ProcessTxsAndUserActs(ctx);
     }
 }
@@ -1000,7 +1001,8 @@ bool CheckDiskStatus(const TStorageStatusFlags status) {
 }
 
 void TPartition::InitComplete(const TActorContext& ctx) {
-    if (BlobEncoder.StartOffset == 0 && BlobEncoder.EndOffset == 0 && BlobEncoder.MirroredOffset != 0) {
+    if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
+        && BlobEncoder.IsEmpty() && CompactionBlobEncoder.IsEmpty()) {
         // Restore the position of an empty mirror before starting consumers and the mirrorer.
         BlobEncoder.StartOffset = BlobEncoder.EndOffset = BlobEncoder.MirroredOffset;
         BlobEncoder.Head.Offset = BlobEncoder.NewHead.Offset = BlobEncoder.MirroredOffset;
@@ -3285,7 +3287,7 @@ void TPartition::RunPersist() {
                 && encoder.NewHead.GetBatches().empty()
                 && !encoder.PartitionedBlob.IsInited();
         };
-        if (GetStartOffset() == 0 && GetEndOffset() == 0 && GetMirroredOffset() > 0
+        if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
             && PendingRequests.empty() && QuotaWaitingRequests.empty()
             && UserActionAndTransactionEvents.empty() && UserActionAndTxPendingWrite.empty()
             && WriteInflightSize == 0 && WriteInfosApplied.empty()
@@ -4148,7 +4150,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
     for (auto& user : AffectedUsers) {
         if (auto* actual = GetPendingUserIfExists(user)) {
             TUserInfo& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-            bool offsetHasChanged = (userInfo.Offset != actual->Offset);
+            const auto previousOffset = userInfo.Offset;
             if (userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
                 && !actual->Session.empty() && actual->ReadSessionActor
                 && (userInfo.Session != actual->Session || userInfo.Generation != actual->Generation
@@ -4181,6 +4183,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 userInfo.Offset = GetStartOffset();
             }
 
+            const bool offsetHasChanged = userInfo.Offset != previousOffset;
             if (offsetHasChanged && !userInfo.UpdateTimestampFromCache()) {
                 userInfo.ActualTimestamps = false;
                 ReadTimestampForOffset(user, userInfo, ctx);
@@ -4579,6 +4582,17 @@ TPartition::EProcessResult TPartition::PreProcessUserAct(TEvPQ::TEvSetClientInfo
     return EProcessResult::Continue;
 }
 
+ECumulativeCounters TPartition::UserActCounter(TEvPQ::TEvSetClientInfo::ESetClientInfoType type, bool ok) {
+    switch (type) {
+    case TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION:
+        return ok ? COUNTER_PQ_CREATE_SESSION_OK : COUNTER_PQ_CREATE_SESSION_ERROR;
+    case TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION:
+        return ok ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_DELETE_SESSION_ERROR;
+    default:
+        return ok ? COUNTER_PQ_SET_CLIENT_OFFSET_OK : COUNTER_PQ_SET_CLIENT_OFFSET_ERROR;
+    }
+}
+
 void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
     const TString& user = act.ClientId;
@@ -4635,7 +4649,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
             && (act.Type != TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION || !userInfo.Session.empty()) //but allow DropSession request when session is already dropped - for idempotence
             || (act.ClientId != CLIENTID_WITHOUT_CONSUMER && act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && !userInfo.Session.empty()
                  && (act.Generation < userInfo.Generation || act.Generation == userInfo.Generation && act.Step <= userInfo.Step))) { //old generation request
-        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+        TabletCounters.Cumulative()[UserActCounter(act.Type, false)].Increment(1);
 
         ScheduleReplyError(act,
                            NPersQueue::NErrorCode::WRONG_COOKIE,
@@ -4822,8 +4836,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             SendReadingFinished(user);
         }
 
-        auto counter = createSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
-        TabletCounters.Cumulative()[counter].Increment(1);
+        TabletCounters.Cumulative()[UserActCounter(act.Type, true)].Increment(1);
         auto *userInfoFull = UsersInfoStorage->GetIfExists(userInfo.User);
         if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET &&
                 userInfoFull && userInfo.Offset > userInfoFull->GetReadOffset() &&

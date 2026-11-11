@@ -300,7 +300,7 @@ public:
         Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead, /*comprehensive=*/ true);
         Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
 
-        Self->ReadGroups(groupIDsToRead, false, Response.get(), nodeId);
+        Self->ReadGroups(groupIDsToRead, true, Response.get(), nodeId);
         Y_ABORT_UNLESS(groupIDsToRead.empty());
 
         Self->ReadGroups(groupsToDiscard, true, Response.get(), nodeId);
@@ -419,6 +419,8 @@ public:
                 Y_ABORT_UNLESS(node);
                 Y_ABORT_UNLESS(!node->Registered);
                 node->Registered = true;
+                // a share taken in Execute may be older than the one already sent to the node during the commit
+                Self->FillBridgeSyncNodeRate(nodeId, &Response->Record);
                 Self->SendInReply(*Request, std::move(Response));
                 Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
             }

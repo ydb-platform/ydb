@@ -261,20 +261,10 @@ NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
             .Done().Ptr();
             // clang-format on
 
-            const auto programArg = Build<TCoArgument>(Ctx, Pos).Name("program_arg").Done().Ptr();
-            const auto renameMap = NPhysicalConvertionUtils::BuildRenameMap(programArg, renames, Ctx);
-            // clang-format off
-            source = Build<TDqPhyStage>(Ctx, Pos)
-                .Inputs()
-                    .Add({source})
-                .Build()
-                .Program()
-                    .Args({programArg})
-                    .Body(renameMap)
-                .Build()
-                .Settings(NYql::NDq::TDqStageSettings::New(StageGUID).BuildNode(Ctx, Pos))
-            .Done().Ptr();
-            // clang-format on
+            // The stage program reads the source through an argument.
+            auto programArg = Build<TCoArgument>(Ctx, Pos).Name("program_arg").Done().Ptr();
+            StageSource = TStageSource{std::move(source), programArg};
+            source = NPhysicalConvertionUtils::BuildRenameMap(std::move(programArg), renames, Ctx);
             break;
         }
         case NYql::EStorageType::ColumnStorage: {
@@ -316,6 +306,7 @@ NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
                 // clang-format on
             }
 
+            settings.RequireSortedRead = Read.RequireSortedRead;
             if (Read.SortDir != ESortDir::None) {
                 const auto sortDirection = Read.SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC;
                 settings.SetSorting(sortDirection);

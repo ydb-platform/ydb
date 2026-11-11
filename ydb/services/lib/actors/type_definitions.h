@@ -29,6 +29,7 @@ struct TTopicInitInfo {
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
     THashMap<ui32, TPartitionInfo> Partitions;
     std::shared_ptr<const NPQ::TPartitionGraph> PartitionGraph;
+    bool IsAsyncReplication = false;
 };
 
 using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;
@@ -46,6 +47,7 @@ struct TTopicHolderBase {
         MeteringMode = info.MeteringMode;
         FullConverter = info.TopicNameConverter;
         Partitions = info.Partitions;
+        IsAsyncReplication = info.IsAsyncReplication;
     }
 
     ui64 TabletID = 0;
@@ -59,6 +61,7 @@ struct TTopicHolderBase {
     NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
     NPersQueue::TTopicConverterPtr FullConverter;
     TMaybe<TString> CdcStreamPath;
+    bool IsAsyncReplication = false;
 
     TVector<ui32> Groups;
     THashMap<ui32, TPartitionInfo> Partitions;

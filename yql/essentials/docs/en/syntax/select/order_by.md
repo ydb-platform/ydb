@@ -9,6 +9,12 @@ Each criteria can be followed by the sorting direction:
 
 Multiple sorting criteria will be applied left-to-right.
 
+{% note info %}
+
+`NaN` is considered greater than all other key values, so it is sorted last in ascending order (`ASC`).
+
+{% endnote %}
+
 ## Example
 
 ```yql

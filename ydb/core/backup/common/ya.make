@@ -6,6 +6,7 @@ SRCS(
     feature_flags.cpp
     fields_wrappers.cpp
     metadata.cpp
+    omit_backup.cpp
 )
 
 PEERDIR(
@@ -15,6 +16,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/util
     ydb/library/yverify_stream
+    ydb/public/api/protos
 )
 
 GENERATE_ENUM_SERIALIZATION(metadata.h)

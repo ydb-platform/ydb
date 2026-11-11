@@ -70,6 +70,31 @@ Y_UNIT_TEST_SUITE(ExportSessionStateMachine) {
         session->Abort("second abort");
         UNIT_ASSERT(session->IsAborted());
     }
+
+    Y_UNIT_TEST(AbortErrorMessageSurvivesStateReload) {
+        auto session = MakeExportSession();
+        session->Confirm();
+        session->Abort("Scan error: blob read failed");
+        const TString state = session->SerializeStateToString();
+
+        auto reloaded = MakeExportSession();
+        UNIT_ASSERT(reloaded->DeserializeStateFromString(state).IsSuccess());
+        UNIT_ASSERT(reloaded->IsAborted());
+        const auto status = reloaded->GetStatus();
+        UNIT_ASSERT(!status.Success);
+        UNIT_ASSERT_VALUES_EQUAL(status.ErrorMessage, "Scan error: blob read failed");
+    }
+
+    Y_UNIT_TEST(AbortedStateWithoutErrorMessageReportsStatus) {
+        NKikimrColumnShardExportProto::TExportSessionState proto;
+        proto.SetStatus(::ToString(NOlap::NExport::TSession::EStatus::Aborted));
+
+        auto reloaded = MakeExportSession();
+        UNIT_ASSERT(reloaded->DeserializeStateFromString(proto.SerializeAsString()).IsSuccess());
+        const auto status = reloaded->GetStatus();
+        UNIT_ASSERT(!status.Success);
+        UNIT_ASSERT_STRING_CONTAINS(status.ErrorMessage, "aborted");
+    }
 }
 
 namespace {

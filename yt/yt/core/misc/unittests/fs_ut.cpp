@@ -13,7 +13,18 @@
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
 
+#include <util/system/file.h>
+#include <util/system/fstat.h>
+
 #include <cstdlib>
+
+#if defined(_linux_) || defined(_darwin_)
+    #include <sys/stat.h>
+    #include <sys/types.h>
+#endif
+#ifdef _linux_
+    #include <sys/sysmacros.h>
+#endif
 
 #ifdef _unix_
     #include <unistd.h>
@@ -39,6 +50,73 @@ TEST(TFSDeathTest, TestGetHomePathEnvironment)
         },
         ::testing::ExitedWithCode(0),
         "");
+}
+
+TEST(TFSTest, SetPermissions)
+{
+    const TTempDir tempDir;
+    std::string path = tempDir.Path().Child("file").GetPath();
+    TFile file(TString(path), CreateAlways | WrOnly | CloseOnExec);
+
+    SetPermissions(path, /*permissions*/ 0600);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0600u);
+
+    SetPermissions(path, /*permissions*/ 0640);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0640u);
+
+    std::string directory = tempDir.Name();
+    SetPermissions(directory, /*permissions*/ 0750);
+    EXPECT_EQ(TFileStat(TString(directory)).Mode & 0777, 0750u);
+}
+
+TEST(TFSTest, SetPermissionsForFileDescriptor)
+{
+    const TTempDir tempDir;
+    std::string path = tempDir.Path().Child("file").GetPath();
+    TFile file(TString(path), CreateAlways | WrOnly | CloseOnExec);
+
+    SetPermissions(file.GetHandle(), /*permissions*/ 0640);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0640u);
+
+    Remove(path);
+    SetPermissions(file.GetHandle(), /*permissions*/ 0600);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0600u);
+}
+
+TEST(TFSTest, SetPermissionsReportsMissingPath)
+{
+    const TTempDir tempDir;
+    std::string path = tempDir.Path().Child("missing").GetPath();
+
+    EXPECT_THROW_WITH_ERROR_CODE(SetPermissions(path, /*permissions*/ 0600), ELinuxErrorCode::NOENT);
+}
+#endif
+
+#if defined(_linux_) || defined(_darwin_)
+TEST(TFSTest, TestGetDeviceId)
+{
+    auto dir = TTempDir{};
+    auto path = std::string(dir.Name()) + "/file";
+    auto file = TFile(path.c_str(), CreateAlways | WrOnly);
+    struct stat status{};
+    ASSERT_EQ(::stat(path.c_str(), &status), 0);
+    auto deviceId = GetDeviceId(path);
+    EXPECT_EQ(static_cast<dev_t>(makedev(deviceId.first, deviceId.second)), status.st_dev);
+}
+
+TEST(TFSTest, TestGetDeviceIdMatchesStat)
+{
+    auto dir = TTempDir{};
+    struct stat status{};
+    ASSERT_EQ(::stat(dir.Name().c_str(), &status), 0);
+    auto deviceId = GetDeviceId(std::string(dir.Name()));
+    EXPECT_EQ(static_cast<dev_t>(makedev(deviceId.first, deviceId.second)), status.st_dev);
+}
+
+TEST(TFSTest, TestGetDeviceIdMissingPath)
+{
+    auto dir = TTempDir{};
+    EXPECT_THROW_WITH_SUBSTRING(GetDeviceId(std::string(dir.Name()) + "/missing"), "Failed to execute ::stat");
 }
 #endif
 

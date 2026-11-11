@@ -162,8 +162,7 @@ namespace NKikimr {
             // without touching group generation.
             THashSet<TBoxStoragePoolId> HeapAllocatorNumLeadingDisksChanged;
 
-            bool ResetDataCenterStates = false;
-            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking);
+            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking, bool suppressDegradedGroupsChecking);
 
             bool PushStaticGroupsToSelfHeal = false;
 
@@ -171,7 +170,10 @@ namespace NKikimr {
             std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
 
             TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const {
-                return Self.ResolveStoragePoolForPile(id, StoragePools.Get().at(id), pileId, BridgeInfo.get(), StorageConfig.get());
+                // the adopted rules, not the ones of the StorageConfig being proposed: BSC keeps following them until it
+                // adopts the new ones, which happens separately from this transaction
+                return Self.ResolveStoragePoolForPile(id, StoragePools.Get().at(id), pileId, BridgeInfo.get(),
+                    Self.GetPileOverrideRules());
             }
 
             THashMap<TVSlotId, ui64> PDiskGuidsForDeletedVSlots;
@@ -448,8 +450,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TMoveDDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd, TStatus& status);
-            void ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates& cmd, TStatus& status);
-            void ExecuteStep(const NKikimrBlobStorage::TDefineFailRealmStates& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDefineGroupState& cmd, TStatus& status);
 
             template<typename TCallback>
             void ForEachStoragePoolGroup(TBoxStoragePoolId storagePoolId, TCallback&& callback);

@@ -2252,10 +2252,6 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         resultProviderDataSources.push_back(TString(KikimrProviderName));
     }
 
-    if (providerNames.contains(RtmrProviderName)) {
-        resultProviderDataSources.push_back(TString(RtmrProviderName));
-    }
-
     if (providerNames.contains(PqProviderName)) {
         resultProviderDataSources.push_back(TString(PqProviderName));
     }

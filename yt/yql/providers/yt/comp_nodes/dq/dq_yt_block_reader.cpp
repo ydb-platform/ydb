@@ -411,6 +411,7 @@ public:
         NYT::NApi::NRpcProxy::NProto::TRowsetDescriptor descriptor;
         NYT::NApi::NRpcProxy::NProto::TRowsetStatistics statistics;
         NYT::TSharedRef currentPayload = NYT::NApi::NRpcProxy::DeserializeRowStreamBlockEnvelope(res.Value(), &descriptor, &statistics);
+        Settings_->RecordReadPayload(currentPayload.Size());
         if (descriptor.rowset_format() != NYT::NApi::NRpcProxy::NProto::RF_ARROW) {
             if (currentPayload.Size()) {
                 std::lock_guard guard(FallbackMtx_);
@@ -444,17 +445,18 @@ public:
     }
 
     void FlushPoolStats() {
+        // Only the consumer may update the non-thread-safe stats registry.
         if (auto bytes = PendingInputBytes_.exchange(0, std::memory_order::relaxed)) {
             MKQL_ADD_STAT(JobStats_, NYql::NCommon::InputBytes, bytes);
         }
         if (auto blocks = PendingBlocks_.exchange(0, std::memory_order::relaxed)) {
             MKQL_ADD_STAT(JobStats_, BlockCount, blocks);
         }
+        Settings_->ReportReadStats(JobStats_);
     }
 
     TResultBatch::TPtr Next() {
         for(;;) {
-            FlushPoolStats();
             size_t inputIdx = 0;
             NYT::TSharedRef payload;
             {
@@ -471,6 +473,7 @@ public:
                 RunRead();
             }
             auto result = Listener_->Get();
+            FlushPoolStats();
             if (!result) { // Falled back
                 continue;
             }

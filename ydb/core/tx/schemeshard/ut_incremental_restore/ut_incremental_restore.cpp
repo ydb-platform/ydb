@@ -2329,6 +2329,9 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_C(sawSubOpTxId.load(), "SubOpTxId was zero on every event");
         UNIT_ASSERT_C(sawSuccess.load(), "No event carried Success=true");
         UNIT_ASSERT_C(capturedGen.load() != 0, "Generation field was zero on the event");
+
+        UNIT_ASSERT_GT(GetTabletTxCompleted(runtime, TTestTxConfig::SchemeShard, "SchemeShard/TxProgressIncrementalRestore"), 0);
+        UNIT_ASSERT_GT(GetTabletTxCompleted(runtime, TTestTxConfig::SchemeShard, "SchemeShard/TxIncrementalRestoreShardResponse"), 0);
     }
 
     // TEvSchemaChanged for ETypeCreateIncrementalRestoreSrc must not populate

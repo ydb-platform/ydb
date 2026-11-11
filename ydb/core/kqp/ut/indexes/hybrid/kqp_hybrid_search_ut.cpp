@@ -2228,6 +2228,20 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
     }
 
     // HybridRank needs both a fulltext relevance index and a vector index; missing either is an error.
+    Y_UNIT_TEST(RejectsFulltextMode) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        const auto issues = RunBadRequestIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "%cats%", "Wildcard" AS Mode),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 3;
+        )sql");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "unsupported FullTextScore named argument 'Mode'");
+    }
+
     Y_UNIT_TEST(RejectsWhenIndexMissing) {
         const TString query = TargetDecl + R"sql(
             SELECT Key FROM `/Root/Docs`

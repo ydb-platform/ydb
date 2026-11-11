@@ -1,5 +1,6 @@
 #include "kqp_opt_phy_rules.h"
 
+#include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
@@ -263,48 +264,38 @@ TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx,
 
     const TKqlReadTableFullTextIndex& read = node.Cast<TKqlReadTableFullTextIndex>();
 
+    // Scalar subqueries are lowered by the shared precompute rules.
+    // Wait until all logical dependencies have been materialized before building the read.
     if (!IsDqPureExpr(read.Query())) {
-        TVector<TDqConnection> connections;
-        bool isPure;
-        FindDqConnections(read.Query(), connections, isPure);
-        if (!isPure) {
-            return node;
-        }
-
-        TNodeOnNodeOwnedMap replacements;
-        for (const auto& connection : connections) {
-            if (!connection.Maybe<TDqCnUnionAll>()) {
-                return node;
-            }
-            replacements[connection.Raw()] = Build<TDqPhyPrecompute>(ctx, connection.Pos())
-                .Connection(connection)
-                .Done().Ptr();
-        }
-
-        // A scalar expression may consume an entire rowset (for example, JoinFromList),
-        // rather than a scalar subquery. Materialize those dependencies as lists first.
-        // Return the logical read so the changed expression is typed before we build
-        // its scalar precompute. Shared outputs are handled by ReplicatePrecompute.
-        return TExprBase(ctx.ChangeChild(*node.Raw(), TKqlReadTableFullTextIndex::idx_Query,
-            ctx.ReplaceNodes(read.Query().Ptr(), replacements)));
+        return node;
     }
 
+    auto phyRead = ctx.RenameNode(*node.Raw(), TKqpReadTableFullTextIndex::CallableName());
+
+    // Materialize computed patterns as parameters before the fulltext source runs.
     TVector<TExprBase> query;
     query.reserve(read.Query().Size());
-    for (const auto& value : read.Query()) {
-        // A fulltext source serializes only literals and parameters. Materialize the
-        // whole scalar expression (not just its subqueries); build-txs will bind its
-        // result as a parameter. PrecomputeToInput also lifts any nested dependencies.
-        if (value.Maybe<TCoDataCtor>() || value.Maybe<TCoParameter>() || value.Maybe<TDqPhyPrecompute>()) {
-            query.push_back(value);
-        } else {
-            query.push_back(KqpPrecomputeParameter(value, ctx));
+    for (auto expr : read.Query()) {
+        auto pattern = expr;
+        const auto patternQuery = TryParseFulltextPatternQuery(expr.Ptr());
+        if (patternQuery) {
+            pattern = TExprBase(patternQuery->Pattern);
         }
+        if (auto just = pattern.Maybe<TCoJust>()) {
+            pattern = just.Cast().Input();
+        }
+        if (!pattern.Maybe<TCoDataCtor>() && !pattern.Maybe<TCoParameter>() &&
+            !pattern.Maybe<TDqPhyPrecompute>() && !pattern.Maybe<TKqpTxResultBinding>())
+        {
+            pattern = KqpPrecomputeParameter(pattern, ctx);
+        }
+        expr = patternQuery
+            ? TExprBase(ctx.ChangeChild(expr.Ref(), 0, pattern.Ptr()))
+            : pattern;
+        query.push_back(expr);
     }
-
-    auto phyRead = ctx.ChangeChild(*node.Raw(), TKqlReadTableFullTextIndex::idx_Query,
-        Build<TExprList>(ctx, read.Pos()).Add(query).Done().Ptr());
-    phyRead = ctx.RenameNode(*phyRead, TKqpReadTableFullTextIndex::CallableName());
+    phyRead = ctx.ChangeChild(*phyRead, TKqpReadTableFullTextIndex::idx_Query,
+        Build<TExprList>(ctx, read.Query().Pos()).Add(query).Done().Ptr());
 
     auto stage = Build<TDqStage>(ctx, read.Pos())
         .Inputs()

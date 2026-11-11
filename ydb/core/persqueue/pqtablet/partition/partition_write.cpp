@@ -581,6 +581,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     OnProcessTxsAndUserActsWriteComplete(ctx);
     CompleteReplicationDataWrite(ctx);
     HandleWriteResponse(ctx);
+    NotifyMirrorerPersistDone();
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();
 
@@ -744,7 +745,9 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
 }
 
 bool TPartition::ShouldUseDeduplicationQueue() const {
-    return DeduplicationQueueActor && !MirroringEnabled(Config);
+    const bool replicatedPartition = ReplicationEnabled(Config);
+    return DeduplicationQueueActor && (!MirroringEnabled(Config)
+        || (replicatedPartition && AppData()->FeatureFlags.GetEnableDstTopicReplicationDisabled()));
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -756,7 +759,19 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return;
     }
 
-    const bool mirroredPartition = MirroringEnabled(Config);
+    const bool replicatedPartition = ReplicationEnabled(Config);
+    const bool replicationDisabled = replicatedPartition
+        && AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled();
+
+    if (ev->Get()->FromMirrorer && replicationDisabled) {
+        DestroyMirrorer();
+
+        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
+                   "Topic replication is temporarily disabled");
+        return;
+    }
+
+    const bool mirroredPartition = MirroringEnabled(Config) && !replicationDisabled;
 
     if (ShouldUseDeduplicationQueue() && ev->Get()->ExternalDeduplicationStatus == TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked) {
         LOG_D("Forwarding TPartition::TEvWrite to DeduplicationQueueActor");

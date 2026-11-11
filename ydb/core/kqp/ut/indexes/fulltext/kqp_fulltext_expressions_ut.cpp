@@ -164,16 +164,20 @@ struct TExpressionFixture {
         return ExpectIds(query, expected, Parameters());
     }
 
-    NYdb::EStatus ExpectError(const TString& query, const TString& message, const NYdb::TParams& params) {
+    NYdb::EStatus ExpectError(const TString& query, const TString& message, const NYdb::TParams& params,
+        NYdb::EStatus expectedStatus = NYdb::EStatus::BAD_REQUEST)
+    {
         const auto result = Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::BAD_REQUEST || result.GetStatus() == NYdb::EStatus::GENERIC_ERROR,
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus,
             query << "\n" << result.GetStatus() << "\n" << result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), message, query);
         return result.GetStatus();
     }
 
-    NYdb::EStatus ExpectError(const TString& query, const TString& message) {
-        return ExpectError(query, message, Parameters());
+    NYdb::EStatus ExpectError(const TString& query, const TString& message,
+        NYdb::EStatus expectedStatus = NYdb::EStatus::BAD_REQUEST)
+    {
+        return ExpectError(query, message, Parameters(), expectedStatus);
     }
 };
 
@@ -450,6 +454,39 @@ Y_UNIT_TEST_QUAD(ColumnNullability, Utf8, NotNull) {
     fixture.ExpectIds(fixture.Query("COALESCE(IF($choose, CAST($q AS Utf8), CAST($other AS Utf8)), \"\"u)"), {1, 3, 5});
 }
 
+Y_UNIT_TEST_TWIN(FallbackBoundsUseSharedExpression, Compact) {
+    TExpressionFixture fixture({.Compact = Compact, .Ngram = true});
+    const TString query = fixture.Declarations() + R"sql(
+        $search = IF(Random($choose) < 0.5, "%", "%a%");
+        SELECT Id, $search AS Search FROM `/Root/Docs` VIEW fulltext_idx
+        WHERE Text LIKE $search AND Id >= CAST(LENGTH($search) AS Uint64)
+        ORDER BY Id;
+    )sql";
+    // Neither pattern yields a two-character ngram: both must use the fallback scan.
+    // Its PK bounds, residual predicate, and projection must use the same random value.
+    for (ui32 iteration = 0; iteration < 32; ++iteration) {
+        const auto result = fixture.Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            fixture.Parameters()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        NYdb::TResultSetParser parser(result.GetResultSet(0));
+        TVector<ui64> ids;
+        TString search;
+        while (parser.TryNextRow()) {
+            ids.push_back(parser.ColumnParser("Id").GetUint64());
+            const TString current(parser.ColumnParser("Search").GetString());
+            if (search.empty()) {
+                search = current;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(current, search);
+        }
+        UNIT_ASSERT_C(search == "%" || search == "%a%", search);
+        const TVector<ui64> expected = search == "%"
+            ? TVector<ui64>{1, 2, 3, 4, 5, 6, 8, 9}
+            : TVector<ui64>{3, 4, 5, 8};
+        UNIT_ASSERT_VALUES_EQUAL_C(ids, expected, search);
+    }
+}
+
 Y_UNIT_TEST_QUAD(EmptyTable, Compact, Score) {
     TExpressionFixture fixture({.Compact = Compact, .Prefixed = Compact || !Score, .FilterScope = true, .Relevance = Score, .Empty = true});
     const TString query = fixture.Query("IF($use_fixed, $q, $other)", R"sql(
@@ -528,7 +565,7 @@ Y_UNIT_TEST_QUAD(InvalidSearchTypes, Utf8, Score) {
         "(SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo)",
     };
     for (const auto& expression : invalid) {
-        fixture.ExpectError(fixture.Query(expression, "", Score), "Search string must be String or Utf8");
+        fixture.ExpectError(fixture.Query(expression, "", Score), "Search string must be String or Utf8", NYdb::EStatus::GENERIC_ERROR);
     }
 }
 
@@ -556,7 +593,7 @@ Y_UNIT_TEST_QUAD(QueryParameterTypes, Utf8, Score) {
             const auto params = optionalBuilder.Build();
             const TString declarations = "DECLARE $value AS " + type + "?;";
             fixture.ExpectError(declarations + fixture.Select("$value", Score),
-                "Search string must be String or Utf8", params);
+                "Search string must be String or Utf8", params, NYdb::EStatus::GENERIC_ERROR);
             fixture.ExpectIds(declarations + fixture.Select("COALESCE($value, \"beta\")", Score),
                 present ? TVector<ui64>{1, 3, 5} : TVector<ui64>{2, 5}, params);
         }
@@ -588,7 +625,7 @@ Y_UNIT_TEST_TWIN(InvalidTextTypesAndColumns, Score) {
         const TString call = Sprintf("%s(%s, IF($choose, $q, $other), \"or\" AS DefaultOperator)",
             Score ? "FulltextScore" : "FulltextMatch", column.c_str());
         fixture.ExpectError(fixture.Declarations() + "SELECT Id FROM `/Root/Docs` VIEW fulltext_idx WHERE "
-            + call + (Score ? " > 0;" : ";"), "Expected String or Utf8");
+            + call + (Score ? " > 0;" : ";"), "Expected String or Utf8", NYdb::EStatus::GENERIC_ERROR);
     }
     // Correct type alone is insufficient: the first argument must identify the indexed column.
     for (const TString& column : {TString("OtherText"), TString("$q"), TString("Text || $q")}) {
@@ -596,6 +633,12 @@ Y_UNIT_TEST_TWIN(InvalidTextTypesAndColumns, Score) {
         fixture.ExpectError(fixture.Declarations() + "SELECT Id FROM `/Root/Docs` VIEW fulltext_idx WHERE "
             + call + (Score ? " > 0;" : ";"), "Unsupported index access");
     }
+}
+
+Y_UNIT_TEST_TWIN(SideEffectSearchRejected, Score) {
+    TExpressionFixture fixture({.Relevance = Score});
+    fixture.ExpectError(fixture.Query("WithSideEffectsMode($q, 'General')", "", Score),
+        "search expression must not have side effects");
 }
 
 Y_UNIT_TEST_TWIN(RowDependentSearchRejected, Score) {

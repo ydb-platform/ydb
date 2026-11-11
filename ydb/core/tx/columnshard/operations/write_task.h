@@ -1,0 +1,94 @@
+#pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/counters/columnshard.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/operations/write.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
+
+#include <library/cpp/lwtrace/all.h>
+
+namespace NKikimr::NColumnShard {
+class TColumnShard;
+class TArrowData;
+
+class TWriteTask: public TMoveOnly {
+private:
+    std::shared_ptr<TArrowData> ArrowData;
+    NOlap::ISnapshotSchema::TPtr Schema;
+    static inline TAtomicCounter Counter = 0;
+    const ui64 TaskId = Counter.Inc();
+    const NActors::TActorId SourceId;
+    const std::optional<ui32> GranuleShardingVersionId;
+    const TUnifiedPathId PathId;
+    const ui64 Cookie;
+    const NOlap::TSnapshot MvccSnapshot;
+    const ui64 LockId;
+    const ui32 LockNodeId;
+    const NKikimrDataEvents::ELockMode LockMode;
+    const NEvWrite::EModificationType ModificationType;
+    const EOperationBehaviour Behaviour;
+    const TMonotonic Created = NActors::TActivationContext::Monotonic();
+    const std::optional<TDuration> Timeout;
+    const ui64 TxId;
+    const bool IsBulk;
+    const std::shared_ptr<NLWTrace::TOrbit> Orbit;
+    const TMonotonic ReceivedAt;
+
+public:
+    bool operator<(const TWriteTask& item) const {
+        return std::tie(Created, PathId.GetInternalPathId(), TaskId) < std::tie(item.Created, item.PathId.GetInternalPathId(), item.TaskId);
+    }
+
+    std::optional<TMonotonic> GetDeadline() const {
+        return Timeout ? std::optional<TMonotonic>(Created + *Timeout) : std::nullopt;
+    }
+
+    bool IsDeprecated(const TMonotonic now) const {
+        const std::optional<TMonotonic> deadline = GetDeadline();
+        return deadline && *deadline <= now;
+    }
+
+    TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
+        const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie,
+        const NOlap::TSnapshot& mvccSnapshot, const ui64 lockId, const ui64 lockNodeId, const NKikimrDataEvents::ELockMode lockMode,
+        const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout,
+        const ui64 txId, const bool isBulk, std::shared_ptr<NLWTrace::TOrbit> orbit, const TMonotonic receivedAt)
+        : ArrowData(arrowData)
+        , Schema(schema)
+        , SourceId(sourceId)
+        , GranuleShardingVersionId(granuleShardingVersionId)
+        , PathId(pathId)
+        , Cookie(cookie)
+        , MvccSnapshot(mvccSnapshot)
+        , LockId(lockId)
+        , LockNodeId(lockNodeId)
+        , LockMode(lockMode)
+        , ModificationType(modificationType)
+        , Behaviour(behaviour)
+        , Timeout(timeout)
+        , TxId(txId)
+        , IsBulk(isBulk)
+        , Orbit(std::move(orbit))
+        , ReceivedAt(receivedAt)
+    {
+    }
+
+    const TInternalPathId& GetInternalPathId() const {
+        return PathId.InternalPathId;
+    }
+
+    ui64 GetLockId() const {
+        return LockId;
+    }
+
+    const TMonotonic& GetCreatedMonotonic() const {
+        return Created;
+    }
+
+    bool Execute(TColumnShard* owner, const TActorContext& ctx) const;
+    void Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx,
+        const NKikimrDataEvents::TEvWriteResult::EStatus& status = NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR) const;
+    void FailByOverload(TColumnShard* owner, const EOverloadStatus overloadStatus, const TActorContext& ctx) const;
+};
+
+}   // namespace NKikimr::NColumnShard

@@ -136,6 +136,7 @@ namespace {
             auto params = MakeHolder<TCompactionParams>();
             params->IsFinal = IsFinal_;
             CompactCfg = MakeHolder<NTabletFlatExecutor::TCompactCfg>(std::move(params));
+            CompactCfg->Outputs.emplace_back();
             CompactCfg->IsFulltextCompact = true;
             CompactCfg->FulltextAddedTag = TagAdded;
             CompactCfg->FulltextSegmentTag = TagSegment;
@@ -143,7 +144,7 @@ namespace {
             CompactCfg->FulltextKeySize = 8;
             CompactCfg->FulltextWithRelevance = false;
             CompactCfg->FulltextKeySigned = false;
-            CompactCfg->Layout.MinRowVersion = minVer;
+            CompactCfg->Outputs.front().Layout.MinRowVersion = minVer;
 
             FtState = NTabletFlatExecutor::TFulltextCompact::Init(
                 CompactCfg.Get(), subset.Scheme, Writer);

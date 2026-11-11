@@ -59,6 +59,7 @@ struct TAllocLocation {
         return 0;
     }
 
+    // NOLINTNEXTLINE(readability-identifier-naming): std::source_location compatibility.
     static TAllocLocation current() {
         return {};
     }

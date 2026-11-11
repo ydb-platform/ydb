@@ -140,6 +140,8 @@ struct Schema : NIceDb::Schema {
         struct DatabaseSpaceBlockColor : Column<30, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
         struct DatabaseSpaceUnblockColor : Column<31, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
         struct DataCenterStates : Column<32, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TDefineDataCenterStates; };
+        struct BridgeSyncTotalRate : Column<33, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
+        struct BridgeSyncMaxSyncers : Column<34, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 64; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
@@ -147,7 +149,8 @@ struct Schema : NIceDb::Schema {
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
               UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig,
-              ExpectedStorageYamlConfigVersion, EnableConfigV2, DatabaseSpaceBlockColor, DatabaseSpaceUnblockColor, DataCenterStates>;
+              ExpectedStorageYamlConfigVersion, EnableConfigV2, DatabaseSpaceBlockColor, DatabaseSpaceUnblockColor, DataCenterStates,
+              BridgeSyncTotalRate, BridgeSyncMaxSyncers>;
     };
 
     struct VSlot : Table<5> {
@@ -483,9 +486,11 @@ struct Schema : NIceDb::Schema {
         struct LastErrorTimestamp : Column<4, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
         struct FirstErrorTimestamp : Column<5, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
         struct ErrorCount : Column<6, NScheme::NTypeIds::Uint32> {};
+        struct EstimatedBytesToCopy : Column<7, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<TargetGroupId>;
-        using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp, ErrorCount>;
+        using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp,
+            ErrorCount, EstimatedBytesToCopy>;
     };
 
     struct DirectBlockGroupTabletState : Table<133> {

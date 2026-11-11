@@ -26,8 +26,21 @@ namespace NKikimr::NGRpcService {
         PathNormalizer_ = std::move(normalizer);
     }
 
-    TString IRequestCtxBaseMtSafe::NormalizePath(TStringBuf path) const {
-        return PathNormalizer_ ? PathNormalizer_->NormalizePath(path) : TString(path);
+    TString IRequestCtxBaseMtSafe::NormalizePath(TStringBuf path, TStringBuf base) const {
+        TString resolved(path);
+        const auto* appData = HasAppData() ? AppData() : nullptr;
+        if (appData && appData->FeatureFlags.GetEnableRelativePaths() && !path.empty() && !path.StartsWith('/')) {
+            auto database = GetDatabaseName().GetOrElse(TString());
+            if (const auto header = GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER); header && !header->empty() && appData->DomainsInfo && appData->DomainsInfo->Domain) {
+                database = PrependDomainIfNeeded("/" + appData->DomainsInfo->Domain->Name, CGIUnescapeRet(*header));
+            }
+            resolved = PrependDomainIfNeeded(
+                base.empty() ? database : PrependDomainIfNeeded(database, base), path);
+            if (resolved.StartsWith('/')) {
+                resolved = CanonizePath(resolved);
+            }
+        }
+        return PathNormalizer_ ? PathNormalizer_->NormalizePath(resolved) : resolved;
     }
 
     void IRequestProxyCtx::InitializePathNormalization(
@@ -52,14 +65,14 @@ namespace NKikimr::NGRpcService {
             return;
         }
 
-        SetPathNormalizer(IsPathNormalizationEnabled() ? std::move(normalizer) : nullptr);
         if (database) {
             if (relativeDatabase) {
                 database = PrependDomainIfNeeded("/" + appData->DomainsInfo->Domain->Name, *database);
             }
-            database = NormalizePath(*database);
+            database = IsPathNormalizationEnabled() && normalizer ? normalizer->NormalizePath(*database) : *database;
         }
 
+        SetPathNormalizer(IsPathNormalizationEnabled() ? std::move(normalizer) : nullptr);
         EffectiveDatabaseName_ = std::move(database);
         PathNormalizationInitialized_ = true;
     }

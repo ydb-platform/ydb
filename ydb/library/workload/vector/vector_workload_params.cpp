@@ -143,6 +143,7 @@ void TVectorWorkloadParams::Init() {
             const auto& indexSettings = std::get<NYdb::NTable::TKMeansTreeSettings>(index.GetIndexSettings());
             Metric = indexSettings.Settings.Metric;
             VectorOpts.VectorDimension = indexSettings.Settings.VectorDimension;
+            VectorOpts.VectorType = ToString(indexSettings.Settings.VectorType);
 
             break;
         }

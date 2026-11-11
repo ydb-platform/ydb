@@ -46,7 +46,6 @@
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
-#include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tracing/startup_probes.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
@@ -108,7 +107,6 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
           EPercentileCounters_descriptor, ETxTypes_descriptor>())
     , Counters(*TabletCountersHolder)
     , StartupTimeline(TabletID(), Counters.GetCSCounters().Initialization)
-    , WriteTasksQueue(std::make_unique<TWriteTasksQueue>(this))
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
     , DataLocksManager(std::make_shared<NOlap::NDataLocks::TManager>())
@@ -121,6 +119,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
+    , ScanGate(Counters.GetTabletCounters(), TablesManager)
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this)
@@ -191,18 +190,8 @@ void TColumnShard::SendWaitPlanStep(ui64 step) {
 }
 
 void TColumnShard::RescheduleWaitingReads() {
-    ui64 minWaitingStep = Max<ui64>();
-    NOlap::TSnapshot maxReadVersion = GetMaxReadVersion();
-    for (auto it = WaitingScans.begin(); it != WaitingScans.end();) {
-        if (maxReadVersion < it->first) {
-            minWaitingStep = Min(minWaitingStep, it->first.GetPlanStep());
-            break;
-        }
-        TActivationContext::Send(it->second.Release());
-        it = WaitingScans.erase(it);
-    }
-    if (minWaitingStep != Max<ui64>()) {
-        WaitPlanStep(minWaitingStep);
+    if (const std::optional<ui64> step = ScanGate.ReleaseReadableSnapshot(GetMaxReadVersion())) {
+        WaitPlanStep(*step);
     }
 }
 
@@ -1889,7 +1878,6 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiato
 };
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx) {
-    SharingSessionsManager->OnSharingAdmission();
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"process", "BlobsSharing"},
         {"event", "TEvApplyLinksModification"},
@@ -2008,9 +1996,9 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvUpdateChannelApproximateFreeSpace, Handle);
         HFunc(TEvPrivate::TEvStartCompaction, Handle);
         HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
-        HFunc(TEvPrivate::TEvContinueFindEmptyHistoryIntervals, Handle);
-        HFunc(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady, Handle);
+        HFunc(TEvFindEmptyHistoryIntervals::TEvScanFinished, Handle);
         HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
+        HFunc(NOlap::TEvPassWriteGate, Handle);
 
         HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
@@ -2021,6 +2009,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(NActors::TEvents::TEvWakeup, Handle);
         HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
         hFunc(TEvPrivate::TEvPrefetchPortionsMetadata, Handle);
+        hFunc(TEvPrivate::TEvSetLoadedKeyRanges, Handle);
         hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);
         hFunc(TEvPrivate::TEvReportExecutorStatistics, Handle);
         HFunc(NEvents::TDataEvents::TEvWrite, Handle);

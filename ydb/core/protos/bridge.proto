@@ -73,6 +73,10 @@ message TClusterStateDetails {
             // DISCONNECTED pile is being removed: BSC has to delete parts in this pile of its bridged groups, then
             // distconf deletes the static ones and makes the pile INACTIVE
             REMOVE = 1;
+            // the cluster is being rolled back to ordinary one (the pile is the implicit one, the only pile left): static
+            // groups are ordinary ones already, BSC has to make its pools and groups ordinary ones, then distconf removes
+            // the cluster state
+            ROLLBACK = 2;
         }
         uint32 BridgePileId = 1;
         EKind Kind = 2;
@@ -89,6 +93,25 @@ message TClusterStateDetails {
 
     // Persisted opt-in; requires nodes supporting mixed ordinary/bridged storage pools.
     bool NonUniformStorageEnabled = 7;
+
+    // identity of the conversion BSC has to perform while BscConversionPending is set (the generation of the config it
+    // was started with), so that a notification of BSC delivered late can't finish the conversion following a rollback;
+    // 0 for conversions started by older versions
+    uint64 BscConversionId = 8;
+}
+
+// left in the storage config by the rollback of the bridged cluster to ordinary one
+message TBridgeRollbackRecord {
+    reserved 1;
+    // name of the original pile; a process started with the bridge config of several piles (the cluster had them before
+    // the rollback) keeps running with this pile only, until it is restarted without bridge config
+    optional string PileName = 3;
+    // the lowest id for the parts of static groups allocated when piles are added after the cluster is converted again;
+    // static group ids are never reused (see TClusterStateDetails.NextStaticGroupId)
+    uint32 NextStaticGroupId = 2;
+    // generation of the cluster state removed; the cluster state of the next conversion goes on from it (the records of
+    // older versions don't have it)
+    optional uint64 ClusterStateGeneration = 4;
 }
 
 message TGroupState {

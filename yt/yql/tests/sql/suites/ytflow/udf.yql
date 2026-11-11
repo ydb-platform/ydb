@@ -7,7 +7,6 @@ pragma Ytflow.PipelineDirectory = "pipelines";
 pragma Ytflow.PipelineName = "test";
 
 pragma Ytflow.YtConsumerName = "main_consumer";
-pragma Ytflow.YtProducerName = "main_producer";
 
 insert into Output
 select 

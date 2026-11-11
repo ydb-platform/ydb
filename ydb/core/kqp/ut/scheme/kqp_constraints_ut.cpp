@@ -77,6 +77,22 @@ void TestCompileTimeDefaultsPlan(const std::string& operation, bool enabled) {
     }
 }
 
+void WaitForAsyncIndexContent(NYdb::NQuery::TSession& session, const std::string& query, const TString& expected) {
+    const auto expectedYson = ReformatYson(expected);
+    const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+    TString actual;
+    do {
+        auto result = session.ExecuteQuery(query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        actual = FormatResultSetYson(result.GetResultSet(0));
+        if (ReformatYson(actual) == expectedYson) {
+            return;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    } while (TInstant::Now() < deadline);
+    CompareYson(expected, actual, TStringBuilder() << "Async index did not catch up for query: " << query);
+}
+
 TKikimrSettings DropNotNullIndexSettings(bool compact) {
     auto settings = TKikimrSettings().SetWithSampleTables(false);
     auto& flags = *settings.AppConfig.MutableFeatureFlags();
@@ -3886,9 +3902,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             const std::string query = R"(
                 SELECT Key, IndexCol, CoverCol FROM `AsyncIdxOnCol/idx/indexImplTable` ORDER BY Key;
             )";
-            auto result = session.ExecuteQuery(query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([[[1];[42];[100]]])", FormatResultSetYson(result.GetResultSet(0)));
+            WaitForAsyncIndexContent(session, query, R"([[[1];[42];[100]]])");
         }
 
         {
@@ -3921,9 +3935,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             const std::string query = R"(
                 SELECT Key, IndexCol, CoverCol FROM `AsyncIdxOnCol/idx/indexImplTable` ORDER BY Key;
             )";
-            auto result = session.ExecuteQuery(query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([[[1];[42];[100]];[[2];#;[200]]])", FormatResultSetYson(result.GetResultSet(0)));
+            WaitForAsyncIndexContent(session, query, R"([[[1];[42];[100]];[[2];#;[200]]])");
         }
     }
 
@@ -3981,9 +3993,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             const std::string query = R"(
                 SELECT Key, IndexCol, CoverCol FROM `AsyncIdxCoverCol/idx/indexImplTable` ORDER BY Key;
             )";
-            auto result = session.ExecuteQuery(query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([[[1];[10];[42]]])", FormatResultSetYson(result.GetResultSet(0)));
+            WaitForAsyncIndexContent(session, query, R"([[[1];[10];[42]]])");
         }
 
         {
@@ -4016,9 +4026,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             const std::string query = R"(
                 SELECT Key, IndexCol, CoverCol FROM `AsyncIdxCoverCol/idx/indexImplTable` ORDER BY Key;
             )";
-            auto result = session.ExecuteQuery(query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([[[1];[10];[42]];[[2];[20];#]])", FormatResultSetYson(result.GetResultSet(0)));
+            WaitForAsyncIndexContent(session, query, R"([[[1];[10];[42]];[[2];[20];#]])");
         }
     }
 
@@ -6325,9 +6333,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         const auto validateIndex = [&](const std::string& indexColVal, const TString& expected) {
             const std::string query = "SELECT Key, Value FROM TestTable VIEW ByIndexCol WHERE IndexCol = \"" + indexColVal + "\" ORDER BY Key;";
-            auto result = session.ExecuteQuery(query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            WaitForAsyncIndexContent(session, query, expected);
         };
 
         // UPSERT without default

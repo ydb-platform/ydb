@@ -1429,6 +1429,83 @@ static constexpr ui32 NODE8 = 1031;
 static constexpr ui32 NODE9 = 1032;
 static constexpr ui32 NODE10 = 1033;
 
+// NodeBroker running with bridge config resolves pile names against bridge info of the storage config; the first pile
+// is the implicit one (the cluster converted from non-bridged one, or prepared for that)
+struct TBridgeNodeBrokerSetup {
+    TTestBasicRuntime& Runtime;
+    const TActorId Sender;
+    const std::shared_ptr<TBridgeInfo> BridgeInfo = std::make_shared<TBridgeInfo>();
+    const std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig =
+        std::make_shared<const NKikimrBlobStorage::TStorageConfig>();
+
+    TBridgeNodeBrokerSetup(TTestBasicRuntime& runtime, const std::vector<TString>& pileNames)
+        : Runtime(runtime)
+        , Sender(runtime.AllocateEdgeActor())
+    {
+        for (const auto& name : pileNames) {
+            auto& pile = BridgeInfo->Piles.emplace_back();
+            pile.BridgePileId = TBridgePileId::FromPileIndex(BridgeInfo->Piles.size() - 1);
+            pile.Name = name;
+        }
+        BridgeInfo->ImplicitPile = &BridgeInfo->Piles.front();
+        BridgeInfo->IsImplicit = pileNames.size() == 1;
+        SetBridgeMode(true);
+        Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvNodeWardenQueryStorageConfig::EventType &&
+                    !ev->Get<TEvNodeWardenQueryStorageConfig>()->Subscribe) {
+                Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, new TEvNodeWardenStorageConfig(StorageConfig,
+                    false, BridgeInfo)), 0, true);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+    }
+
+    // NodeBroker runs with bridge config, or without one
+    void SetBridgeMode(bool enabled) {
+        Runtime.GetAppData(0).BridgeModeEnabled = enabled;
+    }
+
+    NKikimrNodeBroker::TRegistrationResponse Register(const TString& host, const std::optional<TString>& pileName) {
+        auto event = MakeRegistrationRequest(host, 1001, host, "1.2.3.4", DOMAIN_NAME, 1, 2, 3, 4);
+        if (pileName) {
+            event->Record.MutableLocation()->SetBridgePileName(*pileName);
+        }
+        Runtime.SendToPipe(MakeNodeBrokerID(), Sender, event.Release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = Runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvRegistrationResponse>(handle);
+        UNIT_ASSERT(reply);
+        return reply->Record;
+    }
+
+    // register the node and check the pile name stored for it; returns its id
+    ui32 CheckRegistration(const TString& host, const std::optional<TString>& pileName,
+            const std::optional<TString>& storedPileName) {
+        const auto record = Register(host, pileName);
+        UNIT_ASSERT_EQUAL_C(record.GetStatus().GetCode(), TStatus::OK, record.ShortDebugString());
+        const auto& location = record.GetNode().GetLocation();
+        UNIT_ASSERT_VALUES_EQUAL_C(location.HasBridgePileName(), storedPileName.has_value(), record.ShortDebugString());
+        if (storedPileName) {
+            UNIT_ASSERT_VALUES_EQUAL_C(location.GetBridgePileName(), *storedPileName, record.ShortDebugString());
+        }
+        return record.GetNode().GetNodeId();
+    }
+
+    // the pile name stored for the node, as NodeBroker resolves it
+    std::optional<TString> ResolvePileName(ui32 nodeId) {
+        auto event = MakeHolder<TEvNodeBroker::TEvResolveNode>();
+        event->Record.SetNodeId(nodeId);
+        Runtime.SendToPipe(MakeNodeBrokerID(), Sender, event.Release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = Runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvResolvedNode>(handle);
+        UNIT_ASSERT(reply);
+        const auto& record = reply->Record;
+        UNIT_ASSERT_EQUAL_C(record.GetStatus().GetCode(), TStatus::OK, record.ShortDebugString());
+        const auto& location = record.GetNode().GetLocation();
+        return location.HasBridgePileName() ? std::make_optional(location.GetBridgePileName()) : std::nullopt;
+    }
+};
+
 Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
     Y_UNIT_TEST(BasicFunctionality)
     {
@@ -2990,55 +3067,84 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 4, extendedExpire);
     }
 
-    // node of the implicit pile (in the cluster converted from non-bridged one) may get the name of its pile, but it can't
-    // move to another pile
+    // node of the implicit pile (in the cluster converted from non-bridged one) may get the name of its pile and lose it,
+    // but it can't move to another pile
     Y_UNIT_TEST(BridgePileNameOfImplicitPile)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 3);
-        TActorId sender = runtime.AllocateEdgeActor();
+        TBridgeNodeBrokerSetup bridge(runtime, {"pile_1", "pile_2"});
 
-        // NodeBroker resolves pile names against bridge info of the storage config
-        auto bridgeInfo = std::make_shared<TBridgeInfo>();
-        for (const char *name : {"pile_1", "pile_2"}) {
-            auto& pile = bridgeInfo->Piles.emplace_back();
-            pile.BridgePileId = TBridgePileId::FromPileIndex(bridgeInfo->Piles.size() - 1);
-            pile.Name = name;
-        }
-        bridgeInfo->ImplicitPile = &bridgeInfo->Piles.front();
-        const auto storageConfig = std::make_shared<const NKikimrBlobStorage::TStorageConfig>();
-        runtime.GetAppData(0).BridgeModeEnabled = true;
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvNodeWardenQueryStorageConfig::EventType &&
-                    !ev->Get<TEvNodeWardenQueryStorageConfig>()->Subscribe) {
-                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, new TEvNodeWardenStorageConfig(storageConfig,
-                    false, bridgeInfo)), 0, true);
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
+        UNIT_ASSERT_EQUAL(bridge.Register("host1", std::nullopt).GetStatus().GetCode(), TStatus::OK);
+        UNIT_ASSERT_EQUAL(bridge.Register("host1", "pile_2").GetStatus().GetCode(), TStatus::WRONG_REQUEST);
+        UNIT_ASSERT_EQUAL(bridge.Register("host1", "pile_1").GetStatus().GetCode(), TStatus::OK);
+        UNIT_ASSERT_EQUAL(bridge.Register("host1", "pile_1").GetStatus().GetCode(), TStatus::OK);
+        UNIT_ASSERT_EQUAL(bridge.Register("host1", std::nullopt).GetStatus().GetCode(), TStatus::OK);
+        UNIT_ASSERT_EQUAL(bridge.Register("host1", "pile_2").GetStatus().GetCode(), TStatus::WRONG_REQUEST);
 
-        auto registerNode = [&](const TString& host, std::optional<TString> pileName) {
-            auto event = MakeRegistrationRequest(host, 1001, host, "1.2.3.4", DOMAIN_NAME, 1, 2, 3, 4);
-            if (pileName) {
-                event->Record.MutableLocation()->SetBridgePileName(*pileName);
-            }
-            runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, GetPipeConfigWithRetries());
-            TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvRegistrationResponse>(handle);
-            UNIT_ASSERT(reply);
-            return reply->Record.GetStatus();
-        };
+        // node that has got its pile name explicitly can't change it, nor lose it, as its pile is not the implicit one
+        UNIT_ASSERT_EQUAL(bridge.Register("host2", "pile_2").GetStatus().GetCode(), TStatus::OK);
+        UNIT_ASSERT_EQUAL(bridge.Register("host2", "pile_1").GetStatus().GetCode(), TStatus::WRONG_REQUEST);
+        UNIT_ASSERT_EQUAL(bridge.Register("host2", std::nullopt).GetStatus().GetCode(), TStatus::WRONG_REQUEST);
+    }
 
-        UNIT_ASSERT_EQUAL(registerNode("host1", std::nullopt).GetCode(), TStatus::OK);
-        UNIT_ASSERT_EQUAL(registerNode("host1", "pile_2").GetCode(), TStatus::WRONG_REQUEST);
-        UNIT_ASSERT_EQUAL(registerNode("host1", "pile_1").GetCode(), TStatus::OK);
-        UNIT_ASSERT_EQUAL(registerNode("host1", "pile_1").GetCode(), TStatus::OK);
-        UNIT_ASSERT_EQUAL(registerNode("host1", std::nullopt).GetCode(), TStatus::WRONG_REQUEST);
+    // the cluster prepared for bridge mode is rolled back: nodes are restarted without bridge config one by one, and
+    // NodeBroker may run without one before nodes having pile names do; known nodes lose their pile names, even when
+    // started with them again, while new nodes can't get one without bridge mode
+    Y_UNIT_TEST(BridgePileNameWithoutBridgeMode)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4);
+        TBridgeNodeBrokerSetup bridge(runtime, {"pile_1"});
 
-        // node that has got its pile name explicitly can't change it
-        UNIT_ASSERT_EQUAL(registerNode("host2", "pile_2").GetCode(), TStatus::OK);
-        UNIT_ASSERT_EQUAL(registerNode("host2", "pile_1").GetCode(), TStatus::WRONG_REQUEST);
+        // nodes registered while the cluster runs with bridge config, with and without pile names
+        const ui32 node1 = bridge.CheckRegistration("host1", "pile_1", "pile_1");
+        const ui32 node2 = bridge.CheckRegistration("host2", "pile_1", "pile_1");
+        bridge.CheckRegistration("host3", std::nullopt, std::nullopt);
+
+        // NodeBroker runs without bridge config now
+        bridge.SetBridgeMode(false);
+
+        // the node still running with bridge config keeps reporting its pile name, which NodeBroker drops; the node
+        // restarted without one doesn't report it
+        bridge.CheckRegistration("host1", "pile_1", std::nullopt);
+        bridge.CheckRegistration("host1", "pile_1", std::nullopt);
+        bridge.CheckRegistration("host2", std::nullopt, std::nullopt);
+        bridge.CheckRegistration("host3", std::nullopt, std::nullopt);
+        bridge.CheckRegistration("host3", "pile_1", std::nullopt);
+
+        // new node can't get a pile name without bridge mode
+        UNIT_ASSERT_EQUAL(bridge.Register("host4", "pile_1").GetStatus().GetCode(), TStatus::WRONG_REQUEST);
+        bridge.CheckRegistration("host4", std::nullopt, std::nullopt);
+
+        // the change survives NodeBroker restart; the stored locations are checked without registering again
+        RestartNodeBroker(runtime);
+        UNIT_ASSERT(!bridge.ResolvePileName(node1));
+        UNIT_ASSERT(!bridge.ResolvePileName(node2));
+    }
+
+    // the node is restarted without bridge config, but still with its pile name, before NodeBroker is: NodeBroker running
+    // with bridge config keeps the name; when it is restarted without bridge config, it drops the stored pile names of
+    // nodes on its own, as the nodes may just extend their leases rather than register again
+    Y_UNIT_TEST(BridgePileNameDroppedWhenLoadedWithoutBridgeMode)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 3);
+        TBridgeNodeBrokerSetup bridge(runtime, {"pile_1"});
+
+        const ui32 node1 = bridge.CheckRegistration("host1", "pile_1", "pile_1");
+        const ui32 node2 = bridge.CheckRegistration("host2", std::nullopt, std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(bridge.ResolvePileName(node1).value_or("<none>"), "pile_1");
+
+        bridge.SetBridgeMode(false);
+        RestartNodeBroker(runtime);
+        const auto pileName = bridge.ResolvePileName(node1);
+        UNIT_ASSERT_C(!pileName, *pileName);
+        UNIT_ASSERT(!bridge.ResolvePileName(node2));
+
+        // the next restart finds nothing to drop
+        RestartNodeBroker(runtime);
+        UNIT_ASSERT(!bridge.ResolvePileName(node1));
     }
 
     Y_UNIT_TEST(NodesMigrationSetLocation)

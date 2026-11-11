@@ -533,6 +533,7 @@ def rank_headers(
     protos: Dict[str, ProtoInfo],
     incoming: Dict[str, Set[str]],
     only_pb: bool,
+    appdata_h: str = APPDATA_H,
 ) -> List[RankRow]:
     candidates: Set[str] = set()
     if only_pb:
@@ -542,7 +543,7 @@ def rank_headers(
         candidates = {n for n in graph.files if _is_header(n) or _is_pb_h(n)}
         candidates |= {info.pb_h for info in protos.values()}
 
-    appdata_closure = graph.transitive_includes(APPDATA_H)
+    appdata_closure = graph.transitive_includes(appdata_h)
 
     rows: List[RankRow] = []
     for header in candidates:

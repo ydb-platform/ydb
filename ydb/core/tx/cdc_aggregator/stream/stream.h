@@ -1,137 +1,99 @@
 #pragma once
 
-#include "barrier.h"
-#include "stream_changes.h"
-#include "stream_config.h"
+#include <ydb/core/persqueue/common/heartbeat.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/map.h>
 #include <util/generic/set.h>
+#include <util/generic/vector.h>
 
 #include <optional>
 
 namespace NKikimr::NCdcAggregator {
 
-enum class EStreamPhase : ui8 {
-    // Reports are accepted, the barrier is not published yet.
-    Configured = 1,
-    // SchemeShard has configured every participant: the barrier may be published.
-    Active = 2,
+struct TTargetPartition {
+    ui32 PartitionId = 0;
+    ui64 TabletId = 0;
+
+    bool operator==(const TTargetPartition&) const = default;
 };
 
-// Replacement of a source by split/merge. It is kept forever: it answers
-// retries of the same replacement and rejects late reports of the parent.
-struct TSourceReplacement {
-    TSourceId Parent = 0;
-    // Sorted, unique, never empty.
-    TVector<TSourceId> Children;
-    // Split/merge operation, for diagnostics only.
-    ui64 OperationId = 0;
+struct TTrackingConfig {
+    TPathId StreamPathId;
+    TString StreamPath;
+    TVector<ui64> SourceDataShardIds;
+    TVector<TTargetPartition> TargetPartitions;
+
+    bool operator==(const TTrackingConfig&) const = default;
 };
 
-// Sorts children; returns false with an error for a replacement that would
-// leave the stream without a successor of the parent.
-bool NormalizeSourceReplacement(TSourceReplacement& replacement, TString& error);
+struct TStreamChanges {
+    bool Config = false;
+    THashSet<ui64> UpsertedSources;
+    THashSet<ui64> ErasedSources;
+    TMap<TRowVersion, TString> UpsertedHeartbeats;
+    TSet<TRowVersion> ErasedHeartbeats;
+    bool CurrentHeartbeat = false;
 
-// Progress of a source; empty until its first report.
-using TSourceProgress = std::optional<TBarrier>;
+    bool IsEmpty() const;
+};
 
 enum class EConfigureOutcome {
-    Configured,
-    AlreadyConfigured,
+    Success,
     Conflict,
 };
 
-enum class EActivateOutcome {
-    Activated,
-    AlreadyActive,
-    VersionMismatch,
-};
-
-enum class EDeliveredOutcome {
-    Advanced,
-    // A duplicate or an older version: the stored progress is kept.
-    NotAdvanced,
+enum class ESourceOutcome {
+    Success,
     UnknownSource,
-    RetiredSource,
 };
 
-enum class EReplaceOutcome {
-    Replaced,
-    AlreadyReplaced,
-    UnknownSource,
-    Conflict,
-};
-
-// Aggregate of one CDC stream: the current set of sources, their delivered
-// progress and the ready barrier, the minimum progress over all sources.
-//
-// Invariants:
-// - progress of a source and the ready barrier never decrease;
-// - a source without progress blocks the barrier; an empty set has none;
-// - a source leaves the set only through a replacement and never returns;
-// - a replacement removes the parent and adds the children in one step;
-// - the barrier payload is the payload reported with the barrier version.
-//
-// Commands record what they changed into TStreamChanges. Every command except
-// Configure requires a configured stream.
 class TStream {
 public:
-    TStream() = default;
-
     static TStream Restore(
-        TStreamConfig config,
-        EStreamPhase phase,
-        THashMap<TSourceId, TSourceProgress> sources,
-        std::optional<TBarrier> readyBarrier,
-        THashMap<TSourceId, TSourceReplacement> replacements);
+        TTrackingConfig config,
+        THashMap<ui64, std::optional<TRowVersion>> sources,
+        const TMap<TRowVersion, TString>& heartbeats,
+        std::optional<NPQ::THeartbeat> currentHeartbeat);
 
     bool IsConfigured() const {
         return Config.has_value();
     }
 
-    const TStreamConfig& GetConfig() const;
-    EStreamPhase GetPhase() const;
+    const TTrackingConfig& GetConfig() const;
 
-    const std::optional<TBarrier>& GetReadyBarrier() const {
-        return ReadyBarrier;
-    }
-
-    const THashMap<TSourceId, TSourceProgress>& GetSources() const {
+    const THashMap<ui64, std::optional<TRowVersion>>& GetSources() const {
         return Sources;
     }
 
-    const THashMap<TSourceId, TSourceReplacement>& GetReplacements() const {
-        return Replacements;
+    const std::optional<NPQ::THeartbeat>& GetCurrentHeartbeat() const {
+        return CurrentHeartbeat;
     }
 
-    // nullptr for a source outside the current set.
-    const TSourceProgress* FindSourceProgress(TSourceId source) const;
-
-    size_t CountSourcesWithoutProgress() const {
-        return Sources.size() - ProgressIndex.size();
-    }
-
-    EConfigureOutcome Configure(const TStreamConfig& config, TStreamChanges& changes);
-    EActivateOutcome Activate(ui64 configVersion, TStreamChanges& changes);
-    EDeliveredOutcome ApplyDelivered(TSourceId source, const TBarrier& delivered, TStreamChanges& changes);
-    EReplaceOutcome ReplaceSource(const TSourceReplacement& replacement, TStreamChanges& changes);
+    EConfigureOutcome Configure(const TTrackingConfig& config, TStreamChanges& changes);
+    ESourceOutcome WriteHeartbeat(ui64 source, const NPQ::THeartbeat& heartbeat, TStreamChanges& changes);
+    ESourceOutcome ChangePartitioning(ui64 parent, const TVector<ui64>& children, TStreamChanges& changes);
 
 private:
-    void AddSourceWithoutProgress(TSourceId source);
-    void SetSourceProgress(TSourceId source, const TBarrier& delivered);
-    void EraseSource(TSourceId source);
-    void AdvanceReadyBarrier(TStreamChanges& changes);
+    void AddSource(ui64 source, TStreamChanges& changes);
+    void EraseSource(ui64 source, TStreamChanges& changes);
+    void HoldHeartbeat(const NPQ::THeartbeat& heartbeat, TStreamChanges& changes);
+    void ReleaseHeartbeat(const TRowVersion& version, TStreamChanges& changes);
+    void AdvanceCurrentHeartbeat(TStreamChanges& changes);
 
 private:
-    std::optional<TStreamConfig> Config;
-    EStreamPhase Phase = EStreamPhase::Configured;
-    THashMap<TSourceId, TSourceProgress> Sources;
-    // Sources with progress ordered by version; the first one is the minimum.
-    // Keeps a report O(log S) instead of a scan over all sources.
-    TSet<std::pair<TRowVersion, TSourceId>> ProgressIndex;
-    std::optional<TBarrier> ReadyBarrier;
-    // By parent.
-    THashMap<TSourceId, TSourceReplacement> Replacements;
+    struct THeldHeartbeat {
+        TString Data;
+        ui64 SourceCount = 0;
+    };
+
+    std::optional<TTrackingConfig> Config;
+    THashMap<ui64, std::optional<TRowVersion>> Sources;
+    ui64 SourcesWithHeartbeat = 0;
+    TMap<TRowVersion, THeldHeartbeat> Heartbeats;
+    std::optional<NPQ::THeartbeat> CurrentHeartbeat;
 };
 
 } // namespace NKikimr::NCdcAggregator

@@ -1,364 +1,306 @@
-#include "helpers.h"
+#include <ydb/core/tx/cdc_aggregator/stream/stream.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/string/builder.h>
+
 namespace NKikimr::NCdcAggregator {
 
-using namespace NTest;
+namespace {
 
-Y_UNIT_TEST_SUITE(TStream) {
+TTrackingConfig MakeConfig(TVector<ui64> sources) {
+    return TTrackingConfig{
+        .StreamPathId = TPathId(72075186233409546, 42),
+        .StreamPath = "/Root/table/stream",
+        .SourceDataShardIds = std::move(sources),
+        .TargetPartitions = {{.PartitionId = 0, .TabletId = 72075186224037900}, {.PartitionId = 1, .TabletId = 72075186224037901}},
+    };
+}
 
-    Y_UNIT_TEST(ShouldAddEverySourceWithoutProgress_WhenConfigured) {
-        // given
+NPQ::THeartbeat MakeHeartbeat(ui64 step, ui64 txId = 0) {
+    return NPQ::THeartbeat{
+        .Version = TRowVersion(step, txId),
+        .Data = TStringBuilder() << "{\"resolved\":[" << step << "," << txId << "]}",
+    };
+}
+
+TStream MakeStream(TVector<ui64> sources) {
+    TStream stream;
+    TStreamChanges changes;
+    UNIT_ASSERT(stream.Configure(MakeConfig(std::move(sources)), changes) == EConfigureOutcome::Success);
+    return stream;
+}
+
+void Write(TStream& stream, ui64 source, ui64 step) {
+    TStreamChanges changes;
+    UNIT_ASSERT(stream.WriteHeartbeat(source, MakeHeartbeat(step), changes) == ESourceOutcome::Success);
+}
+
+void ChangePartitioning(TStream& stream, ui64 parent, TVector<ui64> children) {
+    TStreamChanges changes;
+    UNIT_ASSERT(stream.ChangePartitioning(parent, children, changes) == ESourceOutcome::Success);
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(TCdcAggregatorStream) {
+
+    Y_UNIT_TEST(ShouldAddSourcesWithoutHeartbeat_WhenConfigured) {
         TStream stream;
         TStreamChanges changes;
 
-        // when
-        const auto outcome = stream.Configure(MakeStreamConfig({1, 2, 3}), changes);
+        const auto outcome = stream.Configure(MakeConfig({1, 2, 3}), changes);
 
-        // then
-        UNIT_ASSERT(outcome == EConfigureOutcome::Configured);
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetSources().size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(stream.CountSourcesWithoutProgress(), 3);
-        UNIT_ASSERT(!stream.GetReadyBarrier());
-        UNIT_ASSERT(stream.GetPhase() == EStreamPhase::Configured);
+        UNIT_ASSERT(outcome == EConfigureOutcome::Success);
         UNIT_ASSERT(changes.Config);
         UNIT_ASSERT_VALUES_EQUAL(changes.UpsertedSources.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetSources().size(), 3);
+        UNIT_ASSERT(!stream.GetSources().at(1));
+        UNIT_ASSERT(!stream.GetCurrentHeartbeat());
     }
 
-    Y_UNIT_TEST(ShouldKeepProgress_WhenSameConfigurationRepeats) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2});
-        TStreamChanges reportChanges;
-        stream.ApplyDelivered(1, MakeBarrier(100), reportChanges);
+    Y_UNIT_TEST(ShouldKeepProgress_WhenSameConfigRepeats) {
+        auto stream = MakeStream({1, 2});
+        Write(stream, 1, 100);
 
-        // when
         TStreamChanges changes;
-        const auto outcome = stream.Configure(MakeStreamConfig({1, 2}), changes);
+        const auto outcome = stream.Configure(MakeConfig({1, 2}), changes);
 
-        // then
-        UNIT_ASSERT(outcome == EConfigureOutcome::AlreadyConfigured);
+        UNIT_ASSERT(outcome == EConfigureOutcome::Success);
         UNIT_ASSERT(changes.IsEmpty());
-        UNIT_ASSERT_VALUES_EQUAL((*stream.FindSourceProgress(1))->Version, TRowVersion(100, 0));
+        UNIT_ASSERT_VALUES_EQUAL(*stream.GetSources().at(1), TRowVersion(100, 0));
     }
 
-    Y_UNIT_TEST(ShouldRejectConfiguration_WhenItDiffersFromStoredOne) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2});
+    Y_UNIT_TEST(ShouldReturnConflict_WhenConfigDiffers) {
+        auto stream = MakeStream({1, 2});
+        auto otherPartitions = MakeConfig({1, 2});
+        otherPartitions.TargetPartitions.pop_back();
 
-        // when
         TStreamChanges changes;
-        const auto otherSources = stream.Configure(MakeStreamConfig({1, 2, 3}), changes);
-        const auto otherVersion = stream.Configure(MakeStreamConfig({1, 2}, 2), changes);
+        const auto otherSources = stream.Configure(MakeConfig({1, 2, 3}), changes);
+        const auto otherTargets = stream.Configure(otherPartitions, changes);
 
-        // then
         UNIT_ASSERT(otherSources == EConfigureOutcome::Conflict);
-        UNIT_ASSERT(otherVersion == EConfigureOutcome::Conflict);
+        UNIT_ASSERT(otherTargets == EConfigureOutcome::Conflict);
         UNIT_ASSERT(changes.IsEmpty());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetSources().size(), 2);
     }
 
-    Y_UNIT_TEST(ShouldTakeMinimumOverAllSources_WhenEverySourceReported) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2, 3});
+    Y_UNIT_TEST(ShouldTakeMinimum_WhenEverySourceWrote) {
+        auto stream = MakeStream({1, 2, 3});
+        Write(stream, 1, 100);
+        Write(stream, 2, 110);
+
         TStreamChanges changes;
+        stream.WriteHeartbeat(3, MakeHeartbeat(120), changes);
 
-        // when
-        stream.ApplyDelivered(1, MakeBarrier(120), changes);
-        stream.ApplyDelivered(2, MakeBarrier(100), changes);
-        stream.ApplyDelivered(3, MakeBarrier(110), changes);
-
-        // then
-        UNIT_ASSERT(stream.GetReadyBarrier());
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetReadyBarrier()->Version, TRowVersion(100, 0));
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetReadyBarrier()->Payload, MakeBarrier(100).Payload);
-        UNIT_ASSERT(changes.ReadyBarrier);
+        UNIT_ASSERT(changes.CurrentHeartbeat);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(100, 0));
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Data, MakeHeartbeat(100).Data);
     }
 
-    Y_UNIT_TEST(ShouldBlockBarrier_WhenSourceHasNotReported) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2, 3});
+    Y_UNIT_TEST(ShouldBlockCurrentHeartbeat_WhenSourceHasNotWritten) {
+        auto stream = MakeStream({1, 2, 3});
+        Write(stream, 1, 120);
+
         TStreamChanges changes;
+        stream.WriteHeartbeat(3, MakeHeartbeat(110), changes);
 
-        // when
-        stream.ApplyDelivered(1, MakeBarrier(120), changes);
-        stream.ApplyDelivered(3, MakeBarrier(110), changes);
-
-        // then
-        UNIT_ASSERT(!stream.GetReadyBarrier());
-        UNIT_ASSERT(!changes.ReadyBarrier);
-        UNIT_ASSERT_VALUES_EQUAL(stream.CountSourcesWithoutProgress(), 1);
+        UNIT_ASSERT(!changes.CurrentHeartbeat);
+        UNIT_ASSERT(!stream.GetCurrentHeartbeat());
     }
 
     Y_UNIT_TEST(ShouldCompareFullVersion_WhenStepsAreEqual) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2});
+        auto stream = MakeStream({1, 2});
         TStreamChanges changes;
 
-        // when
-        stream.ApplyDelivered(1, MakeBarrier(100, 7), changes);
-        stream.ApplyDelivered(2, MakeBarrier(100, 3), changes);
+        stream.WriteHeartbeat(1, MakeHeartbeat(100, 7), changes);
+        stream.WriteHeartbeat(2, MakeHeartbeat(100, 3), changes);
 
-        // then
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetReadyBarrier()->Version, TRowVersion(100, 3));
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(100, 3));
     }
 
-    Y_UNIT_TEST(ShouldKeepProgress_WhenReportIsDuplicateOrOlder) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2});
-        TStreamChanges setup;
-        stream.ApplyDelivered(1, MakeBarrier(120), setup);
-        stream.ApplyDelivered(2, MakeBarrier(110), setup);
+    Y_UNIT_TEST(ShouldKeepProgress_WhenHeartbeatIsEqualOrLower) {
+        auto stream = MakeStream({1, 2});
+        Write(stream, 1, 120);
+        Write(stream, 2, 110);
 
-        // when
         TStreamChanges changes;
-        const auto duplicate = stream.ApplyDelivered(1, MakeBarrier(120), changes);
-        // Altering the resolved interval re-creates heartbeat state and may
-        // emit a lower version.
-        const auto older = stream.ApplyDelivered(2, MakeBarrier(70), changes);
+        const auto equal = stream.WriteHeartbeat(1, MakeHeartbeat(120), changes);
+        const auto lower = stream.WriteHeartbeat(2, MakeHeartbeat(70), changes);
 
-        // then
-        UNIT_ASSERT(duplicate == EDeliveredOutcome::NotAdvanced);
-        UNIT_ASSERT(older == EDeliveredOutcome::NotAdvanced);
+        UNIT_ASSERT(equal == ESourceOutcome::Success);
+        UNIT_ASSERT(lower == ESourceOutcome::Success);
         UNIT_ASSERT(changes.IsEmpty());
-        UNIT_ASSERT_VALUES_EQUAL((*stream.FindSourceProgress(2))->Version, TRowVersion(110, 0));
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetReadyBarrier()->Version, TRowVersion(110, 0));
+        UNIT_ASSERT_VALUES_EQUAL(*stream.GetSources().at(2), TRowVersion(110, 0));
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(110, 0));
     }
 
-    Y_UNIT_TEST(ShouldNotAddSource_WhenUnknownSourceReports) {
-        // given
-        auto stream = MakeConfiguredStream({1});
+    Y_UNIT_TEST(ShouldTakeDataOfNewMinimum_WhenMinimumSourceAdvances) {
+        auto stream = MakeStream({1, 2, 3});
+        Write(stream, 1, 100);
+        Write(stream, 2, 110);
+        Write(stream, 3, 120);
 
-        // when
         TStreamChanges changes;
-        const auto outcome = stream.ApplyDelivered(9, MakeBarrier(100), changes);
+        stream.WriteHeartbeat(1, MakeHeartbeat(130), changes);
 
-        // then
-        UNIT_ASSERT(outcome == EDeliveredOutcome::UnknownSource);
-        UNIT_ASSERT(!stream.FindSourceProgress(9));
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(110, 0));
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Data, MakeHeartbeat(110).Data);
+        UNIT_ASSERT(changes.ErasedHeartbeats.contains(TRowVersion(100, 0)));
+        UNIT_ASSERT(changes.UpsertedHeartbeats.contains(TRowVersion(130, 0)));
+    }
+
+    Y_UNIT_TEST(ShouldStoreDataOnce_WhenSourcesWriteSameVersion) {
+        auto stream = MakeStream({1, 2});
+        TStreamChanges first;
+        TStreamChanges second;
+        TStreamChanges third;
+
+        stream.WriteHeartbeat(1, MakeHeartbeat(100), first);
+        stream.WriteHeartbeat(2, MakeHeartbeat(100), second);
+        stream.WriteHeartbeat(1, MakeHeartbeat(110), third);
+
+        UNIT_ASSERT_VALUES_EQUAL(first.UpsertedHeartbeats.size(), 1);
+        UNIT_ASSERT(second.UpsertedHeartbeats.empty());
+        UNIT_ASSERT(third.ErasedHeartbeats.empty());
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(100, 0));
+    }
+
+    Y_UNIT_TEST(ShouldReturnUnknownSource_WhenSourceIsNotTracked) {
+        auto stream = MakeStream({1});
+
+        TStreamChanges changes;
+        const auto outcome = stream.WriteHeartbeat(9, MakeHeartbeat(100), changes);
+
+        UNIT_ASSERT(outcome == ESourceOutcome::UnknownSource);
+        UNIT_ASSERT(!stream.GetSources().contains(9));
         UNIT_ASSERT(changes.IsEmpty());
     }
 
-    Y_UNIT_TEST(ShouldReplaceParentWithChildrenAtOnce_WhenSourceSplits) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2});
-        TStreamChanges setup;
-        stream.ApplyDelivered(1, MakeBarrier(100), setup);
-        stream.ApplyDelivered(2, MakeBarrier(110), setup);
+    Y_UNIT_TEST(ShouldReplaceParentWithChildrenWithoutHeartbeat_WhenSplit) {
+        auto stream = MakeStream({1, 2});
+        Write(stream, 1, 100);
+        Write(stream, 2, 110);
 
-        // when
         TStreamChanges changes;
-        const auto outcome = stream.ReplaceSource({.Parent = 1, .Children = {3, 4}, .OperationId = 77}, changes);
+        const auto outcome = stream.ChangePartitioning(1, {3, 4}, changes);
 
-        // then
-        UNIT_ASSERT(outcome == EReplaceOutcome::Replaced);
-        UNIT_ASSERT(!stream.FindSourceProgress(1));
-        UNIT_ASSERT(stream.FindSourceProgress(3) && !*stream.FindSourceProgress(3));
-        UNIT_ASSERT(stream.FindSourceProgress(4) && !*stream.FindSourceProgress(4));
+        UNIT_ASSERT(outcome == ESourceOutcome::Success);
+        UNIT_ASSERT(!stream.GetSources().contains(1));
+        UNIT_ASSERT(!stream.GetSources().at(3));
+        UNIT_ASSERT(!stream.GetSources().at(4));
         UNIT_ASSERT(changes.ErasedSources.contains(1));
         UNIT_ASSERT(changes.UpsertedSources.contains(3) && changes.UpsertedSources.contains(4));
-        UNIT_ASSERT_VALUES_EQUAL(changes.AddedReplacements.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetReadyBarrier()->Version, TRowVersion(100, 0));
+        UNIT_ASSERT(changes.ErasedHeartbeats.contains(TRowVersion(100, 0)));
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(100, 0));
     }
 
-    Y_UNIT_TEST(ShouldWaitForEveryChild_WhenSourceSplits) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2});
-        TStreamChanges setup;
-        stream.ApplyDelivered(1, MakeBarrier(100), setup);
-        stream.ApplyDelivered(2, MakeBarrier(110), setup);
-        stream.ReplaceSource({.Parent = 1, .Children = {3, 4}}, setup);
+    Y_UNIT_TEST(ShouldWaitForEveryChild_WhenSplit) {
+        auto stream = MakeStream({1, 2});
+        Write(stream, 1, 100);
+        Write(stream, 2, 110);
+        ChangePartitioning(stream, 1, {3, 4});
 
-        // when
         TStreamChanges firstChild;
-        stream.ApplyDelivered(3, MakeBarrier(130), firstChild);
+        stream.WriteHeartbeat(3, MakeHeartbeat(130), firstChild);
         TStreamChanges secondChild;
-        stream.ApplyDelivered(4, MakeBarrier(140), secondChild);
+        stream.WriteHeartbeat(4, MakeHeartbeat(140), secondChild);
 
-        // then
-        UNIT_ASSERT(!firstChild.ReadyBarrier);
-        UNIT_ASSERT(secondChild.ReadyBarrier);
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetReadyBarrier()->Version, TRowVersion(110, 0));
+        UNIT_ASSERT(!firstChild.CurrentHeartbeat);
+        UNIT_ASSERT(secondChild.CurrentHeartbeat);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(110, 0));
     }
 
-    Y_UNIT_TEST(ShouldKeepBarrier_WhenChildReportsBelowIt) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2});
-        TStreamChanges setup;
-        stream.ApplyDelivered(1, MakeBarrier(100), setup);
-        stream.ApplyDelivered(2, MakeBarrier(110), setup);
-        stream.ReplaceSource({.Parent = 1, .Children = {3}}, setup);
+    Y_UNIT_TEST(ShouldKeepCurrentHeartbeat_WhenChildWritesBelowIt) {
+        auto stream = MakeStream({1, 2});
+        Write(stream, 1, 100);
+        Write(stream, 2, 110);
+        ChangePartitioning(stream, 1, {3});
 
-        // when
         TStreamChanges changes;
-        const auto outcome = stream.ApplyDelivered(3, MakeBarrier(90), changes);
+        stream.WriteHeartbeat(3, MakeHeartbeat(90), changes);
 
-        // then
-        UNIT_ASSERT(outcome == EDeliveredOutcome::Advanced);
-        UNIT_ASSERT(!changes.ReadyBarrier);
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetReadyBarrier()->Version, TRowVersion(100, 0));
+        UNIT_ASSERT(!changes.CurrentHeartbeat);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(100, 0));
     }
 
-    Y_UNIT_TEST(ShouldKeepChildProgress_WhenReplacementRepeats) {
-        // given
-        auto stream = MakeConfiguredStream({1});
-        TStreamChanges setup;
-        stream.ReplaceSource({.Parent = 1, .Children = {2, 3}}, setup);
-        stream.ApplyDelivered(2, MakeBarrier(100), setup);
+    Y_UNIT_TEST(ShouldKeepChildProgress_WhenPartitioningChangeRepeats) {
+        auto stream = MakeStream({1});
+        ChangePartitioning(stream, 1, {2, 3});
+        Write(stream, 2, 100);
 
-        // when
         TStreamChanges changes;
-        const auto outcome = stream.ReplaceSource({.Parent = 1, .Children = {2, 3}}, changes);
+        const auto outcome = stream.ChangePartitioning(1, {2, 3}, changes);
 
-        // then
-        UNIT_ASSERT(outcome == EReplaceOutcome::AlreadyReplaced);
+        UNIT_ASSERT(outcome == ESourceOutcome::Success);
         UNIT_ASSERT(changes.IsEmpty());
-        UNIT_ASSERT_VALUES_EQUAL((*stream.FindSourceProgress(2))->Version, TRowVersion(100, 0));
+        UNIT_ASSERT_VALUES_EQUAL(*stream.GetSources().at(2), TRowVersion(100, 0));
     }
 
-    Y_UNIT_TEST(ShouldRejectReplacement_WhenParentWasReplacedByOtherChildren) {
-        // given
-        auto stream = MakeConfiguredStream({1});
-        TStreamChanges setup;
-        stream.ReplaceSource({.Parent = 1, .Children = {2, 3}}, setup);
+    Y_UNIT_TEST(ShouldReturnUnknownSource_WhenParentAndSomeChildAreAbsent) {
+        auto stream = MakeStream({1});
+        ChangePartitioning(stream, 1, {2, 3});
 
-        // when
         TStreamChanges changes;
-        const auto outcome = stream.ReplaceSource({.Parent = 1, .Children = {4}}, changes);
+        const auto otherChildren = stream.ChangePartitioning(1, {2, 4}, changes);
+        const auto unknownParent = stream.ChangePartitioning(9, {5}, changes);
 
-        // then
-        UNIT_ASSERT(outcome == EReplaceOutcome::Conflict);
+        UNIT_ASSERT(otherChildren == ESourceOutcome::UnknownSource);
+        UNIT_ASSERT(unknownParent == ESourceOutcome::UnknownSource);
         UNIT_ASSERT(changes.IsEmpty());
-        UNIT_ASSERT(!stream.FindSourceProgress(4));
+        UNIT_ASSERT(!stream.GetSources().contains(4));
     }
 
-    Y_UNIT_TEST(ShouldRejectLateReport_WhenSourceIsReplaced) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2});
-        TStreamChanges setup;
-        stream.ReplaceSource({.Parent = 1, .Children = {3}}, setup);
+    Y_UNIT_TEST(ShouldRejectLateHeartbeat_WhenParentIsReplaced) {
+        auto stream = MakeStream({1, 2});
+        ChangePartitioning(stream, 1, {3});
 
-        // when
         TStreamChanges changes;
-        const auto outcome = stream.ApplyDelivered(1, MakeBarrier(100), changes);
+        const auto outcome = stream.WriteHeartbeat(1, MakeHeartbeat(100), changes);
 
-        // then
-        UNIT_ASSERT(outcome == EDeliveredOutcome::RetiredSource);
-        UNIT_ASSERT(!stream.FindSourceProgress(1));
+        UNIT_ASSERT(outcome == ESourceOutcome::UnknownSource);
+        UNIT_ASSERT(!stream.GetSources().contains(1));
         UNIT_ASSERT(changes.IsEmpty());
     }
 
     Y_UNIT_TEST(ShouldKeepExistingChild_WhenSecondParentMerges) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2});
-        TStreamChanges setup;
-        stream.ApplyDelivered(1, MakeBarrier(100), setup);
-        stream.ApplyDelivered(2, MakeBarrier(110), setup);
-        stream.ReplaceSource({.Parent = 1, .Children = {3}}, setup);
-        stream.ApplyDelivered(3, MakeBarrier(120), setup);
+        auto stream = MakeStream({1, 2});
+        Write(stream, 1, 100);
+        Write(stream, 2, 110);
+        ChangePartitioning(stream, 1, {3});
+        Write(stream, 3, 120);
 
-        // when
         TStreamChanges changes;
-        const auto outcome = stream.ReplaceSource({.Parent = 2, .Children = {3}}, changes);
+        const auto outcome = stream.ChangePartitioning(2, {3}, changes);
 
-        // then
-        UNIT_ASSERT(outcome == EReplaceOutcome::Replaced);
+        UNIT_ASSERT(outcome == ESourceOutcome::Success);
         UNIT_ASSERT(!changes.UpsertedSources.contains(3));
         UNIT_ASSERT_VALUES_EQUAL(stream.GetSources().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL((*stream.FindSourceProgress(3))->Version, TRowVersion(120, 0));
-        UNIT_ASSERT(changes.ReadyBarrier);
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetReadyBarrier()->Version, TRowVersion(120, 0));
-    }
-
-    Y_UNIT_TEST(ShouldRejectReplacement_WhenChildIsRetiredSource) {
-        // given
-        auto stream = MakeConfiguredStream({1, 2});
-        TStreamChanges setup;
-        stream.ReplaceSource({.Parent = 1, .Children = {3}}, setup);
-
-        // when
-        TStreamChanges changes;
-        const auto outcome = stream.ReplaceSource({.Parent = 2, .Children = {1}}, changes);
-
-        // then
-        UNIT_ASSERT(outcome == EReplaceOutcome::Conflict);
-        UNIT_ASSERT(stream.FindSourceProgress(2));
-        UNIT_ASSERT(changes.IsEmpty());
-    }
-
-    Y_UNIT_TEST(ShouldRejectReplacement_WhenParentIsUnknown) {
-        // given
-        auto stream = MakeConfiguredStream({1});
-
-        // when
-        TStreamChanges changes;
-        const auto outcome = stream.ReplaceSource({.Parent = 9, .Children = {3}}, changes);
-
-        // then
-        UNIT_ASSERT(outcome == EReplaceOutcome::UnknownSource);
-        UNIT_ASSERT(changes.IsEmpty());
-    }
-
-    Y_UNIT_TEST(ShouldRejectReplacementShape_WhenChildrenAreInvalid) {
-        // given
-        TSourceReplacement noChildren{.Parent = 1};
-        TSourceReplacement duplicateChild{.Parent = 1, .Children = {3, 2, 3}};
-        TSourceReplacement parentAsChild{.Parent = 1, .Children = {1, 2}};
-        TSourceReplacement unsorted{.Parent = 1, .Children = {3, 2}};
-        TString error;
-
-        // when / then
-        UNIT_ASSERT(!NormalizeSourceReplacement(noChildren, error));
-        UNIT_ASSERT(!NormalizeSourceReplacement(duplicateChild, error));
-        UNIT_ASSERT(!NormalizeSourceReplacement(parentAsChild, error));
-        UNIT_ASSERT(NormalizeSourceReplacement(unsorted, error));
-        UNIT_ASSERT(unsorted.Children == TVector<TSourceId>({2, 3}));
-    }
-
-    Y_UNIT_TEST(ShouldActivateOnce_WhenVersionMatches) {
-        // given
-        auto stream = MakeConfiguredStream({1});
-
-        // when
-        TStreamChanges mismatch;
-        const auto wrongVersion = stream.Activate(2, mismatch);
-        TStreamChanges first;
-        const auto activated = stream.Activate(1, first);
-        TStreamChanges repeat;
-        const auto again = stream.Activate(1, repeat);
-
-        // then
-        UNIT_ASSERT(wrongVersion == EActivateOutcome::VersionMismatch);
-        UNIT_ASSERT(mismatch.IsEmpty());
-        UNIT_ASSERT(activated == EActivateOutcome::Activated);
-        UNIT_ASSERT(first.Config);
-        UNIT_ASSERT(again == EActivateOutcome::AlreadyActive);
-        UNIT_ASSERT(repeat.IsEmpty());
-        UNIT_ASSERT(stream.GetPhase() == EStreamPhase::Active);
+        UNIT_ASSERT_VALUES_EQUAL(*stream.GetSources().at(3), TRowVersion(120, 0));
+        UNIT_ASSERT(changes.CurrentHeartbeat);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(120, 0));
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Data, MakeHeartbeat(120).Data);
     }
 
     Y_UNIT_TEST(ShouldRebuildMinimum_WhenRestored) {
-        // given
-        THashMap<TSourceId, TSourceProgress> sources{
-            {2, MakeBarrier(110)},
-            {3, MakeBarrier(130)},
+        THashMap<ui64, std::optional<TRowVersion>> sources{
+            {2, TRowVersion(110, 0)},
+            {3, TRowVersion(130, 0)},
             {4, std::nullopt},
         };
-        THashMap<TSourceId, TSourceReplacement> replacements{
-            {1, TSourceReplacement{.Parent = 1, .Children = {3, 4}}},
+        const TMap<TRowVersion, TString> heartbeats{
+            {TRowVersion(110, 0), MakeHeartbeat(110).Data},
+            {TRowVersion(130, 0), MakeHeartbeat(130).Data},
         };
-        auto stream = TStream::Restore(MakeStreamConfig({1, 2}), EStreamPhase::Active,
-            std::move(sources), MakeBarrier(100), std::move(replacements));
+        auto stream = TStream::Restore(MakeConfig({1, 2}), std::move(sources), heartbeats, MakeHeartbeat(100));
 
-        // when
         TStreamChanges changes;
-        const auto retired = stream.ApplyDelivered(1, MakeBarrier(200), changes);
-        stream.ApplyDelivered(4, MakeBarrier(120), changes);
+        stream.WriteHeartbeat(4, MakeHeartbeat(120), changes);
 
-        // then
-        UNIT_ASSERT(retired == EDeliveredOutcome::RetiredSource);
-        UNIT_ASSERT(changes.ReadyBarrier);
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetReadyBarrier()->Version, TRowVersion(110, 0));
+        UNIT_ASSERT(changes.CurrentHeartbeat);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(110, 0));
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Data, MakeHeartbeat(110).Data);
     }
 }
 

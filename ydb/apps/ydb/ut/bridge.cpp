@@ -217,6 +217,7 @@ private:
 class TBridgeCliFixture : public TCliTestFixture {
 public:
     void AddServices() override {
+        EnvHomeFile("ydb/bin/config.json", R"({"check_version":false})");
         AddService<TBridgeDiscovery>(GetAddress());
         AddService<TBridgeLogin>();
         AddService<TBridgeService>();

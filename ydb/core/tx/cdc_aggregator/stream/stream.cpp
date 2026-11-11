@@ -6,204 +6,157 @@
 
 namespace NKikimr::NCdcAggregator {
 
-bool NormalizeSourceReplacement(TSourceReplacement& replacement, TString& error) {
-    if (!replacement.Parent) {
-        error = "Parent is not set";
-        return false;
-    }
-    if (replacement.Children.empty()) {
-        error = "No children";
-        return false;
-    }
-
-    auto& children = replacement.Children;
-    std::sort(children.begin(), children.end());
-    if (std::adjacent_find(children.begin(), children.end()) != children.end()) {
-        error = "Duplicate child";
-        return false;
-    }
-    if (children.front() == 0) {
-        error = "Zero child id";
-        return false;
-    }
-    if (std::binary_search(children.begin(), children.end(), replacement.Parent)) {
-        error = "Parent is its own child";
-        return false;
-    }
-
-    return true;
+bool TStreamChanges::IsEmpty() const {
+    return !Config
+        && UpsertedSources.empty()
+        && ErasedSources.empty()
+        && UpsertedHeartbeats.empty()
+        && ErasedHeartbeats.empty()
+        && !CurrentHeartbeat;
 }
 
 TStream TStream::Restore(
-        TStreamConfig config,
-        EStreamPhase phase,
-        THashMap<TSourceId, TSourceProgress> sources,
-        std::optional<TBarrier> readyBarrier,
-        THashMap<TSourceId, TSourceReplacement> replacements)
+        TTrackingConfig config,
+        THashMap<ui64, std::optional<TRowVersion>> sources,
+        const TMap<TRowVersion, TString>& heartbeats,
+        std::optional<NPQ::THeartbeat> currentHeartbeat)
 {
     TStream stream;
     stream.Config = std::move(config);
-    stream.Phase = phase;
-    stream.ReadyBarrier = std::move(readyBarrier);
-    stream.Replacements = std::move(replacements);
+    stream.CurrentHeartbeat = std::move(currentHeartbeat);
 
-    for (auto& [source, progress] : sources) {
-        Y_ENSURE(!stream.Replacements.contains(source), "Retired source " << source << " is in the current set");
-        if (progress) {
-            stream.ProgressIndex.emplace(progress->Version, source);
+    for (const auto& [source, version] : sources) {
+        if (!version) {
+            continue;
         }
+        auto it = heartbeats.find(*version);
+        Y_ENSURE(it != heartbeats.end(), "Source " << source << " has no heartbeat data for version " << *version);
+        auto& held = stream.Heartbeats[*version];
+        held.Data = it->second;
+        ++held.SourceCount;
+        ++stream.SourcesWithHeartbeat;
     }
+    Y_ENSURE(stream.Heartbeats.size() == heartbeats.size(), "Heartbeat data is not held by any source");
     stream.Sources = std::move(sources);
 
     return stream;
 }
 
-const TStreamConfig& TStream::GetConfig() const {
-    Y_ENSURE(Config, "Stream is not configured");
+const TTrackingConfig& TStream::GetConfig() const {
+    Y_ENSURE(Config, "Tracking is not configured");
     return *Config;
 }
 
-EStreamPhase TStream::GetPhase() const {
-    Y_ENSURE(Config, "Stream is not configured");
-    return Phase;
-}
-
-const TSourceProgress* TStream::FindSourceProgress(TSourceId source) const {
-    auto it = Sources.find(source);
-    return it != Sources.end() ? &it->second : nullptr;
-}
-
-EConfigureOutcome TStream::Configure(const TStreamConfig& config, TStreamChanges& changes) {
+EConfigureOutcome TStream::Configure(const TTrackingConfig& config, TStreamChanges& changes) {
     if (Config) {
-        return *Config == config ? EConfigureOutcome::AlreadyConfigured : EConfigureOutcome::Conflict;
+        return *Config == config ? EConfigureOutcome::Success : EConfigureOutcome::Conflict;
     }
 
-    Y_ENSURE(!config.Sources.empty());
     Config = config;
-    Phase = EStreamPhase::Configured;
     changes.Config = true;
-
-    for (const auto source : config.Sources) {
-        AddSourceWithoutProgress(source);
-        changes.UpsertedSources.insert(source);
+    for (const auto source : config.SourceDataShardIds) {
+        AddSource(source, changes);
     }
 
-    return EConfigureOutcome::Configured;
+    return EConfigureOutcome::Success;
 }
 
-EActivateOutcome TStream::Activate(ui64 configVersion, TStreamChanges& changes) {
-    Y_ENSURE(Config, "Stream is not configured");
-
-    if (configVersion != Config->Version) {
-        return EActivateOutcome::VersionMismatch;
-    }
-    if (Phase == EStreamPhase::Active) {
-        return EActivateOutcome::AlreadyActive;
-    }
-
-    Phase = EStreamPhase::Active;
-    changes.Config = true;
-    return EActivateOutcome::Activated;
-}
-
-EDeliveredOutcome TStream::ApplyDelivered(TSourceId source, const TBarrier& delivered, TStreamChanges& changes) {
-    Y_ENSURE(Config, "Stream is not configured");
+ESourceOutcome TStream::WriteHeartbeat(ui64 source, const NPQ::THeartbeat& heartbeat, TStreamChanges& changes) {
+    Y_ENSURE(Config, "Tracking is not configured");
 
     auto it = Sources.find(source);
     if (it == Sources.end()) {
-        // A report never adds a source: the set changes only by configuration
-        // and replacements.
-        return Replacements.contains(source) ? EDeliveredOutcome::RetiredSource : EDeliveredOutcome::UnknownSource;
+        return ESourceOutcome::UnknownSource;
     }
 
-    // Altering the resolved interval or retrying an unacknowledged heartbeat
-    // may bring an older version. The stored one remains valid, so it is kept.
-    const auto& progress = it->second;
-    if (progress && delivered.Version <= progress->Version) {
-        return EDeliveredOutcome::NotAdvanced;
+    auto& version = it->second;
+    if (version && heartbeat.Version <= *version) {
+        return ESourceOutcome::Success;
     }
 
-    SetSourceProgress(source, delivered);
+    if (version) {
+        ReleaseHeartbeat(*version, changes);
+    } else {
+        ++SourcesWithHeartbeat;
+    }
+    version = heartbeat.Version;
+    HoldHeartbeat(heartbeat, changes);
     changes.UpsertedSources.insert(source);
-    AdvanceReadyBarrier(changes);
-    return EDeliveredOutcome::Advanced;
+
+    AdvanceCurrentHeartbeat(changes);
+    return ESourceOutcome::Success;
 }
 
-EReplaceOutcome TStream::ReplaceSource(const TSourceReplacement& replacement, TStreamChanges& changes) {
-    Y_ENSURE(Config, "Stream is not configured");
+ESourceOutcome TStream::ChangePartitioning(ui64 parent, const TVector<ui64>& children, TStreamChanges& changes) {
+    Y_ENSURE(Config, "Tracking is not configured");
 
-    // A parent is replaced at most once: tablet ids are never reused and
-    // a split or merge retires its source tablets.
-    if (auto it = Replacements.find(replacement.Parent); it != Replacements.end()) {
-        return it->second.Children == replacement.Children ? EReplaceOutcome::AlreadyReplaced : EReplaceOutcome::Conflict;
-    }
-    if (!Sources.contains(replacement.Parent)) {
-        return EReplaceOutcome::UnknownSource;
-    }
-    for (const auto child : replacement.Children) {
-        if (Replacements.contains(child)) {
-            return EReplaceOutcome::Conflict;
-        }
+    if (!Sources.contains(parent)) {
+        const bool applied = std::all_of(children.begin(), children.end(), [this](ui64 child) {
+            return Sources.contains(child);
+        });
+        return applied ? ESourceOutcome::Success : ESourceOutcome::UnknownSource;
     }
 
-    EraseSource(replacement.Parent);
-    changes.ErasedSources.insert(replacement.Parent);
-
-    // In a merge every parent names the same child: the child that is already
-    // in the set keeps its progress.
-    for (const auto child : replacement.Children) {
+    EraseSource(parent, changes);
+    for (const auto child : children) {
         if (!Sources.contains(child)) {
-            AddSourceWithoutProgress(child);
-            changes.UpsertedSources.insert(child);
+            AddSource(child, changes);
         }
     }
 
-    Replacements.emplace(replacement.Parent, replacement);
-    changes.AddedReplacements.push_back(replacement.Parent);
-
-    // Children normally have no progress and block the barrier; a child that
-    // reported already may let it advance once the parent is gone.
-    AdvanceReadyBarrier(changes);
-    return EReplaceOutcome::Replaced;
+    AdvanceCurrentHeartbeat(changes);
+    return ESourceOutcome::Success;
 }
 
-void TStream::AddSourceWithoutProgress(TSourceId source) {
+void TStream::AddSource(ui64 source, TStreamChanges& changes) {
     const bool inserted = Sources.emplace(source, std::nullopt).second;
     Y_ENSURE(inserted, "Duplicate source " << source);
+    changes.UpsertedSources.insert(source);
 }
 
-void TStream::SetSourceProgress(TSourceId source, const TBarrier& delivered) {
-    auto& progress = Sources.at(source);
-    if (progress) {
-        ProgressIndex.erase(std::make_pair(progress->Version, source));
-    }
-    progress = delivered;
-    ProgressIndex.emplace(delivered.Version, source);
-}
-
-void TStream::EraseSource(TSourceId source) {
+void TStream::EraseSource(ui64 source, TStreamChanges& changes) {
     auto it = Sources.find(source);
     Y_ENSURE(it != Sources.end(), "Unknown source " << source);
-    if (const auto& progress = it->second) {
-        ProgressIndex.erase(std::make_pair(progress->Version, source));
+    if (const auto& version = it->second) {
+        ReleaseHeartbeat(*version, changes);
+        --SourcesWithHeartbeat;
     }
     Sources.erase(it);
+    changes.ErasedSources.insert(source);
 }
 
-void TStream::AdvanceReadyBarrier(TStreamChanges& changes) {
-    if (Sources.empty() || ProgressIndex.size() != Sources.size()) {
+void TStream::HoldHeartbeat(const NPQ::THeartbeat& heartbeat, TStreamChanges& changes) {
+    auto [it, inserted] = Heartbeats.try_emplace(heartbeat.Version);
+    if (inserted) {
+        it->second.Data = heartbeat.Data;
+        changes.UpsertedHeartbeats[heartbeat.Version] = heartbeat.Data;
+        changes.ErasedHeartbeats.erase(heartbeat.Version);
+    }
+    ++it->second.SourceCount;
+}
+
+void TStream::ReleaseHeartbeat(const TRowVersion& version, TStreamChanges& changes) {
+    auto it = Heartbeats.find(version);
+    Y_ENSURE(it != Heartbeats.end() && it->second.SourceCount > 0, "Heartbeat " << version << " is not held");
+    if (--it->second.SourceCount == 0) {
+        Heartbeats.erase(it);
+        changes.UpsertedHeartbeats.erase(version);
+        changes.ErasedHeartbeats.insert(version);
+    }
+}
+
+void TStream::AdvanceCurrentHeartbeat(TStreamChanges& changes) {
+    if (Sources.empty() || SourcesWithHeartbeat != Sources.size()) {
         return;
     }
 
-    const auto& [version, source] = *ProgressIndex.begin();
-    // A child may report a version below the published barrier; the barrier
-    // stays where it is.
-    if (ReadyBarrier && version <= ReadyBarrier->Version) {
+    const auto& [version, held] = *Heartbeats.begin();
+    if (CurrentHeartbeat && version <= CurrentHeartbeat->Version) {
         return;
     }
 
-    ReadyBarrier = *Sources.at(source);
-    changes.ReadyBarrier = true;
+    CurrentHeartbeat = NPQ::THeartbeat{.Version = version, .Data = held.Data};
+    changes.CurrentHeartbeat = true;
 }
 
 } // namespace NKikimr::NCdcAggregator

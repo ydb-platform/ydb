@@ -397,3 +397,40 @@ def test_tier0_policy_is_read_from_selected_sources_root(tmp_path, monkeypatch):
         policy.write_text("pnpm:\n  defaults:\n    registry: " + registry + "\n")
         monkeypatch.setattr(common_config, "_tier0_sources_root", str(root))
         assert common_config.load_tier0_settings()["pnpm"]["defaults"]["registry"] == registry
+
+
+@pytest.mark.parametrize("external_target", [False, True])
+def test_effective_config_rebases_common_and_local_before_merge(tmp_path, external_target):
+    from build.plugins.lib.nots.package_manager.common_config import load_effective_pnpm_config
+
+    pj, _ = fixture(
+        tmp_path,
+        "overrides: {common: 'file:./common-peer', winning: 'file:./old'}\npatchedDependencies: {common: patches/common.patch}",
+    )
+    pj.data["pnpm"] = {
+        "overrides": {"local": "workspace:../local-peer", "winning": "file:./new"},
+        "patchedDependencies": {"local": "patches/local.patch"},
+    }
+    target = tmp_path / "build" if external_target else Path(pj.path).parent
+    original = json.loads(json.dumps(pj.data))
+    filename, catalogs, settings = load_effective_pnpm_config(pj, str(tmp_path), str(target))
+    assert filename == "project/common.yaml"
+    assert catalogs == {}
+    if external_target:
+        assert settings["overrides"] == {
+            "common": "file:../project/common-peer",
+            "winning": "file:../project/pkg/new",
+            "local": "workspace:../project/local-peer",
+        }
+        assert settings["patchedDependencies"] == {
+            "common": "../project/patches/common.patch",
+            "local": "../project/pkg/patches/local.patch",
+        }
+    else:
+        assert settings["overrides"] == {
+            "common": "file:../common-peer",
+            "winning": "file:./new",
+            "local": "workspace:../local-peer",
+        }
+        assert settings["patchedDependencies"] == {"common": "../patches/common.patch", "local": "patches/local.patch"}
+    assert pj.data == original

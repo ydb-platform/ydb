@@ -79,7 +79,7 @@ TString LoadTPCHYqlQuery(ui32 queryId) {
     const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
     const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
     return toDecimal + "\n" + toDecimalMax + "\n"
-        + GetFullPath(BenchmarkQueryPath[EBenchType::TPCH], ToString(queryId) + ".yql");
+        + ReadBenchmarkQuery(EBenchType::TPCH, queryId);
 }
 
 } // namespace

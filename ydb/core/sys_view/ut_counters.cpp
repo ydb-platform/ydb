@@ -3,6 +3,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/tablet/detailed_metrics/processor_database_metrics_aggregator.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -329,6 +330,10 @@ Y_UNIT_TEST_SUITE(DbCounters) {
     // always present (processor-move protection, mirrors ydb_serverless),
     // monitoring_project_id=<value> comes from the DB user attribute of the
     // same name (ATTR_MONITORING_PROJECT_ID) and is absent when unset.
+    // A new SysView Processor starts folded: the first table group comes
+    // without the partition leaves, which publish after
+    // DETAILED_OUTPUT_RESTORE_TICKS ticks. The ICB limit of the node's output
+    // folds them back into the table rollup.
     Y_UNIT_TEST(DetailedTables) {
         TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true});
 
@@ -342,24 +347,32 @@ Y_UNIT_TEST_SUITE(DbCounters) {
         const TString relativeTablePath = "Table1";
         const TString projectId = "proj1";
 
-        for (size_t iter = 0; iter < 30; ++iter) {
-            Cerr << "iteration " << iter << Endl;
-
-            bool isGood = false;
-
-            for (ui32 nodeId = 0; nodeId < env.GetServer().GetRuntime()->GetNodeCount(); ++nodeId) {
-                auto counters = env.GetServer().GetRuntime()->GetAppData(nodeId).Counters;
-                auto root = GetServiceCounters(counters, "ydb_detailed", false);
-
-                auto tableGroup = FindDetailedTableGroup(root, projectId, databasePath, relativeTablePath);
+        auto* runtime = env.GetServer().GetRuntime();
+        // The SysView Processor's tick
+        const TDuration tick = TDuration::Seconds(5);
+        // The table stats take longer to show, and the leaves wait out the start fold
+        const TInstant publishBy = TInstant::Now() + tick * (30 + DETAILED_OUTPUT_RESTORE_TICKS);
+        // Looked up afresh: a restarted SysView Processor publishes a new table group
+        const auto findTableGroup = [&](ui32 nodeId) {
+            return FindDetailedTableGroup(GetServiceCounters(runtime->GetAppData(nodeId).Counters, "ydb_detailed", false),
+                projectId, databasePath, relativeTablePath);
+        };
+        bool tableSeen = false;
+        bool published = false;
+        while (TInstant::Now() < publishBy) {
+            for (ui32 nodeId = 0; nodeId < runtime->GetNodeCount(); ++nodeId) {
+                auto tableGroup = findTableGroup(nodeId);
                 if (!tableGroup) {
                     continue;
                 }
 
-                {
+                // Unfolded, the first report would create the table group and its leaves at once
+                if (!tableSeen) {
                     TStringStream ss;
                     tableGroup->OutputHtml(ss);
-                    Cerr << "node " << nodeId << ", table group:" << Endl << ss.Str() << Endl;
+                    Cerr << "node " << nodeId << ", first table group:" << Endl << ss.Str() << Endl;
+                    UNIT_ASSERT_C(!FindAnyTabletIdGroup(tableGroup), "the first table group has partition leaves");
+                    tableSeen = true;
                 }
 
                 // A table-level metric present and > 0 directly on table=
@@ -388,18 +401,37 @@ Y_UNIT_TEST_SUITE(DbCounters) {
                 UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics"));
                 UNIT_ASSERT(!tableGroup->FindSubgroup("follower_id", "replicas_only"));
 
-                isGood = true;
+                published = true;
                 break;
             }
 
-            if (isGood) {
-                return;
+            if (published) {
+                break;
             }
 
-            Sleep(TDuration::Seconds(5));
+            Sleep(TDuration::MilliSeconds(500));
         }
 
-        UNIT_ASSERT_C(false, "out of iterations");
+        UNIT_ASSERT_C(published, "out of time");
+
+        for (ui32 nodeId = 0; nodeId < runtime->GetNodeCount(); ++nodeId) {
+            TControlBoard::SetValue(0, runtime->GetAppData(nodeId).Icb->DetailedMetricsControls.MaxNodeOutputBytes);
+        }
+        const auto hasLeaves = [&] {
+            for (ui32 nodeId = 0; nodeId < runtime->GetNodeCount(); ++nodeId) {
+                auto tableGroup = findTableGroup(nodeId);
+                if (tableGroup && FindAnyTabletIdGroup(tableGroup)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        // The SysView Processor reads the ICB once per tick
+        const TInstant foldBy = TInstant::Now() + tick * 6;
+        while (hasLeaves() && TInstant::Now() < foldBy) {
+            Sleep(TDuration::MilliSeconds(500));
+        }
+        UNIT_ASSERT_C(!hasLeaves(), "the limit does not fold the partition leaves");
     }
 
     // used_core_percents is a non-derivative histogram (tablets per CPU-% bucket) that

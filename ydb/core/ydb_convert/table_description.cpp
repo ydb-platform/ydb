@@ -32,6 +32,7 @@
 
 #include <util/generic/hash_set.h>
 #include <util/generic/hash.h>
+#include <util/generic/size_literals.h>
 
 #include <optional>
 
@@ -816,6 +817,16 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
         auto op = modifyScheme->MutableCreateCdcStream();
         op->SetTableName(name);
+
+        const ui64 writeSpeed = add.has_partition_write_speed_bytes_per_second()
+            ? add.partition_write_speed_bytes_per_second()
+            : (add.attributes().contains("__async_replication") ? 10_MB : 1_MB);
+        if (!writeSpeed || writeSpeed > Max<ui32>()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = "Invalid changefeed partition write speed";
+            return false;
+        }
+        op->SetTopicWriteSpeedInBytesPerSecond(writeSpeed);
 
         if (add.has_retention_period()) {
             op->SetRetentionPeriodSeconds(add.retention_period().seconds());

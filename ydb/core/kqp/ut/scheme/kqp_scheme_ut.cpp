@@ -9098,6 +9098,54 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond(), 1_MB);
         }
 
+        {
+            const auto changefeed = TChangefeedDescription("replicationFeed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+                .AddAttribute("__async_replication", R"({"id":"1","path":"/Root/replica"})");
+            const auto result = session.AlterTable("/Root/table", TAlterTableSettings()
+                .AppendAddChangefeeds(changefeed)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto desc = pq.DescribeTopic("/Root/table/replicationFeed").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond(), 10_MB);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteBurstBytes(), 1_MB);
+        }
+
+        using TEvAlterTableRequest = NGRpcService::TGrpcRequestOperationCall<
+            Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse>;
+        const auto addChangefeed = [&kikimr, &session](const TString& name, ui64 writeSpeed, bool replication) {
+            Ydb::Table::AlterTableRequest request;
+            request.set_path("/Root/table");
+            request.set_session_id(session.GetId());
+            auto& changefeed = *request.add_add_changefeeds();
+            changefeed.set_name(name);
+            changefeed.set_mode(Ydb::Table::ChangefeedMode::MODE_UPDATES);
+            changefeed.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+            changefeed.set_partition_write_speed_bytes_per_second(writeSpeed);
+            if (replication) {
+                (*changefeed.mutable_attributes())["__async_replication"] = R"({"id":"1","path":"/Root/replica"})";
+            }
+            return NRpcService::DoLocalRpc<TEvAlterTableRequest>(std::move(request), "/Root", "",
+                kikimr.GetTestServer().GetRuntime()->GetActorSystem(0)).ExtractValueSync();
+        };
+
+        for (const bool replication : {false, true}) {
+            const TString feedName = replication ? "explicitReplicationFeed" : "explicitFeed";
+            const auto result = addChangefeed(feedName, 3_MB, replication);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.operation().status(), Ydb::StatusIds::SUCCESS, result.DebugString());
+
+            const auto desc = pq.DescribeTopic("/Root/table/" + feedName).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond(), 3_MB);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteBurstBytes(), 1_MB);
+        }
+
+        for (const ui64 writeSpeed : {ui64(0), ui64(Max<ui32>()) + 1}) {
+            const auto result = addChangefeed("invalidFeed", writeSpeed, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.operation().status(), Ydb::StatusIds::BAD_REQUEST, result.DebugString());
+        }
+
         { // alter (2 MB/s)
             auto query = R"(
                 --!syntax_v1

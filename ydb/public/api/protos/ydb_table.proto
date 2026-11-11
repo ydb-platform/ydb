@@ -608,6 +608,7 @@ message Changefeed {
     bool user_sids = 12;
     // Emit user trace identifier (trace_id) or not.
     bool trace_ids = 13;
+    optional uint64 partition_write_speed_bytes_per_second = 14 [(Ydb.value) = ">= 1"];
 }
 
 message ChangefeedDescription {

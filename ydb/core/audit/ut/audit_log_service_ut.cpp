@@ -296,7 +296,7 @@ Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
     }
 
     Y_UNIT_TEST(LoggingHeartbeatPrefersIPv4) {
-        CheckHeartbeat({"2001:db8::10", "192.0.2.10"}, "192.0.2.10");
+        CheckHeartbeat({"2001:db8::10", "192.0.2.10", "2001:db8::20"}, "192.0.2.10");
     }
 
     Y_UNIT_TEST(LoggingHeartbeatSkipsSpecialAddresses) {

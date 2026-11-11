@@ -40,8 +40,11 @@ public:
     }
 
     TString GetNodeAddress() const {
+        // Pick a local IP to identify the node in heartbeat audit records.
+        TString ipv4;
         TString ipv6;
-        for (const auto& interface : NetworkInterfacesProvider()) {
+        const auto interfaces = NetworkInterfacesProvider();
+        for (const auto& interface : interfaces) {
             if (!interface.Address || NAddr::IsLoopback(*interface.Address)) {
                 continue;
             }
@@ -53,21 +56,23 @@ public:
             if (ip.empty() || ip == "0.0.0.0" || ip == "::") {
                 continue;
             }
-            if (address.GetFamily() == AF_INET) {
-                return ip;
-            }
-            if (ipv6.empty()) {
+            if (address.GetFamily() == AF_INET6) {
                 ipv6 = ip;
+            } else if (address.GetFamily() == AF_INET) {
+                ipv4 = ip;
             }
         }
-        return ipv6.empty() ? TString("{none}") : ipv6;
+        if (!ipv4.empty()) {
+            return ipv4;
+        }
+        return ipv6;
     }
 
     void HeartbeatLog() {
         const TString nodeAddress = GetNodeAddress();
         AUDIT_LOG(
             AUDIT_PART("component", "audit-service")
-            AUDIT_PART("remote_address", nodeAddress)
+            AUDIT_PART("remote_address", nodeAddress.empty() ? "{none}" : nodeAddress)
             AUDIT_PART("subject", "metadata@system")
             AUDIT_PART("sanitized_token", "{none}")
             AUDIT_PART("operation", "HEARTBEAT")

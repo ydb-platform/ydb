@@ -9,7 +9,6 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
@@ -268,13 +267,11 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // with no progress from the shard the build stays in Filling and is billed every ReBillPeriod
+        // with no progress from the shard the build stays in Filling and is billed every ReBillPeriod (10s)
         TBlockEvents<TEvDataShard::TEvBuildIndexProgressResponse> progressBlocker(runtime);
-        TWaitForFirstEvent<NSchemeShard::TEvPrivate::TEvIndexBuildingMakeABill> billWaiter(runtime);
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
             TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
-        billWaiter.Wait(TDuration::Minutes(1));
-        env.SimulateSleep(runtime, TDuration::Seconds(1)); // let TTxBilling complete
+        env.SimulateSleep(runtime, TDuration::Seconds(15));
 
         UNIT_ASSERT_GT(GetTabletTxCompleted(runtime, TTestTxConfig::SchemeShard, "SchemeShard/TxBillingIndexBuild"), 0);
     }

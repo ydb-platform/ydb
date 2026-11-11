@@ -582,7 +582,9 @@ size_t TBlobStorageController::RollbackBridgedGroups(TConfigState& state, TBridg
     const auto *bridgePile = BridgeInfo->FindPile(pileId);
     if (!bridgePile) {
         throw TExError() << "the pile is not known";
-    } else if (StorageConfig && HasStoragePoolPileOverrides(StorageConfig->GetBlobStorageConfig(), bridgePile->Name)) {
+    } else if (const auto *rules = GetPileOverrideRules();
+            (StorageConfig && HasStoragePoolPileOverrides(StorageConfig->GetBlobStorageConfig(), bridgePile->Name)) ||
+            (rules && HasStoragePoolPileOverrides(*rules, bridgePile->Name))) { // neither set by config, nor followed
         throw TExError() << "storage pool pile overrides for the pile '" << bridgePile->Name << "' have to be removed"
             " first";
     }
@@ -1960,6 +1962,15 @@ void TBlobStorageController::RenderBridge(IOutputStream& out) {
     RenderHeader(out);
 
     HTML(out) {
+        if (PileOverridesError) {
+            DIV_CLASS("alert alert-danger") {
+                out << "Storage pool pile overrides of StorageConfig are not applied, the previous ones (of StorageConfig"
+                    " generation " << (AppliedPileOverrides ? AppliedPileOverrides->GetStorageConfigGeneration() : 0)
+                    << ") are in effect: ";
+                out << *PileOverridesError;
+            }
+        }
+
         TAG(TH3) {
             out << "Working syncers";
         }

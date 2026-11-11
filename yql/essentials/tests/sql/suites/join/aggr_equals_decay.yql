@@ -1,0 +1,22 @@
+PRAGMA config.flags("OptimizerFlags", "AggrEqualsJoinKeys");
+
+$rows = AsList(
+    AsStruct(Float("nan") AS x, AsTuple(Nothing(Int32?)) AS nested, Nothing(Int32?) AS nullable),
+    AsStruct(Float("1") AS x, AsTuple(Just(1)) AS nested, Just(1) AS nullable)
+);
+
+$floats = SELECT x FROM AS_TABLE($rows);
+$nested = SELECT nested FROM AS_TABLE($rows);
+$nullable = SELECT nullable FROM AS_TABLE($rows);
+
+SELECT a.x AS ax, b.x AS bx
+FROM $floats AS a CROSS JOIN $floats AS b
+WHERE Yql::AggrEquals(a.x, b.x);
+
+SELECT a.nested AS ax, b.nested AS bx
+FROM $nested AS a CROSS JOIN $nested AS b
+WHERE Yql::AggrEquals(a.nested, b.nested);
+
+SELECT a.nullable AS ax, b.nullable AS bx
+FROM $nullable AS a CROSS JOIN $nullable AS b
+WHERE Yql::AggrEquals(a.nullable, b.nullable);

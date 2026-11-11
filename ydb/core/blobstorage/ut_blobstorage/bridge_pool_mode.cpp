@@ -209,21 +209,26 @@ namespace {
         return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false)->Get()->Status;
     }
 
+    // settings of pools of the kind 'pool_2' for the second pile
+    void AddPoolPileOverride(YAML::Node& config, const TString& erasure, ui32 numFailDomains) {
+        YAML::Node rule;
+        rule["pile_name"].push_back("pile_2");
+        rule["kind"].push_back("pool_2");
+        rule["static_group_override"] = false;
+        rule["erasure_species"] = erasure;
+        rule["geometry"] = YAML::Node(YAML::NodeType::Map);
+        if (numFailDomains) {
+            auto geometry = rule["geometry"];
+            geometry["num_fail_realms"] = 1;
+            geometry["num_fail_domains_per_fail_realm"] = numFailDomains;
+            geometry["num_vdisks_per_fail_domain"] = 1;
+        }
+        config["blob_storage_config"]["storage_pool_pile_overrides"].push_back(rule);
+    }
+
     void SetPoolPileOverride(TEnvironmentSetup& env, const TString& erasure, ui32 numFailDomains) {
         const auto result = ReplaceMainConfig(env, [&](YAML::Node& config) {
-            YAML::Node rule;
-            rule["pile_name"].push_back("pile_2");
-            rule["kind"].push_back("pool_2");
-            rule["static_group_override"] = false;
-            rule["erasure_species"] = erasure;
-            rule["geometry"] = YAML::Node(YAML::NodeType::Map);
-            if (numFailDomains) {
-                auto geometry = rule["geometry"];
-                geometry["num_fail_realms"] = 1;
-                geometry["num_fail_domains_per_fail_realm"] = numFailDomains;
-                geometry["num_vdisks_per_fail_domain"] = 1;
-            }
-            config["blob_storage_config"]["storage_pool_pile_overrides"].push_back(rule);
+            AddPoolPileOverride(config, erasure, numFailDomains);
         });
         UNIT_ASSERT_EQUAL_C(result.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
             result.GetErrorReason());
@@ -1277,6 +1282,127 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
             env.Sim(TDuration::Seconds(30));
             checkAll(nodeId);
         }
+    }
+
+    // BSC validates the proposed pile override while no group conflicts with it, but such a group gets created before
+    // distconf commits the config. BSC doesn't adopt the override then: the group stays manageable under the settings it
+    // was created with, and the override takes effect when the conflicting group is gone.
+    Y_UNIT_TEST(StalePileOverrideIsNotApplied) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+
+        auto createPool = [&] {
+            auto pool = ReadStoragePool(env, 1);
+            pool.SetStoragePoolId(2);
+            pool.SetName("pool_2");
+            pool.SetKind("pool_2");
+            pool.ClearItemConfigGeneration();
+            pool.SetBridgeMode(true);
+            pool.SetNumGroups(1);
+            NKikimrBlobStorage::TConfigRequest request;
+            request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        };
+        // the part of the group in the pile: its group id and erasure
+        auto getPart = [&](ui32 groupId, ui32 pileIndex) {
+            const auto info = GetGroupInfo(env, groupId);
+            const auto *part = NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(pileIndex));
+            UNIT_ASSERT_C(part, info.ShortDebugString());
+            return std::make_pair(part->GetGroupId(), GetGroupInfo(env, part->GetGroupId()).GetErasureSpecies());
+        };
+        auto checkPoolErasure = [&](size_t numGroups, TBlobStorageGroupType::EErasureSpecies secondPileErasure) {
+            const auto groups = GetLogicalPoolGroups(env, 2);
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), numGroups);
+            for (ui32 groupId : groups) {
+                UNIT_ASSERT_VALUES_EQUAL(getPart(groupId, 0).second, TBlobStorageGroupType::Erasure4Plus2Block);
+                UNIT_ASSERT_VALUES_EQUAL(getPart(groupId, 1).second, secondPileErasure);
+            }
+        };
+
+        // propose the override and hold the answer of BSC, which has just found nothing against it
+        std::unique_ptr<IEventHandle> held;
+        ui32 heldNodeId = 0;
+        bool hold = true;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (hold && !held && ev->Type == TEvBlobStorage::EvControllerDistconfResponse) {
+                held = std::move(ev);
+                heldNodeId = nodeId;
+                return false;
+            }
+            return true;
+        };
+        const TString yaml = MakeNextMainConfigYaml(env, [](YAML::Node& config) { AddPoolPileOverride(config, "none", 0); });
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        {
+            auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto *cmd = ev->Record.MutableReplaceStorageConfig();
+            cmd->SetYAML(yaml);
+            cmd->SetSkipConsoleValidation(true);
+            env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), edge, ev.release()), 1);
+        }
+        WaitUntil(env, [&] { return static_cast<bool>(held); }, "answer of BSC", TDuration::MilliSeconds(10), 3000);
+
+        // the pool of the kind gets its group under the settings still in effect
+        createPool();
+
+        // distconf commits the override BSC has agreed to
+        hold = false;
+        env.Runtime->Send(held.release(), heldNodeId);
+        {
+            auto res = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge, false);
+            const auto& record = res->Get()->Record;
+            UNIT_ASSERT_EQUAL_C(record.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+                record.GetErrorReason());
+        }
+        env.Runtime->FilterFunction = {};
+        env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(QueryStorageConfig(env).GetBlobStorageConfig().StoragePoolPileOverridesSize(), 1);
+
+        // BSC keeps managing the group: its disks can be replaced, and the pool can be redefined and grown under the
+        // same settings, including after the restart of BSC
+        checkPoolErasure(1, TBlobStorageGroupType::Erasure4Plus2Block);
+        const ui32 groupId = GetLogicalPoolGroups(env, 2).front();
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        ReassignOneDisk(env, getPart(groupId, 1).first);
+        env.Sim(TDuration::Seconds(30));
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.AddCommand()->MutableDefineStoragePool()->CopyFrom(ReadStoragePool(env, 2));
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        }
+        env.RebootTablet(env.TabletId);
+        env.Sim(TDuration::Seconds(30));
+        SetNumGroups(env, 2, 2);
+        env.Sim(TDuration::Seconds(30));
+        checkPoolErasure(2, TBlobStorageGroupType::Erasure4Plus2Block);
+        checker.CheckAll();
+
+        // the override can't be made effective while the groups are there; it is adopted as soon as they are gone
+        {
+            const auto pool = ReadStoragePool(env, 2);
+            NKikimrBlobStorage::TConfigRequest request;
+            auto *cmd = request.AddCommand()->MutableDeleteStoragePool();
+            cmd->SetBoxId(pool.GetBoxId());
+            cmd->SetStoragePoolId(pool.GetStoragePoolId());
+            cmd->SetItemConfigGeneration(pool.GetItemConfigGeneration());
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        }
+        env.Sim(TDuration::Seconds(30));
+        createPool();
+        env.Sim(TDuration::Seconds(30));
+        checkPoolErasure(1, TBlobStorageGroupType::ErasureNone);
+
+        // and it stays adopted
+        env.RebootTablet(env.TabletId);
+        env.Sim(TDuration::Seconds(30));
+        SetNumGroups(env, 2, 2);
+        env.Sim(TDuration::Seconds(30));
+        checkPoolErasure(2, TBlobStorageGroupType::ErasureNone);
     }
 
     // BridgeMode of pools may be changed only in the cluster supporting both kinds of them

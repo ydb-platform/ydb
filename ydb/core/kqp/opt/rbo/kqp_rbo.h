@@ -122,6 +122,15 @@ public:
     void RunStage(TOpRoot& root, TRBOContext& ctx) override;
 };
 
+// Remove sorts without a limit whose order nothing above them uses, such as a sort in a subquery
+// whose rows reach an aggregate, a join or a result without ORDER BY. Run before the logical rewrites,
+// so filters and aggregates can move to the reads.
+class TRemoveRedundantSortsStage final: public IRBOStage {
+public:
+    explicit TRemoveRedundantSortsStage(TString stageName);
+    void RunStage(TOpRoot& root, TRBOContext& ctx) override;
+};
+
 /**
  * A rule based optimizer is a collection of rule-based and global stages.
  */

@@ -188,5 +188,31 @@ def test_ts_check_preserves_docker_images_and_runs_user_recipes_after_setup(monk
     assert nots.df.deserialize_list(record[nots.df.DockerImage.KEY]) == [image]
     setup = "extract-node-modules-layer" if hermetic else "install-node-modules"
     assert base64.b64decode(record[nots.df.TestRecipes.KEY]).decode().split() == [
-        setup, "extract-outputs", "podman-compose"
+        setup,
+        "extract-outputs",
+        "podman-compose",
     ]
+
+
+@pytest.mark.parametrize(
+    "settings,expected",
+    [
+        ({"HOST_OS_DARWIN": "yes", "HOST_ARCH_ARM64": "yes"}, ("darwin", "arm64", "unknown")),
+        ({"HOST_OS_LINUX": "yes", "HOST_ARCH_X86_64": "yes"}, ("linux", "x64", "unknown")),
+        ({"HOST_OS_LINUX": "yes", "HOST_ARCH_ARM64": "yes"}, ("linux", "arm64", "unknown")),
+        ({"HOST_OS_WINDOWS": "yes", "HOST_ARCH_X86_64": "yes"}, ("win32", "x64", "unknown")),
+        ({"HOST_OS_LINUX": "yes"}, None),
+        (
+            {"OS_LINUX": "yes", "ARCH_X86_64": "yes", "HOST_OS_DARWIN": "yes", "HOST_ARCH_ARM64": "yes"},
+            ("darwin", "arm64", "unknown"),
+        ),
+    ],
+)
+def test_tarballs_platform_uses_action_configuration(settings, expected):
+    values = dict(settings)
+    unit = SimpleNamespace(get=lambda name: values.get(name, ""), set=lambda pair: values.update([pair]))
+    assert nots._configure_tarballs_platform(unit) == expected
+    if expected:
+        assert values["_PREPARE_DEPS_PLATFORM_ARG"] == "--tarballs-platform " + " ".join(expected)
+    else:
+        assert "_PREPARE_DEPS_PLATFORM_ARG" not in values

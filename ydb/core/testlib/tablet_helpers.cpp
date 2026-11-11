@@ -161,6 +161,32 @@ namespace NKikimr {
         return runtime.Register(CreateTabletFollower(launcher, info, new TTabletSetupInfo(op, TMailboxType::Simple, 0, TMailboxType::Simple, 0), 0, new TResourceProfiles));
     }
 
+    static THashMap<TString, ui64> GetTabletCumulativeCounters(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex) {
+        const TActorId sender = runtime.AllocateEdgeActor(nodeIndex);
+        runtime.SendToPipe(tabletId, sender, new TEvTablet::TEvGetCounters(), nodeIndex, GetPipeConfigWithRetries());
+        auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(sender);
+        THashMap<TString, ui64> result;
+        for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+            result[counter.GetName()] = counter.GetValue();
+        }
+        return result;
+    }
+
+    static ui64 FindCounter(const THashMap<TString, ui64>& counters, const TString& name, ui64 tabletId) {
+        const auto it = counters.find(name);
+        UNIT_ASSERT_C(it != counters.end(), "No cumulative counter " << name << " in tablet " << tabletId);
+        return it->second;
+    }
+
+    ui64 GetTabletCumulativeCounter(TTestActorRuntime& runtime, ui64 tabletId, const TString& name, ui32 nodeIndex) {
+        return FindCounter(GetTabletCumulativeCounters(runtime, tabletId, nodeIndex), name, tabletId);
+    }
+
+    ui64 GetTabletTxCompleted(TTestActorRuntime& runtime, ui64 tabletId, const TString& txName, ui32 nodeIndex) {
+        const auto counters = GetTabletCumulativeCounters(runtime, tabletId, nodeIndex);
+        return FindCounter(counters, txName + "/RoCompleted", tabletId) + FindCounter(counters, txName + "/RwCompleted", tabletId);
+    }
+
     void SetupTabletServices(TTestActorRuntime &runtime, TAppPrepare *app, bool mockDisk, NFake::TStorage storage,
                             const NSharedCache::TSharedCacheConfig* sharedCacheConfig, bool forceFollowers,
                             TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies) {

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <map>
+#include <random>
 #include <set>
 #include <ranges>
 
@@ -132,6 +133,415 @@ namespace {
         UNIT_ASSERT_VALUES_UNEQUAL(config.GetClusterStateDetails().GetNextStaticGroupId(), 0);
     }
 
+    // the notification of BSC about the finished conversion delivered after the cluster has been rolled back and
+    // converted again doesn't finish the new conversion; BSC of older version reports no identity of the conversion
+    void CheckStaleConversionNotificationIgnored(bool olderBsc) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        // the notification of the first conversion stays undelivered, then the reply to it is held
+        bool holdNotification = true;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> notifications;
+        std::optional<TActorId> bscId;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> replies;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (holdNotification && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType &&
+                    ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasNotifyBscConversionFinished()) {
+                notifications.emplace_back(nodeId, std::move(ev));
+                return false;
+            } else if (bscId && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType &&
+                    ev->Recipient == *bscId) {
+                replies.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        WaitUntil(env, [&] { return !notifications.empty(); }, "notification of BSC");
+        UNIT_ASSERT_VALUES_EQUAL(notifications.size(), 1);
+        CheckInlinePileGroup(env, groupId);
+        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+        holdNotification = false;
+        const ui64 clusterStateGeneration = QueryStorageConfig(env).GetClusterState().GetGeneration();
+
+        // the conversion is rolled back, and the cluster is converted again
+        res = InvokeDistconf(env, [](auto& record) { record.MutableRollbackBridge(); });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        WaitUntil(env, [&] { return !QueryStorageConfig(env).HasClusterState(); }, "cluster state removed");
+        res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+        // generations of the cluster state go on from the ones of the cluster rolled back
+        UNIT_ASSERT_GT(QueryStorageConfig(env).GetClusterState().GetGeneration(), clusterStateGeneration);
+
+        // the late notification of the first conversion leaves the second one pending
+        bscId.emplace(notifications.front().second->Sender);
+        for (auto& [nodeId, ev] : notifications) {
+            auto& record = *ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.MutableNotifyBscConversionFinished();
+            UNIT_ASSERT(record.GetBscConversionId());
+            if (olderBsc) {
+                record.ClearBscConversionId();
+            }
+        }
+        for (auto& [nodeId, ev] : std::exchange(notifications, {})) {
+            ResendEvent(env, nodeId, std::move(ev));
+        }
+        WaitUntil(env, [&] { return !replies.empty(); }, "reply to the notification");
+        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+
+        // BSC performs the second conversion then
+        bscId.reset();
+        for (auto& [nodeId, ev] : std::exchange(replies, {})) {
+            ResendEvent(env, nodeId, std::move(ev));
+        }
+        WaitUntil(env, [&] { return !QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending(); },
+            "second conversion finished");
+        CheckInlinePileGroup(env, groupId);
+        checker.Write(groupId);
+        checker.CheckAll();
+        env.Runtime->FilterFunction = {};
+    }
+
+    // The ordinary cluster of nodes 1-9 goes through several cycles: it is converted into the bridged one, gets the
+    // second pile named the same way in every cycle (nodes 10-17 in the first one, 18-25 in the second one and so on),
+    // goes through random pile operations and node restarts, loses the added pile, and is rolled back to the ordinary
+    // one. Data written all the way stays readable, static group ids and cluster state generations are never reused, and
+    // the pool created in the ordinary cluster gets converted in the next cycle. The random choices come from the seed of
+    // the environment, so SEED repeats the run (see TEnvironmentSetup::SetupEnv).
+    class TConversionCycles {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        using TState = NKikimrBridge::TClusterState;
+
+        static constexpr ui32 OriginalNodes = 9;
+        static constexpr ui32 PileNodes = 8;
+        static constexpr ui32 NumActions = 6;
+
+        const ui32 NumCycles;
+        const std::shared_ptr<bool> Named = std::make_shared<bool>(false);
+        TEnvironmentSetup Env;
+        TDataChecker Checker;
+        std::mt19937_64 Rng;
+        std::vector<ui32> GroupIds; // the ones data is written to: static group 0 and the first group of every pool
+        ui32 FirstAddedNodeId = 0;
+        ui32 LastAddedNodeId = 0;
+        std::set<ui32> OriginalStaticGroupIds;
+        std::set<ui32> AddedStaticGroupIds; // parts of static groups in the piles added, of all the cycles
+        ui64 ClusterStateGeneration = 0; // the one of the cluster rolled back last
+
+    public:
+        explicit TConversionCycles(ui32 numCycles)
+            : NumCycles(numCycles)
+            , Env(TEnvironmentSetup::TSettings{
+                .NodeCount = OriginalNodes + PileNodes * numCycles,
+                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+                .LocationGenerator = [named = Named](ui32 nodeId) { return GetConvertedClusterLocation(nodeId, *named); },
+                .SelfManagementConfig = true,
+                .AutomaticBootstrap = true,
+                .InitialConfiguredNodeCount = OriginalNodes,
+            })
+            , Checker(Env)
+            , Rng(RandomNumber<ui64>()) // seeded by the environment
+        {}
+
+        void Run() {
+            GroupIds = {0, CreatePoolAndGetGroup(Env)};
+            WriteAndCheck();
+            for (ui32 cycle = 0; cycle < NumCycles; ++cycle) {
+                Cerr << "*** cycle " << cycle << Endl;
+                FirstAddedNodeId = OriginalNodes + PileNodes * cycle + 1;
+                LastAddedNodeId = FirstAddedNodeId + PileNodes - 1;
+                Convert(cycle);
+                AddPile();
+                for (ui32 i = 0; i < NumActions; ++i) {
+                    RandomAction();
+                    WriteAndCheck();
+                }
+                RemoveAddedPile();
+                Rollback();
+                CheckOrdinary();
+            }
+        }
+
+    private:
+        void WriteAndCheck() {
+            for (ui32 groupId : GroupIds) {
+                Checker.Write(groupId);
+            }
+            Checker.CheckAll();
+        }
+
+        NKikimrBlobStorage::TStorageConfig Config() {
+            return QueryStorageConfig(Env);
+        }
+
+        std::set<ui32> GetStaticGroupIds() {
+            std::set<ui32> res;
+            const auto config = Config(); // a temporary would be gone before the loop body (pre-C++23)
+            for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                res.insert(group.GetGroupID());
+            }
+            return res;
+        }
+
+        ui32 GetPrimaryPileIndex() {
+            const auto clusterState = Config().GetClusterState();
+            return TBridgePileId::FromProto(&clusterState, &TState::GetPrimaryPile).GetPileIndex();
+        }
+
+        std::vector<ui32> GetPileNodeIds(ui32 pileIndex) const {
+            std::vector<ui32> res;
+            const ui32 first = pileIndex ? FirstAddedNodeId : 1;
+            const ui32 last = pileIndex ? LastAddedNodeId : OriginalNodes;
+            for (ui32 nodeId = first; nodeId <= last; ++nodeId) {
+                res.push_back(nodeId);
+            }
+            return res;
+        }
+
+        // the ordinary cluster (the one rolled back too) is prepared and converted into the single-pile bridged one,
+        // then the nodes get the name of the original pile
+        void Convert(ui32 cycle) {
+            RollingRestartWithSinglePileBridgeConfig(Env, Checker, GroupIds.back());
+            const auto res = ConvertToBridge(Env);
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+            WaitUntil(Env, [&] { return !Config().GetClusterStateDetails().GetBscConversionPending(); },
+                "conversion finished");
+            const auto config = Config();
+            UNIT_ASSERT(!config.HasBridgeRollback());
+            if (cycle) { // the cluster converted again goes on with static group ids and generations of the one rolled back
+                UNIT_ASSERT_GT(config.GetClusterStateDetails().GetNextStaticGroupId(), *AddedStaticGroupIds.rbegin());
+                UNIT_ASSERT_GT(config.GetClusterState().GetGeneration(), ClusterStateGeneration);
+            }
+            for (ui32 groupId : GroupIds) {
+                if (groupId) {
+                    CheckInlinePileGroup(Env, groupId); // the pool created in the ordinary cluster is converted too
+                }
+            }
+            if (!cycle) {
+                OriginalStaticGroupIds = GetStaticGroupIds();
+            }
+            WriteAndCheck();
+            NameConvertedClusterNodes(Env, *Named, [&] { WriteAndCheck(); });
+        }
+
+        // the second pile is listed in the config, its nodes are started, and the nodes of the original pile are restarted
+        // with the bridge config listing both piles; then the pile is added and synchronized
+        void AddPile() {
+            auto res = AddPileToConfig(Env, "pile_2", FirstAddedNodeId, LastAddedNodeId);
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+            Env.Sim(TDuration::Seconds(10));
+            StartPileNodes(Env, "pile_2", FirstAddedNodeId, LastAddedNodeId);
+            for (ui32 nodeId : GetPileNodeIds(0)) {
+                Env.RestartNode(nodeId);
+                Env.Sim(TDuration::Seconds(30));
+            }
+            AddPileAndWait(Env, "pile_2");
+            Rejoin();
+            UNIT_ASSERT_VALUES_EQUAL(GetPileStates(Config()), "pile_1:SYNCHRONIZED pile_2:SYNCHRONIZED");
+            CheckPileParts(Env, 1, FirstAddedNodeId, LastAddedNodeId);
+            // the original pile can go out only when groups don't rely on their parts there anymore
+            WaitUntil(Env, [&] {
+                return std::ranges::all_of(GroupIds, [&](ui32 groupId) {
+                    return !GetGroupInfo(Env, groupId).GetBridgeGroupState().GetAuthorityPileId();
+                });
+            }, "groups not relying on their original parts");
+
+            // static group ids are never reused, not even by the parts of the pile added in the next cycle
+            std::set<ui32> added;
+            std::ranges::set_difference(GetStaticGroupIds(), OriginalStaticGroupIds, std::inserter(added, added.end()));
+            UNIT_ASSERT(!added.empty());
+            for (ui32 groupId : added) {
+                UNIT_ASSERT_C(AddedStaticGroupIds.insert(groupId).second, "GroupId# " << groupId);
+            }
+            WriteAndCheck();
+        }
+
+        // every action leaves the cluster with both piles synchronized, all their nodes running, and the original pile
+        // being the primary one: BSC runs on node 1 without Hive to move it elsewhere, it can't start (after a restart)
+        // outside of the primary pile, and it can't drive the sync of the cluster from the pile cut off
+        void RandomAction() {
+            switch (Rng() % 4) {
+                case 0: { // restart a node of either pile
+                    std::vector<ui32> nodeIds = GetPileNodeIds(0);
+                    std::ranges::copy(GetPileNodeIds(1), std::back_inserter(nodeIds));
+                    const ui32 nodeId = nodeIds[Rng() % nodeIds.size()];
+                    Cerr << "*** restarting node " << nodeId << Endl;
+                    Env.RestartNode(nodeId);
+                    Env.Sim(TDuration::Seconds(30));
+                    break;
+                }
+                case 1: { // planned switchover to the added pile, which serves for a while, and back
+                    Cerr << "*** switchover to pile 1" << Endl;
+                    Promote(1);
+                    WriteAndCheck();
+                    if (Rng() % 2) {
+                        const std::vector<ui32> nodeIds = GetPileNodeIds(1);
+                        const ui32 nodeId = nodeIds[Rng() % nodeIds.size()];
+                        Cerr << "*** restarting node " << nodeId << Endl;
+                        Env.RestartNode(nodeId);
+                        Env.Sim(TDuration::Seconds(30));
+                        WriteAndCheck();
+                    }
+                    Cerr << "*** switchover to pile 0" << Endl;
+                    Promote(0);
+                    break;
+                }
+                case 2: { // the added pile goes out, some or all of its nodes are down meanwhile
+                    std::vector<ui32> nodeIds = GetPileNodeIds(1);
+                    std::ranges::shuffle(nodeIds, Rng);
+                    nodeIds.resize(Rng() % 2 ? nodeIds.size() : 1 + Rng() % 2);
+                    Cerr << "*** disconnecting pile 1 with nodes " << FormatList(nodeIds) << " stopped" << Endl;
+                    SwitchBridgePileState(Env, 1, TState::DISCONNECTED);
+                    Env.Sim(TDuration::Seconds(10)); // writes racing with the disconnection may fail, as they wait for the pile
+                    for (ui32 nodeId : nodeIds) {
+                        Env.StopNode(nodeId);
+                    }
+                    WaitForDistconf();
+                    WriteAndCheck(); // the primary pile serves alone
+                    for (ui32 nodeId : nodeIds) {
+                        Env.StartNode(nodeId);
+                    }
+                    Env.Sim(TDuration::Seconds(30));
+                    Rejoin();
+                    break;
+                }
+                case 3:
+                    Cerr << "*** rebooting BSC" << Endl;
+                    Env.FetchBaseConfig(); // BSC may still be starting after the previous action
+                    Env.RebootTablet(Env.TabletId);
+                    Env.Sim(TDuration::Seconds(10));
+                    Env.FetchBaseConfig();
+                    break;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(GetPileStates(Config()), "pile_1:SYNCHRONIZED pile_2:SYNCHRONIZED");
+            UNIT_ASSERT_VALUES_EQUAL(GetPrimaryPileIndex(), 0);
+        }
+
+        // the root of distconf may have been running on one of the nodes stopped, wait for the next one to settle
+        void WaitForDistconf() {
+            Env.Sim(TDuration::Seconds(30));
+            TResult res;
+            WaitUntil(Env, [&] {
+                res = InvokeDistconf(Env, [](auto& record) { record.MutableQueryConfig(); });
+                return res.GetStatus() == TResult::OK;
+            }, "distconf answering", [&] { return res.ShortDebugString(); });
+        }
+
+        void Rejoin() {
+            SwitchBridgePileState(Env, 1, TState::NOT_SYNCHRONIZED_1);
+            WaitUntil(Env, [&] { return GetPileStates(Config()) == "pile_1:SYNCHRONIZED pile_2:SYNCHRONIZED"; },
+                "added pile synchronized", [&] {
+                    const auto config = Config();
+                    return TStringBuilder() << GetPileStates(config) << ' '
+                        << config.GetClusterStateDetails().ShortDebugString();
+                });
+        }
+
+        void Promote(ui32 pileIndex) {
+            auto clusterState = Config().GetClusterState();
+            TBridgePileId::FromPileIndex(pileIndex).CopyToProto(&clusterState, &TState::SetPromotedPile);
+            clusterState.SetGeneration(clusterState.GetGeneration() + 1);
+            const auto res = InvokeDistconf(Env, [&](auto& record) {
+                record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(clusterState);
+            });
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+            WaitUntil(Env, [&] { return GetPrimaryPileIndex() == pileIndex; }, "primary pile switched");
+        }
+
+        // the added pile is removed along with its nodes, the original one is to stay the only one
+        void RemoveAddedPile() {
+            SwitchBridgePileState(Env, 1, TState::DISCONNECTED);
+            RemovePileAndWait(Env, "pile_2");
+            CheckPileGone(Env, 1, FirstAddedNodeId, LastAddedNodeId);
+            for (ui32 nodeId : GetPileNodeIds(1)) {
+                Env.StopNode(nodeId);
+            }
+            WaitForDistconf();
+            Env.ConfiguredNodeCount = OriginalNodes;
+            const auto res = DropPileFromConfig(Env, "pile_2");
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+            Env.Sim(TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(GetPileStates(Config()), "pile_1:SYNCHRONIZED");
+            WriteAndCheck();
+        }
+
+        // the cluster is rolled back while its nodes keep running with the bridge config listing both piles, then the
+        // bridge config and the pile names go away, and the nodes are restarted without them
+        void Rollback() {
+            ClusterStateGeneration = Config().GetClusterState().GetGeneration();
+            TResult res;
+            WaitUntil(Env, [&] { // nodes bound to the ones stopped may take a while to report again
+                res = InvokeDistconf(Env, [](auto& record) { record.MutableRollbackBridge(); });
+                UNIT_ASSERT_C(res.GetStatus() == TResult::OK || res.GetErrorReason().Contains("did not report"),
+                    res.GetErrorReason());
+                return res.GetStatus() == TResult::OK;
+            }, "rollback accepted", [&] { return res.GetErrorReason(); });
+            WaitUntil(Env, [&] { return !Config().HasClusterState(); }, "cluster state removed",
+                [&] { return Config().GetClusterStateDetails().ShortDebugString(); });
+            const auto record = Config().GetBridgeRollback();
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPileName(), "pile_1");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetClusterStateGeneration(), ClusterStateGeneration);
+            UNIT_ASSERT_GT(record.GetNextStaticGroupId(), *AddedStaticGroupIds.rbegin());
+            for (ui32 nodeId : GetPileNodeIds(0)) {
+                for (ui32 groupId : GroupIds) {
+                    Checker.Write(groupId, nodeId);
+                }
+                Checker.CheckAll(nodeId);
+            }
+            CheckRollbackStatus(Env, GetAllNodeIds(Env));
+
+            const auto replaced = ReplaceMainConfig(Env, [](YAML::Node& config) {
+                config.remove("bridge_config");
+                for (YAML::Node host : config["hosts"]) {
+                    if (YAML::Node location = host["location"]) {
+                        location.remove("bridge_pile_name");
+                    }
+                }
+            });
+            UNIT_ASSERT_EQUAL_C(replaced.GetStatus(), TResult::OK, replaced.GetErrorReason());
+            Env.Sim(TDuration::Seconds(10));
+            *Named = false;
+            RollingRestartWithoutBridgeConfig(Env, Checker, GroupIds.back());
+            CheckRollbackStatus(Env, {});
+        }
+
+        // nothing bridged is left, the cluster serves as the ordinary one, and a pool created now is an ordinary one
+        void CheckOrdinary() {
+            const auto config = Config(); // a temporary would be gone before the loop body (pre-C++23)
+            for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                UNIT_ASSERT_C(!group.HasBridgeGroupState() && !group.HasBridgeProxyGroupId() && !group.HasBridgePileId(),
+                    group.ShortDebugString());
+            }
+            for (ui32 groupId : GroupIds) {
+                const auto info = GetGroupInfo(Env, groupId);
+                UNIT_ASSERT_C(!info.HasBridgeGroupState() && !info.HasBridgeProxyGroupId() && !info.HasBridgePileId(),
+                    info.ShortDebugString());
+            }
+            for (ui64 storagePoolId = 1; storagePoolId < GroupIds.size(); ++storagePoolId) {
+                UNIT_ASSERT(!ReadStoragePool(Env, storagePoolId).GetBridgeMode());
+            }
+            ReassignOneDisk(Env, GroupIds[1]); // self-heal works for the group made ordinary
+            Env.Sim(TDuration::Minutes(1));
+
+            const ui64 storagePoolId = GroupIds.size();
+            CreateAnotherPool(Env, storagePoolId);
+            Env.Sim(TDuration::Seconds(30));
+            const auto baseConfig = Env.FetchBaseConfig(); // groups are referenced by pointers
+            const auto groups = GetPoolGroups(baseConfig, storagePoolId);
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+            UNIT_ASSERT(!ReadStoragePool(Env, storagePoolId).GetBridgeMode());
+            GroupIds.push_back(groups.front()->GetGroupId());
+            UNIT_ASSERT(!GetGroupInfo(Env, GroupIds.back()).HasBridgeGroupState());
+            WriteAndCheck();
+        }
+    };
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeRollback) {
@@ -243,6 +653,7 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         checker.CheckAll();
 
         // static groups are ordinary ones as soon as the rollback is accepted
+        const ui64 clusterStateGeneration = QueryStorageConfig(env).GetClusterState().GetGeneration();
         auto res = InvokeDistconf(env, [](auto& record) { record.MutableRollbackBridge(); });
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
         const auto accepted = QueryStorageConfig(env); // a temporary would be gone before the loop body (pre-C++23)
@@ -258,6 +669,7 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         UNIT_ASSERT(!config.HasClusterStateDetails());
         UNIT_ASSERT_C(config.HasBridgeRollback(), config.ShortDebugString());
         UNIT_ASSERT_VALUES_UNEQUAL(config.GetBridgeRollback().GetNextStaticGroupId(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetBridgeRollback().GetClusterStateGeneration(), clusterStateGeneration);
         for (const auto *pb : {&config.GetStateStorageConfig(), &config.GetStateStorageBoardConfig(),
                 &config.GetSchemeBoardConfig()}) {
             for (const auto& ringGroup : pb->GetRingGroups()) {
@@ -295,8 +707,9 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         }
         checker.CheckAll();
 
-        // the cluster can be converted again, static group ids are not reused
+        // the cluster can be converted again, static group ids are not reused, generations of the cluster state go on
         ConvertClusterAgain(env, checker, groupId);
+        UNIT_ASSERT_GT(QueryStorageConfig(env).GetClusterState().GetGeneration(), clusterStateGeneration);
         for (ui32 id : dynamicGroupIds) {
             CheckInlinePileGroup(env, id);
         }
@@ -590,69 +1003,16 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         env.Runtime->FilterFunction = {};
     }
 
-    // the notification of BSC about the finished conversion delivered after the cluster has been rolled back and
-    // converted again doesn't finish the new conversion
     Y_UNIT_TEST(StaleConversionNotificationIgnored) {
-        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
-        TEnvironmentSetup env(MakeUnbridgedSettings());
-        const ui32 groupId = CreatePoolAndGetGroup(env);
-        TDataChecker checker(env);
-        checker.Write(groupId);
-        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+        CheckStaleConversionNotificationIgnored(false);
+    }
 
-        // the notification of the first conversion stays undelivered, then the reply to it is held
-        bool holdNotification = true;
-        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> notifications;
-        std::optional<TActorId> bscId;
-        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> replies;
-        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-            if (holdNotification && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType &&
-                    ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasNotifyBscConversionFinished()) {
-                notifications.emplace_back(nodeId, std::move(ev));
-                return false;
-            } else if (bscId && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType &&
-                    ev->Recipient == *bscId) {
-                replies.emplace_back(nodeId, std::move(ev));
-                return false;
-            }
-            return true;
-        };
-        auto res = ConvertToBridge(env);
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
-        WaitUntil(env, [&] { return !notifications.empty(); }, "notification of BSC");
-        UNIT_ASSERT_VALUES_EQUAL(notifications.size(), 1);
-        CheckInlinePileGroup(env, groupId);
-        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
-        holdNotification = false;
+    Y_UNIT_TEST(StaleConversionNotificationOfOlderBscIgnored) {
+        CheckStaleConversionNotificationIgnored(true);
+    }
 
-        // the conversion is rolled back, and the cluster is converted again
-        res = InvokeDistconf(env, [](auto& record) { record.MutableRollbackBridge(); });
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
-        WaitUntil(env, [&] { return !QueryStorageConfig(env).HasClusterState(); }, "cluster state removed");
-        res = ConvertToBridge(env);
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
-        env.Sim(TDuration::Seconds(10));
-        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
-
-        // the late notification of the first conversion leaves the second one pending
-        bscId.emplace(notifications.front().second->Sender);
-        for (auto& [nodeId, ev] : std::exchange(notifications, {})) {
-            ResendEvent(env, nodeId, std::move(ev));
-        }
-        WaitUntil(env, [&] { return !replies.empty(); }, "reply to the notification");
-        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
-
-        // BSC performs the second conversion then
-        bscId.reset();
-        for (auto& [nodeId, ev] : std::exchange(replies, {})) {
-            ResendEvent(env, nodeId, std::move(ev));
-        }
-        WaitUntil(env, [&] { return !QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending(); },
-            "second conversion finished");
-        CheckInlinePileGroup(env, groupId);
-        checker.Write(groupId);
-        checker.CheckAll();
-        env.Runtime->FilterFunction = {};
+    Y_UNIT_TEST(ConversionCycles) {
+        TConversionCycles(2).Run();
     }
 
 }

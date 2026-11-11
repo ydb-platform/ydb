@@ -1010,69 +1010,6 @@ IGraphTransformer::TStatus ValidateYqlWarnShadow(
     return IGraphTransformer::TStatus::Repeat;
 }
 
-TExprNode::TPtr BuildYqlColumnOrAccessRef(
-    const TExprNode::TPtr& node,
-    const THashSet<TString>& possibleAliases,
-    TExprContext& ctx)
-{
-    if (!EnsureArgsCount(*node, 4, ctx) || !EnsureAtom(*node->Child(1), ctx)) {
-        return nullptr;
-    }
-
-    const auto& source = node->ChildPtr(1);
-    if (possibleAliases.contains(TString(source->Content()))) {
-        return ctx.Builder(node->Pos())
-            .Callable("YqlColumnRef")
-            .Add(0, source)
-            .Add(1, node->ChildPtr(2))
-            .Seal()
-            .Build();
-    }
-
-    return ctx.Builder(node->Pos())
-        .Callable("YqlColumnRef")
-        .Add(0, source)
-        .Seal()
-        .Build();
-}
-
-IGraphTransformer::TStatus YqlColumnRefOrAccessWrapper(
-    const TExprNode::TPtr& input,
-    TExprNode::TPtr& output,
-    TContext& ctx)
-{
-    if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-    bool isSourceUniversal;
-    bool areOptionsUniversal;
-    if (!EnsureAtomOrUniversal(*input->Child(1), ctx.Expr, isSourceUniversal) ||
-        !EnsureTupleOfAtomsOrUniversal(input->Tail(), ctx.Expr, areOptionsUniversal)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-    if (isSourceUniversal || areOptionsUniversal) {
-        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
-        return IGraphTransformer::TStatus::Ok;
-    }
-    if (input->Head().IsCallable("Void")) {
-        input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
-        return IGraphTransformer::TStatus::Ok;
-    }
-    if (!EnsureComputable(input->Head(), ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    output = ctx.Expr.Builder(input->Pos())
-                 .Callable("SqlAccess")
-                 .Atom(0, "struct")
-                 .Add(1, input->HeadPtr())
-                 .Add(2, input->ChildPtr(2))
-                 .Add(3, input->TailPtr())
-                 .Seal()
-                 .Build();
-    return IGraphTransformer::TStatus::Repeat;
-}
-
 IGraphTransformer::TStatus YqlColumnOrTypeWrapper(
     const TExprNode::TPtr& input,
     TExprNode::TPtr& output,

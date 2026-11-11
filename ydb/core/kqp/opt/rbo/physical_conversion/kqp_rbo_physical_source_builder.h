@@ -3,18 +3,25 @@
 #include <ydb/core/kqp/opt/rbo/kqp_olap_aggregate.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <optional>
+
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 class TPhysicalSourceBuilder: public TPhysicalNullaryOpBuilder {
 public:
+    // A row read is a source input of its stage, which the stage program reads through an argument.
+    struct TStageSource {
+        TExprNode::TPtr Source;
+        TExprNode::TPtr Argument;
+    };
+
     TPhysicalSourceBuilder(TOpRead& read, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names,
-        const TInfoUnitRegistry& registry, const TString& stageGUID, bool isSysView = false, TString carrierColumn = {})
+        const TInfoUnitRegistry& registry, bool isSysView = false, TString carrierColumn = {})
         : TPhysicalNullaryOpBuilder(ctx, pos, names)
         , Read(read)
         , Registry(registry)
-        , StageGUID(stageGUID)
         , IsSysView(isSysView)
         , CarrierColumn(std::move(carrierColumn)) {}
 
@@ -38,6 +45,10 @@ public:
 
     NPhysicalConvertionUtils::TStageBody BuildPhysicalOp() override;
 
+    // The source input of a row read stage, set by BuildPhysicalOp. The body it returns reads the argument,
+    // so the other operators of the stage build on it.
+    const std::optional<TStageSource>& GetStageSource() const { return StageSource; }
+
 private:
     // Program row fields by name.
     using TProgramFields = THashMap<TString, TExprNode::TPtr>;
@@ -57,10 +68,10 @@ private:
 
     TOpRead& Read;
     const TInfoUnitRegistry& Registry;
-    TString StageGUID;
     bool IsSysView;
     TString CarrierColumn;
     const TOlapAggregate* OlapAggregate = nullptr;
     const TOlapDistinct* OlapDistinct = nullptr;
     ui64 OlapDistinctLimit = 0;
+    std::optional<TStageSource> StageSource;
 };

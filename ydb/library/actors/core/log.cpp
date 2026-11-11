@@ -945,4 +945,55 @@ namespace NActors {
         }
     }
 
+    [[noreturn]] void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui64 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage) {
+        NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();
+        YDB_LOG_UPDATE_MESSAGE(structuredMessage,
+            {"condition", condition},
+            {"file", filename},
+            {"line", lineNum},
+            addMessage);
+
+        TStringBuilder textMessage;
+        textMessage << "Verify failed ";
+        NStructuredLog::TTextWriter().Write(textMessage, structuredMessage);
+        Y_ABORT("%s", textMessage.data());
+    }
+
+    [[noreturn]] void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui64 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage) {
+        // Construct structured message
+        NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();
+        YDB_LOG_UPDATE_MESSAGE(structuredMessage,
+            {"condition", condition},
+            addMessage);
+
+        // Construct text message
+        TStringBuilder textMessage;
+        textMessage << "Ensure failed ";
+        NStructuredLog::TTextWriter().Write(textMessage, YDB_LOG_CREATE_MESSAGE(structuredMessage,
+            {"file", filename},
+            {"line", lineNum}));
+
+        // Log message
+        if (NActors::TlsActivationContext) {
+            ::NActors::MemStructLogAdapter(
+                NActors::TlsActivationContext->AsActorContext(),
+                NLog::EPriority::PRI_ERROR,
+                0,
+                filename.Data(),
+                lineNum,
+                "Ensure failed",
+                std::move(structuredMessage) );
+        } else {
+            Cerr << "FALLBACK_EXCEPTION_LOGGING;component=EXCEPTION;" << textMessage.data() << Endl;
+        }
+
+        // final action
+        if (!std::uncaught_exceptions()) {
+            Y_ENSURE(false, textMessage.data());
+        } else {
+            Y_ABORT("%s", textMessage.data());
+        }
+    }
 }

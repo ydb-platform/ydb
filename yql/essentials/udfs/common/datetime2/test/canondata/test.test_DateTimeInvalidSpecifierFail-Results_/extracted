@@ -1,0 +1,4 @@
+<tmp_path>/program.sql:<main>:3:15: Error: character 'q' is not a valid format specifier.
+See documentation for valid format characters
+	    DateTime::Format("%q")(CurrentUtcDatetime());
+	              ^

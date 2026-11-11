@@ -4,6 +4,7 @@ SRCS(
     cpu_quota_manager.cpp
     events.cpp
     helpers.cpp
+    service_id.cpp
 )
 
 PEERDIR(

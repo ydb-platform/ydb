@@ -1290,6 +1290,7 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
             {"tablet", TabletID()},
             {"pathId", pathId},
             {"requestedFrom", ev->Sender});
+        FinishForcedCompactionActualization();
         reply(NKikimrTxDataShard::TEvCompactTableResult::OK);
         return;
     }
@@ -1339,10 +1340,21 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
             ctx.Send(waiter.Sender, response.Release(), 0, waiter.Cookie);
         }
+        if (*status == NKikimrTxDataShard::TEvCompactTableResult::OK) {
+            FinishForcedCompactionActualization();
+        }
         finished.push_back(internalPathId);
     }
     for (const auto& internalPathId : finished) {
         ForcedCompactionWaiters.erase(internalPathId);
+    }
+}
+
+void TColumnShard::FinishForcedCompactionActualization() {
+    // the CASCADE request is answered: no rewrite target any more, schema cleanup is allowed again
+    if (ForcedCompactionActualizeSchema) {
+        ForcedCompactionActualizeSchema = false;
+        TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().SetSchemeNeedActualization(false);
     }
 }
 

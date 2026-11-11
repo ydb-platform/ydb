@@ -1,6 +1,6 @@
 # Information Layout in a Query Plan
 
-The graphical SVG query plan with metrics is obtained after the query has actually been executed — see [Getting a graphical plan when executing a query via CLI](plans.md#svg-cli) and [in the UI](plans.md#svg-ui). The diagram columns are discussed below.
+The graphical SVG query plan with metrics is obtained after the query has actually been executed. See [how to obtain a query plan](plans.md). The diagram columns are discussed below.
 
 The images embedded in the documentation have no interactive elements — open the plan in a separate browser tab to use stage collapsing and tooltips.
 

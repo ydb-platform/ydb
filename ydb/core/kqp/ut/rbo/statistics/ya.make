@@ -15,14 +15,20 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/ut/common
-    ydb/core/statistics/ut_common
-    ydb/library/yql/udfs/statistics_internal
+    ydb/core/kqp/ut/rbo/statistics/helpers
     yql/essentials/core/minsketch
-    yql/essentials/udfs/common/hyperloglog
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+)
+
+DATA(
+    arcadia/ydb/core/kqp/ut/rbo/statistics/data
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    join_order
+)

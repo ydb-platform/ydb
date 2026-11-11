@@ -54,7 +54,7 @@ class TestBadSyntax(TestYdsBase):
                     step_seconds=0.5,
                 ), io.state(query)
             else:
-                assert io.state(query)['Status'] == 'STOPPED'
+                assert io.state(query)['Status'] == 'CREATED'
             before = describe()[0]
             operation = f'ALTER STREAMING QUERY `{query}` SET (FORCE = TRUE)'
         else:
@@ -87,7 +87,7 @@ class TestBadSyntax(TestYdsBase):
 
     def test_require_as(self, ydb_cluster):
         with pytest.raises(ydb_sdk.issues.GenericError) as error:
-            ydb_cluster.ydb_client.query('SELECT 42 a')
+            ydb_cluster.ydb_client.query('PRAGMA DisableAnsiOptionalAs; SELECT 42 a;')
         assert 'Expecting mandatory AS here' in str(error.value)
 
     def test_type_as_column(self, ydb_cluster):

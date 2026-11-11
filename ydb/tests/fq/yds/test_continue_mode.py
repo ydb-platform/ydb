@@ -53,8 +53,10 @@ class TestContinueMode(StreamingTestBase):
             second.write(['before-new-source-start'], partition_key=partition_key)
             sql = f"""
                 PRAGMA ydb.MaxTasksPerStage = '1';
-                INSERT INTO {second.output} SELECT Data FROM {first.input};
-                INSERT INTO {second.output} SELECT Data FROM {second.input};
+                INSERT INTO {second.output}
+                SELECT Data FROM {first.input}
+                UNION ALL
+                SELECT Data FROM {second.input};
             """
             missing_topic = f'Topic `{second.input_topic}` is not found in previous query'
 

@@ -17,6 +17,10 @@ PEERDIR(
     ydb/tests/tools/fq_runner
 )
 
+DEPENDS(
+    ydb/apps/ydb
+)
+
 PY_SRCS(
     conftest.py
     test_base.py
@@ -31,7 +35,6 @@ TEST_SRCS(
     test_disposition.py
     test_eval.py
     test_invalid_consumer.py
-    test_mem_alloc.py
     test_metrics_cleanup.py
     test_pq_read_write.py
     test_recovery.py

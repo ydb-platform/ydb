@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import logging
 import time
 import multiprocessing
 import pytest
@@ -11,6 +10,7 @@ import random
 import yatest
 
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.fq.streaming_common.common import get_checkpoint_coordinator_metric
 from ydb.tests.library.harness import param_constants
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
@@ -225,44 +225,68 @@ class TestRecovery(TestYdsBase):
 
         close_ic_sessions_future.wait()
 
-    @yq_v1
-    def test_program_state_recovery_error_if_no_states(self, client, kikimr):
-        kikimr.control_plane.wait_bootstrap()
-        kikimr.compute_plane.wait_bootstrap()
-        kikimr.compute_plane.wait_discovery()
-        self.init_topics("error_if_no_states", partitions_count=1)
+    def test_program_state_recovery_error_if_no_states(self, ydb_topics):
+        io = ydb_topics('error_if_no_states')
+        client = io.kikimr.ydb_client
+        query = io.start(f"""
+            INSERT INTO {io.output} SELECT Data FROM {io.input};
+        """)
+        io.write(['before_restart'])
+        assert io.read(1) == ['before_restart']
+        io.checkpoint(query, count=3)
+        execution_id = client.query(f"""
+            SELECT LastExecutionId FROM `.sys/streaming_queries` WHERE Path = '{query}';
+        """)[0].rows[0]['LastExecutionId']
+        assert execution_id
+        checkpoint_id = execution_id + '-' + query
 
-        sql = R'''
-            INSERT INTO myyds.`{output_topic}`
-            SELECT STREAM * FROM myyds.`{input_topic}`;'''.format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
-        )
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        # Stop checkpoint writers before removing state. The tenant must stay up
+        # to execute the DELETE against its own metadata tables.
+        io.stop(query)
+        io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 0)
+        io.wait_actor_count('KQP_COMPUTE_ACTOR', 0)
 
-        query_id = client.create_query(
-            "error_if_no_states", sql, type=fq.QueryContent.QueryType.STREAMING
-        ).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
+        def checkpoint_rows(table):
+            return client.query(f"""
+                SELECT COUNT(*) AS saved FROM `.metadata/streaming/checkpoints/{table}`
+                WHERE graph_id = '{checkpoint_id}';
+            """)[0].rows[0]['saved']
 
-        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
+        assert checkpoint_rows('states') > 0
+        assert checkpoint_rows('checkpoints_metadata') > 0
+        client.query(f"""
+            DELETE FROM `.metadata/streaming/checkpoints/states`
+            WHERE graph_id = '{checkpoint_id}';
+        """)
+        assert checkpoint_rows('states') == 0
+        # Keep checkpoint metadata: recovery must find the checkpoint and fail
+        # to load its missing task states rather than start with empty state.
+        assert checkpoint_rows('checkpoints_metadata') > 0
 
-        session = kikimr.driver.table_client.session().create()
-        checkpoint_table_prefix = "/local/CheckpointCoordinatorStorage_" + kikimr.uuid + '/states'
-        session.transaction().execute(f"DELETE FROM `{checkpoint_table_prefix}`", commit_tx=True)
+        for node_id in io.kikimr.cluster.slots:
+            io.restart_node(io.kikimr, node_id)
+        timeout = plain_or_under_sanitizer(120, 500)
+        io.kikimr.wait_kqp_node_count(len(io.kikimr.cluster.slots), timeout_seconds=timeout)
+        client.query(f'ALTER STREAMING QUERY `{query}` SET (RUN = TRUE);')
+        last_state = None
 
-        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
-        kikimr.compute_plane.wait_bootstrap()
+        def restore_failed():
+            nonlocal last_state
+            rows = client.query(f"""
+                SELECT Status, Issues, RetryCount
+                FROM `.sys/streaming_queries` WHERE Path = '{query}';
+            """)[0].rows
+            assert len(rows) == 1, rows
+            last_state = rows[0]
+            issues = last_state['Issues']
+            return (
+                "Can't restore: STORAGE_ERROR" in issues
+                and 'Checkpoint is not found' in issues
+                and 'will be restarted' in issues
+                and last_state['RetryCount'] > 0
+            )
 
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
-        logging.debug("Describe result: {}".format(describe_result))
-        describe_string = "{}".format(describe_result)
-        assert r"Can\'t restore: STORAGE_ERROR" in describe_string
-        assert r"Checkpoint is not found" in describe_string
+        # Streaming queries retry storage failures instead of becoming terminal FAILED.
+        assert wait_for(restore_failed, timeout_seconds=timeout, step_seconds=0.5), last_state
+        assert last_state['Status'] in ('RUNNING', 'SUSPENDED'), last_state
+        io.stop(query)

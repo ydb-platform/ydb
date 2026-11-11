@@ -87,20 +87,28 @@ def client_many_retries(kikimr_many_retries, request=None):
 @pytest.fixture(scope='module')
 def ydb_cluster(request):
     # Kept separate from kikimr: unported tests still need the YQ environment.
-    config = get_ydb_config(request)
-    config.yaml_config['feature_flags']['enable_streaming_query_disposition'] = True
-    compute_nodes = getattr(request, 'param', {}).get('compute_nodes', 2)
-    cluster = Kikimr(config)
-    # Negative SQL tests must expose the original error, even if it retires
-    # the session. Retrying INTERNAL_ERROR can mask it with BAD_SESSION.
-    cluster.ydb_client.retry_settings.retry_internal_error = False
-    try:
-        if compute_nodes > 2:
-            cluster.cluster.register_and_start_slots(database=cluster.get_database_name(), count=compute_nodes - 2)
-        cluster.wait_kqp_node_count(compute_nodes)
-        yield cluster
-    finally:
-        cluster.stop()
+    param = getattr(request, 'param', {})
+    with pytest.MonkeyPatch.context() as environment:
+        if 'rebalancing_timeout_ms' in param:
+            environment.setenv('YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS', str(param['rebalancing_timeout_ms']))
+        config = get_ydb_config(request)
+        config.yaml_config['feature_flags']['enable_streaming_query_disposition'] = True
+        if 'aggregation_compute_threads' in param:
+            config.yaml_config['table_service_config'].setdefault('aggregation_config', {})[
+                'aggregation_compute_threads'
+            ] = param['aggregation_compute_threads']
+        compute_nodes = getattr(request, 'param', {}).get('compute_nodes', 2)
+        cluster = Kikimr(config)
+        # Negative SQL tests must expose the original error, even if it retires
+        # the session. Retrying INTERNAL_ERROR can mask it with BAD_SESSION.
+        cluster.ydb_client.retry_settings.retry_internal_error = False
+        try:
+            if compute_nodes > 2:
+                cluster.cluster.register_and_start_slots(database=cluster.get_database_name(), count=compute_nodes - 2)
+            cluster.wait_kqp_node_count(compute_nodes)
+            yield cluster
+        finally:
+            cluster.stop()
 
 
 @pytest.fixture

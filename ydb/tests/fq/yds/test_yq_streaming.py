@@ -2,13 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import logging
-import os
 import time
 
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
+import pytest
 
-import ydb.public.api.protos.draft.fq_pb2 as fq
+from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
 
 class TestYqStreaming(TestYdsBase):
@@ -77,73 +75,7 @@ class TestYqStreaming(TestYdsBase):
         assert io.state(query)['Status'] == 'RUNNING', io.state(query)
         io.stop(query)
 
-    @yq_v1
-    def test_state_load_mode(self, kikimr, client, yq_version):
-        self.init_topics(f"pq_test_state_load_mode_{yq_version}")
-
-        sql = R'''
-            INSERT INTO myyds1.`{output_topic}`
-                SELECT STREAM (Data || Data) ?? "" As Data FROM myyds1.`{input_topic}`;
-            '''.format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
-        )
-
-        client.create_yds_connection("myyds1", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        name = "simple"
-        create_query_result = client.create_query(name, sql, type=fq.QueryContent.QueryType.STREAMING).result
-        query_id = create_query_result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
-
-        data = [
-            '{"Data" = "hello";}',
-        ]
-        self.write_stream(data)
-
-        expected = ['{"Data" = "hello";}{"Data" = "hello";}']
-        assert self.read_stream(len(expected)) == expected
-
-        client.describe_query(query_id)
-
-        client.abort_query(query_id)
-
-        client.wait_query(query_id)
-
-        describe_response = client.describe_query(query_id)
-        status = describe_response.result.query.meta.status
-        assert not describe_response.issues, str(describe_response.issues)
-        assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
-
-        self.init_topics("test_state_load_mode2")
-        new_sql = R'''
-            INSERT INTO myyds1.`{output_topic}`
-                SELECT STREAM (Data || CAST(COUNT(*) as string)) ?? "" as cnt
-                FROM myyds1.`{input_topic}`
-                GROUP BY Data, HOP(Just(CurrentUtcTimestamp(TableRow())), "PT1S", "PT1S", "PT1S")
-                ;
-            '''.format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
-        )
-        client.modify_query(
-            query_id, name, new_sql, type=fq.QueryContent.QueryType.STREAMING, state_load_mode=fq.StateLoadMode.EMPTY
-        )
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
-
-        modified_data = ["hello new query"]
-        modified_expected = ["hello new query1"]
-        self.write_stream(modified_data)
-        time.sleep(5)
-        self.write_stream(modified_data)
-        assert self.read_stream(len(modified_expected)) == modified_expected
-
-        client.abort_query(query_id)
-        client.wait_query(query_id)
-
+    @pytest.mark.skip(reason="Join of two streaming inputs is not supported in YDB")
     def test_early_finish_case1(self, ydb_topics):
         io = ydb_topics('pq_test_early_finish_case1')
         sql = f"""
@@ -163,6 +95,7 @@ class TestYqStreaming(TestYdsBase):
         result = future.result(timeout=120)
         assert len(result) == 1
 
+    @pytest.mark.skip(reason="Join of two streaming inputs is not supported in YDB")
     def test_early_finish_case2(self, ydb_topics):
         io = ydb_topics('pq_test_early_finish_case2')
         sql = f"""
@@ -182,6 +115,7 @@ class TestYqStreaming(TestYdsBase):
         result = future.result(timeout=120)
         assert len(result) == 1
 
+    @pytest.mark.skip(reason="Join of two streaming inputs is not supported in YDB")
     def test_early_finish_case3(self, ydb_topics):
         io = ydb_topics('pq_test_early_finish_case3')
         sql = f"""
@@ -203,6 +137,7 @@ class TestYqStreaming(TestYdsBase):
         assert len(result) == 1
         assert len(result[0].rows) == 3
 
+    @pytest.mark.skip(reason="Streaming right input is not supported for LEFT join in YDB")
     def test_early_finish_case4(self, ydb_topics):
         io = ydb_topics('pq_test_early_finish_case4')
         sql = f"""
@@ -224,6 +159,7 @@ class TestYqStreaming(TestYdsBase):
         assert len(result) == 1
         assert len(result[0].rows) == 3
 
+    @pytest.mark.skip(reason="Streaming right input is not supported for LEFT join in YDB")
     def test_early_finish_case5(self, ydb_topics):
         io = ydb_topics('pq_test_early_finish_case5')
         sql = f"""

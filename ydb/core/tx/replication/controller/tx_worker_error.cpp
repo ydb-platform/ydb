@@ -11,10 +11,7 @@ class TController::TTxWorkerError: public TTxBase {
     const TMaybe<ui64> SourceCommittedOffset;
     TMaybe<ui32> RestartWorkerNode;
     bool StopWorkers = false;
-<<<<<<< HEAD
-=======
     bool StopReplicationWorkers = false;
->>>>>>> stable-26-3-1
 
 public:
     explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset)
@@ -78,14 +75,6 @@ public:
             StopWorkers = true;
             return true;
         }
-<<<<<<< HEAD
-
-        YDB_LOG_ERROR_CTX(ctx, "Worker error",
-            {"rid", WorkerId.ReplicationId()},
-            {"tid", WorkerId.TargetId()},
-            {"error", Error});
-=======
->>>>>>> stable-26-3-1
 
         YDB_LOG_ERROR_CTX(ctx, "Worker error",
             {"rid", WorkerId.ReplicationId()},
@@ -124,8 +113,6 @@ public:
         if (StopWorkers) {
             Self->StopWorkersForMismatch(WorkerId.ReplicationId(), ctx);
         }
-<<<<<<< HEAD
-=======
 
         if (StopReplicationWorkers) {
             // The error is durable before stopping the remaining partitions.
@@ -151,7 +138,6 @@ public:
             }
             Self->ScheduleProcessQueues();
         }
->>>>>>> stable-26-3-1
     }
 
 }; // TTxWorkerError

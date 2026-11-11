@@ -217,8 +217,6 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             "Client schema modifications are disabled for non-administrators");
     }
 
-<<<<<<< HEAD
-=======
     if (record.TransactionSize() > 1) {
         for (const auto& transaction : record.GetTransaction()) {
             const auto type = transaction.GetOperationType();
@@ -243,7 +241,6 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
->>>>>>> stable-26-3-1
     TOperation::TPtr operation = new TOperation(txId);
 
     for (const auto& transaction : record.GetTransaction()) {

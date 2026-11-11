@@ -1,8 +1,5 @@
 #include <ydb/core/protos/replication.pb.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/protos/schemeshard/operations.pb.h>
->>>>>>> stable-26-3-1
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/ydb_convert/replication_description.h>

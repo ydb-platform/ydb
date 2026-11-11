@@ -1,11 +1,8 @@
 #include "controller_impl.h"
-<<<<<<< HEAD
-=======
 #include <ydb/core/transfer/transfer_writer.h>
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/library/testlib/helpers.h>
 #include <atomic>
->>>>>>> stable-26-3-1
 
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -30,8 +27,6 @@ namespace NKikimr::NReplication::NController {
 Y_UNIT_TEST_SUITE(WorkerLifecycle) {
     using namespace NTestHelpers;
 
-<<<<<<< HEAD
-=======
     struct TTransferErrorCounters {
         std::atomic<ui32> Starts{0};
         std::atomic<ui32> DataErrors{0};
@@ -207,7 +202,6 @@ Y_UNIT_TEST_SUITE(WorkerLifecycle) {
         }
     }
 
->>>>>>> stable-26-3-1
     struct TSetup {
         TEnv<> Env;
         TActorId Service;

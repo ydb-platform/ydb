@@ -984,10 +984,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         switch (status) {
         case TEvWorker::TEvGone::SCHEME_ERROR:
         case TEvWorker::TEvGone::DATA_LOSS:
-<<<<<<< HEAD
-=======
         case TEvWorker::TEvGone::DATA_ERROR:
->>>>>>> stable-26-3-1
             return NKikimrReplication::TEvWorkerStatus::REASON_ERROR;
         default:
             return NKikimrReplication::TEvWorkerStatus::REASON_UNSPECIFIED;

@@ -9,10 +9,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/testlib/basics/appdata.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/testlib/tablet_helpers.h>
->>>>>>> stable-26-3-1
 #include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -1606,8 +1603,6 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/table1").GetPathDescription().GetTable().CdcStreamsSize(), 0);
         AssertDestinationWritable(env);
     }
-<<<<<<< HEAD
-=======
 
     Y_UNIT_TEST(OrdinaryActiveDropCleansSourceAndRetainsReadonlyDestination) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
@@ -1935,7 +1930,6 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
         CheckForceDropAfterDone(Cascade ? EForceDropDestination::Cascade : EForceDropDestination::Retain,
             {EForceDropRecovery::LegacyAdmission});
     }
->>>>>>> stable-26-3-1
 }
 
 Y_UNIT_TEST_SUITE(StreamRetry) {

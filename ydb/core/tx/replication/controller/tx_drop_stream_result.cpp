@@ -42,14 +42,10 @@ public:
             return true;
         }
 
-<<<<<<< HEAD
-        if (target->GetStreamState() != TReplication::EStreamState::Removing) {
-=======
         if (target->GetStreamState() != TReplication::EStreamState::Removing
             && !(target->GetStreamState() == TReplication::EStreamState::Removed
                 && Replication->GetState() == TReplication::EState::Removing))
         {
->>>>>>> stable-26-3-1
             YDB_LOG_WARN_CTX(ctx, "Stream state mismatch",
                 {"rid", rid},
                 {"tid", tid},
@@ -71,18 +67,11 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-<<<<<<< HEAD
-        Self->DeleteProcessedSourceOffsets(rid, tid, db);
-=======
->>>>>>> stable-26-3-1
         const auto dstState = target->GetDstState();
         const bool isRemoving = dstState == TReplication::EDstState::Removing;
         const bool isAttaching = dstState == TReplication::EDstState::Attaching;
         if (isRemoving || isAttaching) {
-<<<<<<< HEAD
-=======
             Self->DeleteProcessedSourceOffsets(rid, tid, db);
->>>>>>> stable-26-3-1
             target->SetStreamState(TReplication::EStreamState::Removed);
             db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());
         } else {

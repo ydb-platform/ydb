@@ -191,10 +191,7 @@ private:
     std::vector<TItem> Items_;
     EAvailabilityPeriodKind AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Unknown;
     std::optional<TDuration> AvailabilityPeriod_;
-<<<<<<< HEAD
-=======
     std::optional<TTransactions> Transactions_;
->>>>>>> stable-26-3-1
 
     std::variant<
         TRowConsistency,

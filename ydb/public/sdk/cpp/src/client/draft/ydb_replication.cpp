@@ -152,8 +152,6 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
         }
     }
 
-<<<<<<< HEAD
-=======
     if (desc.has_transactions()) {
         auto& transactions = Transactions_.emplace();
         transactions.Assigned.reserve(desc.transactions().assigned_size());
@@ -168,7 +166,6 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
             transactions.Pending.emplace_back(version);
         }
     }
->>>>>>> stable-26-3-1
     Items_.reserve(desc.items_size());
     for (const auto& item : desc.items()) {
         Items_.push_back(TItem{

@@ -332,8 +332,6 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
-<<<<<<< HEAD
-=======
     if (replication->GetState() == TReplication::EState::Removing
         && GetStreamState() == EStreamState::Removed)
     {
@@ -350,7 +348,6 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
         }
     }
 
->>>>>>> stable-26-3-1
     if (CanDetachWithoutStream()) {
         Reset(StreamCreator);
         // Keep the stream metadata so a later DROP can clean up a stream whose

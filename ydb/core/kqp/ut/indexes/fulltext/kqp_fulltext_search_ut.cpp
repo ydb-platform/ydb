@@ -3752,10 +3752,6 @@ static TKikimrRunner KikimrPrefixRowId(bool compact = false) {
 
 Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixed, KeyPart) {
     auto kikimr = KikimrPrefixRowId(true);
-<<<<<<< HEAD
-
-=======
->>>>>>> stable-26-3-1
     auto db = kikimr.GetQueryClient();
 
     { // Create table with a prefixed fulltext index ON (UserId, Text)
@@ -4674,10 +4670,6 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevancePrefixedWriteMaintenance, KeyPart) {
     // (DocCount / SumDocLength) in sync. INSERT / UPDATE / DELETE on one prefix change that prefix's
     // scores while other prefixes stay isolated. Plain format only: compact relevance is build-only.
     auto kikimr = KikimrPrefixRowId(true);
-<<<<<<< HEAD
-
-=======
->>>>>>> stable-26-3-1
     auto db = kikimr.GetQueryClient();
 
     auto exec = [&](const TString& q) {
@@ -4693,10 +4685,6 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevancePrefixedWriteMaintenance, KeyPart) {
             PRIMARY KEY (%s)
         );
     )sql", KeyPart ? "UserId, Key" : "Key"));
-<<<<<<< HEAD
-
-=======
->>>>>>> stable-26-3-1
     exec(R"sql(
         UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
             (1, 100, "cats"),

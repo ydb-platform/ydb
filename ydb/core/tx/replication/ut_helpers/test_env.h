@@ -122,13 +122,9 @@ public:
         TAdaptiveThreadPool threadPool;
         threadPool.Start();
         auto future = NThreading::Async(std::forward<TFunc>(func), threadPool);
-<<<<<<< HEAD
-        return GetRuntime().WaitFuture(std::move(future), TDuration::Seconds(60));
-=======
         // External calls progress in wall time, independently of simulated timers.
         // Rely on the test runner's wall-clock timeout to catch hangs.
         return GetRuntime().WaitFuture(std::move(future));
->>>>>>> stable-26-3-1
     }
 
     TEnv(bool init = true, ERuntimeMode runtimeMode = ERuntimeMode::RealThreads, ui32 nodeCount = 1)

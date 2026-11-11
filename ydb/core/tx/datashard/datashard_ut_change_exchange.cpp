@@ -3402,8 +3402,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
         IndexStream(NKikimrSchemeOp::EIndexTypeGlobalUnique, InitialScan);
     }
 
-<<<<<<< HEAD
-=======
     void InitialScanTopicSplitRecovery(bool topicAutoPartitioning, bool rebootPq, bool pauseAutoPartitioning = false, bool delayedPrepared = false) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -3675,7 +3673,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
         InitialScanTopicSplitRecovery(true, false, false, true);
     }
 
->>>>>>> stable-26-3-1
     Y_UNIT_TEST(InitialScanDebezium) {
         TTestTopicEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "UnusedStream"));
         auto& client = env.GetClient();

@@ -1156,6 +1156,11 @@ void TColumnShard::SetupCleanupSchemas() {
     if (!AppDataVerified().FeatureFlags.GetEnableCSSchemasCollapsing()) {
         return;
     }
+    if (ForcedCompactionActualizeSchema) {
+        // a cascade compaction is rewriting the portions to the current schema: a version collapsed meanwhile would
+        // make its portions look current and hide them from the rewrite
+        return;
+    }
     Counters.GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupSchemasActive()) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",

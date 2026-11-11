@@ -287,6 +287,17 @@ public:
             }
         }
 
+        if (Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().GetAlterSchema().HasOptions()) {
+            // ALTER TABLE ... COMPACT WITH (CASCADE = true) rewrites the portions to the current schema;
+            // SCHEME_NEED_ACTUALIZATION drives the same rewrite and could switch it off midway
+            auto* compaction = context.SS->InProgressForcedCompactionsByTable.FindPtr(path.Base()->PathId);
+            if (compaction && (*compaction)->Cascade) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Table options cannot be altered while a cascade compaction of the table is in progress");
+                return result;
+            }
+        }
+
         TProposeErrorCollector errors(*result);
         TEntityInitializationContext iContext(&context);
         std::shared_ptr<ISSEntity> originalEntity = ISSEntity::GetEntityVerified(context, path);

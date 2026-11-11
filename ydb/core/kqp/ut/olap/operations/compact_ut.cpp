@@ -20,7 +20,7 @@ std::vector<ui64> GetPortionSchemaVersions(TTestHelper& helper) {
     NYdb::TResultSetParser parser(result.GetResultSet(0));
     while (parser.TryNextRow()) {
         NJson::TJsonValue details;
-        UNIT_ASSERT(NJson::ReadJsonTree(TString(parser.ColumnParser("Details").GetUtf8()), &details));
+        UNIT_ASSERT(NJson::ReadJsonTree(TString(*parser.ColumnParser("Details").GetOptionalUtf8()), &details));
         versions.push_back(details["schema_version"].GetUIntegerRobust());
     }
     return versions;

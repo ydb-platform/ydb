@@ -3713,6 +3713,77 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         UNIT_ASSERT(seqNo(requests[0]) < seqNo(requests[1]));
     }
 
+    Y_UNIT_TEST(SchemeshardShouldNotMixCascadeCompactionWithSchemaActualizationOption) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // While a cascade compaction is in progress (its result is blocked) the table options cannot be altered:
+        // SCHEME_NEED_ACTUALIZATION could switch the rewrite off midway. Other schema changes stay allowed.
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true);
+        const ui64 compactionId = txId;
+        runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { Options { SchemeNeedActualization: true } }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "extra" Type: "Uint64" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId);
+        block.Stop().Unblock();
+
+        // Once the option is set it drives the rewrite itself, so a cascade compaction is refused.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { Options { SchemeNeedActualization: true } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true, /*maxShardsInFlight=*/1,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldRejectCascadeCompactionWithSchemaCollapsing) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Collapsed schema versions make their portions look current to the rewrite: a cascade compaction is refused
+        // while the feature is enabled, and accepted again once it is not.
+        runtime.GetAppData().FeatureFlags.SetEnableCSSchemasCollapsing(true);
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true, /*maxShardsInFlight=*/1,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        runtime.GetAppData().FeatureFlags.SetEnableCSSchemasCollapsing(false);
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true);
+    }
+
     Y_UNIT_TEST(SchemeshardShouldFailToCompactColumnTableInStore) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

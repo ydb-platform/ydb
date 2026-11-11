@@ -97,6 +97,19 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
                 return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST,
                     "Forced compaction is not supported for tables in a column store");
             }
+            if (settings.cascade()) {
+                // The rewrite is exclusive with the two other things touching the same machinery: the table option
+                // drives the same rewrite (and altering it is refused while a cascade compaction runs), and schema
+                // collapsing makes the portions of a collapsed version look current, hiding them from the rewrite.
+                if (tableInfo->Description.GetSchema().GetOptions().GetSchemeNeedActualization()) {
+                    return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED,
+                        "Cascade compaction is not allowed while SCHEME_NEED_ACTUALIZATION is set for the table");
+                }
+                if (AppData()->FeatureFlags.GetEnableCSSchemasCollapsing()) {
+                    return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED,
+                        "Cascade compaction is not allowed while schema collapsing is enabled (EnableCSSchemasCollapsing)");
+                }
+            }
         }
 
         auto info = MakeIntrusive<TForcedCompactionInfo>();

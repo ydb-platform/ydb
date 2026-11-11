@@ -1817,6 +1817,8 @@ message TEvSampleKResponse {
     // Retryable memory admission/backpressure; status is ABORTED.
     optional uint32 RetryAfterMs = 100;
     optional uint64 RequiredRowBytes = 101;
+    // Persisted by SchemeShard to distinguish retryable admission from upload failures.
+    optional Ydb.StatusIds.StatusCode UploadStatus = 102;
 }
 
 enum EKMeansState {
@@ -1896,6 +1898,8 @@ message TEvLocalKMeansResponse {
     // Retryable memory admission/backpressure; status is ABORTED.
     optional uint32 RetryAfterMs = 100;
     optional uint64 RequiredRowBytes = 101;
+    // Persisted by SchemeShard to distinguish retryable admission from upload failures.
+    optional Ydb.StatusIds.StatusCode UploadStatus = 102;
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1962,6 +1966,8 @@ message TEvReshuffleKMeansResponse {
     // Retryable memory admission/backpressure; status is ABORTED.
     optional uint32 RetryAfterMs = 100;
     optional uint64 RequiredRowBytes = 101;
+    // Persisted by SchemeShard to distinguish retryable admission from upload failures.
+    optional Ydb.StatusIds.StatusCode UploadStatus = 102;
 }
 
 message TEvRecomputeKMeansRequest {
@@ -2013,6 +2019,8 @@ message TEvRecomputeKMeansResponse {
     // Retryable memory admission/backpressure; status is ABORTED.
     optional uint32 RetryAfterMs = 100;
     optional uint64 RequiredRowBytes = 101;
+    // Persisted by SchemeShard to distinguish retryable admission from upload failures.
+    optional Ydb.StatusIds.StatusCode UploadStatus = 102;
 }
 
 message TEvIncrementalRestoreResponse {
@@ -2102,6 +2110,8 @@ message TEvPrefixKMeansResponse {
     // Retryable memory admission/backpressure; status is ABORTED.
     optional uint32 RetryAfterMs = 100;
     optional uint64 RequiredRowBytes = 101;
+    // Persisted by SchemeShard to distinguish retryable admission from upload failures.
+    optional Ydb.StatusIds.StatusCode UploadStatus = 102;
 }
 
 // Applies main table changes in (FromSnapshot, ToSnapshot] to the shadow copy of
@@ -2225,6 +2235,8 @@ message TEvFilterKMeansResponse {
     // Retryable memory admission/backpressure; status is ABORTED.
     optional uint32 RetryAfterMs = 100;
     optional uint64 RequiredRowBytes = 101;
+    // Persisted by SchemeShard to distinguish retryable admission from upload failures.
+    optional Ydb.StatusIds.StatusCode UploadStatus = 102;
 }
 
 enum EFulltextIndexType {

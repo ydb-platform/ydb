@@ -3768,8 +3768,10 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
     try {
         const auto readiness = Scans->AwaitReadiness(serial);
         if (readiness != TScans::EReadiness::Ready) {
-            if (readiness == TScans::EReadiness::TimedOut) {
-                ReleaseScanLocks(Scans->AdmissionFailed(serial, "Timed out waiting for scan readiness").Snapshot);
+            if (readiness == TScans::EReadiness::TimedOut || readiness == TScans::EReadiness::RetryLimitExceeded) {
+                const char* reason = readiness == TScans::EReadiness::TimedOut
+                    ? "Timed out waiting for scan readiness" : "Scan readiness retry limit exceeded";
+                ReleaseScanLocks(Scans->AdmissionFailed(serial, reason).Snapshot);
             }
             return;
         }

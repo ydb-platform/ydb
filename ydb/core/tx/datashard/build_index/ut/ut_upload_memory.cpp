@@ -961,7 +961,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
                     new TBroker::TEvSubmitTask(900, "hold readmission memory", {{0, 128_MB}}, "build_index", 0, nullptr)));
                 fixture.Runtime.GrabEdgeEventRethrow<TBroker::TEvResourceAllocated>(fixture.Sender);
             }
-            fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(600));
+            fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(900));
             readSets.Stop().Unblock();
             if (failure == EFailure::LostWakeup || failure == EFailure::ExpiredResume) {
                 fixture.Runtime.WaitFor("resume event held", [&] { return !resumes.empty(); });
@@ -971,7 +971,9 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
                 fixture.Runtime.WaitFor("readmission grant held", [&] { return !readmission.empty(); });
             }
             if (failure == EFailure::QueuedReadmission) {
-                fixture.Runtime.SimulateSleep(TDuration::Seconds(3));
+                fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(200));
+                UNIT_ASSERT(shard->GetScanManager().GetMinReadVersion().IsMax());
+                fixture.Runtime.SimulateSleep(TDuration::Seconds(2));
                 UNIT_ASSERT_VALUES_EQUAL(submissions, 1);
                 UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 1);
                 UNIT_ASSERT(shard->GetScanManager().Get(1));
@@ -993,7 +995,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
                 fixture.Runtime.Send(new IEventHandle(client, NResourceBroker::MakeResourceBrokerID(), error.Release()));
             }
             if (failure != EFailure::LostBrokerTask && failure != EFailure::StaleBrokerError) {
-                fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(600));
+                fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(300));
             }
             if (failure == EFailure::LateGrant) {
                 // An overdue grant refreshes HEAD and completes the same task,
@@ -1298,6 +1300,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         fixture.Runtime.SimulateSleep(TDuration::Minutes(7));
         auto reply = fixture.Reply(NKikimrIndexBuilder::ABORTED);
         UNIT_ASSERT_GT(reply->Get()->Record.GetRetryAfterMs(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetUploadStatus(), Ydb::StatusIds::TIMEOUT);
         UNIT_ASSERT_STRING_CONTAINS(reply->Get()->Record.ShortDebugString(), "previous upload payload cleanup");
         reply.Reset();
         UNIT_ASSERT_VALUES_EQUAL(uploads.size(), 1);

@@ -37,6 +37,10 @@ namespace NTabletFlatExecutor {
             Gone    = 5,    /* Internal termination     */
         };
 
+        // Repeated volatile waits must eventually yield a retry. Broker queue
+        // time never consumes this budget.
+        static constexpr ui32 MaxReadmissionAttempts = 8;
+
         enum class EType {
             Client,
             System,
@@ -210,9 +214,9 @@ namespace NTabletFlatExecutor {
             THolder<TScanSnapshot> Snapshot;
             EState State = EState::None;
             bool NeedsReadmission = false;
-            // Bounds the volatile wait, while broker queue waits retain
-            // their FIFO position.
+            // Owns expiry of the readiness state chosen at a broker grant.
             TInstant ReadinessDeadline;
+            ui32 ReadmissionAttempts = 0;
             ui64 TimeoutGeneration = 0;
             TActorId Actor;     /* Valid just after EState::Scan*/
             TAutoPtr<IScan> Scan;   /* Valid before EState::Scan    */
@@ -250,7 +254,7 @@ namespace NTabletFlatExecutor {
         };
 
     public:
-        enum class EReadiness { Ready, Waiting, TimedOut };
+        enum class EReadiness { Ready, Waiting, TimedOut, RetryLimitExceeded };
 
         /**
          * followerId must outlive TScans, it is read on every task submission
@@ -353,6 +357,9 @@ namespace NTabletFlatExecutor {
             } else if (one->State != EState::Task) {
                 Y_TABLET_ERROR(NFmt::Do(*one) << " acquired an unexpected resource");
             } else {
+                // An overdue grant must discard the old readiness state
+                // before selecting a new one, even if its timer is delayed.
+                ExpireReadiness(*one);
                 // A call to Start is expected now
                 one->State = EState::Ready;
                 ++one->TimeoutGeneration;
@@ -372,16 +379,19 @@ namespace NTabletFlatExecutor {
             if (!one.Options.OnAdmissionReady) {
                 return EReadiness::Ready;
             }
+            if (!one.ReadinessDeadline && one.Options.QueueTimeout) {
+                one.ReadinessDeadline = TActivationContext::Now() + one.Options.QueueTimeout;
+            }
             auto resume = std::make_unique<IEventHandle>(BrokerClient, TActorId(), new NOps::TEvResumeScan(serial));
             if (!one.Options.OnAdmissionReady(one.Options, std::move(resume))) {
                 if (!one.NeedsReadmission) {
+                    if (one.ReadmissionAttempts++ >= MaxReadmissionAttempts) {
+                        return EReadiness::RetryLimitExceeded;
+                    }
                     // Only the bounded descriptor is needed while waiting.
                     // Transactions being waited on may need broker resources.
                     one.Lease->Suspend();
                     one.NeedsReadmission = true;
-                    if (!one.ReadinessDeadline && one.Options.QueueTimeout) {
-                        one.ReadinessDeadline = TActivationContext::Now() + one.Options.QueueTimeout;
-                    }
                     ScheduleAdmissionTimeout(one);
                 }
                 return EReadiness::Waiting;
@@ -391,7 +401,6 @@ namespace NTabletFlatExecutor {
                 // unlike cancelling it and submitting a new request.
                 one.Lease->Readmit();
                 one.NeedsReadmission = false;
-                one.ReadinessDeadline = {};
                 one.State = EState::Task;
                 ScheduleAdmissionTimeout(one);
                 return EReadiness::Waiting;
@@ -455,6 +464,9 @@ namespace NTabletFlatExecutor {
                 TActivationContext::Now() >= one->ReadinessDeadline) {
                 return AdmissionFailed(serial, "Timed out waiting for scan readiness");
             }
+            if (one->State == EState::Task) {
+                ExpireReadiness(*one);
+            }
             if (one->State == EState::Task && one->Options.OnAdmissionTimeout && one->Options.OnAdmissionTimeout()) {
                 // A heartbeat must not cancel and reinsert a queued task: that
                 // would lose its FIFO position under a sustained backlog.
@@ -496,6 +508,7 @@ namespace NTabletFlatExecutor {
             auto &one = *Lookup(serial, true);
             Start(one, { });
             one.Options.OnAdmissionReady = {};
+            one.Options.OnReadinessExpired = {};
             one.Options.OnAdmissionFailure = {};
             one.Options.OnAdmissionTimeout = {};
         }
@@ -737,6 +750,15 @@ namespace NTabletFlatExecutor {
             out << NFmt::Do(one, false) << "::" << Tablet;
 
             return out.Str();
+        }
+
+        void ExpireReadiness(TOne& one) {
+            if (one.ReadinessDeadline && TActivationContext::Now() >= one.ReadinessDeadline) {
+                one.ReadinessDeadline = {};
+                if (one.Options.OnReadinessExpired) {
+                    one.Options.OnReadinessExpired();
+                }
+            }
         }
 
         void ScheduleAdmissionTimeout(TOne& one) {

@@ -248,6 +248,8 @@ public:
             Issues.AddIssue(NYql::TIssue(InvalidEmbeddingError)
                 .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_ERROR));
         }
+        record.SetUploadStatus(record.GetStatus() == NKikimrIndexBuilder::BUILD_ERROR
+            ? Ydb::StatusIds::INTERNAL_ERROR : Ydb::StatusIds::SUCCESS);
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {

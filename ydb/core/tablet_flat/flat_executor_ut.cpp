@@ -1415,6 +1415,67 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         }
     }
 
+    Y_UNIT_TEST(RepeatedReadinessCyclesYieldRetry) {
+        TMyEnvScans env;
+        bool ready = false;
+        bool failed = false;
+        bool finished = false;
+        ui32 suspended = 0;
+        ui32 constructed = 0;
+        std::unique_ptr<IEventHandle> resume;
+        TBlockEvents<TEvResourceBroker::TEvResourceAllocated> grants(env.Env, [](const auto& event) {
+            const auto* resource = dynamic_cast<TResource*>(event->Get()->Cookie.Get());
+            return resource && resource->Source == TResource::ESource::Scan;
+        });
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.QueueTimeout = TDuration::Hours(1);
+            options.OnAdmissionTimeout = [] { return true; };
+            options.OnAdmissionReady = [&](TScanOptions&, std::unique_ptr<IEventHandle> event) {
+                if (ready) {
+                    return true;
+                }
+                ++suspended;
+                resume = std::move(event);
+                return false;
+            };
+            options.OnAdmissionFailure = [&](const TString& reason, bool retry) {
+                UNIT_ASSERT(retry);
+                UNIT_ASSERT_VALUES_EQUAL(reason, "Scan readiness retry limit exceeded");
+                failed = true;
+            };
+            options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                ++constructed;
+                return new TAdmissionReadyScan(finished);
+            };
+            executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+        }));
+        env->WaitFor("initial readiness grant", [&] { return !grants.empty(); });
+        grants.Unblock(1);
+        for (ui32 attempt = 0; attempt < 32 && !failed; ++attempt) {
+            env->WaitFor("readiness wait or retry", [&] { return bool(resume) || failed; });
+            if (failed) {
+                break;
+            }
+            ready = true;
+            env->Send(resume.release());
+            env->WaitFor("readmission queues without constructing a scan", [&] { return !grants.empty() || failed; });
+            ready = false;
+            grants.Unblock(1);
+        }
+        env->WaitFor("bounded readiness retry", [&] { return failed; });
+        UNIT_ASSERT_GT(suspended, 1);
+        UNIT_ASSERT_LT(suspended, 32);
+        UNIT_ASSERT_VALUES_EQUAL(constructed, 0);
+        UNIT_ASSERT(!finished);
+        if (resume) {
+            env->Send(resume.release());
+        }
+        env->SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(constructed, 0);
+    }
+
     Y_UNIT_TEST_TWIN(ScanStartFailureReleasesPreparedSnapshot, Deferred) {
         TMyEnvScans env;
         env.SendSync(env.Rows.MakeRows(1));

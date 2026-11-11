@@ -478,14 +478,12 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 retriedAt = runtime.GetCurrentTime();
             }
         });
-        bool firstReply = true;
-        TBlockEvents<TEvDataShard::TEvSampleKResponse> replies(runtime, [&](const auto&) {
-            return std::exchange(firstReply, false);
-        });
+        TBlockEvents<TEvDataShard::TEvSampleKResponse> replies(runtime);
         const ui64 build = ++txId;
         StartSingleShardAutodetect(runtime, schemeShard, build, "/MyRoot/ServerLessDB/Table");
         runtime.WaitFor("first autodetect reply held", [&] { return replies.size() == 1; });
         auto& record = replies.front()->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetUploadStatus(), Ydb::StatusIds::SUCCESS);
         record.SetStatus(NKikimrIndexBuilder::ABORTED);
         record.SetRetryAfterMs(30000);
         record.ClearRows();
@@ -496,7 +494,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             : "Minimum index scan reservation exceeds the current memory budget";
         record.AddIssues()->set_message(reason);
         const auto rejectedAt = runtime.GetCurrentTime();
-        replies.Stop().Unblock();
+        replies.Unblock();
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(probes, 1);
         auto* ss = dynamic_cast<TSchemeShard*>(runtime.FindActor(ResolveTablet(runtime, schemeShard)));
@@ -504,8 +502,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         auto& info = *ss->IndexBuilds.at(TIndexBuildId(build));
         UNIT_ASSERT_VALUES_EQUAL(info.Shards.size(), 1);
         const auto idx = info.Shards.begin()->first;
-        const auto retryAt = info.Shards.at(idx).AdmissionRetryAt;
-        info.Shards.at(idx).UploadStatus = Ydb::StatusIds::SUCCESS;
+        UNIT_ASSERT_VALUES_EQUAL(info.Shards.at(idx).UploadStatus, Ydb::StatusIds::SUCCESS);
         for (ui32 poll = 0; poll < 2; ++poll) {
             const auto pending = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
             UNIT_ASSERT_VALUES_EQUAL(pending.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
@@ -520,24 +517,54 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build)
             .GetIndexBuild().IssuesSize(), 1);
         info.Shards.erase(duplicate);
+        // Let the natural backoff elapse while the next reply is held back.
+        runtime.WaitFor("budget retry reply held", [&] { return !replies.empty(); });
+        UNIT_ASSERT(retriedAt >= rejectedAt + TDuration::Seconds(30));
         for (auto uploadStatus : {Ydb::StatusIds::OVERLOADED, Ydb::StatusIds::SCHEME_ERROR,
-                Ydb::StatusIds::STATUS_CODE_UNSPECIFIED}) {
-            info.Shards.at(idx).UploadStatus = uploadStatus;
+                Ydb::StatusIds::TIMEOUT, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, Ydb::StatusIds::SUCCESS}) {
+            auto& response = replies.front()->Get()->Record;
+            response.SetStatus(NKikimrIndexBuilder::ABORTED);
+            response.ClearRows();
+            response.ClearProbabilities();
+            response.ClearMeteringStats();
+            response.ClearIssues();
+            response.AddIssues()->set_message(uploadStatus == Ydb::StatusIds::SUCCESS ? reason : "scan abort from peer");
             if (uploadStatus == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
-                // A legacy ABORTED reply has no admission retry hint.
-                info.Shards.at(idx).AdmissionRetryAt = {};
+                // Old peers have neither the status field nor a retry hint.
+                response.ClearUploadStatus();
+                response.ClearRetryAfterMs();
+            } else {
+                response.SetUploadStatus(uploadStatus);
+                response.SetRetryAfterMs(1000);
             }
+            replies.Unblock();
             const auto aborted = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
             UNIT_ASSERT_VALUES_EQUAL(aborted.GetIndexBuild().IssuesSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(aborted.GetIndexBuild().GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
-            UNIT_ASSERT_STRING_CONTAINS(aborted.GetIndexBuild().GetIssues(0).message(), "ShardIdx:");
-            UNIT_ASSERT_STRING_CONTAINS(aborted.GetIndexBuild().GetIssues(0).message(), "UploadStatus:");
+            const bool retryWarning = uploadStatus == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED || uploadStatus == Ydb::StatusIds::SUCCESS;
+            const auto severity = retryWarning ? NYql::TSeverityIds::S_WARNING : NYql::TSeverityIds::S_ERROR;
+            UNIT_ASSERT_VALUES_EQUAL(aborted.GetIndexBuild().GetIssues(0).severity(), ui32(severity));
+            UNIT_ASSERT_STRING_CONTAINS(aborted.GetIndexBuild().GetIssues(0).message(),
+                retryWarning ? "on shard" : "UploadStatus:");
+            UNIT_ASSERT_VALUES_EQUAL(info.Shards.at(idx).UploadStatus, uploadStatus);
+            runtime.WaitFor("retry reply held after abort", [&] { return !replies.empty(); });
         }
-        info.Shards.at(idx).AdmissionRetryAt = retryAt;
-        info.Shards.at(idx).UploadStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+        // Keep the persisted budget abort visible across a real reboot. A
+        // resumed build may enter the local scan phase instead of sampling.
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localReplies(runtime);
+        replies.clear();
+        RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
+        const auto restarted = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
+        UNIT_ASSERT_VALUES_EQUAL(restarted.GetIndexBuild().IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(restarted.GetIndexBuild().GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_WARNING));
+        UNIT_ASSERT_STRING_CONTAINS(restarted.GetIndexBuild().GetIssues(0).message(), reason);
+        auto* rebooted = dynamic_cast<TSchemeShard*>(runtime.FindActor(ResolveTablet(runtime, schemeShard)));
+        UNIT_ASSERT(rebooted);
+        const auto& restored = *rebooted->IndexBuilds.at(TIndexBuildId(build));
+        UNIT_ASSERT_VALUES_EQUAL(restored.Shards.begin()->second.UploadStatus, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(!restored.Shards.begin()->second.AdmissionRetryAt);
+        replies.Stop().Unblock();
+        localReplies.Stop().Unblock();
         env.TestWaitNotification(runtime, build, schemeShard);
-        UNIT_ASSERT_VALUES_EQUAL(probes, 2);
-        UNIT_ASSERT(retriedAt >= rejectedAt + TDuration::Seconds(30));
         const auto done = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
         UNIT_ASSERT_VALUES_EQUAL(done.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
         UNIT_ASSERT_VALUES_EQUAL(done.GetIndexBuild().IssuesSize(), 0);

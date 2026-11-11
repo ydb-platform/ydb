@@ -270,16 +270,17 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         const TIndexBuildShardStatus& status = item.second;
 
         if (indexInfo.IsBuildVectorIndex() && indexInfo.State == TIndexBuildInfo::EState::Filling &&
-            status.Status == NKikimrIndexBuilder::ABORTED && status.AdmissionRetryAt && status.DebugMessage &&
+            status.Status == NKikimrIndexBuilder::ABORTED && status.DebugMessage &&
             (status.UploadStatus == Ydb::StatusIds::SUCCESS || status.UploadStatus == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)) {
-            // Retry hints identify admission-aware peers; preserve real upload
-            // failures as errors and report each shared admission reason once.
+            // The persisted upload status survives restarts. Hintless legacy
+            // aborts are also retried; known upload failures remain errors.
             if (reportedAdmissionIssues.emplace(status.DebugMessage).second) {
                 AddIssue(index.MutableIssues(), TStringBuilder() << "Retrying index scan on shard " << shardIdx
                     << ": " << status.DebugMessage, NYql::TSeverityIds::S_WARNING);
             }
         } else if (status.Status != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
-            if (status.UploadStatus != Ydb::StatusIds::SUCCESS) {
+            if (status.UploadStatus != Ydb::StatusIds::SUCCESS ||
+                status.Status == NKikimrIndexBuilder::BUILD_ERROR || status.Status == NKikimrIndexBuilder::BAD_REQUEST) {
                 if (status.DebugMessage) {
                     AddIssue(index.MutableIssues(), status.ToString(shardIdx));
                 }

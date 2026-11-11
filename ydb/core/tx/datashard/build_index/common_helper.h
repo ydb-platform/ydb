@@ -272,6 +272,10 @@ public:
                 response.SetRetryAfterMs(1000);
             }
         }
+        if constexpr (requires { response.SetUploadStatus(Ydb::StatusIds::SUCCESS); }) {
+            response.SetUploadStatus(CleanupTimedOut ? Ydb::StatusIds::TIMEOUT
+                : UploadStatus.IsNone() ? Ydb::StatusIds::SUCCESS : UploadStatus.StatusCode);
+        }
         NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
     }
 
@@ -730,6 +734,7 @@ void ReplyBuildIndexScanFailure(TDataShard* self, TActorId recipient, const TReq
     record.ClearRetryAfterMs();
     if (retry) {
         record.SetRetryAfterMs(1000);
+        record.SetUploadStatus(Ydb::StatusIds::SUCCESS);
     }
     record.AddIssues()->set_message(reason);
     TlsActivationContext->Send(new IEventHandle(recipient, self->SelfId(), response.Release()));
@@ -880,18 +885,11 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
         generation = admission.GetBrokerLimitGeneration()](ui64 limit) {
         quota->RestrictBrokerLimit(limit, generation);
     };
-    struct TReadState {
-        TRowVersion Version = TRowVersion::Max();
-        TInstant Deadline;
-    };
-    auto readState = std::make_shared<TReadState>();
-    options.OnAdmissionTimeout = [self, pending, memory, pendingBytes, readState, quota = AppData()->BuildIndexScanAdmission]() {
-        // Expire a queued readmission's version without evicting its broker
-        // task. The next grant chooses a fresh HEAD cut before construction.
-        if (readState->Deadline && TActivationContext::Now() >= readState->Deadline) {
-            readState->Version = TRowVersion::Max();
-            readState->Deadline = {};
-        }
+    auto readVersion = std::make_shared<TRowVersion>(TRowVersion::Max());
+    if (!pending->SnapshotReference) {
+        options.OnReadinessExpired = [readVersion]() { *readVersion = TRowVersion::Max(); };
+    }
+    options.OnAdmissionTimeout = [self, pending, memory, pendingBytes, quota = AppData()->BuildIndexScanAdmission]() {
         const auto& config = AppData()->DataShardConfig;
         if (memory > Min(config.GetBuildIndexScanMemoryLimit(),
                 quota->GetActiveByteLimit(config.GetBuildIndexPendingBytesLimit())) ||
@@ -916,19 +914,18 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
         TlsActivationContext->Send(new IEventHandle(pending->Event->Sender, self->SelfId(), accepted.Release()));
         return true;
     };
-    options.OnAdmissionReady = [self, readState, explicitSnapshot = bool(pending->SnapshotReference)](
+    options.OnAdmissionReady = [self, readVersion, explicitSnapshot = bool(pending->SnapshotReference)](
         TScanOptions& opts, std::unique_ptr<IEventHandle> resume) {
-        if (readState->Version.IsMax() || TActivationContext::Now() >= readState->Deadline) {
+        if (readVersion->IsMax()) {
             if (!explicitSnapshot) {
                 opts.SetSnapshotRowVersion(self->GetMvccTxVersion(EMvccTxMode::ReadOnly));
             }
             const auto* version = std::get_if<TScanOptions::TSnapshotByRowVersion>(&opts.Snapshot);
             Y_ENSURE(version);
-            readState->Version = version->RowVersion;
-            readState->Deadline = TActivationContext::Now() + opts.QueueTimeout;
+            *readVersion = version->RowVersion;
         }
-        if (self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(readState->Version)) {
-            self->GetVolatileTxManager().AttachWaitingSnapshotEvent(readState->Version, std::move(resume));
+        if (self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(*readVersion)) {
+            self->GetVolatileTxManager().AttachWaitingSnapshotEvent(*readVersion, std::move(resume));
             return false;
         }
         return true;
@@ -971,7 +968,9 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
     };
     const ui64 serial = self->QueueScan(tableId, {}, 0, options);
     manager.Set(id, seqNo).push_back(serial);
-    manager.HoldReadVersion(id, seqNo, std::shared_ptr<TRowVersion>(readState, &readState->Version));
+    if (!pending->SnapshotReference) {
+        manager.HoldReadVersion(id, seqNo, readVersion);
+    }
 }
 
 template<typename TResponse>

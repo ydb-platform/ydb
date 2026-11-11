@@ -454,6 +454,8 @@ struct TScanOptions {
     // A false result defers construction and returns the granted resources.
     // Delivering the supplied event rechecks readiness and readmits the same task.
     std::function<bool(TScanOptions&, std::unique_ptr<NActors::IEventHandle>)> OnAdmissionReady;
+    // Discard expired readiness state while retaining the queued broker task.
+    std::function<void()> OnReadinessExpired;
     std::function<void(const TString&, bool)> OnAdmissionFailure;
     std::function<void(ui64)> OnMemoryLimitExceeded;
     // True keeps a queued task in place; false requests cancellation and retry.

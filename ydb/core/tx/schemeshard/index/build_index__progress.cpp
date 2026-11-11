@@ -4257,6 +4257,11 @@ public:
         NYql::IssuesFromMessage(record.GetIssues(), issues);
         shardStatus.DebugMessage = issues.ToString();
         shardStatus.Status = record.GetStatus();
+        if constexpr (requires { record.GetUploadStatus(); }) {
+            shardStatus.UploadStatus = record.GetUploadStatus();
+        } else {
+            shardStatus.UploadStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+        }
         if (shardStatus.Status != NKikimrIndexBuilder::ACCEPTED && shardStatus.Status != NKikimrIndexBuilder::IN_PROGRESS) {
             shardStatus.RequestReservation.reset();
         }

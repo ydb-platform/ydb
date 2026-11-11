@@ -194,12 +194,27 @@ void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
         }
 
         TKey newKey(tabletId, newBlob);
-        Cache.Insert(newKey, *it);
+        TCacheValue::TPtr value = *it;
         Cache.Erase(it);
 
-        LOG_D("PQ Cache (L2). Renamed. old new",
-            {"oldKey", oldKey},
-            {"newKey", newKey});
+        if (Cache.FindWithoutPromote(newKey) != Cache.End()) {
+            LOG_W("PQ Cache (L2). Renamed blob is already in cache, dropping old value. old new size",
+                {"oldKey", oldKey},
+                {"newKey", newKey},
+                {"valueDataSize", value->GetDataSize()});
+            CurrentSize -= value->GetDataSize();
+        } else {
+            Cache.Insert(newKey, value);
+
+            LOG_D("PQ Cache (L2). Renamed. old new",
+                {"oldKey", oldKey},
+                {"newKey", newKey});
+        }
+    }
+
+    { // counters
+        (*Counters.TotalSize) = CurrentSize;
+        (*Counters.TotalCount) = Cache.Size();
     }
 }
 

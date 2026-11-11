@@ -682,6 +682,12 @@ protected:
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         } else {
             MtlsAuthStage = AUTH_SUCCESSFUL;
+            if (!PollerEventSaved) {
+                YDB_LOG_ERROR("mTLS authentication succeeded, but no poller event is saved to continue with",
+                    {LogPrefix()});
+                PassAway();
+                return;
+            }
             HandleConnected(PollerEventSaved, ctx);
         }
     }

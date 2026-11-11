@@ -1,76 +1,36 @@
 from __future__ import annotations
 
 import logging
-import time
 
 from flask import Blueprint, request, jsonify
 
 from ydb.tests.stability.nemesis.internal.models import ProcessInfo, WardenTimeWindow, parse_warden_time_window
-from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
 from ydb.tests.stability.nemesis.internal.agent.agent_warden_checker import AgentWardenChecker
-from ydb.tests.stability.nemesis.internal.agent.nemesis.runner import NemesisManager
+from ydb.tests.stability.nemesis.internal.agent.nemesis.service import AgentExecutionService
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-manager = NemesisManager()
+execution_service: AgentExecutionService | None = None  # initialized in app.py
 blueprint = Blueprint('agent', __name__)
 warden_checker: AgentWardenChecker = None  # initialized in app.py
 
 
-# Helper functions that can be called directly (without Flask request context)
+# Compatibility helpers for the HTTP adapter; execution is owned by the app.
 def get_all_processes_helper():
-    """Helper function to get all processes (can be called directly)"""
-    return [ProcessInfo(**row).to_json() for row in manager.get_all()]
+    return [ProcessInfo(**row).to_json() for row in execution_service.get_all()]
 
 
-def create_process_helper(
-    process_type: str,
-    action: str = 'inject',
-    payload=None,
-):
-    """Helper function to create a process (can be called directly)"""
-    if process_type not in NEMESIS_TYPES:
-        return {"status": "error", "message": "Invalid process type"}
-
-    process_def = NEMESIS_TYPES[process_type]
-    runner = process_def['runner']
-
-    manager.start_process(
-        process_type,
-        runner,
-        action,
-        payload=payload,
-    )
-    return {"status": "started"}
+def create_process_helper(process_type: str, action: str = "inject", payload=None):
+    return execution_service.start(process_type, action, payload=payload)
 
 
 def wait_for_local_processes(timeout: float = 20.0, poll_interval: float = 0.2) -> int:
-    """Block until locally-started actions finish; return how many are still running.
-
-    Actions run in daemon threads, which the interpreter kills on shutdown — that would drop the
-    teardown extracts for targets on this host.
-    """
-    deadline = time.monotonic() + float(timeout)
-
-    def _running() -> int:
-        return sum(1 for row in manager.get_all() if row.get("status") == "running")
-
-    pending = _running()
-    if not pending:
+    if execution_service is None:
         return 0
-    logger.info("waiting up to %.0fs for %d local nemesis action(s) to finish", timeout, pending)
-    while time.monotonic() < deadline:
-        pending = _running()
-        if not pending:
-            return 0
-        time.sleep(poll_interval)
-    pending = _running()
-    if pending:
-        logger.warning("%d local nemesis action(s) still running after %.0fs", pending, timeout)
-    return pending
+    return execution_service.wait_for_processes(timeout, poll_interval)
 
 
 def start_warden_checks_helper(time_window: WardenTimeWindow | None = None):
@@ -149,3 +109,22 @@ def start_warden_checks():
 def get_warden_result():
     """Get the last warden check result."""
     return jsonify(get_warden_result_helper())
+
+
+@blueprint.route("/api/agent/drain", methods=["POST"])
+def drain_agent():
+    """Internal service lifecycle endpoint; test clients keep their old API."""
+    if execution_service is None:
+        return jsonify({"status": "ok"})
+    result = execution_service.shutdown(timeout=60)
+    return jsonify(result), (200 if result["status"] == "ok" else 503)
+
+
+@blueprint.route("/api/agent/resume", methods=["POST"])
+def resume_agent():
+    """A new orchestrator can reopen a drained agent, but never one handling SIGTERM."""
+    try:
+        execution_service.resume()
+        return jsonify({"status": "ok"})
+    except RuntimeError as error:
+        return jsonify({"status": "error", "message": str(error)}), 409

@@ -2,6 +2,7 @@ PY3_PROGRAM()
 
 PY_SRCS(
     __main__.py
+    internal/shutdown.py
     internal/config.py
     internal/agent/agent_warden_catalog.py
     internal/orchestrator/orchestrator_warden_catalog.py
@@ -27,6 +28,10 @@ PY_SRCS(
     internal/nemesis/runners/yaml_gates.py
     internal/nemesis/runners/target_payload.py
     internal/nemesis/chaos_dispatch.py
+    internal/nemesis/command_transport.py
+    internal/orchestrator/nemesis/command_dispatcher.py
+    internal/agent/nemesis/local_process.py
+    internal/agent/nemesis/service.py
     internal/agent/agent_warden_checker.py
     internal/agent/nemesis/runner.py
     internal/orchestrator/install.py
@@ -34,8 +39,8 @@ PY_SRCS(
     internal/orchestrator/orchestrator_warden_execution.py
     internal/orchestrator/unified_agent_verify_failed_aggregated.py
     internal/orchestrator/orchestrator_warden_checker.py
-    internal/orchestrator/nemesis/schedule_loop.py
     internal/orchestrator/nemesis/boundary_scheduler.py
+    internal/orchestrator/nemesis/runtime_topology.py
     internal/orchestrator/nemesis/recovery_probe.py
     internal/orchestrator/nemesis/hc_model.py
     internal/orchestrator/nemesis/chaos_state.py
@@ -47,7 +52,9 @@ PY_SRCS(
     internal/orchestrator/nemesis/topology_fanout_planner.py
     internal/orchestrator/nemesis/network_planner.py
     internal/orchestrator/nemesis/nemesis_planner_base.py
+    internal/orchestrator/nemesis/fault_engine.py
     internal/orchestrator/nemesis/failure_model.py
+    internal/orchestrator/nemesis/target_topology.py
     internal/orchestrator/nemesis/metrics.py
     internal/orchestrator/nemesis/chaos_target.py
     internal/orchestrator/nemesis/cluster_inventory.py

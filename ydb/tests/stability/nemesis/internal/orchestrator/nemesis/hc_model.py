@@ -54,6 +54,7 @@ class HcSnapshot:
     # node_id -> entity id -> worst overall across all hosts' views
     storage_by_node: dict[int, dict[str, str]] = field(default_factory=dict)
     alive_compute: int = 0
+    alive_compute_by_pile: dict[int, int] = field(default_factory=dict)
     clock_skew_green: bool = True
     # host → compute.clock_skew.overall is GREEN (and any node-level skew on that report).
     # Hosts with no clock_skew section are omitted; see host_clock_skew_green.
@@ -90,6 +91,7 @@ def build_snapshot(
     now: float,
     last_update: float | None,
     max_age_sec: float,
+    node_piles: dict[int, int] | None = None,
 ) -> HcSnapshot:
     """Merge hosts' HC reports; ``fresh=False`` when data is stale or no endpoint answered."""
     fresh = last_update is not None and (now - last_update) <= max_age_sec
@@ -143,7 +145,16 @@ def build_snapshot(
         fresh = False
     # Pessimistic: min across views so one stale "still alive" cannot release early.
     alive_compute = min((len(s) for s in alive_by_host), default=0)
+    pile_counts = {}
+    if node_piles is not None and alive_by_host:
+        # Unknown runtime IDs make the partition incomplete: never fall back to global count.
+        if all(n in node_piles for nodes in alive_by_host for n in nodes):
+            pile_counts = {
+                p: min(sum(node_piles[n] == p for n in nodes) for nodes in alive_by_host)
+                for p in set(node_piles.values())
+            }
     return HcSnapshot(
+        alive_compute_by_pile=pile_counts,
         fresh=fresh,
         data_at=last_update,
         answering=frozenset(answering),
@@ -205,10 +216,12 @@ def disk_predicate(target: ChaosTarget) -> Callable[[HcSnapshot], bool]:
     return recovered
 
 
-def slot_predicate(baseline: int) -> Callable[[HcSnapshot], bool]:
+def slot_predicate(baseline: int | dict[int, int]) -> Callable[[HcSnapshot], bool]:
     """Alive compute count ≥ pre-inject baseline (runtime ids change on restart)."""
 
     def recovered(snap: HcSnapshot) -> bool:
+        if isinstance(baseline, dict):
+            return all(snap.alive_compute_by_pile.get(p, -1) >= n for p, n in baseline.items())
         return snap.alive_compute >= baseline
 
     return recovered
@@ -252,7 +265,36 @@ def needs_baseline(kind: TargetKind, scope: ImpactScope) -> bool:
     return kind is TargetKind.SLOT or scope is ImpactScope.SLOT
 
 
-def hc_predicate_for(
+def hc_predicate_for(target, *, kind, scope, inventory=None, baseline=None, nemesis_type=None):
+    resource = _resource_predicate_for(target, kind=kind, scope=scope, inventory=inventory,
+                                       baseline=baseline, nemesis_type=nemesis_type)
+    nodes = list((getattr(inventory, "nodes", {}) or {}).values())
+    bridge = any(getattr(n, "bridge_pile_id", None) is not None for n in nodes)
+    storage_ids = []
+    if bridge and kind is not TargetKind.SLOT and kind is not TargetKind.TABLET:
+        if kind is TargetKind.PILE:
+            storage_ids = [n.node_id for n in nodes if str(n.bridge_pile_id) == target.group_id]
+        elif kind is TargetKind.DATACENTER:
+            storage_ids = [n.node_id for n in nodes if n.datacenter == target.group_id]
+        elif kind is TargetKind.HOST:
+            storage_ids = [n.node_id for n in nodes if n.host == target.host]
+        elif target.node_id is not None:
+            storage_ids = [target.node_id]
+        elif target.ic_port is not None:
+            storage_ids = [n.node_id for n in nodes if n.host == target.host and n.ic_port == target.ic_port]
+
+    def recovered(snap):
+        if not resource(snap):
+            return False
+        if isinstance(baseline, dict) and not slot_predicate(baseline)(snap):
+            return False
+        # Missing storage from a dead pile must not look like a healthy empty set.
+        return all(snap.storage_by_node.get(n) and snap.storage_green(n) for n in storage_ids)
+
+    return recovered
+
+
+def _resource_predicate_for(
     target: ChaosTarget,
     *,
     kind: TargetKind,
@@ -273,6 +315,10 @@ def hc_predicate_for(
             )
             return lambda snap: False
         return slot_predicate(baseline)
+    if kind is TargetKind.PILE or scope is ImpactScope.PILE:
+        nodes = [n for n in (getattr(inventory, "nodes", {}) or {}).values()
+                 if str(n.bridge_pile_id) == target.group_id]
+        return datacenter_predicate(sorted({n.host for n in nodes}), [n.node_id for n in nodes])
     if kind is TargetKind.DATACENTER or scope is ImpactScope.DATACENTER:
         dc = target.group_id
         dc_hosts = [target.host]
@@ -286,7 +332,7 @@ def hc_predicate_for(
                 }
             ) or [target.host]
             nodes = getattr(inventory, "nodes", None) or {}
-            dc_node_ids = [n.node_id for n in nodes.values() if n.host in dc_hosts]
+            dc_node_ids = [n.node_id for n in nodes.values() if n.datacenter == dc]
             if not dc_node_ids:
                 # Test fakes may expose NODE entities without a ``nodes`` map.
                 dc_node_ids = [

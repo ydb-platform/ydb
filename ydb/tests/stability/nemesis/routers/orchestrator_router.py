@@ -9,26 +9,21 @@ from flask import Blueprint, request, jsonify
 from ydb.tests.stability.nemesis.internal.config import Settings
 from ydb.tests.stability.nemesis.internal.models import parse_warden_time_window
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop import OrchestratorNemesisSchedule
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.command_dispatcher import CommandDispatcher
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
-    guard_mode_for,
-    impact_scope_for,
     nemesis_types_flat_for_api,
     nemesis_types_grouped_for_api,
-    stuck_timeout_for,
     supports_boundary_scheduler,
     target_kind_for,
+    recovery_mode_for,
+    recovery_sec_for,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_problems import ChaosProblemStore
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import ClusterInventory
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.hc_model import (
-    hc_predicate_for,
-    needs_baseline,
-)
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.boundary_scheduler import (
     BoundaryNemesisScheduler,
     default_enabled_types,
@@ -48,7 +43,9 @@ hosts: list[str] = []
 host_endpoints: dict[str, str] = {}
 mon_port = 8765  # Default monitoring port
 orchestrator_warden_checker: OrchestratorWardenChecker | None = None
-nemesis_schedule: OrchestratorNemesisSchedule | None = None
+available_fault_types: set[str] | None = None
+command_dispatcher: CommandDispatcher | None = None
+fault_engine = None
 nemesis_scheduler: BoundaryNemesisScheduler | None = None
 chaos_store: ChaosOrchestratorStore | None = None
 failure_guard: FailureModelGuard | None = None
@@ -151,7 +148,8 @@ def create_host_process():
     process_type = data.get("type")
     host = data.get("host")
     action = data.get("action", "inject")
-    force = bool(data.get("force", False))
+    if action not in ("inject", "extract"):
+        return jsonify({"status": "error", "message": "Invalid action"}), 400
     target_data = data.get("target")
 
     if not process_type:
@@ -193,127 +191,20 @@ def create_host_process():
         return jsonify({"status": "error", "message": "Invalid host"}), 400
     host = chaos_target.host
 
-    if nemesis_schedule is None:
-        return jsonify({"status": "error", "message": "Schedule not initialized"}), 500
-
-    if nemesis_schedule.is_schedule_enabled(process_type):
-        return jsonify(
-            {
-                "status": "error",
-                "message": f"Cannot manually run {process_type}: it is currently scheduled. Disable scheduling first.",
-            }
-        ), 400
+    reason = _fault_unavailable(process_type)
+    if reason:
+        return jsonify({"status": "error", "message": reason}), 409
 
     try:
         if chaos_store is None:
             return jsonify({"status": "error", "message": "Chaos store not initialized"}), 500
-        # Plan-time safety for a FULL-mode manual inject; force=true skips it.
-        if (
-            not force
-            and action == "inject"
-            and failure_guard is not None
-            and guard_mode_for(process_type) is GuardMode.FULL
-        ):
-            scope = impact_scope_for(process_type)
-            safe = failure_guard.filter_safe([chaos_target], scope)
-            if not safe:
-                return jsonify(
-                    {
-                        "status": "error",
-                        "message": (
-                            f"Rejected by failure model: injecting {process_type} on "
-                            f"{chaos_target.identity_key()} would exceed the cluster's fault "
-                            f"tolerance (kind={target_kind_for(process_type).value}). "
-                            f"Retry with force=true to override."
-                        ),
-                    }
-                ), 409
-
-        cmds = chaos_store.plan_manual(process_type, host, action)
-        if not cmds:
-            return jsonify(
-                {"status": "error", "message": "Could not plan manual execution for this type/action"}
-            ), 400
-        # Prefer the request's ChaosTarget over whatever the planner picked.
-        cmds = [
-            type(c)(
-                execution_id=c.execution_id,
-                scenario_id=c.scenario_id,
-                nemesis_type=c.nemesis_type,
-                action=c.action,
-                target=chaos_target,
-                payload=c.payload,
-            )
-            for c in cmds
-        ]
-        record_scope = impact_scope_for(process_type) if failure_guard is not None else None
-        for cmd in cmds:
-            full = failure_guard is not None and guard_mode_for(process_type) is GuardMode.FULL
-            baseline = None
-            if (
-                full and cmd.action == "inject" and recovery_probe is not None
-                and needs_baseline(target_kind_for(process_type), record_scope)
-            ):
-                baseline = recovery_probe.alive_compute_baseline()  # before inject
-                if baseline is None:
-                    return jsonify(
-                        {
-                            "status": "error",
-                            "message": (
-                                f"Cannot inject {process_type}: no fresh healthcheck data "
-                                f"for a slot baseline (recovery probe is blind)"
-                            ),
-                        }
-                    ), 503
-            if not nemesis_schedule.dispatch_command(cmd, track_history=False):
-                return jsonify(
-                    {"status": "error", "message": f"dispatch failed for {process_type}"},
-                ), 502
-            if full:
-                if cmd.action == "extract":
-                    failure_guard.record_extract(
-                        cmd.execution_id,
-                        cmd.target,
-                        record_scope,
-                        nemesis_type=cmd.nemesis_type,
-                        source="manual",
-                    )
-                    if recovery_probe is not None:
-                        recovery_probe.untrack_identity(cmd.target.identity_key())
-                    if nemesis_metrics is not None:
-                        nemesis_metrics.fault_ended(
-                            target=cmd.target,
-                            nemesis_type=cmd.nemesis_type,
-                            reason="extract",
-                            lease_id=cmd.execution_id,
-                            execution_id=cmd.execution_id,
-                            source="manual",
-                            guard_mode="full",
-                        )
-                elif cmd.action == "inject":
-                    # Held until HC confirms (or a manual extract); never on a timer.
-                    failure_guard.record_inject(
-                        cmd.execution_id,
-                        cmd.target,
-                        record_scope,
-                        nemesis_type=cmd.nemesis_type,
-                        source="manual",
-                    )
-                    if recovery_probe is not None:
-                        recovery_probe.track(
-                            cmd.execution_id,
-                            cmd.target,
-                            cmd.nemesis_type,
-                            recovered=hc_predicate_for(
-                                cmd.target,
-                                kind=target_kind_for(cmd.nemesis_type),
-                                scope=record_scope,
-                                inventory=cluster_inventory,
-                                baseline=baseline,
-                                nemesis_type=cmd.nemesis_type,
-                            ),
-                            stuck_timeout_sec=stuck_timeout_for(cmd.nemesis_type),
-                        )
+        if fault_engine is None:
+            return jsonify({"status": "error", "message": "Fault engine not initialized"}), 503
+        # force is accepted for wire compatibility, but cannot bypass shared admission.
+        if action == "inject":
+            cmds = fault_engine.inject(process_type, chaos_target, source="manual")
+        else:
+            cmds = fault_engine.extract(process_type, chaos_target)
         return jsonify(
             {
                 "status": "ok",
@@ -330,7 +221,7 @@ def create_host_process():
             }
         )
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": str(e)}), getattr(e, "status_code", 500)
 
 
 @blueprint.route("/api/process_types", methods=["GET"])
@@ -402,94 +293,9 @@ def get_hosts_health():
     return jsonify(aggregated_health)
 
 
-@blueprint.route("/api/schedule", methods=["POST"])
-def set_schedule():
-    data = request.get_json()
-    if not data:
-        return jsonify({"status": "error", "message": "No data provided"}), 400
-
-    process_type = data.get("type")
-    enabled = data.get("enabled")
-    interval = data.get("interval")
-    params = data.get("params") or {}
-
-    if not process_type:
-        return jsonify({"status": "error", "message": "Missing type field"}), 400
-    if enabled is None:
-        return jsonify({"status": "error", "message": "Missing enabled field"}), 400
-
-    if process_type not in NEMESIS_TYPES:
-        return jsonify({"status": "error", "message": "Invalid process type"}), 400
-    if not isinstance(params, dict):
-        return jsonify({"status": "error", "message": "params must be an object"}), 400
-
-    if enabled:
-        # Rebuild planner with user-supplied params (if any) before starting the schedule.
-        if chaos_store is not None and params:
-            if not chaos_store.rebuild_planner(process_type, params):
-                return jsonify(
-                    {"status": "error", "message": "Failed to apply params to planner"}
-                ), 400
-        started = nemesis_schedule.enable_schedule(
-            process_type,
-            interval
-        )
-        if not started:
-            return jsonify({"status": "ok", "message": "Already enabled"})
-    else:
-        with nemesis_schedule.lock:
-            if nemesis_schedule.has_task(process_type):
-                nemesis_schedule.mark_disabled_before_flush(process_type)
-                nemesis_schedule.flush_disable_extracts(process_type)
-                nemesis_schedule.remove_task_entry(process_type)
-
-    return jsonify({"status": "ok"})
-
-
-@blueprint.route("/api/schedule/all", methods=["POST"])
-def set_schedule_all():
-    """
-    Enable or disable scheduled nemesis for all registered types at once.
-
-    Body JSON: ``enabled`` (bool, required). When enabling: optional ``interval`` (int) — same
-    interval for every type; if omitted, each type uses its catalog default from NEMESIS_TYPES.
-    """
-    if nemesis_schedule is None:
-        return jsonify({"status": "error", "message": "Schedule not initialized"}), 500
-
-    data = request.get_json()
-    if not data:
-        return jsonify({"status": "error", "message": "No data provided"}), 400
-
-    enabled = data.get("enabled")
-    if enabled is None:
-        return jsonify({"status": "error", "message": "Missing enabled field"}), 400
-    if not isinstance(enabled, bool):
-        return jsonify({"status": "error", "message": "enabled must be a boolean"}), 400
-
-    interval = data.get("interval")
-    if interval is not None and not isinstance(interval, int):
-        return jsonify({"status": "error", "message": "interval must be an integer or omitted"}), 400
-
-    if enabled:
-        results = nemesis_schedule.enable_all_schedules(uniform_interval=interval)
-        return jsonify({"status": "ok", "results": results})
-    stopped = nemesis_schedule.disable_all_schedules()
-    return jsonify({"status": "ok", "stopped": stopped})
-
-
-@blueprint.route("/api/schedule", methods=["GET"])
-def get_schedule():
-    """Return schedule status with intervals"""
-    return jsonify(
-        nemesis_schedule.schedule_status_for_types(NEMESIS_TYPES.keys())
-    )
-
-
-@blueprint.route("/api/schedule/history", methods=["GET"])
-def get_schedule_history():
-    """Return last scheduled executions"""
-    return jsonify(nemesis_schedule.recent_history(15))
+@blueprint.route("/api/history", methods=["GET"])
+def get_execution_history():
+    return jsonify(command_dispatcher.recent_history(50) if command_dispatcher is not None else [])
 
 
 def _scheduler_state() -> dict:
@@ -525,12 +331,11 @@ def _validated_profile(data: dict) -> tuple[dict, str | None]:
                 f"unknown nemesis type(s): {', '.join(sorted(unknown))}. "
                 f"See GET /api/process_types; default profile: {', '.join(default_enabled_types())}"
             )
-        unsupported = [t for t in names if not supports_boundary_scheduler(t)]
+        unsupported = [t for t in names if _fault_unavailable(t)]
         if unsupported:
             return {}, (
                 f"type(s) not usable by the boundary scheduler: {', '.join(sorted(unsupported))}. "
-                f"Their planners keep their own target state, so they would inject somewhere other "
-                f"than the target the guard reserved. Run them through the per-type schedule instead."
+                f"These types are not available through FaultEngine in this installation."
             )
         profile["enabled"] = names
 
@@ -762,3 +567,106 @@ def get_warden_results_from_all_hosts():
         }
 
     return jsonify(combined_results)
+
+
+def _fault_unavailable(name):
+    if name not in NEMESIS_TYPES:
+        return "Unknown fault type"
+    if not supports_boundary_scheduler(name):
+        return "This planner has not been migrated to FaultEngine"
+    if available_fault_types is not None and name not in available_fault_types:
+        return "Not supported by this installation's execution backend"
+    return None
+
+
+@blueprint.route("/api/faults", methods=["GET"])
+def get_faults():
+    result = []
+    for row in nemesis_types_flat_for_api():
+        name = row["name"]
+        reason = _fault_unavailable(name)
+        mode = recovery_mode_for(name)
+        result.append({"name": name, "description": row["description"],
+                       "target_kind": row["target_kind"], "available": reason is None,
+                       "unavailable_reason": reason, "recovery_mode": mode,
+                       "hold_sec": recovery_sec_for(name) if mode == "extract" else None})
+    return jsonify(result)
+
+
+def _target_placement(target):
+    nodes = list(cluster_inventory.nodes.values())
+    slots = list(cluster_inventory.slots.values())
+    if target.kind is TargetKind.SLOT:
+        resources = [s for s in slots if s.host == target.host and s.slot_idx == target.slot_idx]
+    elif target.kind in (TargetKind.NODE, TargetKind.DISK):
+        resources = [n for n in nodes if n.host == target.host and n.node_id == target.node_id]
+    elif target.kind is TargetKind.PILE:
+        resources = [n for n in nodes + slots if str(n.bridge_pile_id) == target.group_id]
+    elif target.kind is TargetKind.DATACENTER:
+        resources = [n for n in nodes + slots if n.datacenter == target.group_id]
+    else:
+        resources = [n for n in nodes + slots if n.host == target.host]
+    return sorted({(n.host, str(n.bridge_pile_id) if n.bridge_pile_id is not None else "—",
+                    str(n.datacenter or "—"), str(n.rack or "—")) for n in resources})
+
+
+@blueprint.route("/api/targets", methods=["GET"])
+def get_fault_targets():
+    name = request.args.get("type", "")
+    reason = _fault_unavailable(name)
+    if reason:
+        return jsonify({"status": "error", "message": reason}), 409
+    if cluster_inventory is None:
+        return jsonify({"status": "error", "message": "Inventory unavailable"}), 503
+    targets = {}
+    for target in cluster_inventory.entities(target_kind_for(name)):
+        targets.setdefault(target.identity_key(), {"target": target.to_dict(),
+                                                   "placement": _target_placement(target)})
+    return jsonify(list(targets.values()))
+
+
+@blueprint.route("/api/operations", methods=["GET"])
+def get_operations():
+    return jsonify({"available": fault_engine is not None,
+                    "operations": fault_engine.operations() if fault_engine is not None else []})
+
+
+@blueprint.route("/api/operations", methods=["POST"])
+def create_operation():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or set(data) - {"type", "target", "hold_sec"}:
+        return jsonify({"status": "error", "message": "Expected type, target and optional hold_sec"}), 400
+    name = data.get("type")
+    if not isinstance(name, str):
+        return jsonify({"status": "error", "message": "type must be a string"}), 400
+    reason = _fault_unavailable(name)
+    if reason:
+        return jsonify({"status": "error", "message": reason}), 409
+    if fault_engine is None or cluster_inventory is None:
+        return jsonify({"status": "error", "message": "Engine/inventory unavailable"}), 503
+    try:
+        target = ChaosTarget.from_dict(data.get("target"))
+    except (TypeError, ValueError) as error:
+        return jsonify({"status": "error", "message": str(error)}), 400
+    try:
+        candidates = cluster_inventory.entities(target_kind_for(name))
+        if target is None or target not in candidates:
+            return jsonify({"status": "error", "message": "Choose an exact target from current inventory"}), 400
+        commands = fault_engine.inject(name, target, source="manual", hold_sec=data.get("hold_sec"))
+        return jsonify({"status": "ok", "operation_id": commands[0].lease_id}), 201
+    except Exception as error:
+        return jsonify({"status": "error", "message": str(error),
+                        "operation_id": getattr(error, "operation_id", None)}), getattr(error, "status_code", 500)
+
+
+@blueprint.route("/api/operations/<operation_id>/restore", methods=["POST"])
+def restore_operation(operation_id):
+    if fault_engine is None:
+        return jsonify({"status": "error", "message": "Engine unavailable"}), 503
+    try:
+        fault_engine.restore_operation(operation_id)
+        return jsonify({"status": "ok", "operation_id": operation_id})
+    except KeyError:
+        return jsonify({"status": "error", "message": "Unknown operation"}), 404
+    except Exception as error:
+        return jsonify({"status": "error", "message": str(error)}), getattr(error, "status_code", 409)

@@ -43,6 +43,7 @@ class ClusterInventory:
         topology: ClusterTopologyModel,
         *,
         agent_hosts: Iterable[str] | None = None,
+        process_specs=None,
     ) -> None:
         self._topology = topology
         self._agent_hosts = [h for h in (agent_hosts or []) if h]
@@ -52,7 +53,18 @@ class ClusterInventory:
         self.slots: dict[int, SlotInfo] = {}
         # Set when nodes had to be synthesized: ids and ports are guesses, and there are no slots.
         self.degraded_reason: str | None = None
-        self._load_from_harness()
+        if process_specs is not None:
+            for spec in process_specs:
+                if spec.kind == "node":
+                    self.nodes[spec.node_id] = NodeInfo(
+                        spec.node_id, spec.host, spec.ic_port, spec.rack, spec.datacenter, spec.bridge_pile_id,
+                    )
+                else:
+                    self.slots[spec.slot_idx] = SlotInfo(
+                        spec.slot_idx, spec.host, spec.ic_port, spec.node_id, spec.rack, spec.datacenter, spec.bridge_pile_id,
+                    )
+        else:
+            self._load_from_harness()
 
     # -- loading ------------------------------------------------------------
 
@@ -76,7 +88,8 @@ class ClusterInventory:
                     ic_port=int(node.ic_port) if getattr(node, "ic_port", None) else None,
                     rack=getattr(node, "rack", None) or self._topology.rack_of(host),
                     datacenter=getattr(node, "datacenter", None) or self._topology.dc_of(host),
-                    bridge_pile_id=getattr(node, "bridge_pile_id", None),
+                    bridge_pile_id=(getattr(node, "bridge_pile_id", None)
+                                    if getattr(node, "bridge_pile_id", None) is not None else self._topology.pile_of(host)),
                 )
             for slot_idx, slot in cluster.slots.items():
                 host = str(slot.host)
@@ -87,7 +100,8 @@ class ClusterInventory:
                     node_id=int(slot.node_id) if getattr(slot, "node_id", None) is not None else None,
                     rack=getattr(slot, "rack", None) or self._topology.rack_of(host),
                     datacenter=getattr(slot, "datacenter", None) or self._topology.dc_of(host),
-                    bridge_pile_id=getattr(slot, "bridge_pile_id", None),
+                    bridge_pile_id=(getattr(slot, "bridge_pile_id", None)
+                                    if getattr(slot, "bridge_pile_id", None) is not None else self._topology.pile_of(host)),
                 )
         except Exception as e:  # noqa: BLE001
             logger.warning("ClusterInventory: failed to read nodes/slots (%s); host-only", e)
@@ -118,6 +132,7 @@ class ClusterInventory:
                 ic_port=19001,
                 rack=self._topology.rack_of(host),
                 datacenter=self._topology.dc_of(host),
+                bridge_pile_id=self._topology.pile_of(host),
             )
 
     # -- lookups ------------------------------------------------------------

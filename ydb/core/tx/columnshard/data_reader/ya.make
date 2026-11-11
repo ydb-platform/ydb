@@ -10,10 +10,10 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/kqp/common/events
     ydb/core/tx/columnshard/blobs_action/abstract
-    ydb/library/actors/core
     ydb/core/tx/columnshard/engines/writer
-    ydb/core/kqp/compute_actor
+    ydb/library/actors/core
 )
 
 GENERATE_ENUM_SERIALIZATION(contexts.h)

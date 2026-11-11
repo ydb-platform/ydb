@@ -8,7 +8,7 @@
 
 #include <map>
 
-namespace NKikimr::NBridge {
+namespace NKikimr::NGroupSyncer {
 namespace {
 
 class TMirror3dcRepairSyncer : public TActorBootstrapped<TMirror3dcRepairSyncer> {
@@ -201,4 +201,4 @@ IActor* CreateMirror3dcRepairSyncer(TIntrusivePtr<TBlobStorageGroupInfo> info, T
     return new TMirror3dcRepairSyncer(std::move(info), notifyId);
 }
 
-} // namespace NKikimr::NBridge
+} // namespace NKikimr::NGroupSyncer

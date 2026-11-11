@@ -35,7 +35,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
     )
 
     PEERDIR(
-        ydb/core/blobstorage/bridge/syncer
+        ydb/core/blobstorage/syncer
         ydb/core/blobstorage/ut_blobstorage/lib
     )
 

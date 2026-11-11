@@ -1224,6 +1224,16 @@ def _write_state(path: str, state: dict[str, Any]) -> None:
 
 
 
+def _strip_shard_plan_title(plan_md: str) -> str:
+    """Drop the leading ``## Shard plan`` line from shard_graph plan markdown."""
+    lines = plan_md.strip().splitlines()
+    if lines and lines[0].strip() == "## Shard plan":
+        lines = lines[1:]
+        while lines and not lines[0].strip():
+            lines = lines[1:]
+    return "\n".join(lines)
+
+
 def _cmd_plan(args: argparse.Namespace) -> int:
     plan_md = Path(args.plan_md).read_text(encoding="utf-8")
     plan = json.loads(Path(args.plan_json).read_text(encoding="utf-8"))
@@ -1232,7 +1242,7 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         f"## Shard plan `{_md(args.preset)}` "
         f"(run [{args.run_id}]({args.run_url or '#'}))\n\n"
     )
-    body = heading + plan_md.strip() + "\n"
+    body = heading + _strip_shard_plan_title(plan_md) + "\n"
     _write_summary(args.summary_file, body)
     if not args.pr:
         print("No PR number; plan is on the step summary only.", file=sys.stderr)
@@ -1250,7 +1260,7 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         f"[Workflow run]({run_url})\n\n"
     )
     store = GithubCommentStore(token, repository, int(args.pr))
-    full_body = intro + plan_md.strip() + "\n"
+    full_body = intro + _strip_shard_plan_title(plan_md) + "\n"
     try:
         matches = store.list_marker(header)
         if matches:

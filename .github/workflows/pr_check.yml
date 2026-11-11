@@ -460,7 +460,6 @@ jobs:
           plan_args+=(--shard-count "$requested")
         fi
         python3 .github/scripts/tests/shard_graph.py plan "${plan_args[@]}"
-        cat shard_plan.md >> "$GITHUB_STEP_SUMMARY"
         python3 - << 'PY'
         import json
         from pathlib import Path
@@ -468,16 +467,18 @@ jobs:
         Path("active_count.txt").write_text(str(int(plan["shard_count"])))
         PY
         count=$(cat active_count.txt)
+        plan_progress_args=(
+          --run-id "$GITHUB_RUN_ID"
+          --preset "${{ matrix.build_preset }}"
+          --plan-json shard_plan.json
+          --plan-md shard_plan.md
+          --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          --summary-file "$GITHUB_STEP_SUMMARY"
+        )
         if [ "$count" -gt 1 ] && [ -n "${{ github.event.pull_request.number }}" ]; then
-          python3 .github/scripts/tests/shard_progress.py plan \
-            --pr "${{ github.event.pull_request.number }}" \
-            --run-id "$GITHUB_RUN_ID" \
-            --preset "${{ matrix.build_preset }}" \
-            --plan-json shard_plan.json \
-            --plan-md shard_plan.md \
-            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --summary-file "$GITHUB_STEP_SUMMARY" || true
+          plan_progress_args=(--pr "${{ github.event.pull_request.number }}" "${plan_progress_args[@]}")
         fi
+        python3 .github/scripts/tests/shard_progress.py plan "${plan_progress_args[@]}" || true
         echo "active_shard_count=$(cat active_count.txt)" >> "$GITHUB_OUTPUT"
     - name: Run the single job
       if: steps.plan.outputs.active_shard_count == '1'

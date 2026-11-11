@@ -703,7 +703,6 @@ jobs:
             plan_args+=(--blacklist "${{ steps.create-blacklist.outputs.blacklist_file }}")
           fi
           python3 .github/scripts/tests/shard_graph.py plan "${plan_args[@]}"
-          cat shard_plan.md >> "$GITHUB_STEP_SUMMARY"
           python3 - << 'PY'
           import json
           from pathlib import Path
@@ -713,16 +712,18 @@ jobs:
           Path("shard_ids.txt").write_text(json.dumps(ids))
           Path("active_count.txt").write_text(str(count))
           PY
+          plan_progress_args=(
+            --run-id "$GITHUB_RUN_ID"
+            --preset "${{ inputs.build_preset }}"
+            --plan-json shard_plan.json
+            --plan-md shard_plan.md
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            --summary-file "$GITHUB_STEP_SUMMARY"
+          )
           if [ "$(cat active_count.txt)" -gt 1 ] && [ -n "${{ steps.determine-branch.outputs.pr_number }}" ]; then
-            python3 .github/scripts/tests/shard_progress.py plan \
-              --pr "${{ steps.determine-branch.outputs.pr_number }}" \
-              --run-id "$GITHUB_RUN_ID" \
-              --preset "${{ inputs.build_preset }}" \
-              --plan-json shard_plan.json \
-              --plan-md shard_plan.md \
-              --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-              --summary-file "$GITHUB_STEP_SUMMARY" || true
+            plan_progress_args=(--pr "${{ steps.determine-branch.outputs.pr_number }}" "${plan_progress_args[@]}")
           fi
+          python3 .github/scripts/tests/shard_progress.py plan "${plan_progress_args[@]}" || true
           echo "shard_ids=$(cat shard_ids.txt)" >> "$GITHUB_OUTPUT"
           echo "active_shard_count=$(cat active_count.txt)" >> "$GITHUB_OUTPUT"
           echo "Planned shard ids: $(cat shard_ids.txt)"
@@ -870,9 +871,6 @@ jobs:
             --shard-id "${{ matrix.shard_id }}" \
             -o shard_graph/graph.json \
             --context-output shard_graph/context.json
-          echo "## Shard ${{ matrix.shard_id }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Result nodes: $(python3 -c 'import json; print(len(json.load(open("shard_graph/graph.json"))["result"]))')" >> "$GITHUB_STEP_SUMMARY"
-          echo "S3 subdirectory: shard_${{ matrix.shard_id }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run shard tests
         id: run_tests

@@ -4,6 +4,8 @@
 
 #include <ydb/core/protos/bridge.pb.h>
 
+#include <mutex>
+
 namespace NKikimr::NBsController {
 
     // bridge pile sync progress, labelled by pile, database and storage pool
@@ -75,16 +77,21 @@ namespace NKikimr::NBsController {
         std::map<TString, TPileCounters> Piles;
         std::map<TKey, TPoolCounters> Pools;
 
+        // the instances on one node take over and drop the tree on different threads
+        static inline std::mutex OwnerLock;
+
     public:
         TBridgeSyncCounters(::NMonitoring::TDynamicCounterPtr root)
             : Root(std::move(root))
         {
             // own tree per instance: a previous BSC instance on this node may still be alive
+            std::lock_guard g(OwnerLock);
             Root->RemoveSubgroup("subsystem", "bsc");
             Counters = Root->GetSubgroup("subsystem", "bsc");
         }
 
         ~TBridgeSyncCounters() {
+            std::lock_guard g(OwnerLock);
             if (Root->FindSubgroup("subsystem", "bsc") == Counters) { // not taken over by a newer instance
                 Root->RemoveSubgroup("subsystem", "bsc");
             }

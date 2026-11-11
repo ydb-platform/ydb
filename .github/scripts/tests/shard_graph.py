@@ -737,11 +737,21 @@ def build_plan(
         elif observed is None:
             timeout_slot_seconds += weight
             timeout_nodes += 1
-        elif path and p90_by_suite and _size_seconds(p90_by_suite, path, size) is not None:
-            weight = 0.0
         else:
-            timeout_slot_seconds += weight
-            timeout_nodes += 1
+            # observed == 0: dedup/parent-tail zero. Exact suite history on this
+            # path means another node already took the p90 — keep weight 0.
+            # Otherwise fall back to the timeout budget.
+            node_path = path_by_uid.get(uid) or ""
+            node_size = size_by_result.get(uid) or size
+            if (
+                node_path
+                and p90_by_suite
+                and _size_seconds(p90_by_suite, node_path, node_size) is not None
+            ):
+                weight = 0.0
+            else:
+                timeout_slot_seconds += weight
+                timeout_nodes += 1
         weights[uid] = weight
         size_counts[size] += 1
         total_units += units

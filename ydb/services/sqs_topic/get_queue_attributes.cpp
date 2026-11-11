@@ -268,9 +268,10 @@ namespace NKikimr::NSqsTopic::V1 {
                 AddAttribute(result, attrName, NSQS::TLimits::MaxMessageSize);
             }
             if (const auto attrName = "MessageRetentionPeriod"sv; HasAttribute(attrName)) {
-                TDuration topicRetentionPeriod = TDuration::Seconds(pqTabletConfig.GetPartitionConfig().GetLifetimeSeconds());
-                TDuration availabilityPeriod = ConsumerConfig ? TDuration::MilliSeconds(ConsumerConfig->GetAvailabilityPeriodMs()) : TDuration::Zero();
-                TDuration duration = Max(topicRetentionPeriod, availabilityPeriod);
+                TDuration duration = TDuration::Seconds(pqTabletConfig.GetPartitionConfig().GetLifetimeSeconds());
+                if (ConsumerConfig && ConsumerConfig->HasAvailabilityPeriodMs()) {
+                    duration = TDuration::MilliSeconds(ConsumerConfig->GetAvailabilityPeriodMs());
+                }
                 AddAttribute(result, attrName, duration.Seconds());
             }
             if (const auto attrName = "ReceiveMessageWaitTimeSeconds"sv; HasAttribute(attrName)) {

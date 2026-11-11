@@ -4420,7 +4420,7 @@ public:
         Wait = FromStringWithDefault(cgi.Get("wait"), Wait);
     }
 
-    TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_RESUME_TABLET; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {

@@ -1281,6 +1281,33 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_VALUES_EQUAL(trimmedHistory[1].UnsyncedPilesSize(), 1);
     }
 
+    // the cluster converted again after the rollback goes on with the cluster state generations of the one rolled back,
+    // even when the rollback record has been left by an older version not keeping the generation in it
+    Y_UNIT_TEST(ClusterStateGenerationAfterRollback) {
+        auto convert = [](const NKikimrBlobStorage::TStorageConfig& prev) {
+            auto config = prev;
+            config.ClearBridgeRollback();
+            config.MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(1));
+            config.SetGeneration(prev.GetGeneration() + 1);
+            config.MutablePrevConfig()->CopyFrom(prev);
+            if (const auto error = NStorage::TDistributedConfigKeeper::UpdateClusterStateGeneration(&config)) {
+                UNIT_FAIL(*error);
+            }
+            return config.GetClusterState().GetGeneration();
+        };
+
+        auto prev = MakeStorageConfig(3, 7);
+        UNIT_ASSERT_VALUES_EQUAL(convert(prev), 1); // never bridged before
+
+        auto *record = prev.MutableBridgeRollback();
+        record->SetPileName("pile0");
+        record->SetNextStaticGroupId(1);
+        UNIT_ASSERT_VALUES_EQUAL(convert(prev), 8); // older version, the storage config generation bounds the old ones
+
+        record->SetClusterStateGeneration(5);
+        UNIT_ASSERT_VALUES_EQUAL(convert(prev), 6);
+    }
+
     // node warden handing out the designated storage config and bridge info to the bridge connection checker
     class TStorageConfigProvider : public TActor<TStorageConfigProvider> {
         const std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> Config;
@@ -2419,6 +2446,36 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
 
     Y_UNIT_TEST(StorageQuorumLossStillReleasesRoot) {
         CheckRootAfterNodeLoss(true);
+    }
+
+    Y_UNIT_TEST(ConfigChangeWithoutScepterIsRetryable) {
+        const auto config = MakeStorageConfig(3);
+        TNodeWardenTestState state;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        runtime.StopNode(2);
+        runtime.StopNode(3);
+        const TActorId keeper = RegisterKeeper(runtime, config, 1, state);
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableRemoveBridgePile()->SetPileName("pile1");
+        runtime.Send(new IEventHandle(keeper, edge, request.release()), 1);
+        const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        const auto& record = response->Get()->Record;
+        UNIT_ASSERT_EQUAL_C(record.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE,
+            record.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(record.GetErrorReason(), "No scepter");
+        UNIT_ASSERT(!record.HasScepter());
+
+        std::vector<TActorId> keepers{keeper};
+        for (ui32 nodeId : {2, 3}) {
+            runtime.StartNode(nodeId);
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers).has_value(); }));
+        const auto root = FindConvergedRoot(runtime, keepers);
+        UNIT_ASSERT(QueryKeeper(runtime, keepers[*root - 1]).HasScepter());
     }
 
     Y_UNIT_TEST(OfflineLowerPeerDoesNotBlockBinding) {
@@ -5008,6 +5065,12 @@ selector_config: []
             runtime.StartNode(nodeId);
             fixture.Keepers[nodeId - 1] = RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State);
         }
+        auto push = std::make_unique<NStorage::TEvNodeConfigPush>();
+        push->Record.SetInitial(true);
+        auto *bound = push->Record.AddBoundNodes();
+        bound->MutableNodeId()->CopyFrom(expanded.GetAllNodes(3));
+        bound->MutableMeta()->CopyFrom(NStorage::TStorageConfigMeta(expanded));
+        runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), fixture.Keepers[3], push.release()), 4);
         UNIT_ASSERT(SimUntil(runtime, [&] { return rejectedBinding; }));
         for (ui32 nodeId : {1, 2, 3}) {
             UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetGeneration(), 2);

@@ -114,7 +114,9 @@ struct TPhysicalOpProps {
         Analysis.Clear();
     }
 
-    std::optional<int> StageId;
+    std::optional<TStageId> StageId;
+    // Physical boundary bindings, indexed by operator child.
+    TVector<std::optional<TStageEdgeId>> StageInputEdges;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
 
@@ -141,6 +143,7 @@ struct TPhysicalOpProps {
 private:
     void CopyPhysicalFrom(const TPhysicalOpProps& other) {
         StageId = other.StageId;
+        StageInputEdges = other.StageInputEdges;
         Algorithm = other.Algorithm;
         OrderEnforcer = other.OrderEnforcer;
         Metadata = other.Metadata;
@@ -642,7 +645,8 @@ public:
     // Reconstruction preserves the supplied bindings; it never allocates IDs.
     TOpRead(const TString& alias, TUnorderedIUs columns, const NYql::EStorageType storageType,
             const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, std::optional<TRangeInfo> ranges,
-            const std::optional<TExpression>& originalPredicate, const ESortDir sortDirection, const TPhysicalOpProps& props, TPositionHandle pos);
+            const std::optional<TExpression>& originalPredicate, const ESortDir sortDirection, const TPhysicalOpProps& props, TPositionHandle pos,
+            bool requireSortedRead = false);
 
     const TUnorderedIUs& GetColumns() const Y_LIFETIME_BOUND { return Columns_; }
     TUnorderedIUs& GetColumns() Y_LIFETIME_BOUND { return Columns_; }
@@ -681,6 +685,7 @@ public:
     // Bound to the pre-program input row, also using IDs.
     std::optional<TExpression> OriginalPredicate;
     ESortDir SortDir{ESortDir::None};
+    bool RequireSortedRead = false;
     std::optional<TRangeInfo> RangeInfo;
 
 protected:
@@ -1200,6 +1205,8 @@ public:
     TExpression GetLimitCond() const { return LimitCond; }
     bool HasOffset() const { return OffsetCond.has_value(); }
     std::optional<TExpression> GetOffsetCond() const { return OffsetCond; }
+    // The number of input rows this limit consumes: the rows it returns and the rows its offset skips.
+    TExpression GetInputRowsLimit(TExprContext& ctx, TPlanProps& props) const;
 
     // Make private.
     TExpression LimitCond;

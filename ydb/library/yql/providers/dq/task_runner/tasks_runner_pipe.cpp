@@ -417,6 +417,7 @@ struct TPortoSettings {
     TString Layer;
     TString ContainerNamePrefix;
     bool EnableAnonLimitRaiseBeforeDestroy;
+    TMaybe<TLocalJobProxySettings> LocalJobProxy;
 
     bool operator == (const TPortoSettings& o) const {
         return Enable == o.Enable && MemoryLimit == o.MemoryLimit && Layer == o.Layer;
@@ -438,6 +439,7 @@ public:
         : TChildProcess(exeName, args, env, workDir)
         , PortoCtl(portoCtl)
         , PortoLayer(portoSettings.Layer)
+        , LocalJobProxy(portoSettings.LocalJobProxy)
         , MemoryLimit(portoSettings.MemoryLimit)
         , EnablePortoAnonLimitRaiseBeforeDestroy(portoSettings.EnableAnonLimitRaiseBeforeDestroy)
         , Counters(std::move(counters))
@@ -583,8 +585,12 @@ private:
         }
 
         TString caps = "CHOWN;DAC_OVERRIDE;FOWNER;KILL;SETPCAP;IPC_LOCK;SYS_CHROOT;SYS_PTRACE;MKNOD;AUDIT_WRITE;SETFCAP";
+        auto childEnv = Env;
+        if (LocalJobProxy) {
+            LocalJobProxy->ConfigureEnvironment(childEnv, /*porto*/ true);
+        }
         TStringBuilder env;
-        for (const auto& [k, v] : Env) {
+        for (const auto& [k, v] : childEnv) {
             env << k << '=' << v << ';';
         }
         env << "TMPDIR=/tmp;";
@@ -593,6 +599,9 @@ private:
         bind << WorkDir << ' ' << InternalWorkDir() << " rw;"; // see YQL-11392
         bind << exeDir << ' ' << InternalExeDir << " ro;";
         bind << TmpDir << " /tmp rw;";
+        if (LocalJobProxy) {
+            bind << LocalJobProxy->GetPortoBind();
+        }
 
         ArgsElems = TVector<TString>{
             "portoctl",
@@ -630,6 +639,7 @@ private:
 
     const TString PortoCtl;
     const TString PortoLayer;
+    const TMaybe<TLocalJobProxySettings> LocalJobProxy;
     const TMaybe<ui64> MemoryLimit;
     const bool EnablePortoAnonLimitRaiseBeforeDestroy;
     const TPipeFactoryCountersPtr Counters;
@@ -2148,6 +2158,7 @@ public:
                 options.PortoLayer,
                 options.ContainerName,
                 options.EnablePortoAnonLimitRaiseBeforeDestroy,
+                options.LocalJobProxy,
             })
         , FileCache(options.FileCache)
         , Args {"yql@child", "tasks_runner_proxy"}

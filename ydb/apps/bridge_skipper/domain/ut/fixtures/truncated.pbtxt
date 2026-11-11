@@ -1,0 +1,7 @@
+self_check_result: MAINTENANCE_REQUIRED
+issue_log { id: "logical-1" status: ORANGE type: "STORAGE_GROUP" message: "Group dead in some piles" location { storage { pool { name: "/Root:test" group { id: "1" } } } } reason: "part-1-b" }
+issue_log { id: "part-1-b" status: RED type: "BRIDGE_GROUP" message: "Group failed" location { storage { pool { name: "/Root:test" group { id: "1" pile { name: "b" } } } } } reason: "vdisk-1-b-1" reason: "vdisk-1-b-2" reason: "vdisk-1-b-3" }
+issue_log { id: "logical-2" status: ORANGE type: "STORAGE_GROUP" message: "Group dead in some piles" location { storage { pool { name: "/Root:test" group { id: "2" } } } } reason: "part-2-c" }
+issue_log { id: "part-2-c" status: RED type: "BRIDGE_GROUP" message: "Group failed" location { storage { pool { name: "/Root:test" group { id: "2" pile { name: "c" } } } } } reason: "vdisk-2-c-1" }
+issue_log { id: "vdisk-2-c-1" status: RED type: "VDISK" message: "VDisk is not available" }
+issue_log { id: "RED-1d2e" status: RED type: "HEALTHCHECK_STATUS" message: "Healthcheck response size exceeds 50 MB and will be truncated" level: 1 }

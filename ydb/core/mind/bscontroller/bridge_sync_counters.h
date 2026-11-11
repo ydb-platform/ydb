@@ -21,6 +21,10 @@ namespace NKikimr::NBsController {
             ui64 SyncersRunning = 0;
             ui64 BytesDone = 0;
             ui64 BytesTotal = 0;
+            // blob bytes left to copy into the pile, a lower bound while GroupsNotEstimated isn't zero
+            ui64 BytesRemaining = 0;
+            ui64 GroupsNotEstimated = 0; // groups not synced yet, with no scan over all their blobs done
+            ui64 BytesPerSecond = 0; // copy rate over the last minute
         };
 
     private:
@@ -44,12 +48,20 @@ namespace NKikimr::NBsController {
             ::NMonitoring::TDynamicCounters::TCounterPtr SyncBytesDone;
             ::NMonitoring::TDynamicCounters::TCounterPtr SyncBytesTotal;
             ::NMonitoring::TDynamicCounters::TCounterPtr SyncErrors;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SyncBytesRemaining;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SyncGroupsNotEstimated;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SyncBytesPerSecond;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SyncBytesCopied;
 
             TPoolCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
                 : SyncersRunning(counters->GetCounter("SyncersRunning"))
                 , SyncBytesDone(counters->GetCounter("SyncBytesDone"))
                 , SyncBytesTotal(counters->GetCounter("SyncBytesTotal"))
                 , SyncErrors(counters->GetCounter("SyncErrors", true))
+                , SyncBytesRemaining(counters->GetCounter("SyncBytesRemaining"))
+                , SyncGroupsNotEstimated(counters->GetCounter("SyncGroupsNotEstimated"))
+                , SyncBytesPerSecond(counters->GetCounter("SyncBytesPerSecond"))
+                , SyncBytesCopied(counters->GetCounter("SyncBytesCopied", true))
             {
                 for (size_t i = 0; i < GroupsInStage.size(); ++i) {
                     GroupsInStage[i] = counters->GetSubgroup("stage", NKikimrBridge::TGroupState::EStage_Name(i))
@@ -75,6 +87,10 @@ namespace NKikimr::NBsController {
 
         void IncErrors(const TKey& key) {
             GetPool(key).SyncErrors->Inc();
+        }
+
+        void AddCopied(const TKey& key, ui64 bytes) {
+            GetPool(key).SyncBytesCopied->Add(bytes);
         }
 
         void Update(const std::map<TString, TPileValues>& piles, const std::map<TKey, TValues>& values) {
@@ -114,6 +130,9 @@ namespace NKikimr::NBsController {
                 pool.SyncersRunning->Set(value.SyncersRunning);
                 pool.SyncBytesDone->Set(value.BytesDone);
                 pool.SyncBytesTotal->Set(value.BytesTotal);
+                pool.SyncBytesRemaining->Set(value.BytesRemaining);
+                pool.SyncGroupsNotEstimated->Set(value.GroupsNotEstimated);
+                pool.SyncBytesPerSecond->Set(value.BytesPerSecond);
             }
         }
 

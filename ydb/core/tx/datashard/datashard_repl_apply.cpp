@@ -6,14 +6,195 @@
 #include "const.h"
 #include "setup_sys_locks.h"
 
+#include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/engine/minikql/minikql_engine_host_counters.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
+
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 
 #include <util/string/escape.h>
+#include <util/system/byteorder.h>
 
 namespace NKikimr {
 namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
+
+namespace {
+
+    template<bool BE, typename T>
+    static bool CellToInt64(const NKikimr::TCell& cell, i64& value) {
+        TString err;
+        T typed = 0;
+        if (!cell.ToValue<T>(typed, err)) {
+            return false;
+        }
+        if constexpr(BE) {
+            value = (i64)InetToHost(typed);
+        } else {
+            value = (i64)typed;
+        }
+        return true;
+    }
+
+    // Sequence defaults only support integer columns, and replication applies typed cells.
+    bool TryGetSequenceValue(const NScheme::TTypeInfo& type, const NKikimr::TCell& cell, i64& value) {
+        if (cell.IsNull()) {
+            return false;
+        }
+
+        switch (type.GetTypeId()) {
+            case NScheme::NTypeIds::Int64:
+                return CellToInt64<false, i64>(cell, value);
+            case NScheme::NTypeIds::Uint64:
+                return CellToInt64<false, ui64>(cell, value);
+            case NScheme::NTypeIds::Int32:
+                return CellToInt64<false, i32>(cell, value);
+            case NScheme::NTypeIds::Uint32:
+                return CellToInt64<false, ui32>(cell, value);
+            case NScheme::NTypeIds::Int16:
+                return CellToInt64<false, i16>(cell, value);
+            case NScheme::NTypeIds::Uint16:
+                return CellToInt64<false, ui16>(cell, value);
+            case NScheme::NTypeIds::Pg: {
+                // A PostgreSQL serial column is a pg integer with a native sequence behind it.
+                // Fixed-width pg values are stored in the network (big-endian) byte order.
+                switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
+                    case INT2OID:
+                        return CellToInt64<true, i16>(cell, value);
+                    case INT4OID:
+                        return CellToInt64<true, i32>(cell, value);
+                    case INT8OID:
+                        return CellToInt64<true, i64>(cell, value);
+                    default:
+                        return false;
+                }
+            }
+            default:
+                return false;
+        }
+    }
+
+    using TSequenceRange = std::pair<i64, i64>; // min, max
+
+    // Collects the range of values applied to every column with a sequence default, together with
+    // the absolute path of that sequence. Both the key and the update columns are checked, since a
+    // sequence column is often a part of the primary key.
+    TVector<std::pair<TString, TSequenceRange>> CollectSequenceAdvances(
+            const NKikimrTxDataShard::TEvApplyReplicationChanges& msg, const TUserTable& userTable)
+    {
+        TVector<std::pair<TString, TSequenceRange>> result;
+
+        if (!userTable.IsReplicated()) {
+            return result;
+        }
+
+        THashMap<ui32, TString> sequenceColumns;
+        for (const auto& [tag, column] : userTable.Columns) {
+            if (column.DefaultFromSequence.empty()) {
+                continue;
+            }
+            const TString& reference = column.DefaultFromSequence;
+            sequenceColumns.emplace(tag, reference.StartsWith('/')
+                ? reference
+                : JoinPath({userTable.Path, reference}));
+        }
+
+        if (sequenceColumns.empty()) {
+            return result;
+        }
+
+        THashMap<ui32, TSequenceRange> observed;
+        const auto observe = [&observed, &userTable](ui32 tag, i64 value) {
+            // __ydb_row_id always uses the spread layout: the query compiler applies it by column
+            // name (both when filling the column and in the backfill scan), so the sequence position
+            // is the dense part of the value. The column is never created by users, so the layout is
+            // hardcoded here instead of being taken from the scheme.
+            if (auto it = userTable.Columns.find(tag); it != userTable.Columns.end()
+                    && it->second.Name == NTableIndex::NFulltext::RowIdColumn) {
+                value = i64(NTableIndex::NFulltext::SeqFromRowId(ui64(value)));
+            }
+
+            auto it = observed.find(tag);
+            if (it == observed.end()) {
+                observed.emplace(tag, TSequenceRange(value, value));
+            } else {
+                it->second.first = Min(it->second.first, value);
+                it->second.second = Max(it->second.second, value);
+            }
+        };
+
+        for (const auto& change : msg.GetChanges()) {
+            TSerializedCellVec keyCells;
+            if (!TSerializedCellVec::TryParse(change.GetKey(), keyCells)
+                    || keyCells.GetCells().size() != userTable.KeyColumnIds.size())
+            {
+                // The change is going to be rejected while applying, skip it here.
+                continue;
+            }
+
+            for (size_t i = 0; i < userTable.KeyColumnIds.size(); ++i) {
+                const ui32 tag = userTable.KeyColumnIds[i];
+                if (!sequenceColumns.contains(tag)) {
+                    continue;
+                }
+                i64 value = 0;
+                if (TryGetSequenceValue(userTable.KeyColumnTypes[i], keyCells.GetCells()[i], value)) {
+                    observe(tag, value);
+                }
+            }
+
+            const NKikimrTxDataShard::TEvApplyReplicationChanges::TUpdates* updates = nullptr;
+            switch (change.RowOperation_case()) {
+                case NKikimrTxDataShard::TEvApplyReplicationChanges::TChange::kUpsert:
+                    updates = &change.GetUpsert();
+                    break;
+                case NKikimrTxDataShard::TEvApplyReplicationChanges::TChange::kReset:
+                    updates = &change.GetReset();
+                    break;
+                default:
+                    break;
+            }
+            if (!updates) {
+                continue;
+            }
+
+            TSerializedCellVec updateCells;
+            const auto& tags = updates->GetTags();
+            if (!TSerializedCellVec::TryParse(updates->GetData(), updateCells)
+                || updateCells.GetCells().size() != (size_t)tags.size())
+            {
+                continue;
+            }
+
+            for (int i = 0; i < tags.size(); ++i) {
+                if (!sequenceColumns.contains(tags[i])) {
+                    continue;
+                }
+                auto column = userTable.Columns.find(tags[i]);
+                if (column == userTable.Columns.end()) {
+                    continue;
+                }
+                i64 value = 0;
+                if (TryGetSequenceValue(column->second.Type, updateCells.GetCells()[i], value)) {
+                    observe(tags[i], value);
+                }
+            }
+        }
+
+        result.reserve(observed.size());
+        for (const auto& [tag, range] : observed) {
+            auto it = sequenceColumns.find(tag);
+            Y_ENSURE(it != sequenceColumns.end());
+            result.emplace_back(it->second, range);
+        }
+
+        return result;
+    }
+
+} // anonymous namespace
 
 class TDataShard::TTxApplyReplicationChanges : public TTransactionBase<TDataShard> {
 public:
@@ -38,7 +219,7 @@ public:
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(*Self, &locksDb);
 
-        if (Self->State != TShardState::Ready) {
+        if (Self->State != TShardState::Ready || Self->IsDatabaseFrozen()) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_WRONG_STATE,
@@ -138,7 +319,10 @@ public:
         TDataShardChangeGroupProvider groupProvider(*Self, txc.DB);
         THolder<IDataShardChangeCollector> collector;
         if (userTable.HasAsyncIndexes()) {
-            collector.Reset(CreateChangeCollector(*Self, userDb, groupProvider, txc.DB, userTable));
+            const auto indexKeySizePolicy = userTable.IsReplicated()
+                ? EAsyncIndexKeySizePolicy::SkipOversizedIntermediateKeys
+                : EAsyncIndexKeySizePolicy::Reject;
+            collector.Reset(CreateChangeCollector(*Self, userDb, groupProvider, txc.DB, userTable, indexKeySizePolicy));
             // Previously staged base writes are the logical pre-image for new
             // global-consistency stream records, including after a shard reboot.
             for (ui64 openTxId : txc.DB.GetOpenTxs(userTable.LocalTid)) {
@@ -371,7 +555,114 @@ private:
 }; // TTxApplyReplicationChanges
 
 void TDataShard::Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx) {
-    Execute(new TTxApplyReplicationChanges(this, Pipeline, std::move(ev)), ctx);
+    const auto& msg = ev->Get()->Record;
+
+    TVector<std::pair<TString, TSequenceRange>> advances;
+    {
+        const auto& tableId = msg.GetTableId();
+        const auto& userTables = GetUserTables();
+        auto it = userTables.find(tableId.GetTableId());
+        if (it != userTables.end() && tableId.GetOwnerId() == GetPathOwnerId()) {
+            advances = CollectSequenceAdvances(msg, *it->second);
+        }
+    }
+
+    if (advances.empty()) {
+        Execute(new TTxApplyReplicationChanges(this, Pipeline, std::move(ev)), ctx);
+        return;
+    }
+
+    const auto& database = msg.GetDatabaseName();
+    if (database.empty()) {
+        auto result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+            NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+            NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_OVERLOADED,
+            TStringBuilder() << "Cannot advance sequences of table " << msg.GetTableId().GetTableId()
+                << ": the replication request has no database name");
+        ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
+        return;
+    }
+
+    const ui64 pendingId = NextApplyReplicationChangesId++;
+    auto& pending = PendingApplyReplicationChanges[pendingId];
+    pending.Ev = std::move(ev);
+
+    // The batch must not be applied if the sequences could not be advanced in time: reject it and
+    // let the replication service retry.
+    ctx.Schedule(TDuration::Seconds(10), new TEvPrivate::TEvAdvanceSequencesTimeout(pendingId));
+
+    for (auto& [path, range] : advances) {
+        const ui64 cookie = NextAdvanceSequenceCookie++;
+        pending.Cookies.insert(cookie);
+        AdvanceSequenceCookies.emplace(cookie, pendingId);
+
+        auto request = MakeHolder<NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequence>(
+            database, path, range.first, range.second);
+        ctx.Send(NSequenceProxy::MakeSequenceProxyServiceID(), request.Release(), 0, cookie);
+    }
+}
+
+void TDataShard::Handle(NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequenceResult::TPtr& ev, const TActorContext& ctx) {
+    auto cookieIt = AdvanceSequenceCookies.find(ev->Cookie);
+    if (cookieIt == AdvanceSequenceCookies.end()) {
+        // A stale response from a batch which has already been rejected.
+        return;
+    }
+
+    auto pendingIt = PendingApplyReplicationChanges.find(cookieIt->second);
+    if (pendingIt == PendingApplyReplicationChanges.end()) {
+        AdvanceSequenceCookies.erase(cookieIt);
+        return;
+    }
+    auto& pending = pendingIt->second;
+
+    if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        // The data must not be applied while the sequence is behind it: reject the batch and let
+        // the replication service retry it later.
+        auto result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+            NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+            NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_OVERLOADED,
+            TStringBuilder() << "Cannot advance sequences: " << ev->Get()->Status
+                << ", " << ev->Get()->Issues.ToOneLineString());
+        ctx.Send(pending.Ev->Sender, result.Release(), 0, pending.Ev->Cookie);
+
+        for (const ui64 cookie : pending.Cookies) {
+            AdvanceSequenceCookies.erase(cookie);
+        }
+        PendingApplyReplicationChanges.erase(pendingIt);
+        return;
+    }
+
+    pending.Cookies.erase(ev->Cookie);
+    AdvanceSequenceCookies.erase(cookieIt);
+
+    if (!pending.Cookies.empty()) {
+        return;
+    }
+
+    auto applyEv = std::move(pending.Ev);
+    PendingApplyReplicationChanges.erase(pendingIt);
+    Execute(new TTxApplyReplicationChanges(this, Pipeline, std::move(applyEv)), ctx);
+}
+
+void TDataShard::Handle(TEvPrivate::TEvAdvanceSequencesTimeout::TPtr& ev, const TActorContext& ctx) {
+    auto pendingIt = PendingApplyReplicationChanges.find(ev->Get()->PendingId);
+    if (pendingIt == PendingApplyReplicationChanges.end()) {
+        // The batch has already been applied or rejected.
+        return;
+    }
+
+    auto& pending = pendingIt->second;
+    auto result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+        NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+        NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_OVERLOADED,
+        "Cannot advance sequences: timeout");
+    ctx.Send(pending.Ev->Sender, result.Release(), 0, pending.Ev->Cookie);
+
+    for (const ui64 cookie : pending.Cookies) {
+        AdvanceSequenceCookies.erase(cookie);
+    }
+    PendingApplyReplicationChanges.erase(pendingIt);
 }
 
 } // NDataShard

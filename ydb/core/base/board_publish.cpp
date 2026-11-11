@@ -39,7 +39,7 @@ class TBoardReplicaPublishActor : public TActorBootstrapped<TBoardReplicaPublish
     void NotAvailableUnsubscribe() {
         if (Replica.NodeId() != SelfId().NodeId())
             Send(TActivationContext::InterconnectProxy(Replica.NodeId()), new TEvents::TEvUnsubscribe());
-        Send(PublishActor, new TEvents::TEvGone());
+        Send(PublishActor, new TEvStateStorage::TEvPublishActorGone(Replica));
         PassAway();
     }
 

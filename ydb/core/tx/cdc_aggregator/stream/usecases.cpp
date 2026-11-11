@@ -6,8 +6,6 @@
 
 namespace NKikimr::NCdcAggregator {
 
-namespace {
-
 bool ParseTrackingConfig(const NKikimrCdcAggregator::TTrackingConfig& proto, TTrackingConfig& config, TString& error) {
     config.StreamPathId = TPathId::FromProto(proto.GetStreamPathId());
     if (!config.StreamPathId || !config.StreamPathId.OwnerId || !config.StreamPathId.LocalPathId) {
@@ -53,6 +51,8 @@ bool ParseTrackingConfig(const NKikimrCdcAggregator::TTrackingConfig& proto, TTr
 
     return true;
 }
+
+namespace {
 
 bool IsValidHeartbeat(const NKikimrCdcAggregator::TEvWriteHeartbeats::TSourceHeartbeat& proto, const NPQ::THeartbeat& heartbeat) {
     return proto.GetSourceDataShardId()

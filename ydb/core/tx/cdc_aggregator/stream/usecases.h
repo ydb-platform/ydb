@@ -6,6 +6,8 @@
 
 namespace NKikimr::NCdcAggregator {
 
+bool ParseTrackingConfig(const NKikimrCdcAggregator::TTrackingConfig& proto, TTrackingConfig& config, TString& error);
+
 NKikimrCdcAggregator::TEvConfigureTrackingResult ConfigureTracking(
     TStream& stream, const NKikimrCdcAggregator::TEvConfigureTracking& request, TStreamChanges& changes);
 

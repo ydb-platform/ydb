@@ -168,7 +168,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void CheckStatus() {
         // Requires source-side statuses to follow read responses on the stream.
-        // The proxy drains SDK data first; finish local decompression too.
+        // The proxy preserves SDK event order; finish local decompression too.
         if (!PendingStatusReadOffset || !DecompressQueue.empty() || !ResponseQueue.empty()) {
             return;
         }

@@ -456,14 +456,52 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
         }
 
-        void AssertFirstMessageDelivered(const TActorId& reader) {
+        void AssertFirstMessageAndStatusDelivered(const TActorId& reader) {
             auto& runtime = Env.GetRuntime();
+            bool readPending = false;
+            bool statusReceived = false;
+            auto requestObserver = runtime.AddObserver<TEvYdbProxy::TEvReadTopicRequest>(
+                [&](TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
+                    if (ev->Sender == reader) {
+                        UNIT_ASSERT(!readPending);
+                        readPending = true;
+                    }
+                });
+            auto responseObserver = runtime.AddObserver<TEvYdbProxy::TEvReadTopicResponse>(
+                [&](TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
+                    if (ev->Recipient == reader) {
+                        UNIT_ASSERT(readPending);
+                        readPending = false;
+                    }
+                });
+            auto statusObserver = runtime.AddObserver<TEvYdbProxy::TEvTopicReaderStatus>(
+                [&](TEvYdbProxy::TEvTopicReaderStatus::TPtr& ev) {
+                    if (ev->Recipient == reader) {
+                        UNIT_ASSERT_C(readPending, "Proxy consumed an SDK status without a pending Poll");
+                        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.ReadOffset, InitialOffset + 1);
+                        statusReceived = true;
+                    }
+                });
+
             Env.SendAsync(reader, new TEvWorker::TEvPoll());
             TAutoPtr<IEventHandle> result;
             runtime.GrabEdgeEvents<TEvWorker::TEvData, TEvWorker::TEvGone>(result, TDuration::Seconds(30));
             UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Sender, reader);
             UNIT_ASSERT_VALUES_EQUAL(result->GetTypeRewrite(), TEvWorker::EvData);
             UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvWorker::TEvData>()->Records.front().GetOffset(), InitialOffset);
+            UNIT_ASSERT(!readPending);
+            UNIT_ASSERT(!statusReceived);
+
+            // The preceding batch has been delivered. Its status must stay in
+            // the SDK until another Poll, which remains pending on an empty topic.
+            Env.SendAsync(reader, new TEvWorker::TEvPoll());
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&] { return statusReceived; };
+            runtime.DispatchEvents(options, TDuration::Seconds(30));
+            UNIT_ASSERT(statusReceived);
+            UNIT_ASSERT(readPending);
+            UNIT_ASSERT(runtime.CaptureMailboxEvents(Env.GetSender().Hint(), Env.GetSender().NodeId()).empty());
 
             Env.SendAsync(reader, new TEvents::TEvPoison());
             runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
@@ -687,7 +725,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             });
 
         // Observe timer registration rather than waiting for an absent SDK RPC.
-        // This also checks that disabling status detection stops background reads.
+        // Status requests require both checks, independently of client Polls.
         THashSet<TActorId> wakeupRecipients;
         TTestActorRuntimeBase::TScheduledEventFilter previousFilter;
         previousFilter = runtime.SetScheduledEventFilter(
@@ -826,11 +864,26 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         }
     }
 
-    Y_UNIT_TEST(BufferedDataBeforeStatusDoesNotReportDataLoss) {
+    Y_UNIT_TEST(DataBeforeStatusIsDeliveredOnPoll) {
         TRetentionGapTest s;
+        auto& runtime = s.Env.GetRuntime();
+        bool messageRead = false;
+        auto readObserver = runtime.AddObserver<NGRpcProxy::V1::TEvPQProxy::TEvReadResponse>(
+            [&](NGRpcProxy::V1::TEvPQProxy::TEvReadResponse::TPtr& ev) {
+                if (ev->Get()->NextReadOffset == s.InitialOffset + 1) {
+                    messageRead = true;
+                }
+            });
         const auto reader = s.StartReader(true);
+
+        // The SDK can prefetch data, but the proxy must leave it there until Poll.
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return messageRead; };
+        runtime.DispatchEvents(options, TDuration::Seconds(30));
+        UNIT_ASSERT(messageRead);
+
         s.WaitForFirstMessageReadStatus();
-        s.AssertFirstMessageDelivered(reader);
+        s.AssertFirstMessageAndStatusDelivered(reader);
     }
 
     Y_UNIT_TEST(InFlightReadBeforeStatusDoesNotReportDataLoss) {
@@ -854,7 +907,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         for (auto& response : heldResponses) {
             runtime.Send(response.Release());
         }
-        s.AssertFirstMessageDelivered(reader);
+        s.AssertFirstMessageAndStatusDelivered(reader);
     }
 }
 

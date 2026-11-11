@@ -678,6 +678,7 @@ namespace NActors {
 
         void OnCloseOnIdleTimerHit() {
             YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "CloseOnIdle timer hit, session terminated",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICS27"});
             Terminate(TDisconnectReason::CloseOnIdle());
         }

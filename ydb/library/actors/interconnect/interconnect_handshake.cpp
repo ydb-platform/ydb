@@ -297,7 +297,7 @@ namespace NActors {
 #if defined(_linux_)
 #if !defined(TCP_KEEPIDLE) || !defined(TCP_KEEPINTVL) || !defined(TCP_KEEPCNT)
                 YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH42 Kernel liveness requested, but TCP keepalive tuning options are unavailable on this platform",
-                    {"logPrefix", Actor->LogPrefix.data()});
+                    {"logPrefix", Actor->LogPrefix});
                 return false;
 #else
                 auto toSockOptSeconds = [](TDuration value) -> ui64 {
@@ -338,7 +338,7 @@ namespace NActors {
                 }
 #else
                 YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH45 Kernel liveness requested, but TCP_USER_TIMEOUT is unavailable on this platform",
-                    {"logPrefix", Actor->LogPrefix.data()});
+                    {"logPrefix", Actor->LogPrefix});
                 return false;
 #endif
 
@@ -346,7 +346,7 @@ namespace NActors {
 #endif
 #else
                 YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH44 Kernel liveness requested, but this platform is unsupported",
-                    {"logPrefix", Actor->LogPrefix.data()});
+                    {"logPrefix", Actor->LogPrefix});
                 return false;
 #endif
             }

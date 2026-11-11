@@ -18,7 +18,7 @@ namespace NActors {
         }
 
         void SetPrefix(NActors::NStructuredLog::TStructuredMessage&& prefix) {
-            LogPrefix = prefix;
+            LogPrefix = std::move(prefix);
         }
     };
 }

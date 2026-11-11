@@ -225,13 +225,13 @@ namespace NActors {
             Schedule(interval, new TEvCheckSubscriberLiveness);
         }
 
-        YDB_LOG_INFO_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "Session created",
-            {"logPrefix", LogPrefix},
-            {"peerNodeId", Proxy->PeerNodeId});
         SetPrefix(YDB_LOG_CREATE_MESSAGE(
             {"selfActorKind", "Session"},
             {"selfActorId", SelfId()},
             {"nodeId", Proxy->PeerNodeId}));
+        YDB_LOG_INFO_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "Session created",
+            {"logPrefix", LogPrefix},
+            {"peerNodeId", Proxy->PeerNodeId});
         SendUpdateToWhiteboard();
     }
 
@@ -1408,11 +1408,14 @@ namespace NActors {
             {"marker", "ICS23"},
             {"count", confirm});
 
+        bool checkResult = (LastConfirmed <= confirm && confirm <= OutputCounter);
         TStringBuilder stringPrefix;
-        NActors::NStructuredLog::TTextWriter TextWriter;
-        TextWriter.Write(stringPrefix, LogPrefix);
+        if (Y_UNLIKELY(!(checkResult))) {
+            NActors::NStructuredLog::TTextWriter TextWriter;
+            TextWriter.Write(stringPrefix, LogPrefix);
+        }
 
-        Y_ABORT_UNLESS(LastConfirmed <= confirm && confirm <= OutputCounter,
+        Y_ABORT_UNLESS(checkResult,
             "%s confirm# %" PRIu64 " LastConfirmed# %" PRIu64 " OutputCounter# %" PRIu64,
             stringPrefix.data(), confirm, LastConfirmed, OutputCounter);
         LastConfirmed = confirm;

@@ -495,33 +495,46 @@ SELECT
 
 ### Variant over a tuple
 
-A variant over a tuple lists its alternative types directly. For example,
-`Variant<Int32, String>` has two alternatives with indexes `0` and `1`.
-In contrast, `Variant<Tuple<Int32, String>>` has one alternative whose value
-is a tuple, so only index `0` exists.
+`Variant` lets a variable hold a value of one of several predefined types. For example, a worker thread count setting could contain the number `8` or the string `"auto"`. The number specifies how many threads to use, while `"auto"` tells the application to choose automatically. This is an example of an application setting, not a built-in YDB setting.
 
-The index passed to `Variant()` is written as a string. [Way](#way) returns
-the active index as `Uint32`. Dot notation accesses an alternative by its
-compile-time index and returns `Optional<T>`: the value for the active
-alternative, or `NULL` otherwise:
+The type `Variant<Int32, String>` can represent this value. It holds either a number or a string, along with an index identifying the selected type. The allowed choices are called alternatives and are numbered from zero: `0` corresponds to `Int32`, and `1` corresponds to `String`.
+
+#### Creating a value
+
+First, declare the allowed types, then create a value:
 
 ```yql
-$tuple = (7, "seven");
-$variant_type = Variant<Int32, String>;
-$variant = Variant($tuple.1, "1", $variant_type);
-
-SELECT
-    $tuple.0 AS tuple_number,              -- 7
-    $tuple.1 AS tuple_text,                -- "seven"
-    $variant.1 AS variant_text,            -- "seven"
-    Way($variant) AS active_alternative;   -- 1 (Uint32)
+$setting_type = Variant<Int32, String>;
+$setting = Variant("auto", "1", $setting_type);
 ```
 
-`Variant()` uses a string for the tuple index because the same argument also
-accepts a field name for a variant over a structure. This does not change the
-return type of `Way()`.
+The first line defines only the type; it does not store a setting yet. The second line creates a value. The arguments to `Variant()` are ordered as follows:
 
-If a query must handle any possible active alternative, use [Visit](#visit).
+1. `"auto"`: the value to store.
+1. `"1"`: the index of the selected alternative, which is `String` in this case.
+1. `$setting_type`: the declared variant type.
+
+Now `$setting` holds the string `"auto"` with index `1`. It contains no number. To store the number `8` using the same `$setting_type`, use `Variant(8, "0", $setting_type)`.
+
+#### Reading a value
+
+Access an alternative by placing its index after a dot. If a different alternative is selected, the result is `NULL`:
+
+```yql
+$setting_type = Variant<Int32, String>;
+$setting = Variant("auto", "1", $setting_type);
+
+SELECT
+    $setting.1 AS mode,                   -- "auto"
+    $setting.0 AS thread_count,           -- NULL
+    Way($setting) AS alternative_index;   -- 1 (Uint32)
+```
+
+Here, `$setting.1` returns the string `"auto"`, and `$setting.0` returns `NULL` because no number was specified. `AS mode`, `AS thread_count`, and `AS alternative_index` assign arbitrary names to the result columns. They are not part of the `Variant` type.
+
+[Way](#way) returns the index of the selected alternative. The application can use it to decide how to handle the setting: use the specified thread count or choose the count automatically. To handle each alternative directly in YQL, use [Visit](#visit).
+
+Access through dot notation returns `Optional<T>`, where `T` is the type of the requested alternative. The index after the dot must be known at compile time. `Way()` returns the index as `Uint32`. `Variant()` takes the index as a string because the same argument is used for the field name in a variant over a structure.
 
 ## AsVariant {#asvariant}
 

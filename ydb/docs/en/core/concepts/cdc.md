@@ -15,7 +15,6 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 
 ## Limitations {#restrictions}
 
-* The number of topic partitions is fixed as of changefeed creation and remains unchanged (unlike tables, topics are not elastic).
 * Changefeeds support records of the following types of operations:
 
   * Updates: overwriting the values of the specified columns. Query example: [UPDATE](../yql/reference/syntax/update.md).

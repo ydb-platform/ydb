@@ -4,6 +4,7 @@
 BUILD_PREPARE_DIR="$PUBLIC_DIR/build_prepare"
 mkdir -p "$BUILD_PREPARE_DIR"
 echo "19 [Build before tests]($PUBLIC_DIR_URL/build_prepare/)" >> "$SUMMARY_LINKS"
+python3 .github/scripts/tests/extract_build_phase.py "$GRAPH_PATH" "$TMP_DIR/build_phase.json"
 PREPARE_MEM_KB=$(awk '/MemTotal/ {printf "%.0f", $2 * 0.95}' /proc/meminfo)
 analytics start build_before_tests
 if (
@@ -16,7 +17,7 @@ if (
     -p MemoryMax="${PREPARE_MEM_KB}K" -p MemorySwapMax=0 \
     -- prlimit --core=unlimited:unlimited \
     setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups -- \
-    ./ya make "${params[@]}" $YA_MAKE_TARGET --test-prepare \
+    ./ya make "${params[@]}" $YA_MAKE_TARGET --build-custom-json "$TMP_DIR/build_phase.json" \
     --log-file "$BUILD_PREPARE_DIR/ya_log.txt" \
     --evlog-file "$BUILD_PREPARE_DIR/ya_evlog.jsonl" \
     --build-results-report "$BUILD_PREPARE_DIR/report.json" \
@@ -31,3 +32,6 @@ else
   echo "status=failed" >> "$GITHUB_OUTPUT"
   exit "$RC"
 fi
+# Publish the completed build phase before tests, so progress is visible in S3.
+s3cmd sync --follow-symlinks --acl-public --no-progress --no-mime-magic --guess-mime-type \
+  "$BUILD_PREPARE_DIR/" "$S3_BUCKET_PATH/build_prepare/"

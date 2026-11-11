@@ -12,4 +12,6 @@ SRCS(
 PEERDIR(
 )
 
+REQUIREMENTS(cpu:1)
+
 END()

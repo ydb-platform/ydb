@@ -11,4 +11,6 @@ PEERDIR(
     contrib/libs/xxhash
 )
 
+REQUIREMENTS(cpu:1)
+
 END()

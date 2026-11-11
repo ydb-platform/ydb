@@ -16,4 +16,6 @@ PEERDIR(
     ydb/library/actors/wilson
 )
 
+REQUIREMENTS(cpu:1)
+
 END()

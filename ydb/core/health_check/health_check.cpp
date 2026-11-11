@@ -3062,9 +3062,13 @@ public:
         }
     };
 
-    const TBridgeInfo::TPile* FindCurrentPile(TBridgePileId pileId) const {
-        const auto* bridgeInfo = NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk()
+    const TBridgeInfo* GetBridgeInfo() const {
+        return NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk()
             ? NodeWardenStorageConfig->Get()->BridgeInfo.get() : nullptr;
+    }
+
+    const TBridgeInfo::TPile* FindCurrentPile(TBridgePileId pileId) const {
+        const auto* bridgeInfo = GetBridgeInfo();
         const auto* pile = bridgeInfo ? bridgeInfo->FindPile(pileId) : nullptr;
         return pile && !pile->IsFreeSlot ? pile : nullptr;
     }
@@ -3589,6 +3593,11 @@ public:
             // Sysview and storage configuration are independent snapshots. A
             // removed pile can remain in BSC statistics after its registry slot
             // has disappeared (or become free).
+            if (!GetBridgeInfo()) {
+                context.ReportNoData("Bridge configuration is not available", ETags::GroupState);
+                storageGroupStatus.set_overall(context.GetOverallStatus());
+                return;
+            }
             auto parts = itGroup->second.BridgeGroups;
             if (itGroup->second.BridgePileId) { // inline pile: group converted from non-bridged one is also its own part
                 parts.insert(parts.begin(), &itGroup->second);
@@ -3720,7 +3729,11 @@ public:
                 context.ReportStatus(context.GetOverallStatus(), "Pool failed", ETags::PoolState, {ETags::GroupState});
                 break;
             default:
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                if (context.HasTags({ETags::GroupState})) {
+                    context.ReportNoData("Pool has groups with no data", ETags::PoolState, {ETags::GroupState});
+                } else {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                }
                 break;
         }
         storagePoolStatus.set_overall(context.GetOverallStatus());
@@ -3763,7 +3776,11 @@ public:
                     context.ReportStatus(context.GetOverallStatus(), "Storage failed", ETags::StorageState, {ETags::PoolState});
                     break;
                 default:
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                    if (context.HasTags({ETags::PoolState})) {
+                        context.ReportNoData("Storage has pools with no data", ETags::StorageState, {ETags::PoolState});
+                    } else {
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                    }
                     break;
             }
             if (!HaveAllBSControllerInfo()) {
@@ -3870,15 +3887,19 @@ public:
             }
             TSelfCheckResult* currentContext = &ssContext;
             TSelfCheckContext pileContext(&ssContext, TStringBuilder() << "PILE_" << type);
-            if (ringGroup.BridgePileId && NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk()
-                && NodeWardenStorageConfig->Get()->BridgeInfo)
-            {
-                const auto* pile = FindCurrentPile(ringGroup.BridgePileId);
-                if (!pile) {
+            if (ringGroup.BridgePileId && GetBridgeInfo()) {
+                // Only a registry at least as new as this proxy reply can prove
+                // removal. A newer proxy reply still needs its replicas checked.
+                const bool registryCurrent = info->ClusterStateGeneration
+                    <= NodeWardenStorageConfig->Get()->Config->GetClusterState().GetGeneration();
+                const auto* pile = registryCurrent ? FindCurrentPile(ringGroup.BridgePileId) : nullptr;
+                if (registryCurrent && !pile) {
                     continue;
                 }
-                pileContext.Location.mutable_compute()->mutable_state_storage()->mutable_pile()->set_name(pile->Name);
-                currentContext = &pileContext;
+                if (pile) {
+                    pileContext.Location.mutable_compute()->mutable_state_storage()->mutable_pile()->set_name(pile->Name);
+                    currentContext = &pileContext;
+                }
             }
             ui32 disabledRings = 0;
             ui32 badRings = 0;

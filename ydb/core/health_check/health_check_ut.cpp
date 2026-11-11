@@ -655,10 +655,18 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
     }
 
+    enum class EBridgePileRegistry {
+        Current,
+        MissingSecondPile,
+        FreeSecondPile,
+        MissingConfigReply,
+    };
+
     Ydb::Monitoring::SelfCheckResult RequestHcWithBridgeVdisks(const TVector<TVDisks>& groupVdisks,
             size_t bridgeGroupCount = 1, bool ordinary = false,
             std::array<NKikimrBridge::TClusterState::EPileState, 2> pileStates = {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::SYNCHRONIZED},
-            bool inlinePile = false, bool bridgeModeEnabled = false, bool removedSecondPile = false)
+            bool inlinePile = false, bool bridgeModeEnabled = false, EBridgePileRegistry registry = EBridgePileRegistry::Current,
+            std::optional<NKikimrBlobStorage::EVDiskStatus> ordinaryGroupStatus = {}, bool separateOrdinaryPool = false)
     {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -681,13 +689,20 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
         bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "pile0", .State = pileStates[0]});
         bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "pile1", .State = pileStates[1]});
-        if (removedSecondPile) {
+        // pileStates[1] is unused when the second pile is removed or its slot is free.
+        if (registry == EBridgePileRegistry::MissingSecondPile) {
             bridgeInfo->Piles.pop_back();
+        } else if (registry == EBridgePileRegistry::FreeSecondPile) {
+            bridgeInfo->Piles[1].Name.clear();
+            bridgeInfo->Piles[1].State = NKikimrBridge::TClusterState::INACTIVE;
+            bridgeInfo->Piles[1].IsFreeSlot = true;
+            bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(2),
+                .Name = "pile2", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
         }
         bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(0)] = &bridgeInfo->Piles[0];
-        if (!removedSecondPile) {
-            bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(1)] = &bridgeInfo->Piles[1];
+        if (registry != EBridgePileRegistry::MissingSecondPile) {
+            bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(1)] = &bridgeInfo->Piles.back();
         }
 
         auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, nullptr);
@@ -700,11 +715,17 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, bridgeInfo)));
         }
 
+        const ui32 ordinaryGroupId = GROUP_START_ID + 1000;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvSchemeShard::EvDescribeSchemeResult: {
                     auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResult(x);
+                    if (ordinaryGroupStatus && separateOrdinaryPool) {
+                        auto* pool = (*x)->Get()->MutableRecord()->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
+                        pool->set_name("/Root:ordinary");
+                        pool->set_kind("kind");
+                    }
                     break;
                 }
                 case NSysView::TEvSysView::EvGetVSlotsResponse: {
@@ -715,6 +736,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     for (const auto& vdisks : groupVdisks) {
                         AddVSlotsToSysViewResponse(x, 1, vdisks, ++groupId, std::exchange(first, false));
                     }
+                    if (ordinaryGroupStatus) {
+                        AddVSlotsToSysViewResponse(x, 1, TVDisks{8, *ordinaryGroupStatus}, ordinaryGroupId, false);
+                    }
                     break;
                 }
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
@@ -724,11 +748,27 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     } else {
                         AddBridgeGroupsToSysViewResponse(x, bridgeGroupCount, 2, inlinePile);
                     }
+                    if (ordinaryGroupStatus) {
+                        auto sample = (*x)->Get()->Record.entries(0);
+                        auto* group = (*x)->Get()->Record.add_entries();
+                        group->CopyFrom(sample);
+                        group->mutable_key()->set_groupid(ordinaryGroupId);
+                        auto* info = group->mutable_info();
+                        info->clear_proxygroupid();
+                        info->clear_bridgepileid();
+                        info->set_erasurespeciesv2(NHealthCheck::BLOCK_4_2);
+                        info->set_storagepoolid(separateOrdinaryPool ? 2 : 1);
+                    }
                     break;
                 }
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
+                    if (ordinaryGroupStatus && separateOrdinaryPool) {
+                        auto* pool = (*x)->Get()->Record.add_entries();
+                        pool->mutable_key()->set_storagepoolid(2);
+                        pool->mutable_info()->set_name("/Root:ordinary");
+                    }
                     break;
                 }
                 case NNodeWhiteboard::TEvWhiteboard::EvBSGroupStateResponse: {
@@ -737,6 +777,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     break;
                 }
                 case TEvBlobStorage::EvNodeWardenStorageConfig: {
+                    if (registry == EBridgePileRegistry::MissingConfigReply
+                        && ev->Recipient != GetNameserviceActorId()
+                        && ev->Recipient != MakeBlobStorageNodeWardenID(runtime.GetNodeId(0)))
+                    {
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
                     auto* x = reinterpret_cast<TEvNodeWardenStorageConfig::TPtr*>(&ev);
                     (*x)->Get()->BridgeInfo = bridgeInfo;
                     break;
@@ -749,6 +795,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
         request->Request.set_merge_records(true);
+        if (registry == EBridgePileRegistry::MissingConfigReply) {
+            request->Request.set_return_verbose_status(true);
+        }
 
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
@@ -1299,18 +1348,89 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(BridgeGroupIgnoresRemovedPileInLaggingBscStatistics) {
         // BSC sysview still includes pile1 after the current registry dropped it.
+        for (auto registry : {EBridgePileRegistry::MissingSecondPile, EBridgePileRegistry::FreeSecondPile}) {
+            for (bool inlinePile : {false, true}) {
+                for (bool liveCopyFailed : {false, true}) {
+                    const auto result = RequestHcWithBridgeVdisks(
+                        {TVDisks{8, liveCopyFailed ? NKikimrBlobStorage::ERROR : NKikimrBlobStorage::READY},
+                         TVDisks{8, liveCopyFailed ? NKikimrBlobStorage::READY : NKikimrBlobStorage::ERROR}},
+                        1, false,
+                        {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::SYNCHRONIZED},
+                        inlinePile, true, registry);
+                    CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED,
+                        liveCopyFailed ? 1 : 0, TLocationFilter().Pool("/Root:test"));
+                    for (const auto& issue : result.issue_log()) {
+                        UNIT_ASSERT_UNEQUAL(issue.location().storage().pool().group().pile().name(), "pile1");
+                        if (issue.location().storage().pool().group().has_pile()) {
+                            UNIT_ASSERT_VALUES_EQUAL(issue.location().storage().pool().group().pile().name(), "pile0");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(BridgeGroupMissingConfigRemainsUnknown) {
         for (bool inlinePile : {false, true}) {
-            for (bool liveCopyFailed : {false, true}) {
-                const auto result = RequestHcWithBridgeVdisks(
-                    {TVDisks{8, liveCopyFailed ? NKikimrBlobStorage::ERROR : NKikimrBlobStorage::READY},
-                     TVDisks{8, liveCopyFailed ? NKikimrBlobStorage::READY : NKikimrBlobStorage::ERROR}},
-                    1, false,
-                    {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::SYNCHRONIZED},
-                    inlinePile, true, /*removedSecondPile=*/true);
-                CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED,
-                    liveCopyFailed ? 1 : 0, TLocationFilter().Pool("/Root:test"));
-                for (const auto& issue : result.issue_log()) {
-                    UNIT_ASSERT_UNEQUAL(issue.location().storage().pool().group().pile().name(), "pile1");
+            // A healthy ordinary group must not turn an unknown bridge group or its pool green.
+            for (bool addOrdinaryGroup : {false, true}) {
+                for (bool separateOrdinaryPool : {false, true}) {
+                    if (!addOrdinaryGroup && separateOrdinaryPool) {
+                        continue;
+                    }
+                    const auto result = RequestHcWithBridgeVdisks(
+                        {TVDisks{8, NKikimrBlobStorage::READY}, TVDisks{8, NKikimrBlobStorage::READY}},
+                        1, false,
+                        {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::SYNCHRONIZED},
+                        inlinePile, true, EBridgePileRegistry::MissingConfigReply,
+                        addOrdinaryGroup ? std::make_optional(NKikimrBlobStorage::READY) : std::nullopt,
+                        separateOrdinaryPool);
+                    CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 1,
+                        TLocationFilter().Pool("/Root:test"));
+                    CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+                    bool foundStorage = false;
+                    for (const auto& db : result.database_status()) {
+                        for (const auto& pool : db.storage().pools()) {
+                            if (pool.id() == "/Root:test") {
+                                foundStorage = true;
+                                UNIT_ASSERT_VALUES_EQUAL(pool.overall(), Ydb::Monitoring::StatusFlag::GREY);
+                                UNIT_ASSERT_VALUES_EQUAL(db.storage().overall(), Ydb::Monitoring::StatusFlag::GREY);
+                                for (const auto& group : pool.groups()) {
+                                    UNIT_ASSERT_VALUES_EQUAL(group.overall(), group.id() == ToString(GROUP_START_ID)
+                                        ? Ydb::Monitoring::StatusFlag::GREY : Ydb::Monitoring::StatusFlag::GREEN);
+                                }
+                            } else if (pool.id() == "/Root:ordinary") {
+                                UNIT_ASSERT_VALUES_EQUAL(pool.overall(), Ydb::Monitoring::StatusFlag::GREEN);
+                            }
+                        }
+                    }
+                    UNIT_ASSERT(foundStorage);
+                    for (const auto& issue : result.issue_log()) {
+                        UNIT_ASSERT_UNEQUAL(issue.message(), "Group has no parts in synchronized piles");
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(BridgeGroupMissingConfigPreservesKnownFailure) {
+        for (bool separateOrdinaryPool : {false, true}) {
+            const auto result = RequestHcWithBridgeVdisks(
+                {TVDisks{8, NKikimrBlobStorage::READY}, TVDisks{8, NKikimrBlobStorage::READY}},
+                1, false,
+                {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::SYNCHRONIZED},
+                false, true, EBridgePileRegistry::MissingConfigReply, NKikimrBlobStorage::ERROR, separateOrdinaryPool);
+            CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 1,
+                TLocationFilter().Pool("/Root:test"));
+            CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1,
+                TLocationFilter().Pool(separateOrdinaryPool ? "/Root:ordinary" : "/Root:test"));
+            for (const auto& db : result.database_status()) {
+                for (const auto& pool : db.storage().pools()) {
+                    if (pool.id() == "/Root:test" || pool.id() == "/Root:ordinary") {
+                        UNIT_ASSERT_VALUES_EQUAL(pool.overall(), separateOrdinaryPool && pool.id() == "/Root:test"
+                            ? Ydb::Monitoring::StatusFlag::GREY : Ydb::Monitoring::StatusFlag::RED);
+                        UNIT_ASSERT_VALUES_EQUAL(db.storage().overall(), Ydb::Monitoring::StatusFlag::RED);
+                    }
                 }
             }
         }
@@ -2925,7 +3045,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         std::vector<EWhiteboardReply> VDiskReplies; // per static node
         std::vector<EWhiteboardReply> PDiskReplies; // per static node
         bool Bridge = false;
-        ui32 GroupBridgePileId = 1; // proto ID; the fixture registry contains only pile0 (ID 1)
+        ui32 GroupBridgePileId = 1; // proto ID; normally the fixture registry contains only pile0 (ID 1)
+        bool FreeGroupPile = false;
         bool MergeRecords = false;
         TDuration OperationTimeout; // zero means the server default, 20 s
     };
@@ -2982,6 +3103,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
         if (scenario.Bridge) {
             bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "pile0", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+            if (scenario.FreeGroupPile) {
+                bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1),
+                    .IsFreeSlot = true, .State = NKikimrBridge::TClusterState::INACTIVE});
+                bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(2),
+                    .Name = "pile2", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+            }
             bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
             for (ui32 node = 0; node < scenario.StaticNodes; ++node) {
                 bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(node)] = &bridgeInfo->Piles[0];
@@ -3551,21 +3678,25 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     Y_UNIT_TEST(BridgeWhiteboardRemovedPileDoesNotCrashOrBlameCurrentPile) {
-        TStaticWhiteboardScenario scenario;
-        scenario.Bridge = true;
-        scenario.GroupBridgePileId = 2;
-        scenario.Disks = Block42Disks();
-        for (auto& disk : scenario.Disks) {
-            MakeFailed(disk);
-        }
-        scenario.VDiskReplies = {EWhiteboardReply::Received};
-        scenario.PDiskReplies = {EWhiteboardReply::Received};
-        const auto result = RequestHcWithStaticWhiteboard(scenario);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1,
-            TLocationFilter().Pool("static"));
-        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::RED, "Pool failed");
-        for (const auto& issue : result.issue_log()) {
-            UNIT_ASSERT_UNEQUAL(issue.location().storage().pool().group().pile().name(), "pile0");
+        for (bool freeGroupPile : {false, true}) {
+            TStaticWhiteboardScenario scenario;
+            scenario.Bridge = true;
+            scenario.GroupBridgePileId = 2;
+            scenario.FreeGroupPile = freeGroupPile;
+            scenario.Disks = Block42Disks();
+            for (auto& disk : scenario.Disks) {
+                MakeFailed(disk);
+            }
+            scenario.VDiskReplies = {EWhiteboardReply::Received};
+            scenario.PDiskReplies = {EWhiteboardReply::Received};
+            const auto result = RequestHcWithStaticWhiteboard(scenario);
+            CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1,
+                TLocationFilter().Pool("static"));
+            CheckStaticPool(result, Ydb::Monitoring::StatusFlag::RED, "Pool failed");
+            for (const auto& issue : result.issue_log()) {
+                UNIT_ASSERT(!issue.location().storage().pool().group().has_pile());
+                UNIT_ASSERT_UNEQUAL(issue.location().storage().pool().group().pile().name(), "pile0");
+            }
         }
     }
 
@@ -4372,7 +4503,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
     }
 
-    void TestStateStorage(ui32 deadNodes, std::optional<Ydb::Monitoring::StatusFlag::Status> expectedStatus, bool removedPile = false) {
+    void TestStateStorage(ui32 deadNodes, std::optional<Ydb::Monitoring::StatusFlag::Status> expectedStatus,
+            EBridgePileRegistry registry = EBridgePileRegistry::Current, ui64 configGeneration = 0, ui64 stateStorageGeneration = 0) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -4389,6 +4521,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TAutoPtr<IEventHandle> handle;
 
         TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
+        info->ClusterStateGeneration = stateStorageGeneration;
         info->RingGroups.push_back({ERingGroupState::PRIMARY, false, 9, {}, {}});
         info->RingGroups.back().Rings.resize(9);
         info->RingGroups.back().NToSelect = 9;
@@ -4399,20 +4532,29 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
         bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0),
             .Name = "pile0", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        if (registry == EBridgePileRegistry::FreeSecondPile) {
+            bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1),
+                .IsFreeSlot = true, .State = NKikimrBridge::TClusterState::INACTIVE});
+            bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(2),
+                .Name = "pile2", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        }
         bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
         for (ui32 node = 0; node < 9; ++node) {
             bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(node)] = &bridgeInfo->Piles[0];
         }
+        const bool unresolvedPile = registry != EBridgePileRegistry::Current;
         auto configObserver = runtime.AddObserver<TEvNodeWardenStorageConfig>([&](auto&& ev) {
-            if (removedPile) {
+            if (unresolvedPile) {
                 ev->Get()->BridgeInfo = bridgeInfo;
+                auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>(*ev->Get()->Config);
+                config->MutableClusterState()->SetGeneration(configGeneration);
+                ev->Get()->Config = std::move(config);
             }
         });
-        if (removedPile) {
-            // Ring data may still reference the pile removed from the registry.
+        if (unresolvedPile) {
+            // Ring data can outlive its registry entry or arrive before the registry update.
             info->RingGroups.back().BridgePileId = TBridgePileId::FromPileIndex(1);
-            // The removed pile's nodes are no longer in the nameservice and
-            // have no whiteboard replies. Current pile nodes remain available.
+            // Unavailable pile nodes have no whiteboard replies; current pile nodes remain available.
             for (ui32 i = 0; i < 9; ++i) {
                 info->RingGroups.back().Rings[i].Replicas.front() = TActorId(runtime.GetNodeId(0) + 9 + i, "FAKE");
             }
@@ -4464,10 +4606,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         };
 
-        if (removedPile) {
+        if (unresolvedPile) {
             for (const auto& issue : result.issue_log()) {
                 for (const TString& type : {"STATE_STORAGE", "SCHEME_BOARD", "BOARD"}) {
-                    UNIT_ASSERT_C(!issue.type().Contains(type), issue.ShortDebugString());
+                    if (issue.type().Contains(type)) {
+                        UNIT_ASSERT_C(expectedStatus, issue.ShortDebugString());
+                        UNIT_ASSERT(!issue.location().compute().state_storage().has_pile());
+                    }
                 }
             }
         }
@@ -4475,7 +4620,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     Y_UNIT_TEST(TestStateStorageRemovedPile) {
-        TestStateStorage(0, {}, true);
+        for (auto registry : {EBridgePileRegistry::MissingSecondPile, EBridgePileRegistry::FreeSecondPile}) {
+            TestStateStorage(0, {}, registry, 11, 10);
+        }
+    }
+
+    Y_UNIT_TEST(TestStateStorageNewerPileIsCheckedWithoutAttribution) {
+        for (auto registry : {EBridgePileRegistry::MissingSecondPile, EBridgePileRegistry::FreeSecondPile}) {
+            TestStateStorage(0, Ydb::Monitoring::StatusFlag::RED, registry, 10, 11);
+        }
     }
 
     Y_UNIT_TEST(TestStateStorageOk) {

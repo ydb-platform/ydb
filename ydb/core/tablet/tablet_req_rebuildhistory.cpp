@@ -471,7 +471,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         Become(&TThis::StateReadLog);
     }
 
-    void ApplyDiscoveryRange(TEvBlobStorage::TEvRangeResult *msg) {
+    bool ApplyDiscoveryRange(TEvBlobStorage::TEvRangeResult* msg) {
         if (IntrospectionTrace) {
             IntrospectionTrace->Attach(MakeHolder<NTracing::TOnApplyDiscoveryRange>(msg->GroupId, msg->From, msg->To));
         }
@@ -488,8 +488,12 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                     {"tabletId", Info->TabletID},
                     {"isFollower", static_cast<bool>(FollowerCookie)},
                     {"blobId", id},
+                    {"groupId", msg->GroupId},
+                    {"expectedSize", id.BlobSize()},
+                    {"actualSize", it->Buffer.size()},
                     {"marker", "TRRH05"});
-                return ReplyAndDie(NKikimrProto::ERROR, "Log entry parse failed");
+                ReplyAndDie(NKikimrProto::ERROR, "Log entry parse failed");
+                return false;
             }
 
             const bool isZeroStep = (id.Step() == 0);
@@ -499,6 +503,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 ProcessLogEntry(id, logEntry);
             }
         }
+        return true;
     }
 
     void MakeHistory() {
@@ -895,7 +900,10 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
         switch (msg->Status) {
         case NKikimrProto::OK:
-            ApplyDiscoveryRange(msg);
+            if (!ApplyDiscoveryRange(msg)) {
+                // ReplyAndDie() has already sent the result and called PassAway()
+                return;
+            }
             break;
         case NKikimrProto::RACE:
             return ReplyAndDie(NKikimrProto::RACE, msg->ErrorReason);

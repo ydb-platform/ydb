@@ -1040,18 +1040,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             if (onlineIt->first.second == 0) { // leader
                 RetainedCutHistory.erase(onlineIt->first.first);
             }
-<<<<<<< HEAD
-<<<<<<< HEAD
-            if (onlineIt->first.second == 0) { // leader
-                RetainedCutHistory.erase(onlineIt->first.first);
-            }
-            OnlineTablets.erase(onlineIt);
-=======
-=======
             UpdatedTabletMetrics.erase(onlineIt->first);
->>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
             EraseTablet(OnlineTablets, OnlineTabletsByActor, onlineIt);
->>>>>>> 98f71206dce (Avoid linear tablet actor lookups in Local (#58497))
             UpdateEstimate();
             return;
         }

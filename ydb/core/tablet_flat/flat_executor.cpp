@@ -3675,7 +3675,15 @@ void TExecutor::Handle(TEvResourceBroker::TEvTaskOperationError::TPtr& ev) {
 
 void TExecutor::Handle(NOps::TEvAdmissionTimeout::TPtr& ev) {
     if (Scans) {
-        ReleaseScanLocks(Scans->AdmissionFailed(ev->Get()->Serial, "Timed out waiting for scan admission").Snapshot);
+        ReleaseScanLocks(Scans->AdmissionTimedOut(ev->Get()->Serial, ev->Get()->Generation).Snapshot);
+    }
+}
+
+void TExecutor::Handle(NOps::TEvResumeScan::TPtr& ev) {
+    if (Scans) {
+        if (const auto acquired = Scans->Resume(ev->Get()->Serial)) {
+            StartScan(acquired.Serial, acquired.Table);
+        }
     }
 }
 
@@ -3758,6 +3766,9 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
         return;
     }
     try {
+        if (!Scans->AwaitReadiness(serial)) {
+            return;
+        }
         if (!Scans->Initialize(serial)) {
             ReleaseScanLocks(Scans->AdmissionFailed(serial, "Deferred scan factory returned no scan").Snapshot);
             return;
@@ -4732,6 +4743,7 @@ STFUNC(TExecutor::StateBoot) {
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
         hFunc(TEvResourceBroker::TEvTaskOperationError, Handle);
         hFunc(NOps::TEvAdmissionTimeout, Handle);
+        hFunc(NOps::TEvResumeScan, Handle);
     default:
         return TranscriptBootOpResult(BootLogic->Receive(*ev), this->ActorContext());
     }
@@ -4766,6 +4778,7 @@ STFUNC(TExecutor::StateWork) {
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
         hFunc(TEvResourceBroker::TEvTaskOperationError, Handle);
         hFunc(NOps::TEvAdmissionTimeout, Handle);
+        hFunc(NOps::TEvResumeScan, Handle);
         HFunc(NOps::TEvScanStat, Handle);
         hFunc(NOps::TEvResult, Handle);
         HFunc(NBlockIO::TEvStat, Handle);
@@ -4799,6 +4812,7 @@ STFUNC(TExecutor::StateFollower) {
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
         hFunc(TEvResourceBroker::TEvTaskOperationError, Handle);
         hFunc(NOps::TEvAdmissionTimeout, Handle);
+        hFunc(NOps::TEvResumeScan, Handle);
         HFunc(NOps::TEvScanStat, Handle);
         hFunc(NOps::TEvResult, Handle);
         HFunc(NBlockIO::TEvStat, Handle);
@@ -4820,6 +4834,7 @@ STFUNC(TExecutor::StateFollowerBoot) {
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
         hFunc(TEvResourceBroker::TEvTaskOperationError, Handle);
         hFunc(NOps::TEvAdmissionTimeout, Handle);
+        hFunc(NOps::TEvResumeScan, Handle);
     default:
         return TranscriptFollowerBootOpResult(BootLogic->Receive(*ev), this->ActorContext());
     }

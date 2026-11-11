@@ -2837,8 +2837,8 @@ private:
                             Y_ENSURE(it != buildInfo.Cluster2Shards.end());
                             Y_ENSURE(it->second.Shards.size() == 1);
                             const auto& idx = it->second.Shards[0];
-                            buildInfo.InProgressShards.emplace(idx);
-                            SendVectorAutodetectRequest(idx, buildInfo);
+                            buildInfo.ToUploadShards.emplace_back(idx);
+                            SendToShards(buildInfo, [&](TShardIdx shard) { SendVectorAutodetectRequest(shard, buildInfo); }, 1);
                             return false;
                         } else if (!AutoSelectVectorSettings(txc, buildInfo)) {
                             return false;
@@ -4264,7 +4264,12 @@ public:
         switch (shardStatus.Status) {
         case NKikimrIndexBuilder::EBuildStatus::INVALID:
             Y_ENSURE(false, "Unreachable");
-        case NKikimrIndexBuilder::EBuildStatus::ACCEPTED: // TODO: do we need ACCEPTED?
+        case NKikimrIndexBuilder::EBuildStatus::ACCEPTED: {
+            // A queued scan heartbeat carries no scan progress. Keep its
+            // request credit and pipe open while preserving broker position.
+            Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
+            return true;
+        }
         case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS: {
             HandleProgress(db, shardStatus, buildInfo);
             Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);

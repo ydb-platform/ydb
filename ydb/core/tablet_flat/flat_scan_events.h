@@ -19,11 +19,18 @@ namespace NOps {
         ScanStat = Base_ + 1,
         Continue = Base_ + 2,
         AdmissionTimeout = Base_ + 3,
+        ResumeScan = Base_ + 4,
     };
 
     struct TEvAdmissionTimeout : public TEventLocal<TEvAdmissionTimeout, ui32(EEv::AdmissionTimeout)> {
         const ui64 Serial;
-        explicit TEvAdmissionTimeout(ui64 serial) : Serial(serial) {}
+        const ui64 Generation;
+        TEvAdmissionTimeout(ui64 serial, ui64 generation) : Serial(serial), Generation(generation) {}
+    };
+
+    struct TEvResumeScan : public TEventLocal<TEvResumeScan, ui32(EEv::ResumeScan)> {
+        const ui64 Serial;
+        explicit TEvResumeScan(ui64 serial) : Serial(serial) {}
     };
 
     struct TEvResult: public TEventLocal<TEvResult, ui32(EEv::Result)> {

@@ -4,6 +4,8 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/scan_admission.h>
 #include <ydb/core/tablet_flat/flat_exec_broker.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -282,7 +284,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         fixture.Reply(NKikimrIndexBuilder::DONE);
     }
 
-    Y_UNIT_TEST(BrokerCapacityHintBoundsRetriesForImpossibleScan) {
+    Y_UNIT_TEST(BrokerCapacityHintRemainsRetryableUntilBudgetRecovers) {
         TAdmissionFixture fixture;
         using TBroker = NResourceBroker::TEvResourceBroker;
         auto configure = [&](ui64 memory) {
@@ -301,8 +303,8 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         UNIT_ASSERT_GT(rejected->Get()->Record.GetRetryAfterMs(), 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
         fixture.Send(fixture.Shards[0]);
-        const auto impossible = fixture.Reply(NKikimrIndexBuilder::BAD_REQUEST);
-        UNIT_ASSERT(!impossible->Get()->Record.HasRetryAfterMs());
+        const auto constrained = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(constrained->Get()->Record.GetRetryAfterMs(), 0);
         fixture.SetMemoryBudget(512_MB, 448_MB);
         fixture.Send(fixture.Shards[0]);
         fixture.Reply(NKikimrIndexBuilder::DONE);
@@ -347,6 +349,74 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         quota.ConfirmBrokerLimit(448_MB);
         fixture.Send(fixture.Shards[0]);
         fixture.Reply(NKikimrIndexBuilder::DONE);
+    }
+
+    Y_UNIT_TEST_TWIN(ConfirmedDynamicActiveLimitRetriesUntilRecovery, Zero) {
+        TAdmissionFixture fixture;
+        fixture.InsertRow();
+        auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
+        fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexScanMemoryLimit(32_MB);
+        const ui64 limit = Zero ? 0 : 1;
+        fixture.SetMemoryBudget(256_MB, limit);
+        quota.ConfirmBrokerLimit(limit);
+        UNIT_ASSERT(!quota.IsBrokerConfigurationPending());
+        fixture.Send(fixture.Shards[0]);
+        const auto constrained = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(constrained->Get()->Record.GetRetryAfterMs(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+        fixture.SetMemoryBudget(256_MB, 96_MB);
+        quota.ConfirmBrokerLimit(96_MB);
+        fixture.Send(fixture.Shards[0]);
+        const auto done = fixture.Reply(NKikimrIndexBuilder::DONE);
+        UNIT_ASSERT_VALUES_EQUAL(done->Get()->Record.GetMeteringStats().GetReadRows(), 1);
+    }
+
+    Y_UNIT_TEST(DynamicPendingByteLimitRetriesUntilRecovery) {
+        TAdmissionFixture fixture;
+        auto request = fixture.Request(fixture.Shards[0]);
+        auto& rec = request->Record;
+        rec.MutableSettings()->set_vector_dimension(2048);
+        rec.MutableSettings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        rec.ClearClusters();
+        TString centroid(2048 * sizeof(float) + 1, '\0');
+        centroid.back() = 1;
+        for (ui32 i = 0; i < 640; ++i) {
+            rec.AddClusters(centroid);
+        }
+        const ui64 pendingBytes = rec.SpaceUsedLong() + rec.ByteSizeLong() + 4_KB;
+        UNIT_ASSERT_GT(pendingBytes, 8_MB);
+        const ui64 total = 4 * (pendingBytes - 1024);
+        const ui64 active = total - total / 4;
+        fixture.SetMemoryBudget(total, active);
+        fixture.Runtime.GetAppData().BuildIndexScanAdmission->ConfirmBrokerLimit(active);
+        auto retry = fixture.Request(fixture.Shards[0]);
+        retry->Record.CopyFrom(rec);
+        retry->Record.SetSeqNoRound(2);
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, request.Release(), 0, GetPipeConfigWithRetries());
+        const auto constrained = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(constrained->Get()->Record.GetRetryAfterMs(), 0);
+        UNIT_ASSERT_STRING_CONTAINS(constrained->Get()->Record.ShortDebugString(), "current node pending byte budget");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+        fixture.SetMemoryBudget(128_MB, 96_MB);
+        fixture.Runtime.SendToPipe(fixture.Shards[0], fixture.Sender, retry.Release(), 0, GetPipeConfigWithRetries());
+        fixture.Reply(NKikimrIndexBuilder::DONE);
+    }
+
+    Y_UNIT_TEST(WaitingScanReadVersionPinExpiresWithItsOwner) {
+        NDataShard::TScanManager manager;
+        const NDataShard::TScanRecord::TSeqNo seqNo{1, 1};
+        manager.Set(1, seqNo);
+        auto version = std::make_shared<TRowVersion>(TRowVersion::Max());
+        manager.HoldReadVersion(1, seqNo, version);
+        UNIT_ASSERT(manager.GetMinReadVersion().IsMax());
+        *version = TRowVersion(100, 1);
+        UNIT_ASSERT(manager.GetMinReadVersion() == *version);
+        version.reset();
+        UNIT_ASSERT(manager.GetMinReadVersion().IsMax());
+        version = std::make_shared<TRowVersion>(100, 2);
+        manager.HoldReadVersion(1, seqNo, version);
+        manager.Drop(1);
+        UNIT_ASSERT(manager.GetMinReadVersion().IsMax());
     }
 
     Y_UNIT_TEST(LateBrokerRejectionCannotUndoConfirmedCapacity) {
@@ -583,7 +653,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
     }
 
-    Y_UNIT_TEST(TimeoutAndLateGrantReleasePendingReservation) {
+    Y_UNIT_TEST(QueuedAcceptancePreservesPendingReservationUntilGrant) {
         TAdmissionFixture fixture;
         fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexQueueTimeoutMs(1000);
         using TGrant = NResourceBroker::TEvResourceBroker::TEvResourceAllocated;
@@ -593,6 +663,13 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         });
         ui32 uploads = 0;
         auto observer = fixture.Runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&](auto&) { ++uploads; });
+        ui32 heartbeats = 0;
+        auto responses = fixture.Runtime.AddObserver<TEvDataShard::TEvReshuffleKMeansResponse>([&](auto& event) {
+            if (event->Get()->Record.GetStatus() == NKikimrIndexBuilder::ACCEPTED) {
+                ++heartbeats;
+                event.Reset();
+            }
+        });
         fixture.Send(fixture.Shards[0]);
         fixture.Runtime.WaitFor("scan grant held", [&] { return grants.size() == 1; });
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 1);
@@ -604,17 +681,203 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
                 ++finishes;
             }
         });
-        fixture.Runtime.SimulateSleep(TDuration::Seconds(2));
-        auto reply = fixture.Reply(NKikimrIndexBuilder::ABORTED);
-        UNIT_ASSERT_GT(reply->Get()->Record.GetRetryAfterMs(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Bytes, 0);
+        fixture.Runtime.SimulateSleep(TDuration::Seconds(3));
+        UNIT_ASSERT_VALUES_EQUAL(heartbeats, 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 1);
+        UNIT_ASSERT_GT(fixture.Usage().Bytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(finishes, 0);
         grants.Stop().Unblock();
-        fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
+        fixture.Reply(NKikimrIndexBuilder::DONE);
+        fixture.Runtime.WaitFor("queued task finishes after its original grant", [&] { return finishes == 1; });
         UNIT_ASSERT_VALUES_EQUAL(uploads, 0);
         UNIT_ASSERT_VALUES_EQUAL(finishes, 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+    }
+
+    Y_UNIT_TEST(QueuedScansKeepBrokerOrderAcrossTimeoutIntervals) {
+        TAdmissionFixture fixture;
+        fixture.SetMemoryBudget(256_MB, 96_MB);
+        fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexQueueTimeoutMs(1000);
+        using TBroker = NResourceBroker::TEvResourceBroker;
+        fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender,
+            new TBroker::TEvSubmitTask(900, "occupy scan memory", {{0, 96_MB}}, "build_index", 0, nullptr)));
+        const auto blocker = fixture.Runtime.GrabEdgeEventRethrow<TBroker::TEvResourceAllocated>(fixture.Sender);
+        UNIT_ASSERT_VALUES_EQUAL(blocker->Get()->TaskId, 900);
+        TVector<TActorId> submissions;
+        TVector<TActorId> grants;
+        auto submitted = fixture.Runtime.AddObserver<TBroker::TEvSubmitTask>([&](auto& event) {
+            if (event->Get()->Task.Type == "build_index") {
+                submissions.push_back(event->Sender);
+            }
+        });
+        auto allocated = fixture.Runtime.AddObserver<TBroker::TEvResourceAllocated>([&](auto& event) {
+            const auto* resource = dynamic_cast<NTabletFlatExecutor::TResource*>(event->Get()->Cookie.Get());
+            if (resource && resource->Source == NTabletFlatExecutor::TResource::ESource::Scan) {
+                grants.push_back(event->Recipient);
+            }
+        });
+        ui32 heartbeats = 0;
+        auto responses = fixture.Runtime.AddObserver<TEvDataShard::TEvReshuffleKMeansResponse>([&](auto& event) {
+            if (event->Get()->Record.GetStatus() == NKikimrIndexBuilder::ACCEPTED) {
+                ++heartbeats;
+                event.Reset();
+            }
+        });
+        fixture.Send(fixture.Shards[0]);
+        fixture.Runtime.WaitFor("first scan queued", [&] { return submissions.size() == 1; });
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        fixture.Send(fixture.Shards[1]);
+        fixture.Runtime.WaitFor("second scan queued", [&] { return submissions.size() == 2; });
+        fixture.Runtime.SimulateSleep(TDuration::Seconds(3));
+        UNIT_ASSERT_VALUES_EQUAL(heartbeats, 2);
+        UNIT_ASSERT_VALUES_EQUAL(submissions.size(), 2);
+        UNIT_ASSERT(grants.empty());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 2);
+        fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender,
+            new TBroker::TEvFinishTask(900, true)));
+        fixture.Reply(NKikimrIndexBuilder::DONE);
+        fixture.Reply(NKikimrIndexBuilder::DONE);
+        UNIT_ASSERT_VALUES_EQUAL(grants.size(), 2);
+        UNIT_ASSERT(grants[0] == submissions[0]);
+        UNIT_ASSERT(grants[1] == submissions[1]);
+        UNIT_ASSERT_VALUES_EQUAL(submissions.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+    }
+
+    Y_UNIT_TEST(QueuedScanRefitsWhenCapacityDropsAfterHeartbeat) {
+        TAdmissionFixture fixture;
+        fixture.SetMemoryBudget(256_MB, 128_MB);
+        fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexQueueTimeoutMs(1000);
+        using TBroker = NResourceBroker::TEvResourceBroker;
+        TBlockEvents<TBroker::TEvResourceAllocated> grants(fixture.Runtime, [](const auto& event) {
+            const auto* resource = dynamic_cast<NTabletFlatExecutor::TResource*>(event->Get()->Cookie.Get());
+            return resource && resource->Source == NTabletFlatExecutor::TResource::ESource::Scan;
+        });
+        ui32 heartbeats = 0;
+        auto responses = fixture.Runtime.AddObserver<TEvDataShard::TEvReshuffleKMeansResponse>([&](auto& event) {
+            if (event->Get()->Record.GetStatus() == NKikimrIndexBuilder::ACCEPTED) {
+                ++heartbeats;
+                event.Reset();
+            }
+        });
+        fixture.Send(fixture.Shards[0]);
+        fixture.Runtime.WaitFor("scan grant held", [&] { return grants.size() == 1; });
+        fixture.Runtime.WaitFor("first heartbeat", [&] { return heartbeats > 0; });
+        fixture.SetMemoryBudget(256_MB, 32_MB);
+        const auto retry = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(retry->Get()->Record.GetRetryAfterMs(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+        grants.Stop().Unblock();
         fixture.Send(fixture.Shards[0]);
         fixture.Reply(NKikimrIndexBuilder::DONE);
+    }
+
+    Y_UNIT_TEST(BudgetDropBeforeFactoryRetriesWithoutUploading) {
+        TAdmissionFixture fixture;
+        fixture.InsertRow();
+        fixture.SetMemoryBudget(256_MB, 128_MB);
+        using TBroker = NResourceBroker::TEvResourceBroker;
+        TBlockEvents<TBroker::TEvResourceAllocated> grants(fixture.Runtime, [](const auto& event) {
+            const auto* resource = dynamic_cast<NTabletFlatExecutor::TResource*>(event->Get()->Cookie.Get());
+            return resource && resource->Source == NTabletFlatExecutor::TResource::ESource::Scan;
+        });
+        ui32 uploads = 0;
+        auto requests = fixture.Runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&](auto&) { ++uploads; });
+        fixture.Send(fixture.Shards[0]);
+        fixture.Runtime.WaitFor("grant precedes budget drop", [&] { return grants.size() == 1; });
+        fixture.SetMemoryBudget(256_MB, 32_MB);
+        grants.Stop().Unblock();
+        const auto retry = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(retry->Get()->Record.GetRetryAfterMs(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(uploads, 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+        fixture.Send(fixture.Shards[0]);
+        fixture.Reply(NKikimrIndexBuilder::DONE);
+        UNIT_ASSERT_GT(uploads, 0);
+    }
+
+    Y_UNIT_TEST(AdmittedHeadScanWaitsForItsCutWithoutChasingNewVolatileWrites) {
+        TAdmissionFixture fixture;
+        fixture.InsertRow("old");
+        CreateShardedTable(fixture.Server, fixture.Sender, "/Root", "table-side", 1);
+        fixture.Runtime.GetAppData().FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+        auto* shard = dynamic_cast<NDataShard::TDataShard*>(
+            fixture.Runtime.FindActor(ResolveTablet(fixture.Runtime, fixture.Shards[0])));
+        UNIT_ASSERT(shard);
+        using TBroker = NResourceBroker::TEvResourceBroker;
+        TBlockEvents<TBroker::TEvResourceAllocated> grants(fixture.Runtime, [](const auto& event) {
+            const auto* resource = dynamic_cast<NTabletFlatExecutor::TResource*>(event->Get()->Cookie.Get());
+            return resource && resource->Source == NTabletFlatExecutor::TResource::ESource::Scan;
+        });
+        ui32 replies = 0;
+        bool resourcesReturned = false;
+        ui32 readmissions = 0;
+        ui64 readmittedTaskId = 0;
+        auto resources = fixture.Runtime.AddObserver<TBroker::TEvUpdateTask>([&](auto& event) {
+            if (event->Get()->Type == "build_index" && event->Get()->Resubmit) {
+                ++readmissions;
+                readmittedTaskId = event->Get()->TaskId;
+            }
+            if (event->Get()->Type == "build_index" &&
+                !event->Get()->RequiredResources[NKikimrResourceBroker::CPU] &&
+                !event->Get()->RequiredResources[NKikimrResourceBroker::MEMORY]) {
+                resourcesReturned = true;
+            }
+        });
+        auto responses = fixture.Runtime.AddObserver<TEvDataShard::TEvReshuffleKMeansResponse>([&](auto&) { ++replies; });
+        fixture.Send(fixture.Shards[0]);
+        fixture.Runtime.WaitFor("scan queued before concurrent writes", [&] { return grants.size() == 1; });
+
+        ui64 firstTxId = 0;
+        TBlockEvents<TEvTxProcessing::TEvReadSet> firstReadSets(fixture.Runtime, [&](const auto& event) {
+            return !firstTxId || event->Get()->Record.GetTxId() == firstTxId;
+        });
+        const auto writer = fixture.Runtime.AllocateEdgeActor();
+        SendSQL(fixture.Server, writer, R"(
+            UPSERT INTO `/Root/table-main` (key, data) VALUES (1, 'committed');
+            UPSERT INTO `/Root/table-side` (key, value) VALUES (1, 1);
+        )");
+        auto& volatileTxs = shard->GetVolatileTxManager();
+        fixture.Runtime.WaitFor("first volatile write waits on readsets", [&] {
+            return volatileTxs.GetTxInFlight() > 0 && !firstReadSets.empty();
+        });
+        firstTxId = (*volatileTxs.GetVolatileTxByVersion().begin())->TxId;
+        // Advance the replied write edge beyond the unresolved transaction so
+        // that the newly admitted HEAD is guaranteed to include its version.
+        ExecSQL(fixture.Server, fixture.Sender, "DELETE FROM `/Root/table-main` WHERE key = 3;");
+        const ui64 originalTaskId = grants.front()->Get()->TaskId;
+        grants.Stop().Unblock();
+        fixture.Runtime.WaitFor("admitted scan pins its volatile wait version", [&] {
+            return resourcesReturned && !shard->GetScanManager().GetMinReadVersion().IsMax();
+        });
+        const auto cut = shard->GetScanManager().GetMinReadVersion();
+        UNIT_ASSERT_VALUES_EQUAL(replies, 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 1);
+
+        TBlockEvents<TEvTxProcessing::TEvReadSet> newerReadSets(fixture.Runtime, [&](const auto& event) {
+            return event->Get()->Record.GetTxId() != firstTxId;
+        });
+        fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
+        SendSQL(fixture.Server, fixture.Runtime.AllocateEdgeActor(), R"(
+            UPSERT INTO `/Root/table-main` (key, data) VALUES (2, 'newer');
+            UPSERT INTO `/Root/table-side` (key, value) VALUES (2, 2);
+        )");
+        fixture.Runtime.WaitFor("newer volatile write remains unresolved", [&] {
+            return volatileTxs.GetTxInFlight() >= 2 && !newerReadSets.empty();
+        });
+        UNIT_ASSERT((*volatileTxs.GetVolatileTxByVersion().rbegin())->Version > cut);
+        firstReadSets.Stop().Unblock();
+        const auto done = fixture.Reply(NKikimrIndexBuilder::DONE);
+        UNIT_ASSERT_VALUES_EQUAL(done->Get()->Record.GetMeteringStats().GetReadRows(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(readmissions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(readmittedTaskId, originalTaskId);
+        UNIT_ASSERT_VALUES_EQUAL(volatileTxs.GetTxInFlight(), 1);
+        UNIT_ASSERT(!newerReadSets.empty());
+        UNIT_ASSERT(shard->GetScanManager().GetMinReadVersion().IsMax());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+        newerReadSets.Stop().Unblock();
+        fixture.Runtime.WaitFor("remaining volatile write commits", [&] { return volatileTxs.GetTxInFlight() == 0; });
+        UNIT_ASSERT_STRING_CONTAINS(ReadShardedTable(fixture.Server, "/Root/table-posting"), "data = committed");
     }
 
     Y_UNIT_TEST(SnapshotRemainsPinnedAfterDiscardWhileQueued) {

@@ -8,6 +8,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
+#include <memory>
 
 namespace NKikimr::NDataShard {
 
@@ -27,6 +28,7 @@ struct TScanRecord {
 
     TSeqNo SeqNo;
     TScanIds ScanIds;
+    std::weak_ptr<TRowVersion> ReadVersion;
 };
 
 class TScanManager {
@@ -52,6 +54,19 @@ public:
         Y_ENSURE(Get(id) == &Record);
         Id = 0;
         Record = {};
+    }
+
+    void HoldReadVersion(ui64 id, TScanRecord::TSeqNo seqNo, const std::shared_ptr<TRowVersion>& version) {
+        const auto* record = Get(id);
+        Y_ENSURE(record && record->SeqNo == seqNo);
+        Record.ReadVersion = version;
+    }
+
+    TRowVersion GetMinReadVersion() const {
+        if (const auto version = Record.ReadVersion.lock()) {
+            return *version;
+        }
+        return TRowVersion::Max();
     }
 
 private:

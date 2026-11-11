@@ -1353,6 +1353,68 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("overrunBytes").value_or(""), ToString(2_KB));
     }
 
+    class TAdmissionReadyScan : public NTable::IScan {
+    public:
+        explicit TAdmissionReadyScan(bool& finished)
+            : Finished(finished)
+        {}
+        void Describe(IOutputStream& out) const override { out << "deferred readiness scan"; }
+        TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) override { return {EScan::Final, {}}; }
+        EScan Seek(TLead&, ui64) override { return EScan::Final; }
+        EScan Feed(TArrayRef<const TCell>, const TRow&) override { return EScan::Final; }
+        TAutoPtr<IDestructable> Finish(EStatus status) override {
+            Finished = status == EStatus::Done;
+            delete this;
+            return nullptr;
+        }
+    private:
+        bool& Finished;
+    };
+
+    Y_UNIT_TEST_TWIN(DeferredReadinessResumesOnlyLiveScans, Cancel) {
+        TMyEnvScans env;
+        bool ready = false;
+        bool finished = false;
+        ui32 constructed = 0;
+        ui64 serial = 0;
+        std::unique_ptr<IEventHandle> resume;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.OnAdmissionReady = [&](TScanOptions&, std::unique_ptr<IEventHandle> event) {
+                if (!ready) {
+                    resume = std::move(event);
+                    return false;
+                }
+                return true;
+            };
+            options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                ++constructed;
+                return new TAdmissionReadyScan(finished);
+            };
+            serial = executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+        }));
+        env->WaitFor("scan awaits readiness without construction", [&] { return bool(resume); });
+        UNIT_ASSERT_VALUES_EQUAL(constructed, 0);
+        if (Cancel) {
+            env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto& ctx) {
+                executor->CancelScan(TRowsModel::TableId, serial);
+                ctx.Send(env.Edge, new TEvents::TEvWakeup);
+            }));
+            env.WaitForWakeUp();
+        }
+        ready = true;
+        env->Send(resume.release());
+        if (Cancel) {
+            env->SimulateSleep(TDuration::MilliSeconds(100));
+            UNIT_ASSERT_VALUES_EQUAL(constructed, 0);
+            UNIT_ASSERT(!finished);
+        } else {
+            env->WaitFor("ready scan completes", [&] { return finished; });
+            UNIT_ASSERT_VALUES_EQUAL(constructed, 1);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(ScanStartFailureReleasesPreparedSnapshot, Deferred) {
         TMyEnvScans env;
         env.SendSync(env.Rows.MakeRows(1));

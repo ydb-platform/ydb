@@ -451,8 +451,13 @@ struct TScanOptions {
     // The factory runs on the owning tablet's mailbox, before snapshot capture.
     std::shared_ptr<void> PendingReservation;
     std::function<TAutoPtr<NTable::IScan>(TScanOptions&)> Factory;
+    // A false result defers construction and returns the granted resources.
+    // Delivering the supplied event rechecks readiness and readmits the same task.
+    std::function<bool(TScanOptions&, std::unique_ptr<NActors::IEventHandle>)> OnAdmissionReady;
     std::function<void(const TString&, bool)> OnAdmissionFailure;
     std::function<void(ui64)> OnMemoryLimitExceeded;
+    // True keeps a queued task in place; false requests cancellation and retry.
+    std::function<bool()> OnAdmissionTimeout;
     TDuration QueueTimeout;
 
     EReadPrio ReadPrio = EReadPrio::Default;

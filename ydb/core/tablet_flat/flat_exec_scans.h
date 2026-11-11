@@ -131,6 +131,28 @@ namespace NTabletFlatExecutor {
                 }
             }
 
+            void Acquired() {
+                with_lock(State->Lock) {
+                    State->ChargedMemory = State->Memory;
+                    State->ChargedCpu = 1;
+                }
+            }
+
+            void Suspend() {
+                with_lock(State->Lock) {
+                    State->System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), State->Client,
+                        new TEvResourceBroker::TEvUpdateTask(State->TaskId, {{0, 0}}, State->Type, State->Priority)));
+                    State->ChargedMemory = 0;
+                    State->ChargedCpu = 0;
+                }
+            }
+
+            void Readmit() {
+                State->System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), State->Client,
+                    new TEvResourceBroker::TEvUpdateTask(State->TaskId, {{1, State->Memory}}, State->Type,
+                        State->Priority, true)));
+            }
+
             std::shared_ptr<void> Retain(ui64 bytes) {
                 auto payload = std::make_shared<TPayload>(State, bytes);
                 with_lock(State->Lock) {
@@ -187,6 +209,8 @@ namespace NTabletFlatExecutor {
             TScanOptions Options;
             THolder<TScanSnapshot> Snapshot;
             EState State = EState::None;
+            bool NeedsReadmission = false;
+            ui64 TimeoutGeneration = 0;
             TActorId Actor;     /* Valid just after EState::Scan*/
             TAutoPtr<IScan> Scan;   /* Valid before EState::Scan    */
             ui64 Cookie = Max<ui64>();
@@ -305,10 +329,7 @@ namespace NTabletFlatExecutor {
                 }
                 submit->SetOwner(Tablet, FollowerId);
                 ToBroker(submit.Release());
-                if (options.Factory && options.QueueTimeout) {
-                    TActivationContext::ActorContextFor(BrokerClient).Schedule(options.QueueTimeout,
-                        new NOps::TEvAdmissionTimeout(one.Serial));
-                }
+                ScheduleAdmissionTimeout(one);
             }
 
             return one.Serial;
@@ -329,9 +350,48 @@ namespace NTabletFlatExecutor {
             } else {
                 // A call to Start is expected now
                 one->State = EState::Ready;
+                ++one->TimeoutGeneration;
+                if (one->Lease) {
+                    one->Lease->Acquired();
+                }
 
                 return { one->Serial, one->Table };
             }
+        }
+
+        bool AwaitReadiness(ui64 serial) {
+            auto& one = *Lookup(serial, true);
+            if (!one.Options.OnAdmissionReady) {
+                return true;
+            }
+            auto resume = std::make_unique<IEventHandle>(BrokerClient, TActorId(), new NOps::TEvResumeScan(serial));
+            if (!one.Options.OnAdmissionReady(one.Options, std::move(resume))) {
+                if (!one.NeedsReadmission) {
+                    // Only the bounded descriptor is needed while waiting.
+                    // Transactions being waited on may need broker resources.
+                    one.Lease->Suspend();
+                    one.NeedsReadmission = true;
+                }
+                return false;
+            }
+            if (one.NeedsReadmission) {
+                // Updating the same task preserves its original submit time,
+                // unlike cancelling it and submitting a new request.
+                one.Lease->Readmit();
+                one.NeedsReadmission = false;
+                one.State = EState::Task;
+                ScheduleAdmissionTimeout(one);
+                return false;
+            }
+            return true;
+        }
+
+        TAcquired Resume(ui64 serial) {
+            const auto* one = Lookup(serial, false);
+            if (!one || one->State != EState::Ready || !one->Options.Factory) {
+                return {};
+            }
+            return {one->Serial, one->Table};
         }
 
         bool Initialize(ui64 serial) {
@@ -372,6 +432,20 @@ namespace NTabletFlatExecutor {
             return cancelled;
         }
 
+        TCancelled AdmissionTimedOut(ui64 serial, ui64 generation) {
+            auto* one = Lookup(serial, false);
+            if (!one || one->State != EState::Task || one->TimeoutGeneration != generation) {
+                return {};
+            }
+            if (one->Options.OnAdmissionTimeout && one->Options.OnAdmissionTimeout()) {
+                // A heartbeat must not cancel and reinsert a queued task: that
+                // would lose its FIFO position under a sustained backlog.
+                ScheduleAdmissionTimeout(*one);
+                return {};
+            }
+            return AdmissionFailed(serial, "Timed out waiting for scan admission");
+        }
+
         TCancelled Rejected(const TEvResourceBroker::TEvTaskOperationError& error) {
             if (error.Status.Code == TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED && error.Cookie) {
                 const auto* resource = CheckedCast<TResource*>(error.Cookie.Get());
@@ -392,7 +466,9 @@ namespace NTabletFlatExecutor {
         {
             auto &one = *Lookup(serial, true);
             Start(one, { });
+            one.Options.OnAdmissionReady = {};
             one.Options.OnAdmissionFailure = {};
+            one.Options.OnAdmissionTimeout = {};
         }
 
         ui64 StartSystem(ui32 table, TAutoPtr<IScan> scan, NOps::TConf conf, THolder<TScanSnapshot> snapshot)
@@ -632,6 +708,14 @@ namespace NTabletFlatExecutor {
             out << NFmt::Do(one, false) << "::" << Tablet;
 
             return out.Str();
+        }
+
+        void ScheduleAdmissionTimeout(TOne& one) {
+            ++one.TimeoutGeneration;
+            if (one.Options.Factory && one.Options.QueueTimeout) {
+                TActivationContext::ActorContextFor(BrokerClient).Schedule(one.Options.QueueTimeout,
+                    new NOps::TEvAdmissionTimeout(one.Serial, one.TimeoutGeneration));
+            }
         }
 
         void ToBroker(TAutoPtr<IEventBase> event)

@@ -831,9 +831,11 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
     if (auto it = Self->Pipeline.GetPlan().begin(); it != Self->Pipeline.GetPlan().end())
         leastPlanned = TRowVersion(it->Step, it->TxId);
 
-    // Running pipeline operations still limit cleanup. Detached iterators are
-    // protected as individual points by CleanupRowVersions.
-    const TRowVersion leastAcquired = GetLeastAcquiredPipelineSnapshot();
+    // Running pipeline operations and admitted scans waiting for volatile writes
+    // still limit cleanup. Detached iterators are protected as individual points
+    // by CleanupRowVersions.
+    const TRowVersion leastAcquired = Min(GetLeastAcquiredPipelineSnapshot(),
+        Self->GetScanManager().GetMinReadVersion());
 
     if (CompleteEdge.Step < ImmediateWriteEdgeReplied.Step) {
         PromoteCompleteEdge(ImmediateWriteEdgeReplied.Step, txc);

@@ -8,6 +8,7 @@
 #include <ydb/core/base/scan_admission.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/library/actors/core/log.h>
+#include <utility>
 
 namespace NKikimr::NDataShard {
 using namespace NTableIndex;
@@ -794,6 +795,12 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
         reject("Index scan request exceeds BuildIndexRequestBytesLimit", false);
         return;
     }
+    const ui64 requestBytes = CheckedScanMemoryAdd(requestMemory, serializedBytes);
+    const ui64 pendingBytes = CheckedScanMemoryAdd(requestBytes, 4_KB);
+    if (pendingBytes > config.GetBuildIndexPendingBytesLimit()) {
+        reject("Index scan request exceeds BuildIndexPendingBytesLimit", false);
+        return;
+    }
     auto& admission = *AppData()->BuildIndexScanAdmission;
     const ui64 scanLimit = Min(config.GetBuildIndexScanMemoryLimit(),
         admission.GetActiveByteLimit(config.GetBuildIndexPendingBytesLimit()));
@@ -802,16 +809,14 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
     // RequiredRowBytes floor discovered by the existing row-reservation retry.
     const ui64 memory = FitBuildIndexScanMemory(request, table, scanLimit, rowLimit, requestMemory);
     if (!memory) {
-        const bool retry = admission.IsBrokerConfigurationPending() &&
-            EstimateBuildIndexScanMemory(request, table, rowLimit, requestMemory) <= config.GetBuildIndexScanMemoryLimit();
+        const bool retry = FitBuildIndexScanMemory(request, table,
+            config.GetBuildIndexScanMemoryLimit(), rowLimit, requestMemory) != 0;
         reject("Minimum index scan reservation exceeds the current memory budget", retry);
         return;
     }
-    const ui64 requestBytes = CheckedScanMemoryAdd(requestMemory, serializedBytes);
-    const ui64 pendingBytes = CheckedScanMemoryAdd(requestBytes, 4_KB);
     const ui64 pendingLimit = admission.GetByteLimit(config.GetBuildIndexPendingBytesLimit());
     if (pendingBytes > pendingLimit) {
-        reject("Index scan request exceeds the current node pending byte budget", false);
+        reject("Index scan request exceeds the current node pending byte budget", true);
         return;
     }
     if (!config.GetBuildIndexPendingScansLimit()) {
@@ -844,6 +849,7 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
         typename TRequest::TPtr Event;
         THolder<TResponse> Response;
         std::shared_ptr<void> SnapshotReference;
+        bool AcceptedSent = false;
         bool Replied = false;
     };
     auto pending = std::make_shared<TPending>();
@@ -874,12 +880,63 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
         generation = admission.GetBrokerLimitGeneration()](ui64 limit) {
         quota->RestrictBrokerLimit(limit, generation);
     };
-    options.Factory = [self, pending, pathId, tableId, schemaVersion, rowLimit, makeScan, fail](TScanOptions& opts) mutable -> TAutoPtr<NTable::IScan> {
+    options.OnAdmissionTimeout = [self, pending, memory, pendingBytes, quota = AppData()->BuildIndexScanAdmission]() {
+        const auto& config = AppData()->DataShardConfig;
+        if (memory > Min(config.GetBuildIndexScanMemoryLimit(),
+                quota->GetActiveByteLimit(config.GetBuildIndexPendingBytesLimit())) ||
+            pendingBytes > quota->GetByteLimit(config.GetBuildIndexPendingBytesLimit())) {
+            // A smaller budget needs a new fitting pass, rather than waiting
+            // forever with an oversized reservation left in the broker queue.
+            return false;
+        }
+        if (std::exchange(pending->AcceptedSent, true)) {
+            // Recheck changing budgets without accumulating heartbeat messages
+            // in a pipe to an unavailable requester.
+            return true;
+        }
+        auto accepted = MakeHolder<TResponse>();
+        auto& record = accepted->Record;
+        const auto& request = pending->Event->Get()->Record;
+        record.SetId(request.GetId());
+        record.SetTabletId(self->TabletID());
+        record.SetRequestSeqNoGeneration(request.GetSeqNoGeneration());
+        record.SetRequestSeqNoRound(request.GetSeqNoRound());
+        record.SetStatus(NKikimrIndexBuilder::ACCEPTED);
+        TlsActivationContext->Send(new IEventHandle(pending->Event->Sender, self->SelfId(), accepted.Release()));
+        return true;
+    };
+    auto readVersion = std::make_shared<TRowVersion>(TRowVersion::Max());
+    options.OnAdmissionReady = [self, readVersion, explicitSnapshot = bool(pending->SnapshotReference), chosen = false](
+        TScanOptions& opts, std::unique_ptr<IEventHandle> resume) mutable {
+        if (!chosen) {
+            if (!explicitSnapshot) {
+                opts.SetSnapshotRowVersion(self->GetMvccTxVersion(EMvccTxMode::ReadOnly));
+            }
+            const auto* version = std::get_if<TScanOptions::TSnapshotByRowVersion>(&opts.Snapshot);
+            Y_ENSURE(version);
+            *readVersion = version->RowVersion;
+            chosen = true;
+        }
+        if (self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(*readVersion)) {
+            self->GetVolatileTxManager().AttachWaitingSnapshotEvent(*readVersion, std::move(resume));
+            return false;
+        }
+        return true;
+    };
+    options.Factory = [self, pending, pathId, tableId, schemaVersion, rowLimit, memory, makeScan, fail](TScanOptions& opts) mutable -> TAutoPtr<NTable::IScan> {
         try {
             const auto found = self->GetUserTables().find(pathId.LocalPathId);
             if (!self->IsStateActive() || found == self->GetUserTables().end() ||
                 found->second->LocalTid != tableId || found->second->GetTableSchemaVersion() != schemaVersion) {
                 fail("Table changed while waiting for scan admission", true);
+                return {};
+            }
+            const auto& config = AppData()->DataShardConfig;
+            if (memory > Min(config.GetBuildIndexScanMemoryLimit(),
+                    AppData()->BuildIndexScanAdmission->GetActiveByteLimit(config.GetBuildIndexPendingBytesLimit()))) {
+                // Admission may have been granted before a long volatile wait
+                // or before the controller applied a smaller memory budget.
+                fail("Index scan memory budget changed before scan construction", true);
                 return {};
             }
             const auto& req = pending->Event->Get()->Record;
@@ -890,17 +947,8 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
                     Y_ENSURE(pending->SnapshotReference, "Explicit scan snapshot was not pinned");
                 }
             }
-            if (!explicitSnapshot) {
-                // HEAD reads choose their point when the scan actually starts;
-                // registered snapshots keep the version requested by the sender.
-                opts.SetSnapshotRowVersion(self->GetMvccTxVersion(EMvccTxMode::ReadOnly));
-            }
             const auto* version = std::get_if<TScanOptions::TSnapshotByRowVersion>(&opts.Snapshot);
             Y_ENSURE(version);
-            if (self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(version->RowVersion)) {
-                fail("Waiting for volatile transactions at the admitted scan version", true);
-                return {};
-            }
             auto scan = makeScan(*found->second, req, pending->Event->Sender, std::move(pending->Response));
             auto* vectorScan = CheckedCast<TVectorIndexScan*>(scan.Get());
             vectorScan->SetRowBytesLimit(rowLimit);
@@ -913,6 +961,7 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
     };
     const ui64 serial = self->QueueScan(tableId, {}, 0, options);
     manager.Set(id, seqNo).push_back(serial);
+    manager.HoldReadVersion(id, seqNo, readVersion);
 }
 
 template<typename TResponse>

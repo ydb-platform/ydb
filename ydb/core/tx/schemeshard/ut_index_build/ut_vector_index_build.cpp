@@ -387,6 +387,119 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             .GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
     }
 
+    void StartSingleShardAutodetect(TTestBasicRuntime& runtime, ui64 schemeShard, ui64 build, const TString& table) {
+        auto request = CreateBuildIndexRequest(build, "/MyRoot/ServerLessDB", table, TBuildIndexConfig{
+            "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
+        });
+        auto* settings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index()
+            ->mutable_vector_settings()->mutable_settings();
+        settings->clear_vector_type();
+        settings->clear_vector_dimension();
+        ForwardToTablet(runtime, schemeShard, runtime.AllocateEdgeActor(), request);
+    }
+
+    Y_UNIT_TEST_TWIN(SingleShardAutodetectSharesCreditsAcrossBuilds, ByBytes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        ui64 schemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, schemeShard);
+        for (const TString name : {"TableA", "TableB"}) {
+            TestCreateTable(runtime, schemeShard, ++txId, "/MyRoot/ServerLessDB", TStringBuilder()
+                << "Name: \"" << name << "\" "
+                << R"(Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "embedding" Type: "String" }
+                    Columns { Name: "prefix" Type: "Uint32" }
+                    Columns { Name: "value" Type: "String" }
+                    KeyColumnNames: ["key"])");
+            env.TestWaitNotification(runtime, txId, schemeShard);
+            WriteVectorTableRows(runtime, schemeShard, ++txId, TStringBuilder() << "/MyRoot/ServerLessDB/" << name, 0, 0, 200);
+        }
+        auto& config = runtime.GetAppData().SchemeShardConfig;
+        config.SetIndexBuildRequestCountLimit(ByBytes ? 128 : 1);
+        ui32 probes = 0;
+        auto requests = runtime.AddObserver<TEvDataShard::TEvSampleKRequest>([&](auto& event) {
+            if (event->Get()->Record.GetSkipEmptyColumns() && ++probes == 1 && ByBytes) {
+                const auto& record = event->Get()->Record;
+                config.SetIndexBuildRequestBytesLimit(2 * (record.SpaceUsedLong() + record.ByteSizeLong() + 4_KB) - 256);
+            }
+        });
+        TBlockEvents<TEvDataShard::TEvSampleKResponse> replies(runtime, [](const auto& event) {
+            return event->Get()->Record.GetStatus() != NKikimrIndexBuilder::ACCEPTED;
+        });
+        const ui64 first = ++txId;
+        StartSingleShardAutodetect(runtime, schemeShard, first, "/MyRoot/ServerLessDB/TableA");
+        runtime.WaitFor("first autodetect probe holds credits", [&] { return !replies.empty(); });
+        // A queue heartbeat must retain the sender credit and carry no sample
+        // progress, including for SampleK which has no HandleProgress override.
+        auto accepted = MakeHolder<TEvDataShard::TEvSampleKResponse>();
+        const auto& record = replies.front()->Get()->Record;
+        accepted->Record.SetId(record.GetId());
+        accepted->Record.SetTabletId(record.GetTabletId());
+        accepted->Record.SetRequestSeqNoGeneration(record.GetRequestSeqNoGeneration());
+        accepted->Record.SetRequestSeqNoRound(record.GetRequestSeqNoRound());
+        accepted->Record.SetStatus(NKikimrIndexBuilder::ACCEPTED);
+        runtime.Send(new IEventHandle(replies.front()->Recipient, replies.front()->Sender, accepted.Release()));
+        const ui64 second = ++txId;
+        StartSingleShardAutodetect(runtime, schemeShard, second, "/MyRoot/ServerLessDB/TableB");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(probes, 1);
+        replies.Stop().Unblock();
+        env.TestWaitNotification(runtime, first, schemeShard);
+        env.TestWaitNotification(runtime, second, schemeShard);
+        UNIT_ASSERT_VALUES_EQUAL(probes, 2);
+        for (const ui64 build : {first, second}) {
+            UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build)
+                .GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        }
+    }
+
+    Y_UNIT_TEST(SingleShardAutodetectRespectsRetryHint) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        ui64 schemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, schemeShard);
+        TestCreateTable(runtime, schemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix" Type: "Uint32" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, schemeShard);
+        WriteVectorTableRows(runtime, schemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+        ui32 probes = 0;
+        TInstant retriedAt;
+        auto requests = runtime.AddObserver<TEvDataShard::TEvSampleKRequest>([&](auto& event) {
+            if (event->Get()->Record.GetSkipEmptyColumns() && ++probes == 2) {
+                retriedAt = runtime.GetCurrentTime();
+            }
+        });
+        bool firstReply = true;
+        TBlockEvents<TEvDataShard::TEvSampleKResponse> replies(runtime, [&](const auto&) {
+            return std::exchange(firstReply, false);
+        });
+        const ui64 build = ++txId;
+        StartSingleShardAutodetect(runtime, schemeShard, build, "/MyRoot/ServerLessDB/Table");
+        runtime.WaitFor("first autodetect reply held", [&] { return replies.size() == 1; });
+        auto& record = replies.front()->Get()->Record;
+        record.SetStatus(NKikimrIndexBuilder::ABORTED);
+        record.SetRetryAfterMs(30000);
+        record.ClearRows();
+        record.ClearProbabilities();
+        const auto rejectedAt = runtime.GetCurrentTime();
+        replies.Stop().Unblock();
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(probes, 1);
+        env.TestWaitNotification(runtime, build, schemeShard);
+        UNIT_ASSERT_VALUES_EQUAL(probes, 2);
+        UNIT_ASSERT(retriedAt >= rejectedAt + TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build)
+            .GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+    }
+
     Y_UNIT_TEST(BackoffAtFrontDoesNotDelayReadyShards) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

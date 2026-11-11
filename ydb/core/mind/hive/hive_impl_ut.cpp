@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             tablet.SetType(TTabletTypes::Dummy);
             tablet.State = NHive::ETabletState::ReadyToWork;
             tablet.AssignDomains({1, 2}, {});
-            tablet.BecomeStopped(EHiveEventReason::StopRequest);
+            tablet.BecomeStopped();
             return tablet;
         }
 
@@ -509,7 +509,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             auto& tablet = hive->GetTablet(1);
             tablet.SetType(TTabletTypes::Dummy);
             tablet.State = NHive::ETabletState::ReadyToWork;
-            tablet.BecomeStopped(EHiveEventReason::StopRequest);
+            tablet.BecomeStopped();
             tablet.MutableResourceMetricsAggregates().MaximumCPU.SetWindowSize(TDuration::MilliSeconds(24));
             auto high = TProtoMetricsCheckpointTest::Sample();
             high.SetCPU(200);
@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         tablet.ObjectId = {1, 7};
         tablet.AssignDomains({1, 2}, {});
         tablet.GetMutableResourceValues().Counter = 1;
-        UNIT_ASSERT(tablet.BecomeRunning(node.Id, EHiveEventReason::StatusOk));
+        UNIT_ASSERT(tablet.BecomeRunning(node.Id));
 
         const auto check = [&](ui64 storageValue, ui64 read, ui64 write, ui64 groupRead) {
             for (const auto* values : {&hive.ObjectMetrics(tablet.GetObjectId()),
@@ -644,7 +644,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         zero.SetReadThroughput(0);
         tablet.UpdateResourceUsage(zero);
         check(0, 0, 0, 333);
-        UNIT_ASSERT(tablet.BecomeStopped(EHiveEventReason::StopRequest));
+        UNIT_ASSERT(tablet.BecomeStopped());
     }
 
     Y_UNIT_TEST(BecomeStartingRemovesLockedTabletFromPreviousNode) {

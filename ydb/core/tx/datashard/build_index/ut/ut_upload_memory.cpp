@@ -17,6 +17,7 @@
 #include <library/cpp/testing/common/env.h>
 #include <ydb/library/testlib/helpers.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/file.h>
 #include <util/stream/format.h>
@@ -285,30 +286,64 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         fixture.Reply(NKikimrIndexBuilder::DONE);
     }
 
-    Y_UNIT_TEST(BrokerCapacityHintRemainsRetryableUntilBudgetRecovers) {
+    Y_UNIT_TEST_TWIN(RejectedBrokerSubmissionRetriesWithoutFinishingUnknownTask, ExpiredOwner) {
         TAdmissionFixture fixture;
         using TBroker = NResourceBroker::TEvResourceBroker;
-        auto configure = [&](ui64 memory) {
+        bool rejectSubmissions = true;
+        TActorId client;
+        THashSet<ui64> rejectedTaskIds;
+        ui32 finishes = 0;
+        ui32 errors = 0;
+        auto submissions = fixture.Runtime.AddObserver<TBroker::TEvSubmitTask>([&](auto& event) {
+            if (event->Get()->Task.Type == "build_index" && rejectSubmissions) {
+                client = event->Sender;
+                rejectedTaskIds.insert(event->Get()->Task.TaskId);
+                if constexpr (ExpiredOwner) {
+                    // Exercise the broker's real expired-owner rejection while
+                    // keeping the executor alive to process its reply.
+                    event->Get()->Task.OwnerLease = std::weak_ptr<void>{};
+                }
+            }
+        });
+        auto finished = fixture.Runtime.AddObserver<TBroker::TEvFinishTask>([&](auto& event) {
+            if (event->Sender == client && rejectedTaskIds.contains(event->Get()->TaskId)) {
+                ++finishes;
+            }
+        });
+        auto rejected = fixture.Runtime.AddObserver<TBroker::TEvTaskOperationError>([&](auto& event) {
+            if (event->Recipient == client && rejectedTaskIds.contains(event->Get()->TaskId)) {
+                ++errors;
+            }
+        });
+        if constexpr (!ExpiredOwner) {
             auto event = MakeHolder<TBroker::TEvConfigure>();
             event->Merge = true;
             auto* queue = event->Record.AddQueues();
             queue->SetName("queue_build_index");
-            queue->MutableLimit()->SetMemory(memory);
+            queue->MutableLimit()->SetMemory(1);
             fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender, event.Release()));
             const auto reply = fixture.Runtime.GrabEdgeEventRethrow<TBroker::TEvConfigureResult>(fixture.Sender);
             UNIT_ASSERT(reply->Get()->Record.GetSuccess());
-        };
-        configure(1);
+        }
         fixture.Send(fixture.Shards[0]);
-        const auto rejected = fixture.Reply(NKikimrIndexBuilder::ABORTED);
-        UNIT_ASSERT_GT(rejected->Get()->Record.GetRetryAfterMs(), 0);
+        const auto retry = fixture.Reply(NKikimrIndexBuilder::ABORTED);
+        UNIT_ASSERT_GT(retry->Get()->Record.GetRetryAfterMs(), 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
         fixture.Send(fixture.Shards[0]);
         const auto constrained = fixture.Reply(NKikimrIndexBuilder::ABORTED);
         UNIT_ASSERT_GT(constrained->Get()->Record.GetRetryAfterMs(), 0);
+        // Drain any extra cleanup/error round trip after the rejection replies.
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(finishes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(errors, ExpiredOwner ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(rejectedTaskIds.size(), ExpiredOwner ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+        rejectSubmissions = false;
         fixture.SetMemoryBudget(512_MB, 448_MB);
         fixture.Send(fixture.Shards[0]);
         fixture.Reply(NKikimrIndexBuilder::DONE);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
+        UNIT_ASSERT_VALUES_EQUAL(finishes, 0);
     }
 
     Y_UNIT_TEST(BrokerLimitMismatchRetriesWithSmallerBatches) {

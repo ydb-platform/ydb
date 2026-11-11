@@ -74,6 +74,8 @@ namespace NTabletFlatExecutor {
                 ui64 ChargedMemory;
                 ui64 ChargedCpu = 1;
                 bool Running = true;
+                bool Armed = true;
+                bool WasAcquired = false;
                 bool OverrunReported = false;
                 std::atomic<bool> Cancel{true};
 
@@ -83,14 +85,16 @@ namespace NTabletFlatExecutor {
                 {}
 
                 ~TState() {
-                    System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
-                        new TEvResourceBroker::TEvFinishTask(TaskId, Cancel.load(std::memory_order_acquire))));
+                    if (Armed) {
+                        System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
+                            new TEvResourceBroker::TEvFinishTask(TaskId, Cancel.load(std::memory_order_acquire))));
+                    }
                 }
 
                 void UpdateRetained() {
                     const ui64 memory = Running ? Max(Memory, Retained) : Retained;
                     const ui64 cpu = Running ? 1 : 0;
-                    if (memory && (memory != ChargedMemory || cpu != ChargedCpu)) {
+                    if (Armed && memory && (memory != ChargedMemory || cpu != ChargedCpu)) {
                         System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
                             new TEvResourceBroker::TEvUpdateTask(TaskId, {{cpu, memory}}, Type, Priority)));
                         ChargedMemory = memory;
@@ -134,8 +138,17 @@ namespace NTabletFlatExecutor {
 
             void Acquired() {
                 with_lock(State->Lock) {
+                    State->WasAcquired = true;
                     State->ChargedMemory = State->Memory;
                     State->ChargedCpu = 1;
+                }
+            }
+
+            void Rejected() {
+                with_lock(State->Lock) {
+                    // A rejected submit created no task. A rejected readmission
+                    // still owns the task from its earlier grant.
+                    State->Armed = State->WasAcquired;
                 }
             }
 
@@ -477,7 +490,8 @@ namespace NTabletFlatExecutor {
                 for (const auto& [serial, one] : Scans) {
                     if (one.TaskId == error.TaskId && one.Lease && one.Options.Factory && one.State <= EState::Ready) {
                         // A delayed error may refer to an earlier update, while
-                        // the broker still owns this task. Always send FinishTask.
+                        // the broker still owns a previously acquired task.
+                        one.Lease->Rejected();
                         return AdmissionFailed(serial, error.Status.Message);
                     }
                 }
@@ -486,13 +500,16 @@ namespace NTabletFlatExecutor {
                 const auto* resource = CheckedCast<TResource*>(error.Cookie.Get());
                 if (resource->Source == TResource::ESource::Scan) {
                     const ui64 serial = CheckedCast<const TCookie*>(resource)->Serial;
-                    if (auto* one = Lookup(serial, false); one && error.Status.MemoryLimit && one->Options.OnMemoryLimitExceeded) {
-                        one->Options.OnMemoryLimitExceeded(*error.Status.MemoryLimit);
+                    if (auto* one = Lookup(serial, false)) {
+                        if (one->Lease) {
+                            one->Lease->Rejected();
+                        }
+                        if (error.Status.MemoryLimit && one->Options.OnMemoryLimitExceeded) {
+                            one->Options.OnMemoryLimitExceeded(*error.Status.MemoryLimit);
+                        }
                     }
                     // Limits may be applied asynchronously. Teach admission the
                     // actual capacity, then retry fitting against that value.
-                    // A rejected readmission still owns its broker task, so
-                    // keep cleanup armed even when no resources were granted.
                     return AdmissionFailed(serial, error.Status.Message);
                 }
             }

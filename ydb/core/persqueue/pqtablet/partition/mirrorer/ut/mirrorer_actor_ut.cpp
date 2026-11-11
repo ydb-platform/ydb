@@ -332,7 +332,6 @@ THolder<TEvPersQueue::TEvResponse> MakeWriteResponse(
 
 NPersQueue::TTopicConverterPtr MakeTopicConverter(const TString& database, const TString& topicPath) {
     NKikimrPQ::TPQTabletConfig config;
-    config.SetTopicName("dst-topic");
     config.SetTopicPath(topicPath);
     config.SetYdbDatabasePath(database);
     return NPersQueue::TTopicNameConverter::ForFirstClass(config);

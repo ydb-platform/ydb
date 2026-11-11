@@ -1,5 +1,7 @@
 LIBRARY()
 
+YQL_LAST_ABI_VERSION()
+
 PEERDIR(
     yql/essentials/public/decimal
     yql/essentials/public/udf

@@ -5,11 +5,8 @@
 #include "util.h"
 
 #include <ydb/core/base/appdata.h>
-<<<<<<< HEAD
 #include <ydb/core/base/path.h>
-=======
 #include <ydb/core/backup/common/omit_backup.h>
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/util/proto_duration.h>
@@ -531,14 +528,8 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
         TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant, bool enableOmitBackupAttribute)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
-<<<<<<< HEAD
         streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
-        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant);
-=======
-        streamName, streamPath, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
-        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant,
-        enableOmitBackupAttribute);
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
+        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant, enableOmitBackupAttribute);
 }
 
 }

@@ -138,7 +138,6 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         SessionAcquisitionFailure(Ydb::StatusIds::UNAUTHORIZED);
     }
 
-<<<<<<< HEAD
     enum class EBootstrapStage {
         Changefeed,
         Consumer,
@@ -225,10 +224,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         MissingSourceDnsName(EBootstrapStage::Retention);
     }
 
-    void Basic(const std::optional<TDuration>& resolvedTimestamps = {}) {
-=======
     void Basic(const std::optional<TDuration>& resolvedTimestamps = {}, bool enableOmitBackupAttribute = false) {
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
@@ -257,12 +253,8 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-<<<<<<< HEAD
-            "Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps
-=======
-            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps,
+            "Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps,
             false, true, false, true, false, TDuration::Seconds(1), TDuration::Days(1), false, enableOmitBackupAttribute
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
@@ -377,7 +369,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         const auto creator = runtime.Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1, 1,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
+            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
         runtime.EnableScheduleForActor(creator);
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender()));
         runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
@@ -618,12 +610,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         TTestActorRuntime::TEventObserverHolder Observer;
 
         explicit TStreamSetup(bool transfer = false, TDuration retention = TDuration::Seconds(1),
-<<<<<<< HEAD
-                TDuration availability = TDuration::Days(1), bool describeOnly = false, bool important = false)
-=======
-                TDuration availability = TDuration::Days(1), bool describeOnly = false, bool important = false,
-                TString streamPath = {}, bool enableOmitBackupAttribute = false)
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
+                TDuration availability = TDuration::Days(1), bool describeOnly = false, bool important = false, bool enableOmitBackupAttribute = false)
         {
             Runtime.Initialize(TAppPrepare().Unwrap());
             Parent = Runtime.AllocateEdgeActor();
@@ -641,13 +628,8 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
                 config = std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/Table/Index", "/Root/Replica");
             }
             Creator = Runtime.Register(CreateStreamCreator(Parent, Proxy, 1, 1, config,
-<<<<<<< HEAD
                 "Stream", "replicationConsumer", TDuration::Days(1), std::nullopt,
-                false, true, false, true, describeOnly, retention, availability, important));
-=======
-                "Stream", streamPath, "replicationConsumer", TDuration::Days(1), std::nullopt,
                 false, true, false, true, describeOnly, retention, availability, important, enableOmitBackupAttribute));
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
             Runtime.EnableScheduleForActor(Creator);
         }
 
@@ -696,21 +678,6 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         }
     };
 
-<<<<<<< HEAD
-=======
-    Y_UNIT_TEST(ExplicitStreamPathUsedForIndexTable) {
-        const TString streamPath = "/Root/ResolvedStream";
-        TStreamSetup setup(false, TDuration::Seconds(1), TDuration::Days(1), false, false, streamPath);
-        const auto consumer = setup.CreateConsumer();
-        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(consumer->Get()->GetArgs()), streamPath);
-        setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(consumer->Cookie);
-        setup.VerifyConsumer(false, TDuration::Days(1), streamPath);
-        const auto retention = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(setup.Proxy);
-        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(retention->Get()->GetArgs()), streamPath);
-        setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(retention->Cookie);
-        setup.Finish();
-    }
-
     Y_UNIT_TEST(CreateErrorsDoNotDisableOmitBackup) {
         for (const auto& [status, message] : TVector<std::pair<NYdb::EStatus, TString>>{
                 {NYdb::EStatus::BAD_REQUEST, "UserAttributes: unsupported attribute '__omit_backup'"},
@@ -719,7 +686,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
                 {NYdb::EStatus::UNAUTHORIZED, "UserAttributes: unsupported attribute '__omit_backup'"},
                 {NYdb::EStatus::BAD_REQUEST, "Invalid changefeed settings"}})
         {
-            TStreamSetup setup(false, TDuration::Seconds(1), TDuration::Days(1), false, false, {}, true);
+            TStreamSetup setup(false, TDuration::Seconds(1), TDuration::Days(1), false, false, true);
             setup.Allow();
             const auto request = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTableRequest>(setup.Proxy);
             const auto& settings = std::get<NYdb::NTable::TAlterTableSettings>(request->Get()->GetArgs());
@@ -738,7 +705,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(OmitBackupSettingIsPreservedOnRetry) {
         for (const bool enabled : {false, true}) {
-            TStreamSetup setup(false, TDuration::Seconds(1), TDuration::Days(1), false, false, {}, enabled);
+            TStreamSetup setup(false, TDuration::Seconds(1), TDuration::Days(1), false, false, enabled);
             setup.Allow();
             TString original;
             for (ui32 attempt = 0; attempt < 2; ++attempt) {
@@ -762,7 +729,6 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         }
     }
 
->>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
     Y_UNIT_TEST(FiniteAvailabilityBeforeShortRetention) {
         TStreamSetup setup(false, TDuration::Minutes(5), TDuration::Hours(2));
         const auto consumer = setup.CreateConsumer();

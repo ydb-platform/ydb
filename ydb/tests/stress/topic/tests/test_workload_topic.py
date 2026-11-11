@@ -3,6 +3,7 @@ import os
 import pytest
 import yatest
 
+from ydb.tests.library.harness.kikimr_config import PARALLEL_ACTOR_SYSTEM_CONFIG
 from ydb.tests.library.stress.fixtures import StressFixture
 from ydb.tests.stress.topic.workload import YdbTopicWorkload
 
@@ -42,10 +43,13 @@ def create_test_methods(chunk_size):
 class TestYdbTopicWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster(extra_feature_flags=[
-            "enable_topic_write_offset_delta_in_keys",
-            "enable_topic_messages_batching",
-        ])
+        yield from self.setup_cluster(
+            overrided_actor_system_config=PARALLEL_ACTOR_SYSTEM_CONFIG,
+            extra_feature_flags=[
+                "enable_topic_write_offset_delta_in_keys",
+                "enable_topic_messages_batching",
+            ],
+        )
 
     def _run_chunk(self, chunk_index, chunk_size):
         limit_memory_usage = os.environ.get("YDB_STRESS_TEST_LIMIT_MEMORY", "0").lower() in ['true', '1', 'y', 'yes']

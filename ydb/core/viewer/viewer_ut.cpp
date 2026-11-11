@@ -5556,6 +5556,78 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
+    // A proxy that got no answer from any node replies without a payload. Such a reply is taken for a wrong one
+    // and the batch is asked again, but only while it is still kept: an answer of the same proxy to another
+    // request (about tablets here) releases it. The nodes the proxy was waiting for are reported anyway.
+    Y_UNIT_TEST(NodesPageReportsTimeoutFromEmptyProxyReply) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        // TServer registers viewers by node index; offload requests address them by node ID.
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            runtime.RegisterService(MakeViewerID(runtime.GetNodeId(nodeIndex)), viewerId, nodeIndex);
+        }
+        size_t droppedSystemStates = 0;
+        size_t tabletProxyReplies = 0;
+        size_t emptyProxyReplies = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                // one data center, so all the nodes get into one batch with one proxy
+                SetNodesLocation(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev), "dc-1");
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateResponse) {
+                // no node answers about its system state, so the proxy has nothing to put into its reply
+                ++droppedSystemStates;
+                return TTestActorRuntime::EEventAction::DROP;
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse) {
+                switch (ev->Get<TEvViewer::TEvViewerResponse>()->Record.Response_case()) {
+                    case NKikimrViewer::TEvViewerResponse::ResponseCase::kTabletResponse:
+                        ++tabletProxyReplies;
+                        break;
+                    case NKikimrViewer::TEvViewerResponse::ResponseCase::RESPONSE_NOT_SET:
+                        ++emptyProxyReplies;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/json/nodes?type=static&fields_required=NodeId,SystemState,Tablets&sort=NodeId"
+            "&offload_merge=true&offload_merge_attempts=1&timeout=1000&enums=true HTTP/1.1\r\n\r\n", endpoint, {});
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const TString context = NJson::WriteJson(json, false);
+
+        // the scenario itself: the answer about tablets releases the batch, the answer about the system state is empty
+        UNIT_ASSERT_C(droppedSystemStates > 0, context);
+        UNIT_ASSERT_C(tabletProxyReplies > 0, context);
+        UNIT_ASSERT_C(emptyProxyReplies > 0, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["Nodes"].GetArray().size(), 3, context);
+        size_t disconnectedNodes = 0;
+        for (const auto& node : json["Nodes"].GetArray()) {
+            // no node has answered in time, and the client is told so about every one of them
+            UNIT_ASSERT_C(node["ResponseTimeout"].GetBoolean(), context);
+            disconnectedNodes += node["Disconnected"].GetBoolean() ? 1 : 0;
+        }
+        // the old marking is not extended: only the proxy itself is reported as disconnected
+        UNIT_ASSERT_C(disconnectedNodes <= 1, context);
+    }
+
     Y_UNIT_TEST(NodesPageKeepsPDisksForDisconnectedNode)
     {
         TPortManager tp;

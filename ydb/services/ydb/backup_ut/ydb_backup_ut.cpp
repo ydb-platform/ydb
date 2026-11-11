@@ -3696,6 +3696,175 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST(OlapColumnTableContentPreservedThroughFsBackupRestore) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        constexpr const char* table = "/Root/olap_table";
+
+        for (auto mode : {NDump::TRestoreSettings::EMode::BulkUpsert, NDump::TRestoreSettings::EMode::ImportData}) {
+            TTempDir tempDir;
+            TestTableContentIsPreserved(
+                table,
+                session,
+                CreateBackupLambda(driver, tempDir.Path(), "/Root", "/Root", NDump::TDumpSettings().AvoidCopy(true)),
+                CreateRestoreLambda(driver, tempDir.Path(), "/Root",
+                    NDump::TRestoreSettings().Mode(mode)),
+                /* isOlap */ true
+            );
+            ExecuteQuery(session, Sprintf(R"(
+                    DROP TABLE `%s`;
+                )", table
+            ), true);
+        }
+    }
+
+    Y_UNIT_TEST(EmptyColumnTableBackupLeavesNoIncompleteDataFile) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        constexpr const char* table = "/Root/empty_olap_table";
+
+        ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", table
+        ), true);
+
+        NDump::TClient backupClient(driver);
+        const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().AvoidCopy(true).Database("/Root"));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        TVector<TFsPath> children;
+        pathToBackup.Child("empty_olap_table").List(children);
+        for (const auto& child : children) {
+            UNIT_ASSERT_C(child.GetName() != NDump::NFiles::IncompleteData().FileName,
+                "Stray incomplete data file left behind after backing up an empty column table: " << child.GetPath());
+        }
+    }
+
+    Y_UNIT_TEST(OmittedColumnTableIsNotDumped) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        ExecuteQuery(querySession, R"(
+            CREATE TABLE `/Root/olap_table` (
+                Key Uint32 NOT NULL,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )", true);
+        ExecuteQuery(querySession, "UPSERT INTO `/Root/olap_table` (Key, Value) VALUES (1, 'value');");
+
+        Tests::TClient legacyClient(*server.ServerSettings);
+        UNIT_ASSERT_VALUES_EQUAL(legacyClient.AlterUserAttributes("/Root", "olap_table", {{"__omit_backup", "true"}}),
+            NMsgBusProxy::MSTATUS_OK);
+        TTableClient tableClient(driver);
+        auto session = tableClient.CreateSession().ExtractValueSync().GetSession();
+        const auto description = session.DescribeTable("/Root/olap_table").ExtractValueSync();
+        UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(description.GetTableDescription().GetAttributes().at("__omit_backup"), "true");
+
+        NDump::TClient backupClient(driver);
+        for (const TString path : {"/Root", "/Root/olap_table"}) {
+            TTempDir tempDir;
+            const auto result = backupClient.Dump(path, tempDir.Path(), NDump::TDumpSettings().AvoidCopy(true).Database("/Root"));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(!tempDir.Path().Child("olap_table").Exists());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(legacyClient.AlterUserAttributes("/Root", "olap_table", {}, {"__omit_backup"}),
+            NMsgBusProxy::MSTATUS_OK);
+        const auto unmarked = session.DescribeTable("/Root/olap_table").ExtractValueSync();
+        UNIT_ASSERT_C(unmarked.IsSuccess(), unmarked.GetIssues().ToString());
+        UNIT_ASSERT(!unmarked.GetTableDescription().GetAttributes().contains("__omit_backup"));
+        TTempDir tempDir;
+        const auto result = backupClient.Dump("/Root", tempDir.Path(), NDump::TDumpSettings().AvoidCopy(true).Database("/Root"));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(tempDir.Path().Child("olap_table").Child("scheme.pb").Exists());
+        UNIT_ASSERT(tempDir.Path().Child("olap_table").Child("data_00.csv").Exists());
+    }
+
+    Y_UNIT_TEST(ColumnTableSkippedWhenCopyTableFallbackTriggered) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* rowTable = "/Root/row_table";
+        constexpr const char* columnTable = "/Root/column_table";
+
+        ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", rowTable
+        ), true);
+        ExecuteQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (Key, Value) VALUES (1, "one"), (2, "two");
+            )", rowTable
+        ));
+
+        ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", columnTable
+        ), true);
+        ExecuteQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (Key, Value) VALUES (1u, "a");
+            )", columnTable
+        ));
+
+        const auto originalRowTableContent = GetTableContent(session, rowTable);
+
+        NDump::TClient backupClient(driver);
+        const auto dumpResult = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
+        UNIT_ASSERT_C(dumpResult.IsSuccess(), dumpResult.GetIssues().ToString());
+
+        UNIT_ASSERT_C(!pathToBackup.Child("column_table").Exists(),
+            "Column table directory should not be present in the backup after the CopyTable fallback skipped it");
+        UNIT_ASSERT_C(pathToBackup.Child("row_table").Exists(),
+            "Row table should still be backed up via the fallback CopyTables call");
+
+        ExecuteQuery(session, Sprintf(R"(DROP TABLE `%s`;)", rowTable), true);
+
+        NDump::TClient restoreClient(driver);
+        const auto restoreResult = restoreClient.Restore(pathToBackup, "/Root");
+        UNIT_ASSERT_C(restoreResult.IsSuccess(), restoreResult.GetIssues().ToString());
+
+        CompareResults(GetTableContent(session, rowTable), originalRowTableContent);
+    }
+
+>>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
         TestReplicationBackupRestore(/* tokenSecretType */ Nothing());
     }
@@ -3929,6 +4098,118 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
+    Y_UNIT_TEST(DirectTopicDumpWithoutParentPermissions) {
+        TKikimrWithGrpcAndRootSchema server;
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto adminDriver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
+        TSchemeClient adminScheme(adminDriver);
+        auto result = adminScheme.ModifyPermissions("/Root", TModifyPermissionsSettings()
+            .AddGrantPermissions(TPermissions("root@builtin", {"ydb.generic.full"}))
+            .AddGrantPermissions(TPermissions("dump@builtin", {"ydb.database.connect"}))).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        result = adminScheme.MakeDirectory("/Root/private").ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        NTopic::TTopicClient topicClient(adminDriver);
+        result = topicClient.CreateTopic("/Root/private/topic", NTopic::TCreateTopicSettings()
+            .PartitioningSettings(NTopic::TPartitioningSettings(1, 1))).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        result = adminScheme.ModifyPermissions("/Root/private/topic", TModifyPermissionsSettings()
+            .AddGrantPermissions(TPermissions("dump@builtin", {"ydb.granular.describe_schema"}))).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("dump@builtin"));
+        TSchemeClient schemeClient(driver);
+        const auto parent = schemeClient.DescribePath("/Root/private").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(parent.GetStatus(), EStatus::UNAUTHORIZED, parent.GetIssues().ToString());
+        const auto topic = schemeClient.DescribePath("/Root/private/topic").ExtractValueSync();
+        UNIT_ASSERT_C(topic.IsSuccess(), topic.GetIssues().ToString());
+
+        TTempDir tempDir;
+        NDump::TClient backupClient(driver);
+        const auto dump = backupClient.Dump("/Root/private/topic", tempDir.Path(),
+            NDump::TDumpSettings().Database("/Root").SchemaOnly(true));
+        UNIT_ASSERT_C(dump.IsSuccess(), dump.GetIssues().ToString());
+        UNIT_ASSERT(tempDir.Path().Child("topic").Child(NDump::NFiles::CreateTopic().FileName).Exists());
+        UNIT_ASSERT(tempDir.Path().Child("topic").Child(NDump::NFiles::Permissions().FileName).Exists());
+    }
+
+    Y_UNIT_TEST(OmittedTablesAndChangefeedsAreNotDumped) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TTableClient tableClient(driver);
+        auto session = tableClient.CreateSession().ExtractValueSync().GetSession();
+
+        ExecuteDataDefinitionQuery(session, "CREATE TABLE `/Root/kept` (k Uint32, PRIMARY KEY (k));");
+        ExecuteDataDefinitionQuery(session, "CREATE TABLE `/Root/omitted` (k Uint32, PRIMARY KEY (k));");
+        {
+            const auto result = session.AlterTable("/Root/omitted", TAlterTableSettings()
+                .BeginAlterAttributes().Add("__omit_backup", "true").EndAlterAttributes()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        NTopic::TTopicClient topicClient(driver);
+        const auto topicStatus = topicClient.CreateTopic("/Root/topic", NTopic::TCreateTopicSettings()
+            .PartitioningSettings(NTopic::TPartitioningSettings(1, 1))).ExtractValueSync();
+        UNIT_ASSERT_C(topicStatus.IsSuccess(), topicStatus.GetIssues().ToString());
+
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        ExecuteQuery(querySession, "CREATE VIEW `/Root/omitted_view` WITH security_invoker = TRUE AS SELECT 1;", true);
+        ExecuteQuery(querySession, "CREATE VIEW `/Root/kept_view` WITH security_invoker = TRUE AS SELECT 2;", true);
+        Tests::TClient legacyClient(*server.ServerSettings);
+        UNIT_ASSERT_VALUES_EQUAL(legacyClient.AlterUserAttributes("/Root", "omitted_view", {{"__omit_backup", "true"}}),
+            NMsgBusProxy::MSTATUS_OK);
+
+        for (const auto& name : {"application", "omitted_feed", "replication_feed", "replication_without_omit", "unmarked_feed"}) {
+            auto feed = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json);
+            if (TStringBuf(name).StartsWith("replication")) {
+                feed.AddAttribute("__async_replication", "{}");
+            }
+            if (TStringBuf(name) != "application" && TStringBuf(name) != "replication_feed") {
+                feed.AddAttribute("__omit_backup", "true");
+            }
+            const auto result = session.AlterTable("/Root/kept", TAlterTableSettings().AppendAddChangefeeds(feed)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        for (const auto& name : {"replication_without_omit", "unmarked_feed"}) {
+            UNIT_ASSERT_VALUES_EQUAL(legacyClient.AlterUserAttributes("/Root/kept", name, {}, {"__omit_backup"}),
+                NMsgBusProxy::MSTATUS_OK);
+        }
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        NDump::TClient backupClient(driver);
+        const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        TVector<TString> children;
+        pathToBackup.ListNames(children);
+        UNIT_ASSERT_C(FindPtr(children, "kept"), JoinSeq(", ", children));
+        UNIT_ASSERT_C(!FindPtr(children, "omitted"), JoinSeq(", ", children));
+        // Views do not expose user attributes through the existing public API.
+        // Server-side export handles them, while tools dump retains them.
+        UNIT_ASSERT_C(FindPtr(children, "omitted_view"), JoinSeq(", ", children));
+        UNIT_ASSERT_C(FindPtr(children, "kept_view"), JoinSeq(", ", children));
+        UNIT_ASSERT_C(FindPtr(children, "topic"), JoinSeq(", ", children));
+        const auto tableFolder = pathToBackup.Child("kept");
+        UNIT_ASSERT(tableFolder.Child("application").Exists());
+        UNIT_ASSERT(tableFolder.Child("unmarked_feed").Exists());
+        UNIT_ASSERT(!tableFolder.Child("omitted_feed").Exists());
+        UNIT_ASSERT(!tableFolder.Child("replication_feed").Exists());
+        UNIT_ASSERT(!tableFolder.Child("replication_without_omit").Exists());
+
+        for (const auto& name : {"replication_without_omit", "replication_feed", "omitted_feed", "application", "unmarked_feed"}) {
+            TTempDir directFeedDump;
+            const auto directResult = backupClient.Dump(TString("/Root/kept/") + name, directFeedDump.Path(),
+                NDump::TDumpSettings().Database("/Root"));
+            UNIT_ASSERT_C(directResult.IsSuccess(), directResult.GetIssues().ToString());
+            const bool excluded = TStringBuf(name) != "application" && TStringBuf(name) != "unmarked_feed";
+            UNIT_ASSERT_VALUES_EQUAL(directFeedDump.Path().Child(name).Exists(), !excluded);
+        }
+
+    }
+
     Y_UNIT_TEST(SkipEmptyDirsOnRestore) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -4040,6 +4321,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
         ui16 GetS3Port() const {
             return S3Port;
+        }
+
+        const TS3Mock& GetS3Mock() const {
+            return S3Mock;
         }
     };
 
@@ -4185,6 +4470,65 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
+    }
+
+    // Items marked with __omit_backup are dropped from the export, whether the
+    // client listed them explicitly or the server expanded a directory.
+    Y_UNIT_TEST(OmittedObjectsAreNotExported) {
+        TS3TestEnv testEnv;
+        auto& session = testEnv.GetTableSession();
+
+        ExecuteDataDefinitionQuery(session, "CREATE TABLE `/Root/kept` (k Uint32, PRIMARY KEY (k));");
+        ExecuteDataDefinitionQuery(session, "CREATE TABLE `/Root/omitted` (k Uint32, PRIMARY KEY (k));");
+        {
+            const auto result = session.AlterTable("/Root/omitted", TAlterTableSettings()
+                .BeginAlterAttributes().Add("__omit_backup", "true").EndAlterAttributes()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ExecuteQuery(testEnv.GetQuerySession(), "CREATE VIEW `/Root/omitted_view` WITH security_invoker = TRUE AS SELECT 1;", true);
+        ExecuteQuery(testEnv.GetQuerySession(), "CREATE VIEW `/Root/kept_view` WITH security_invoker = TRUE AS SELECT 2;", true);
+        Tests::TClient legacyClient(*testEnv.GetServer().ServerSettings);
+        UNIT_ASSERT_VALUES_EQUAL(legacyClient.AlterUserAttributes("/Root", "omitted_view", {{"__omit_backup", "true"}}),
+            NMsgBusProxy::MSTATUS_OK);
+
+        CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port())();
+
+        bool keptExported = false;
+        bool keptViewExported = false;
+        for (const auto& [key, content] : testEnv.GetS3Mock().GetData()) {
+            UNIT_ASSERT_C(!key.Contains("omitted"), key);
+            keptExported |= key.Contains("kept/");
+            keptViewExported |= key.Contains("kept_view/");
+        }
+        UNIT_ASSERT(keptExported);
+        UNIT_ASSERT(keptViewExported);
+
+        const auto clientSettings = TCommonClientSettings().Database("/Root");
+        NExport::TExportClient exportClient(testEnv.GetDriver(), clientSettings);
+        auto exportSettings = NExport::TExportToS3Settings()
+            .Endpoint(Sprintf("localhost:%u", testEnv.GetS3Port()))
+            .Scheme(ES3Scheme::HTTP)
+            .Bucket("test_bucket")
+            .AccessKey("test_key")
+            .SecretKey("test_secret")
+            .AppendItem({.Src = "/Root/omitted", .Dst = "only_omitted"});
+        const auto response = exportClient.ExportToS3(exportSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(response.Status().GetStatus(), EStatus::BAD_REQUEST, response.Status().GetIssues().ToString());
+
+        exportSettings.Item_.clear();
+        exportSettings.AppendItem({.Src = "/Root", .Dst = "recursive"});
+        const auto recursiveResponse = exportClient.ExportToS3(exportSettings).ExtractValueSync();
+        UNIT_ASSERT_C(recursiveResponse.Status().IsSuccess(), recursiveResponse.Status().GetIssues().ToString());
+        NOperation::TOperationClient operationClient(testEnv.GetDriver(), clientSettings);
+        UNIT_ASSERT(WaitForOperation<NExport::TExportToS3Response>(operationClient, recursiveResponse.Id()));
+        bool recursiveExported = false;
+        for (const auto& [key, content] : testEnv.GetS3Mock().GetData()) {
+            UNIT_ASSERT_C(!key.Contains("omitted"), key);
+            recursiveExported |= key.Contains("recursive/kept_view/");
+        }
+        UNIT_ASSERT(recursiveExported);
     }
 
     Y_UNIT_TEST(RestoreIndexTablePartitioningSettings) {

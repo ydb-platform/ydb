@@ -118,6 +118,15 @@ Y_UNIT_TEST_SUITE(TGeneralCacheConsumers) {
         UNIT_ASSERT_VALUES_EQUAL(WeightOf(explicitZero, EConsumer::DUPLICATE_FILTERING), 0);
     }
 
+    Y_UNIT_TEST(ListedConsumerWithoutWeightGetsOne) {
+        NKikimrConfig::TGeneralCacheConfig proto;
+        proto.AddConsumers()->SetName("GENERAL_COMPACTION");
+        for (const bool useDefaultConsumers : { true, false }) {
+            const auto config = NGeneralCache::BuildCacheConfig("ut", proto, true, useDefaultConsumers);
+            UNIT_ASSERT_VALUES_EQUAL(WeightOf(config, EConsumer::GENERAL_COMPACTION), 1);
+        }
+    }
+
     Y_UNIT_TEST(InvalidConsumersKeepTheLimits) {
         const auto config = NGeneralCache::BuildCacheConfig("ut", WithConsumer("NOT_A_CONSUMER", 4), true, false);
         UNIT_ASSERT(!config.GetHasWeights());

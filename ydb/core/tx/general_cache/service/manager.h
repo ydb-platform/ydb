@@ -1,6 +1,6 @@
 #pragma once
 #include "counters.h"
-#include "weighted_queues.h"
+#include "request_queues.h"
 
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
@@ -165,8 +165,7 @@ private:
     const ui64 Cookie = Counter.Inc();
 
     THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> RequestedObjects;
-    TWeightedQueues<TAddress, std::shared_ptr<TRequest>> WeightedQueues;
-    std::deque<std::shared_ptr<TRequest>> UnweightedQueue;
+    TRequestQueues<TAddress, std::shared_ptr<TRequest>> Queues;
     YDB_READONLY_DEF(THashSet<ui64>, RequestsInProgress);
     THashMap<ui64, std::vector<std::shared_ptr<TRequest>>> RequestsByCookies;
     const std::shared_ptr<TManagerCounters> Counters;
@@ -202,16 +201,11 @@ public:
 
     void EnqueueRequest(const std::shared_ptr<TRequest>& request) {
         Counters->GetQueueObjectsCount()->Add(request->GetWaitBySource(SourceId).size());
-        const auto requestClass = ConsumerClasses->Get(request->GetConsumer());
-        if (requestClass.Weight == 0) {
-            UnweightedQueue.emplace_back(request);
-            return;
-        }
-        WeightedQueues.Enqueue(requestClass, request);
+        Queues.Enqueue(ConsumerClasses->Get(request->GetConsumer()), request);
     }
 
     void ReleaseInflight(const TAddress& address) {
-        WeightedQueues.OnFinished(address);
+        Queues.OnFinished(address);
     }
 
     void AddObjects(THashMap<TAddress, TObject>&& add, const bool isAdditional, const TMonotonic now) {
@@ -301,11 +295,8 @@ public:
                     Counters->OnMissCacheRequestFinished(request->GetStartRequest(), request->GetCreated(), now);
                 }
             }
-            queue.clear();
         };
-        WeightedQueues.ForEachRequestQueue(abortQueue);
-        WeightedQueues.Clear();
-        abortQueue(UnweightedQueue);
+        Queues.Abort(abortQueue);
         for (auto&& [objAddr, requests] : RequestedObjects) {
             for (auto&& r : requests) {
                 Counters->FailedObject->Inc();
@@ -385,7 +376,7 @@ public:
                 Counters->DirectObjects->Inc();
                 ++newAddresses;
                 if (weightedQueueId) {
-                    WeightedQueues.OnSent(*weightedQueueId, addr);
+                    Queues.OnSent(*weightedQueueId, addr);
                 }
             }
             itAddress->second.emplace_back(request);
@@ -402,34 +393,17 @@ public:
         THashMap<EConsumer, THashSet<TAddress>> requestedAddresses;
         const ui64 sourceLimit = Counters->GetConfig().GetDirectInflightSourceLimit();
         const TMonotonic now = TMonotonic::Now();
-
-        // Without weights in the config a request is sent whole and the limit is checked between requests only.
-        const bool chunked = Counters->GetConfig().GetHasWeights();
-
-        while (RequestedObjects.size() < sourceLimit && Counters->CheckTotalLimit()) {
-            if (const auto chosen = WeightedQueues.Pick(sourceLimit)) {
-                const ui64 budget = std::min(chosen->Budget, sourceLimit - RequestedObjects.size());
-                const auto dispatched =
-                    DispatchFront(WeightedQueues.MutableRequests(chosen->QueueId), budget, chosen->QueueId, requestedAddresses, now);
-                if (dispatched.NewAddresses) {
-                    WeightedQueues.MarkServed(chosen->QueueId);
+        Queues.Drain(
+            sourceLimit, Counters->GetConfig().GetHasWeights(),
+            [&]() -> ui64 {
+                if (RequestedObjects.size() >= sourceLimit || !Counters->CheckTotalLimit()) {
+                    return 0;
                 }
-                if (dispatched.PutBack && dispatched.NewAddresses == 0) {
-                    break;
-                }
-                continue;
-            }
-            // Weight 0 sends nothing while a weighted consumer has queued requests.
-            if (WeightedQueues.HasWaiting() || UnweightedQueue.empty()) {
-                break;
-            }
-            const ui64 budget = chunked ? sourceLimit - RequestedObjects.size() : Max<ui64>();
-            const auto dispatched = DispatchFront(UnweightedQueue, budget, std::nullopt, requestedAddresses, now);
-            if (dispatched.PutBack) {
-                break;
-            }
-        }
-        WeightedQueues.DropIdle();
+                return sourceLimit - RequestedObjects.size();
+            },
+            [&](std::deque<std::shared_ptr<TRequest>>& requests, const ui64 budget, const std::optional<ui64> weightedQueueId) {
+                return DispatchFront(requests, budget, weightedQueueId, requestedAddresses, now);
+            });
         ObjectsProcessor->AskData(std::move(requestedAddresses), ObjectsProcessor, Cookie);
         Counters->ObjectsQueueSize->Set(Counters->GetQueueObjectsCount()->Val());
         Counters->ObjectsInFlight->Set(Counters->GetTotalInFlight()->Val());

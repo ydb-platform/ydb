@@ -3533,7 +3533,7 @@ message TLabel {
 
 message TGeneralCacheConsumer {
     optional string Name = 1;
-    optional uint32 Weight = 2 [default = 0];
+    optional uint32 Weight = 2 [default = 1];
 }
 
 message TGeneralCacheConfig {

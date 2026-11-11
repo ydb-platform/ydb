@@ -179,10 +179,15 @@ public:
     }
 
     std::shared_ptr<TCallback> Add(const ui64 source, const EConsumer consumer, const std::vector<ui64>& ids) {
-        THashSet<TAddress> addresses;
+        std::vector<TAddress> addresses;
         for (const ui64 id : ids) {
-            addresses.insert(TAddress{ source, id });
+            addresses.push_back(TAddress{ source, id });
         }
+        return Add(consumer, addresses);
+    }
+
+    std::shared_ptr<TCallback> Add(const EConsumer consumer, const std::vector<TAddress>& list) {
+        THashSet<TAddress> addresses(list.begin(), list.end());
         auto callback = std::make_shared<TCallback>();
         std::shared_ptr<NKikimr::NGeneralCache::NPublic::ICallback<TPolicy>> base = callback;
         Manager->AddRequest(std::make_shared<TRequest>(std::move(addresses), std::move(base), consumer, TMonotonic::Now()));
@@ -201,6 +206,14 @@ public:
         }
         UNIT_ASSERT(!objects.empty());
         Manager->OnRequestResult(source, std::move(objects), {}, {});
+    }
+
+    void Finish(const ui64 source, const std::vector<ui64>& ids) {
+        TAsk ask;
+        for (const ui64 id : ids) {
+            ask.Addresses[EConsumer::SCAN].insert(TAddress{ source, id });
+        }
+        Finish(std::move(ask));
     }
 };
 
@@ -407,5 +420,74 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
         NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(1).Ids(), { 10 }, 1);
         UNIT_ASSERT(!aborted->Ready);
+    }
+
+    Y_UNIT_TEST(RequestAbortedAfterFirstChunkNeverFetchesItsTail) {
+        NGeneralCacheUt::THarness harness(2, { { "SCAN", 1 } });
+        auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1, 2, 3, 4, 5 });
+        const auto sent = harness.Processor->Asks.at(0).Ids();
+        NGeneralCacheUt::AssertIds(sent, { 1, 2, 3, 4, 5 }, 2);
+        std::vector<ui64> sentIds(sent.begin(), sent.end());
+        scan->Aborted = true;
+
+        harness.Finish(1, { sentIds[0] });
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
+        UNIT_ASSERT(!scan->Ready);
+
+        harness.Finish(1, { sentIds[1] });
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
+        UNIT_ASSERT(scan->Ready);
+        UNIT_ASSERT(scan->HasErrors);
+
+        auto next = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 10, 11 });
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(1).Ids(), { 10, 11 }, 2);
+        harness.Finish(harness.Processor->Asks.at(1));
+        UNIT_ASSERT(next->Ready);
+        UNIT_ASSERT(!next->HasErrors);
+    }
+
+    Y_UNIT_TEST(BrokenSourceFinishesPartlySentAndQueuedRequests) {
+        NGeneralCacheUt::THarness harness(2, { { "SCAN", 1 } });
+        auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1, 2, 3, 4, 5 });
+        auto prefetch = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 20 });
+        const auto sentAsk = harness.Processor->Asks.at(0);
+        NGeneralCacheUt::AssertIds(sentAsk.Ids(), { 1, 2, 3, 4, 5 }, 2);
+
+        harness.Manager->AbortSource(1);
+        UNIT_ASSERT(scan->Ready);
+        UNIT_ASSERT(scan->HasErrors);
+        UNIT_ASSERT(prefetch->Ready);
+        UNIT_ASSERT(prefetch->HasErrors);
+
+        harness.Finish(sentAsk);
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
+
+        auto next = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 10, 11 });
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(1).Ids(), { 10, 11 }, 2);
+        harness.Finish(harness.Processor->Asks.at(1));
+        UNIT_ASSERT(next->Ready);
+        UNIT_ASSERT(!next->HasErrors);
+    }
+
+    Y_UNIT_TEST(RequestOnTwoSourcesWaitsForBoth) {
+        NGeneralCacheUt::THarness harness(1, { { "SCAN", 1 } });
+        auto scan = harness.Add(NGeneralCacheUt::EConsumer::SCAN, { { 1, 1 }, { 2, 2 } });
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
+        auto queued = harness.Add(2, NGeneralCacheUt::EConsumer::SCAN, { 3 });
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
+
+        harness.Finish(1, { 1 });
+        UNIT_ASSERT(!scan->Ready);
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
+
+        harness.Finish(2, { 2 });
+        UNIT_ASSERT(scan->Ready);
+        UNIT_ASSERT(!scan->HasErrors);
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 3);
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(2).Ids(), { 3 }, 1);
+        harness.Finish(harness.Processor->Asks.at(2));
+        UNIT_ASSERT(queued->Ready);
     }
 }

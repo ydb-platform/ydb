@@ -450,4 +450,5 @@ message TFeatureFlags {
     optional bool EnableClientModifications = 368 [default = true];
     optional bool EnableComputeSchedulerMemory = 370 [default = false, (RequireRestart) = true];
     optional bool EnableColumnshardCutHistorySending = 385 [default = false];
+    optional bool EnableCdcAggregator = 386 [default = false];
 }

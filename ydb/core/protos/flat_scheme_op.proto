@@ -1178,6 +1178,11 @@ enum ECdcStreamFormat {
     ECdcStreamFormatDebeziumJson = 4;
 }
 
+enum ECdcStreamHeartbeatMode {
+    ECdcStreamHeartbeatModeDirect = 0;
+    ECdcStreamHeartbeatModeAggregated = 1;
+}
+
 message TCdcStreamScanProgress {
     optional uint32 ShardsTotal = 1;
     optional uint32 ShardsCompleted = 2;
@@ -1200,6 +1205,8 @@ message TCdcStreamDescription {
     optional bool SchemaChanges = 12;
     optional bool UserSIDs = 13;
     optional bool TraceIds = 14;
+    optional ECdcStreamHeartbeatMode HeartbeatMode = 17;
+    optional fixed64 AggregatorTabletId = 18;
 }
 
 message TCreateCdcStream {

@@ -4,7 +4,8 @@ TEST_SRCS(
     test_restarts.py
 )
 
-SPLIT_FACTOR(10)
+FORK_SUBTESTS()
+SPLIT_FACTOR(8)
 
 SIZE(MEDIUM)
 
@@ -26,8 +27,5 @@ PEERDIR(
     ydb/tests/library
     ydb/tests/library/clients
 )
-
-FORK_SUBTESTS()
-FORK_TEST_FILES()
 
 END()

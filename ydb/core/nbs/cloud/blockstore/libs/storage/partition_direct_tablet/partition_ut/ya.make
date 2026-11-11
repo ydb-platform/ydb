@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(7)
 
 REQUIREMENTS(ram:32 cpu:1)
 

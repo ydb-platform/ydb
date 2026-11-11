@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/statistics/database)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(9)
 
 SIZE(MEDIUM)
 

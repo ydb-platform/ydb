@@ -1,6 +1,7 @@
 UNITTEST()
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(2)
 
 SRCS(
     purecalc_io_ut.cpp

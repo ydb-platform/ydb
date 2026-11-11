@@ -1,10 +1,9 @@
 UNITTEST_FOR(ydb/core/tablet)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(7)
 
 SIZE(MEDIUM)
-
-SPLIT_FACTOR(50)
 
 PEERDIR(
     library/cpp/getopt

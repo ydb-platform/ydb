@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/dq/runtime)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(3)
 
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:1)

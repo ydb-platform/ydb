@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
-    FORK_SUBTESTS()
+FORK_SUBTESTS()
+SPLIT_FACTOR(6)
 
     SIZE(MEDIUM)
 

@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/tx/tx_proxy)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(2)
 
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)

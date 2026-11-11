@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/kqp)
 
 SIZE(MEDIUM)
 FORK_SUBTESTS()
+SPLIT_FACTOR(8)
 
 SRCS(
     kqp_ydb_external_ut.cpp

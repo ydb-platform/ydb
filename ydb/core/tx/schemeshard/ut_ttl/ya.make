@@ -1,8 +1,7 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
-
-SPLIT_FACTOR(56)
+SPLIT_FACTOR(40)
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)

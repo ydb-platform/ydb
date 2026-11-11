@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/local_proxy/local_pq_client)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(9)
 
 REQUIREMENTS(cpu:1)
 SIZE(MEDIUM)

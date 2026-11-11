@@ -6,6 +6,7 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 using namespace NYql::NNodes;
 using namespace NKikimr;
@@ -196,6 +197,15 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildOlapAverageState(const TOlapAggrega
     // clang-format on
 }
 
+TExprNode::TPtr TPhysicalSourceBuilder::AddOlapComputeSharding(TExprNode::TPtr settings) const {
+    TExprNode::TListType columns;
+    for (const auto& column : OlapComputeSharding->Columns) {
+        columns.push_back(Ctx.NewAtom(Pos, column));
+    }
+    const TString name(TKqpReadTableSettings::GroupByFieldNames);
+    return NYql::AddSetting(*settings, Pos, name, Ctx.NewList(Pos, std::move(columns)), Ctx);
+}
+
 NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
     TExprNode::TPtr source;
     TVector<TString> storageColumns;
@@ -327,12 +337,17 @@ NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
                 settings.SequentialInFlight = 1;
             }
 
+            auto settingsNode = settings.BuildNode(Ctx, Pos).Ptr();
+            if (OlapComputeSharding) {
+                settingsNode = AddOlapComputeSharding(std::move(settingsNode));
+            }
+
             // clang-format off
             auto olapRead = Build<TKqpBlockReadOlapTableRanges>(Ctx, Pos)
                 .Table(Read.TableCallable)
                 .Ranges(ranges)
                 .Columns().Add(columns).Build()
-                .Settings(settings.BuildNode(Ctx, Pos))
+                .Settings(settingsNode)
                 .ExplainPrompt<TCoNameValueTupleList>().Build()
                 .Process(processLambda)
             .Done().Ptr();

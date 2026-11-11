@@ -2308,6 +2308,7 @@ private:
             TSyncerProgress Progress;
             std::optional<NKikimrBridge::TGroupState::EStage> ProgressStage;
             ui64 ProgressRound = 0;
+            ui32 ProgressGeneration = 0;
             ui32 ProgressBaselineFields = 0;
             TProgressBaseline ProgressBaseline;
         };

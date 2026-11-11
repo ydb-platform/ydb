@@ -1379,11 +1379,13 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
                 syncer.HasBlobsDone() || syncer.HasBlobsTotal() || syncer.HasBlobsError() ||
                 syncer.HasBytesToCopy() || syncer.HasBytesCopied() || syncer.HasScanFinished() || syncer.HasScannedItems()) {
             auto& progress = perNodeInfo.Progress;
-            if (targetPile && (!sameSource || perNodeInfo.ProgressStage != targetPile->GetStage() ||
+            if (targetPile && (!sameSource || perNodeInfo.ProgressGeneration != generation ||
+                    perNodeInfo.ProgressStage != targetPile->GetStage() ||
                     perNodeInfo.ProgressRound != targetPile->GetBecameUnsyncedGeneration())) {
                 progress = {};
                 perNodeInfo.ProgressStage = targetPile->GetStage();
                 perNodeInfo.ProgressRound = targetPile->GetBecameUnsyncedGeneration();
+                perNodeInfo.ProgressGeneration = generation;
                 perNodeInfo.ProgressBaselineFields = 0;
                 perNodeInfo.ProgressBaseline = {};
             }

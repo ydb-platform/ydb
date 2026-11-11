@@ -59,6 +59,7 @@ SRCS(
     sql_ddl_topic.cpp
     sql_ddl_transfer.cpp
     sql_expression.cpp
+    sql_flatten.cpp
     sql_group_by.cpp
     sql_match_recognize.cpp
     sql_into_tables.cpp

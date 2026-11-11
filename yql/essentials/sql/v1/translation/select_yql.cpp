@@ -16,6 +16,15 @@ public:
     {
     }
 
+    TAstNode* Translate(TContext& ctx) const override {
+        return Node_->Translate(ctx);
+    }
+
+    TNodePtr Build(TContext& ctx) override {
+        Y_UNUSED(ctx);
+        return Node_;
+    }
+
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) final {
         Y_UNUSED(ctx, column);
         return true;
@@ -24,6 +33,95 @@ public:
     ISource* GetSource() final {
         return this;
     }
+
+protected:
+    TNodePtr Node_;
+};
+
+class TYqlFlattenNodeBase: public IYqlSource {
+public:
+    using IYqlSource::IYqlSource;
+
+protected:
+    TNodePtr BuildBlockLambda(TNodePtr body) const {
+        return BuildLambda(Pos_, Y("row"), std::move(body), "res");
+    }
+};
+
+class TYqlFlattenColumnsNode final: public TYqlFlattenNodeBase {
+public:
+    explicit TYqlFlattenColumnsNode(TPosition position)
+        : TYqlFlattenNodeBase(std::move(position))
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(ctx, src);
+        Node_ = Q(Y(Q("flatten_columns"), Y("YqlFlattenColumns", BuildBlockLambda(BuildFlattenColumns("row")))));
+        return true;
+    }
+
+    TNodePtr DoClone() const override {
+        return new TYqlFlattenColumnsNode(*this);
+    }
+};
+
+class TYqlFlattenByNode final: public TYqlFlattenNodeBase {
+public:
+    TYqlFlattenByNode(
+        TPosition position,
+        TString mode,
+        TFlattenByArgs&& args)
+        : TYqlFlattenNodeBase(std::move(position))
+        , Mode_(std::move(mode))
+        , Args_(std::move(args))
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!InitFlattenBy(ctx, src)) {
+            return false;
+        }
+
+        TNodePtr preFlatten = Y("Void");
+        if (IsFlattenByExprs()) {
+            preFlatten = BuildLambda(Pos_, Y("row"), BuildPreFlattenMap(ctx));
+        }
+        TNodePtr flatten = BuildBlockLambda(BuildFlattenByColumns("row"));
+        Node_ = Q(Y(Q("flatten_by"), Y("YqlFlattenBy", std::move(preFlatten), std::move(flatten))));
+        return true;
+    }
+
+    TNodePtr DoClone() const override {
+        return new TYqlFlattenByNode(*this);
+    }
+
+private:
+    bool InitFlattenBy(TContext& ctx, ISource* src) {
+        TVector<TNodePtr> columns;
+        TVector<TNodePtr> expressions;
+        for (const auto& argument : Args_.Arguments) {
+            columns.push_back(argument.Column);
+            if (argument.Expression) {
+                expressions.push_back(argument.Expression);
+            }
+        }
+
+        if (!AddExpressions(ctx, columns, EExprSeat::FlattenBy) ||
+            !AddExpressions(ctx, expressions, EExprSeat::FlattenByExpr)) {
+            return false;
+        }
+
+        SetFlattenByMode(Mode_);
+        if (!ISource::DoInit(ctx, src)) {
+            return false;
+        }
+        const ISource& source = *this;
+        return NSQLTranslationV1::Init(ctx, this, source.Expressions(EExprSeat::FlattenByExpr));
+    }
+
+    TString Mode_;
+    TFlattenByArgs Args_;
 };
 
 class TYqlTableRefNode final: public INode, private TYqlTableRefArgs {
@@ -378,15 +476,6 @@ public:
         return true;
     }
 
-    TAstNode* Translate(TContext& ctx) const override {
-        return Node_->Translate(ctx);
-    }
-
-    TNodePtr Build(TContext& ctx) override {
-        Y_UNUSED(ctx);
-        return Node_;
-    }
-
     TNodePtr DoClone() const override {
         return new TYqlSetItemNode(*this);
     }
@@ -488,6 +577,10 @@ private:
 
         for (const auto& source : Source->Sources) {
             if (!source.Node->Init(ctx, src)) {
+                return false;
+            }
+
+            if (source.Flatten && !source.Flatten->Init(ctx, src)) {
                 return false;
             }
         }
@@ -626,7 +719,7 @@ private:
     }
 
     TMaybe<TNodePtr> BuildFromElement(TContext& ctx, TYqlSource source) const {
-        const auto build = [this, &ctx](
+        const auto build = [this, &ctx, &source](
                                TNodePtr node,
                                TString name,
                                const TVector<TYqlColumnRef>& columns,
@@ -650,16 +743,22 @@ private:
             x = L(std::move(x), std::move(nameAtom));
             x = L(std::move(x), Q(std::move(columnList)));
 
+            TNodePtr settings = Y();
             switch (kind) {
                 case TYqlSourceAlias::EKind::Subquery:
-                    // Ignore
                     break;
                 case TYqlSourceAlias::EKind::CTE:
-                    x = L(std::move(x), Q(Y(Q(Y(Q("cte"))))));
+                    settings->Add(Q(Y(Q("cte"))));
                     break;
                 case TYqlSourceAlias::EKind::IntoValues:
-                    x = L(std::move(x), Q(Y(Q(Y(Q("into_values"))))));
+                    settings->Add(Q(Y(Q("into_values"))));
                     break;
+            }
+            if (source.Flatten) {
+                settings->Add(source.Flatten);
+            }
+            if (source.Flatten || kind != TYqlSourceAlias::EKind::Subquery) {
+                x = L(std::move(x), Q(std::move(settings)));
             }
 
             return Q(std::move(x));
@@ -903,8 +1002,6 @@ private:
     bool IsJoin() const {
         return Source && 1 < Source->Sources.size();
     }
-
-    TNodePtr Node_;
 };
 
 class TYqlSelectNode final: public TYqlSelectLikeNode, private TYqlSelectArgs {
@@ -955,15 +1052,6 @@ public:
 
         Node_ = Y("YqlSelect", Q(std::move(body)));
         return true;
-    }
-
-    TAstNode* Translate(TContext& ctx) const override {
-        return Node_->Translate(ctx);
-    }
-
-    TNodePtr Build(TContext& ctx) override {
-        Y_UNUSED(ctx);
-        return Node_;
     }
 
     TNodePtr DoClone() const override {
@@ -1035,7 +1123,6 @@ private:
         return *node;
     }
 
-    TNodePtr Node_;
     TVector<TNodePtr> SetItems_;
 };
 
@@ -1348,6 +1435,21 @@ TNodePtr BuildYqlSelf(TPosition position) {
 
 TNodePtr BuildYqlStar(TPosition position, TMaybe<TString> source) {
     return new TYqlStarNode(std::move(position), std::move(source));
+}
+
+TNodePtr BuildYqlFlattenColumns(TPosition position) {
+    return new TYqlFlattenColumnsNode(std::move(position));
+}
+
+TNodePtr BuildYqlFlattenBy(
+    TPosition position,
+    TString mode,
+    TFlattenByArgs&& args)
+{
+    return new TYqlFlattenByNode(
+        std::move(position),
+        std::move(mode),
+        std::move(args));
 }
 
 TSourcePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args) {

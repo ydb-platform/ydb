@@ -1,4 +1,4 @@
-/* custom check: len(yt_res_yson[0][b'Write'][0][b'Data']) < 16 */
+/* custom check: 0 < sum(int(row[2]) for row in yt_res_yson[0][b'Write'][0][b'Data']) < 200 */
 USE plato;
 
 $udf = YQL::@@
@@ -16,6 +16,6 @@ $udf = YQL::@@
 )
 @@;
 
-$r = (REDUCE Input SAMPLE(0.1), Input SAMPLE(0.1) ON key USING $udf(TableRow()));
+$r = (REDUCE Input SAMPLE(0.5), Input SAMPLE(0.5) ON key USING $udf(TableRow()));
 
 SELECT key, src, cnt FROM $r ORDER BY key, src, cnt;

@@ -47,6 +47,7 @@ public:
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStages));
         AddHandler(0, &TKqlSequencer::Match, HNDL(BuildSequencerStages));
         AddHandler(0, IsSort, HNDL(RemoveRedundantSortOverReadTable));
+        AddHandler(0, &TDqCnMerge::Match, HNDL(ReadOlapWithMerge));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToFullTextIndex));
         AddHandler(0, &TCoTopSort::Match, HNDL(ApplyLimitToOlapReadTable));
@@ -170,6 +171,12 @@ public:
     }
 
 protected:
+    TMaybeNode<TExprBase> ReadOlapWithMerge(TExprBase node, TExprContext& ctx) {
+        auto output = KqpReadOlapWithMerge(node, ctx, KqpCtx);
+        DumpAppliedRule("ReadOlapWithMerge", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> BuildReturning(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildReturning(node, ctx, TypesCtx, KqpCtx);
         DumpAppliedRule("BuildReturning", node.Ptr(), output.Ptr(), ctx);

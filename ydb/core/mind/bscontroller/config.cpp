@@ -685,6 +685,11 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            // the groups that didn't let BSC adopt storage pool pile overrides of StorageConfig may be gone now
+            if (PileOverridesError && (state.Groups.Changed() || state.StoragePools.Changed())) {
+                state.Callbacks.push_back([this] { UpdatePileOverrides(); });
+            }
+
             // groups relying on single parts get synced or lose their parts, see if they are done with it
             for (const auto& [base, overlay] : state.Groups.Diff()) {
                 if (const TGroupInfo *cur = overlay->second.Get(); cur && cur->BridgeGroupInfo &&
@@ -968,14 +973,22 @@ namespace NKikimr::NBsController {
         void TBlobStorageController::CommitDatabaseSpaceUpdates(TConfigState& state, NIceDb::TNiceDb& db) {
             {
                 TDatabaseSpaceTracker::TBatch batch(DatabaseSpace);
+                const TGroupInfo::TGroupFinder finder = [&state](TGroupId groupId) {
+                    return state.Groups.Find(groupId);
+                };
 
                 // created/changed/deleted groups (group may change its storage pool or stop being a physical one);
                 // done first, so that deleted pools have no groups left
                 for (const auto& [base, overlay] : state.Groups.Diff()) {
                     if (overlay->second) {
-                        UpdateDatabaseSpaceGroup(*overlay->second);
+                        UpdateDatabaseSpaceGroup(*overlay->second, finder, state.BridgeInfo.get());
                     } else {
                         DatabaseSpace.RemoveGroup(overlay->first);
+                        if (base && base->second->BridgeProxyGroupId) {
+                            if (const TGroupInfo *proxy = finder(*base->second->BridgeProxyGroupId)) {
+                                UpdateDatabaseSpaceGroup(*proxy, finder, state.BridgeInfo.get());
+                            }
+                        }
                     }
                 }
 

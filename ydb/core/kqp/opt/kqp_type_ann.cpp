@@ -1,6 +1,7 @@
 #include "kqp_opt.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
@@ -376,7 +377,7 @@ const TTypeAnnotationNode* GetReadTableRowTypeFullText(TExprContext& ctx, const 
 }
 
 TStatus AnnotateReadTableFullTextIndexSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster, const TKikimrTablesData& tablesData) {
-    if (!EnsureArgsCount(*node, 6, ctx)) {
+    if (!EnsureArgsCount(*node, 7, ctx)) {
         return TStatus::Error;
     }
 
@@ -2261,7 +2262,8 @@ TStatus AnnotateKqpStreamEnumerate(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 3, ctx)) {
+    if (node->ChildrenSize() != 3 && node->ChildrenSize() != 5) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "FulltextAnalyze requires 3 or 5 arguments"));
         return TStatus::Error;
     }
 
@@ -2307,10 +2309,37 @@ TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    // Third argument: mode (should be Atom - "0" (any fulltext), "1" (JI on Json) or "2" (JI on JsonDocument))
+    // Third argument: the numeric EIndexMode as an atom.
     const auto* modeArg = node->Child(2);
     if (!EnsureAtom(*modeArg, ctx)) {
         return TStatus::Error;
+    }
+
+    if (node->ChildrenSize() == 5) {
+        if ((textSlot != EDataSlot::String && textSlot != EDataSlot::Utf8)
+            || modeArg->Content() != ToString(static_cast<ui32>(NFulltext::EIndexMode::FulltextQuery)))
+        {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "String patterns require String or Utf8 text and FulltextQuery mode"));
+            return TStatus::Error;
+        }
+        const auto* patternMode = node->Child(3);
+        if (!EnsureAtom(*patternMode, ctx)) {
+            return TStatus::Error;
+        }
+        const auto mode = patternMode->Content();
+        if (mode != "LIKE" && mode != "ILIKE" && mode != "EXACT" && mode != "STARTS_WITH"
+            && mode != "ENDS_WITH" && mode != "CONTAINS")
+        {
+            ctx.AddError(TIssue(ctx.GetPosition(patternMode->Pos()), "Unknown string pattern mode"));
+            return TStatus::Error;
+        }
+        const auto* escape = node->Child(4);
+        if (!escape->IsCallable("String") || escape->ChildrenSize() != 1 || !escape->Head().IsAtom()
+            || escape->Head().Content().size() > 1)
+        {
+            ctx.AddError(TIssue(ctx.GetPosition(escape->Pos()), "Expected an optional single-byte LIKE escape as a String literal"));
+            return TStatus::Error;
+        }
     }
 
     // Return type: List<Struct<__ydb_token:String or Utf8,__ydb_freq:Uint32>>

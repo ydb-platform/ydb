@@ -100,16 +100,14 @@ public:
 
 class TTxSwitchDrainOff : public TTransactionBase<THive> {
     TDrainTarget Target;
-    TDrainSettings Settings;
     NKikimrProto::EReplyStatus Status;
     ui32 Movements;
     TVector<TActorId> Initiators;
 
 public:
-    TTxSwitchDrainOff(TDrainTarget target, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements, THive* hive)
+    TTxSwitchDrainOff(TDrainTarget target, NKikimrProto::EReplyStatus status, ui32 movements, THive* hive)
         : TBase(hive)
         , Target(target)
-        , Settings(std::move(settings))
         , Status(status)
         , Movements(movements)
     {}
@@ -143,9 +141,11 @@ public:
             }
             SwitchDrainOff<Schema::Node>(db, node);
         } else if (std::holds_alternative<TBridgePileId>(Target)) {
-            // the pile may have been removed from the cluster meanwhile, then there is nothing to switch off
-            const auto it = Self->BridgePiles.find(std::get<TBridgePileId>(Target));
-            SwitchDrainOff<Schema::BridgePile>(db, it != Self->BridgePiles.end() ? &it->second : nullptr);
+            const auto pileId = std::get<TBridgePileId>(Target);
+            const auto it = Self->BridgePiles.find(pileId);
+            if (it != Self->BridgePiles.end() && !Self->HasTabletsToDrain(pileId)) {
+                SwitchDrainOff<Schema::BridgePile>(db, &it->second);
+            }
         } else {
             Y_DEBUG_ABORT("Unexpected value in TDrainTarget");
         }
@@ -161,6 +161,14 @@ public:
         for (const TActorId& initiator : Initiators) {
             Self->Send(initiator, new TEvHive::TEvDrainNodeResult(Status, Movements));
         }
+        if (const auto* pileId = std::get_if<TBridgePileId>(&Target)) {
+            const auto it = Self->BridgePiles.find(*pileId);
+            if (Self->BridgeInfo && it != Self->BridgePiles.end() && !it->second.DrainActor && std::exchange(it->second.DrainRetry, false)) {
+                Self->StartPileDrain(it->second);
+            }
+        } else {
+            Self->ProcessPileDrains();
+        }
     }
 };
 
@@ -168,8 +176,8 @@ ITransaction* THive::CreateSwitchDrainOn(NHive::TNodeId nodeId, TDrainSettings s
     return new TTxSwitchDrainOn(nodeId, std::move(settings), initiator, seqNo, cookie, this);
 }
 
-ITransaction* THive::CreateSwitchDrainOff(TDrainTarget target, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements) {
-    return new TTxSwitchDrainOff(target, std::move(settings), status, movements, this);
+ITransaction* THive::CreateSwitchDrainOff(TDrainTarget target, NKikimrProto::EReplyStatus status, ui32 movements) {
+    return new TTxSwitchDrainOff(target, status, movements, this);
 }
 
 } // NHive

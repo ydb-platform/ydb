@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 PEERDIR(
+    ydb/core/backup/common
     ydb/core/base
     ydb/core/discovery
     ydb/core/engine/minikql

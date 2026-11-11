@@ -48,6 +48,24 @@ Y_UNIT_TEST_SUITE(ReplicationTestEnv) {
 Y_UNIT_TEST_SUITE(StreamCreator) {
     using namespace NTestHelpers;
 
+    Y_UNIT_TEST(TargetStreamPathsAreCanonical) {
+        const NKikimrReplication::TReplicationConfig config;
+        TReplication replication(1, TPathId(1, 1), config, "/Root");
+        const auto check = [&](const TReplication::ITarget::IConfig::TPtr& targetConfig, const TString& expected) {
+            const auto id = replication.AddTarget(targetConfig->GetKind(), targetConfig);
+            auto* target = replication.FindTarget(id);
+            target->SetStreamName("Stream");
+            UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), expected);
+        };
+
+        check(std::make_shared<TTargetTable::TTableConfig>("Root//Table/", "/Root/Replica"),
+            "/Root/Table/Stream");
+        check(std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root//Table/Index/", "/Root/Replica"),
+            "/Root/Table/Index/indexImplTable/Stream");
+        check(std::make_shared<TTargetTransfer::TTransferConfig>("/Root//Topic/", "/Root/Replica", config),
+            "/Root/Topic");
+    }
+
     enum class EBootstrapStage {
         Changefeed,
         Consumer,
@@ -117,7 +135,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         creator = runtime.Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1, 1,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), TDuration::Seconds(10)));
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), TDuration::Seconds(10)));
         runtime.EnableScheduleForActor(creator);
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender(), TDuration::Seconds(30)));
         const auto startedAt = runtime.GetCurrentTime();
@@ -199,7 +217,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         creator = runtime.Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1, 1,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
         runtime.EnableScheduleForActor(creator);
         const auto request = runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(
             env.GetSender(), TDuration::Seconds(30));
@@ -255,7 +273,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         SessionAcquisitionFailure(Ydb::StatusIds::UNAUTHORIZED);
     }
 
-    void Basic(const std::optional<TDuration>& resolvedTimestamps = {}) {
+    void Basic(const std::optional<TDuration>& resolvedTimestamps = {}, bool enableOmitBackupAttribute = false) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
@@ -284,7 +302,8 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps,
+            false, true, false, true, false, TDuration::Seconds(1), TDuration::Days(1), false, enableOmitBackupAttribute
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
@@ -308,6 +327,18 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         UNIT_ASSERT_VALUES_EQUAL(stream.GetVirtualTimestamps(), resolvedTimestamps.has_value());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetResolvedTimestampsIntervalMs(), resolvedTimestamps.value_or(TDuration::Zero()).MilliSeconds());
 
+        // The legacy marker is always present; the explicit exclusion is opt-in.
+        {
+            const auto streamDesc = env.GetDescription("/Root/Table/Stream");
+            const auto& attributes = streamDesc.GetPathDescription().GetUserAttributes();
+            UNIT_ASSERT_VALUES_EQUAL_C(attributes.size(), enableOmitBackupAttribute ? 2 : 1, streamDesc.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(attributes.Get(0).GetKey(), "__async_replication");
+            if (enableOmitBackupAttribute) {
+                UNIT_ASSERT_VALUES_EQUAL(attributes.Get(1).GetKey(), "__omit_backup");
+                UNIT_ASSERT_VALUES_EQUAL(attributes.Get(1).GetValue(), "true");
+            }
+        }
+
         const auto topic = env.GetDescription("/Root/Table/Stream/streamImpl");
         const auto& config = topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
         UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionConfig().GetLifetimeSeconds(), 1);
@@ -320,8 +351,98 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         Basic();
     }
 
+    Y_UNIT_TEST(OmitBackupAttributeEnabled) {
+        Basic({}, true);
+    }
+
     Y_UNIT_TEST(WithResolvedTimestamps) {
         Basic(TDuration::Seconds(10));
+    }
+
+    void SourceWithoutOmitBackupSupport(bool retryAfterTransientFailure) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        ui32 rejectedRequests = 0;
+        ui32 acceptedRequests = 0;
+        // Model the old source's attribute validation at the proxy boundary.
+        // Requests using only the legacy marker still reach the real source.
+        auto observer = runtime.AddObserver<TEvYdbProxy::TEvAlterTableRequest>(
+            [&](TEvYdbProxy::TEvAlterTableRequest::TPtr& ev) {
+                if (ev->GetRecipientRewrite() != env.GetYdbProxy()) {
+                    return;
+                }
+                const auto& settings = std::get<NYdb::NTable::TAlterTableSettings>(ev->Get()->GetArgs());
+                for (const auto& feed : settings.AddChangefeeds_) {
+                    for (const auto& [name, value] : feed.GetAttributes()) {
+                        if (name.starts_with("__") && name != "__async_replication") {
+                            ++rejectedRequests;
+                            NYdb::NIssue::TIssues issues;
+                            NYdb::NIssue::TIssue issue("SchemeShard rejected changefeed creation");
+                            issue.AddSubIssue(new NYdb::NIssue::TIssue("UserAttributes: unsupported attribute '" + name + "'"));
+                            issues.AddIssue(std::move(issue));
+                            runtime.Send(new IEventHandle(ev->Sender, env.GetYdbProxy(),
+                                new TEvYdbProxy::TEvAlterTableResponse(
+                                    NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, std::move(issues))),
+                                0, ev->Cookie));
+                            ev.Reset();
+                            return;
+                        }
+                    }
+                }
+                ++acceptedRequests;
+                if (retryAfterTransientFailure && acceptedRequests == 1) {
+                    runtime.Send(new IEventHandle(ev->Sender, env.GetYdbProxy(),
+                        new TEvYdbProxy::TEvAlterTableResponse(NYdb::TStatus(NYdb::EStatus::UNAVAILABLE, {})),
+                        0, ev->Cookie));
+                    ev.Reset();
+                }
+            });
+
+        // Check that this source really rejects the new attribute.
+        runtime.SendAsync(new IEventHandle(env.GetYdbProxy(), env.GetSender(),
+            new TEvYdbProxy::TEvAlterTableRequest("/Root/Table",
+            NYdb::NTable::TAlterTableSettings().AppendAddChangefeeds(
+                NYdb::NTable::TChangefeedDescription("Unsupported", NYdb::NTable::EChangefeedMode::Updates,
+                    NYdb::NTable::EChangefeedFormat::Json).AddAttribute("__omit_backup", "true")))), 0);
+        const auto rejected = runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTableResponse>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(rejected->Get()->Result.GetIssues().ToString(), "__omit_backup");
+
+        const auto creator = runtime.Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
+        runtime.EnableScheduleForActor(creator);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender()));
+        runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(rejectedRequests, 1); // only the explicit probe; the controller uses the legacy marker
+        UNIT_ASSERT_VALUES_EQUAL(acceptedRequests, retryAfterTransientFailure ? 2 : 1);
+        const auto stream = env.GetDescription("/Root/Table/Stream");
+        const auto& attributes = stream.GetPathDescription().GetUserAttributes();
+        UNIT_ASSERT_VALUES_EQUAL(attributes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(attributes.Get(0).GetKey(), "__async_replication");
+
+        env.SendAsync(env.GetYdbProxy(), new TEvYdbProxy::TEvDescribeConsumerRequest(
+            "/Root/Table/Stream", "replicationConsumer", {}));
+        const auto consumer = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeConsumerResponse>(env.GetSender());
+        UNIT_ASSERT_C(consumer->Get()->Result.IsSuccess(), consumer->Get()->Result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(SourceWithoutOmitBackupSupport) {
+        SourceWithoutOmitBackupSupport(false);
+    }
+
+    Y_UNIT_TEST(SourceWithoutOmitBackupSupportAfterTransientFailure) {
+        SourceWithoutOmitBackupSupport(true);
     }
 
     Y_UNIT_TEST(WithoutInitialScan) {
@@ -335,7 +456,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1, 1,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Restored"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
             false, true, false, false));
         auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
         env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
@@ -363,7 +484,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt, enabled
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt, enabled
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
@@ -403,7 +524,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1, 1,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
             true, true, true));
         auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
         env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
@@ -432,7 +553,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             env.GetRuntime().Register(CreateStreamCreator(
                 env.GetSender(), env.GetYdbProxy(), 1, 1,
                 std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-                "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+                "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
                 false, true, schemaChanges));
             const auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
             env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
@@ -475,7 +596,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         const auto run = [&](bool unlimited) {
             runtime.Register(CreateStreamCreator(env.GetSender(), proxy, 1, 1,
                 std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-                "Stream", "replicationConsumer", TDuration::Days(1), std::nullopt,
+                "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Days(1), std::nullopt,
                 false, true, false, true, false, TDuration::Seconds(1),
                 unlimited ? TDuration::Zero() : availability, unlimited));
             const auto request = runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
@@ -538,7 +659,8 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         TTestActorRuntime::TEventObserverHolder Observer;
 
         explicit TStreamSetup(bool transfer = false, TDuration retention = TDuration::Seconds(1),
-                TDuration availability = TDuration::Days(1), bool describeOnly = false, bool important = false)
+                TDuration availability = TDuration::Days(1), bool describeOnly = false, bool important = false,
+                TString streamPath = {}, bool enableOmitBackupAttribute = false)
         {
             Runtime.Initialize(TAppPrepare().Unwrap());
             Parent = Runtime.AllocateEdgeActor();
@@ -555,9 +677,12 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             } else {
                 config = std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/Table/Index", "/Root/Replica");
             }
+            if (streamPath.empty()) {
+                streamPath = transfer ? "/Root/Topic" : "/Root/Table/Index/indexImplTable/Stream";
+            }
             Creator = Runtime.Register(CreateStreamCreator(Parent, Proxy, 1, 1, config,
-                "Stream", "replicationConsumer", TDuration::Days(1), std::nullopt,
-                false, true, false, true, describeOnly, retention, availability, important));
+                "Stream", streamPath, "replicationConsumer", TDuration::Days(1), std::nullopt,
+                false, true, false, true, describeOnly, retention, availability, important, enableOmitBackupAttribute));
             Runtime.EnableScheduleForActor(Creator);
         }
 
@@ -587,8 +712,10 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             return std::get<NYdb::NTopic::TAlterTopicSettings>(request->Get()->GetArgs());
         }
 
-        auto VerifyConsumer(bool important = false, TDuration availability = TDuration::Days(1)) {
+        auto VerifyConsumer(bool important = false, TDuration availability = TDuration::Days(1),
+                const TString& streamPath = "/Root/Table/Index/indexImplTable/Stream") {
             const auto request = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicRequest>(Proxy);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(request->Get()->GetArgs()), streamPath);
             Ydb::Topic::DescribeTopicResult result;
             auto* consumer = result.add_consumers();
             consumer->set_name("replicationConsumer");
@@ -606,9 +733,75 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         }
     };
 
+    Y_UNIT_TEST(ExplicitStreamPathUsedForIndexTable) {
+        const TString streamPath = "/Root/ResolvedStream";
+        TStreamSetup setup(false, TDuration::Seconds(1), TDuration::Days(1), false, false, streamPath);
+        const auto consumer = setup.CreateConsumer();
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(consumer->Get()->GetArgs()), streamPath);
+        setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(consumer->Cookie);
+        setup.VerifyConsumer(false, TDuration::Days(1), streamPath);
+        const auto retention = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(setup.Proxy);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(retention->Get()->GetArgs()), streamPath);
+        setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(retention->Cookie);
+        setup.Finish();
+    }
+
+    Y_UNIT_TEST(CreateErrorsDoNotDisableOmitBackup) {
+        for (const auto& [status, message] : TVector<std::pair<NYdb::EStatus, TString>>{
+                {NYdb::EStatus::BAD_REQUEST, "UserAttributes: unsupported attribute '__omit_backup'"},
+                {NYdb::EStatus::BAD_REQUEST, "UserAttributes: unsupported attribute '__another_attribute'"},
+                {NYdb::EStatus::BAD_REQUEST, "UserAttributes: attribute '__omit_backup' accepts only 'true', got 'false'"},
+                {NYdb::EStatus::UNAUTHORIZED, "UserAttributes: unsupported attribute '__omit_backup'"},
+                {NYdb::EStatus::BAD_REQUEST, "Invalid changefeed settings"}})
+        {
+            TStreamSetup setup(false, TDuration::Seconds(1), TDuration::Days(1), false, false, {}, true);
+            setup.Allow();
+            const auto request = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTableRequest>(setup.Proxy);
+            const auto& settings = std::get<NYdb::NTable::TAlterTableSettings>(request->Get()->GetArgs());
+            UNIT_ASSERT_VALUES_EQUAL(settings.AddChangefeeds_.at(0).GetAttributes().at("__omit_backup"), "true");
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue(std::string(message));
+            setup.Runtime.Send(new IEventHandle(setup.Creator, setup.Proxy,
+                new TEvYdbProxy::TEvAlterTableResponse(NYdb::TStatus(status, std::move(issues))), 0, request->Cookie));
+            const auto result = setup.Runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(
+                setup.Parent, TDuration::Seconds(1));
+            UNIT_ASSERT_C(result, "Unrelated errors must be returned without retrying changefeed creation");
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status.GetStatus(), status);
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Status.GetIssues().ToString(), message);
+        }
+    }
+
+    Y_UNIT_TEST(OmitBackupSettingIsPreservedOnRetry) {
+        for (const bool enabled : {false, true}) {
+            TStreamSetup setup(false, TDuration::Seconds(1), TDuration::Days(1), false, false, {}, enabled);
+            setup.Allow();
+            TString original;
+            for (ui32 attempt = 0; attempt < 2; ++attempt) {
+                const auto request = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTableRequest>(setup.Proxy);
+                const auto& settings = std::get<NYdb::NTable::TAlterTableSettings>(request->Get()->GetArgs());
+                const auto& feed = settings.AddChangefeeds_.at(0);
+                UNIT_ASSERT_VALUES_EQUAL(feed.GetAttributes().contains("__omit_backup"), enabled);
+                UNIT_ASSERT(feed.GetAttributes().contains("__async_replication"));
+                Ydb::Table::Changefeed proto;
+                feed.SerializeTo(proto);
+                if (attempt == 0) {
+                    original = proto.DebugString();
+                    setup.Runtime.GetAppData().ReplicationConfig.SetEnableOmitBackupAttribute(!enabled);
+                    setup.Reply<TEvYdbProxy::TEvAlterTableResponse>(request->Cookie, NYdb::EStatus::UNAVAILABLE);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(proto.DebugString(), original);
+                    setup.Reply<TEvYdbProxy::TEvAlterTableResponse>(request->Cookie, NYdb::EStatus::BAD_REQUEST);
+                }
+            }
+            setup.Finish(NYdb::EStatus::BAD_REQUEST);
+        }
+    }
+
     Y_UNIT_TEST(FiniteAvailabilityBeforeShortRetention) {
         TStreamSetup setup(false, TDuration::Minutes(5), TDuration::Hours(2));
         const auto consumer = setup.CreateConsumer();
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(consumer->Get()->GetArgs()),
+            "/Root/Table/Index/indexImplTable/Stream");
         const auto& settings = TStreamSetup::Settings(consumer);
         UNIT_ASSERT_VALUES_EQUAL(settings.AddConsumers_.size(), 1);
         UNIT_ASSERT(!settings.AddConsumers_[0].Important_);
@@ -759,6 +952,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             TStreamSetup setup(true);
             setup.Allow();
             const auto consumer = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(setup.Proxy);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(consumer->Get()->GetArgs()), "/Root/Topic");
             const auto& settings = TStreamSetup::Settings(consumer);
             UNIT_ASSERT_VALUES_EQUAL(settings.AddConsumers_.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(settings.AddConsumers_[0].AvailabilityPeriod_, TDuration::Zero());

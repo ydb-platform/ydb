@@ -1,10 +1,18 @@
+* Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.
+
+* Added draft `TBridgeClient::Rollback()` to roll a cluster converted into a bridged one back to ordinary mode, and `TBridgeClient::GetRollbackStatus()` to show the progress of the rollback.
+
 * Topic and PersQueue writers now schedule RAW and pre-encoded messages on the configured compression executor, reducing request construction on the caller thread.
 
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
 
 * Added `TGetClusterStateSettings::IncludePileConnectivity()` and `TGetClusterStateResult::GetPileConnectivity()` for optional bridge static-node connectivity reports.
+* Added `TGetClusterStateSettings::IncludeUnbridgedStatus()` and `TGetClusterStateResult::GetUnbridgedStatus()` to report node configuration when the cluster has no bridge state.
 
 * Added `TUpdateClusterStateSettings::ExpectedGeneration()` to apply a bridge cluster state update only if the cluster state still has the given generation.
+* Added draft bridge synchronization APIs for pile, database, and group diagnostics.
+
+* Fixed Topic write-session path handling: paths starting with `/` remain absolute, and relative database names are left for server-side resolution.
 
 * Added draft `TBridgeClient::SetDatabaseBridgeMode()` to atomically change a database's bridge mode. `TSetDatabaseBridgeModeSettings::RetainPileName()` selects the pile to retain when disabling bridge mode.
 
@@ -13,6 +21,8 @@
 * Fixed Topic producer retries touching the producer after it was destroyed. Write sessions keep a snapshot of the retry policy and no longer read producer settings from the gRPC thread.
 
 * Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
+
+* Fixed a Topic read session crash (Panic in `OnUserRetrievedEvent`) when an unrecoverable stream read error tore down the session while data events were still queued for delivery; the teardown now releases the accounting for undelivered events exactly once.
 
 ## v3.26.0
 

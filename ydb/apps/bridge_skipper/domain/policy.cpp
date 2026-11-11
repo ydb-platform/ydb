@@ -120,7 +120,9 @@ void TConfirmations::Update(const TClusterView& view, const std::map<TString, TP
             for (auto it = Piles.begin(); it != Piles.end();) {
                 const auto state = view.Piles.find(it->first);
                 const auto previous = States.find(it->first);
-                if (state == view.Piles.end() || previous == States.end() || state->second != previous->second) {
+                if (state == view.Piles.end() || previous == States.end() || state->second != previous->second
+                    || it->second.FailureEvidence != EFailureEvidence::Ordinary)
+                {
                     it = Piles.erase(it);
                 } else {
                     ++it;
@@ -132,7 +134,9 @@ void TConfirmations::Update(const TClusterView& view, const std::map<TString, TP
     }
     for (auto it = Piles.begin(); it != Piles.end();) {
         const auto verdict = verdicts.find(it->first);
-        if (verdict == verdicts.end() || !IsDown(verdict->second.Verdict)) {
+        if (verdict == verdicts.end() || !IsDown(verdict->second.Verdict)
+            || verdict->second.FailureEvidence != it->second.FailureEvidence)
+        {
             it = Piles.erase(it);
         } else {
             ++it;
@@ -143,7 +147,7 @@ void TConfirmations::Update(const TClusterView& view, const std::map<TString, TP
             continue;
         }
         auto [it, inserted] = Piles.try_emplace(pile,
-            TConfirmation{now, verdict.NewestEvidenceSentAt, verdict.NewestEvidenceSentAt});
+            TConfirmation{now, verdict.NewestEvidenceSentAt, verdict.NewestEvidenceSentAt, verdict.FailureEvidence});
         if (!inserted) {
             it->second.NewestEvidenceSentAt = verdict.NewestEvidenceSentAt;
         }
@@ -218,13 +222,12 @@ TDecision Decide(
     }
     // SelectView admits only views with exactly one primary.
     Y_ENSURE(primary);
-    // D3: one rule for every pile. Without a fresh BSC-mode reply, self quorum
-    // qualifies a candidate unless a fresh fallback reply attributes a part
-    // (RED, or GREY "no data") to it.
+    // Without BSC, require a current own fallback observation as well as self
+    // quorum and no attributed RED/GREY part. This is not proof of disk health.
     const auto eligible = [&](const TString& pile) {
         const auto& verdict = PileVerdict(health, pile);
         return verdict.Verdict == EPileVerdict::Healthy
-            || (!health.BscAvailable && verdict.SelfQuorum && !verdict.FallbackRed);
+            || (!health.BscAvailable && verdict.SelfQuorum && verdict.OwnFallback && !verdict.FallbackRed);
     };
 
     std::optional<TString> survivor;

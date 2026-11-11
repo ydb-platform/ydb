@@ -99,6 +99,13 @@ null, duplicate or malformed Origin and duplicate Host are rejected. Forwarded
 headers do not establish trust. Every response sends `X-Frame-Options: DENY` and
 `Content-Security-Policy: frame-ancestors 'none'`.
 
+The default [failover timing budget](../README.md#failover-timing) uses an
+8-second evidence TTL and 2-second confirmation. Explicit settings retain their
+values; an old configuration with TTL 30, confirmation 20 and 10-second rounds
+continues to use that slower profile. Review timing overrides when upgrading.
+Partial overrides with longer RPC budgets or rounds may require an explicit
+larger TTL to satisfy validation; larger values also extend failover latency.
+
 ## Observe, Manual and Auto
 
 Open `/` or read `/api/state`. Confirm the cluster ID, acknowledged mode,
@@ -217,6 +224,27 @@ as a status refresh: explicit NOT_SYNCHRONIZED can reset stage 2 to stage 1 and
 restart resynchronization. No public resync percentage or ETA exists. A lost
 SUSPENDED pile yields `SUSPENDED_PILE_LOST`; public update cannot disconnect it,
 so restore its quorum or follow a separate server recovery procedure.
+
+When BSC is unavailable and outside connectivity stays binding, Auto can
+confirm failure of the BSC host (PROMOTED, otherwise PRIMARY) from fresh
+agreeing fallback RED static parts with complete VDisk reasons, provided
+the host has no own node-quorum claim. A separate storage-failure proof
+permits a live own quorum only when every current outside fallback reply names
+a RED static group whose complete unique reason graph contains only RED
+VDisks caused by an explicitly reported same-node, same-pile PDisk
+`DeviceIoError`. A hardware error mixed with transport loss or replication
+does not suffice. GREY, missing and truncated data remain insufficient.
+An I/O hang without an explicit device error remains unproven.
+After a role change this evidence
+starts only after BSC warm-up, then spans `confirm_seconds` within one
+generation. Switching between the generic fallback rule and the storage proof
+restarts confirmation; earlier samples cannot confirm the new proof.
+A replacement needs own node quorum and an own fresh
+non-truncated fallback reply without any attributed fallback RED/GREY veto;
+it has no separate candidate confirmation timer. A `NO_CANDIDATE` decision
+can therefore persist while connectivity works but own SelfCheck is missing.
+These observations do not fence an isolated primary or prove full disk health;
+keep exactly one active controller and qualify the policy for the server build.
 
 Membership and conversion use separate existing RPCs. Their CLI commands have
 no `expected_generation` guard. Keep exclusive operator control and Skipper

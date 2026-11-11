@@ -100,8 +100,8 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
 
                 if (rs.HasRemovedRowVersions()) {
                     for (const auto& range : rs.GetRemovedRowVersions().GetRanges()) {
-                        removedRowVersions.Add(TRowVersion::FromProto(range.GetLower()),
-                            TRowVersion::FromProto(range.GetUpper()));
+                        removedRowVersions.Add(TRowVersion::FromProto(range.GetLowerInclusive()),
+                            TRowVersion::FromProto(range.GetUpperExclusive()));
                     }
                 } else {
                     // Old CopyTable sources did not preserve registry snapshots.

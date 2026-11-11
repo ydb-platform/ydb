@@ -348,6 +348,92 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         return MakeBSControllerID();
     }
 
+    void AssertReplQuoterRate(const TReplQuoter::TPtr& quoter, ui64 expectedBytesPerSecond) {
+        UNIT_ASSERT(quoter);
+        const ui64 expectedMaxPacketSize = expectedBytesPerSecond
+            * TReplQuoter::GetCapacity().MicroSeconds()
+            / TDuration::Seconds(1).MicroSeconds();
+        UNIT_ASSERT_VALUES_EQUAL(quoter->GetMaxPacketSize(), expectedMaxPacketSize);
+    }
+
+    CUSTOM_UNIT_TEST(ApplyReplBrokerConfigUpdatesAllQuoters) {
+        auto nodeWardenConfig = MakeIntrusive<TNodeWardenConfig>();
+        NStorage::TNodeWarden warden(nodeWardenConfig);
+        NStorage::TNodeWardenTestPeer::InitializeReplQuoters(warden, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 1, NPDisk::DEVICE_TYPE_ROT, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 2, NPDisk::DEVICE_TYPE_SSD, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 3, NPDisk::DEVICE_TYPE_NVME, 10);
+
+        NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig config;
+        config.SetTotalRequestBytesPerSecond(1'100);
+        config.SetTotalResponseBytesPerSecond(1'200);
+
+        const auto addMediaQuota = [&](NKikimrBlobStorage::EPDiskType type, ui64 read, ui64 write) {
+            auto *quota = config.AddMediaTypeQuota();
+            quota->SetType(type);
+            quota->SetReadBytesPerSecond(read);
+            quota->SetWriteBytesPerSecond(write);
+        };
+        addMediaQuota(NKikimrBlobStorage::EPDiskType::ROT, 2'100, 2'200);
+        addMediaQuota(NKikimrBlobStorage::EPDiskType::SSD, 3'100, 3'200);
+        addMediaQuota(NKikimrBlobStorage::EPDiskType::NVME, 4'100, 4'200);
+
+        NStorage::TNodeWardenTestPeer::ApplyReplBrokerConfig(warden, config);
+
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeRequestQuoter(warden), 1'100);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeResponseQuoter(warden), 1'200);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 1), 2'100);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 1), 2'200);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 2), 3'100);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 2), 3'200);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 3), 4'100);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 3), 4'200);
+    }
+
+    CUSTOM_UNIT_TEST(ApplyReplBrokerConfigDecreasesRatesAndRestoresDefaults) {
+        auto nodeWardenConfig = MakeIntrusive<TNodeWardenConfig>();
+        NStorage::TNodeWarden warden(nodeWardenConfig);
+        NStorage::TNodeWardenTestPeer::InitializeReplQuoters(warden, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 1, NPDisk::DEVICE_TYPE_ROT, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 2, NPDisk::DEVICE_TYPE_SSD, 10);
+        NStorage::TNodeWardenTestPeer::AddReplPDisk(warden, 3, NPDisk::DEVICE_TYPE_NVME, 10);
+
+        NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig highConfig;
+        highConfig.SetTotalRequestBytesPerSecond(900'000'000);
+        highConfig.SetTotalResponseBytesPerSecond(800'000'000);
+        auto *highQuota = highConfig.AddMediaTypeQuota();
+        highQuota->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+        highQuota->SetReadBytesPerSecond(700'000'000);
+        highQuota->SetWriteBytesPerSecond(600'000'000);
+        NStorage::TNodeWardenTestPeer::ApplyReplBrokerConfig(warden, highConfig);
+
+        NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig lowConfig;
+        lowConfig.SetTotalRequestBytesPerSecond(90'000'000);
+        lowConfig.SetTotalResponseBytesPerSecond(80'000'000);
+        auto *lowQuota = lowConfig.AddMediaTypeQuota();
+        lowQuota->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+        lowQuota->SetReadBytesPerSecond(70'000'000);
+        lowQuota->SetWriteBytesPerSecond(60'000'000);
+        NStorage::TNodeWardenTestPeer::ApplyReplBrokerConfig(warden, lowConfig);
+
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeRequestQuoter(warden), 90'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeResponseQuoter(warden), 80'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 1), 70'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 1), 60'000'000);
+
+        NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig defaultConfig;
+        NStorage::TNodeWardenTestPeer::ApplyReplBrokerConfig(warden, defaultConfig);
+
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeRequestQuoter(warden), 500'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplNodeResponseQuoter(warden), 500'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 1), 100'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 1), 100'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 2), 200'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 2), 200'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskReadQuoter(warden, 3), 300'000'000);
+        AssertReplQuoterRate(NStorage::TNodeWardenTestPeer::GetReplPDiskWriteQuoter(warden, 3), 300'000'000);
+    }
+
     ui32 CreatePDisk(TTestActorRuntime &runtime, ui32 nodeIdx, TString path, ui64 guid, ui32 pdiskId, ui64 pDiskCategory,
             const NKikimrBlobStorage::TPDiskConfig* pdiskConfig = nullptr, TActorId nodeWarden = {}) {
         VERBOSE_COUT(" Creating pdisk");

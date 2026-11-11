@@ -4,6 +4,15 @@
 
 namespace NSQLTranslationV1 {
 
+struct TFlattenByArg {
+    TNodePtr Column;
+    TNodePtr Expression;
+};
+
+struct TFlattenByArgs {
+    TVector<TFlattenByArg> Arguments;
+};
+
 struct TYqlColumnRef {
     TPosition Position;
     TString Name;
@@ -25,6 +34,7 @@ struct TYqlSourceAlias {
 struct TYqlSource {
     TNodePtr Node;
     TMaybe<TYqlSourceAlias> Alias;
+    TNodePtr Flatten;
 };
 
 enum class EYqlJoinKind {
@@ -150,6 +160,13 @@ TYqlSelectArgs DestructYqlSelect(TNodePtr node);
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
 
 TNodePtr BuildYqlSelf(TPosition position);
+
+TNodePtr BuildYqlFlattenColumns(TPosition position);
+
+TNodePtr BuildYqlFlattenBy(
+    TPosition position,
+    TString mode,
+    TFlattenByArgs&& args);
 
 TSourcePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
 

@@ -423,8 +423,8 @@ void TSnapshotManager::SerializeRemovedRowVersions(const NTable::TRowVersionRang
 {
     for (const auto& range : ranges) {
         auto* item = proto.AddRanges();
-        range.Lower.ToProto(item->MutableLower());
-        range.Upper.ToProto(item->MutableUpper());
+        range.Lower.ToProto(item->MutableLowerInclusive());
+        range.Upper.ToProto(item->MutableUpperExclusive());
     }
 }
 
@@ -432,8 +432,8 @@ void TSnapshotManager::RestoreRemovedRowVersions(NTable::TDatabase& db, ui32 loc
     const NKikimrTxDataShard::TMvccRemovedRowVersions& proto)
 {
     for (const auto& range : proto.GetRanges()) {
-        db.RemoveRowVersions(localTableId, TRowVersion::FromProto(range.GetLower()),
-            TRowVersion::FromProto(range.GetUpper()));
+        db.RemoveRowVersions(localTableId, TRowVersion::FromProto(range.GetLowerInclusive()),
+            TRowVersion::FromProto(range.GetUpperExclusive()));
     }
 }
 

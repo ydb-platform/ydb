@@ -73,6 +73,7 @@ PEERDIR(
     ydb/core/test_tablet
     ydb/core/testlib/actors
     ydb/core/testlib/basics
+    ydb/core/testlib/tablet_helpers
     ydb/core/tx/columnshard
     ydb/core/tx/conveyor/service
     ydb/core/tx/conveyor/usage
@@ -151,4 +152,5 @@ RECURSE(
     default
     grpc_request
     pg
+    tablet_helpers
 )

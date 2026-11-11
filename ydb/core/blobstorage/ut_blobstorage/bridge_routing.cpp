@@ -466,4 +466,152 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].Status, NKikimrProto::NODATA);
     }
 
+
+    // The request waiting for the part of the pile going out (its nodes are gone) completes when the proxy learns that
+    // the pile takes no part in data quorum anymore, as the one admitted then would go to the primary pile only; the
+    // error the part reports later doesn't fail it, nor makes another response.
+    template<typename TResult>
+    void CheckRequestInFlightCompletesWhenPileDisconnected(
+            const std::function<void(TEnvironmentSetup&, TDataChecker&, ui32, TActorId)>& send,
+            const std::function<void(TResult&)>& check) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto pileGroups = GetPileGroups(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(pileGroups.size(), 2);
+        TDataChecker checker(env);
+        checker.Write(groupId); // start the bridge proxy on node 1
+
+        bool hold = true;
+        std::vector<std::unique_ptr<IEventHandle>> held;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (hold && nodeId == 1 && ev->GetTypeRewrite() == TResult::EventType &&
+                    ev->Get<TResult>()->GroupId == pileGroups[1]) {
+                held.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        send(env, checker, groupId, edge);
+        WaitUntil(env, [&] { return !held.empty(); }, "result of the second pile", TDuration::MilliSeconds(10), 100);
+        auto res = env.WaitForEdgeActorEvent<TResult>(edge, false, env.Runtime->GetClock() + TDuration::Seconds(1));
+        UNIT_ASSERT_C(!res, "request completed without the second pile: " << res->Get()->ToString());
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        res = env.WaitForEdgeActorEvent<TResult>(edge, false, env.Runtime->GetClock() + TDuration::Seconds(10));
+        UNIT_ASSERT_C(res, "request not completed after the pile has been disconnected");
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        check(*res->Get());
+
+        hold = false;
+        for (auto& ev : std::exchange(held, {})) { // the part gives up waiting for its VDisks
+            auto *msg = ev->Get<TResult>();
+            msg->Status = NKikimrProto::ERROR;
+            msg->ErrorReason = "Timeout while establishing sessions";
+            env.Runtime->Send(ev.release(), 1);
+        }
+        res = env.WaitForEdgeActorEvent<TResult>(edge, false, env.Runtime->GetClock() + TDuration::Seconds(10));
+        UNIT_ASSERT_C(!res, "second response: " << res->Get()->ToString());
+        env.Runtime->FilterFunction = {};
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
+
+    Y_UNIT_TEST(PutInFlightCompletesWhenPileDisconnected) {
+        CheckRequestInFlightCompletesWhenPileDisconnected<TEvBlobStorage::TEvPutResult>(
+            [](TEnvironmentSetup&, TDataChecker& checker, ui32 groupId, TActorId edge) {
+                checker.SendPut(groupId, edge);
+            },
+            [](TEvBlobStorage::TEvPutResult&) {});
+    }
+
+    // the request restarted as it waits for the pile disconnected is answered when the proxy stops right after that
+    Y_UNIT_TEST(RestartedRequestAnsweredWhenProxyStops) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto pileGroups = GetPileGroups(env, groupId);
+        TDataChecker checker(env);
+        checker.Write(groupId); // start the bridge proxy on node 1
+
+        std::optional<TActorId> proxyId;
+        bool poisoned = false;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == 1 && ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult &&
+                    ev->Get<TEvBlobStorage::TEvPutResult>()->GroupId == pileGroups[1]) {
+                proxyId = ev->Recipient;
+                return false; // the part of the second pile never answers
+            } else if (proxyId && !poisoned && ev->GetRecipientRewrite() == *proxyId &&
+                    ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                const auto& bridgeInfo = ev->Get<TEvNodeWardenStorageConfig>()->BridgeInfo;
+                const auto *pile = bridgeInfo ? bridgeInfo->FindPile(TBridgePileId::FromPileIndex(1)) : nullptr;
+                if (pile && pile->State == NKikimrBridge::TClusterState::DISCONNECTED) {
+                    // the proxy is stopped right after it handles the cluster state making it restart the request
+                    env.Runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, *proxyId, {}, nullptr, 0), 1);
+                    poisoned = true;
+                }
+            }
+            return true;
+        };
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        checker.SendPut(groupId, edge);
+        WaitUntil(env, [&] { return proxyId.has_value(); }, "put of the second pile", TDuration::MilliSeconds(10), 100);
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(10));
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT(poisoned);
+        UNIT_ASSERT_C(res, "restarted request lost when the proxy stopped");
+        Cerr << "*** result " << res->Get()->ToString() << Endl;
+    }
+
+    // the request restarted as it waits for the pile disconnected keeps the routing wait it has left
+    Y_UNIT_TEST(RestartKeepsRoutingBudget) {
+        TQueuedRoutingTest test;
+        test.SendGet(1);
+        test.Env.Sim(TDuration::MilliSeconds(1500)); // the read waits for the cluster state of its group state
+        test.HoldResults = true;
+        test.MakeRoutingAvailable();
+        WaitUntil(test.Env, [&] { return test.HeldResults.size() == 2; }, "dispatched read",
+            TDuration::MilliSeconds(10), 100);
+
+        // the group state made for the cluster state newer than the one disconnecting the pile makes the restarted read
+        // wait again
+        const ui64 generation = test.Config->GetClusterState().GetGeneration();
+        test.Group.MutableBridgeGroupState()->SetClusterStateGeneration(generation + 2);
+        test.UpdateGroupInfo();
+        test.Env.Sim(TDuration::MilliSeconds(10));
+        UNIT_ASSERT(!test.Results.contains(1));
+        SwitchPileState(test.Env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        const TInstant restarted = test.Env.Runtime->GetClock();
+        WaitUntil(test.Env, [&] { return test.Results.contains(1); }, "read timed out", TDuration::MilliSeconds(10),
+            300);
+        const TDuration waited = test.Env.Runtime->GetClock() - restarted;
+        UNIT_ASSERT_C(waited <= TDuration::MilliSeconds(700), "restarted read got a new routing wait: " << waited);
+        UNIT_ASSERT_VALUES_EQUAL(test.Results.at(1)->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(test.Results.at(1)->ErrorReason, "bridge request timed out");
+    }
+
+    // a read of what the trusted pile has completes with its answer; the one proving the absence of a blob needs every
+    // pile in data quorum
+    Y_UNIT_TEST(GetInFlightCompletesWhenPileDisconnected) {
+        const TLogoBlobID id(100500, 1, 1000000, 0, 10, 0); // never written
+        CheckRequestInFlightCompletesWhenPileDisconnected<TEvBlobStorage::TEvGetResult>(
+            [&](TEnvironmentSetup& env, TDataChecker&, ui32 groupId, TActorId edge) {
+                env.Runtime->WrapInActorContext(edge, [&] {
+                    SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                        NKikimrBlobStorage::FastRead));
+                });
+            },
+            [&](TEvBlobStorage::TEvGetResult& res) {
+                UNIT_ASSERT_VALUES_EQUAL(res.ResponseSz, 1);
+                UNIT_ASSERT_VALUES_EQUAL(res.Responses[0].Id, id);
+                UNIT_ASSERT_VALUES_EQUAL_C(res.Responses[0].Status, NKikimrProto::NODATA, res.ToString());
+            });
+    }
+
 }

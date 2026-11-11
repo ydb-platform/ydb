@@ -1178,6 +1178,11 @@ enum ECdcStreamFormat {
     ECdcStreamFormatDebeziumJson = 4;
 }
 
+enum ECdcStreamCompression {
+    ECdcStreamCompressionNone = 0;
+    ECdcStreamCompressionZstd = 1;
+}
+
 message TCdcStreamScanProgress {
     optional uint32 ShardsTotal = 1;
     optional uint32 ShardsCompleted = 2;
@@ -1200,6 +1205,8 @@ message TCdcStreamDescription {
     optional bool SchemaChanges = 12;
     optional bool UserSIDs = 13;
     optional bool TraceIds = 14;
+    optional ECdcStreamCompression Compression = 15 [default = ECdcStreamCompressionNone];
+    optional int32 CompressionLevel = 16;
 }
 
 message TCreateCdcStream {
@@ -1556,6 +1563,7 @@ message TBackupTask {
     }
 
     optional TPathDescription Table = 10; // for further restore
+    optional string SourceDatabase = 21; // for restoring absolute references in table settings
     repeated TPathDescription ChangefeedUnderlyingTopics = 17; // for further restore
 
     message TScanSettings {

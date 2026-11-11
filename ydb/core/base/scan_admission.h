@@ -156,6 +156,7 @@ public:
             State->TotalLimit = bytes;
             if (State->ActiveLimit != activeLimit) {
                 State->BrokerLimit = Max<ui64>();
+                ++State->BrokerLimitGeneration;
             }
             State->ActiveLimit = activeLimit;
             State->BrokerConfigurationPending |= configurationPending;

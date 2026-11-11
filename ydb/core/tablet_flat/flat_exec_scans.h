@@ -10,6 +10,7 @@
 #include <util/system/spinlock.h>
 #include <util/system/guard.h>
 #include "tablet_flat_executor.h"
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -70,6 +71,7 @@ namespace NTabletFlatExecutor {
                 ui64 ChargedCpu = 1;
                 bool Running = true;
                 bool Armed = true;
+                bool OverrunReported = false;
                 std::atomic<bool> Cancel{true};
 
                 TState(TActorSystem* system, TActorId client, ui64 taskId, TString type, ui32 priority, ui64 memory)
@@ -137,6 +139,14 @@ namespace NTabletFlatExecutor {
                     // the scan's teardown path or hiding their memory usage.
                     State->Retained += bytes;
                     payload->Armed = true;
+                    if (!State->OverrunReported && State->Retained > State->Memory) {
+                        State->OverrunReported = true;
+                        YDB_LOG_WARN_CTX_COMP(*State->System, NKikimrServices::TABLET_OPS_HOST,
+                            "Retained scan payload exceeds admitted memory reservation",
+                            {"scanType", State->Type}, {"client", State->Client}, {"taskId", State->TaskId},
+                            {"admittedBytes", State->Memory}, {"retainedBytes", State->Retained},
+                            {"overrunBytes", State->Retained - State->Memory});
+                    }
                     State->UpdateRetained();
                 }
                 return payload;

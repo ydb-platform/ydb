@@ -9,6 +9,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/library/testlib/helpers.h>
+#include <util/generic/scope.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -1278,6 +1279,23 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         TActorId client;
         ui64 taskId = 0;
         bool finished = false;
+        struct TOverrunWarning {
+            NActors::NLog::EPrio Priority;
+            TMaybe<NActors::NStructuredLog::TStructuredMessage> Fields;
+        };
+        TVector<TOverrunWarning> overrunWarnings;
+        TTestActorRuntimeBase::TEventFilter previousFilter;
+        previousFilter = env->SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NActors::NLog::TEvLog::EventType) {
+                const auto* log = event->Get<NActors::NLog::TEvLog>();
+                if (log->Component == NKikimrServices::TABLET_OPS_HOST &&
+                    log->Line == "Retained scan payload exceeds admitted memory reservation") {
+                    overrunWarnings.push_back({log->Level.ToPrio(), log->StructuredMessage});
+                }
+            }
+            return previousFilter(runtime, event);
+        });
+        Y_DEFER { env->SetEventFilter(previousFilter); };
         auto submissions = env->AddObserver<TEvResourceBroker::TEvSubmitTask>([&](auto& event) {
             if (event->Get()->Task.Type == "build_index") {
                 client = event->Sender;
@@ -1322,6 +1340,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         UNIT_ASSERT_VALUES_EQUAL(updates[5][MEMORY], 3_KB);
         payloads.Upload.reset();
         env->WaitFor("last payload finishes the broker task", [&] { return finished; });
+        // Prepare() and Finish() both exceed the estimate, but only the first
+        // occurrence should warn, and payload cleanup must not repeat it.
+        UNIT_ASSERT_VALUES_EQUAL(overrunWarnings.size(), 1);
+        UNIT_ASSERT(overrunWarnings[0].Priority == NActors::NLog::EPrio::Warn);
+        UNIT_ASSERT(overrunWarnings[0].Fields);
+        const auto& fields = *overrunWarnings[0].Fields;
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("scanType").value_or(""), "build_index");
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("taskId").value_or(""), ToString(taskId));
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("admittedBytes").value_or(""), ToString(8_KB));
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("retainedBytes").value_or(""), ToString(10_KB));
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("overrunBytes").value_or(""), ToString(2_KB));
     }
 
     Y_UNIT_TEST_TWIN(ScanStartFailureReleasesPreparedSnapshot, Deferred) {

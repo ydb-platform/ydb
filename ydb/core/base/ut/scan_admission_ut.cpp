@@ -73,6 +73,27 @@ Y_UNIT_TEST_SUITE(TScanAdmission) {
         UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 96);
     }
 
+    Y_UNIT_TEST(StaleRejectionCannotOverrideResetBrokerLimit) {
+        TScanAdmissionControl quota;
+        quota.SetTotalLimit(256, 64, true);
+        const ui64 generation = quota.GetBrokerLimitGeneration();
+        quota.RestrictBrokerLimit(32, generation);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 32);
+
+        quota.SetTotalLimit(256, 128, true);
+        quota.RestrictBrokerLimit(32, generation);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 128);
+        UNIT_ASSERT(quota.IsBrokerConfigurationPending());
+
+        const ui64 resetGeneration = quota.GetBrokerLimitGeneration();
+        quota.RestrictBrokerLimit(96, resetGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 96);
+        // A tick which keeps the active limit must preserve its current hint.
+        quota.SetTotalLimit(512, 128, true);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetBrokerLimitGeneration(), resetGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 96);
+    }
+
     Y_UNIT_TEST(OverflowCannotBypassLimit) {
         TScanAdmissionControl quota;
         auto lease = quota.TryAcquire(1, 1, 100);

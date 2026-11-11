@@ -2,6 +2,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/subst.h>
 
 namespace NKikimr::NKqp {
 
@@ -251,7 +252,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
             "Default value is not supported for primary key columns in column tables");
     }
 
-    Y_UNIT_TEST(BoolAndStringDefaultsAndUnsupportedType) {
+    Y_UNIT_TEST(BoolStringAndJsonDefaults) {
         TKikimrRunner kikimr(DefaultsSettings());
         auto db = kikimr.GetQueryClient();
         ExecScheme(db, R"(
@@ -259,18 +260,149 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
                 Key Uint32 NOT NULL,
                 Flag Bool DEFAULT true,
                 Payload String DEFAULT 'xy',
+                Doc Json DEFAULT '{}',
                 PRIMARY KEY (Key)
             ) WITH (STORE = COLUMN);
         )");
         ExecDml(db, "INSERT INTO `/Root/DefTypes` (Key) VALUES (1);");
-        CompareYson(R"([[[%true];["xy"]]])", SelectYson(db, "SELECT Flag, Payload FROM `/Root/DefTypes` WHERE Key = 1;"));
+        CompareYson(R"([[[%true];["xy"];["{}"]]])", SelectYson(db, "SELECT Flag, Payload, Doc FROM `/Root/DefTypes` WHERE Key = 1;"));
+    }
+
+    Y_UNIT_TEST(NotNullDefaultOmitMatchesRowTable) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        for (const char* side : {"Ds", "Cs"}) {
+            const TString store = TString(side) == "Cs" ? "WITH (STORE = COLUMN)" : "";
+            ExecScheme(db, TStringBuilder() << R"(
+                CREATE TABLE `/Root/)" << side << R"(Nn` (
+                    Key Uint32 NOT NULL,
+                    Name Utf8,
+                    Value Uint32 NOT NULL DEFAULT 1,
+                    Note Utf8 DEFAULT 'n',
+                    PRIMARY KEY (Key)
+                ) )" << store << ";");
+        }
+        const auto runBoth = [&](const TString& sql) {
+            for (const char* side : {"Ds", "Cs"}) {
+                TString query = sql;
+                SubstGlobal(query, "$T", TStringBuilder() << "`/Root/" << side << "Nn`");
+                ExecDml(db, query);
+            }
+        };
+        const auto selectBoth = [&](const TString& sql) {
+            TString ds = sql;
+            TString cs = sql;
+            SubstGlobal(ds, "$T", "`/Root/DsNn`");
+            SubstGlobal(cs, "$T", "`/Root/CsNn`");
+            CompareYson(SelectYson(db, ds), SelectYson(db, cs));
+        };
+        runBoth("INSERT INTO $T (Key, Name) VALUES (1, 'a');");
+        selectBoth("SELECT Key, Name, Value, Note FROM $T WHERE Key = 1;");
+
+        runBoth("INSERT INTO $T (Key, Name, Note) VALUES (2, 'b', NULL);");
+        selectBoth("SELECT Key, Name, Value, Note FROM $T WHERE Key = 2;");
+
+        runBoth("UPSERT INTO $T (Key, Name, Value) VALUES (3, 'c', 9);");
+        runBoth("UPSERT INTO $T (Key, Name) VALUES (3, 'd');");
+        selectBoth("SELECT Key, Name, Value, Note FROM $T WHERE Key = 3;");
+
+        runBoth("REPLACE INTO $T (Key, Name) VALUES (3, 'e');");
+        selectBoth("SELECT Key, Name, Value, Note FROM $T WHERE Key = 3;");
+
+        runBoth("UPDATE $T SET Name = 'f' WHERE Key = 1;");
+        selectBoth("SELECT Key, Name, Value, Note FROM $T WHERE Key = 1;");
+
+        runBoth("DELETE FROM $T WHERE Key = 3;");
+        runBoth("UPSERT INTO $T (Key, Name) VALUES (3, 'g');");
+        selectBoth("SELECT Key, Name, Value, Note FROM $T WHERE Key = 3;");
+
+        for (const char* side : {"Ds", "Cs"}) {
+            ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "Nn` ALTER COLUMN Value SET DEFAULT 5;");
+        }
+        runBoth("INSERT INTO $T (Key, Name) VALUES (4, 'h');");
+        selectBoth("SELECT Key, Value FROM $T WHERE Key IN (1, 4) ORDER BY Key;");
+
+        for (const char* side : {"Ds", "Cs"}) {
+            ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "Nn` ALTER COLUMN Value DROP DEFAULT;");
+            ExpectDmlError(db, TStringBuilder() << "INSERT INTO `/Root/" << side << "Nn` (Key, Name) VALUES (5, 'i');",
+                "Missing not null column");
+        }
+    }
+
+    Y_UNIT_TEST(LiteralTypesMatchRowTable) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        const char* columns = R"(
+            k Uint32 NOT NULL,
+            d Date DEFAULT Date('2021-01-01'),
+            dt Datetime DEFAULT Datetime('2021-01-01T00:00:00Z'),
+            ts Timestamp DEFAULT Timestamp('2021-01-01T00:00:00.000000Z'),
+            iv Interval DEFAULT Interval('P1D'),
+            d32 Date32 DEFAULT Date32('2021-01-01'),
+            dt64 Datetime64 DEFAULT Datetime64('2021-01-01T00:00:00Z'),
+            ts64 Timestamp64 DEFAULT Timestamp64('2021-01-01T00:00:00.000000Z'),
+            iv64 Interval64 DEFAULT Interval64('P1D'),
+            js Json DEFAULT Json('[0]'),
+            ys Yson DEFAULT Yson('[1]'),
+            uid Uuid DEFAULT Uuid('65df9ecc-a97d-47b2-ae56-3c023da6ee8c'),
+            dec Decimal(22, 9) DEFAULT Decimal('1.11', 22, 9),
+            PRIMARY KEY (k)
+        )";
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsTypes` (" << columns << ");");
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsTypes` (" << columns << ") WITH (STORE = COLUMN);");
+        ExecDml(db, "UPSERT INTO `/Root/DsTypes` (k) VALUES (1);");
+        ExecDml(db, "UPSERT INTO `/Root/CsTypes` (k) VALUES (1);");
+        const TString select = "SELECT d, dt, ts, iv, d32, dt64, ts64, iv64, js, ys, uid, dec FROM ";
+        CompareYson(SelectYson(db, select + "`/Root/DsTypes`"), SelectYson(db, select + "`/Root/CsTypes`"));
         ExpectSchemeError(db, R"(
-            CREATE TABLE `/Root/DefBad` (
-                Key Uint32 NOT NULL,
-                Doc Json DEFAULT '{}',
-                PRIMARY KEY (Key)
+            CREATE TABLE `/Root/CsJsonDoc` (
+                k Uint32 NOT NULL,
+                jd JsonDocument DEFAULT JsonDocument('[2]'),
+                PRIMARY KEY (k)
             ) WITH (STORE = COLUMN);
         )", "Default value is not supported for type");
+        ExpectSchemeError(db, R"(
+            CREATE TABLE `/Root/CsDyNumber` (
+                k Uint32 NOT NULL,
+                dn DyNumber DEFAULT DyNumber('3.14'),
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN);
+        )", "Default value is not supported for type");
+    }
+
+    Y_UNIT_TEST(BulkUpsertNotNullDefault) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        auto table = kikimr.GetTableClient();
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/DsBulkNn` (
+                Key Uint32 NOT NULL,
+                Value Uint32 NOT NULL DEFAULT 4,
+                PRIMARY KEY (Key)
+            );
+        )");
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/CsBulkNn` (
+                Key Uint32 NOT NULL,
+                Value Uint32 NOT NULL DEFAULT 4,
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )");
+        const auto omittedKey = []() {
+            TValueBuilder rows;
+            rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).EndStruct().EndList();
+            return rows.Build();
+        };
+        {
+            auto result = table.BulkUpsert("/Root/DsBulkNn", omittedKey()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing not null columns");
+        }
+        {
+            auto result = table.BulkUpsert("/Root/CsBulkNn", omittedKey()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        CompareYson(R"([[4u]])", SelectYson(db, "SELECT Value FROM `/Root/CsBulkNn` WHERE Key = 1;"));
     }
 
     Y_UNIT_TEST(SparsedSetDefaultRejected) {

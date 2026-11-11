@@ -38,6 +38,8 @@ public:
 
     NKikimrColumnShardColumnDefaults::TColumnDefault SerializeToProto() const;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardColumnDefaults::TColumnDefault& proto);
+    // Proto stores Interval as Int64 and Uuid/Decimal as bytes. After load, reshape to the column Arrow type.
+    void AlignToColumnType(const std::shared_ptr<arrow::DataType>& columnType);
     TConclusionStatus ParseFromString(const TString& value, const NScheme::TTypeInfo& type);
     TConclusionStatus ParseFromTypedValue(const Ydb::TypedValue& value, const NScheme::TTypeInfo& type);
     TConclusion<Ydb::TypedValue> SerializeToTypedValue(const NScheme::TTypeInfo& type = {}) const;

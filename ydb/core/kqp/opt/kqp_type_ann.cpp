@@ -1000,6 +1000,11 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
             }
 
             if ((meta.NotNull || meta.SetNotNullInProgress) && !rowType->FindItem(name)) {
+                // Column-table literal defaults stay out of the write row. The portion omits the
+                // column and the read fills it. DataShard inlines the literal before this check.
+                if (table.second->Metadata->IsOlap() && meta.IsDefaultFromLiteral() && !meta.SetNotNullInProgress) {
+                    continue;
+                }
                 if (meta.SetNotNullInProgress) {
                     ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
                         << "Missing column in input: " << name
@@ -1089,6 +1094,11 @@ TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         }
 
         if ((meta.NotNull || meta.SetNotNullInProgress) && !rowType->FindItem(name)) {
+            // Column-table literal defaults stay out of the write row. The portion omits the
+            // column and the read fills it. DataShard inlines the literal before this check.
+            if (table.second->Metadata->IsOlap() && meta.IsDefaultFromLiteral() && !meta.SetNotNullInProgress) {
+                continue;
+            }
             if (meta.SetNotNullInProgress) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
                     << "Missing column in input: " << name

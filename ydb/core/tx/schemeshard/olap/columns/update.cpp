@@ -181,6 +181,7 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
             errors.AddError("Default value is not supported for type " + TypeName + " in column tables");
             return false;
         }
+        DefaultValue.AlignToColumnType(*arrowTypeResult);
         if (!DefaultValue.IsCompatibleType(*arrowTypeResult)) {
             errors.AddError(
                 "incompatible types for default write: def" + DefaultValue.DebugString() + ", col:" + (*arrowTypeResult)->ToString());
@@ -212,11 +213,13 @@ void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescrip
     auto arrowType = NArrow::TStatusValidator::GetValid(NArrow::GetArrowType(Type));
     if (columnSchema.HasDefaultValue()) {
         DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue()).Validate();
+        DefaultValue.AlignToColumnType(arrowType);
         AFL_VERIFY(DefaultValue.IsCompatibleType(arrowType) || DefaultValue.IsEmpty());
     }
     if (columnSchema.HasCreatedDefaultValue()) {
         NOlap::TColumnDefaultScalarValue created;
         created.DeserializeFromProto(columnSchema.GetCreatedDefaultValue()).Validate();
+        created.AlignToColumnType(arrowType);
         CreatedDefaultValue = std::move(created);
     } else if (DefaultValue.GetValue()) {
         // Schemas stored before CreatedDefaultValue existed keep the configured default as the
@@ -324,7 +327,9 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
                                                 : "Default value is not supported for type " + TypeName + " in column tables");
             return false;
         }
-        if (!DefaultValue.IsCompatibleType(NArrow::TStatusValidator::GetValid(NArrow::GetArrowType(Type)))) {
+        const auto columnArrowType = NArrow::TStatusValidator::GetValid(NArrow::GetArrowType(Type));
+        DefaultValue.AlignToColumnType(columnArrowType);
+        if (!DefaultValue.IsCompatibleType(columnArrowType)) {
             errors.AddError("incompatible types for default write");
             return false;
         }

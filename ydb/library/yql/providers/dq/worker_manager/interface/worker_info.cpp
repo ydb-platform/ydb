@@ -47,6 +47,7 @@ namespace NYql::NDqs {
             ? request.GetStartTime()
             : startTime)
         , Port(request.GetPort())
+        , MonitoringPort(request.GetMonitoringPort())
         , Epoch(request.GetEpoch())
         , Capabilities(request.GetCapabilities())
         , Capacity(request.GetCapacity()?request.GetCapacity():1)

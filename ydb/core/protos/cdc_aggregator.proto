@@ -1,53 +1,26 @@
 import "ydb/core/protos/base.proto";
+import "ydb/core/protos/pqconfig.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 
 package NKikimrCdcAggregator;
 option java_package = "ru.yandex.kikimr.proto";
 
-// Wire contract of the CdcAggregator tablet.
-//
-// One CdcAggregator serves one CDC stream with resolved timestamps. Sources
-// (DataShards of the table) report their delivered progress, the tablet keeps
-// the minimum over all sources as the ready barrier and later publishes it to
-// every topic partition. Every response is sent only after the state it
-// describes has been committed to the tablet's local database.
-
-// Progress boundary of a source or of the whole stream.
-//
-// Version H states that the source will not produce changes below H and that
-// all its changes below H are durably written to the topic. Payload is the
-// opaque serialized NKikimrPQClient::TDataChunk of the heartbeat record in the
-// stream format; it is written to the topic as is when H becomes the barrier.
-message TBarrier {
-    optional NKikimrProto.TRowVersion Version = 1;
-    optional bytes Payload = 2;
-}
-
 message TPartition {
     optional uint32 PartitionId = 1;
-    // PersQueue tablet that hosts the partition.
     optional fixed64 TabletId = 2;
 }
 
-message TStreamConfig {
+message TTrackingConfig {
     optional NKikimrProto.TPathID StreamPathId = 1;
-    // SchemeShard that owns the stream and the aggregator tablet.
-    optional fixed64 SchemeShardId = 2;
-    optional uint64 ConfigVersion = 3;
-    // Full initial set of sources (DataShard tablet ids). Every source blocks
-    // the barrier until its first report.
-    repeated fixed64 SourceTabletIds = 4;
-    // Fixed set of topic partitions.
-    repeated TPartition Partitions = 5;
+    repeated fixed64 SourceDataShardIds = 2;
+    repeated TPartition TargetPartitions = 3;
 }
 
-// SchemeShard -> CdcAggregator: set the initial configuration.
-// Repeating an identical configuration is safe; a different one is a conflict.
-message TEvConfigure {
-    optional TStreamConfig Config = 1;
+message TEvConfigureTracking {
+    optional TTrackingConfig Config = 1;
 }
 
-message TEvConfigureResult {
+message TEvConfigureTrackingResult {
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
         SUCCESS = 1;
@@ -58,125 +31,73 @@ message TEvConfigureResult {
     optional EStatus Status = 1;
     optional string Error = 2;
     optional fixed64 Origin = 3;
-    // Version of the configuration stored by the tablet.
-    optional uint64 ConfigVersion = 4;
 }
 
-// SchemeShard -> CdcAggregator: all participants are configured, the barrier
-// may be published. Reports are accepted before activation as well.
-message TEvActivate {
-    optional NKikimrProto.TPathID StreamPathId = 1;
-    optional uint64 ConfigVersion = 2;
+message TEvWriteHeartbeats {
+    message TSourceHeartbeat {
+        optional fixed64 SourceDataShardId = 1;
+        optional NKikimrPQ.THeartbeat Heartbeat = 2;
+    }
+
+    repeated TSourceHeartbeat Heartbeats = 1;
 }
 
-message TEvActivateResult {
+message TEvWriteHeartbeatsResult {
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
         SUCCESS = 1;
         NOT_READY = 2;
-        WRONG_STREAM = 3;
-        CONFLICT = 4;
+        BAD_REQUEST = 3;
+    }
+
+    message THeartbeatResult {
+        enum EStatus {
+            STATUS_UNSPECIFIED = 0;
+            SUCCESS = 1;
+            UNKNOWN_SOURCE = 2;
+            BAD_REQUEST = 3;
+        }
+
+        optional fixed64 SourceDataShardId = 1;
+        optional EStatus Status = 2;
+        optional NKikimrProto.TRowVersion WrittenVersion = 3;
     }
 
     optional EStatus Status = 1;
     optional string Error = 2;
     optional fixed64 Origin = 3;
+    repeated THeartbeatResult Results = 4;
 }
 
-message TSourceReport {
-    optional fixed64 SourceTabletId = 1;
-    optional TBarrier Delivered = 2;
+message TEvPartitioningChanged {
+    optional fixed64 ParentDataShardId = 1;
+    repeated fixed64 ChildDataShardIds = 2;
+    optional uint64 OperationId = 3;
 }
 
-// CdcAggregatorService -> CdcAggregator: reports of several sources.
-// The batch is committed atomically.
-message TEvReportDeliveredBatch {
-    optional NKikimrProto.TPathID StreamPathId = 1;
-    repeated TSourceReport Reports = 2;
-}
-
-message TEvReportDeliveredBatchResult {
+message TEvPartitioningChangedAck {
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
-        // Per-source results are in Results.
         SUCCESS = 1;
-        // The tablet is not configured yet; retry later.
         NOT_READY = 2;
-        WRONG_STREAM = 3;
+        UNKNOWN_SOURCE = 3;
         BAD_REQUEST = 4;
     }
 
-    message TSourceResult {
-        enum EStatus {
-            STATUS_UNSPECIFIED = 0;
-            // PersistedVersion is committed. It is never lower than the
-            // reported version and may be higher.
-            SUCCESS = 1;
-            UNKNOWN_SOURCE = 2;
-            // The source was replaced by split/merge; it must stop reporting.
-            RETIRED_SOURCE = 3;
-            BAD_REQUEST = 4;
-        }
-
-        optional fixed64 SourceTabletId = 1;
-        optional EStatus Status = 2;
-        optional NKikimrProto.TRowVersion PersistedVersion = 3;
-    }
-
-    optional EStatus Status = 1;
-    optional string Error = 2;
-    optional fixed64 Origin = 3;
-    // One result per report, in request order.
-    repeated TSourceResult Results = 4;
-}
-
-// Split/merge participant -> CdcAggregator: atomically replace the parent
-// source with its children. Children start without progress. Repeating the
-// same replacement is safe; the parent never returns to the set.
-message TEvReplaceSource {
-    optional NKikimrProto.TPathID StreamPathId = 1;
-    optional fixed64 ParentTabletId = 2;
-    repeated fixed64 ChildTabletIds = 3;
-    // Split/merge operation that caused the replacement, for diagnostics.
-    optional uint64 OperationId = 4;
-}
-
-message TEvReplaceSourceResult {
-    enum EStatus {
-        STATUS_UNSPECIFIED = 0;
-        SUCCESS = 1;
-        NOT_READY = 2;
-        WRONG_STREAM = 3;
-        UNKNOWN_SOURCE = 4;
-        CONFLICT = 5;
-        BAD_REQUEST = 6;
-    }
-
     optional EStatus Status = 1;
     optional string Error = 2;
     optional fixed64 Origin = 3;
 }
 
-// Diagnostics: committed state of the stream, e.g. which sources hold the
-// barrier back.
-message TEvDescribeStream {
+message TEvDescribeTracking {
 }
 
-message TEvDescribeStreamResult {
+message TEvDescribeTrackingResult {
     message TSource {
-        optional fixed64 SourceTabletId = 1;
-        // Absent until the first report; such a source blocks the barrier.
-        optional NKikimrProto.TRowVersion Delivered = 2;
+        optional fixed64 DataShardId = 1;
+        optional NKikimrProto.TRowVersion LastHeartbeat = 2;
     }
 
-    optional fixed64 Origin = 1;
-    // Absent until the tablet is configured.
-    optional TStreamConfig Config = 2;
-    optional bool Active = 3;
-    // Absent until every source has reported.
-    optional TBarrier ReadyBarrier = 4;
-    // Current set of sources.
-    repeated TSource Sources = 5;
-    // Sources replaced by split/merge.
-    repeated fixed64 RetiredSourceTabletIds = 6;
+    optional NKikimrProto.TRowVersion CurrentHeartbeat = 1;
+    repeated TSource Sources = 2;
 }

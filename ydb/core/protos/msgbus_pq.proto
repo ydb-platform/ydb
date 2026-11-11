@@ -1,6 +1,5 @@
 import "ydb/core/protos/pqconfig.proto";
 import "ydb/core/protos/pqdata_transaction.proto";
-import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/library/actors/protos/actors.proto";
@@ -171,16 +170,8 @@ message TPersQueuePartitionRequest {
     message TCmdAbortDeferredStaging {
     }
 
-    // Internal: the bound CdcAggregator publishes the ready barrier of an
-    // aggregated CDC stream (see TPQTabletConfig.CdcBarrierBinding).
-    // The partition atomically appends a heartbeat record with Barrier.Data and
-    // stores Barrier as the last committed barrier, then responds. A barrier not
-    // above the last committed one is acknowledged without a new record; a
-    // repeat of a barrier that is still being written waits for its commit.
-    message TCmdPublishCdcBarrier {
-        optional fixed64 AggregatorTabletId = 1;
-        optional NKikimrProto.TPathID StreamPathId = 2;
-        optional NKikimrPQ.THeartbeat Barrier = 3;
+    message TCmdEmitHeartbeat {
+        optional NKikimrPQ.THeartbeat Heartbeat = 1;
     }
 
     optional string Topic = 1; //mandatory for request for partitions
@@ -207,7 +198,7 @@ message TPersQueuePartitionRequest {
     optional TCmdSplitMessageGroup CmdSplitMessageGroup = 22;
     optional TCmdUpdateReadMetrics CmdUpdateReadMetrics = 29;
     optional TCmdAbortDeferredStaging CmdAbortDeferredStaging = 30;
-    optional TCmdPublishCdcBarrier CmdPublishCdcBarrier = 31;
+    optional TCmdEmitHeartbeat CmdEmitHeartbeat = 31;
 
     optional NActorsProto.TActorId PipeClient = 15;
 
@@ -564,9 +555,7 @@ message TPersQueuePartitionResponse {
     message TCmdAbortDeferredStagingResult {
     }
 
-    message TCmdPublishCdcBarrierResult {
-        // Last barrier committed by the partition; on success it is not lower
-        // than the requested one.
+    message TCmdEmitHeartbeatResult {
         optional uint64 Step = 1;
         optional uint64 TxId = 2;
     }
@@ -581,7 +570,7 @@ message TPersQueuePartitionResponse {
     optional TCmdPublishDirectReadResult CmdForgetReadResult = 9;
     optional TCmdRestoreDirectReadSessionResult CmdRestoreDirectReadResult = 10;
     optional TCmdAbortDeferredStagingResult CmdAbortDeferredStagingResult = 11;
-    optional TCmdPublishCdcBarrierResult CmdPublishCdcBarrierResult = 12;
+    optional TCmdEmitHeartbeatResult CmdEmitHeartbeatResult = 12;
 
     optional uint64 Cookie = 6;
 }

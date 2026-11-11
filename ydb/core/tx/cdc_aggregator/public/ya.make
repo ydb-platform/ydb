@@ -6,8 +6,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/persqueue/common
     ydb/core/protos
-    ydb/core/scheme
     ydb/library/actors/core
 )
 

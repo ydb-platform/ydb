@@ -1486,6 +1486,29 @@ std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
 }
 
 void CreateSampleTablesWithIndex(TSession& session, bool populateTables, bool withPgTypes) {
+    // KeyValue/Test used to come from WithSampleTables=true; keep helper self-contained.
+    if (populateTables) {
+        auto keyValue = session.DescribeTable("/Root/KeyValue").GetValueSync();
+        if (!keyValue.IsSuccess()) {
+            auto ensure = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/KeyValue` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+                CREATE TABLE `/Root/Test` (
+                    Group Uint32,
+                    Name String,
+                    Amount Uint64,
+                    Comment String,
+                    PRIMARY KEY (Group, Name)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_C(ensure.IsSuccess(), ensure.GetIssues().ToString());
+        }
+    }
+
     auto res = session.ExecuteSchemeQuery(R"(
         --!syntax_v1
         CREATE TABLE `/Root/SecondaryKeys` (

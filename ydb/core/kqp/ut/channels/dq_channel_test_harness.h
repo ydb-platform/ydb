@@ -638,6 +638,8 @@ struct TLoadTest {
     virtual ~TLoadTest() = default;
 
     virtual void Prepare() {
+        // Keep historical sample-table bootstrap; default WithSampleTables=false breaks Channels20.
+        settings.SetWithSampleTables(true);
         settings.NodeCount = Local ? 1 : 2;
         settings.UseRealInterconnect = !Local;
         settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_CHANNELS, NActors::NLog::EPriority::PRI_TRACE);

@@ -4,7 +4,6 @@ import logging
 import os
 import tempfile
 import time
-import yatest.common
 import yaml
 import ydb
 import pytest

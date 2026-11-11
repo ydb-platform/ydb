@@ -13,7 +13,7 @@ TKikimrRunner RunnerWithArrowInChannels() {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableArrowFormatInChannels(true);
 
-    return TKikimrRunner{TKikimrSettings(featureFlags).SetWithSampleTables(true)};
+    return TKikimrRunner{featureFlags};
 }
 
 void InsertAllColumnsAndCheckSelectAll(TKikimrRunner* runner) {

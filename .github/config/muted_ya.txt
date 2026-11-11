@@ -36,6 +36,7 @@ ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/mysql py3test.sole chunk
+ydb/library/yql/providers/generic/connector/tests/join py3test.sole chunk
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.GetAllStartPartitionSessions
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.WriteSessionSwitchDatabases
 ydb/public/sdk/cpp/src/client/topic/ut Describe.DescribePartitionPermissions
@@ -131,6 +132,7 @@ ydb/tests/functional/blobstorage/replication_rate_control test_replication_rate_
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/bridge test_pile_ops.py.TestBridgePileOps.test_convert_add_switch_remove
 ydb/tests/functional/bridge test_three_piles.py.TestBridgeThreePiles.test_discovery
+ydb/tests/functional/bridge/chaos test_bridge_chaos.py.TestBridgeChaos.test_bridge_chaos
 ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[index_predicate_point.sql-plan]
 ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[pk_predicate/pk_predicate_ranges_rp.sql-result_sets]
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV1.test_migration_from_v1_to_v2_to_v1_to_v2

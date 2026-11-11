@@ -1906,7 +1906,9 @@ private:
 
     TVSlotInfo* FindVSlot(TVDiskID id) { // GroupGeneration may be zero
         if (TGroupInfo *group = FindGroup(id.GroupID); group && !group->VDisksInGroup.empty()) {
-            Y_ABORT_UNLESS(group->Topology->IsValidId(id));
+            if (!group->Topology->IsValidId(id)) {
+                return nullptr; // stale status update for a VDisk removed by a topology change
+            }
             const ui32 index = group->Topology->GetOrderNumber(id);
             const TVSlotInfo *slot = group->VDisksInGroup[index];
             Y_ABORT_UNLESS(slot->GetShortVDiskId() == TVDiskIdShort(id)); // sanity check

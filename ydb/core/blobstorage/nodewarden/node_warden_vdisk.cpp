@@ -761,6 +761,11 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(newInfo->GroupID == currentInfo->GroupID);
 
         const ui32 orderNumber = vdisk.RuntimeData->OrderNumber;
+        if (orderNumber >= newInfo->GetTotalVDisksNum()) {
+            // The updated topology no longer contains this VDisk; its slot will be destroyed by the service-set update.
+            return;
+        }
+
         const TActorId vdiskServiceId = vdisk.RuntimeData->ServiceId;
 
         if (newInfo->GetActorId(orderNumber) != vdiskServiceId) {

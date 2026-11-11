@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tx/cdc_aggregator/stream/usecases.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -37,6 +38,10 @@ STFUNC(TCdcAggregator::StateInit) {
 
 STFUNC(TCdcAggregator::StateWork) {
     switch (ev->GetTypeRewrite()) {
+        HFunc(TEvCdcAggregator::TEvConfigureTracking, Handle);
+        HFunc(TEvCdcAggregator::TEvWriteHeartbeats, Handle);
+        HFunc(TEvCdcAggregator::TEvPartitioningChanged, Handle);
+        HFunc(TEvCdcAggregator::TEvDescribeTracking, Handle);
         IgnoreFunc(TEvTabletPipe::TEvServerConnected);
         IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
     default:
@@ -51,6 +56,16 @@ STFUNC(TCdcAggregator::StateWork) {
 void TCdcAggregator::SwitchToWork(const TActorContext& ctx) {
     SignalTabletActive(ctx);
     Become(&TThis::StateWork);
+}
+
+void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, const TActorContext& ctx) {
+    YDB_LOG_TRACE("Handle",
+        {"tabletId", TabletID()},
+        {"ev", ev->Get()->ToString()});
+
+    auto result = MakeHolder<TEvCdcAggregator::TEvDescribeTrackingResult>();
+    result->Record = DescribeTracking(Stream);
+    ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
 }
 
 IActor* CreateCdcAggregator(const TActorId& tablet, TTabletStorageInfo* info) {

@@ -182,6 +182,62 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Basic("/Root/Replicated");
     }
 
+    Y_UNIT_TEST(CreateTableWithLiteralDefaults) {
+        TEnv env;
+        auto source = MakeTableDescription(TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint64"},
+                {.Name = "count", .Type = "Uint64"},
+                {.Name = "message", .Type = "Utf8"},
+                {.Name = "bytes", .Type = "String"},
+                {.Name = "value", .Type = "Int32"},
+            },
+            .ReplicationConfig = Nothing(),
+        });
+        auto* count = source->MutableColumns(1);
+        count->SetNotNull(true);
+        count->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+        count->MutableDefaultFromLiteral()->mutable_value()->set_uint64_value(0);
+        auto* message = source->MutableColumns(2)->MutableDefaultFromLiteral();
+        message->mutable_type()->set_type_id(Ydb::Type::UTF8);
+        message->mutable_value()->set_text_value("default message");
+        auto* bytes = source->MutableColumns(3)->MutableDefaultFromLiteral();
+        bytes->mutable_type()->set_type_id(Ydb::Type::STRING);
+        bytes->mutable_value()->set_bytes_value(std::string("\0\xff", 2));
+        auto* value = source->MutableColumns(4)->MutableDefaultFromLiteral();
+        value->mutable_type()->set_type_id(Ydb::Type::INT32);
+        value->mutable_value()->set_int32_value(-42);
+        env.CreateTable("/Root", *source);
+
+        for (const auto consistency : {EConsistencyLevel::Row, EConsistencyLevel::Global}) {
+            const TString dstPath = consistency == EConsistencyLevel::Row ? "/Root/Row" : "/Root/Global";
+            // Repeating creation also exercises validation of an existing destination.
+            for (ui32 attempt = 0; attempt < 2; ++attempt) {
+                env.GetRuntime().Register(CreateDstCreator(
+                    env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+                    "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                    "/Root/Source", dstPath, EReplicationMode::ReadOnly, consistency));
+                auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+                UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+
+                const auto description = env.GetDescription(dstPath);
+                const auto& destination = description.GetPathDescription().GetTable();
+                for (const auto& expected : source->GetColumns()) {
+                    const auto* actual = FindIfPtr(destination.GetColumns(), [&](const auto& column) {
+                        return column.GetName() == expected.GetName();
+                    });
+                    UNIT_ASSERT(actual);
+                    UNIT_ASSERT_VALUES_EQUAL(actual->GetNotNull(), expected.GetNotNull());
+                    UNIT_ASSERT_VALUES_EQUAL(actual->HasDefaultFromLiteral(), expected.HasDefaultFromLiteral());
+                    UNIT_ASSERT_VALUES_EQUAL(actual->GetDefaultFromLiteral().SerializeAsString(),
+                        expected.GetDefaultFromLiteral().SerializeAsString());
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(CreateWaitingImportTable) {
         TEnv env;
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{

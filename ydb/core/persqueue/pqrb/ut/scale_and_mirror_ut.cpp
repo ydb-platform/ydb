@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/pqrb/partition_scale_request.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/services/scheme_secret/service.h>
 #include <ydb/library/actors/core/events.h>
 #include <util/generic/yexception.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
@@ -522,6 +523,7 @@ public:
     mutable std::vector<TString> CredTokens;
     mutable NYdb::TCredentialsProviderFactoryPtr LastDescribeCredentials;
     mutable TString LastDescribeTopic;
+    mutable NKikimrPQ::TMirrorPartitionConfig LastDescribeConfig;
 
     NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr> GetCredentialsProviderImpl(
         const NKikimrPQ::TMirrorPartitionConfig::TCredentials& cred
@@ -555,6 +557,7 @@ public:
     ) const override {
         LastDescribeCredentials = credentialsProviderFactory;
         LastDescribeTopic = config.GetTopic();
+        LastDescribeConfig = config;
         ++DescribeCalls;
         auto promise = NThreading::NewPromise<NYdb::NTopic::TDescribeTopicResult>();
         DescribePromises.push_back(promise);
@@ -579,13 +582,47 @@ NKikimrPQ::TMirrorPartitionConfig MakeMirrorConfig(const TString& topic = "src-t
     return config;
 }
 
-TActorId StartDescriber(TTestContext& tc, TControllableMirrorFactory& factory, const NKikimrPQ::TMirrorPartitionConfig& config) {
+TActorId StartDescriber(
+    TTestContext& tc,
+    TControllableMirrorFactory& factory,
+    const NKikimrPQ::TMirrorPartitionConfig& config,
+    const TString& database = {},
+    const TString& topicPath = {}
+) {
     tc.Runtime->GetAppData(0).PersQueueMirrorReaderFactory = &factory;
-    auto describer = tc.Runtime->Register(CreateMirrorDescriber(1, tc.Edge, "topic", config));
+    auto describer = tc.Runtime->Register(CreateMirrorDescriber(1, tc.Edge, "topic", config, database, topicPath));
     tc.Runtime->EnableScheduleForActor(describer);
+    DispatchFor(tc);
     DispatchFor(tc);
     return describer;
 }
+
+class TFakeSecretService : public TActorBootstrapped<TFakeSecretService> {
+public:
+    using TEvResolveSecret = NSecret::TDescribeSchemaSecretsService::TEvResolveSecret;
+
+    explicit TFakeSecretService(THolder<TEvResolveSecret>& request)
+        : Request(request)
+    {
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvResolveSecret, Handle);
+        }
+    }
+
+private:
+    void Handle(TEvResolveSecret::TPtr& ev) {
+        Request = ev->Get()->MakeCopy();
+    }
+
+    THolder<TEvResolveSecret>& Request;
+};
 
 void FireDescribeWakeup(TTestContext& tc, TDuration delay = TDuration::Seconds(1)) {
     tc.Runtime->ResetScheduledCount();
@@ -830,7 +867,69 @@ Y_UNIT_TEST(DuplicateInitCredentialsIsIgnoredWhileInflight) {
     UNIT_ASSERT_VALUES_EQUAL(factory.DescribeCalls, 1u);
 }
 
-Y_UNIT_TEST(UnknownEventsAndPoisonPill) {
+Y_UNIT_TEST(SecretCredentialsAreResolvedForDescribeWithoutPersistingValue) {
+    using TEvResolveSecret = NSecret::TDescribeSchemaSecretsService::TEvResolveSecret;
+
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+    tc.Runtime->RegisterService(MakeSchemeCacheID(), tc.Runtime->AllocateEdgeActor());
+
+    THolder<TEvTxProxySchemeCache::TEvNavigateKeySet> navigation;
+    TActorId navigationSender;
+    THolder<TEvResolveSecret> secretRequest;
+    tc.Runtime->RegisterService(
+        NSecret::MakeDescribeSchemaSecretServiceId(tc.Runtime->GetNodeId(0)),
+        tc.Runtime->Register(new TFakeSecretService(secretRequest))
+    );
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySet::EventType) {
+            navigationSender = ev->Sender;
+            navigation = ev->Release<TEvTxProxySchemeCache::TEvNavigateKeySet>();
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    auto mirror = MakeMirrorConfig();
+    mirror.MutableCredentials()->SetOauthTokenSecretName("/Root/describe-secret");
+    TControllableMirrorFactory factory;
+    StartDescriber(tc, factory, mirror, "/Root", "/Root/dst-topic");
+
+    UNIT_ASSERT(navigation);
+    UNIT_ASSERT_VALUES_EQUAL(navigation->Request->DatabaseName, "/Root");
+    auto response = MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(navigation->Request.Release());
+    auto& entry = response->Request->ResultSet.at(0);
+    entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+    entry.SecurityObject = MakeIntrusive<TSecurityObject>("topic-owner@builtin", TString(), false);
+    tc.Runtime->Send(new IEventHandle(navigationSender, MakeSchemeCacheID(), response.Release()));
+    for (size_t i = 0; i < 100 && !secretRequest; ++i) {
+        DispatchFor(tc);
+    }
+
+    UNIT_ASSERT(secretRequest);
+    UNIT_ASSERT_VALUES_EQUAL(secretRequest->Database, "/Root");
+    UNIT_ASSERT_VALUES_EQUAL(secretRequest->SecretNames.front(), "/Root/describe-secret");
+    UNIT_ASSERT(secretRequest->UserToken);
+    UNIT_ASSERT_VALUES_EQUAL(secretRequest->UserToken->GetUserSID(), "topic-owner@builtin");
+    secretRequest->Promise.SetValue(NKqp::TEvDescribeSecretsResponse::TDescription({"resolved-oauth"}));
+    for (size_t i = 0; i < 100 && factory.CredCalls == 0; ++i) {
+        DispatchFor(tc);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(factory.CredCalls, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(factory.CredTokens.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(factory.CredTokens.front(), "resolved-oauth");
+    FireDescribeWakeup(tc);
+    UNIT_ASSERT_VALUES_EQUAL(factory.DescribeCalls, 1u);
+    const auto& credentials = factory.LastDescribeConfig.GetCredentials();
+    UNIT_ASSERT(credentials.HasOauthTokenSecretName());
+    UNIT_ASSERT_VALUES_EQUAL(credentials.GetOauthTokenSecretName(), "/Root/describe-secret");
+    UNIT_ASSERT(!credentials.HasOauthToken());
+}
+
+Y_UNIT_TEST(PoisonIgnoresLateSecrets) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);

@@ -1,5 +1,6 @@
 #include "mirror_describer.h"
 
+#include <ydb/core/persqueue/common/proxy/mirror_credentials.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -17,11 +18,15 @@ TMirrorDescriber::TMirrorDescriber(
     ui64 tabletId,
     TActorId readBalancerActorId,
     TString topicName,
-    const NKikimrPQ::TMirrorPartitionConfig& config
+    const NKikimrPQ::TMirrorPartitionConfig& config,
+    const TString& database,
+    const TString& topicPath
 )
     : TBaseTabletActor(tabletId, readBalancerActorId, NKikimrServices::PQ_MIRROR_DESCRIBER)
     , TopicName(std::move(topicName))
     , Config(config)
+    , Database(database)
+    , TopicPath(topicPath)
 {
 }
 
@@ -35,26 +40,36 @@ void TMirrorDescriber::StartInit(const TActorContext& ctx) {
     ++DescribeGeneration;
     DescribeTopicRequestInFlight = false;
     CredentialsRequestInFlight = false;
+    if (auto initializer = std::exchange(CredentialsInitializer, {})) {
+        ctx.Send(initializer, new TEvents::TEvPoisonPill());
+    }
     ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials, 0, DescribeGeneration);
 }
 
 void TMirrorDescriber::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     LOG_N("Killed");
+    if (auto initializer = std::exchange(CredentialsInitializer, {})) {
+        ctx.Send(initializer, new TEvents::TEvPoisonPill());
+    }
     CredentialsProvider = nullptr;
     Die(ctx);
 }
 
 void TMirrorDescriber::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
+    const auto& tabletConfig = ev->Get()->Config;
     bool equalConfigs = google::protobuf::util::MessageDifferencer::Equals(
         Config,
-        ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
+        tabletConfig.GetPartitionConfig().GetMirrorFrom()
     );
+    const bool equalContext = Database == tabletConfig.GetYdbDatabasePath() && TopicPath == tabletConfig.GetTopicPath();
     LOG_D(
         "Got new config, equal with",
-        {"previous", equalConfigs}
+        {"previous", equalConfigs && equalContext}
     );
-    if (!equalConfigs) {
-        Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
+    if (!equalConfigs || !equalContext) {
+        Config = tabletConfig.GetPartitionConfig().GetMirrorFrom();
+        Database = tabletConfig.GetYdbDatabasePath();
+        TopicPath = tabletConfig.GetTopicPath();
         LOG_I("Changing config");
         StartInit(ctx);
     }
@@ -154,6 +169,14 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
+    if (MirrorCredentialsNeedResolution(Config.GetCredentials())) {
+        CredentialsInitializer = ctx.Register(CreateMirrorCredentialsInitializer(
+            SelfId(), DescribeGeneration, Config.GetCredentials(), Database, TopicPath, factory
+        ));
+        CredentialsRequestInFlight = true;
+        return;
+    }
+
     auto future = factory->GetCredentialsProvider(Config.GetCredentials());
     future.Subscribe(
         [
@@ -189,13 +212,17 @@ void TMirrorDescriber::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TP
         );
         return;
     }
+    CredentialsInitializer = {};
     CredentialsRequestInFlight = false;
     if (ev->Get()->Error) {
         LOG_W(
             "Cannot initialize credentials",
             {"provider", ev->Get()->Error.value()}
         );
-        ScheduleWithIncreasingTimeout<TEvPQ::TEvInitCredentials>(SelfId(), CredentialsInitInterval, INIT_INTERVAL_MAX, ctx);
+        ctx.Schedule(CredentialsInitInterval, std::make_unique<IEventHandle>(
+            SelfId(), SelfId(), new TEvPQ::TEvInitCredentials(), 0, DescribeGeneration
+        ));
+        CredentialsInitInterval = Min(CredentialsInitInterval * 2, INIT_INTERVAL_MAX);
         return;
     }
 
@@ -225,9 +252,11 @@ NActors::IActor* CreateMirrorDescriber(
     const ui64 tabletId,
     const NActors::TActorId& readBalancerActorId,
     const TString& topicName,
-    const NKikimrPQ::TMirrorPartitionConfig& config
+    const NKikimrPQ::TMirrorPartitionConfig& config,
+    const TString& database,
+    const TString& topicPath
 ) {
-    return new TMirrorDescriber(tabletId, readBalancerActorId, topicName, config);
+    return new TMirrorDescriber(tabletId, readBalancerActorId, topicName, config, database, topicPath);
 }
 
 

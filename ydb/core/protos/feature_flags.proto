@@ -430,7 +430,7 @@ message TFeatureFlags {
     optional bool EnableCompositeConveyorScheduling = 349 [default = false];
     optional bool EnableCsIndexReadMemoryTracking = 350 [default = false];
     // Creates asynchronous indexes on newly created asynchronous replication destinations.
-    optional bool EnableAsyncIndexReplication = 351 [default = false];
+    optional bool EnableAsyncIndexReplication = 351 [default = true];
     optional bool EnableDatabaseAccessCheckForHttpMonitoring = 352 [default = false];
     optional bool EnableLocalDBBtreeIndexV2 = 353 [default = false];
     // Only a leading '/' makes a client path absolute. Otherwise prepend the
@@ -482,5 +482,6 @@ message TFeatureFlags {
     // Gate for HNSW creation and acceleration once the implementation is included.
     optional bool EnableHnswIndex = 384 [default = false];
     optional bool EnableColumnshardCutHistorySending = 385 [default = false];
-    optional bool EnableColumnTableDefaults = 386 [default = false];
+    optional bool EnableCdcAggregator = 386 [default = false];
+    optional bool EnableColumnTableDefaults = 387 [default = false];
 }

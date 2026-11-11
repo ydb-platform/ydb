@@ -1,6 +1,7 @@
 #include "kqp_query_compiler.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
@@ -518,6 +519,7 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta
 
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadOlapRanges>) {
         readProto.SetSorted(settings.IsSorted());
+        readProto.SetRequireSortedRead(settings.RequireSortedRead);
         if (settings.TabletId) {
             readProto.SetTabletId(*settings.TabletId);
         }
@@ -1425,6 +1427,7 @@ private:
 
             TString indexName = TString(settings.Index().Cast().StringValue());
             fullTextProto.SetIndex(settings.Index().Cast().StringValue());
+            fullTextProto.SetMainTableCovered(settings.MainTableCovered().Cast().Value() == "true");
 
             auto type = settings.Raw()->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
 
@@ -1574,8 +1577,23 @@ private:
             }
 
             {
-                for (const auto& expr: settings.Query().Maybe<TExprList>().Cast()) {
-                    auto* value = fullTextProto.MutableQuerySettings()->AddQueryValue();
+                for (auto expr: settings.Query().Maybe<TExprList>().Cast()) {
+                    NKqpProto::TKqpPhyValue* value;
+                    if (const auto query = NOpt::TryParseFulltextPatternQuery(expr.Ptr())) {
+                        auto* patternQuery = fullTextProto.MutableQuerySettings()->AddPatternQueries();
+                        if (query->Escape) {
+                            patternQuery->SetEscape(TString(1, *query->Escape));
+                        }
+                        using TPatternQuery = NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TPatternQuery;
+                        TPatternQuery::EMatchMode matchMode;
+                        YQL_ENSURE(TPatternQuery::EMatchMode_Parse(TString(query->Mode), &matchMode),
+                            "Unexpected string match mode: " << query->Mode);
+                        patternQuery->SetMode(matchMode);
+                        value = patternQuery->MutablePattern();
+                        expr = TExprBase(query->Pattern);
+                    } else {
+                        value = fullTextProto.MutableQuerySettings()->AddQueryValue();
+                    }
                     if (expr.Maybe<TCoParameter>()) {
                         value->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
                     } else {

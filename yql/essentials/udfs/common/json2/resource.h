@@ -9,12 +9,10 @@ using namespace NKikimr;
 using namespace NUdf;
 using namespace NYql;
 
-// NOLINTNEXTLINE(misc-definitions-in-headers)
-extern const char JSONPATH_RESOURCE_NAME[] = "JsonPath";
+inline constexpr char JSONPATH_RESOURCE_NAME[] = "JsonPath";
 using TJsonPathResource = TBoxedResource<NJsonPath::TJsonPathPtr, JSONPATH_RESOURCE_NAME>;
 
-// NOLINTNEXTLINE(misc-definitions-in-headers)
-extern const char JSON_NODE_RESOURCE_NAME[] = "JsonNode";
+inline constexpr char JSON_NODE_RESOURCE_NAME[] = "JsonNode";
 using TJsonNodeResource = TResource<JSON_NODE_RESOURCE_NAME>;
 
 } // namespace NJson2Udf

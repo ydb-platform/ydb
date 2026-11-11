@@ -24,11 +24,11 @@ SELECT
     Max(cd_dep_college_count) AS x3,
     Sum(cd_dep_college_count) AS s3
 FROM
-    `/Root/test/ds/customer` AS c
+    `customer` AS c
 ,
-    `/Root/test/ds/customer_address` AS ca
+    `customer_address` AS ca
 ,
-    `/Root/test/ds/customer_demographics`
+    `customer_demographics`
 WHERE
     c.c_current_addr_sk == ca.ca_address_sk
     AND cd_demo_sk == c.c_current_cdemo_sk
@@ -36,9 +36,9 @@ WHERE
         SELECT
             *
         FROM
-            `/Root/test/ds/store_sales`
+            `store_sales`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             c.c_customer_sk == ss_customer_sk
             AND ss_sold_date_sk == d_date_sk
@@ -50,9 +50,9 @@ WHERE
             SELECT
                 *
             FROM
-                `/Root/test/ds/web_sales`
+                `web_sales`
             ,
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 c.c_customer_sk == ws_bill_customer_sk
                 AND ws_sold_date_sk == d_date_sk
@@ -63,9 +63,9 @@ WHERE
             SELECT
                 *
             FROM
-                `/Root/test/ds/catalog_sales`
+                `catalog_sales`
             ,
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 c.c_customer_sk == cs_ship_customer_sk
                 AND cs_sold_date_sk == d_date_sk

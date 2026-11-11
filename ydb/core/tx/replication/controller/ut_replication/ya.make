@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/replication/controller)
 
-FORK_SUBTESTS()
-
 SIZE(SMALL)
 
 TIMEOUT(60)

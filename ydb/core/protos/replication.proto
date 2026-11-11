@@ -37,6 +37,9 @@ message TReplicationDefaults {
     optional uint32 ConsumerAvailabilityPeriodSeconds = 6 [default = 86400]; // 1d
     optional uint32 SourceOffsetCommitIntervalMilliSeconds = 7 [default = 1000];
     optional bool EnableDataLossDetection = 8 [default = true];
+    // Enable on the destination only after all source clusters support __omit_backup.
+    // Keep false until the minimum supported source version supports the attribute.
+    optional bool EnableOmitBackupAttribute = 9 [default = false];
 }
 
 message TStaticCredentials {

@@ -160,7 +160,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
     YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP projection: " << KqpExprToPrettyString(TExprBase(newLambda), ctx.ExprCtx);
 
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->StorageType, read->TableCallable, newLambda, read->Limit,
-                                          read->RangeInfo, read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
+                                          read->RangeInfo, read->OriginalPredicate, read->SortDir, read->Props, read->Pos, read->RequireSortedRead);
     return MakeIntrusive<TOpMap>(newRead, map->Pos, newMapElements);
 }
 

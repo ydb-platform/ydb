@@ -718,7 +718,9 @@ private:
         };
 
         auto replyError = [&](auto message, auto status) {
-            return RuntimeError(message, status, getIssues());
+            const auto issueCode = record.GetStatus().GetCode() == Ydb::StatusIds::PRECONDITION_FAILED
+                ? NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED : 0;
+            return RuntimeError(message, status, getIssues(), issueCode);
         };
 
         switch (record.GetStatus().GetCode()) {
@@ -1429,8 +1431,11 @@ private:
         return TypeEnv.BindAllocator();
     }
 
-    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {},
+        NYql::TIssueCode issueCode = 0)
+    {
         NYql::TIssue issue(message);
+        issue.SetCode(issueCode, NYql::TSeverityIds::S_ERROR);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
         }

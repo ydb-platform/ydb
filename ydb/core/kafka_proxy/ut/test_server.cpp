@@ -75,6 +75,7 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(128);
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(512);
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(1_KB);
+    appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(10_KB);
 
     appConfig.MutableGRpcConfig()->SetHost("::1");
     auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();

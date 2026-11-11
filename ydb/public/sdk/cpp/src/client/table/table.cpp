@@ -3736,11 +3736,7 @@ TChangefeedDescription::TChangefeedDescription(const std::string& name, EChangef
 
 TChangefeedDescription::TChangefeedDescription(const Ydb::Table::Changefeed& proto)
     : TChangefeedDescription(FromProto(proto))
-{
-    if (proto.has_partition_write_speed_bytes_per_second()) {
-        PartitionWriteSpeedBytesPerSecond_ = proto.partition_write_speed_bytes_per_second();
-    }
-}
+{}
 
 TChangefeedDescription::TChangefeedDescription(const Ydb::Table::ChangefeedDescription& proto)
     : TChangefeedDescription(FromProto(proto))
@@ -3795,11 +3791,6 @@ TChangefeedDescription& TChangefeedDescription::WithResolvedTimestamps(const TDu
 
 TChangefeedDescription& TChangefeedDescription::WithRetentionPeriod(const TDuration& value) {
     RetentionPeriod_ = value;
-    return *this;
-}
-
-TChangefeedDescription& TChangefeedDescription::WithPartitionWriteSpeedBytesPerSecond(uint64_t value) {
-    PartitionWriteSpeedBytesPerSecond_ = value;
     return *this;
 }
 
@@ -4040,9 +4031,6 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
 
     if (RetentionPeriod_) {
         SetDuration(*RetentionPeriod_, *proto.mutable_retention_period());
-    }
-    if (PartitionWriteSpeedBytesPerSecond_) {
-        proto.set_partition_write_speed_bytes_per_second(*PartitionWriteSpeedBytesPerSecond_);
     }
 }
 

@@ -818,9 +818,9 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
         auto op = modifyScheme->MutableCreateCdcStream();
         op->SetTableName(name);
 
-        const ui64 defaultWriteSpeed = add.attributes().contains("__async_replication") ? 10_MB : 1_MB;
         const ui64 writeSpeed = add.has_partition_write_speed_bytes_per_second()
-            ? add.partition_write_speed_bytes_per_second() : defaultWriteSpeed;
+            ? add.partition_write_speed_bytes_per_second()
+            : (add.attributes().contains("__async_replication") ? 10_MB : 1_MB);
         if (!writeSpeed || writeSpeed > Max<ui32>()) {
             code = Ydb::StatusIds::BAD_REQUEST;
             error = "Invalid changefeed partition write speed";

@@ -1,5 +1,3 @@
-* Added `TChangefeedDescription::WithPartitionWriteSpeedBytesPerSecond()` to set the underlying topic's per-partition write quota during changefeed creation. Without an explicit value, replication changefeeds use 10 MiB/s and ordinary changefeeds use 1 MiB/s.
-
 ## v3.27.0
 
 * Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.

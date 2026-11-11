@@ -142,8 +142,7 @@ TString TMetadata::Serialize() const {
 
 TMetadata TMetadata::Deserialize(const TString& metadata) {
     NJson::TJsonValue json;
-    // Do not restore a partial resource/semaphore list left by a failed parse.
-    NJson::ReadJsonTree(metadata, &json, /* throwOnError */ true);
+    NJson::ReadJsonTree(metadata, &json);
     const auto& value = json["version"];
 
     TMetadata result;

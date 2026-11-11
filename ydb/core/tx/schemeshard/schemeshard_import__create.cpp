@@ -1603,10 +1603,6 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         auto& item = importInfo->Items.at(msg.ItemIdx);
-        if (item.State != EState::GetScheme || item.SchemeGetter != SchemeResult->Sender) {
-            Self->RunningImportSchemeGetters.erase(SchemeResult->Sender);
-            return;
-        }
         Self->RunningImportSchemeGetters.erase(std::exchange(item.SchemeGetter, {}));
 
         if (importInfo->State == EState::Cancelled || importInfo->State == EState::Done) {

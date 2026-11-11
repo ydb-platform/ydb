@@ -1240,9 +1240,6 @@ public:
     }
 
     void Bootstrap() {
-        if (Key && !IV) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Encrypted import item has no IV in schema mapping");
-        }
         DownloadMetadata();
         Become(&TThis::StateDownloadMetadata);
     }

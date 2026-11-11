@@ -10614,24 +10614,6 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         }
     }
 
-    Y_UNIT_TEST(MalformedMetadataDoesNotRestorePartialLists) {
-        TKesusImportEnv t;
-        for (bool truncated : {false, true}) {
-            t.WriteBackup(MakeContents());
-            TString metadata = t.S3.GetData().at(MetadataKey);
-            if (truncated) {
-                metadata.pop_back();
-            } else {
-                metadata += " trailing garbage";
-            }
-            t.WriteFile(MetadataKey, metadata);
-            const ui64 id = t.StartImport(t.MakeImport());
-            t.Finish(id, Ydb::StatusIds::CANCELLED, "failed to parse metadata");
-            t.AssertNotCreated();
-            TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", id);
-        }
-    }
-
     Y_UNIT_TEST(EmptyMetadataIgnoresStaleFiles) {
         TKesusImportEnv t;
         t.WriteBackup(MakeContents());

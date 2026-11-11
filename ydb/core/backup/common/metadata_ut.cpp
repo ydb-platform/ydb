@@ -34,21 +34,6 @@ Y_UNIT_TEST_SUITE(PathsNormalizationTest) {
 }
 
 Y_UNIT_TEST_SUITE(RateLimiterMetadataTest) {
-    Y_UNIT_TEST(RejectsMalformedJsonWithoutRejectingUnknownFields) {
-        for (const TString& text : {
-            "",
-            R"({"rate_limiter_resources":[],"semaphores":[])",
-            R"({"rate_limiter_resources":[],"semaphores":[{"export_prefix":"semaphores/001","name":"lock"},)",
-            R"({"rate_limiter_resources":[],"semaphores":[]} trailing garbage)",
-        }) {
-            UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(text), NJson::TJsonException);
-        }
-        const auto parsed = TMetadata::Deserialize(
-            R"({"rate_limiter_resources":[],"semaphores":[],"future_field":{"value":1}})");
-        UNIT_ASSERT(parsed.GetRateLimiterResources()->empty());
-        UNIT_ASSERT(parsed.GetSemaphores()->empty());
-    }
-
     Y_UNIT_TEST(AbsentList) {
         const auto metadata = TMetadata::Deserialize("{}");
         UNIT_ASSERT(!metadata.GetRateLimiterResources());

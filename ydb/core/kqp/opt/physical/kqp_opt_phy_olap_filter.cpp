@@ -1,7 +1,7 @@
 #include "kqp_opt_phy_rules.h"
 #include "predicate_collector.h"
 #include "kqp_opt_phy_olap_filter.h"
-#include "like_hint.h"
+#include <ydb/core/kqp/common/kqp_expr_helpers.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
@@ -776,11 +776,12 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         replacements.emplace(pptr.Get(), lambdaArgs.back());
     }
 
-    const auto likeHint = TryParseLikeHint(apply.Ref());
+    const auto like = TryParseLikeExpression(apply.Ptr());
+    TString likePattern;
     std::optional<ui32> hintArgument;
-    if (likeHint) {
+    if (like && ExtractLiteral(like->Pattern, likePattern)) {
         for (ui32 i = 0; i < members.size(); ++i) {
-            if (members[i].Get() == likeHint->Column) {
+            if (members[i] == like->Column) {
                 hintArgument = static_cast<ui32>(externalArgs.size() + i);
                 break;
             }
@@ -791,12 +792,12 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         .Lambda(ctx.NewLambda(apply.Pos(), ctx.NewArguments(argument.Pos(), std::move(lambdaArgs)), ctx.ReplaceNodes(apply.Ptr(), replacements)))
         .Args().Add(std::move(realArgs)).Build()
         .KernelName(ctx.NewAtom(apply.Pos(), ""));
-    if (hintArgument && likeHint) {
+    if (hintArgument) {
         auto hintList = ctx.NewList(apply.Pos(), {
             ctx.NewAtom(apply.Pos(), *hintArgument),
-            ctx.NewAtom(apply.Pos(), likeHint->Pattern, TNodeFlags::BinaryContent),
-            ctx.NewAtom(apply.Pos(), likeHint->Escape, TNodeFlags::BinaryContent),
-            ctx.NewAtom(apply.Pos(), likeHint->CaseSensitive ? "true" : "false"),
+            ctx.NewAtom(apply.Pos(), likePattern, TNodeFlags::BinaryContent),
+            ctx.NewAtom(apply.Pos(), like->Escape ? TString(1, *like->Escape) : TString(), TNodeFlags::BinaryContent),
+            ctx.NewAtom(apply.Pos(), like->CaseSensitive ? "true" : "false"),
         });
         built.LikeHint(TExprList(hintList));
     }

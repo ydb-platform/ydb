@@ -400,6 +400,7 @@ struct TTaskMeta {
             Blocks
         };
         ui64 ItemsLimit = 0;
+        bool RequireSortedRead = false;
         EReadType ReadType = EReadType::Rows;
         TKqpOlapProgram OlapProgram;
         TVector<NScheme::TTypeInfo> ResultColumnsTypes;

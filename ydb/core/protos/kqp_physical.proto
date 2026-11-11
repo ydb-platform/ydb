@@ -210,6 +210,8 @@ message TKqpPhyOpReadOlapRanges {
     repeated string GroupByColumnNames = 14;
     // If set, only data from the specified tablet will be processed
     optional uint64 TabletId = 15;
+    // Each shard supplies a separate PK-ordered stream.
+    bool RequireSortedRead = 16;
 }
 
 message TKqpPhyOpReadRanges {
@@ -465,6 +467,21 @@ message TKqpFullTextSource {
             optional TKqpPhyValue Value = 2;
         }
         repeated TPrefixColumn PrefixColumns = 4;
+
+        message TPatternQuery {
+            enum EMatchMode {
+                LIKE = 0;
+                EXACT = 1;
+                STARTS_WITH = 2;
+                ENDS_WITH = 3;
+                CONTAINS = 4;
+                ILIKE = 5;
+            }
+            optional TKqpPhyValue Pattern = 1;
+            optional bytes Escape = 2;
+            optional EMatchMode Mode = 3;
+        }
+        repeated TPatternQuery PatternQueries = 5;
     }
 
     message TIndexTable {
@@ -498,6 +515,8 @@ message TKqpFullTextSource {
     // When fulltext index uses __ydb_row_id as doc_id, this is the unique secondary index impl table
     // (keyed by __ydb_row_id, value = main-table PK columns) used to resolve __ydb_row_id -> PK at read time.
     optional TIndexTable UniqueIndexImplTable = 16;
+
+    optional bool MainTableCovered = 17;
 }
 
 message TKqpReadSampling {

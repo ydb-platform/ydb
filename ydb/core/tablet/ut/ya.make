@@ -25,6 +25,7 @@ SRCS(
     tablet_pipe_ut.cpp
     tablet_pipecache_ut.cpp
     tablet_req_blockbs_ut.cpp
+    tablet_req_rebuildhistory_ut.cpp
     tablet_resolver_ut.cpp
     tablet_state_ut.cpp
     detailed_metrics/ut_helpers.cpp

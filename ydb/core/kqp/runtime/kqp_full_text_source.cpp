@@ -1827,14 +1827,13 @@ struct TReadInfo {
  * TMainTableReader -- reader for the user's original table.
  *
  * After the merge identifies matching document IDs, this reader fetches the
- * full row data that the user's SELECT requested.  FromSettings() analyzes
- * the requested columns to determine:
+ * full row data that the user's SELECT requested. FromSettings() configures:
  *
  *   - ResultCellIndices: mapping from output column position to either a table
  *     cell index or RELEVANCE_COLUMN_MARKER for the BM25 score column.
  *   - MainTableCovered: true if all requested columns are key columns of the
  *     main table (so no actual read is needed -- the data is already known
- *     from the doc_id).
+ *     from the doc_id). Set by the optimizer, or derived for older settings.
  *   - WithRelevance: true if the user requested __ydb_full_text_relevance and
  *     the index type supports it.
  */
@@ -1890,7 +1889,8 @@ public:
 
         TVector<std::pair<i32, NScheme::TTypeInfo>> resultCellIndices;
         resultCellIndices.reserve(settings->GetColumns().size());
-        bool mainTableCovered = true;
+        // Older saved graphs and task settings do not carry this decision.
+        bool mainTableCovered = !settings->HasMainTableCovered() || settings->GetMainTableCovered();
         for(i32 i = 0; i < settings->GetColumns().size(); i++) {
             const auto& column = settings->GetColumns(i);
             if (column.GetName() == FullTextRelevanceColumn) {
@@ -1904,6 +1904,7 @@ public:
                 continue;
             }
 
+            YQL_ENSURE(!settings->GetMainTableCovered(), "Covered fulltext source requests a non-key column");
             mainTableCovered = false;
             resultColumnTypes.push_back(NScheme::TypeInfoFromProto(
                 column.GetTypeId(), column.GetTypeInfo()));
@@ -2502,7 +2503,6 @@ private:
     ui64 MatchedItemsCount = 0;                            // Includes pending lookups and buffered rows
     static constexpr ui64 MatchBatchSize = 256;
     std::deque<TDocInfoPtr> ResultQueue;                   // Ready-to-deliver document rows
-    bool IsNgram = false;                                  // True if the index uses n-gram tokenization
 
     TActorId PipeCacheId;  // Per-node pipe cache for datashard communication
 
@@ -2565,47 +2565,59 @@ private:
         YQL_ENSURE(Settings->GetQuerySettings().GetColumns().size() == 1);
         const bool isJsonIndex = Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson
             || Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact;
+        bool isNgram = false;
 
+        YQL_ENSURE(IndexTableReader, "Index table reader is not initialized");
         if (isJsonIndex) {
-            // For JSON index, tokens are pre-compiled at query compile time
-            YQL_ENSURE(IndexTableReader, "Index table reader is not initialized");
-
             size_t wordIndex = 0;
             for (const TString& token : Settings->GetQuerySettings().GetTokens()) {
                 Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells));
             }
         } else {
-            const auto& expr = Settings->GetQuerySettings().GetQuery();
-
             THashMap<TStringBuf, TWordStatePtr> seen;
-            for (const auto& column : Settings->GetQuerySettings().GetColumns()) {
-                for (const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
-                    if (analyzer.analyzers().use_filter_ngram() || analyzer.analyzers().use_filter_edge_ngram()) {
-                        IsNgram = true;
-                    }
+            size_t wordIndex = 0;
+            auto addWord = [&](const TString& token, bool required) {
+                auto wordIt = seen.find(token);
+                if (wordIt != seen.end()) {
+                    wordIt->second->Required = wordIt->second->Required || required;
+                } else {
+                    auto word = MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells);
+                    word->Required = required;
+                    seen[word->Word] = word;
+                    Words.emplace_back(std::move(word));
+                }
+            };
 
-                    if (analyzer.column() == column.GetName()) {
-                        size_t wordIndex = 0;
-                        for (const auto& term: NFulltext::BuildSearchTermsStructured(expr, analyzer.analyzers())) {
-                            YQL_ENSURE(IndexTableReader);
-                            auto wordIt = seen.find(term.Token);
-                            if (wordIt != seen.end()) {
-                                // Don't add duplicate words
-                                wordIt->second->Required = wordIt->second->Required || term.Required;
-                            } else {
-                                auto word = MakeIntrusive<TWordState>(wordIndex++, term.Token, IndexTableReader, PrefixCells);
-                                word->Required = term.Required;
-                                seen[word->Word] = word;
-                                Words.emplace_back(std::move(word));
-                            }
-                        }
-                    }
+            const auto& queries = Settings->GetQuerySettings();
+            const auto& expr = queries.GetQuery();
+            YQL_ENSURE(expr.empty() || queries.GetPatternQueries().empty(), "String predicates must remain residual filters beside fulltext queries");
+            const auto& settings = Settings->GetIndexDescription().GetSettings();
+            YQL_ENSURE(settings.columns_size() == 1);
+            const auto& column = settings.columns(0);
+            YQL_ENSURE(column.column() == queries.GetColumns(0).GetName());
+            isNgram = column.analyzers().use_filter_ngram() || column.analyzers().use_filter_edge_ngram();
+            for (const auto& query : queries.GetPatternQueries()) {
+                YQL_ENSURE(query.GetEscape().size() <= 1, "Expected an optional single-byte LIKE escape");
+                std::optional<char> escape;
+                if (!query.GetEscape().empty()) {
+                    escape = query.GetEscape().front();
+                }
+                using TPatternQuery = NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TPatternQuery;
+                const auto terms = NFulltext::BuildStringMatchTerms(
+                    query.GetPattern(), TPatternQuery::EMatchMode_Name(query.GetMode()), escape, column.analyzers());
+                for (const auto& term : terms) {
+                    addWord(term, true);
+                }
+            }
+            if (!expr.empty()) {
+                for (const auto& term : NFulltext::BuildSearchTermsStructured(expr, column.analyzers())) {
+                    addWord(term.Token, term.Required);
                 }
             }
         }
 
         if (Words.empty()) {
-            if (isJsonIndex || IsNgram) {
+            if (isJsonIndex || isNgram) {
                 NotifyCA();
             } else {
                 RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);

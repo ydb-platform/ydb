@@ -24,11 +24,13 @@
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/logger/backend.h>
+#include <library/cpp/threading/future/async.h>
 
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
 
 #include <atomic>
+#include <chrono>
 #include <util/string/builder.h>
 #include <util/system/datetime.h>
 
@@ -176,11 +178,13 @@ public:
     TKikimrWithGrpcAndRootSchema(
             NKikimrConfig::TAppConfig appConfig = {},
             TAutoPtr<TLogBackend> logBackend = {},
-            const NKikimrBlobDepot::TS3BackendSettings* s3Settings = nullptr)
+            const NKikimrBlobDepot::TS3BackendSettings* s3Settings = nullptr,
+            bool useRealThreads = true)
     {
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
         ServerSettings = new Tests::TServerSettings(port);
+        ServerSettings->SetUseRealThreads(useRealThreads);
         ServerSettings->SetGrpcPort(grpc);
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
@@ -232,7 +236,15 @@ public:
         if (ServerSettings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             annoyingClient.SetSecurityToken("root@builtin");
         }
-        annoyingClient.InitRootScheme("Root");
+        if (useRealThreads) {
+            annoyingClient.InitRootScheme("Root");
+        } else {
+            TThreadPool threadPool;
+            threadPool.Start(1);
+            Server_->GetRuntime()->WaitFuture(NThreading::Async([&] {
+                annoyingClient.InitRootScheme("Root");
+            }, threadPool));
+        }
         if (s3Settings) {
             auto* runtime = Server_->GetRuntime();
             auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
@@ -802,6 +814,82 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             UNIT_ASSERT_VALUES_EQUAL(readResult.requested_offset(), 0);
             UNIT_ASSERT_VALUES_EQUAL(readResult.requested_size(), 5);
         });
+    }
+
+    Y_UNIT_TEST_BOTH_VERSION(ExecuteTransactionStatusMapping) {
+        // Use a simulated runtime so each tablet response can be replaced before
+        // the real RPC actor handles it, without depending on concurrent writes.
+        TKikimrWithGrpcAndRootSchema server({}, {}, nullptr, false);
+        auto& runtime = *server.GetRuntime();
+        const TString tablePath = "/Root/mydb/kvtable";
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GetPort()), grpc::InsecureChannelCredentials());
+        TThreadPool threadPool;
+        threadPool.Start(1);
+        runtime.WaitFuture(NThreading::Async([&] {
+            MakeDirectory(channel, "/Root/mydb");
+            MakeTable(channel, tablePath);
+        }, threadPool));
+        WaitTableCreation(server, tablePath);
+        auto stub = std::make_unique<Stub<StubVersion>>(channel);
+
+        auto execute = [&] {
+            return runtime.WaitFuture(NThreading::Async([&] {
+                Ydb::KeyValue::ExecuteTransactionRequest request;
+                request.set_path(tablePath);
+                request.set_partition_id(0);
+                typename RequestToResponse<StubVersion, Ydb::KeyValue::ExecuteTransactionRequest>::type response;
+                grpc::ClientContext ctx;
+                AdjustCtxForDB(ctx);
+                ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+                const auto status = stub->ExecuteTransaction(&ctx, request, &response);
+                UNIT_ASSERT_C(status.ok(), status.error_message());
+                return response;
+            }, threadPool));
+        };
+        UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(execute()), Ydb::StatusIds::SUCCESS);
+
+        struct TCase {
+            NKikimrKeyValue::Statuses::ReplyStatus TabletStatus;
+            TString Message;
+            Ydb::StatusIds::StatusCode ExpectedStatus;
+        };
+        const TCase cases[] = {
+            {NKikimrKeyValue::Statuses::RSTATUS_BLOCKED, TEvKeyValue::RequestInFlightLimitReached, Ydb::StatusIds::OVERLOADED},
+            {NKikimrKeyValue::Statuses::RSTATUS_BLOCKED, "Tablet is blocked for another reason", Ydb::StatusIds::UNAVAILABLE},
+            {NKikimrKeyValue::Statuses::RSTATUS_BLOCKED, TString(TEvKeyValue::RequestInFlightLimitReached) + " (another reason)", Ydb::StatusIds::UNAVAILABLE},
+            {NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION, TEvKeyValue::RequestInFlightLimitReached, Ydb::StatusIds::PRECONDITION_FAILED},
+        };
+        for (const auto& testCase : cases) {
+            ui32 responses = 0;
+            auto observer = runtime.AddObserver<TEvKeyValue::TEvExecuteTransactionResponse>(
+                [&](TEvKeyValue::TEvExecuteTransactionResponse::TPtr& event) {
+                    auto& record = event->Get()->Record;
+                    record.set_status(testCase.TabletStatus);
+                    record.set_msg(testCase.Message);
+                    ++responses;
+                });
+            // Call once: retrying UNAVAILABLE would hide a proxy status regression.
+            const auto response = execute();
+            observer.Remove();
+            UNIT_ASSERT_VALUES_EQUAL(responses, 1);
+            UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(response), testCase.ExpectedStatus);
+            const auto& issues = [&]() -> const auto& {
+                if constexpr (StubVersion == Version::V1) {
+                    return response.operation().issues();
+                } else {
+                    return response.issues();
+                }
+            }();
+            if (testCase.ExpectedStatus == Ydb::StatusIds::OVERLOADED) {
+                UNIT_ASSERT_VALUES_EQUAL(issues.size(), 0);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(issues.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(issues.Get(0).message(), testCase.Message);
+            }
+            // Ordinary errors must return after Reply(), without a second reply
+            // or PassAway(). A subsequent request must still succeed.
+            UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(execute()), Ydb::StatusIds::SUCCESS);
+        }
     }
 
     Y_UNIT_TEST_BOTH_VERSION(TabletErrorInIssues) {

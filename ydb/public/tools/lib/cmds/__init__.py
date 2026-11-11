@@ -517,7 +517,8 @@ def deploy(arguments, actor_system_config=None):
         for flag_name in flags:
             enable_feature_flags.append(flag_name)
 
-    kafka_api_port = os.environ.get("YDB_KAFKA_PROXY_PORT", "auto")
+    # Default off in tests: Kafka proxy is opt-in via YDB_KAFKA_PROXY_PORT=auto|<port>.
+    kafka_api_port = os.environ.get("YDB_KAFKA_PROXY_PORT", "0")
     if kafka_api_port != 'auto':
         kafka_api_port = int(kafka_api_port)
     if kafka_api_port != 0:

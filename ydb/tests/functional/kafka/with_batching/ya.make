@@ -7,6 +7,8 @@ PEERDIR(
     ydb/tests/functional/kafka/test_common
 )
 
+ENV(YDB_KAFKA_PROXY_PORT="auto")
+
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 SIZE(MEDIUM)

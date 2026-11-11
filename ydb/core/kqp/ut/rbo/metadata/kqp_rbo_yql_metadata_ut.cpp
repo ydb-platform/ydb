@@ -548,6 +548,76 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(map->Props.Metadata->ShuffledByColumns == TOrderedIUs<>{id});
     }
 
+    Y_UNIT_TEST(GlobalAggregateStatisticsEstimateOneRow) {
+        for (const double inputRows : {0.0, 128.0}) {
+            NTests::TIdTestContext f;
+            const auto value = f.Id(), payload = f.Id(), result = f.Id(), alias = f.Id();
+            auto read = f.Read({value, payload});
+            read->Props.Metadata.emplace();
+            read->Props.Metadata->ColumnsCount = 2;
+            read->Props.Statistics.emplace();
+            read->Props.Statistics->ERows = inputRows;
+            read->Props.Statistics->EBytes = inputRows * 32;
+            read->Props.Cost = 123;
+            TAggregationIUs traits;
+            traits.Add(result, TOpAggregationTraits{value, "max"});
+            auto aggregate = MakeIntrusive<TOpAggregate>(read, std::move(traits),
+                TOrderedIUs<>{}, EOpPhase::Undefined, false, f.Pos);
+
+            aggregate->ComputeMetadata(f.RboCtx, f.Props);
+            aggregate->ComputeStatistics(f.RboCtx, f.Props);
+            UNIT_ASSERT(aggregate->Props.Metadata->LogicalCard == ELogicalCardinality::One);
+            UNIT_ASSERT_VALUES_EQUAL(aggregate->Props.Statistics->ERows, 1);
+            UNIT_ASSERT_VALUES_EQUAL(aggregate->Props.Statistics->EBytes, inputRows == 0 ? 8 : 16);
+            UNIT_ASSERT_VALUES_EQUAL(*aggregate->Props.Cost, 123);
+            UNIT_ASSERT_VALUES_EQUAL(read->Props.Statistics->ERows, inputRows);
+
+            // Scalar-result projections must expose the corrected estimate to CBO.
+            auto map = f.Copies(aggregate, {{alias, result}});
+            map->ComputeMetadata(f.RboCtx, f.Props);
+            map->ComputeStatistics(f.RboCtx, f.Props);
+            UNIT_ASSERT_VALUES_EQUAL(map->Props.Statistics->ERows, 1);
+            UNIT_ASSERT_VALUES_EQUAL(map->Props.Statistics->EBytes, inputRows == 0 ? 16 : 32);
+        }
+    }
+
+    Y_UNIT_TEST(AggregateStatisticsUsesLogicalCardinality) {
+        struct TCase {
+            ELogicalCardinality Cardinality;
+            double InputRows;
+            double ExpectedRows;
+        };
+        const TCase cases[] = {
+            {ELogicalCardinality::Zero, 128, 0},
+            {ELogicalCardinality::ZeroOrOne, 128, 1},
+            {ELogicalCardinality::ZeroOrOne, 0.25, 0.25},
+            {ELogicalCardinality::ZeroOrOne, 0, 0},
+            {ELogicalCardinality::One, 128, 1},
+            {ELogicalCardinality::ZeroOrMore, 128, 128},
+            {ELogicalCardinality::OneOrMore, 128, 128},
+        };
+        for (const auto& test : cases) {
+            NTests::TIdTestContext f;
+            const auto key = f.Id(), value = f.Id(), payload = f.Id(), result = f.Id();
+            auto read = f.Read({key, value, payload});
+            read->Props.Metadata.emplace();
+            read->Props.Metadata->LogicalCard = test.Cardinality;
+            read->Props.Metadata->ColumnsCount = 3;
+            read->Props.Statistics.emplace();
+            read->Props.Statistics->ERows = test.InputRows;
+            read->Props.Statistics->EBytes = test.InputRows * 24;
+            TAggregationIUs traits;
+            traits.Add(result, TOpAggregationTraits{value, "max"});
+            auto aggregate = MakeIntrusive<TOpAggregate>(read, std::move(traits),
+                TOrderedIUs<>{key}, EOpPhase::Undefined, false, f.Pos);
+
+            aggregate->ComputeMetadata(f.RboCtx, f.Props);
+            aggregate->ComputeStatistics(f.RboCtx, f.Props);
+            UNIT_ASSERT_VALUES_EQUAL(aggregate->Props.Statistics->ERows, test.ExpectedRows);
+            UNIT_ASSERT_VALUES_EQUAL(aggregate->Props.Statistics->EBytes, test.ExpectedRows * 16);
+        }
+    }
+
     Y_UNIT_TEST(AggregateSeparatesSourceStatisticsAndHintIdentityFromProvenance) {
         NTests::TIdTestContext f;
         const auto key = f.Id("key"), copy = f.Id("copy");

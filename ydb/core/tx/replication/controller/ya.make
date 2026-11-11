@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 PEERDIR(
+    ydb/core/backup/common
     ydb/core/base
     ydb/core/discovery
     ydb/core/engine/minikql
@@ -18,6 +19,7 @@ PEERDIR(
     ydb/core/util
     ydb/core/ydb_convert
     ydb/library/naming_conventions
+    ydb/public/api/protos
     ydb/services/metadata
     yql/essentials/public/issue
     library/cpp/json

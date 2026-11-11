@@ -26,6 +26,8 @@ class TJsonCluster : public TViewerPipeClient {
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse>> VSlotsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse>> StorageStatsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
+    // bridge mode only, for the names of the pools in the sync state of piles
+    std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> StoragePoolsResponse;
     std::optional<TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStatsResponse;
 
     int WhiteboardStateRequestsInFlight = 0;
@@ -123,6 +125,7 @@ public:
         if (AppData()->BridgeModeEnabled) {
             NodeWardenStorageConfigResponse = MakeRequest<TEvNodeWardenStorageConfig>(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ false));
+            StoragePoolsResponse = MakeCachedRequestBSControllerPools();
         }
         NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
         PDisksResponse = MakeCachedRequestBSControllerPDisks();
@@ -264,6 +267,10 @@ private:
             return false;
         }
 
+        if (StoragePoolsResponse && !StoragePoolsResponse->IsDone()) {
+            return false;
+        }
+
         if (StorageStatsResponse && !StorageStatsResponse->IsDone()) {
             return false;
         }
@@ -273,6 +280,21 @@ private:
         }
 
         return true;
+    }
+
+    TString GetStoragePoolName(const std::tuple<ui64, ui64>& key) const {
+        const auto& [boxId, storagePoolId] = key;
+        if (StoragePoolsResponse && StoragePoolsResponse->IsOk()) {
+            for (const auto& entry : StoragePoolsResponse->Get()->Record.GetEntries()) {
+                if (entry.GetKey().GetBoxId() == boxId && entry.GetKey().GetStoragePoolId() == storagePoolId) {
+                    return entry.GetInfo().GetName();
+                }
+            }
+        }
+        if (!boxId && !storagePoolId) {
+            return "static"; // static groups are not in the pool system view
+        }
+        return TStringBuilder() << boxId << ':' << storagePoolId;
     }
 
     static Ydb::Bridge::PileState::State GetPileStateFromPile(const TBridgeInfo::TPile& pile) {
@@ -720,6 +742,13 @@ private:
         }
     }
 
+    void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
+        if (StoragePoolsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
+    }
+
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         if (HiveNodeStatsResponse->Set(std::move(ev))) {
             ProcessResponses();
@@ -889,6 +918,10 @@ private:
             ProcessResponses();
             result = true;
         }
+        if (StoragePoolsResponse && StoragePoolsResponse->Error(error)) {
+            ProcessResponses();
+            result = true;
+        }
         return result;
     }
 
@@ -934,6 +967,7 @@ private:
             hFunc(NSysView::TEvSysView::TEvGetStorageStatsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
             hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
@@ -1011,6 +1045,36 @@ private:
         std::unordered_set<ui32> proxyGroups;
         std::unordered_map<ui32, std::unordered_map<TString, ui32>> pileToGroupStatus;
 
+        struct TSyncAccumulator {
+            NKikimrViewer::TBridgePileSyncInfo Info;
+            bool Unsynced = false;
+
+            void Add(const NKikimrSysView::TGroupInfo& group) {
+                const TString& stage = group.GetBridgeSyncStage();
+                ++(*Info.MutableGroupsInStage())[stage];
+                if (stage != NKikimrBridge::TGroupState::EStage_Name(NKikimrBridge::TGroupState::SYNCED)) {
+                    Unsynced = true;
+                    Info.SetBytesRemaining(Info.GetBytesRemaining() + group.GetBridgeSyncRemainingBytes());
+                    Info.SetBytesPerSecond(Info.GetBytesPerSecond() + group.GetBridgeSyncCopyBytesPerSecond());
+                    if (!group.GetBridgeSyncRemainingBytesComplete()) {
+                        Info.SetGroupsNotEstimated(Info.GetGroupsNotEstimated() + 1);
+                    }
+                }
+            }
+
+            void Finish() {
+                Info.SetBytesRemaining(Info.GetBytesRemaining());
+                Info.SetBytesPerSecond(Info.GetBytesPerSecond());
+                Info.SetGroupsNotEstimated(Info.GetGroupsNotEstimated());
+                if (Info.GetBytesPerSecond()) {
+                    Info.SetSecondsLeft(Info.GetBytesRemaining() / Info.GetBytesPerSecond());
+                }
+            }
+        };
+        using TPoolKey = std::tuple<ui64, ui64>; // BoxId, StoragePoolId; static groups have none of them
+        std::unordered_map<ui32, TSyncAccumulator> pileSync;
+        std::unordered_map<ui32, std::map<TPoolKey, TSyncAccumulator>> pilePoolSync;
+
         if (GroupsResponse && GroupsResponse->IsOk()) {
             for (const NKikimrSysView::TGroupEntry& entry : GroupsResponse->Get()->Record.GetEntries()) {
                 const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
@@ -1026,6 +1090,10 @@ private:
                 }
                 if (info.HasBridgePileId()) {
                     pileToGroupStatus[info.GetBridgePileId()][info.GetOperatingStatus()]++;
+                    if (info.HasBridgeSyncStage()) {
+                        pileSync[info.GetBridgePileId()].Add(info);
+                        pilePoolSync[info.GetBridgePileId()][{info.GetBoxId(), info.GetStoragePoolId()}].Add(info);
+                    }
                 }
                 groupsIndex.emplace(key.GetGroupId(), info);
             }
@@ -1049,6 +1117,19 @@ private:
                         pbBridgePileInfo.SetState(GetPileStateFromPile(pile));
                         for (const auto& [status, count] : pileToGroupStatus[pbBridgePileInfo.GetPileId()]) {
                             (*pbBridgePileInfo.MutableGroupStatuses())[status] = count;
+                        }
+                        if (auto it = pileSync.find(pbBridgePileInfo.GetPileId());
+                                it != pileSync.end() && it->second.Unsynced) {
+                            it->second.Finish();
+                            *pbBridgePileInfo.MutableSync() = std::move(it->second.Info);
+                            for (auto& [key, pool] : pilePoolSync[pbBridgePileInfo.GetPileId()]) {
+                                if (pool.Unsynced) {
+                                    pool.Finish();
+                                    auto *pbPool = pbBridgePileInfo.AddStoragePools();
+                                    pbPool->SetName(GetStoragePoolName(key));
+                                    *pbPool->MutableSync() = std::move(pool.Info);
+                                }
+                            }
                         }
                     }
                     for (const auto& node : NodeData) {

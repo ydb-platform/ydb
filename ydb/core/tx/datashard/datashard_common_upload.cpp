@@ -44,6 +44,11 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     const auto& record = Ev->Get()->Record;
     Result = MakeHolder<TEvResponse>(self->TabletID());
 
+    if (self->IsUserTableWriteBlocked()) {
+        SetError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, "Database or table is frozen for writes");
+        return true;
+    }
+
     TInstant deadline = TInstant::MilliSeconds(record.GetCancelDeadlineMs());
     if (deadline && deadline < AppData()->TimeProvider->Now()) {
         SetError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Deadline exceeded");

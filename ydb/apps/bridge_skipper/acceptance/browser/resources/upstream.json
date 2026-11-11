@@ -1,0 +1,58 @@
+{
+  "playwright": {
+    "name": "playwright-core",
+    "version": "1.64.1",
+    "url": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.64.1.tgz",
+    "sha256": "3af03703c967c95037454f2283f709d53ce804a4776d4219d319f5bbcc2a0185",
+    "npm_integrity_sha512": "BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ==",
+    "license": "Apache-2.0; LICENSE and ThirdPartyNotices.txt included"
+  },
+  "fonts": [
+    {
+      "source": "ydb repository commit 2caa0a33cf1f222ff7582471c814ee59aa52cd20 contrib/python/matplotlib/py3/matplotlib/mpl-data/fonts/ttf/DejaVuSans.ttf",
+      "name": "DejaVuSans.ttf",
+      "sha256": "3fdf69cabf06049ea70a00b5919340e2ce1e6d02b0cc3c4b44fb6801bd1e0d22",
+      "repo_relative_path": "contrib/python/matplotlib/py3/matplotlib/mpl-data/fonts/ttf/DejaVuSans.ttf"
+    },
+    {
+      "source": "ydb repository commit 2caa0a33cf1f222ff7582471c814ee59aa52cd20 contrib/python/matplotlib/py3/matplotlib/mpl-data/fonts/ttf/DejaVuSansMono.ttf",
+      "name": "DejaVuSansMono.ttf",
+      "sha256": "602ec86b8948cfcd956482fe64f94c36c867770149ef2f791d4613f443bcecb3",
+      "repo_relative_path": "contrib/python/matplotlib/py3/matplotlib/mpl-data/fonts/ttf/DejaVuSansMono.ttf"
+    },
+    {
+      "source": "ydb repository commit 2caa0a33cf1f222ff7582471c814ee59aa52cd20 contrib/python/matplotlib/py3/matplotlib/mpl-data/fonts/ttf/LICENSE_DEJAVU",
+      "name": "LICENSE_DEJAVU",
+      "sha256": "d75938dec098f06f0ac3c00853065d94f020be1c3c62ef1dc2975ba15b4d9b0e",
+      "repo_relative_path": "contrib/python/matplotlib/py3/matplotlib/mpl-data/fonts/ttf/LICENSE_DEJAVU"
+    }
+  ],
+  "source_mapping": "playwright-core lib/coreBundle.js cftUrl and browsers.json; r1248 maps Chrome156.0.8078.4",
+  "browsers": {
+    "darwin-arm64": {
+      "revision": "1248",
+      "version": "156.0.8078.4",
+      "url": "https://cdn.playwright.dev/builds/cft/156.0.8078.4/mac-arm64/chrome-headless-shell-mac-arm64.zip",
+      "sha256": "94e4337b70cbc5638f0935fbc46b9f242bc7416f657e3fbe924baf348404b53d",
+      "license": "Chromium LICENSE and ABOUT files retained from official archive"
+    },
+    "linux-x86_64": {
+      "revision": "1248",
+      "version": "156.0.8078.4",
+      "url": "https://cdn.playwright.dev/builds/cft/156.0.8078.4/linux64/chrome-headless-shell-linux64.zip",
+      "sha256": "c3e50596aef52c58f8fda3c6b3411c33d34c88b177b3ed1c2243359fd3b8ba20",
+      "license": "Chromium LICENSE and ABOUT files retained from official archive"
+    }
+  },
+  "debian_package_index": {
+    "url": "https://deb.debian.org/debian/dists/bullseye/main/binary-amd64/Packages.xz",
+    "sha256": "1c3405444297ead864711c18e64bce4810db63b48340a2f9d81182d9f235ad71"
+  },
+  "native_validation": {
+    "method": "cross-platform llvm-readelf DT_NEEDED closure; Linux runtime launch not performed",
+    "tool": "cached YDB LLVM resource 13584333925 llvm-readelf",
+    "tool_sha256": "ef2a13491cb0ad9199651fd8c4b510b13b72f14e1162cfd82d258faf72c3f07e",
+    "host_glibc_baseline": "2.31",
+    "browser_intrinsic_max_glibc": "2.25"
+  }
+}

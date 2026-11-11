@@ -6,14 +6,12 @@
 namespace NKikimr::NBridge {
 
     TSyncerActor::TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter,
-            TBlobStorageGroupType sourceGroupType)
+            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter)
         : Info(std::move(info))
         , SourceGroupId(sourceGroupId)
         , TargetGroupId(targetGroupId)
         , SyncerDataStats(std::move(syncerDataStats))
         , SyncRateQuoter(std::move(syncRateQuoter))
-        , SourceGroupType(sourceGroupType)
     {
         Y_ABORT_UNLESS(Info);
         Y_ABORT_UNLESS(Info->IsBridged());
@@ -68,9 +66,7 @@ namespace NKikimr::NBridge {
             SourceState.SkipBarriersUpTo.emplace(TargetState.SkipBarriersUpTo.emplace());
         }
 
-        if (Stage == NKikimrBridge::TGroupState::BLOCKS ||
-                (Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP && Step == 1)) {
-            // blobs not needed only at the first stage, when we are syncing blocks, or when we are syncing barriers solely
+        if (!ScansBlobs()) {
             SourceState.SkipBlobsUpTo.emplace(TargetState.SkipBlobsUpTo.emplace());
         }
 
@@ -81,6 +77,20 @@ namespace NKikimr::NBridge {
         // issue requests
         IssueAssimilateRequest(false);
         IssueAssimilateRequest(true);
+    }
+
+    bool TSyncerActor::ScansBlobs() const {
+        // blobs not needed only at the first stage, when we are syncing blocks, or when we are syncing barriers solely
+        return Stage != NKikimrBridge::TGroupState::BLOCKS &&
+            (Stage != NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP || Step != 1);
+    }
+
+    void TSyncerActor::CountToCopy(const TLogoBlobID& id) {
+        SyncerDataStats->BytesToCopy += id.BlobSize();
+    }
+
+    void TSyncerActor::CountCopied(const TLogoBlobID& id) {
+        SyncerDataStats->BytesCopied += id.BlobSize();
     }
 
     void TSyncerActor::PassAway() {
@@ -189,15 +199,25 @@ namespace NKikimr::NBridge {
 
             const auto& [blobId] = key;
 
+            // Is the target missing the data of this source blob? A Keep flag reaches the target before the data
+            // does, so the target may have a record of the blob with no data in it.
+            const bool missingData = sourceItem && (!targetItem || !targetItem->HasData);
+
             switch (Stage) {
                 case NKikimrBridge::TGroupState::WRITE_KEEP:
                     if (sourceItem && sourceItem->Keep && targetItem && !targetItem->Keep) {
                         // we have target blob and it misses the Keep flag -- go recover it
                         keepToIssue.push_back(blobId);
                     }
+                    if (missingData) {
+                        CountToCopy(blobId); // an estimate for the data stage
+                    }
                     break;
 
                 case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
+                    if (missingData) {
+                        CountToCopy(blobId); // an estimate for the data stage
+                    }
                     if (sourceItem && sourceItem->DoNotKeep && (!targetItem || !targetItem->DoNotKeep)) {
                         doNotKeepToIssue.push_back(blobId);
                     } else if (!sourceItem && targetItem && targetItem->Keep && !targetItem->DoNotKeep) {
@@ -216,6 +236,10 @@ namespace NKikimr::NBridge {
                         break;
                     }
                     RestoreQueue.push_back(blobId);
+                    if (missingData) {
+                        CountToCopy(blobId);
+                        CountedToCopy.insert(blobId);
+                    }
                     if (sourceItem->Keep || sourceItem->DoNotKeep) {
                         SourceBlobFlags.emplace(blobId, TSourceBlobFlags{sourceItem->Keep, sourceItem->DoNotKeep});
                     }
@@ -273,6 +297,9 @@ namespace NKikimr::NBridge {
         MERGE(Blobs)
 #undef MERGE
 
+        if (ScansBlobs()) {
+            SyncerDataStats->ScanFinished = true;
+        }
         finish();
         Finished = true;
         CheckIfDone();
@@ -398,7 +425,8 @@ namespace NKikimr::NBridge {
                 auto& msg = static_cast<TEvBlobStorage::T##TYPE&>(*ev); \
                 STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS07, #TYPE, (LogId, LogId), (GroupId, groupId), \
                     (Msg, msg), (QueriesInFlight, QueriesInFlight), \
-                    (PendingQueries.size, PendingQueries.size()), (MaxQueriesInFlight, MaxQueriesInFlight), \
+                    (PendingQueries.size, PendingQueries.size()), (PendingPuts.size, PendingPuts.size()), \
+                    (MaxQueriesInFlight, MaxQueriesInFlight), \
                     (Payloads.size, Payloads.size())); \
                 msg.ForceGroupGeneration.emplace(pile->GetGroupGeneration()); \
                 break; \
@@ -419,39 +447,50 @@ namespace NKikimr::NBridge {
         const auto [it, inserted] = Payloads.emplace(cookie, std::move(payload));
         Y_ABORT_UNLESS(inserted);
 
+        auto& queue = ev->Type() == TEvBlobStorage::EvPut ? PendingPuts : PendingQueries;
         std::unique_ptr<IEventHandle> handle(CreateEventForBSProxy(SelfId(), groupId, ev.release(), cookie));
 
-        const TMonotonic now = TActivationContext::Monotonic();
-        const TDuration timeout = SyncRateQuoter && quoterBytes
-            ? SyncRateQuoter->Take(now, quoterBytes)
-            : TDuration::Zero();
-        const TMonotonic timestamp = now + timeout;
-
         if (QueriesInFlight < MaxQueriesInFlight) {
-            SendQuery(std::move(handle), timestamp);
+            SendQuery(std::move(handle), quoterBytes);
             ++QueriesInFlight;
         } else {
-            PendingQueries.emplace_back(std::move(handle), timestamp);
+            queue.emplace_back(std::move(handle), quoterBytes);
         }
     }
 
-    void TSyncerActor::SendQuery(std::unique_ptr<IEventHandle> handle, TMonotonic notBefore) {
-        const TMonotonic now = TActivationContext::Monotonic();
-        if (now < notBefore) {
-            const ui64 cookie = handle->Cookie;
-            // Own throttled requests until dispatch so terminating this attempt also cancels delayed writes/reads.
-            DelayedQueries.emplace(cookie, std::move(handle));
-            Schedule(notBefore - now, new TEvents::TEvWakeup(cookie));
+    void TSyncerActor::SendQuery(std::unique_ptr<IEventHandle> handle, ui64 quoterBytes) {
+        if (SyncRateQuoter && quoterBytes) {
+            QuotaQueue.emplace_back(std::move(handle), quoterBytes);
+            ProcessQuotaQueue();
         } else {
             TActivationContext::Send(handle.release());
         }
     }
 
-    void TSyncerActor::Handle(TEvents::TEvWakeup::TPtr ev) {
-        if (const auto it = DelayedQueries.find(ev->Get()->Tag); it != DelayedQueries.end()) {
-            TActivationContext::Send(it->second.release());
-            DelayedQueries.erase(it);
+    void TSyncerActor::ProcessQuotaQueue() {
+        // The quota is taken for one query at a time, as it can't be returned: a syncer getting restarted would leave the
+        // quota of queries it hasn't sent to the next one, and all queries but one get charged at the current rate. Queries
+        // keep their in-flight slots here, and a stopped syncer doesn't send them.
+        while (!WaitingForQuota && !QuotaQueue.empty()) {
+            auto& [handle, quoterBytes] = QuotaQueue.front();
+            const TDuration timeout = SyncRateQuoter->Take(TActivationContext::Monotonic(), quoterBytes);
+            if (timeout != TDuration::Zero()) {
+                WaitingForQuota = true;
+                Schedule(timeout, new TEvents::TEvWakeup);
+            } else {
+                TActivationContext::Send(handle.release());
+                QuotaQueue.pop_front();
+            }
         }
+    }
+
+    void TSyncerActor::Handle(TEvents::TEvWakeup::TPtr) {
+        Y_ABORT_UNLESS(WaitingForQuota && !QuotaQueue.empty());
+        WaitingForQuota = false;
+        auto& [handle, quoterBytes] = QuotaQueue.front();
+        TActivationContext::Send(handle.release());
+        QuotaQueue.pop_front();
+        ProcessQuotaQueue();
     }
 
     void TSyncerActor::Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
@@ -481,6 +520,7 @@ namespace NKikimr::NBridge {
         if (success) {
             SyncerDataStats->BytesDone += msg.Id.BlobSize();
             ++SyncerDataStats->BlobsDone;
+            CountCopied(msg.Id);
         } else {
             SyncerDataStats->BytesError += msg.Id.BlobSize();
             ++SyncerDataStats->BlobsError;
@@ -521,7 +561,7 @@ namespace NKikimr::NBridge {
                         .BlobId = r.Id,
                         .Buffer = TRope(TRcBuf(r.Buffer)),
                         .Deadline = TInstant::Max(),
-                        .HandleClass = NKikimrBlobStorage::TabletLog,
+                        .HandleClass = NKikimrBlobStorage::AsyncBlob,
                         .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                         .WriteSource = TWriteSource::SyncerMergePut,
                         .IssueKeepFlag = (r.Keep || sourceFlags.Keep) && !(r.DoNotKeep || sourceFlags.DoNotKeep),
@@ -532,6 +572,7 @@ namespace NKikimr::NBridge {
                     // so we don't need to issue any keep flags
                     SyncerDataStats->BytesDone += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsDone;
+                    CountCopied(r.Id);
                 } else if (r.Status == NKikimrProto::ERROR) { // an error occured when reading this exact blob
                     SyncerDataStats->BytesError += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsError;
@@ -547,6 +588,9 @@ namespace NKikimr::NBridge {
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
                     // blob exists and okay; its redundancy has been restored; its keep flag was synced earlier, unless
                     // the blob has been written since then without it, as the bridge proxy restoring it may do
+                    if (CountedToCopy.erase(r.Id)) {
+                        CountCopied(r.Id); // it has been written since the scan
+                    }
                     const auto sourceFlags = TakeSourceBlobFlags(r.Id);
                     if (sourceFlags.Keep && !sourceFlags.DoNotKeep && !r.Keep && !r.DoNotKeep) {
                         if (!keep) {
@@ -558,11 +602,15 @@ namespace NKikimr::NBridge {
                     ++SyncerDataStats->BlobsDone;
                 } else if (r.Status == NKikimrProto::NODATA) {
                     // we have to query this blob and do full rewrite -- there was no data for it
-                    const ui64 quoterBytes = r.Id.BlobSize() * SourceGroupType.TotalPartCount() / SourceGroupType.DataParts();
+                    if (!CountedToCopy.erase(r.Id)) {
+                        CountToCopy(r.Id); // the target has a record of the blob, but its data can't be read
+                    }
+                    // the rate limits traffic between piles, and the read brings about one copy of the blob data across
                     IssueQuery(false, std::make_unique<TEvBlobStorage::TEvGet>(r.Id, 0, 0, TInstant::Max(),
-                        NKikimrBlobStorage::FastRead), {}, quoterBytes);
+                        NKikimrBlobStorage::AsyncRead), {}, r.Id.BlobSize());
                 } else if (r.Status == NKikimrProto::ERROR) {
                     SourceBlobFlags.erase(r.Id);
+                    CountedToCopy.erase(r.Id);
                     SyncerDataStats->BytesError += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsError;
                     errorReason = "TEvGet from target group failed with ERROR";
@@ -625,13 +673,14 @@ namespace NKikimr::NBridge {
             }
         }
 
-        if (PendingQueries.empty()) {
+        auto& queue = PendingPuts.empty() ? PendingQueries : PendingPuts;
+        if (queue.empty()) {
             --QueriesInFlight;
         } else {
             Y_ABORT_UNLESS(QueriesInFlight == MaxQueriesInFlight);
-            auto& [handle, timestamp] = PendingQueries.front();
-            SendQuery(std::move(handle), timestamp);
-            PendingQueries.pop_front();
+            auto& [handle, quoterBytes] = queue.front();
+            SendQuery(std::move(handle), quoterBytes);
+            queue.pop_front();
         }
 
         return res;
@@ -653,12 +702,15 @@ namespace NKikimr::NBridge {
                 std::get<0>(*state.SkipBarriersUpTo) << ':' << (int)std::get<1>(*state.SkipBarriersUpTo) << ']') : "<none>"),
             (SkipBlobsUpTo, state.SkipBlobsUpTo ? state.SkipBlobsUpTo->ToString() : "<none>"));
 
+        // The size of a page is known only after it has come, so a page gets charged when the next one is requested. There
+        // is one such request at a time, so this can't let much through. Reading ends with a result having no items, and it
+        // is the only one left uncharged, unless the syncer gets stopped between pages.
         IssueQuery(toTargetGroup, std::make_unique<TEvBlobStorage::TEvAssimilate>(
             state.SkipBlocksUpTo, state.SkipBarriersUpTo, state.SkipBlobsUpTo,
             /*ignoreDecommitState=*/ true, /*reverse=*/ true),
             TQueryPayload{
                 .ToTargetGroup = toTargetGroup,
-            });
+            }, std::exchange(state.UnchargedReplyBytes, 0));
 
         Y_ABORT_UNLESS(!state.RequestInFlight);
         state.RequestInFlight = true;
@@ -680,6 +732,9 @@ namespace NKikimr::NBridge {
 
         Y_ABORT_UNLESS(state.RequestInFlight);
         state.RequestInFlight = false;
+        if (!payload.ToTargetGroup) { // the target group is in the pile of this syncer, so this traffic stays within the pile
+            state.UnchargedReplyBytes = msg.ReplyBytes;
+        }
 
 #define CHECK(PREV_FINISHED, WHAT, NO_NEXT, KEY) \
         if (bool& finished = state.WHAT##Finished; PREV_FINISHED && !finished) { \
@@ -728,10 +783,9 @@ namespace NKikimr::NBridge {
     )
 
     IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter,
-            TBlobStorageGroupType sourceGroupType) {
+            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter) {
         return new TSyncerActor(std::move(info), sourceGroupId, targetGroupId, std::move(syncerDataStats),
-            std::move(syncRateQuoter), sourceGroupType);
+            std::move(syncRateQuoter));
     }
 
 } // NKikimr::NBridge

@@ -1,3 +1,5 @@
+#include "bridge_common.h"
+
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
@@ -48,13 +50,25 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
     struct TTestContext {
         TEnvironmentSetup Env;
 
-        explicit TTestContext(ui32 nodeCount = 8)
-            : Env(TEnvironmentSetup::TSettings{
+        static TEnvironmentSetup::TSettings MakeSettings(ui32 nodeCount) {
+            return {
                 .NodeCount = nodeCount,
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            })
+            };
+        }
+
+        explicit TTestContext(ui32 nodeCount = 8)
+            : TTestContext(MakeSettings(nodeCount))
+        {}
+
+        explicit TTestContext(TEnvironmentSetup::TSettings settings)
+            : Env(std::move(settings))
         {
-            Env.CreateBoxAndPool(1, 2);
+            if (Env.Settings.NumPiles) {
+                Env.CreatePool(1);
+            } else {
+                Env.CreateBoxAndPool(1, 2);
+            }
             Env.Sim(TDuration::Seconds(30));
             BindPoolToDatabase();
         }
@@ -393,6 +407,59 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
         // and the restored subscription gets notified about changes
         ctx.SetThresholds(TColor::GREEN, TColor::GREEN);
         ctx.WaitState(subscriber, false, TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST(BridgedGroupUsesDataQuorumParts) {
+        TTestContext ctx(TEnvironmentSetup::TSettings{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = NBridgeTest::GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        });
+        ctx.SetThresholds(TColor::YELLOW, TColor::YELLOW);
+        const TSubscriber subscriber = ctx.Subscribe(ctx.Env.Settings.ControllerNodeId + 1);
+        ctx.WaitState(subscriber, false, TDuration::Seconds(10));
+
+        const auto groups = ctx.Env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const auto parts = NBridgeTest::GetPileGroups(ctx.Env, groups.front());
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 2);
+        const auto baseConfig = ctx.Env.FetchBaseConfig();
+        auto reportPart = [&](ui32 groupId, TColor::E color) {
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() == groupId) {
+                    ctx.ReportColor(vslot, color);
+                }
+            }
+        };
+
+        reportPart(parts[0], TColor::GREEN);
+        ctx.Env.Sim(TDuration::Seconds(20));
+        reportPart(parts[1], TColor::YELLOW);
+        ctx.WaitState(subscriber, true, TDuration::Seconds(9));
+        ctx.Env.Sim(TDuration::Seconds(20)); // let BSC persist the colors
+
+        // Stable colors and the exhaustion latch must survive a controller restart.
+        size_t numStates = subscriber.States->size();
+        ctx.Env.RestartNode(ctx.Env.Settings.ControllerNodeId);
+        ctx.WaitState(subscriber, true, TDuration::Seconds(60), numStates);
+        ctx.Env.Sim(TDuration::Seconds(20));
+        for (size_t i = numStates; i < subscriber.States->size(); ++i) {
+            UNIT_ASSERT_C((*subscriber.States)[i].GetExhausted(), "database got unblocked after BS_CONTROLLER restart");
+        }
+
+        // Removing the full part from the data quorum unblocks the pool without waiting for new metrics.
+        NBridgeTest::SwitchPileState(ctx.Env, 1, NKikimrBridge::TClusterState::SUSPENDED);
+        numStates = subscriber.States->size();
+        ctx.WaitState(subscriber, false, TDuration::Seconds(10), numStates);
+
+        // A healthy part outside the data quorum must not keep the remaining full part unblocked.
+        reportPart(parts[1], TColor::GREEN);
+        ctx.Env.Sim(TDuration::Seconds(20));
+        reportPart(parts[0], TColor::YELLOW);
+        ctx.WaitState(subscriber, true, TDuration::Seconds(9), numStates + 1);
     }
 
 }

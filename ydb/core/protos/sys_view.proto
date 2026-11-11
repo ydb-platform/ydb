@@ -307,6 +307,12 @@ message TGroupInfo {
     optional bool BridgeSyncRunning = 29; // is the syncer running right now?
     optional bool DDisk = 30; // is this a Direct Block Group?
     optional string SpaceColor = 31; // space color of the group (the worst one among its VDisks)
+    // blob bytes left to copy into this part of a bridged group in a pile not synced yet; unset when nothing is known
+    optional uint64 BridgeSyncRemainingBytes = 32;
+    // BridgeSyncRemainingBytes comes from a scan over all the blobs (of this stage or the previous one); otherwise it
+    // is only what the scan under way has found so far
+    optional bool BridgeSyncRemainingBytesComplete = 33;
+    optional uint64 BridgeSyncCopyBytesPerSecond = 34; // copy rate into this part over the last minute, in blob bytes
 }
 
 message TGroupEntry {

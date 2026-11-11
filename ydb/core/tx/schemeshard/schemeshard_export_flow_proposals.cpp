@@ -108,7 +108,10 @@ static TString ComputeIndexItemSuffix(
     TStringBuf implTableName;
     if (parentPath.IsResolved() && TStringBuf(item.SourcePathName).TrySplit('/', indexName, implTableName)) {
         const auto parentDescription = GetDescription(ss, parentPath.Base()->PathId);
-        idx = parentDescription.GetTable().CdcStreamsSize() + 1;
+        // Reserve all feed slots, including omitted feeds, just as the uploader
+        // does when assigning index prefixes in the table metadata.
+        idx = AppData()->FeatureFlags.GetEnableChangefeedsExport()
+            ? parentDescription.GetTable().CdcStreamsSize() + 1 : 1;
 
         for (const auto& index : parentDescription.GetTable().GetTableIndexes()) {
             const TVector<TString> indexColumns(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());

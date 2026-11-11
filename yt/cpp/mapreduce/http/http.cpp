@@ -260,6 +260,11 @@ void THttpHeader::SetServiceTicket(const TString& ticket)
     ServiceTicket_ = ticket;
 }
 
+void THttpHeader::SetUserTicket(const TString& ticket)
+{
+    UserTicket_ = ticket;
+}
+
 void THttpHeader::SetTraceparent(const TString& traceparent)
 {
     Traceparent_ = traceparent;
@@ -340,10 +345,6 @@ TString THttpHeader::GetHeaderAsString(const TString& hostName, const TString& r
 
     GetHeader(HostPort_.empty() ? hostName : HostPort_, requestId, includeParameters).Get()->WriteTo(&result);
 
-    if (ShouldAcceptFraming()) {
-        result << "X-YT-Accept-Framing: 1\r\n";
-    }
-
     result << "\r\n";
 
     return result.Str();
@@ -362,6 +363,9 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     }
     if (!ServiceTicket_.empty()) {
         headers->Add("X-Ya-Service-Ticket", ServiceTicket_);
+    }
+    if (!UserTicket_.empty()) {
+        headers->Add("X-Ya-User-Ticket", UserTicket_);
     }
     if (!ImpersonationUser_.empty()) {
         headers->Add("X-Yt-User-Name", ImpersonationUser_);
@@ -413,7 +417,9 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     if (includeParameters) {
         printYTHeader("X-YT-Parameters", NodeToYsonString(Parameters_));
     }
-
+    if (ShouldAcceptFraming()) {
+        headers->Add("X-YT-Accept-Framing", "1");
+    }
     return NHttp::THeadersPtrWrapper(std::move(headers));
 }
 

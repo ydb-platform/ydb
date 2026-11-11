@@ -185,6 +185,8 @@ public:
             i32 tag = value.Type == EValueType::Null ? 0 : 1;
             if constexpr (OptionalKind == EOptionalKind::Variant8) {
                 writer->WriteVariant8Tag(tag);
+            } else if constexpr (OptionalKind == EOptionalKind::VariantVar) {
+                writer->WriteVariantVarTag(tag);
             }
 
             if (tag == 0) {
@@ -548,7 +550,8 @@ public:
                 //      (runtime check is used in such cases).
                 if (!columnSchema) {
                     auto [strippedSchema, optionalKind] = StripOptional(skiffField.Schema());
-                    if ((GetSchemaKind(strippedSchema->GetWireType()) != ESchemaKind::Simple && optionalKind != EOptionalKind::None) ||
+                    if ((GetSchemaKind(strippedSchema->GetWireType()) == ESchemaKind::Complex &&
+                            optionalKind != EOptionalKind::None) ||
                         MatchesOptionalSingular(skiffField.Schema()))
                     {
                         // NB. Special case, column is described in Skiff schema as non required complex field

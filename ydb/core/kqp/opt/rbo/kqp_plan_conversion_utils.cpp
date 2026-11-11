@@ -198,12 +198,16 @@ TExpression PlanConverter::ConvertExpression(TExprNode::TPtr lambda, const TExpr
         ESubplanType type;
         TOrderedIUs<> tuple;
         std::optional<TInfoUnitId> resultIU;
+        bool optionalResult = false;
         if (TKqpExprSublink::Match(node.Get())) {
             type = ESubplanType::EXPR;
         } else if (TKqpExistsSublink::Match(node.Get())) {
             type = ESubplanType::EXISTS;
         } else {
             type = ESubplanType::IN_SUBPLAN;
+            // The sublink keeps the type the query gave the IN, see AnnotateSublinkBase.
+            Y_ENSURE(node->GetTypeAnn(), "IN sublink is not type annotated");
+            optionalResult = node->GetTypeAnn()->IsOptionalOrNull();
             const auto& inLambda = node->Child(TKqpInSublink::idx_InLambda);
             Y_ENSURE(inLambda->IsLambda());
             const auto& comparison = inLambda->Child(1);
@@ -229,7 +233,7 @@ TExpression PlanConverter::ConvertExpression(TExprNode::TPtr lambda, const TExpr
             resultIU = ResolveBinding(*subplanBindings, row->GetItems().front()->GetName());
         }
         const auto id = PlanProps.InfoUnitRegistry.AddGenerated("subquery");
-        PlanProps.Subplans.Add(id, std::move(subplan), type, std::move(tuple), resultIU);
+        PlanProps.Subplans.Add(id, std::move(subplan), type, std::move(tuple), resultIU, optionalResult);
         // clang-format off
         auto member = Build<TCoMember>(Ctx, node->Pos())
             .Struct(lambda->Head().HeadPtr())

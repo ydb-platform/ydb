@@ -1,6 +1,7 @@
 UNITTEST()
 
 SRCS(
+    mvcc_version_ut.cpp
     session_id_ut.cpp
 )
 

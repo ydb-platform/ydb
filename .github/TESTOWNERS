@@ -115,6 +115,7 @@
 /ydb/tests/example @ydb-platform/engineering
 /ydb/tests/functional/benchmarks_init @ydb-platform/engineering
 /ydb/tests/functional/minidumps @ydb-platform/engineering
+/ydb/tests/functional/tpc/medium @ydb-platform/engineering
 /ydb/tests/functional/wardens @ydb-platform/engineering
 /ydb/tests/library @ydb-platform/engineering
 /ydb/tests/stability @ydb-platform/engineering

@@ -8,9 +8,17 @@
 
 namespace NKikimr {
 
+using TStoragePoolPileOverrideRules = google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TStoragePoolPileOverride>;
+
 // A missing kind selects static groups. An empty string is an ordinary (empty) pool kind.
 const NKikimrBlobStorage::TStoragePoolPileOverride* FindStoragePoolPileOverride(
+    const TStoragePoolPileOverrideRules& rules, TStringBuf pileName, std::optional<TStringBuf> kind);
+const NKikimrBlobStorage::TStoragePoolPileOverride* FindStoragePoolPileOverride(
     const NKikimrConfig::TBlobStorageConfig& config, TStringBuf pileName, std::optional<TStringBuf> kind);
+
+// Whether some rule has settings for the pile (for its static groups or for any kind of pools).
+bool HasStoragePoolPileOverrides(const TStoragePoolPileOverrideRules& rules, TStringBuf pileName);
+bool HasStoragePoolPileOverrides(const NKikimrConfig::TBlobStorageConfig& config, TStringBuf pileName);
 
 std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrConfig::TBlobStorageConfig& config);
 

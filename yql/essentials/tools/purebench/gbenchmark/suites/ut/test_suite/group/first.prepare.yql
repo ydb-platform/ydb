@@ -1,0 +1,1 @@
+SELECT index * 2 AS index FROM Input;

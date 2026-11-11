@@ -49,6 +49,8 @@ void ValidateWireTypeForSimpleType(EWireType wireType, ESimpleLogicalValueType s
                     EWireType::Int16,
                     EWireType::Int32,
                     EWireType::Int64,
+                    EWireType::VarInt32,
+                    EWireType::VarInt64,
                     EWireType::Yson32,
                 });
             break;
@@ -85,7 +87,7 @@ void ValidateWireTypeForSimpleType(EWireType wireType, ESimpleLogicalValueType s
 
         case ESimpleLogicalValueType::Float:
         case ESimpleLogicalValueType::Double:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::Double, EWireType::Yson32});
+            ValidateWireTypeIsOneOf(wireType, {EWireType::Float, EWireType::Double, EWireType::Yson32});
             break;
 
         case ESimpleLogicalValueType::Boolean:
@@ -95,7 +97,9 @@ void ValidateWireTypeForSimpleType(EWireType wireType, ESimpleLogicalValueType s
         case ESimpleLogicalValueType::Utf8:
         case ESimpleLogicalValueType::Json:
         case ESimpleLogicalValueType::String:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::String32, EWireType::Yson32});
+            ValidateWireTypeIsOneOf(
+                wireType,
+                {EWireType::String32, EWireType::StringVar, EWireType::StringFixed, EWireType::Yson32});
             break;
 
         case ESimpleLogicalValueType::Any:
@@ -108,12 +112,17 @@ void ValidateWireTypeForSimpleType(EWireType wireType, ESimpleLogicalValueType s
                     EWireType::Int16,
                     EWireType::Int32,
                     EWireType::Int64,
+                    EWireType::VarInt32,
+                    EWireType::VarInt64,
                     EWireType::Uint8,
                     EWireType::Uint16,
                     EWireType::Uint32,
                     EWireType::Uint64,
+                    EWireType::Float,
                     EWireType::Double,
                     EWireType::String32,
+                    EWireType::StringVar,
+                    EWireType::StringFixed,
                     EWireType::Yson32,
                 });
             break;

@@ -256,7 +256,8 @@ TIntrusivePtr<TOpRead> TOpRead::FromExpr(TExprNode::TPtr node, TInfoUnitRegistry
 
 TOpRead::TOpRead(const TString& alias, TUnorderedIUs columns, const NYql::EStorageType storageType,
                  const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, std::optional<TRangeInfo> ranges,
-                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
+                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos,
+                 bool requireSortedRead)
     : IOperator(EOperator::Source, pos, props)
     , Alias(alias)
     , StorageType(storageType)
@@ -265,6 +266,7 @@ TOpRead::TOpRead(const TString& alias, TUnorderedIUs columns, const NYql::EStora
     , Limit(limit)
     , OriginalPredicate(originalPredicate)
     , SortDir(sortDir)
+    , RequireSortedRead(requireSortedRead)
     , RangeInfo(std::move(ranges))
     , Columns_(std::move(columns)) {
 }
@@ -608,6 +610,42 @@ TVector<std::reference_wrapper<const TExpression>> TOpLimit::GetExpressions() co
         result.push_back(std::cref(*OffsetCond));
     }
     return result;
+}
+
+TExpression TOpLimit::GetInputRowsLimit(TExprContext& ctx, TPlanProps& props) const {
+    if (!OffsetCond) {
+        return LimitCond;
+    }
+
+    // The sum saturates: LIMIT 18446744073709551615 OFFSET 5 still means all rows after the offset.
+    constexpr ui64 maxRows = std::numeric_limits<ui64>::max();
+    const auto limit = LimitCond.GetExpressionBody();
+    const auto offset = OffsetCond->GetExpressionBody();
+    ui64 limitValue = 0;
+    ui64 offsetValue = 0;
+    if (TCoUint64::Match(limit.Get()) && TCoUint64::Match(offset.Get())
+        && TryFromString(TCoUint64(limit).Literal().Value(), limitValue)
+        && TryFromString(TCoUint64(offset).Literal().Value(), offsetValue)) {
+        const ui64 rows = offsetValue > maxRows - limitValue ? maxRows : limitValue + offsetValue;
+        return MakeConstant("Uint64", ::ToString(rows), Pos, &ctx);
+    }
+
+    // clang-format off
+    const auto sum = Build<TCoAdd>(ctx, Pos)
+        .Left(limit)
+        .Right(offset)
+    .Done();
+    return TExpression(Build<TCoIf>(ctx, Pos)
+        .Predicate<TCoCmpLess>()
+            .Left(sum)
+            .Right(limit)
+        .Build()
+        .ThenValue<TCoUint64>()
+            .Literal().Build(::ToString(maxRows))
+        .Build()
+        .ElseValue(sum)
+    .Done().Ptr(), &ctx, &props);
+    // clang-format on
 }
 
 /**

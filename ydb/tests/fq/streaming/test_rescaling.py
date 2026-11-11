@@ -210,14 +210,13 @@ class TestRescaling(StreamingTestBase):
         """Resume a plain topic-to-topic query and read every partition after rescaling."""
         partitions_count = 100
         query_name = entity_name("pq_source_rescaling_insert_select")
-        inp, out, _ = self.get_io_names(
+        inp, out, client = self.get_io_names(
             kikimr,
             query_name,
             True,
             entity_name,
             partitions_count=partitions_count,
         )
-        client = kikimr.ydb_client
 
         def check_reading(phase: str) -> None:
             expected = []
@@ -267,14 +266,13 @@ class TestRescaling(StreamingTestBase):
         """Resume after checkpointing a closed target window and process a new window when readers scale up."""
         partitions_count = 100
         query_name = entity_name("pq_source_rescaling_hopping_closed_window")
-        inp, out, _ = self.get_io_names(
+        inp, out, client = self.get_io_names(
             kikimr,
             query_name,
             True,
             entity_name,
             partitions_count=partitions_count,
         )
-        client = kikimr.ydb_client
         # Stay ahead of write-time watermarks but within the five-minute
         # future limit of the event-time watermark generator.
         base = (int(time.time()) // 20) * 20 + 120
@@ -361,14 +359,13 @@ class TestRescaling(StreamingTestBase):
     ) -> None:
         """Restore partition offsets across consecutive 1 -> 2 -> 4 task graphs."""
         query_name = entity_name("pq_source_rescaling_twice")
-        inp, out, _ = self.get_io_names(
+        inp, out, client = self.get_io_names(
             kikimr,
             query_name,
             True,
             entity_name,
             partitions_count=1,
         )
-        client = kikimr.ydb_client
         kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                 INSERT INTO {out} SELECT Data FROM {inp};
@@ -427,14 +424,13 @@ class TestRescaling(StreamingTestBase):
         kikimr.set_feature_flags({"enable_streaming_query_state_recompute": True})
         partitions_count = 8
         query_name = entity_name("pq_source_continuation_scale_up_and_down")
-        inp, out, _ = self.get_io_names(
+        inp, out, client = self.get_io_names(
             kikimr,
             query_name,
             local_topics,
             entity_name,
             partitions_count=partitions_count,
         )
-        client = self.get_ydb_client(kikimr, local_topics)
 
         def query_body(readers: int) -> str:
             return f'''
@@ -496,14 +492,13 @@ class TestRescaling(StreamingTestBase):
         """Read newly added topic partitions after resuming the saved query."""
         partitions_count = 20
         query_name = entity_name("pq_source_rescaling_partition_increase")
-        inp, out, _ = self.get_io_names(
+        inp, out, client = self.get_io_names(
             kikimr,
             query_name,
             local_topics,
             entity_name,
             partitions_count=1,
         )
-        client = self.get_ydb_client(kikimr, local_topics)
         added_slots = []
         kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
@@ -553,14 +548,13 @@ class TestRescaling(StreamingTestBase):
         partitions_count = 208
         selected = list(range(7, 207, 2))
         query_name = entity_name("pq_source_rescaling_partition_predicate")
-        inp, out, _ = self.get_io_names(
+        inp, out, client = self.get_io_names(
             kikimr,
             query_name,
             True,
             entity_name,
             partitions_count=partitions_count,
         )
-        client = kikimr.ydb_client
 
         def check_reading(phase: str) -> None:
             # Excluded partitions must not even reach the JSON parser. This also
@@ -619,14 +613,13 @@ class TestRescaling(StreamingTestBase):
         """An unchanged hopping stage must retain its open window when readers scale up."""
         partitions_count = 100
         query_name = entity_name("pq_source_rescaling_hopping_open_window")
-        inp, out, _ = self.get_io_names(
+        inp, out, client = self.get_io_names(
             kikimr,
             query_name,
             True,
             entity_name,
             partitions_count=partitions_count,
         )
-        client = kikimr.ydb_client
 
         # Keep event time ahead of source watermarks and within the future limit.
         # The target window is [base, base + 20), with another overlapping window

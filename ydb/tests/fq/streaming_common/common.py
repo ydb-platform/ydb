@@ -321,7 +321,7 @@ class YdbClient:
     def topic_write(
         self,
         topic: str,
-        messages: list[str],
+        messages: list[str | bytes | ydb.TopicWriterMessage],
         timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
         *args,
         **kwargs,
@@ -329,34 +329,49 @@ class YdbClient:
         writer = self.driver.topic_client.writer(topic, *args, **kwargs)
 
         try:
-            writer.write(messages, timeout)
-            writer.flush()
+            writer.write_with_ack(messages, timeout=timeout)
         finally:
-            writer.close(flush=False)
+            writer.close(flush=False, timeout=timeout)
 
     def topic_read(
         self,
         topic: str,
         consumer: str,
         messages_count: int,
-        timeout: int = plain_or_under_sanitizer_wrapper(30, 300),
+        timeout: Optional[float] = None,
         commit: bool = True,
-    ) -> list[str]:
+        *,
+        allow_partial: bool = False,
+        decode: bool = True,
+    ) -> list[str | bytes]:
+        """Read payloads and wait for commit acknowledgments.
+
+        With allow_partial, return messages received before the read timeout.
+        """
+        if timeout is None:
+            timeout = plain_or_under_sanitizer_wrapper(30, 300)
         deadline = time.monotonic() + timeout
+        messages = []
 
         with self.driver.topic_client.reader(topic, consumer=consumer) as reader:
-
-            def _read_single() -> str:
+            while len(messages) < messages_count:
                 remaining = deadline - time.monotonic()
-                message = reader.receive_message(timeout=remaining)
+                try:
+                    if remaining <= 0:
+                        raise TimeoutError(f"Timed out reading {messages_count} messages from {topic}")
+                    message = reader.receive_message(timeout=remaining)
+                except TimeoutError:
+                    if allow_partial:
+                        break
+                    raise
 
                 if commit:
-                    reader.commit(message)
+                    reader.commit_with_ack(message, timeout=max(0, deadline - time.monotonic()))
 
                 data = message.data
-                return data.decode() if isinstance(data, bytes) else str(data)
+                messages.append(data.decode() if decode and isinstance(data, bytes) else data)
 
-            return [_read_single() for _ in range(messages_count)]
+        return messages
 
     def topic_read_until(
         self,
@@ -617,6 +632,9 @@ class Kikimr:
     ):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+
+        config.yaml_config["grpc_config"]["max_message_size"] = 136314880
+        config.yaml_config["pqconfig"]["max_message_size_bytes"] = 136314880
 
         full_yaml_config = copy.deepcopy(config.yaml_config)
         self._full_yaml_config = full_yaml_config
@@ -1000,7 +1018,10 @@ class StreamingTestBase(TestYdsBase):
             assert time.time() < deadline, "Wait streaming query metric failed, actual value: " + str(value)
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
-    def get_input_name(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
+    def get_input_name(
+        self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False
+    ) -> tuple[str, YdbClient]:
+        """Create the input topic and return its SQL name and the existing topic client."""
         if local_topics and shared:
             pytest.skip("Shared reading is not supported for local topics: YQ-5036")
 
@@ -1010,12 +1031,17 @@ class StreamingTestBase(TestYdsBase):
         if not local_topics:
             self.create_source(kikimr, source_name, shared=shared)
 
-        if local_topics:
-            return f"`{self.input_topic}`", endpoint
-        else:
-            return f"`{source_name}`.`{self.input_topic}`", endpoint
+        topic_client = self.get_ydb_client(kikimr, local_topics)
 
-    def get_io_names(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False, endpoint=None):
+        if local_topics:
+            return f"`{self.input_topic}`", topic_client
+        else:
+            return f"`{source_name}`.`{self.input_topic}`", topic_client
+
+    def get_io_names(
+        self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False, endpoint=None
+    ) -> tuple[str, str, YdbClient]:
+        """Create topics and return their SQL names and the existing topic client."""
         if local_topics and shared:
             pytest.skip("Shared reading is not supported for local topics: YQ-5036")
 
@@ -1025,10 +1051,12 @@ class StreamingTestBase(TestYdsBase):
         self.init_topics(source_name, create_output=True, partitions_count=partitions_count, endpoint=endpoint)
         self.create_source(kikimr, source_name, shared=shared, endpoint=endpoint)
 
+        topic_client = self.get_ydb_client(kikimr, local_topics)
+
         if local_topics:
-            return f"`{self.input_topic}`", f"`{self.output_topic}`", endpoint
+            return f"`{self.input_topic}`", f"`{self.output_topic}`", topic_client
         else:
-            return f"`{source_name}`.`{self.input_topic}`", f"`{source_name}`.`{self.output_topic}`", endpoint
+            return f"`{source_name}`.`{self.input_topic}`", f"`{source_name}`.`{self.output_topic}`", topic_client
 
     def get_write_topics(self, kikimr, name, local_topics, entity_name, topics_count=1, partitions_count=1):
         """Create an external data source + ``topics_count`` write-target topics, each with a read rule
@@ -1036,7 +1064,7 @@ class StreamingTestBase(TestYdsBase):
 
         Returns ``(endpoint, refs, paths)``: ``refs`` are the SQL names to INSERT into (direct topic when
         ``local_topics``, ``source``.``topic`` otherwise), ``paths`` are topic paths to read back with
-        ``self.read_stream(count, topic_path=path, endpoint=endpoint)``.
+        ``self.get_ydb_client(kikimr, local_topics).topic_read(path, self.consumer_name, count)``.
         """
         endpoint = self.get_endpoint(kikimr, local_topics)
         source_name = entity_name(name)

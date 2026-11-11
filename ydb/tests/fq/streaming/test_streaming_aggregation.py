@@ -190,7 +190,7 @@ class TestStreamingAggregation(StreamingTestBase):
         ), f"{query}\nExpected: {expected}\nActual: {actual}"
 
     def setup_validation(self, kikimr, entity_name, case):
-        source, endpoint = self.get_input_name(kikimr, "aggregation", False, entity_name)
+        source, topic_ydb_client = self.get_input_name(kikimr, "aggregation", False, entity_name)
         names = {name: entity_name(name) for name in ("first", "second", "lookup", "query")}
         for name in ("first", "second"):
             kikimr.ydb_client.query(
@@ -210,7 +210,7 @@ class TestStreamingAggregation(StreamingTestBase):
             UPSERT INTO `{names['first']}` {case.select.format(**names)};
             {case.extra_write.format(**names)}
         """
-        return names, endpoint, body
+        return names, topic_ydb_client, body
 
     @pytest.mark.parametrize("enabled", [False, True], ids=["disabled", "enabled"])
     @pytest.mark.parametrize("keyed", [False, True], ids=["keyless", "keyed"])
@@ -231,7 +231,7 @@ class TestStreamingAggregation(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [False, True], ids=["external_topic", "local_topic"])
     def test_finite_streaming_topic_uses_in_memory_by_default(self, kikimr, entity_name, local_topics):
-        source, endpoint = self.get_input_name(kikimr, "finite_aggregation", local_topics, entity_name)
+        source, topic_ydb_client = self.get_input_name(kikimr, "finite_aggregation", local_topics, entity_name)
         table = entity_name("result")
         kikimr.ydb_client.query(f"CREATE TABLE `{table}` (key String, value Int64, PRIMARY KEY (key));")
         kikimr.ydb_client.query(f"UPSERT INTO `{table}` (key, value) VALUES ('a', 100), ('b', 200);")
@@ -250,12 +250,12 @@ class TestStreamingAggregation(StreamingTestBase):
 
         future = kikimr.ydb_client.query_async(query, timeout=120)
         time.sleep(1)
-        self.write_stream(
+        topic_ydb_client.topic_write(
+            self.input_topic,
             [
                 json.dumps(dict(key=key, value=value))
                 for key, value in [("a", 2), ("b", 10), ("a", 3), ("b", -3), ("a", 1000)]
             ],
-            endpoint=endpoint,
         )
         future.result(timeout=120)
         self.check_rows(kikimr, f"SELECT key, value FROM `{table}` ORDER BY key;", [("a", 5), ("b", 7)])
@@ -264,7 +264,7 @@ class TestStreamingAggregation(StreamingTestBase):
     @pytest.mark.parametrize("keyed", [False, True], ids=["keyless", "keyed"])
     def test_feature_flag_controls_rewrite(self, kikimr, entity_name, enabled, keyed):
         kikimr.set_feature_flags({"enable_streaming_aggregation": enabled})
-        source, output, endpoint = self.get_io_names(kikimr, "rewrite", False, entity_name)
+        source, output, topic_ydb_client = self.get_io_names(kikimr, "rewrite", False, entity_name)
         query = entity_name("query")
         body = f"""
             PRAGMA EmitAggApply;
@@ -281,14 +281,17 @@ class TestStreamingAggregation(StreamingTestBase):
                 kikimr.ydb_client.query(f"CREATE STREAMING QUERY `{query}` AS DO BEGIN {body} END DO;")
             return
         with self.running_query(kikimr, query, body):
-            self.write_stream([json.dumps(dict(key="a", value=v)) for v in (2, 3)], endpoint=endpoint)
-            assert self.read_stream(2, endpoint=endpoint) == ["2", "5"]
+            topic_ydb_client.topic_write(
+                self.input_topic,
+                [json.dumps(dict(key="a", value=v)) for v in (2, 3)],
+            )
+            assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 2) == ["2", "5"]
 
     @pytest.mark.parametrize("advanced", [False, True], ids=["disabled", "enabled"])
     @pytest.mark.parametrize("use_state_table", [False, True], ids=["memory", "explicit_state"])
     def test_explicit_state_table_requires_advanced_flag(self, kikimr, entity_name, advanced, use_state_table):
         kikimr.set_feature_flags({"enable_streaming_aggregation_advanced": advanced})
-        source, output, endpoint = self.get_io_names(kikimr, "advanced_aggregation", False, entity_name)
+        source, output, topic_ydb_client = self.get_io_names(kikimr, "advanced_aggregation", False, entity_name)
         query, table = entity_name("query"), entity_name("state")
         state_path = f"{kikimr.get_database_name()}/{table}" if use_state_table else ""
         if use_state_table:
@@ -310,17 +313,18 @@ class TestStreamingAggregation(StreamingTestBase):
                 kikimr.ydb_client.query(f"CREATE STREAMING QUERY `{query}` AS DO BEGIN {body} END DO;")
             return
         with self.running_query(kikimr, query, body, wait_checkpoint=False):
-            self.write_stream(
-                [json.dumps(dict(key=k, value=v)) for k, v in [("a", 1), ("b", 2), ("a", 3)]], endpoint=endpoint
+            topic_ydb_client.topic_write(
+                self.input_topic,
+                [json.dumps(dict(key=k, value=v)) for k, v in [("a", 1), ("b", 2), ("a", 3)]],
             )
-            assert self.read_stream(3, endpoint=endpoint) == ["a:1", "b:2", "a:4"]
+            assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 3) == ["a:1", "b:2", "a:4"]
             if use_state_table:
                 rows = kikimr.ydb_client.query(f"SELECT state FROM `{table}`;")[0].rows
                 assert rows and all(row["state"] is not None for row in rows)
 
     @pytest.mark.parametrize("case", VALIDATION_CASES, ids=lambda case: case.name)
     def test_validation(self, kikimr, entity_name, case):
-        names, endpoint, body = self.setup_validation(kikimr, entity_name, case)
+        names, topic_ydb_client, body = self.setup_validation(kikimr, entity_name, case)
         if case.error:
             with pytest.raises(case.error_type, match=case.error):
                 kikimr.ydb_client.query(f"CREATE STREAMING QUERY `{names['query']}` AS DO BEGIN {body} END DO;")
@@ -341,7 +345,10 @@ class TestStreamingAggregation(StreamingTestBase):
                 ([("a", "b", 2), ("a", "b", 3), ("c", "d", 7)], [5, 7], [2, 7]),
                 ([("a", "b", 4), ("c", "d", -2)], [9, 5], [2, -2]),
             ]:
-                self.write_stream([json.dumps(dict(key=k, subkey=s, value=v)) for k, s, v in batch], endpoint=endpoint)
+                topic_ydb_client.topic_write(
+                    self.input_topic,
+                    [json.dumps(dict(key=k, subkey=s, value=v)) for k, s, v in batch],
+                )
                 expected = []
                 for i, (key, subkey) in enumerate([("a", "b"), ("c", "d")]):
                     value = values[i]
@@ -390,7 +397,7 @@ class TestStreamingAggregation(StreamingTestBase):
             error=STATE_ERROR if checkpoints and validation and pragma is not True else "",
             state_table=None,
         )
-        names, endpoint, body = self.setup_validation(kikimr, entity_name, case)
+        names, topic_ydb_client, body = self.setup_validation(kikimr, entity_name, case)
         if case.error:
             with pytest.raises(ydb.issues.GenericError, match=STATE_ERROR):
                 kikimr.ydb_client.query(f"CREATE STREAMING QUERY `{names['query']}` AS DO BEGIN {body} END DO;")
@@ -401,8 +408,9 @@ class TestStreamingAggregation(StreamingTestBase):
             assert "state_table_path" not in ast
             batches = [([2], 3), ([3], 6)] if checkpoints else [([2, 3], 6)]
             for values, expected in batches:
-                self.write_stream(
-                    [json.dumps(dict(key="a", subkey="b", value=value)) for value in values], endpoint=endpoint
+                topic_ydb_client.topic_write(
+                    self.input_topic,
+                    [json.dumps(dict(key="a", subkey="b", value=value)) for value in values],
                 )
                 self.check_rows(kikimr, f"SELECT value FROM `{names['first']}`;", [(expected,)])
 
@@ -415,11 +423,14 @@ class TestStreamingAggregation(StreamingTestBase):
             extra_write="UPSERT INTO `{second}` SELECT * FROM $agg WHERE value > 0;",
             state_table=None,
         )
-        names, endpoint, body = self.setup_validation(kikimr, entity_name, case)
+        names, topic_ydb_client, body = self.setup_validation(kikimr, entity_name, case)
         with self.running_query(kikimr, names["query"], body) as ast:
             assert "output_state_table" not in ast
             for value, total in [(2, 2), (3, 5)]:
-                self.write_stream([json.dumps(dict(key="a", subkey="b", value=value))], endpoint=endpoint)
+                topic_ydb_client.topic_write(
+                    self.input_topic,
+                    [json.dumps(dict(key="a", subkey="b", value=value))],
+                )
                 for table, expected in [("first", total + int(modify_first)), ("second", total)]:
                     self.check_rows(kikimr, f"SELECT value FROM `{names[table]}`;", [(expected,)])
 
@@ -446,14 +457,17 @@ class TestStreamingAggregation(StreamingTestBase):
             aggregation=f"SELECT key, subkey, {aggregate} AS value FROM $input GROUP BY key, subkey",
             error="" if kind == "matching_udaf" else FINALIZER_ERROR,
         )
-        names, endpoint, body = self.setup_validation(kikimr, entity_name, case)
+        names, topic_ydb_client, body = self.setup_validation(kikimr, entity_name, case)
         if case.error:
             with pytest.raises(ydb.issues.GenericError, match=FINALIZER_ERROR):
                 kikimr.ydb_client.query(f"CREATE STREAMING QUERY `{names['query']}` AS DO BEGIN {body} END DO;")
             return
         with self.running_query(kikimr, names["query"], body):
             for value, total in [(2, 3), (3, 6)]:
-                self.write_stream([json.dumps(dict(key="a", subkey="b", value=value))], endpoint=endpoint)
+                topic_ydb_client.topic_write(
+                    self.input_topic,
+                    [json.dumps(dict(key="a", subkey="b", value=value))],
+                )
                 self.check_rows(kikimr, f"SELECT value FROM `{names['first']}`;", [(total,)])
 
     @pytest.mark.parametrize("left", [False, True], ids=["inner", "left"])
@@ -482,7 +496,7 @@ class TestStreamingAggregation(StreamingTestBase):
                 else ""
             ),
         )
-        names, endpoint, body = self.setup_validation(kikimr, entity_name, case)
+        names, topic_ydb_client, body = self.setup_validation(kikimr, entity_name, case)
         body = body.replace(f"UPSERT INTO `{names['first']}`", f"{mode} INTO `{names['first']}`")
         if case.error:
             with pytest.raises(ydb.issues.GenericError, match=case.error):
@@ -490,7 +504,10 @@ class TestStreamingAggregation(StreamingTestBase):
             return
         with self.running_query(kikimr, names["query"], body):
             for value, total in [(2, 2), (3, 5)]:
-                self.write_stream([json.dumps(dict(key="a", subkey="b", value=value))], endpoint=endpoint)
+                topic_ydb_client.topic_write(
+                    self.input_topic,
+                    [json.dumps(dict(key="a", subkey="b", value=value))],
+                )
                 self.check_rows(kikimr, f"SELECT value FROM `{names['first']}`;", [(total,)])
 
     @pytest.mark.parametrize("destination", ["result", "topic"])
@@ -511,7 +528,7 @@ class TestStreamingAggregation(StreamingTestBase):
     @pytest.mark.parametrize("nullable", [False, True])
     def test_standard_aggregates_use_defaults(self, kikimr, entity_name, nullable):
         kikimr.set_log_levels({"KQP_COMPUTE": 7})
-        source, endpoint = self.get_input_name(kikimr, "standard_aggregation", False, entity_name)
+        source, topic_ydb_client = self.get_input_name(kikimr, "standard_aggregation", False, entity_name)
         table, query = entity_name("result"), entity_name("query")
         fields = {
             "count_all": ("Uint64", "COUNT(*)"),
@@ -598,7 +615,10 @@ class TestStreamingAggregation(StreamingTestBase):
                     {"a": [6, 3, 5], "b": [4, 2], "c": [7]},
                 ),
             ]:
-                self.write_stream([json.dumps(dict(key=k, value=v, flag=f)) for k, v, f in batch], endpoint=endpoint)
+                topic_ydb_client.topic_write(
+                    self.input_topic,
+                    [json.dumps(dict(key=k, value=v, flag=f)) for k, v, f in batch],
+                )
                 self.check_rows(kikimr, f"SELECT key, {', '.join(columns)} FROM `{table}` ORDER BY key;", wanted)
                 for row in kikimr.ydb_client.query(f"SELECT key, some_value FROM `{table}`;")[0].rows:
                     choices = some[row["key"].decode()]
@@ -609,7 +629,7 @@ class TestStreamingAggregation(StreamingTestBase):
     @pytest.mark.parametrize("local_topic", [False, True], ids=["external_topic", "local_topic"])
     @pytest.mark.parametrize("manual_restart", [False, True], ids=["node_restart", "manual_restart"])
     def test_checkpoint_batches_and_idle_recovery(self, kikimr, entity_name, local_topic, manual_restart):
-        source, endpoint = self.get_input_name(kikimr, "batches", local_topic, entity_name)
+        source, topic_ydb_client = self.get_input_name(kikimr, "batches", local_topic, entity_name)
         table, query = entity_name("result"), entity_name("query")
         kikimr.ydb_client.query(
             f"CREATE TABLE `{table}` (key String NOT NULL, count Uint64, total Int64, PRIMARY KEY (key));"
@@ -623,8 +643,9 @@ class TestStreamingAggregation(StreamingTestBase):
         result = f"SELECT key, count, total FROM `{table}` ORDER BY key;"
         with self.running_query(kikimr, query, body) as ast:
             assert "output_state_table" in ast
-            self.write_stream(
-                [json.dumps(dict(key=key, value=value)) for value in [1, 2, 3] for key in keys], endpoint=endpoint
+            topic_ydb_client.topic_write(
+                self.input_topic,
+                [json.dumps(dict(key=key, value=value)) for value in [1, 2, 3] for key in keys],
             )
             self.check_rows(kikimr, result, [(key, 3, 6) for key in keys])
             self.wait_completed_checkpoints(kikimr, query)
@@ -641,12 +662,15 @@ class TestStreamingAggregation(StreamingTestBase):
             # Completed-checkpoint restoration must progress without another input row.
             self.wait_completed_checkpoints(kikimr, query)
             self.check_rows(kikimr, result, [(key, 3, 6) for key in keys])
-            self.write_stream([json.dumps(dict(key=key, value=5)) for key in keys], endpoint=endpoint)
+            topic_ydb_client.topic_write(
+                self.input_topic,
+                [json.dumps(dict(key=key, value=5)) for key in keys],
+            )
             self.check_rows(kikimr, result, [(key, 4, 11) for key in keys])
 
     def test_alter_text_preserves_output_state(self, kikimr, entity_name):
         kikimr.set_feature_flags({"enable_streaming_query_state_recompute": True})
-        names, endpoint, body = self.setup_validation(kikimr, entity_name, ValidationCase("alter"))
+        names, topic_ydb_client, body = self.setup_validation(kikimr, entity_name, ValidationCase("alter"))
         query, table = names["query"], names["first"]
         body = """
             PRAGMA ydb.MaxTasksPerStage = '1';
@@ -657,24 +681,30 @@ class TestStreamingAggregation(StreamingTestBase):
         """ + body
         rows = f"SELECT key, subkey, value FROM `{table}` ORDER BY key, subkey;"
         with self.running_query(kikimr, query, body):
-            self.write_stream([json.dumps(dict(key="a", subkey="b", value=v)) for v in (2, 3)], endpoint=endpoint)
+            topic_ydb_client.topic_write(
+                self.input_topic,
+                [json.dumps(dict(key="a", subkey="b", value=v)) for v in (2, 3)],
+            )
             self.check_rows(kikimr, rows, [("a", "b", 5)])
             self.wait_completed_checkpoints(kikimr, query)
             updated = body.replace("GROUP BY key, subkey", "WHERE value > 0 GROUP BY key, subkey")
             kikimr.ydb_client.query(
                 f"ALTER STREAMING QUERY `{query}` SET (FORCE = FALSE) AS DO BEGIN {updated} END DO;"
             )
-            self.write_stream([json.dumps(dict(key="a", subkey="b", value=v)) for v in (4, -100)], endpoint=endpoint)
+            topic_ydb_client.topic_write(
+                self.input_topic,
+                [json.dumps(dict(key="a", subkey="b", value=v)) for v in (4, -100)],
+            )
             self.check_rows(kikimr, rows, [("a", "b", 9)])
             self.wait_completed_checkpoints(kikimr, query)
             self.restart_streaming_node(kikimr)
             self.wait_completed_checkpoints(kikimr, query)
-            self.write_stream([json.dumps(dict(key="a", subkey="b", value=1))], endpoint=endpoint)
+            topic_ydb_client.topic_write(self.input_topic, [json.dumps(dict(key="a", subkey="b", value=1))])
             self.check_rows(kikimr, rows, [("a", "b", 10)])
 
     @pytest.mark.parametrize("valid_load", [False, True], ids=["invalid_load", "checkpoint_recovery"])
     def test_udaf_serialization_use_defaults(self, kikimr, entity_name, valid_load):
-        source, endpoint = self.get_input_name(kikimr, "udaf", False, entity_name)
+        source, topic_ydb_client = self.get_input_name(kikimr, "udaf", False, entity_name)
         table, query = entity_name("result"), entity_name("query")
         kikimr.ydb_client.query(
             f"CREATE TABLE `{table}` (key String NOT NULL, raw_count Int64, serialized_value String, PRIMARY KEY (key));"
@@ -697,12 +727,15 @@ class TestStreamingAggregation(StreamingTestBase):
             return
         with self.running_query(kikimr, query, body) as ast:
             assert "output_state_table" in ast
-            self.write_stream([json.dumps(dict(key="a", value=v)) for v in [6, 3]], endpoint=endpoint)
+            topic_ydb_client.topic_write(
+                self.input_topic,
+                [json.dumps(dict(key="a", value=v)) for v in [6, 3]],
+            )
             self.check_rows(kikimr, f"SELECT raw_count, serialized_value FROM `{table}`;", [(2, "9")])
             self.wait_completed_checkpoints(kikimr, query)
             self.restart_streaming_node(kikimr)
             self.wait_completed_checkpoints(kikimr, query)
-            self.write_stream([json.dumps(dict(key="a", value=5))], endpoint=endpoint)
+            topic_ydb_client.topic_write(self.input_topic, [json.dumps(dict(key="a", value=5))])
             self.check_rows(
                 kikimr,
                 f"SELECT raw_count, serialized_value, Unwrap(CAST(serialized_value AS Int64)) + 7l AS next_state FROM `{table}`;",

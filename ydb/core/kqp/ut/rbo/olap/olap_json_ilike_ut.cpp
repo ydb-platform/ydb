@@ -17,8 +17,9 @@ using namespace NYdb;
 
 namespace {
 
-// The OLAP program of the first column read of a query AST: its KqpOlapFilter, with the let bindings inlined, atoms
-// printed by their content and the arguments named by their order, so that both optimizers print the same program the same way.
+// The OLAP program of the first column read of a query AST: its KqpOlapFilter, or with `withProjections` its KqpOlapProjections
+// when it has them, with the let bindings inlined, atoms printed by their content and the arguments named by their order,
+// so that both optimizers print the same program the same way.
 class TOlapProgramPrinter {
 public:
     explicit TOlapProgramPrinter(const TString& ast)
@@ -28,13 +29,16 @@ public:
         CollectLets(*Ast.Root);
     }
 
-    TString Print() {
-        const auto* filter = FindCallable(*Ast.Root, "KqpOlapFilter");
-        if (!filter) {
+    TString Print(bool withProjections) {
+        const auto* program = withProjections ? FindCallable(*Ast.Root, "KqpOlapProjections") : nullptr;
+        if (!program) {
+            program = FindCallable(*Ast.Root, "KqpOlapFilter");
+        }
+        if (!program) {
             return {};
         }
         TStringBuilder out;
-        Print(*filter, out);
+        Print(*program, out);
         return out;
     }
 
@@ -97,6 +101,12 @@ private:
             Print(*node.GetChild(1), out);
             return;
         }
+        // The old optimizer drops the columns the program no longer needs from its output, the new one does not.
+        // This changes only which columns the read sends, not what the program computes.
+        if (node.GetChildrenCount() == 3 && (IsAtom(*node.GetChild(0), "TKqpOlapExtractMembers") || IsAtom(*node.GetChild(0), "KqpOlapExtractMembers"))) {
+            Print(*node.GetChild(1), out);
+            return;
+        }
         // (block '((let ...) ... (return x))) is x, its lets are inlined.
         if (node.GetChildrenCount() == 2 && IsAtom(*node.GetChild(0), "block")) {
             const auto* body = node.GetChild(1);
@@ -143,7 +153,8 @@ struct TQueryOutcome {
     std::vector<TString> Rows;
 };
 
-std::vector<TQueryOutcome> RunQueries(bool newRbo, const std::function<void(TKikimrRunner&)>& prepare, const std::vector<TString>& queries) {
+std::vector<TQueryOutcome> RunQueries(bool newRbo, const std::function<void(TKikimrRunner&)>& prepare, const std::vector<TString>& queries,
+                                      bool withProjections) {
     // Column-shard schema caches are process-wide and keyed by path ID, which every new runner reuses.
     NOlap::TSchemaCachesManager::DropCaches();
     auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
@@ -160,15 +171,17 @@ std::vector<TQueryOutcome> RunQueries(bool newRbo, const std::function<void(TKik
         auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx(), NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
             .ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), (newRbo ? "new" : "old") << " optimizer, " << query << ": " << result.GetIssues().ToString());
-        outcomes.push_back({TOlapProgramPrinter(TString{*result.GetStats()->GetAst()}).Print(), CanonicalRows(result.GetResultSet(0))});
+        outcomes.push_back({TOlapProgramPrinter(TString{*result.GetStats()->GetAst()}).Print(withProjections), CanonicalRows(result.GetResultSet(0))});
     }
     return outcomes;
 }
 
 // The new optimizer gives the column shard the same program as the old one, and the query returns the same rows.
-void CheckSameAsOldOptimizer(const std::function<void(TKikimrRunner&)>& prepare, const std::vector<TString>& queries) {
-    const auto oldOutcomes = RunQueries(false, prepare, queries);
-    const auto newOutcomes = RunQueries(true, prepare, queries);
+// The projections are compared only with `withProjections`: the new optimizer pushes some projections the old one does not.
+void CheckSameAsOldOptimizer(const std::function<void(TKikimrRunner&)>& prepare, const std::vector<TString>& queries,
+                             bool withProjections = false) {
+    const auto oldOutcomes = RunQueries(false, prepare, queries, withProjections);
+    const auto newOutcomes = RunQueries(true, prepare, queries, withProjections);
     for (size_t i = 0; i < queries.size(); ++i) {
         UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].Program, oldOutcomes[i].Program, queries[i]);
         UNIT_ASSERT_VALUES_EQUAL_C(JoinSeq("\n", newOutcomes[i].Rows), JoinSeq("\n", oldOutcomes[i].Rows), queries[i]);
@@ -330,6 +343,24 @@ Y_UNIT_TEST_SUITE(KqpRboOlapCompat) {
             R"q(SELECT id FROM `/Root/tableWithNulls` WHERE JSON_VALUE(jsondoc, "$.col1") IS NOT NULL ORDER BY id)q",
             R"q(SELECT id FROM `/Root/tableWithNulls` WHERE JSON_VALUE(jsonval, "$.col1") IN ("val1", "val2") ORDER BY id)q",
         });
+    }
+
+    // JSON_VALUE projections over a filter the column shard cannot run, which reads other columns.
+    // Not ported: a filter which reads the JSON column itself. The old optimizer then pushes the projection
+    // as a new column named by its alias, while the new optimizer only pushes projections in place of their source column.
+    Y_UNIT_TEST(JsonProjectionsOverRemainingFilterSameAsOldOptimizer) {
+        CheckSameAsOldOptimizer([](TKikimrRunner& kikimr) {
+            TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+            WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        }, {
+            R"q(SELECT id, JSON_VALUE(jsonval, "$.col1") AS x FROM `/Root/tableWithNulls` WHERE resource_id || "x" != "x" ORDER BY id)q",
+            R"q(SELECT id, JSON_VALUE(jsondoc, "$.col1") AS x FROM `/Root/tableWithNulls` WHERE resource_id || "x" != "x" ORDER BY id)q",
+            R"q(SELECT id, JSON_VALUE(jsonval, "$.col1") AS x FROM `/Root/tableWithNulls` WHERE level = 1 AND resource_id || "x" != "x" ORDER BY id)q",
+            R"q(SELECT id, JSON_VALUE(jsonval, "$.col1") AS a, JSON_VALUE(jsondoc, "$.col1") AS b FROM `/Root/tableWithNulls`
+                WHERE resource_id || "x" != "x" ORDER BY id)q",
+            R"q(SELECT id, JSON_VALUE(jsondoc, "$.obj.obj_col2_int") || "!" AS x FROM `/Root/tableWithNulls` WHERE resource_id || "x" != "x" ORDER BY id)q",
+            R"q(SELECT id, JSON_VALUE(jsonval, "$.col1") AS x FROM `/Root/tableWithNulls` WHERE resource_id || "x" != "x" OR level = 2 ORDER BY id)q",
+        }, /*withProjections=*/true);
     }
 
     // PredicatePushdown_FastAsciiContainsIgnoreCase, PredicatePushdown_IgnoreCaseUdfDifferentStringTypes and

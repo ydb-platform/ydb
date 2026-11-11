@@ -3211,9 +3211,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
         TAutoPtr<IEventHandle> handle;
         auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        NJson::TJsonValue json;
-        NJson::ReadJsonTree(result->Response->Body, &json, true);
         const TString context = TStringBuilder() << query << ": " << result->Response->Body;
+        NJson::TJsonValue json;
+        // a rejected request is answered with plain text: show it instead of a bare parse error
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), context);
         UNIT_ASSERT_VALUES_EQUAL_C(vslotsResponses > 0, expectVSlots, context);
         bool hasVSlotsError = false;
         for (const auto& problem : json["Problems"].GetArray()) {
@@ -3254,9 +3255,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
         TAutoPtr<IEventHandle> handle;
         auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        NJson::TJsonValue json;
-        NJson::ReadJsonTree(result->Response->Body, &json, true);
         const TString context = TStringBuilder() << fields << (page ? " (page)" : "") << ": " << result->Response->Body;
+        NJson::TJsonValue json;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(nodeIdsDescending.size()), context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["FoundNodes"].GetString(), ToString(nodeIdsDescending.size()), context);
         // a handler that is still waiting for the pools leaves these flags set and returns the nodes as they are
@@ -3313,6 +3314,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     entry->MutableKey()->SetGroupId(10 + i);
                     entry->MutableInfo()->SetBoxId(1);
                     entry->MutableInfo()->SetStoragePoolId(7 + i);
+                }
+            } else if (ev->GetTypeRewrite() == TEvStateStorage::EvBoardInfo) {
+                // A request with a database first resolves the endpoints board of the database and is
+                // rejected when the board is not available, which it is not for the root in this test.
+                auto* event = reinterpret_cast<TEvStateStorage::TEvBoardInfo::TPtr*>(&ev);
+                auto* record = (*event)->Get();
+                if (record->Path == "gpc+/Root") {
+                    using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
+                    const_cast<EStatus&>(record->Status) = EStatus::Ok;
                 }
             } else if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySetResult) {
                 auto* event = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);

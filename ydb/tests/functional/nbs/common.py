@@ -32,8 +32,9 @@ class NbsTestBase:
 
     ddisk_pool_name = "ddp1"
 
-    @pytest.fixture(autouse=True)
-    def setup(self):
+    @classmethod
+    def setup_class(cls):
+        # One MIRROR_3_DC cluster per test class (was per-test autouse fixture).
         nbs_database_name = "/Root/NBS"
         configurator = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
@@ -48,13 +49,18 @@ class NbsTestBase:
         )
         # These load-actor/vhost tests are not limited to a single disk.
         configurator.yaml_config['nbs_config']['nbs_frontend_config'] = {'enabled': False}
-        self.cluster = KiKiMR(configurator)
-        self.cluster.start()
-        self.start_nbs(nbs_database_name)
+        cls.cluster = KiKiMR(configurator)
+        cls.cluster.start()
+        # start_nbs is instance method; call via unbound with a shim
+        shim = cls.__new__(cls)
+        shim.cluster = cls.cluster
+        shim.start_nbs(nbs_database_name)
 
-        yield
-
-        self.cluster.stop()
+    @classmethod
+    def teardown_class(cls):
+        if getattr(cls, 'cluster', None) is not None:
+            cls.cluster.stop()
+            cls.cluster = None
 
     def start_nbs(self, nbs_database_name):
         logger.info("Creating NBS database: %s", nbs_database_name)

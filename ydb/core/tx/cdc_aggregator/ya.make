@@ -1,3 +1,4 @@
 RECURSE(
     public
+    tablet
 )

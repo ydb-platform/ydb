@@ -25,7 +25,7 @@ enum ESimpleCounters {
     COUNTER_EVENTQUEUE_SIZE = 15 [(CounterOpts) = {Name: "EventQueueSize"}];
     COUNTER_NODES_TOTAL = 16 [(CounterOpts) = {Name: "NodesTotal"}];
     COUNTER_NODES_CONNECTED = 17 [(CounterOpts) = {Name: "NodesConnected"}];
-    COUNTER_BALANCE_OBJECT_IMBALANCE = 18 [(CounterOpts) = {Name: "BalanceObjectImbalance"}];
+    COUNTER_BALANCE_OBJECT_IMBALANCE_DEPRECATED = 18 [deprecated = true];
     COUNTER_IMBALANCED_OBJECTS = 19 [(CounterOpts) = {Name: "ImbalancedObjects"}];
     COUNTER_WORST_OBJECT_VARIANCE = 20 [(CounterOpts) = {Name: "WorstObjectVariance"}];
     COUNTER_STORAGE_SCATTER = 21 [(CounterOpts) = {Name: "StorageScatter"}];
@@ -49,8 +49,8 @@ enum ESimpleCounters {
 enum ECumulativeCounters {
     COUNTER_BOOTQUEUE_PROCESSED = 0 [(CounterOpts) = {Name: "BootQueueProcessed"}];
     COUNTER_BOOTQUEUE_TIME = 1 [(CounterOpts) = {Name: "BootQueueTime"}];
-    COUNTER_AUTOKICK_EXECUTED = 2 [(CounterOpts) = {Name: "AutokickExecuted"}]; // obsolete
-    COUNTER_AUTOKICK_FAILED = 3 [(CounterOpts) = {Name: "AutokickFailed"}]; // obsolete
+    COUNTER_AUTOKICK_EXECUTED_DEPRECATED = 2 [deprecated = true]; // obsolete
+    COUNTER_AUTOKICK_FAILED_DEPRECATED = 3 [deprecated = true]; // obsolete
     COUNTER_BALANCER_EXECUTED = 4 [(CounterOpts) = {Name: "BalancerExecuted"}];
     COUNTER_BALANCER_FAILED = 5 [(CounterOpts) = {Name: "BalancerFailed"}];
     COUNTER_DRAIN_EXECUTED = 6 [(CounterOpts) = {Name: "DrainExecuted"}];
@@ -129,8 +129,8 @@ enum EPercentileCounters {
 enum ETxTypes {
     TXTYPE_CREATE_TABLET = 0                              [(TxTypeOpts) = {Name: "TxCreateTablet"}];
     TXTYPE_SYNC_TABLETS = 1                               [(TxTypeOpts) = {Name: "TxSyncTablets"}];
-    TXTYPE_KILL_TABLET = 2                                [(TxTypeOpts) = {Name: "TxKillTablet"}];
-    TXTYPE_UPDATE_TABLET_GROUP = 3                        [(TxTypeOpts) = {Name: "TxUpdateTabletGroup"}];
+    TXTYPE_KILL_TABLET_DEPRECATED = 2                     [deprecated = true];
+    TXTYPE_UPDATE_TABLET_GROUP_DEPRECATED = 3             [deprecated = true];
     TXTYPE_UPDATE_TABLET_STATUS = 4                       [(TxTypeOpts) = {Name: "TxUpdateTabletStatus"}];
     TXTYPE_REGISTER_NODE = 5                              [(TxTypeOpts) = {Name: "TxRegisterNode"}];
     TXTYPE_KILL_NODE = 6                                  [(TxTypeOpts) = {Name: "TxKillNode"}];

@@ -1,8 +1,6 @@
 PY3TEST()
 
 SIZE(MEDIUM)
-FORK_SUBTESTS()
-SPLIT_FACTOR(2)
 
 TEST_SRCS(test_bundle_provenance.py)
 

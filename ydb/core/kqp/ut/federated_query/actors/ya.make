@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/kqp/federated_query/actors)
 
 SIZE(MEDIUM)
 
-FORK_SUBTESTS()
-
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/fq/libs/checkpointing/events

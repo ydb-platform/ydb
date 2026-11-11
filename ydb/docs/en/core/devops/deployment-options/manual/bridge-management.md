@@ -201,15 +201,23 @@ Removing a pile permanently deletes its storage-group parts and all data in them
 
     After the check succeeds, the command starts a `REMOVE` operation. Use [bridge list](#list) to wait until the pending operation clears and the pile becomes `INACTIVE`. Without the global `-y` option, the command asks for confirmation before deleting data.
 
-4. After the pile becomes `INACTIVE`, remove it and its hosts from `bridge_config`, `hosts`, and `host_configs`, and remove its node IDs from any explicit `system_tablets` lists.
+4. After the pile becomes `INACTIVE`, remove its entry from `bridge_config.piles`, its hosts from `hosts`, and its node IDs from any explicit `system_tablets` lists. From `host_configs`, remove only configurations that are no longer referenced by any remaining host. In the example above, keep the configuration with `host_config_id: 1` because it is used by `node-a1`.
 
 For command details, see [admin cluster bridge destroy-pile](../../../reference/ydb-cli/commands/bridge/destroy-pile.md).
+
+5. Apply the updated configuration:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config replace -f config.yaml
+    ```
+
+    Perform a [rolling restart](../../../maintenance/manual/node_restarting.md) of the remaining static and dynamic nodes, as required after changing [bridge_config](../../../reference/configuration/bridge_config.md).
 
 ### Switch a database between bridged and ordinary storage {#database-mode}
 
 A bridge cluster can contain databases using bridged storage and databases using ordinary storage when `bridge_config.enable_non_uniform_storage: true` is set. Conversion must be complete, and no pile addition or removal can be in progress. If you change this configuration option, restart all static and dynamic nodes before continuing.
 
-The following commands change all storage pools of the selected database without deleting its existing data:
+Choose one of the two commands according to the required storage mode. These are alternative operations: do not run them sequentially. Each command changes all storage pools of the selected database without deleting its existing data.
 
 ```bash
 # Replicate the database across all provisioned piles:

@@ -229,7 +229,8 @@ class TJsonNodes : public TViewerPipeClient {
         bool Problems = false;
         NKikimrWhiteboard::TNodeStateInfo NetworkStateInfo;
         bool Disconnected = false;
-        bool ResponseTimeout = false; // the node was marked as disconnected only because it did not answer in time
+        bool ResponseTimeout = false; // the node was asked and did not answer in time, so its real state is unknown
+        bool HasSystemStateData = false; // the system state of the node was received through at least one response
         bool HasDisks = false;
         bool HasPDiskWhiteboardResponse = false;
         bool GotDatabaseFromDatabaseBoardInfo = false;
@@ -798,6 +799,7 @@ class TJsonNodes : public TViewerPipeClient {
             // we received valid data, so the node should not be considered disconnected
             Disconnected = false;
             ResponseTimeout = false;
+            HasSystemStateData = true;
             Problems = false;
             Cleanup();
             CalcDatabase();
@@ -1507,20 +1509,20 @@ public:
         }
     }
 
-    // A node that did not answer in time is not necessarily down. It is still reported
-    // as disconnected, as before, but the reason is exposed to the client.
+    // A node that did not answer in time is not necessarily down, so the client is told that
+    // its state is unknown. Nothing else about the node is changed here. The data of a node can
+    // arrive through another response (a retry, another proxy), and then there is nothing to report.
     void SetNodeResponseTimeout(TNodeId nodeId) {
         if (TNode* node = FindNode(nodeId)) {
-            node->ResponseTimeout = true;
+            if (!node->HasSystemStateData) {
+                node->ResponseTimeout = true;
+            }
         }
     }
 
     template<typename TResponse>
-    void SetNodeDisconnected(TNodeId nodeId, const TResponse& failedResponse) {
-        SetNodeDisconnected(nodeId);
-        if (failedResponse.IsError() && failedResponse.GetError() == TimeoutError) {
-            SetNodeResponseTimeout(nodeId);
-        }
+    static bool IsTimeoutError(const TResponse& response) {
+        return response.IsError() && response.GetError() == TimeoutError;
     }
 
     bool HasPendingFilters() const {
@@ -2881,6 +2883,10 @@ public:
             TInstant now = TInstant::Now();
             bool hasMemoryDetailed = false;
             std::unordered_set<TNodeId> removeNodes;
+            // The nodes that were asked, directly or through a proxy, and did not answer before the timeout.
+            // They are marked after all the responses are merged: the data of a node can arrive through
+            // another response, and the result must not depend on the order the responses are processed in.
+            std::unordered_set<TNodeId> timedOutNodes;
             for (const auto& [responseNodeId, response] : SystemViewerResponse) {
                 if (response.IsOk()) {
                     const auto& systemResponse(response.Get()->Record.GetSystemResponse());
@@ -2907,11 +2913,19 @@ public:
                     }
                     for (TNodeId nodeId : response.Get()->Record.GetLocationTimedOut().GetNodeId()) {
                         if (nodesWithoutData.count(nodeId) > 0) {
-                            SetNodeResponseTimeout(nodeId);
+                            timedOutNodes.insert(nodeId);
                         }
                     }
                 } else {
-                    SetNodeDisconnected(responseNodeId, response);
+                    SetNodeDisconnected(responseNodeId);
+                    if (IsTimeoutError(response)) {
+                        // the proxy did not answer at all, so nothing is known about any node of its batch
+                        timedOutNodes.insert(responseNodeId);
+                        auto itRequest = SystemViewerRequest.find(responseNodeId);
+                        if (itRequest != SystemViewerRequest.end()) {
+                            timedOutNodes.insert(itRequest->second.begin(), itRequest->second.end());
+                        }
+                    }
                 }
             }
             for (const auto& [nodeId, response] : SystemStateResponse) {
@@ -2933,8 +2947,14 @@ public:
                         hasMemoryDetailed |= systemState.GetSystemStateInfo(0).HasMemoryStats();
                     }
                 } else {
-                    SetNodeDisconnected(nodeId, response);
+                    SetNodeDisconnected(nodeId);
+                    if (IsTimeoutError(response)) {
+                        timedOutNodes.insert(nodeId);
+                    }
                 }
+            }
+            for (TNodeId nodeId : timedOutNodes) {
+                SetNodeResponseTimeout(nodeId);
             }
             if (!removeNodes.empty()) {
                 NodeView.erase(std::remove_if(NodeView.begin(), NodeView.end(), [&removeNodes](const TNode* node) { return removeNodes.count(node->GetNodeId()) > 0; }), NodeView.end());

@@ -5480,6 +5480,82 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TestNodesAliveFilter(true);
     }
 
+    // The nodes of one data center are asked through one proxy. When the whole answer of the proxy is lost,
+    // nothing is known about any node of its batch, not only about the proxy itself.
+    Y_UNIT_TEST(NodesPageReportsTimeoutOfOffloadedBatch) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        // TServer registers viewers by node index; offload requests address them by node ID.
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            runtime.RegisterService(MakeViewerID(runtime.GetNodeId(nodeIndex)), viewerId, nodeIndex);
+        }
+        bool dropOffloadedResponses = true;
+        size_t droppedResponses = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                // one data center, so all the nodes get into one batch with one proxy
+                SetNodesLocation(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev), "dc-1");
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse
+                    && ev->Get<TEvViewer::TEvViewerResponse>()->Record.Response_case() == NKikimrViewer::TEvViewerResponse::ResponseCase::kSystemResponse) {
+                if (dropOffloadedResponses) {
+                    ++droppedResponses;
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto makeRequest = [&]() {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                "GET /viewer/json/nodes?type=static&fields_required=NodeId,SystemState&sort=NodeId"
+                "&offload_merge=true&offload_merge_attempts=1&timeout=1000&enums=true HTTP/1.1\r\n\r\n", endpoint, {});
+            TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
+            return json;
+        };
+
+        {
+            const auto json = makeRequest();
+            const TString context = NJson::WriteJson(json, false);
+            UNIT_ASSERT_C(droppedResponses > 0, context);
+            UNIT_ASSERT_C(HasProblem(json, "wb-incomplete"), context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Nodes"].GetArray().size(), 3, context);
+            size_t disconnectedNodes = 0;
+            for (const auto& node : json["Nodes"].GetArray()) {
+                // no node of the batch has answered, and the client is told so about every one of them
+                UNIT_ASSERT_C(node["ResponseTimeout"].GetBoolean(), context);
+                disconnectedNodes += node["Disconnected"].GetBoolean() ? 1 : 0;
+            }
+            // the old marking is not extended: only the proxy itself is reported as disconnected
+            UNIT_ASSERT_C(disconnectedNodes <= 1, context);
+        }
+
+        dropOffloadedResponses = false;
+        {
+            const auto json = makeRequest();
+            const TString context = NJson::WriteJson(json, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Nodes"].GetArray().size(), 3, context);
+            for (const auto& node : json["Nodes"].GetArray()) {
+                UNIT_ASSERT_C(!node.Has("ResponseTimeout"), context);
+                UNIT_ASSERT_C(!node["Disconnected"].GetBoolean(), context);
+            }
+        }
+    }
+
     Y_UNIT_TEST(NodesPageKeepsPDisksForDisconnectedNode)
     {
         TPortManager tp;

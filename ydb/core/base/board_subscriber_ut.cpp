@@ -97,6 +97,8 @@ public:
     void ManySubscribersManyPublisher();
     void NotAvailableByShutdown();
     void ReconnectReplica();
+    void RepublishAfterReplicaShutdown();
+    void RepublishAfterInitialUndelivery();
     void DropByDisconnect();
     void KeepInfoFromOtherRingGroup();
     void IgnoreWriteOnlyRingGroupOnLookup();
@@ -113,6 +115,8 @@ class TBoardSubscriberTest : public TBoardSubscriberTestBase {
     UNIT_TEST(ManySubscribersManyPublisher);
     UNIT_TEST(NotAvailableByShutdown);
     UNIT_TEST(ReconnectReplica);
+    UNIT_TEST(RepublishAfterReplicaShutdown);
+    UNIT_TEST(RepublishAfterInitialUndelivery);
     UNIT_TEST(DropByDisconnect);
     UNIT_TEST_SUITE_END();
 };
@@ -378,6 +382,80 @@ void TBoardSubscriberTestBase::ReconnectReplica() {
 
         UNIT_ASSERT_EQUAL(updatesIt->second.Payload, "test");
     }
+}
+
+void TBoardSubscriberTestBase::RepublishAfterReplicaShutdown() {
+    const auto replicas = ResolveReplicas();
+    UNIT_ASSERT(!replicas.empty());
+
+    size_t publications = 0;
+    TActorId replicaPublisher;
+    auto prevObserverFunc = Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvStateStorage::TEvReplicaBoardPublish::EventType
+                && ev->Recipient == replicas[0]) {
+            ++publications;
+            replicaPublisher = ev->Sender;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
+    const auto edgePublisher = Context->AllocateEdgeActor(0);
+    CreatePublisher("path", "test", edgePublisher, 0);
+    Context->WaitFor("initial publication", [&] { return publications == 1; }, TDuration::Seconds(10));
+    UNIT_ASSERT(replicaPublisher);
+
+    Send(
+        replicaPublisher,
+        replicas[0],
+        new TEvStateStorage::TEvReplicaShutdown(),
+        0
+    );
+
+    Context->WaitFor(
+        "publication after replica recovery",
+        [&] { return publications == 2; },
+        TDuration::Seconds(10)
+    );
+}
+
+void TBoardSubscriberTestBase::RepublishAfterInitialUndelivery() {
+    const auto replicas = ResolveReplicas();
+    UNIT_ASSERT(!replicas.empty());
+
+    size_t publicationAttempts = 0;
+    auto observer = Context->AddObserver<TEvStateStorage::TEvReplicaBoardPublish>([&](auto& ev) {
+        if (ev->Recipient != replicas[0]) {
+            return;
+        }
+
+        ++publicationAttempts;
+        UNIT_ASSERT_C(
+            ev->Flags & IEventHandle::FlagTrackDelivery,
+            "initial Board publication must track delivery"
+        );
+
+        if (publicationAttempts == 1) {
+            Context->EnableScheduleForActor(ev->Sender);
+            Context->Send(new IEventHandle(
+                ev->Sender,
+                ev->Recipient,
+                new TEvents::TEvUndelivered(
+                    TEvStateStorage::TEvReplicaBoardPublish::EventType,
+                    TEvents::TEvUndelivered::ReasonActorUnknown),
+                0,
+                ev->Cookie));
+            ev.Reset();
+        }
+    });
+
+    const auto edgePublisher = Context->AllocateEdgeActor(0);
+    CreatePublisher("path", "test", edgePublisher, 0);
+
+    Context->WaitFor(
+        "publication after initial undelivery",
+        [&] { return publicationAttempts == 2; },
+        TDuration::Seconds(10)
+    );
 }
 
 void TBoardSubscriberTestBase::DropByDisconnect() {

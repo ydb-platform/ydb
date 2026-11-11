@@ -34,10 +34,55 @@ Independently verify that all configured nodes belong to the intended cluster.
 `VERIFIED` means the SelfCheck pile matches its configured name; it is not a
 remote cluster identity check. `cluster_id` is a configured local label binding
 the state directory to this configuration, not an identifier read from YDB.
-Fresh views can influence selection and the durable high-water mark before
-SelfCheck verifies the pile. A wrong-cluster endpoint with matching pile names
+Configured seed views can influence selection and the durable high-water mark
+before SelfCheck verifies the pile. Learned endpoint views cannot. A wrong-cluster endpoint with matching pile names
 can also pass that check; correcting the endpoint does not lower a persisted
 high-water mark. Trusted endpoint inventory is a deployment requirement.
+
+Configured addresses are bootstrap seeds. Without changing the file or restarting,
+Skipper refreshes discovery every five seconds through a verified current node:
+ConfigService/FetchConfig supplies raw YAML without requiring a v1 downgrade;
+root selection follows YDB's main-first top-level config merge and domain-name defaults, then Discovery/ListEndpoints supplies gRPC addresses and pile names.
+The credential must be allowed to fetch cluster configuration and list root-domain
+endpoints. A failed refresh leaves existing observations and failure detection
+running; its status appears on the source endpoint under `last_error`.
+
+New addresses must be reachable single-node endpoints using the configured TLS
+scheme and driver credentials. Advertisements requiring `ssl_target_name_override`
+are skipped because pinned clients do not support that override. Each learned
+address must pass SelfCheck with its advertised pile and node ID before its views,
+health or mutation routes count. At most `health_endpoints_per_pile` learned
+health addresses per pile are kept, plus at most one extra client for finding
+and retaining a port that successfully serves both Config and Discovery.
+Discovery is not a storage inventory or a quorum:
+omissions do not prove health/failure and do not discard fresh endpoint evidence.
+Candidate addresses rotate within each pile, so an unchanged Discovery ordering
+does not keep retrying only unreachable nodes. Only current verified endpoints
+deduplicate configured node IDs. Pending learned health addresses also reserve
+their expected node ID, so aliases cannot consume another health slot; a learned
+address advertising a changed identity is drained
+and checked again before reuse. The first verification budget covers read/SelfCheck
+deadlines and polling rounds; Bridge-only ports cannot keep a slot indefinitely.
+After verification, address retention includes the complete per-pile sampling
+rotation and RPC renewal deadline. This grace does not extend evidence or routing
+freshness. The last complete advertisement list is cached in memory, so failure
+of Config or Discovery can trigger another bounded probe even after all seeds
+have been removed. Probing uses the last accepted pile membership even after all
+fresh views expire; it never extends evidence freshness or authorizes mutations.
+An extra inventory port may be on a node whose health port
+was already learned; it does not consume another health slot.
+For `grpc://`, published IPv4/IPv6 addresses are also candidates and pass the same
+node ID and pile checks; TLS discovery retains certificate verification by hostname.
+`GetClusterState` supplies pile states, including Add/Remove progress; Auto never
+calls AddPile or RemovePile. Inactive, disconnected and removed piles disappear
+from the endpoint list. Their configured seeds retain low-frequency bootstrap
+probes; learned clients are removed once outstanding calls settle.
+
+Learned addresses are process-local. Keep at least one reachable seed in the
+configuration before restarting Skipper, especially after removing every pile
+that originally supplied seeds. This does not require a restart during live
+membership changes. Configuration, CA, certificate and key changes still require
+one; evidence, pending mutations and history keep their existing persistence rules.
 
 The YAML parser rejects unknown/duplicate keys and files above 1 MiB. Credential
 files are bounded to 16 MiB each, read at startup (the token file again on every
@@ -98,6 +143,13 @@ approved host and effective port. Missing Origin is accepted for CLI clients;
 null, duplicate or malformed Origin and duplicate Host are rejected. Forwarded
 headers do not establish trust. Every response sends `X-Frame-Options: DENY` and
 `Content-Security-Policy: frame-ancestors 'none'`.
+
+The default [failover timing budget](../README.md#failover-timing) uses an
+8-second evidence TTL and 2-second confirmation. Explicit settings retain their
+values; an old configuration with TTL 30, confirmation 20 and 10-second rounds
+continues to use that slower profile. Review timing overrides when upgrading.
+Partial overrides with longer RPC budgets or rounds may require an explicit
+larger TTL to satisfy validation; larger values also extend failover latency.
 
 ## Observe, Manual and Auto
 
@@ -221,10 +273,18 @@ so restore its quorum or follow a separate server recovery procedure.
 When BSC is unavailable and outside connectivity stays binding, Auto can
 confirm failure of the BSC host (PROMOTED, otherwise PRIMARY) from fresh
 agreeing fallback RED static parts with complete VDisk reasons, provided
-the host has no own node-quorum claim. GREY, missing, truncated and
-replication-only data remain insufficient. After a role change this evidence
+the host has no own node-quorum claim. A separate storage-failure proof
+permits a live own quorum only when every current outside fallback reply names
+a RED static group whose complete unique reason graph contains only RED
+VDisks caused by an explicitly reported same-node, same-pile PDisk
+`DeviceIoError`. A hardware error mixed with transport loss or replication
+does not suffice. GREY, missing and truncated data remain insufficient.
+An I/O hang without an explicit device error remains unproven.
+After a role change this evidence
 starts only after BSC warm-up, then spans `confirm_seconds` within one
-generation. A replacement needs own node quorum and an own fresh
+generation. Switching between the generic fallback rule and the storage proof
+restarts confirmation; earlier samples cannot confirm the new proof.
+A replacement needs own node quorum and an own fresh
 non-truncated fallback reply without any attributed fallback RED/GREY veto;
 it has no separate candidate confirmation timer. A `NO_CANDIDATE` decision
 can therefore persist while connectivity works but own SelfCheck is missing.

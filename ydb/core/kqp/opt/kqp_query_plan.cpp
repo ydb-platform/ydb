@@ -1,7 +1,9 @@
 #include "kqp_query_plan.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/fulltext_query.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/library/json_index/json_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -846,11 +848,20 @@ private:
         TOperator op;
 
         TVector<TString> readColumns;
+        TTableRead readInfo;
         for(const auto& column: columns) {
             readColumns.push_back(TString(column.Value()));
             if (readColumns.back() == NTableIndex::NFulltext::FullTextRelevanceColumn) {
                 op.Properties["RelevanceQuery"] = "True";
+            } else {
+                readInfo.Columns.push_back(readColumns.back());
             }
+        }
+
+        if (sourceSettings.MainTableCovered().Value() != "true") {
+            readInfo.Type = EPlanTableReadType::Lookup;
+            readInfo.LookupBy = tableData.Metadata->KeyColumnNames;
+            SerializerCtx.Tables[TString(tablePath)].Reads.push_back(std::move(readInfo));
         }
 
         op.Properties["Table"] = TString(tablePath);
@@ -859,21 +870,30 @@ private:
         op.Properties["Name"] = "ReadFullTextIndex";
 
         std::vector<TString> subparts;
-        for(const auto& query: sourceSettings.Query().Cast<TExprList>()) {
-            TString expr = GetExprStr(query, true);
-            if (expr == "expr")
-                continue;
-            subparts.emplace_back(std::move(expr));
-        }
-
-        if (!subparts.empty()) {
-            op.Properties["Query"] = JoinSeq(" ", subparts);
-        }
-
         TVector<TString> searchTerms;
         for(const auto& query: sourceSettings.Query().Cast<TExprList>()) {
-            if (query.Maybe<TCoDataCtor>()) {
-                auto literal = TString(query.Cast<TCoDataCtor>().Literal());
+            auto pattern = query;
+            std::optional<char> escape;
+            TString mode;
+            if (const auto patternQuery = NOpt::TryParseFulltextPatternQuery(query.Ptr())) {
+                pattern = TExprBase(patternQuery->Pattern);
+                escape = patternQuery->Escape;
+                mode = patternQuery->Mode;
+            }
+
+            TString expr = GetExprStr(pattern, true);
+            if (expr != "expr") {
+                if (escape) {
+                    expr += TStringBuilder() << " ESCAPE \"" << *escape << '"';
+                }
+                if (!mode.empty()) {
+                    expr = TStringBuilder() << mode << '(' << expr << ')';
+                }
+                subparts.emplace_back(std::move(expr));
+            }
+
+            if (pattern.Maybe<TCoDataCtor>()) {
+                auto literal = TString(pattern.Cast<TCoDataCtor>().Literal());
                 YQL_ENSURE(indexDesc);
                 YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
                     || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
@@ -884,13 +904,20 @@ private:
                 for(const auto& column: readColumns) {
                     for(const auto& analyzer: desc.settings().columns()) {
                         if (analyzer.column() == column) {
-                            for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
+                            const auto terms = mode.empty()
+                                ? NFulltext::BuildSearchTerms(literal, analyzer.analyzers())
+                                : NFulltext::BuildStringMatchTerms(literal, mode, escape, analyzer.analyzers());
+                            for(const auto& term: terms) {
                                 searchTerms.push_back(term);
                             }
                         }
                     }
                 }
             }
+        }
+
+        if (!subparts.empty()) {
+            op.Properties["Query"] = JoinSeq(" ", subparts);
         }
 
         if (!searchTerms.empty())
@@ -2382,6 +2409,9 @@ private:
             op.Properties["ReadLimit"] = limit;
         }
         readInfo.SetSorting(settings.GetSorting());
+        if (settings.RequireSortedRead) {
+            op.Properties["RequireSortedRead"] = true;
+        }
         if (settings.GetSorting() == ERequestSorting::DESC) {
             op.Properties["Reverse"] = true;
         } else if (settings.GetSorting() == ERequestSorting::ASC) {

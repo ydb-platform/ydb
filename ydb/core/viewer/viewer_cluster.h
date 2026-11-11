@@ -7,7 +7,9 @@
 #include "viewer_tabletinfo.h"
 #include <ydb/core/util/proto_duration.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/api/protos/ydb_bridge_common.pb.h>
+#include <library/cpp/protobuf/json/json2proto.h>
 
 namespace NKikimr::NViewer {
 
@@ -31,6 +33,19 @@ class TJsonCluster : public TViewerPipeClient {
     std::optional<TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStatsResponse;
 
     int WhiteboardStateRequestsInFlight = 0;
+    bool WhiteboardRequestsSent = false;
+    bool NodePileMapKnown = false;
+    bool LocalPileNodeStats = false;
+    bool PileRequestsStarted = false;
+    TInstant Deadline;
+    TActorId HttpProxy;
+    struct TPileRequest {
+        std::vector<TString> Endpoints;
+        size_t NextEndpoint = 0;
+        NHttp::THttpOutgoingRequestPtr ActiveRequest;
+        std::optional<NKikimrViewer::TBridgePileInfo> Result;
+    };
+    std::unordered_map<ui32, TPileRequest> PileRequests;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvSystemStateResponse>> SystemStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvTabletStateResponse>> TabletStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> SystemViewerResponse;
@@ -50,6 +65,10 @@ class TJsonCluster : public TViewerPipeClient {
         bool Static = false;
         bool Connected = false;
         bool Disconnected = false;
+
+        bool IsAlive() const {
+            return !Disconnected && SystemState.HasSystemState();
+        }
 
         int GetCandidateScore() const {
             int score = 0;
@@ -113,7 +132,10 @@ public:
     }
 
     void Bootstrap() override {
-        Tablets = FromStringWithDefault<bool>(Params.Get("tablets"), false);
+        LocalPileNodeStats = FromStringWithDefault<bool>(Params.Get("local_pile_node_stats"), false);
+        Deadline = TActivationContext::Now() + Timeout;
+        // The reduced response consists of the serving pile node statistics only.
+        Tablets = !LocalPileNodeStats && FromStringWithDefault<bool>(Params.Get("tablets"), false);
         OffloadMerge = FromStringWithDefault<bool>(Params.Get("offload_merge"), OffloadMerge);
         OffloadMergeAttempts = FromStringWithDefault<bool>(Params.Get("offload_merge_attempts"), OffloadMergeAttempts);
         UseHealthCheck = FromStringWithDefault<bool>(Params.Get("use_health_check"), UseHealthCheck);
@@ -125,9 +147,18 @@ public:
         if (AppData()->BridgeModeEnabled) {
             NodeWardenStorageConfigResponse = MakeRequest<TEvNodeWardenStorageConfig>(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ false));
-            StoragePoolsResponse = MakeCachedRequestBSControllerPools();
         }
         NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
+        if (LocalPileNodeStats) {
+            // This request is served inside the target pile. It neither calls other
+            // piles over HTTPS nor waits for cluster tablets outside this pile.
+            OffloadMerge = false;
+            Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
+            return;
+        }
+        if (AppData()->BridgeModeEnabled) {
+            StoragePoolsResponse = MakeCachedRequestBSControllerPools();
+        }
         PDisksResponse = MakeCachedRequestBSControllerPDisks();
         VSlotsResponse = MakeCachedRequestBSControllerVSlots();
         GroupsResponse = MakeCachedRequestBSControllerGroups();
@@ -209,12 +240,42 @@ private:
         }
     }
 
+    const TBridgeInfo* GetBridgeInfo() const {
+        return NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsOk()
+            ? NodeWardenStorageConfigResponse->Get()->BridgeInfo.get()
+            : nullptr;
+    }
+
+    static bool CanQueryPile(const TBridgeInfo& bridgeInfo, const TBridgeInfo::TPile& pile) {
+        if (!bridgeInfo.SelfNodePile) {
+            return false;
+        }
+        if (pile.BridgePileId == bridgeInfo.SelfNodePile->BridgePileId) {
+            return NBridge::PileStateTraits(pile.State).AllowsConnectionWithinPile;
+        }
+        return NBridge::PileStateTraits(bridgeInfo.SelfNodePile->State).AllowsConnection
+            && NBridge::PileStateTraits(pile.State).AllowsConnection;
+    }
+
+    bool CanQueryNode(const TNode& node) const {
+        const auto* bridgeInfo = GetBridgeInfo();
+        if (LocalPileNodeStats && (!bridgeInfo || !bridgeInfo->SelfNodePile || !node.PileNum
+                || *node.PileNum != bridgeInfo->SelfNodePile->BridgePileId.GetPileIndex())) {
+            return false;
+        }
+        return !bridgeInfo || !node.PileNum
+            || (*node.PileNum < bridgeInfo->Piles.size() && CanQueryPile(*bridgeInfo, bridgeInfo->Piles[*node.PileNum]));
+    }
+
     std::vector<TNodeBatch> BatchNodes() {
         std::vector<TNodeBatch> batches;
         if (OffloadMerge) {
             std::unordered_map<TSubDomainKey, TNodeBatch> batchSubDomain;
             std::unordered_map<TString, TNodeBatch> batchDataCenters;
             for (TNode& node : NodeData) {
+                if (!CanQueryNode(node)) {
+                    continue;
+                }
                 if (node.Static) {
                     batchDataCenters[node.DataCenter].NodesToAskAbout.push_back(&node);
                 } else {
@@ -235,6 +296,9 @@ private:
         } else {
             TNodeBatch nodeBatch;
             for (TNode& node : NodeData) {
+                if (!CanQueryNode(node)) {
+                    continue;
+                }
                 nodeBatch.NodesToAskAbout.push_back(&node);
             }
             SplitBatch(nodeBatch, batches);
@@ -249,6 +313,16 @@ private:
 
         if (NodeStateResponse && !NodeStateResponse->IsDone()) {
             return false;
+        }
+
+        if (NodeWardenStorageConfigResponse && !NodeWardenStorageConfigResponse->IsDone()) {
+            return false;
+        }
+
+        if (const auto* bridgeInfo = GetBridgeInfo(); bridgeInfo && bridgeInfo->SelfNodePile
+                && !NBridge::PileStateTraits(bridgeInfo->SelfNodePile->State).AllowsConnection) {
+            // Local whiteboard collection must not wait for tablets in other piles.
+            return true;
         }
 
         if (ListTenantsResponse && !ListTenantsResponse->IsDone()) {
@@ -319,6 +393,191 @@ private:
         }
     }
 
+    void SendPileRequest(TPileRequest& request) {
+        const auto now = TActivationContext::Now();
+        if (request.NextEndpoint == request.Endpoints.size() || now >= Deadline) {
+            AddProblem("no-pile-node-info");
+            return;
+        }
+        const auto timeout = (Deadline - now) / (request.Endpoints.size() - request.NextEndpoint);
+        if (timeout.MilliSeconds() < 2) {
+            AddProblem("no-pile-node-info");
+            return;
+        }
+        request.ActiveRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(TStringBuilder()
+            << request.Endpoints[request.NextEndpoint++] << "/viewer/json/cluster?local_pile_node_stats=true"
+            << "&timeout=" << timeout.MilliSeconds() * 3 / 4);
+        auto authorization = GetRequest().GetHeader("Authorization");
+        if (authorization.empty()) {
+            const auto cookie = GetRequest().GetHeader("Cookie");
+            const NHttp::TCookies cookies(cookie);
+            if (const auto session = cookies["ydb_session_id"]; !session.empty()) {
+                authorization = TStringBuilder() << "Login " << session;
+            }
+        }
+        if (!authorization.empty()) {
+            request.ActiveRequest->Set("Authorization", authorization);
+        }
+        request.ActiveRequest->Finish();
+        if (!HttpProxy) {
+            HttpProxy = Register(NHttp::CreateHttpProxy());
+        }
+        SendRequest(HttpProxy, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request.ActiveRequest, timeout));
+    }
+
+    // Endpoints of other piles are built from the monitoring port of this process, which is
+    // common for static nodes only. A dynamic node forwards the request to a static node of its own pile.
+    bool ForwardToStaticNode(const TBridgeInfo& bridgeInfo) {
+        if (!CanQueryPile(bridgeInfo, *bridgeInfo.SelfNodePile)) {
+            return false;
+        }
+        std::vector<ui32> nodes;
+        for (const auto& node : NodeData) {
+            if (node.Static && node.Connected && node.PileNum == bridgeInfo.SelfNodePile->BridgePileId.GetPileIndex()) {
+                nodes.push_back(node.NodeId);
+            }
+        }
+        if (nodes.empty()) {
+            return false;
+        }
+        std::sort(nodes.begin(), nodes.end());
+        const ui32 nodeId = nodes[std::hash<TString>()(GetRequest().GetRemoteAddr()) % nodes.size()];
+        const TString location = TStringBuilder() << "/node/" << nodeId << GetRequest().GetUri();
+        // Allow this redirect after a /node/ proxy hop. StartPileRequests only redirects
+        // non-static nodes, so the static target will not redirect again.
+        TBase::ReplyAndPassAway(Viewer->GetHTTPFORWARD(GetRequest(), location, {}));
+        return true;
+    }
+
+    // Returns false when the request has been forwarded to another node.
+    bool StartPileRequests() {
+        if (PileRequestsStarted || LocalPileNodeStats || !NodePileMapKnown || NodeStateResponse) {
+            return true;
+        }
+        const auto* bridgeInfo = GetBridgeInfo();
+        if (!bridgeInfo || !bridgeInfo->SelfNodePile) {
+            return true;
+        }
+        PileRequestsStarted = true;
+        std::vector<const TBridgeInfo::TPile*> piles;
+        for (const auto& pile : bridgeInfo->Piles) {
+            if (pile.IsFreeSlot || &pile == bridgeInfo->SelfNodePile || CanQueryPile(*bridgeInfo, pile)
+                    || !NBridge::PileStateTraits(pile.State).AllowsConnectionWithinPile) {
+                continue;
+            }
+            piles.push_back(&pile);
+        }
+        if (piles.empty()) {
+            return true;
+        }
+        const auto itSelf = NodeCache.find(SelfId().NodeId());
+        if (itSelf == NodeCache.end() || !itSelf->second) {
+            AddProblem("no-pile-node-info");
+            return true;
+        }
+        if (!itSelf->second->Static) {
+            if (ForwardToStaticNode(*bridgeInfo)) {
+                return false;
+            }
+            AddProblem("no-pile-node-info");
+            return true;
+        }
+        const auto& config = Viewer->GetKikimrRunConfig().AppConfig.GetMonitoringConfig();
+        std::vector<const TNode*> staticNodes;
+        for (const auto& node : NodeData) {
+            if (node.Static) {
+                staticNodes.push_back(&node);
+            }
+        }
+        // Make the choice of the probed nodes reproducible.
+        std::sort(staticNodes.begin(), staticNodes.end(), [](const TNode* a, const TNode* b) {
+            return a->NodeId < b->NodeId;
+        });
+        for (const auto* pile : piles) {
+            auto& request = PileRequests[pile->BridgePileId.GetPileIndex()];
+            if (config.GetMonitoringPort()) {
+                for (const auto* node : staticNodes) {
+                    if (node->PileNum != pile->BridgePileId.GetPileIndex()) {
+                        continue;
+                    }
+                    TString host = node->NodeInfo.Host ? node->NodeInfo.Host : node->NodeInfo.ResolveHost;
+                    if (host.empty()) {
+                        continue;
+                    }
+                    if (host.Contains(':') && !host.StartsWith('[')) {
+                        host = TStringBuilder() << '[' << host << ']';
+                    }
+                    TString endpoint = TStringBuilder() << "https://" << host << ':' << config.GetMonitoringPort();
+                    if (std::find(request.Endpoints.begin(), request.Endpoints.end(), endpoint) == request.Endpoints.end()) {
+                        request.Endpoints.push_back(std::move(endpoint));
+                        // Bound the number of attempts within the common HTTP deadline.
+                        if (request.Endpoints.size() == 3) {
+                            break;
+                        }
+                    }
+                }
+            }
+            SendPileRequest(request);
+        }
+        return true;
+    }
+
+    bool ReadPileResponse(ui32 pileIndex, const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response,
+            NKikimrViewer::TBridgePileInfo& result) {
+        if (response.Error || !response.Response || response.Response->Status != "200") {
+            return false;
+        }
+        NJson::TJsonValue json;
+        if (!NJson::ReadJsonTree(response.Response->Body, &json)) {
+            return false;
+        }
+        const auto& piles = json["BridgeInfo"]["Piles"];
+        // A server ignoring local_pile_node_stats (e.g. an older version) must not
+        // contribute counters for a different or unreachable pile.
+        if (!piles.IsArray() || piles.GetArray().size() != 1) {
+            return false;
+        }
+        try {
+            NProtobufJson::Json2Proto(piles[0], result, NProtobufJson::TJson2ProtoConfig()
+                .SetAllowUnknownFields(true)
+                .SetMapAsObject(true));
+        } catch (const yexception&) {
+            return false;
+        }
+        const auto& pile = GetBridgeInfo()->Piles[pileIndex];
+        return result.HasPileId() && TBridgePileId::FromProto(&result, &NKikimrViewer::TBridgePileInfo::GetPileId) == pile.BridgePileId
+            && result.GetName() == pile.Name
+            && result.HasNodes() && result.HasStorageNodes() && result.HasComputeNodes()
+            && result.HasAliveStorageNodes() && result.HasAliveComputeNodes()
+            && ui64(result.GetStorageNodes()) + result.GetComputeNodes() == result.GetNodes()
+            && result.GetAliveStorageNodes() <= result.GetStorageNodes()
+            && result.GetAliveComputeNodes() <= result.GetComputeNodes();
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
+        for (auto& [pileIndex, request] : PileRequests) {
+            if (request.ActiveRequest && request.ActiveRequest == ev->Get()->Request) {
+                request.ActiveRequest.Reset();
+                NKikimrViewer::TBridgePileInfo result;
+                if (ReadPileResponse(pileIndex, *ev->Get(), result)) {
+                    request.Result = std::move(result);
+                } else {
+                    SendPileRequest(request);
+                }
+                RequestDone();
+                return;
+            }
+        }
+    }
+
+    void PassAway() override {
+        if (HttpProxy) {
+            Send(HttpProxy, new TEvents::TEvPoisonPill());
+            HttpProxy = {};
+        }
+        TBase::PassAway();
+    }
+
     void ProcessResponses() {
         if (NodesInfoResponse && NodesInfoResponse->IsDone()) {
             if (NodesInfoResponse->IsOk()) {
@@ -344,6 +603,10 @@ private:
                             itNode->second->PileNum = pileNum;
                         }
                     }
+                    // Nodes missing from the pile map are not attributed to any pile.
+                    NodePileMapKnown = std::any_of(NodeData.begin(), NodeData.end(), [](const TNode& node) {
+                        return node.PileNum.has_value();
+                    });
                 }
                 ClusterInfo.SetNodesTotal(NodesInfoResponse->Get()->Nodes.size());
                 ClusterInfo.SetHosts(hosts.size());
@@ -361,7 +624,9 @@ private:
             if (NodeStateResponse->IsOk()) {
                 for (const auto& nodeStateInfo : NodeStateResponse->Get()->Record.GetNodeStateInfo()) {
                     if (nodeStateInfo.GetConnected()) {
-                        TNodeId nodeId = FromStringWithDefault(TStringBuf(nodeStateInfo.GetPeerName()).Before(':'), 0);
+                        TNodeId nodeId = nodeStateInfo.GetPeerNodeId()
+                            ? nodeStateInfo.GetPeerNodeId()
+                            : FromStringWithDefault(TStringBuf(nodeStateInfo.GetPeerName()).Before(':'), 0);
                         if (nodeId) {
                             TNode* node = NodeCache[nodeId];
                             if (node) {
@@ -374,6 +639,10 @@ private:
                 AddProblem("no-node-state-info");
             }
             NodeStateResponse.reset();
+        }
+
+        if (!StartPileRequests()) {
+            return;
         }
 
         if (HiveNodeStatsResponse && HiveNodeStatsResponse->IsDone()) {
@@ -402,9 +671,13 @@ private:
             ListTenantsResponse.reset();
         }
 
-        if (TimeToAskWhiteboard()) {
+        if (!WhiteboardRequestsSent && TimeToAskWhiteboard()) {
+            WhiteboardRequestsSent = true;
             std::vector<TNodeBatch> batches = BatchNodes();
             SendWhiteboardRequests(batches);
+            if (WhiteboardStateRequestsInFlight == 0) {
+                ProcessWhiteboard();
+            }
         }
     }
 
@@ -569,7 +842,7 @@ private:
             if (stats.Limit > 0 && stats.Total > 0) {
                 stats.Limit = std::min(stats.Limit, stats.Total);
             }
-            if (!node.Disconnected && node.SystemState.HasSystemState()) {
+            if (node.IsAlive()) {
                 ClusterInfo.SetNodesAlive(ClusterInfo.GetNodesAlive() + 1);
             }
             (*ClusterInfo.MutableMapNodeStates())[NKikimrWhiteboard::EFlag_Name(node.SystemState.GetSystemState())]++;
@@ -951,6 +1224,11 @@ private:
     }
 
     void HandleTimeout() {
+        if (WhiteboardRequestsSent && WhiteboardStateRequestsInFlight > 0) {
+            // Use the responses received so far: nodes that have not answered are counted as not alive.
+            WhiteboardStateRequestsInFlight = 0;
+            ProcessWhiteboard();
+        }
         ReplyAndPassAway();
     }
 
@@ -962,6 +1240,7 @@ private:
             hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
             hFunc(TEvViewer::TEvViewerResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStorageStatsResponse, Handle);
@@ -1013,7 +1292,96 @@ private:
         }
     }
 
+    void FillBridgeInfo(const std::unordered_map<ui32, std::unordered_map<TString, ui32>>& pileToGroupStatus) {
+        if (!NodeWardenStorageConfigResponse || !NodeWardenStorageConfigResponse->IsDone()) {
+            return;
+        }
+        if (!NodeWardenStorageConfigResponse->IsOk()) {
+            AddProblem("no-node-warden-storage-config");
+            return;
+        }
+        if (!NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
+            AddProblem("empty-node-warden-bridge-info");
+            return;
+        }
+        const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
+        auto& pbBridgeInfo = *ClusterInfo.MutableBridgeInfo();
+        struct TPileNodes {
+            ui32 Storage = 0;
+            ui32 Compute = 0;
+            ui32 AliveStorage = 0;
+            ui32 AliveCompute = 0;
+        };
+        std::unordered_map<ui32, TPileNodes> pileNodes;
+        for (const auto& node : NodeData) {
+            if (node.PileNum) {
+                auto& nodes = pileNodes[*node.PileNum];
+                if (node.Static) {
+                    ++nodes.Storage;
+                    nodes.AliveStorage += node.IsAlive();
+                } else {
+                    ++nodes.Compute;
+                    nodes.AliveCompute += node.IsAlive();
+                }
+            }
+        }
+        for (const auto& pile : srcBridgeInfo.Piles) {
+            if (pile.IsFreeSlot || (LocalPileNodeStats && &pile != srcBridgeInfo.SelfNodePile)) {
+                continue;
+            }
+            auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
+            pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
+            pbBridgePileInfo.SetName(pile.Name);
+            pbBridgePileInfo.SetState(GetPileStateFromPile(pile));
+            if (const auto it = pileToGroupStatus.find(pbBridgePileInfo.GetPileId()); it != pileToGroupStatus.end()) {
+                for (const auto& [status, count] : it->second) {
+                    (*pbBridgePileInfo.MutableGroupStatuses())[status] = count;
+                }
+            }
+            if (!NodePileMapKnown) {
+                continue;
+            }
+            auto nodes = pileNodes[pile.BridgePileId.GetPileIndex()];
+            // A node that has not answered by the deadline is counted as not alive.
+            // A DISCONNECTED pile can still be queried from within that same pile.
+            bool aliveKnown = WhiteboardRequestsSent && CanQueryPile(srcBridgeInfo, pile);
+            if (auto it = PileRequests.find(pile.BridgePileId.GetPileIndex()); it != PileRequests.end() && it->second.Result) {
+                const auto& remote = *it->second.Result;
+                ClusterInfo.SetNodesTotal(ClusterInfo.GetNodesTotal() - (nodes.Storage + nodes.Compute) + remote.GetNodes());
+                ClusterInfo.SetNodesAlive(ClusterInfo.GetNodesAlive() + remote.GetAliveStorageNodes() + remote.GetAliveComputeNodes());
+                nodes.Storage = remote.GetStorageNodes();
+                nodes.Compute = remote.GetComputeNodes();
+                nodes.AliveStorage = remote.GetAliveStorageNodes();
+                nodes.AliveCompute = remote.GetAliveComputeNodes();
+                aliveKnown = true;
+            }
+            pbBridgePileInfo.SetNodes(nodes.Storage + nodes.Compute);
+            pbBridgePileInfo.SetStorageNodes(nodes.Storage);
+            pbBridgePileInfo.SetComputeNodes(nodes.Compute);
+            if (aliveKnown) {
+                pbBridgePileInfo.SetAliveStorageNodes(nodes.AliveStorage);
+                pbBridgePileInfo.SetAliveComputeNodes(nodes.AliveCompute);
+            }
+        }
+    }
+
+    void ReplyWithLocalPileNodeStats() {
+        FillBridgeInfo({});
+        NKikimrViewer::TClusterInfo result;
+        if (ClusterInfo.HasBridgeInfo()) {
+            *result.MutableBridgeInfo() = std::move(*ClusterInfo.MutableBridgeInfo());
+        }
+        result.SetVersion(Viewer->GetCapabilityVersion("/viewer/cluster"));
+        for (const auto& problem : Problems) {
+            result.AddProblems(problem);
+        }
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(result));
+    }
+
     void ReplyAndPassAway() override {
+        if (LocalPileNodeStats) {
+            return ReplyWithLocalPileNodeStats();
+        }
         if (StorageStatsResponse && StorageStatsResponse->IsOk()) {
             for (NKikimrSysView::TStorageStatsEntry& entry : *StorageStatsResponse->Get()->Record.MutableEntries()) {
                 if (entry.GetPDiskFilter().empty() || !TStringBuf(entry.GetPDiskFilter()).StartsWith("Type:")) {
@@ -1101,53 +1469,22 @@ private:
             AddProblem("no-group-info");
         }
 
-        if (NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsDone()) {
-            if (NodeWardenStorageConfigResponse->IsOk()) {
-                if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
-                    const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
-                    auto& pbBridgeInfo = *ClusterInfo.MutableBridgeInfo();
-                    std::unordered_map<ui32, ui32> pileNodes;
-                    for (const auto& pile : srcBridgeInfo.Piles) {
-                        if (pile.IsFreeSlot) {
-                            continue;
-                        }
-                        auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
-                        pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
-                        pbBridgePileInfo.SetName(pile.Name);
-                        pbBridgePileInfo.SetState(GetPileStateFromPile(pile));
-                        for (const auto& [status, count] : pileToGroupStatus[pbBridgePileInfo.GetPileId()]) {
-                            (*pbBridgePileInfo.MutableGroupStatuses())[status] = count;
-                        }
-                        if (auto it = pileSync.find(pbBridgePileInfo.GetPileId());
-                                it != pileSync.end() && it->second.Unsynced) {
-                            it->second.Finish();
-                            *pbBridgePileInfo.MutableSync() = std::move(it->second.Info);
-                            for (auto& [key, pool] : pilePoolSync[pbBridgePileInfo.GetPileId()]) {
-                                if (pool.Unsynced) {
-                                    pool.Finish();
-                                    auto *pbPool = pbBridgePileInfo.AddStoragePools();
-                                    pbPool->SetName(GetStoragePoolName(key));
-                                    *pbPool->MutableSync() = std::move(pool.Info);
-                                }
-                            }
+        FillBridgeInfo(pileToGroupStatus);
+        if (ClusterInfo.HasBridgeInfo()) {
+            for (auto& pbBridgePileInfo : *ClusterInfo.MutableBridgeInfo()->MutablePiles()) {
+                if (auto it = pileSync.find(pbBridgePileInfo.GetPileId());
+                        it != pileSync.end() && it->second.Unsynced) {
+                    it->second.Finish();
+                    *pbBridgePileInfo.MutableSync() = std::move(it->second.Info);
+                    for (auto& [key, pool] : pilePoolSync[pbBridgePileInfo.GetPileId()]) {
+                        if (pool.Unsynced) {
+                            pool.Finish();
+                            auto *pbPool = pbBridgePileInfo.AddStoragePools();
+                            pbPool->SetName(GetStoragePoolName(key));
+                            *pbPool->MutableSync() = std::move(pool.Info);
                         }
                     }
-                    for (const auto& node : NodeData) {
-                        if (node.PileNum) {
-                            pileNodes[*node.PileNum]++;
-                        }
-                    }
-                    for (auto& pile : *pbBridgeInfo.MutablePiles()) {
-                        const auto pileId = TBridgePileId::FromProto(&pile, &std::decay_t<decltype(pile)>::GetPileId);
-                        if (const auto it = pileNodes.find(pileId.GetPileIndex()); it != pileNodes.end()) {
-                            pile.SetNodes(it->second);
-                        }
-                    }
-                } else {
-                    AddProblem("empty-node-warden-bridge-info");
                 }
-            } else {
-                AddProblem("no-node-warden-storage-config");
             }
         }
 
@@ -1235,6 +1572,12 @@ public:
             .Tag = "viewer",
             .Summary = "Cluster information",
             .Description = "Returns information about cluster"
+        });
+        yaml.AddParameter({
+            .Name = "local_pile_node_stats",
+            .Description = "internal: return only node statistics of the serving bridge pile (BridgeInfo with a single pile); "
+                "other cluster information is not collected and tablets parameter is ignored",
+            .Type = "boolean",
         });
         yaml.AddParameter({
             .Name = "enums",

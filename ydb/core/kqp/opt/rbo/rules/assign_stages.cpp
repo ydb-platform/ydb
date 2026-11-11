@@ -44,19 +44,6 @@ void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
         && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly");
 }
 
-// For row storage read we create a separate stage.
-// TODO: We can also push to row storage stage, but it requires an implementation on physical plan generation.
-void ProcessSource(IOperator* op, TOpRead* read, TPlanProps& props) {
-    const auto readStageId = *read->Props.StageId;
-    if (read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
-        const auto& newStage = props.StageGraph.AddStage();
-        op->Props.StageId = newStage.Id();
-        props.BindStageInput(*op, 0, props.StageGraph.Connect(props.GetStage(*read), newStage, MakeIntrusive<TUnionAllConnection>(props.StageGraph.AllocateOutput(props.GetStage(*read)))));
-    } else {
-        op->Props.StageId = readStageId;
-    }
-}
-
 // A shared Read feeds a consumer stage through a UnionAll connection, any other
 // shared producer through a Map one.
 TIntrusivePtr<TConnection> MakePortConnection(const IOperator& port, ui32 outputIndex) {
@@ -187,13 +174,12 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         auto childOp = CastOperator<IUnaryOperator>(input)->GetInput().Get();
         const auto prevStageId = *(childOp->Props.StageId);
 
-        if (childOp->GetKind() == EOperator::Source) {
-            ProcessSource(input, CastOperator<TOpRead>(childOp), props);
-        } else if (childOp->Kind == EOperator::Replicate) {
+        if (childOp->Kind == EOperator::Replicate) {
             auto& newStage = props.StageGraph.AddStage();
             input->Props.StageId = newStage.Id();
             props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*childOp), newStage, MakePortConnection(*childOp, OutputIndex(*childOp, props.StageGraph))));
         } else {
+            // As in the old optimizer, a filter or a map runs in the stage of its input, the stage of a read included.
             input->Props.StageId = prevStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages map/filter";

@@ -19,6 +19,7 @@ struct TPipeFactoryOptions {
     bool EnablePorto = false;
     bool EnablePortoAnonLimitRaiseBeforeDestroy = true;
     TString PortoLayer;
+    bool UseJobRoot = false;
     int MaxProcesses = 1;
     TString ContainerName;
     TString PortoCtlPath = "/usr/bin/porto";

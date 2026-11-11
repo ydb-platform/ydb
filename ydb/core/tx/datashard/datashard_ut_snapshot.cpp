@@ -199,6 +199,14 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto table2head = DoReadColumns(server, "/Root/table-2");
         UNIT_ASSERT_VALUES_EQUAL(table2head, "key = 10, value = 11\nkey = 20, value = 22\nkey = 30, value = 33\nkey = 40, value = 44\n");
 
+        // The snapshot reference is released in its own tx after the scan finishes
+        const ui64 shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
+        auto released = [&] { return GetTabletTxCompleted(runtime, shard1, "DataShard/TxReleaseSnaphotReference"); };
+        for (int i = 0; i < 10 && !released(); ++i) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT_GT_C(released(), 0, "TxReleaseSnaphotReference not counted after 100 ms");
+
         // Split/merge would fail otherwise :(
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
 

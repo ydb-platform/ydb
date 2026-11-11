@@ -7,11 +7,11 @@ SELECT
     s_store_name,
     Sum(ss_net_profit)
 FROM
-    `/Root/test/ds/store_sales` as store_sales
+    `store_sales` as store_sales
 ,
-    `/Root/test/ds/date_dim` as date_dim
+    `date_dim` as date_dim
 ,
-    `/Root/test/ds/store` as store
+    `store` as store
 , (
     SELECT
         ca_zip as ca_zip
@@ -19,7 +19,7 @@ FROM
         SELECT
             Substring(CAST(ca_zip AS String), 1, 5) AS ca_zip
         FROM
-            `/Root/test/ds/customer_address` as customer_address
+            `customer_address` as customer_address
         WHERE
             Substring(CAST(ca_zip AS String), 1, 5) IN (
                 '89436', '30868', '65085', '22977', '83927', '77557',
@@ -111,9 +111,9 @@ FROM
                 Substring(CAST(ca_zip AS String), 1, 5) AS ca_zip,
                 Count(*) AS cnt
             FROM
-                `/Root/test/ds/customer_address` as customer_address
+                `customer_address` as customer_address
             ,
-                `/Root/test/ds/customer` as customer
+                `customer` as customer
             WHERE
                 ca_address_sk == c_current_addr_sk
                 AND c_preferred_cust_flag == 'Y'

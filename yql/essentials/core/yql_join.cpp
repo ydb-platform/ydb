@@ -2163,8 +2163,21 @@ bool IsEquality(TExprNode::TPtr predicate, TExprNode::TPtr& left, TExprNode::TPt
     return false;
 }
 
-bool IsMemberEquality(const TExprNode::TPtr& predicate, const TExprNode& row, TExprNode::TPtr& leftMember, TExprNode::TPtr& rightMember) {
-    if (!IsEquality(predicate, leftMember, rightMember)) {
+bool IsAggrEqualsJoinKeysEnabled(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "AggrEqualsJoinKeys";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+bool IsMemberEquality(const TExprNode::TPtr& predicate, const TExprNode& row, TExprNode::TPtr& leftMember, TExprNode::TPtr& rightMember,
+                      bool allowAggrEquals) {
+    if (allowAggrEquals && predicate->IsCallable("AggrEquals")) {
+        leftMember = predicate->ChildPtr(0);
+        rightMember = predicate->ChildPtr(1);
+        // Generic joins discard keys containing NULLs, which AggrEquals can match.
+        if (leftMember->GetTypeAnn()->HasOptionalOrNull() && rightMember->GetTypeAnn()->HasOptionalOrNull()) {
+            return false;
+        }
+    } else if (!IsEquality(predicate, leftMember, rightMember)) {
         return false;
     }
 

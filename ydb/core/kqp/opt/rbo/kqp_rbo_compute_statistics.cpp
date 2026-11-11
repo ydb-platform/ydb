@@ -439,6 +439,7 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata = TRBOMetadata();
 
     Props.Metadata->Type = inputMetadata.Type;
+    Props.Metadata->LogicalCard = inputMetadata.LogicalCard;
     Props.Metadata->StorageType = inputMetadata.StorageType;
     Props.Metadata->ColumnsCount = GetOutputIUs().Size();
     // A Map only appends: the input rows, their keys and distribution survive.
@@ -599,7 +600,7 @@ void TOpGroupingSets::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
 /**
  * Compute cost and statistics for aggregate
- * TODO: Need real cardinality and cost here
+ * TODO: Estimate grouped cardinality and aggregation cost.
  */
 void TOpAggregate::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
@@ -611,11 +612,30 @@ void TOpAggregate::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Statistics = GetInput()->Props.Statistics;
     Props.Cost = GetInput()->Props.Cost;
 
-    const auto inputColumnsCount = GetInput()->Props.Metadata->ColumnsCount;
-    if (Props.Metadata->ColumnsCount != inputColumnsCount) {
-        double inputDataSize = Props.Statistics->EBytes;
-        Props.Statistics->EBytes = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
+    switch (Props.Metadata->LogicalCard) {
+        case ELogicalCardinality::Zero:
+            Props.Statistics->ERows = 0;
+            break;
+        case ELogicalCardinality::ZeroOrOne:
+            Props.Statistics->ERows = Min(Props.Statistics->ERows, 1.0);
+            break;
+        case ELogicalCardinality::One:
+            Props.Statistics->ERows = 1;
+            break;
+        default:
+            break;
     }
+
+    const auto& inputStats = *GetInput()->Props.Statistics;
+    const auto inputColumnsCount = GetInput()->Props.Metadata->ColumnsCount;
+    // Estimate output width from the input, as before. Empty or zero-column
+    // inputs have no usable average width, but a global aggregate still emits
+    // a row; use the same eight-byte-per-column fallback as Map.
+    double outputRowSize = Props.Metadata->ColumnsCount * 8.0;
+    if (inputStats.ERows > 0 && inputColumnsCount > 0) {
+        outputRowSize = inputStats.EBytes / inputStats.ERows * Props.Metadata->ColumnsCount / inputColumnsCount;
+    }
+    Props.Statistics->EBytes = outputRowSize * Props.Statistics->ERows;
 }
 
 /**

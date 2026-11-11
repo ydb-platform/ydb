@@ -13,11 +13,11 @@ $year_total = (
         Max(ss_net_paid) AS year_total,
         's' AS sale_type
     FROM
-        `/Root/test/ds/customer`
+        `customer`
     ,
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         c_customer_sk == ss_customer_sk
         AND ss_sold_date_sk == d_date_sk
@@ -36,11 +36,11 @@ $year_total = (
         Max(ws_net_paid) year_total,
         'w' sale_type
     FROM
-        `/Root/test/ds/customer`
+        `customer`
     ,
-        `/Root/test/ds/web_sales`
+        `web_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         c_customer_sk == ws_bill_customer_sk
         AND ws_sold_date_sk == d_date_sk

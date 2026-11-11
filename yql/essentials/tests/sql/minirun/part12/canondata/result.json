@@ -1108,6 +1108,20 @@
             "uri": "https://{canondata_backend}/1871002/823b4e2e15a7a8ffed8970857e4108936aa90584/resource.tar.gz#test.test_select-extend_and_take--Results_/results.txt"
         }
     ],
+    "test.test[select_yql-aggregate_percentile--Debug]": [
+        {
+            "checksum": "4aa8a5ebf6cde260f6652454b03a9eeb",
+            "size": 11109,
+            "uri": "https://{canondata_backend}/1031349/3bbc2ee388c07ecb7ee2bb50153b6076f18fbcd7/resource.tar.gz#test.test_select_yql-aggregate_percentile--Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-aggregate_percentile--Results]": [
+        {
+            "checksum": "8679eea095779cd30025d200a86861c0",
+            "size": 16187,
+            "uri": "https://{canondata_backend}/1031349/3bbc2ee388c07ecb7ee2bb50153b6076f18fbcd7/resource.tar.gz#test.test_select_yql-aggregate_percentile--Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-alias-default.txt-Debug]": [
         {
             "checksum": "e065a652f01070160786d198dc259aa8",

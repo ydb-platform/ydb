@@ -618,8 +618,7 @@ class TTcMallocMonitor : public IAllocMonitor {
         static constexpr size_t MaxPageCacheReleaseRate = 1ll << 30;
 
         static constexpr size_t DefaultPageCacheTargetSize = 512ll << 20;
-        // A smaller request is served by the huge page cache alone and never reaches the page heap
-        static constexpr size_t DefaultPageCacheReleaseRate = 128ll << 20;
+        static constexpr size_t DefaultPageCacheReleaseRate = 8ll << 20;
 
         static constexpr ui64 DefaultUseDwarfBacktracePrinting = 0;
 

@@ -2703,6 +2703,9 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
         }
     }
 
+    ActivateChangeRecordsWaitingVisibility(ctx);
+    CheckSplitCanStart(ctx);
+
     PromoteFollowerReadEdge();
 
     EmitHeartbeats();
@@ -2724,8 +2727,9 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
-        // nothing
+    void Complete(const TActorContext& ctx) override {
+        Self->ActivateChangeRecordsWaitingVisibility(ctx);
+        Self->CheckSplitCanStart(ctx);
     }
 
 private:

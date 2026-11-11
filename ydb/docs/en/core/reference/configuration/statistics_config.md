@@ -6,11 +6,11 @@ The `statistics_config` section controls how column statistics are collected for
 
 | Parameter | Type | Default | Description |
 |:----------|:-----|:--------|:------------|
-| `enable_background_column_stats_collection` | bool | `false` | Background statistics collection is enabled |
-| `background_analyze_change_ratio_threshold_percent` | uint32 | `20` | Change threshold for early collection, as a percentage |
-| `analyze_collect_primary_key_histogram` | bool | `false` | Build a primary-key histogram |
-| `analyze_column_table_whole_table_scan_max_bytes` | uint64 | `10737418240` (10 GiB) | Maximum size for scanning a column table as a whole |
-| `analyze_row_table_whole_table_scan_max_bytes` | uint64 | `10737418240` (10 GiB) | Maximum size for scanning a row table as a whole |
+| [`enable_background_column_stats_collection`](#enable-background-column-stats-collection) | bool | `false` | Enable background statistics collection. Disabled by default. |
+| [`background_analyze_change_ratio_threshold_percent`](#background-analyze-change-ratio-threshold-percent) | uint32 | `20` | Change threshold for collection before the 24-hour interval expires, as a percentage |
+| [`analyze_collect_primary_key_histogram`](#analyze-collect-primary-key-histogram) | bool | `false` | Build a primary-key histogram |
+| [`analyze_column_table_whole_table_scan_max_bytes`](#analyze-column-table-whole-table-scan-max-bytes) | uint64 | `10737418240` (10 GiB) | Size threshold for reading a column table as a whole or shard by shard |
+| [`analyze_row_table_whole_table_scan_max_bytes`](#analyze-row-table-whole-table-scan-max-bytes) | uint64 | `10737418240` (10 GiB) | Size threshold for reading a row table as a whole or in primary-key ranges |
 
 ## Background collection {#enable-background-column-stats-collection}
 
@@ -22,7 +22,7 @@ Sampling (`ANALYZE SAMPLE` with a rate below `1`) does not change the schedule.
 
 ### Change threshold {#background-analyze-change-ratio-threshold-percent}
 
-`background_analyze_change_ratio_threshold_percent` sets the threshold for early collection. Row updates and deletes since the last full `ANALYZE` are compared with the current row count.
+`background_analyze_change_ratio_threshold_percent` allows statistics to be refreshed after data changes without waiting for the scheduled 24-hour interval. It applies when background collection is enabled and sets a threshold as a percentage of the current row count. Row updates and deletes since the last full `ANALYZE` are counted toward the threshold.
 
 For example, if the table currently has 1,000 rows, a 20% threshold corresponds to 200 updates or deletes. Repeated changes to the same row are counted separately.
 
@@ -34,17 +34,17 @@ To avoid listing the primary-key columns in `STATISTICS`, set `analyze_collect_p
 
 ## Reading tables
 
-Size thresholds are specified in bytes and apply only to a full `ANALYZE`.
+A full `ANALYZE` reads every row in the table. The thresholds below determine whether reading is split by shard or primary-key range. Thresholds are specified in bytes.
 
 ### Column tables {#analyze-column-table-whole-table-scan-max-bytes}
 
-If a column table's size does not exceed `analyze_column_table_whole_table_scan_max_bytes`, `ANALYZE` scans the whole table without splitting by shard. Larger tables and tables of unknown size are scanned shard by shard.
+`analyze_column_table_whole_table_scan_max_bytes` selects how a column table is read: as a whole or shard by shard. If the size is known and does not exceed the threshold, `ANALYZE` reads the whole table. Larger tables and tables of unknown size are scanned shard by shard.
 
 A value of `0` always uses shard-by-shard scanning.
 
 ### Row tables {#analyze-row-table-whole-table-scan-max-bytes}
 
-If a row table's size does not exceed `analyze_row_table_whole_table_scan_max_bytes`, `ANALYZE` scans the whole table without splitting into primary-key ranges. Larger tables and tables of unknown size are scanned in primary-key ranges.
+`analyze_row_table_whole_table_scan_max_bytes` selects how a row table is read: as a whole or by primary-key range. If the size is known and does not exceed the threshold, `ANALYZE` reads the whole table. Larger tables and tables of unknown size are scanned in primary-key ranges.
 
 A value of `0` enables scanning by primary-key range. If the key does not allow the table to be split into ranges, the whole table is read.
 

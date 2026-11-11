@@ -17,13 +17,19 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/openssl/crypto/sha.h>
+
+#include <util/digest/multi.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/set.h>
 #include <util/generic/map.h>
 #include <util/generic/size_literals.h>
 
+#include <util/string/hex.h>
+
 #include <tuple>
+#include <variant>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_SERVICE
 
@@ -563,14 +569,49 @@ private:
 
 }; // TSessionInfo
 
-struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
+struct TStaticCredentialsKey {
+    TString User;
+    TString PasswordFingerprint;
+
+    bool operator==(const TStaticCredentialsKey&) const = default;
+
+    size_t Hash() const {
+        return MultiHash(User, PasswordFingerprint);
+    }
+};
+
+struct TOAuthCredentialsKey {
+    TString TokenFingerprint;
+
+    bool operator==(const TOAuthCredentialsKey&) const = default;
+
+    size_t Hash() const {
+        return THash<TString>()(TokenFingerprint);
+    }
+};
+
+struct TIamCredentialsKey {
+    TString ServiceAccountId;
+    TString ResourceId;
+
+    bool operator==(const TIamCredentialsKey&) const = default;
+
+    size_t Hash() const {
+        return MultiHash(ServiceAccountId, ResourceId);
+    }
+};
+
+using TCredentialsKey = std::variant<TStaticCredentialsKey, TOAuthCredentialsKey, TIamCredentialsKey>;
+
+struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentialsKey> {
     explicit TConnectionParams(
             const TString& endpoint,
             const TString& database,
             bool ssl,
             const TString& caCert,
-            const TString& user)
-        : std::tuple<TString, TString, bool, TString, TString>(endpoint, database, ssl, caCert, user)
+            TCredentialsKey credentials)
+        : std::tuple<TString, TString, bool, TString, TCredentialsKey>(
+            endpoint, database, ssl, caCert, std::move(credentials))
     {
     }
 
@@ -590,6 +631,17 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
         return std::get<3>(*this);
     }
 
+    size_t Hash() const {
+        const auto& credentials = std::get<4>(*this);
+        return MultiHash(Endpoint(), Database(), EnableSsl(), CaCert(), credentials.index(),
+            std::visit([](const auto& key) { return key.Hash(); }, credentials));
+    }
+
+    static TString FingerprintCredential(const TString& credential) {
+        const auto digest = NOpenSsl::NSha256::Calc(credential.data(), credential.size());
+        return HexEncode(digest.data(), digest.size());
+    }
+
     static TConnectionParams FromProto(const NKikimrReplication::TConnectionParams& params) {
         const auto& endpoint = params.GetEndpoint();
         const auto& database = params.GetDatabase();
@@ -598,11 +650,14 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
 
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            return TConnectionParams(endpoint, database, ssl, caCert, params.GetStaticCredentials().GetUser());
+            return TConnectionParams(endpoint, database, ssl, caCert, TStaticCredentialsKey{
+                params.GetStaticCredentials().GetUser(), FingerprintCredential(params.GetStaticCredentials().GetPassword())});
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            return TConnectionParams(endpoint, database, ssl, caCert, params.GetOAuthToken().GetToken());
+            return TConnectionParams(endpoint, database, ssl, caCert, TOAuthCredentialsKey{
+                FingerprintCredential(params.GetOAuthToken().GetToken())});
         case NKikimrReplication::TConnectionParams::kIamCredentials:
-            return TConnectionParams(endpoint, database, ssl, caCert, params.GetIamCredentials().GetServiceAccountId());
+            return TConnectionParams(endpoint, database, ssl, caCert, TIamCredentialsKey{
+                params.GetIamCredentials().GetServiceAccountId(), params.GetIamCredentials().GetResourceId()});
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -613,7 +668,11 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
 } // NKikimr::NReplication::NService
 
 template <>
-struct THash<NKikimr::NReplication::NService::TConnectionParams> : THash<std::tuple<TString, TString, bool, TString, TString>> {};
+struct THash<NKikimr::NReplication::NService::TConnectionParams> {
+    size_t operator()(const NKikimr::NReplication::NService::TConnectionParams& params) const {
+        return params.Hash();
+    }
+};
 
 namespace NKikimr::NReplication {
 

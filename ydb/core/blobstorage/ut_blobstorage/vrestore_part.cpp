@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 
 #include <array>
@@ -152,6 +153,26 @@ namespace {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(VRestorePart) {
+    Y_UNIT_TEST(Mirror3dcRepairSyncer) {
+        TFixture fixture;
+        fixture.PutLocalPart(0, 1);
+        fixture.PutLocalPart(3, 1);
+        fixture.PutLocalPart(1, 2);
+        fixture.PutLocalPart(4, 2);
+        fixture.VDiskResponses[0] = {.Status = NKikimrProto::OK, .PartId = 1, .Data = fixture.Data};
+
+        TActorId edge = fixture.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        TInstant deadline = fixture.Env.Runtime->GetClock() + TDuration::Minutes(1);
+        fixture.Env.Runtime->Register(NBridge::CreateMirror3dcRepairSyncer(fixture.Info, edge), 1);
+        NBridge::TEvMirror3dcRepairScanResult::TPtr result =
+            fixture.Env.WaitForEdgeActorEvent<NBridge::TEvMirror3dcRepairScanResult>(edge, true, deadline + TDuration::Seconds(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        fixture.CheckWritten(2, 3);
+        UNIT_ASSERT(!fixture.Read(5, 3));
+        UNIT_ASSERT(!fixture.Read(8, 3));
+    }
+
     Y_UNIT_TEST(MissingPart) {
         TFixture f;
         f.VDiskResponses[1] = {.Status = NKikimrProto::OK, .PartId = 2, .Data = f.Data};

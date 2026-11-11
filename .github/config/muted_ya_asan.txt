@@ -1,6 +1,7 @@
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.BatchWriteThenReadMultiTabletInterleaved_Sequential_WithRestarts_PDiskFallback
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.Mirror3dcReadsFromRestoredRealmAfterSourceDisconnection
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.mirror3of4
 ydb/core/blobstorage/ut_blobstorage/ut_osiris unittest.[*/*] chunk
@@ -13,12 +14,17 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery11
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut unittest.[*/*] chunk
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
+ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.RestoreScriptPhysicalGraphOnRetry+ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.RestoreScriptPhysicalGraphOnRetry-ModernChannels
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreamingQueryUnderTimeout
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryDdlRetriesUnderSchemeShardRestarts
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationCommitFailure
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationDoubleCommitIsOk+LocalTopics
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationDoubleCommitIsOk-LocalTopics
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.ExactlyOnceWritingWithMultipleSinks+LocalTopics
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.ExactlyOnceWritingWithMultipleSinks-LocalTopics
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.ExactlyOnceWritingWithMultipleSinksAndSameTopic
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.RestartStreamingQueryWithExactlyOnceWriting+LocalTopics+ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.RestartStreamingQueryWithExactlyOnceWriting+LocalTopics-ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.RestartStreamingQueryWithExactlyOnceWriting-LocalTopics+ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.RestartStreamingQueryWithExactlyOnceWriting-LocalTopics-ModernChannels
@@ -37,6 +43,7 @@ ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStaleRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStrictSerializableRW
 ydb/core/mind/bscontroller/ut_bscontroller BsControllerGroupState.DurabilityTargets
 ydb/core/mind/bscontroller/ut_bscontroller BsControllerGroupState.RecoveryTargetCountsTheReturningRealm
+ydb/core/mind/hive/ut THiveTest.TestHiveBalancerWithPreferredDC3
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut ArenaAllocatorTest.Multithreaded
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
@@ -48,6 +55,8 @@ ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKInt64
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
+ydb/core/tx/datashard/ut_database_freeze DataShardDatabaseFreeze.FinalResolvedWaitsForSplitTopicPartitions
+ydb/core/tx/datashard/ut_database_freeze DataShardDatabaseFreeze.FinalResolvedWaitsForSplitTopicPartitionsAfterDataShardRestart
 ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.PublicDoneRetriesResourceExhaustionAcrossRestart
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ChangedCredentialsBeforeDeferredReset+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.DropDuringDeferredDoneResolvesFreshSecret
@@ -58,7 +67,6 @@ ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.LateRes
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.PublicForceEscalationReplayedAfterRestart+Cascade
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCredentialsDuringDeferredDone+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCredentialsDuringDeferredDone-ResourceId
-ydb/core/tx/replication/controller/ut_schema_change ReplicationCreation.InitialScanDisabledDoesNotTouchMissingDestination
 ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest+ReplyPending
 ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest-ReplyPending
 ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentFailureAfterReplacement+DescribeOnly
@@ -98,8 +106,10 @@ ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_stable-26-4-1_and_stable-26-3-1]
+ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_stable-26-4-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_stable-26-4-1_and_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_stable-26-4-1]
+ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_stable-26-4-1_and_stable-26-3-1]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/workloads py3test.[test_statistics.py */*] chunk
 ydb/tests/compatibility/workloads test_statistics.py.TestAnalyzeRollingUpdate.test[rolling_stable-26-4-1_to_prestable-27-1-1]
@@ -122,8 +132,12 @@ ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlook
 ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlookup_watermarks[False-local-slj-2-2]
 ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_read_write
 ydb/tests/fq/streaming_optimize py3test.sole chunk
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[watermarks-bad_type-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopExprKey-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_gs_simp-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_ru_join-]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_ru_join_star-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part1 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part1 test.py.test[aggregate-group_by_rollup_grouping_hum-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part1 test.py.test[aggregate-group_by_rollup_with_filter-]
@@ -133,12 +147,14 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part10 test.py.test[aggregate-group_by_rollup
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part11 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part11 test.py.test[aggregate-group_by_gs_grouping-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part11 test.py.test[aggregate-group_by_mul_gb_ru-]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part11 test.py.test[aggregate-group_by_ru_join_qualified-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part12 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part12 test.py.test[aggr_factory-multi-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part12 test.py.test[aggregate-aggregate_key_column-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 test.py.test[aggregate-group_by_gs_few_empty-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 test.py.test[aggregate-group_by_gs_subselect-default.txt]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 test.py.test[aggregate-group_by_session_aliases-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part14 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part14 test.py.test[aggregate-group_by_tablerow_column-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part14 test.py.test[blocks-combine_hashed_count_filter-]
@@ -154,15 +170,18 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part17 test.py.test[aggregate-aggregate_udf_n
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part18 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part18 test.py.test[aggregate-count_distinct_with_filter-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part18 test.py.test[aggregate-group_by_ru_join_simple-]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part18 test.py.test[aggregate-percentile_and_avg_grouped-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-dedup_state_keys-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-group_by_column_alias_reuse-default.txt]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-group_by_expr_with_where-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 test.py.test[aggregate-group_by_gs_alt_duo-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 test.py.test[aggregate-group_by_gs_flatten_columns-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_mul_ru_ru-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_rollup_duo-]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_rollup_udf-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 test.py.test[aggregate-aggrs_no_grouping_via_map-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 test.py.test[aggregate-compare_by_tuple-]
@@ -173,7 +192,9 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part6 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part6 test.py.test[aggregate-aggregate_subquery_yql_15869-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part6 test.py.test[aggregate-aggregation_by_udf-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 test.py.test[action-evaluate_queries-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 test.py.test[aggregate-GroupByTwoFields-]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 test.py.test[aggregate-group_by_cube_grouping_and_expr-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 test.py.test[aggregate-group_by_cube_expr_trio-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 test.py.test[aggregate-group_by_cube_join_count-]
@@ -182,6 +203,7 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part9 test.py.test[aggregate-group_by_rollup_
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part9 test.py.test[aggregate-group_by_ru_partition_by_grouping-default.txt]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
+ydb/tests/functional/blobstorage/replication_rate_control test_replication_rate_control.py.test_replication_rate_control_is_applied_at_runtime
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV1.test_migration_from_v1_to_v2_to_v1_to_v2
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV1WithCustomDomain.test_migration_with_custom_domain_full_cycle
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV2.test_migration_from_v2_to_v1_to_v2_to_v1
@@ -189,14 +211,15 @@ ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV2Wi
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationWithMixedDiskTypes.test_mixed_disk_types_extracted_during_migration
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationWithSecurityConfig.test_security_config_preserved_during_migration
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationWithStoragePoolTypes.test_storage_pool_types_extracted_during_migration
+ydb/tests/functional/config test_distconf_faulty_pdisk_remove_host.py.TestStaticGroupSelfHealWithNodeRemoval.test_faulty_then_stop_then_remove
 ydb/tests/functional/config test_distconf_faulty_pdisk_remove_host.py.TestStaticGroupSelfHealWithNodeRemoval.test_stop_node_then_faulty_then_remove
 ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHealParallelCall2.test
 ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_two_dcs_check_state
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_multiple_disks_creation
-ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
 ydb/tests/functional/nbs/F1_user_scenarios F1_08_recreate_after_delete.py.TestF1_08RecreateAfterDelete.test_recreate_after_delete
+ydb/tests/functional/nbs/F1_user_scenarios F1_09_write_across_stripe.py.TestF1_09WriteAcrossStripe.test_write_across_stripe
 ydb/tests/functional/nbs/F1_user_scenarios F1_12_never_written_reads_zero.py.TestF1_12NeverWrittenReadsZero.test_never_written_reads_zero
 ydb/tests/functional/nbs/F1_user_scenarios F1_17_noisy_neighbour.py.TestF1_17NoisyNeighbour.test_noisy_neighbour
 ydb/tests/functional/nbs/F1_user_scenarios F1_25_max_disk_size.py.TestF1_25MaxDiskSize.test_max_disk_size[4096]

@@ -53,7 +53,11 @@ Card `health_text`, `evidence_age_text` and `context_action` supply the same
 presentation to HTML and JavaScript; elapsed browser time advances ages and
 expiry between reads. Card `current_assessment` and `last_known_assessment`
 contain verdict, reasons, fallback/self-quorum flags, evidence, assessment
-availability and confirmation metadata. The evidence drawer resolves raw pile
+availability and confirmation metadata. `fallback_red` is a candidate veto
+for any attributed RED/GREY or incomplete fallback part, not sufficient proof
+of failure. A fallback Failed verdict has a reason naming decisive RED static
+group parts; the generation, role warm-up, no-BSC and no-self-quorum checks
+still apply. The evidence drawer resolves raw pile
 records by exact name and `endpoint_uris` through root `endpoints[]`, keeping
 current and historical evidence distinct. Captured log rows provide a canonical `summary` alongside
 their original redacted `message`.
@@ -193,7 +197,10 @@ SUSPENDED_PILE_LOST NO_MUTATION_ENDPOINT STATE_WRITE_FAILED
 [alerts.yaml](alerts.yaml) provides example Prometheus rules for a scrape job
 named `bridge_skipper`. Adapt the job selector and time thresholds to the
 deployed timing configuration and measured workload. The examples use the
-30 s evidence TTL and do not establish production timing qualification.
+8 s evidence TTL and do not establish production timing qualification.
+The stale-view rule warns above 4 s before the selected-view series disappears
+at expiry. Use 1 s scrape and rule-evaluation intervals for that short window;
+slower monitoring requires coordinated threshold and TTL adjustments.
 Missing evidence is never zero-age healthy evidence.
 
 Investigate persistent Unknown, Failed/Lost, blocked decisions, pending records,

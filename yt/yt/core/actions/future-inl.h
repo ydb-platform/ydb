@@ -1215,6 +1215,14 @@ TFuture<T> TFutureBase<T>::WithDeadline(
 }
 
 template <class T>
+TFuture<T> TFutureBase<T>::WithDeadline(
+    std::optional<TInstant> deadline,
+    TFutureTimeoutOptions options) const
+{
+    return deadline ? WithDeadline(*deadline, std::move(options)) : TFuture<T>(Impl_);
+}
+
+template <class T>
 TFuture<T> TFutureBase<T>::WithTimeout(
     TDuration timeout,
     TFutureTimeoutOptions options) const

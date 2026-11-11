@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/formats/arrow
     ydb/core/scheme
     ydb/core/testlib/default
+    ydb/core/tx/scheme_board
 )
 
 END()

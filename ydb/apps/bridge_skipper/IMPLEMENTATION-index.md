@@ -109,8 +109,11 @@ callbacks never access an actor object.
    and publishes `EVIDENCE_EXPIRED` without an invocation, completion, occupied
    update slot or `mutation_sent` log. Fresh evidence may authorize it again.
 5. **Classification.** `ClassifySelfCheck` pins exact message texts and
-   distinguishes BSC from fallback mode. In fallback mode every RED group part
-   is fallback RED, and a GREY `Group has disks with no data` with a pile name
+   distinguishes BSC from fallback mode. In fallback mode a RED STORAGE_GROUP part
+   is fallback RED only with complete, unambiguous VDISK reasons, at least one
+   RED reason and no GREY or unknown reason. Neutral and exact BLUE
+   `Replication in progress` reasons are allowed but do not establish failure
+   alone. Other RED parts are incomplete. A GREY `Group has disks with no data` with a pile name
    is an incomplete (unknown) part; without a pile name it is ignored. In BSC
    mode, any reason other than a neutral (GREEN, YELLOW,
    ORANGE) or BLUE `Replication in progress` VDisk makes the part RED;
@@ -126,6 +129,14 @@ callbacks never access an actor object.
    every BSC reply has a RED part for the pile; Lost when at least
    one outside report exists, every outside report shows the pile in config
    quorum without node quorum, and no inside report shows its node quorum;
+   fallback Failed only for the BSC-host pile (PROMOTED, else PRIMARY), with no
+   fresh BSC reply anywhere and every current outside fallback reply reporting
+   a decisive RED static part without truncation. Own node quorum vetoes this
+   generic rule. It does not veto a separate storage proof when every outside
+   reply names a RED static group whose complete unique reason graph consists
+   only of RED VDisks caused by same-node, same-pile PDisk `DeviceIoError`.
+   Mixed transport/replication reasons, missing IDs and ambiguous IDs do not
+   establish this proof;
    Replicating when every BSC reply has a RED or replication-only part and one
    is replication-only; Healthy after the warm-up; otherwise Unknown, which an
    incomplete part also gives. SUSPENDED gets only the Lost rule;
@@ -157,7 +168,20 @@ callbacks never access an actor object.
    A generation change keeps a pile's confirmation when its state and the
    PRIMARY and PROMOTED roles are unchanged (a no-op bump, CMS or a stage flap
    elsewhere); any other change restarts it. Every Down pile must confirm
-   before acting.
+   before acting. Fallback failure is confined to one observed generation:
+   its confirmation restarts even on a no-op bump and when switching to or
+   from the BSC/Lost failure source, or between generic fallback and the
+   storage proof. Only fallback requests sent at or after
+   the generation observation and, after a role change, observation plus
+   `bsc_warmup_seconds` can establish this failure. Cached earlier sends cannot
+   seed it or supply conflicting evidence for that new epoch.
+   A qualifying fallback failure takes precedence over connectivity loss, so
+   retained settled reports cannot hide advancing fallback confirmation evidence.
+   Defaults are 1-second state/health rounds, 8-second evidence TTL and a
+   2-second confirmation span, targeting a committed steady-state failover
+   within 20 seconds when evidence and a surviving quorum permit it. The target
+   is not a timeout that overrides blockers or BSC warm-up; explicit timing
+   overrides can increase latency.
 9. **Clock.** Windows, schedules and evidence send times use the monotonic
    clock, read when a request is launched; a wall-clock step changes nothing.
    The HTTP layer reads the wall clock once per response for `now`. Event UTC is
@@ -171,15 +195,19 @@ callbacks never access an actor object.
     primary is replaced by the eligible PROMOTED pile, else the first eligible
     SYNCHRONIZED pile by name (`NO_CANDIDATE` otherwise).
     Eligible means Healthy, or, without a fresh BSC-mode reply, self quorum
-    with no fallback part on the candidate. In a partition, the BSC side
+    plus a fresh non-truncated fallback reply from the candidate itself,
+    with no fallback RED/GREY part on the candidate from any current responder.
+    There is no additional candidate confirmation window and this does not
+    establish full disk health. In a partition, the BSC side
     wins when its BSC replies show the other side RED. When the BSC-host side
     cannot be observed for a TTL and the other side reports it without node
     quorum, it is Lost and the reachable side wins through the no-BSC rule.
-    Known limits, pending real-cluster recordings: if survivors'
-    connectivity reports stay `binding_in_progress`, no Lost verdict forms and
-    a silent primary loss is not handled automatically; act manually from
-    the published state. With fresh BSC-mode replies a candidate's fallback
-    RED is not a veto (D3); a stale clean BSC reply within the TTL can
+    If survivors' connectivity reports stay `binding_in_progress`, no Lost
+    verdict forms. The limited fallback Failed rule can still confirm loss of
+    the BSC host; GREY or missing static parts remain Unknown and require
+    manual action from the published state. Real-cluster qualification remains
+    incomplete. With fresh BSC-mode replies a candidate's fallback
+    RED is not a veto; a stale clean BSC reply within the TTL can
     therefore qualify a pile whose own fallback reply shows its groups RED.
 11. **Overlay.** One update disconnects every Down pile; if the primary is
     down, it also assigns the survivor PRIMARY and resets any other PROMOTED

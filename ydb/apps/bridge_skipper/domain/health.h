@@ -23,6 +23,10 @@ struct TSelfCheckClassification {
     // Keyed by every pile name in the reply, including names absent from the view.
     // RedPart dominates Incomplete, which dominates ReplicatingPart.
     std::map<TString, EPart> Parts;
+    // Piles with a RED static group whose complete reason graph consists only
+    // of RED VDisks caused by explicit, same-node PDisk DeviceIoError reports.
+    // Generic transport failures, replication and incomplete graphs do not count.
+    std::set<TString> StorageFailures;
     // RED group issues without a pile location.
     ui64 UnnamedRed = 0;
     // "<TYPE> <STATUS> pile=<name>: <message>" for PILE_*, BRIDGE_PILE and
@@ -78,6 +82,10 @@ struct THealthState {
     std::map<TString, TCleanWindow> CleanSince;
     // The mode of each endpoint's latest fresh reply.
     std::map<TString, ESelfCheckMode> EndpointModes;
+    // SelfCheck has no generation. The fallback-failure rule admits only sends
+    // started after observing the current generation, including at startup.
+    std::optional<ui64> Generation;
+    TMonotonic GenerationChangedAt;
 };
 
 struct THealthEvaluation {

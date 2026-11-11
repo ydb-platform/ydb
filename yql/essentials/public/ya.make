@@ -1,4 +1,5 @@
 RECURSE(
+    abi_impl
     decimal
     fastcheck
     fastcheck/abi/impl

@@ -9,6 +9,35 @@
 
 namespace NKikimr::NBsController {
 
+    class TBlobStorageController::TTxUpdateDatabaseSpace : public TTransactionBase<TBlobStorageController> {
+    public:
+        explicit TTxUpdateDatabaseSpace(TBlobStorageController *controller)
+            : TTransactionBase(controller)
+        {}
+
+        TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_UPDATE_DATABASE_SPACE; }
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            {
+                TDatabaseSpaceTracker::TBatch batch(Self->DatabaseSpace);
+                for (const auto& [groupId, group] : Self->GroupMap) {
+                    if (group->BridgeGroupInfo) {
+                        Self->UpdateDatabaseSpaceGroup(*group);
+                    }
+                }
+            }
+            NIceDb::TNiceDb db(txc.DB);
+            Self->CommitDatabaseSpaceChanges(db);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {}
+    };
+
+    void TBlobStorageController::UpdateDatabaseSpaceOnPileChanges() {
+        Execute(new TTxUpdateDatabaseSpace(this));
+    }
+
     void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerSubscribeDatabaseSpace::TPtr ev) {
         const TNodeId nodeId = ev->Sender.NodeId(); // already validated to match the registered node
         const auto& record = ev->Get()->Record;
@@ -80,8 +109,60 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::UpdateDatabaseSpaceGroup(const TGroupInfo& group) {
-        if (!group.IsPhysicalGroup() || group.VDisksInGroup.empty()) {
-            DatabaseSpace.RemoveGroup(group.ID); // only physical groups are taken into account
+        const TGroupInfo::TGroupFinder finder = [this](TGroupId groupId) {
+            return FindGroup(groupId);
+        };
+        UpdateDatabaseSpaceGroup(group, finder, BridgeInfo.get());
+    }
+
+    void TBlobStorageController::UpdateDatabaseSpaceGroup(const TGroupInfo& group,
+            const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo) {
+        if (group.BridgeProxyGroupId && !group.IsInlinePile()) {
+            DatabaseSpace.RemoveGroup(group.ID);
+            if (const TGroupInfo *proxy = finder(*group.BridgeProxyGroupId)) {
+                UpdateDatabaseSpaceGroup(*proxy, finder, bridgeInfo);
+            }
+            return;
+        }
+        if (!group.IsPhysicalGroup()) {
+            DatabaseSpace.RemoveGroup(group.ID);
+            return;
+        }
+        if (group.BridgeGroupInfo) {
+            std::optional<TDatabaseSpaceTracker::ESpaceColor> color;
+            bool complete = true;
+            if (!bridgeInfo) {
+                DatabaseSpace.SetGroup(group.ID, group.StoragePoolId, std::nullopt, false);
+                return;
+            }
+            NBridge::ForEachGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId pileId,
+                    const NKikimrBridge::TGroupState::TPile& pile) {
+                const TBridgeInfo::TPile *pileInfo = bridgeInfo->FindPile(pileId);
+                if (!pileInfo || !NBridge::PileStateTraits(pileInfo->State).RequiresDataQuorum) {
+                    return;
+                }
+                const TGroupId partId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                const TGroupInfo *part = partId == group.ID ? &group : finder(partId);
+                if (!part || !part->IsPhysicalGroup() || part->VDisksInGroup.empty()) {
+                    complete = false;
+                    return;
+                }
+                const auto partColor = StatusFlagToValidSpaceColor(part->StatusFlags.Raw);
+                if (partColor) {
+                    color = color ? Max(*color, *partColor) : *partColor;
+                }
+                for (const TVSlotInfo *slot : part->VDisksInGroup) {
+                    if (!StatusFlagToValidSpaceColor(slot->Metrics.GetStatusFlags())) {
+                        complete = false;
+                        break;
+                    }
+                }
+            });
+            DatabaseSpace.SetGroup(group.ID, group.StoragePoolId, color, complete);
+            return;
+        }
+        if (group.VDisksInGroup.empty()) {
+            DatabaseSpace.RemoveGroup(group.ID);
             return;
         }
         // group's color is the color of its worst VDisk; until every VDisk has reported its metrics, it is only known

@@ -116,12 +116,13 @@ void SubmitPhysicalExprTrace(TRBOContext& rboCtx, const std::string& title, cons
 
 TPhysicalQueryBuilder::TPhysicalQueryBuilder(const TVector<TIntrusivePtr<TOpRoot>>& roots,
     TVector<TStageGraph>&& graphs, TVector<THashMap<ui32, TExprNode::TPtr>>&& stages, 
-    TVector<THashMap<ui32, TVector<TExprNode::TPtr>>>&& stageArgs,
+    TVector<THashMap<ui32, TVector<TExprNode::TPtr>>>&& stageArgs, TVector<THashMap<ui32, TExprNode::TPtr>>&& stageSources,
     TVector<THashMap<ui32, TPositionHandle>>&& stagePos, TVector<TPhysicalNames>&& names, TRBOContext& rboCtx)
     : Roots(roots)
     , Graphs(std::move(graphs))
     , Stages(std::move(stages))
     , StageArgs(std::move(stageArgs))
+    , StageSources(std::move(stageSources))
     , StagePos(std::move(stagePos))
     , Names(std::move(names))
     , RBOCtx(rboCtx)
@@ -222,9 +223,9 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
 
         TExprNode::TPtr stage;
         if ((graphStage->StorageType() == NYql::EStorageType::RowStorage)) {
-            stage = Stages[rootIdx].at(id);
+            auto source = StageSources[rootIdx].at(id);
             // Computed ranges are materialized in a separate transaction. A literal range is taken by the source as is.
-            auto rowSettingsPtr = FindNode(stage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpReadRangesSourceSettings>(node); });
+            auto rowSettingsPtr = FindNode(source, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpReadRangesSourceSettings>(node); });
             if (rowSettingsPtr) {
                 auto rowSettings = TExprBase(rowSettingsPtr).Cast<TKqpReadRangesSourceSettings>();
                 if (!rowSettings.RangesExpr().Maybe<TCoVoid>() && !rowSettings.RangesExpr().Maybe<TKqlKeyRange>()) {
@@ -238,9 +239,12 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
                         .ExplainPrompt(rowSettings.ExplainPrompt())
                     .Done().Ptr();
                     // clang-format on
-                    stage = ctx.ReplaceNode(std::move(stage), rowSettings.Ref(), newRowSettings);
+                    source = ctx.ReplaceNode(std::move(source), rowSettings.Ref(), newRowSettings);
                 }
             }
+            // The program of the stage runs the operators over the read, as in the stage of a column read.
+            stage = BuildDqPhyStage({source}, StageArgs[rootIdx].at(id), Stages[rootIdx].at(id),
+                NYql::NDq::TDqStageSettings().New(graphStage->Guid()).BuildNode(ctx, StagePos[rootIdx].at(id)), ctx, StagePos[rootIdx].at(id));
         } else {
             TVector<TExprNode::TPtr> stageInputConnections;
             TVector<TExprNode::TPtr> stageInputArgs;
@@ -299,7 +303,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
         YQL_CLOG(TRACE, CoreDq) << "Finalized stage " << id;
     }
 
-    // The result stage is explicit, including a lone row source which does
+    // The result stage is explicit, including a row read stage which does
     // not contribute an entry to phyStages.
     auto maybeFinalStage = finalizedStages.at(*Roots[rootIdx]->GetInput()->Props.StageId);
     if (Roots[rootIdx]->PlanProps.WithReturning) {

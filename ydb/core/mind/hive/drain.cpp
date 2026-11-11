@@ -18,8 +18,7 @@ protected:
     ui32 KickInFlight;
     ui32 Movements;
     TDrainTarget Target;
-    const std::unordered_set<TNodeId> Nodes; // nodes of the target at the start of the drain
-    const std::unordered_set<TNodeId> ReservedNodes; // the ones the drain has added to BalancerNodes
+    const std::unordered_set<TNodeId> Nodes;
     std::unordered_map<TNodeId, bool> DownBefore;
     TActorId DomainHivePipeClient;
     TTabletId DomainHiveId = 0;
@@ -37,11 +36,8 @@ protected:
             NTabletPipe::CloseClient(SelfId(), DomainHivePipeClient);
         }
         Hive->RemoveSubActor(this);
-        // the nodes are released as they were reserved, as the target pile may have changed or even gone meanwhile
-        for (const TNodeId nodeId : ReservedNodes) {
-            Hive->BalancerNodes.erase(nodeId);
-        }
         for (const TNodeId nodeId : Nodes) {
+            Hive->BalancerNodes.erase(nodeId);
             if (auto node = Hive->FindNode(nodeId); node && node->DrainActor == this) {
                 node->DrainActor = nullptr;
             }
@@ -72,15 +68,21 @@ protected:
             {"selfId", SelfId()},
             {"movements", Movements});
         for (auto [nodeId, downBefore] : DownBefore) {
-            TNodeInfo* nodeInfo = Hive->FindNode(nodeId);
-            if (nodeInfo != nullptr) {
-                if (!downBefore) {
-                    nodeInfo->SetDown(false, EHiveEventReason::DrainFinished);
-                }
+            if (TNodeInfo* nodeInfo = Hive->FindNode(nodeId); nodeInfo != nullptr && !downBefore) {
+                nodeInfo->SetDown(false, EHiveEventReason::DrainFinished);
             }
         }
-        Hive->Execute(Hive->CreateSwitchDrainOff(Target, std::move(Settings), status, Movements + DomainMovements));
+        auto* switchDrainOff = Hive->CreateSwitchDrainOff(Target, status, Movements + DomainMovements);
+        // Complete may run synchronously and start another drain.
         PassAway();
+        Hive->Execute(switchDrainOff);
+    }
+
+    bool IsTargetTablet(const TTabletInfo& tablet) const {
+        if (const auto* pileId = std::get_if<TBridgePileId>(&Target)) {
+            return tablet.Node != nullptr && Nodes.contains(tablet.Node->Id) && !tablet.GetNodeFilter().IsAllowedPile(*pileId);
+        }
+        return Nodes.contains(tablet.NodeId);
     }
 
     bool CanKickNextTablet() const {
@@ -92,7 +94,7 @@ protected:
         while (CanKickNextTablet()) {
             TFullTabletId tabletId = *NextKick;
             TTabletInfo* tablet = Hive->FindTablet(tabletId);
-            if (tablet != nullptr && tablet->IsAlive() && Nodes.contains(tablet->NodeId)) {
+            if (tablet != nullptr && tablet->IsAlive() && IsTargetTablet(*tablet)) {
                 THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
                 if (std::holds_alternative<TNodeInfo*>(result)) {
                     TNodeInfo* node = std::get<TNodeInfo*>(result);
@@ -219,15 +221,13 @@ public:
         return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR;
     }
 
-    THiveDrain(THive* hive, TDrainTarget target, TDrainSettings settings, std::unordered_set<TNodeId> nodes,
-            std::unordered_set<TNodeId> reservedNodes)
+    THiveDrain(THive* hive, TDrainTarget target, TDrainSettings settings, std::unordered_set<TNodeId> nodes)
         : Hive(hive)
         , NextKick(Tablets.end())
         , KickInFlight(0)
         , Movements(0)
         , Target(target)
         , Nodes(std::move(nodes))
-        , ReservedNodes(std::move(reservedNodes))
         , Settings(std::move(settings))
     {}
 
@@ -299,24 +299,80 @@ public:
 };
 
 THiveDrain* THive::StartHiveDrain(TDrainTarget target, TDrainSettings settings) {
-    TGetNodes getNodes{this};
-    std::unordered_set<TNodeId> nodes = std::visit(getNodes, target);
-    std::unordered_set<TNodeId> reservedNodes;
-    for (const TNodeId nodeId : nodes) {
-        if (BalancerNodes.emplace(nodeId).second) {
-            reservedNodes.insert(nodeId);
-        }
-    }
-    if (!reservedNodes.empty()) {
-        auto* balancer = new THiveDrain(this, target, std::move(settings), std::move(nodes), std::move(reservedNodes));
-        SubActors.emplace_back(balancer);
-        RegisterWithSameMailbox(balancer);
-        return balancer;
-    } else {
-        YDB_LOG_WARN("Cannot start drain: target is already busy",
+    std::unordered_set<TNodeId> nodes = std::visit(TGetNodes{this}, target);
+    std::erase_if(nodes, [this](TNodeId nodeId) { return !BalancerNodes.emplace(nodeId).second; });
+    if (nodes.empty()) {
+        YDB_LOG_WARN("Cannot start drain: no available nodes",
             {"logPrefix", GetLogPrefix()},
             {"target", target});
         return nullptr;
+    }
+    auto* balancer = new THiveDrain(this, target, std::move(settings), std::move(nodes));
+    SubActors.emplace_back(balancer);
+    RegisterWithSameMailbox(balancer);
+    return balancer;
+}
+
+void THive::StartPileDrain(TBridgePileInfo& pile) {
+    if (!pile.Drain || pile.DrainActor || IsPrimaryPile(pile.Id)) {
+        return;
+    }
+    if (std::none_of(Nodes.begin(), Nodes.end(), [this](const auto& item) {
+        const auto& node = item.second;
+        return node.IsAlive() && !node.Down && IsPrimaryPile(node.BridgePileId);
+    })) {
+        return;
+    }
+    pile.DrainActor = StartHiveDrain(pile.Id, TDrainSettings{.DownPolicy = NKikimrHive::DRAIN_POLICY_NO_DOWN, .Forward = false});
+}
+
+bool THive::HasTabletsToDrain(TBridgePileId pileId) const {
+    if (!BridgeInfo || IsPrimaryPile(pileId)) {
+        return false;
+    }
+    for (const auto& [nodeId, node] : Nodes) {
+        if (node.BridgePileId != pileId) {
+            continue;
+        }
+        for (const auto& [state, tablets] : node.Tablets) {
+            for (const auto* tablet : tablets) {
+                if (tablet->CanBeAlive() &&
+                    !(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) &&
+                    !tablet->GetNodeFilter().IsAllowedPile(pileId)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void THive::ProcessPileDrains() {
+    if (ProcessPileDrainsScheduled || !BridgeInfo) {
+        return;
+    }
+    ProcessPileDrainsScheduled = true;
+    Send(SelfId(), new TEvPrivate::TEvProcessPileDrains());
+}
+
+void THive::Handle(TEvPrivate::TEvProcessPileDrains::TPtr&) {
+    ProcessPileDrainsScheduled = false;
+    if (!BridgeInfo || std::none_of(BridgePiles.begin(), BridgePiles.end(), [](const auto& item) { return item.second.Drain; })) {
+        return;
+    }
+    for (auto& [pileId, pile] : BridgePiles) {
+        if (!pile.Drain) {
+            continue;
+        }
+        if (pile.DrainActor) {
+            pile.DrainRetry = true;
+            continue;
+        }
+        if (!HasTabletsToDrain(pileId)) {
+            Execute(CreateSwitchDrainOff(pileId, NKikimrProto::OK, 0));
+        } else {
+            StartPileDrain(pile);
+        }
     }
 }
 

@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         UNIT_ASSERT(server);
         // Each client deadline is derived as its operation timeout + 2 s.
         const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n"
-            "timing: {read_timeout_seconds: 3, selfcheck_operation_timeout_seconds: 11, mutation_operation_timeout_seconds: 5}\n");
+            "timing: {read_timeout_seconds: 3, selfcheck_operation_timeout_seconds: 11, evidence_ttl_seconds: 30, mutation_operation_timeout_seconds: 5}\n");
         TLoadedCredentials credentials;
         credentials.Token = "wire-token";
         std::atomic<ui64> clock{1000000};

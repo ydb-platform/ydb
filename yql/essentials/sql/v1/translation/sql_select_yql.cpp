@@ -3,6 +3,7 @@
 #include "antlr_token.h"
 #include "select_yql.h"
 #include "sql_expression.h"
+#include "sql_flatten.h"
 #include "sql_group_by.h"
 #include "sql_select_window.h"
 #include "sql_select.h"
@@ -1075,20 +1076,41 @@ private:
     }
 
     TSQLResult<TYqlSource> Build(const TRule_flatten_source& rule) {
-        if (rule.HasBlock2()) {
-            const auto& block = rule.GetBlock2();
-            Token(block.GetToken1());
-            switch (block.GetBlock2().GetAltCase()) {
-                case TRule_flatten_source_TBlock2_TBlock2::kAlt1:
-                    return Unsupported("FLATTEN (OPTIONAL|LIST|DICT)? BY flatten_by_arg");
-                case TRule_flatten_source_TBlock2_TBlock2::kAlt2:
-                    return Unsupported("FLATTEN COLUMNS");
-                case TRule_flatten_source_TBlock2_TBlock2::ALT_NOT_SET:
-                    YQL_ENSURE(false, "Unreachable");
-            }
+        auto source = Build(rule.GetRule_named_single_source1());
+        if (!source) {
+            return source;
         }
 
-        return Build(rule.GetRule_named_single_source1());
+        if (!rule.HasBlock2()) {
+            return source;
+        }
+
+        return ApplyFlatten(rule.GetBlock2(), std::move(*source));
+    }
+
+    TSQLResult<TYqlSource> ApplyFlatten(const TRule_flatten_source::TBlock2& block, TYqlSource source) {
+        Token(block.GetToken1());
+        const TPosition position = Ctx_.Pos();
+        switch (block.GetBlock2().GetAltCase()) {
+            case TRule_flatten_source_TBlock2_TBlock2::kAlt1: {
+                const auto& alt = block.GetBlock2().GetAlt1();
+                TSqlFlatten flatten(*this);
+                const TStringBuf sourceAlias = source.Alias
+                                                   .Transform([](const TYqlSourceAlias& alias) { return TStringBuf(alias.Name); })
+                                                   .GetOrElse(TStringBuf());
+                auto args = flatten.ParseArgs(sourceAlias, alt.GetRule_flatten_by_arg3());
+                if (!args) {
+                    return std::unexpected(args.error());
+                }
+                source.Flatten = BuildYqlFlattenBy(position, flatten.ParseMode(alt), std::move(*args));
+                return source;
+            }
+            case TRule_flatten_source_TBlock2_TBlock2::kAlt2:
+                source.Flatten = BuildYqlFlattenColumns(position);
+                return source;
+            case TRule_flatten_source_TBlock2_TBlock2::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
     }
 
     TSQLResult<TYqlSource> Build(const TRule_named_single_source& rule) {

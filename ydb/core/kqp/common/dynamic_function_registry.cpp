@@ -309,11 +309,19 @@ public:
     }
 
     void RemoveModule(const TStringBuf& moduleName) override {
+        RemoveModuleImpl(moduleName, Nothing());
+    }
+
+    void RemoveModuleIfOwned(const TStringBuf& moduleName, const TStringBuf& libraryPath) override {
+        RemoveModuleImpl(moduleName, libraryPath);
+    }
+
+    void RemoveModuleImpl(const TStringBuf& moduleName, TMaybe<TStringBuf> expectedLibraryPath) {
         TMaybe<TString> droppedLibraryPath;
         with_lock (WriterMutex_) {
             auto cur = State_.AtomicLoad();
             auto it = cur->UdfModules.find(TString(moduleName));
-            if (it == cur->UdfModules.end()) {
+            if (it == cur->UdfModules.end() || (expectedLibraryPath && it->second.LibraryPath != *expectedLibraryPath)) {
                 return;
             }
 

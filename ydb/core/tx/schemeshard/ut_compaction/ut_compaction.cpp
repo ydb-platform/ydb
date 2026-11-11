@@ -1,6 +1,7 @@
 #include "operation_queue_timer.h"
 
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -3745,15 +3746,26 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             AlterSchema { AddColumns { Name: "extra" Type: "Uint64" } }
         )");
         env.TestWaitNotification(runtime, txId);
+        // A rename would change the path the refusal above is keyed by.
+        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+        TestMoveTable(runtime, ++txId, "/MyRoot/ColumnTable", "/MyRoot/ColumnTableMoved", {NKikimrScheme::StatusPreconditionFailed});
         TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId);
         block.Stop().Unblock();
 
-        // Once the option is set it drives the rewrite itself, so a cascade compaction is refused.
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+        // An ALTER in flight has passed its own check and may still change the option on the shards: a cascade
+        // compaction is refused until it completes. Once the option is set it drives the rewrite itself, so a cascade
+        // compaction is refused as well.
+        TBlockEvents<TEvColumnShard::TEvNotifyTxCompletionResult> alterBlock(runtime);
+        const ui64 alterTxId = ++txId;
+        TestAlterColumnTable(runtime, alterTxId, "/MyRoot", R"(
             Name: "ColumnTable"
             AlterSchema { Options { SchemeNeedActualization: true } }
         )");
-        env.TestWaitNotification(runtime, txId);
+        runtime.WaitFor("EvNotifyTxCompletionResult", [&]{ return alterBlock.size() >= 1; });
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true, /*maxShardsInFlight=*/1,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        alterBlock.Stop().Unblock();
+        env.TestWaitNotification(runtime, alterTxId);
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true, /*maxShardsInFlight=*/1,
             Ydb::StatusIds::PRECONDITION_FAILED);
     }

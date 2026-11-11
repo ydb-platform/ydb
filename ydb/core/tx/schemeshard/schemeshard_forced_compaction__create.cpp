@@ -97,10 +97,24 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
                 return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST,
                     "Forced compaction is not supported for tables in a column store");
             }
+            if (tableInfo->IsReadOnly) {
+                // A read-only copy shares its shards with the source table: a request through the copy would be
+                // mixed up with one through the source (and stop its schema rewrite).
+                return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST,
+                    "Forced compaction is not supported for a read-only copy of a table, compact the source table");
+            }
             if (settings.cascade()) {
                 // The rewrite is exclusive with the two other things touching the same machinery: the table option
                 // drives the same rewrite (and altering it is refused while a cascade compaction runs), and schema
                 // collapsing makes the portions of a collapsed version look current, hiding them from the rewrite.
+                // An ALTER in flight has passed its own check and may still change the option on the shards.
+                {
+                    const auto checks = tablePath.Check();
+                    checks.NotUnderOperation();
+                    if (!checks) {
+                        return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, checks.GetError());
+                    }
+                }
                 if (tableInfo->Description.GetSchema().GetOptions().GetSchemeNeedActualization()) {
                     return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED,
                         "Cascade compaction is not allowed while SCHEME_NEED_ACTUALIZATION is set for the table");

@@ -10,7 +10,7 @@
 namespace NKikimr::NBsController {
 
     class TBlobStorageController::TTxUpdateDatabaseSpace : public TTransactionBase<TBlobStorageController> {
-        const std::map<TBoxStoragePoolId, bool> Latches;
+        const std::map<TBoxStoragePoolId, bool> Latches; // the ones changed, see PersistChangedDatabaseSpaceLatches
 
     public:
         TTxUpdateDatabaseSpace(TBlobStorageController *controller, std::map<TBoxStoragePoolId, bool> latches)
@@ -22,7 +22,7 @@ namespace NKikimr::NBsController {
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             NIceDb::TNiceDb db(txc.DB);
-            Self->PersistDatabaseSpaceLatches(db, Latches);
+            Self->PersistChangedDatabaseSpaceLatches(db, Latches);
             return true;
         }
 
@@ -86,6 +86,24 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::PersistChangedDatabaseSpaceLatches(NIceDb::TNiceDb& db,
+            const std::map<TBoxStoragePoolId, bool>& changed) {
+        // The transaction persisting the latches changed outside of it may run after the ones queued before it, which
+        // have changed the same latches further (thresholds, groups) and persisted them, or have deleted the pools along
+        // with their rows. So the value taken when the latch changed may be stale by now, and the current one is
+        // written: it follows from everything executed so far, and whatever changes it later persists it again.
+        std::map<TBoxStoragePoolId, bool> latches;
+        for (const auto& [poolId, exhausted] : changed) {
+            if (!StoragePools.contains(poolId)) {
+                continue;
+            }
+            if (const auto state = DatabaseSpace.GetPoolState(poolId)) {
+                latches.emplace(poolId, state->Exhausted);
+            }
+        }
+        PersistDatabaseSpaceLatches(db, latches);
+    }
+
     std::map<TBoxStoragePoolId, bool> TBlobStorageController::PublishDatabaseSpaceChanges() {
         // pool colors are shown in system views
         for (const TBoxStoragePoolId& poolId : DatabaseSpace.TakeChangedPools()) {
@@ -145,25 +163,6 @@ namespace NKikimr::NBsController {
             }
         };
 
-        // does bridge proxy send TEvPut to the part at this stage (see PrepareEvent in bridge proxy)
-        bool PartTakesPuts(NKikimrBridge::TGroupState::EStage stage) {
-            switch (stage) {
-                case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA:
-                case NKikimrBridge::TGroupState::SYNCED:
-                    return true;
-
-                case NKikimrBridge::TGroupState::BLOCKS:
-                case NKikimrBridge::TGroupState::WRITE_KEEP:
-                case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
-                    return false;
-
-                case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MIN_SENTINEL_DO_NOT_USE_:
-                case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MAX_SENTINEL_DO_NOT_USE_:
-                    break;
-            }
-            Y_ABORT();
-        }
-
     } // anonymous
 
     void TBlobStorageController::UpdateDatabaseSpaceGroup(const TGroupInfo& group,
@@ -191,7 +190,7 @@ namespace NKikimr::NBsController {
                     const NKikimrBridge::TGroupState::TPile& pile) {
                 const TBridgeInfo::TPile *pileInfo = bridgeInfo->FindPile(pileId);
                 if (!pileInfo || !NBridge::PileStateTraits(pileInfo->State).RequiresDataQuorum ||
-                        !PartTakesPuts(pile.GetStage())) {
+                        !NBridge::GroupPartTakesPuts(pile.GetStage())) {
                     return;
                 }
                 const TGroupId partId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);

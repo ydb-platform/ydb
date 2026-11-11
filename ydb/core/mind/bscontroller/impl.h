@@ -2507,6 +2507,8 @@ private:
     // the same inside a transaction that persists the state the changes follow from
     void CommitDatabaseSpaceChanges(NIceDb::TNiceDb& db);
     void PersistDatabaseSpaceLatches(NIceDb::TNiceDb& db, const std::map<TBoxStoragePoolId, bool>& latches);
+    // for the latches published outside of the transaction persisting them: writes their current values
+    void PersistChangedDatabaseSpaceLatches(NIceDb::TNiceDb& db, const std::map<TBoxStoragePoolId, bool>& changed);
     void SendDatabaseSpaceState(TNodeId nodeId, TDatabaseSpaceTracker::TScope scope);
     void UpdateDatabaseSpaceOnPileChanges();
     void UpdateDatabaseSpaceGroup(const TGroupInfo& group);

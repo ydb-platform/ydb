@@ -1340,6 +1340,12 @@ namespace NKikimr {
                 TBridgePileId bridgePileId) {
             std::unique_ptr<TEvent> res;
 
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
+                if (!NBridge::GroupPartTakesPuts(pile.GetStage())) {
+                    return nullptr; // the rule is shared with BS_CONTROLLER counting the space of the group
+                }
+            }
+
             switch (pile.GetStage()) {
                 case NKikimrBridge::TGroupState::WRITE_KEEP:
                     if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {

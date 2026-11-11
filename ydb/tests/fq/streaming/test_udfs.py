@@ -258,3 +258,5 @@ END DO
         time.sleep(5)
         validate_query(sql, tests_count, suffix="_final", client=second_ydb_client)
         logger.info("Checked final status")
+
+        second_ydb_client.query(f"DROP STREAMING QUERY `{name}`;")

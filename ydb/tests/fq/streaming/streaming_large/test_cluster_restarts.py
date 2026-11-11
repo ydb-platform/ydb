@@ -59,6 +59,10 @@ class TestStreamingLarge(StreamingTestBase):
             self.do_write_read(input, expected_data, endpoint)
             time.sleep(10)
 
+        for i in range(query_count):
+            name = f"test_shared_reading_{i}"
+            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
     @pytest.mark.parametrize("kikimr", [{"rebalancing_timeout_ms": "20000"}], indirect=["kikimr"])
     def test_restart_nodes(self, kikimr, entity_name):
 

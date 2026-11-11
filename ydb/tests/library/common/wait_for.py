@@ -10,7 +10,7 @@ from hamcrest.core.helpers.wrap_matcher import wrap_matcher
 logger = logging.getLogger()
 
 
-def wait_for(predicate, timeout_seconds=5.0, step_seconds=0.5, multiply=2, max_step_seconds=5.0):
+def wait_for(predicate, timeout_seconds=5.0, step_seconds=0.5, multiply=1, max_step_seconds=5.0):
     finish_time = time.time() + timeout_seconds
     while time.time() <= finish_time:
         if predicate():

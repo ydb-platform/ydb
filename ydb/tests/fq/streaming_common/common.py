@@ -48,6 +48,7 @@ def set_test_env(request):
     os.environ["YDB_TEST_NODES_MANAGER_CHECK_PERIOD_MS"] = param.get("nodes_manager_check_period_ms", "5000")
     os.environ["YDB_TEST_NODES_MANAGER_START_DELAY_MS"] = param.get("nodes_manager_start_delay_ms", "5000")
     os.environ["YDB_TEST_LEASE_DURATION_SEC"] = param.get("lease_duration_sec", "5")
+    os.environ["YDB_TEST_LEASE_CHECK_STARTUP_TIMEOUT_SEC"] = param.get("lease_check_startup_timeout_sec", "1")
     rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
 
@@ -636,7 +637,7 @@ class Kikimr:
 
         token = config.default_clusteradmin
         logger.info("Sleep")
-        time.sleep(10)
+        #time.sleep(10)
         logger.info(f"Creating tenant {tenant_database} with token={token!r}")
         self.cluster.create_database(
             tenant_database,

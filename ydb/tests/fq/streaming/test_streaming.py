@@ -1354,14 +1354,9 @@ FROM `{table_name}`"""
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
 
-    # SchemeShard counters cover the database, so each case needs a fresh cluster.
-    @pytest.mark.parametrize(
-        "local_topics,kikimr",
-        [(True, {}), (False, {})],
-        indirect=["kikimr"],
-        scope="function",
-        ids=["True", "False"],
-    )
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_restore_state(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
@@ -1467,6 +1462,8 @@ FROM `{table_name}`"""
 
         expected = ['hello1', 'hello2']
         assert self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint) == expected
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
     @pytest.mark.parametrize("local_topics", [False])
     def test_shared_reading_group(
@@ -1631,6 +1628,8 @@ FROM `{table_name}`"""
         ]
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
     @pytest.mark.parametrize(
         "use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"]
@@ -2202,6 +2201,8 @@ FROM `{table_name}`"""
         # delayed records expected below are being validated.
         validate_table(expected_data2, allow_extra_rows=True)
 
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
     @link_test_case("#46139")
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_alter_query_with_precompute(
@@ -2274,7 +2275,6 @@ FROM `{table_name}`"""
         """)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    @pytest.mark.parametrize("kikimr", [{"enable_shared_reading_structured_json_parsing": True}], indirect=["kikimr"])
     def test_read_topic_shared_reading_structured_parsing(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
@@ -2565,6 +2565,8 @@ FROM `{table_name}`"""
         """)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
+        second_ydb_client.query(f"DROP STREAMING QUERY `{path}`;")
+
     @link_test_case("#47255")
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("additional_operator", ["hop", "mr", "multi_output"])
@@ -2748,6 +2750,8 @@ FROM `{table_name}`"""
         # After restart, records written before the query was stopped can be
         # persisted while the expected delayed records are being validated.
         validate_table(expected_data2, allow_extra_rows=True)
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
     @link_test_case("#47257")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -2997,6 +3001,8 @@ FROM `{table_name}`"""
             enable_discovery=False,
         )
         check_issues(get_issues(client=second_ydb_client), "Lease expired")
+
+        second_ydb_client.query(f"DROP STREAMING QUERY `{path}`;")
 
     @pytest.mark.parametrize(
         argnames="table_role,table_store",

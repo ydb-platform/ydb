@@ -21,9 +21,9 @@ NPQ::THeartbeat MakeHeartbeat(ui64 step, const TString& data = {}) {
 TResult MakeResult(const TVector<std::pair<ui64, ui64>>& written) {
     TResult record;
     record.SetStatus(TResult::SUCCESS);
-    for (const auto& [sourceId, step] : written) {
+    for (const auto& [sourceDataShardId, step] : written) {
         auto& result = *record.AddResults();
-        result.SetSourceDataShardId(sourceId);
+        result.SetSourceDataShardId(sourceDataShardId);
         result.SetStatus(TResult::THeartbeatResult::SUCCESS);
         TRowVersion(step, 0).ToProto(result.MutableWrittenVersion());
     }
@@ -44,8 +44,8 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatQueue) {
 
     Y_UNIT_TEST(BatchesSources) {
         THeartbeatQueue queue(100, 100);
-        for (ui64 sourceId : {1, 2, 3}) {
-            UNIT_ASSERT(queue.Enqueue(sourceId, MakeHeartbeat(100), Sender, sourceId));
+        for (ui64 sourceDataShardId : {1, 2, 3}) {
+            UNIT_ASSERT(queue.Enqueue(sourceDataShardId, MakeHeartbeat(100), Sender, sourceDataShardId));
         }
 
         UNIT_ASSERT(queue.CanSend());
@@ -103,8 +103,8 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatQueue) {
 
     Y_UNIT_TEST(KeepsWaitersUntilResult) {
         THeartbeatQueue queue(100, 100);
-        for (ui64 sourceId : {1, 2, 3}) {
-            UNIT_ASSERT(queue.Enqueue(sourceId, MakeHeartbeat(100), Sender, sourceId));
+        for (ui64 sourceDataShardId : {1, 2, 3}) {
+            UNIT_ASSERT(queue.Enqueue(sourceDataShardId, MakeHeartbeat(100), Sender, sourceDataShardId));
         }
 
         queue.NextBatch();
@@ -122,8 +122,8 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatQueue) {
 
     Y_UNIT_TEST(LimitsBatchSize) {
         THeartbeatQueue queue(2, 100);
-        for (ui64 sourceId : {1, 2, 3}) {
-            UNIT_ASSERT(queue.Enqueue(sourceId, MakeHeartbeat(100), Sender, sourceId));
+        for (ui64 sourceDataShardId : {1, 2, 3}) {
+            UNIT_ASSERT(queue.Enqueue(sourceDataShardId, MakeHeartbeat(100), Sender, sourceDataShardId));
         }
 
         auto first = queue.NextBatch();
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatQueue) {
         queue.NextBatch();
         UNIT_ASSERT(!queue.Enqueue(3, MakeHeartbeat(100), Sender, 3));
 
-        auto replies = queue.Fail("Pipe destroyed");
+        auto replies = queue.Reset("Pipe destroyed");
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 2);
         for (const auto& reply : replies) {
             UNIT_ASSERT_VALUES_EQUAL(reply.Status, EStatus::Retry);

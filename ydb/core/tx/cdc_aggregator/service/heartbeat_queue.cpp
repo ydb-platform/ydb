@@ -14,16 +14,16 @@ THeartbeatQueue::THeartbeatQueue(ui32 maxBatchSize, ui32 maxWaiters)
     Y_ENSURE(MaxBatchSize > 0);
 }
 
-bool THeartbeatQueue::Enqueue(ui64 sourceId, const NPQ::THeartbeat& heartbeat, const TActorId& sender, ui64 cookie) {
+bool THeartbeatQueue::Enqueue(ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat, const TActorId& sender, ui64 cookie) {
     if (WaitersCount >= MaxWaiters) {
         return false;
     }
 
-    auto& source = Sources[sourceId];
-    auto inFlight = InFlight.find(sourceId);
+    auto& source = Sources[sourceDataShardId];
+    auto inFlight = InFlight.find(sourceDataShardId);
     if (inFlight == InFlight.end() || inFlight->second < heartbeat.Version) {
         if (!source.Pending) {
-            Queue.push_back(sourceId);
+            Queue.push_back(sourceDataShardId);
         }
         if (!source.Pending || source.Pending->Version < heartbeat.Version) {
             source.Pending = heartbeat;
@@ -57,15 +57,15 @@ THolder<TEvCdcAggregator::TEvWriteHeartbeats> THeartbeatQueue::NextBatch() {
 
     auto ev = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeats>();
     while (!Queue.empty() && InFlight.size() < MaxBatchSize) {
-        const ui64 sourceId = Queue.front();
+        const ui64 sourceDataShardId = Queue.front();
         Queue.pop_front();
 
-        auto& source = Sources.at(sourceId);
+        auto& source = Sources.at(sourceDataShardId);
         auto& item = *ev->Record.AddHeartbeats();
-        item.SetSourceDataShardId(sourceId);
+        item.SetSourceDataShardId(sourceDataShardId);
         source.Pending->Serialize(*item.MutableHeartbeat());
 
-        InFlight.emplace(sourceId, source.Pending->Version);
+        InFlight.emplace(sourceDataShardId, source.Pending->Version);
         source.Pending.reset();
     }
 
@@ -87,7 +87,7 @@ TVector<THeartbeatQueue::TReply> THeartbeatQueue::OnResult(const NKikimrCdcAggre
         CompleteInFlight(EStatus::Rejected, record.GetError(), replies);
         return replies;
     default:
-        return Fail(TStringBuilder() << TResult::EStatus_Name(record.GetStatus()) << ": " << record.GetError());
+        return Reset(TStringBuilder() << TResult::EStatus_Name(record.GetStatus()) << ": " << record.GetError());
     }
 
     for (const auto& result : record.GetResults()) {
@@ -117,7 +117,7 @@ TVector<THeartbeatQueue::TReply> THeartbeatQueue::OnResult(const NKikimrCdcAggre
     return replies;
 }
 
-TVector<THeartbeatQueue::TReply> THeartbeatQueue::Fail(const TString& error) {
+TVector<THeartbeatQueue::TReply> THeartbeatQueue::Reset(const TString& error) {
     TVector<TReply> replies;
     for (auto& [_, source] : Sources) {
         Complete(source, TRowVersion::Max(), EStatus::Retry, TRowVersion::Min(), error, replies);
@@ -152,8 +152,8 @@ void THeartbeatQueue::Complete(TSource& source, const TRowVersion& upTo, EStatus
 }
 
 void THeartbeatQueue::CompleteInFlight(EStatus status, const TString& error, TVector<TReply>& replies) {
-    for (const auto& [sourceId, version] : InFlight) {
-        auto it = Sources.find(sourceId);
+    for (const auto& [sourceDataShardId, version] : InFlight) {
+        auto it = Sources.find(sourceDataShardId);
         Y_ENSURE(it != Sources.end());
 
         Complete(it->second, version, status, TRowVersion::Min(), error, replies);

@@ -114,6 +114,7 @@ PEERDIR(
     ydb/core/tracing
     ydb/core/transfer
     ydb/core/tx
+    ydb/core/tx/cdc_aggregator/service
     ydb/core/tx/columnshard
     ydb/core/tx/columnshard/column_fetching
     ydb/core/tx/columnshard/data_accessor/cache_policy
@@ -130,7 +131,6 @@ PEERDIR(
     ydb/core/tx/priorities/usage
     ydb/core/tx/replication/controller
     ydb/core/tx/replication/service
-    ydb/core/tx/cdc_aggregator/service
     ydb/core/tx/scheme_board
     ydb/core/tx/schemeshard
     ydb/core/tx/sequenceproxy

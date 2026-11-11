@@ -12,10 +12,7 @@
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CDC_AGGREGATOR, "[CdcAggregatorService] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CDC_AGGREGATOR, "[CdcAggregatorService] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CDC_AGGREGATOR, "[CdcAggregatorService] " << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::CDC_AGGREGATOR, "[CdcAggregatorService] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CDC_AGGREGATOR
 
 namespace NKikimr::NCdcAggregator {
 
@@ -30,7 +27,6 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
         bool FlushScheduled = false;
     };
 
-    using TAggregators = THashMap<ui64, TAggregator>;
     using EStatus = TEvCdcAggregatorService::TEvWriteHeartbeatResult::EStatus;
 
     void Reply(const THeartbeatQueue::TReply& reply) {
@@ -39,7 +35,9 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
         ev->WrittenVersion = reply.WrittenVersion;
         ev->Error = reply.Error;
 
-        LOG_T("Reply " << ev->ToString() << ": recipient# " << reply.Sender);
+        YDB_LOG_TRACE("Reply",
+            {"ev", ev->ToString()},
+            {"recipient", reply.Sender});
         Send(reply.Sender, ev.Release(), 0, reply.Cookie);
     }
 
@@ -61,36 +59,37 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
         }
 
         auto ev = aggregator.Queue.NextBatch();
-        LOG_D("Send batch: aggregator# " << tabletId << ", heartbeats# " << ev->Record.HeartbeatsSize());
+        YDB_LOG_DEBUG("Send batch",
+            {"aggregator", tabletId},
+            {"heartbeats", ev->Record.HeartbeatsSize()});
         NTabletPipe::SendData(SelfId(), aggregator.PipeClient, ev.Release());
     }
 
-    void Remove(TAggregators::iterator it) {
-        if (it->second.PipeClient) {
-            NTabletPipe::CloseClient(SelfId(), it->second.PipeClient);
-        }
-        Aggregators.erase(it);
-    }
-
-    void Fail(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
+    void ResetAggregator(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
         auto it = Aggregators.find(tabletId);
         if (it == Aggregators.end() || it->second.PipeClient != pipeClient) {
             return;
         }
 
-        LOG_N(error << ": aggregator# " << tabletId << ", waiters# " << it->second.Queue.GetWaitersCount());
-        Reply(it->second.Queue.Fail(error));
-        Remove(it);
+        YDB_LOG_NOTICE("Reset aggregator",
+            {"aggregator", tabletId},
+            {"waiters", it->second.Queue.GetWaitersCount()},
+            {"error", error});
+        Reply(it->second.Queue.Reset(error));
+        Aggregators.erase(it);
     }
 
     void Handle(TEvCdcAggregatorService::TEvWriteHeartbeat::TPtr& ev) {
         const auto* msg = ev->Get();
-        LOG_T("Handle " << msg->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", msg->ToString()});
 
         const ui64 tabletId = msg->RecipientTabletId;
         auto& aggregator = Aggregators[tabletId];
         if (!aggregator.Queue.Enqueue(msg->SourceDataShardId, msg->Heartbeat, ev->Sender, ev->Cookie)) {
-            LOG_W("Queue overflow: aggregator# " << tabletId << ", source# " << msg->SourceDataShardId);
+            YDB_LOG_WARN("Queue overflow",
+                {"aggregator", tabletId},
+                {"sourceDataShardId", msg->SourceDataShardId});
             Reply(THeartbeatQueue::TReply{
                 .Sender = ev->Sender,
                 .Cookie = ev->Cookie,
@@ -118,7 +117,8 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
 
     void Handle(TEvCdcAggregator::TEvWriteHeartbeatsResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         auto it = Aggregators.find(record.GetOrigin());
         if (it == Aggregators.end()) {
@@ -126,11 +126,7 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
         }
 
         Reply(it->second.Queue.OnResult(record));
-        if (it->second.Queue.IsIdle()) {
-            Remove(it);
-        } else {
-            SendBatch(it->first, it->second);
-        }
+        SendBatch(it->first, it->second);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
@@ -139,14 +135,18 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
             return;
         }
 
-        Fail(msg->TabletId, msg->ClientId, TStringBuilder() << "Pipe connect failed: " << NKikimrProto::EReplyStatus_Name(msg->Status));
+        ResetAggregator(msg->TabletId, msg->ClientId, TStringBuilder() << "Pipe connect failed: " << NKikimrProto::EReplyStatus_Name(msg->Status));
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        Fail(ev->Get()->TabletId, ev->Get()->ClientId, "Pipe destroyed");
+        ResetAggregator(ev->Get()->TabletId, ev->Get()->ClientId, "Pipe destroyed");
     }
 
 public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::CDC_AGGREGATOR_SERVICE;
+    }
+
     TCdcAggregatorService()
         : TActor(&TThis::StateWork)
     {
@@ -163,7 +163,7 @@ public:
     }
 
 private:
-    TAggregators Aggregators;
+    THashMap<ui64, TAggregator> Aggregators;
 };
 
 IActor* CreateCdcAggregatorService() {

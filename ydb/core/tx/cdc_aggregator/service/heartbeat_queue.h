@@ -24,14 +24,14 @@ public:
 
     THeartbeatQueue(ui32 maxBatchSize, ui32 maxWaiters);
 
-    bool Enqueue(ui64 sourceId, const NPQ::THeartbeat& heartbeat, const TActorId& sender, ui64 cookie);
+    bool Enqueue(ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat, const TActorId& sender, ui64 cookie);
     bool CanSend() const;
     bool IsIdle() const;
     ui32 GetWaitersCount() const;
 
     THolder<TEvCdcAggregator::TEvWriteHeartbeats> NextBatch();
     TVector<TReply> OnResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& record);
-    TVector<TReply> Fail(const TString& error);
+    TVector<TReply> Reset(const TString& error);
 
 private:
     struct TWaiter {

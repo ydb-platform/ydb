@@ -188,6 +188,7 @@ Y_UNIT_TEST(Beginning) {
         {.Kind = Keyword, .Content = "ANALYZE"},
         {.Kind = Keyword, .Content = "BACKUP"},
         {.Kind = Keyword, .Content = "BATCH"},
+        {.Kind = Keyword, .Content = "CHECKSUM TABLE"},
         {.Kind = Keyword, .Content = "COMBINE"},
         {.Kind = Keyword, .Content = "COMMIT"},
         {.Kind = Keyword, .Content = "CREATE"},
@@ -414,6 +415,7 @@ Y_UNIT_TEST(Explain) {
         {.Kind = Keyword, .Content = "ANALYZE"},
         {.Kind = Keyword, .Content = "BACKUP"},
         {.Kind = Keyword, .Content = "BATCH"},
+        {.Kind = Keyword, .Content = "CHECKSUM TABLE"},
         {.Kind = Keyword, .Content = "COMBINE"},
         {.Kind = Keyword, .Content = "COMMIT"},
         {.Kind = Keyword, .Content = "CREATE"},
@@ -453,6 +455,14 @@ Y_UNIT_TEST(Explain) {
 
     auto engine = MakeSqlCompletionEngineUT();
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "EXPLAIN "), expected);
+}
+
+Y_UNIT_TEST(ChecksumTable) {
+    auto engine = MakeSqlCompletionEngineUT();
+    UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "CHECKSUM "),
+                             (TVector<TCandidate>{{.Kind = Keyword, .Content = "TABLE"}}));
+    UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "CHECKSUM TABLE `test/service/#`"),
+                             (TVector<TCandidate>{{.Kind = TableName, .Content = "example"}}));
 }
 
 Y_UNIT_TEST(Grant) {

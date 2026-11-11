@@ -277,6 +277,7 @@ protected:
     TNodePtr StructLiteral(const TRule_struct_literal& node);
     TMaybe<TTableHints> TableHintsImpl(const TRule_table_hints& node, const TString& provider, const TString& keyFunc = "");
     bool TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc = "");
+    bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     bool SimpleTableRefImpl(const TRule_simple_table_ref& node, TTableRef& result);
     bool TopicRefImpl(const TRule_topic_ref& node, TTopicRef& result);
     TWindowSpecificationPtr WindowSpecification(const TRule_window_specification_details& rule);
@@ -357,7 +358,6 @@ protected:
 
 private:
     TMaybe<TDeferredAtom> DoParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context, bool ignoreAt, bool useTablePrefix);
-    bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);
     static TString FrameSettingsToString(EFrameSettings settings, bool isUnbounded);
 
@@ -378,6 +378,7 @@ protected:
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);
 
+bool StoreString(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {});
 bool StoreString(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
 bool StoreInt(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
 

@@ -114,6 +114,10 @@ bool IsLikelyObjectRefStack(const TParserCallStack& stack) {
 }
 
 bool IsLikelyExistingTableStack(const TParserCallStack& stack) {
+    if (Contains({RULE(Checksum_table_stmt), RULE(Simple_table_ref_core), RULE(Object_ref)}, stack)) {
+        return true;
+    }
+
     return !Contains({RULE(Create_table_stmt),
                       RULE(Simple_table_ref)}, stack) &&
            (Contains({RULE(Simple_table_ref),

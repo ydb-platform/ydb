@@ -2534,15 +2534,10 @@ FROM `{table_name}`"""
 
         # Extra tuple elements are ignored.
         extra_top = parsed["ok-extra"]["top"]
-        assert extra_top.get("b") == [5, "t"]
-        assert extra_top.get("a") is None
-        assert extra_top.get("c") is None
-        assert extra_top.get("d") is None
-        assert extra_top.get("e") is None
+        assert extra_top == {"a": None, "b": [5, "t"], "c": None, "d": None, "e": None}
 
         extra_req = parsed["ok-extra"]["req"]
-        assert extra_req.get("id") == 1
-        assert extra_req.get("name") is None
+        assert extra_req == {"id": 1, "name": None}
 
         # Explicit optional nulls.
         assert parsed["ok-nulls"].get("top") is None
@@ -2554,15 +2549,11 @@ FROM `{table_name}`"""
 
         # Empty containers are valid.
         empty_top = parsed["ok-empty"]["top"]
-        assert empty_top.get("a") == []
-        assert empty_top.get("c") == {}
-        assert empty_top.get("b") is None
+        assert empty_top == {"a": [], "b": None, "c": {}, "d": None, "e": None}
 
         # Only one scalar field present.
         only_d_top = parsed["ok-only-d"]["top"]
-        assert only_d_top.get("d") == 101
-        assert only_d_top.get("a") is None
-        assert only_d_top.get("b") is None
+        assert only_d_top == {"a": None, "b": None, "c": None, "d": 101, "e": None}
         assert parsed["ok-only-d"].get("req") is None
 
         # Tuple trailing optional element omitted.
@@ -2577,6 +2568,8 @@ FROM `{table_name}`"""
 
         # Unknown keys were ignored and the row was still emitted.
         assert "ok-extra-keys" in parsed
+        ok_extra_keys = parsed["ok-extra-keys"]["top"]
+        assert ok_extra_keys == {"a": None, "b": None, "c": None, "d": None, "e": None}
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 

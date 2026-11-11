@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/core/kqp/script_executions/table_queries)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(9)
 
 SIZE(MEDIUM)
 IF (SANITIZER_TYPE)

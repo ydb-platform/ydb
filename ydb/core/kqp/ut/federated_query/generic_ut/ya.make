@@ -8,7 +8,6 @@ ELSE()
 ENDIF()
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(8)
 
 SRCS(
     kqp_generic_provider_ut.cpp

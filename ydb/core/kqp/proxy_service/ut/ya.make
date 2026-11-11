@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/core/kqp/proxy_service)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(6)
 
 SIZE(MEDIUM)
 IF (SANITIZER_TYPE)

@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/services/persqueue_cluster_discovery)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(8)
 
 SIZE(MEDIUM)
 

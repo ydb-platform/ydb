@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp/rm_service)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(4)
+SPLIT_FACTOR(5)
 
 SIZE(MEDIUM)
 

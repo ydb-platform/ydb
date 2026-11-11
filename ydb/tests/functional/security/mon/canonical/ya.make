@@ -8,7 +8,7 @@ TEST_SRCS(
 )
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(8)
+SPLIT_FACTOR(10)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
 

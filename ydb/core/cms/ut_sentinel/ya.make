@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/core/cms)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(5)
 
 SIZE(MEDIUM)
 

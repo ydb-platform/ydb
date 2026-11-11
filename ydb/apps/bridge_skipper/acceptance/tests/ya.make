@@ -3,9 +3,9 @@ PY3TEST()
 SIZE(MEDIUM)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(26)
 # Give each current scenario its own chunk: BSC warmup alone takes >=20 seconds.
 # Leave headroom for new cases without regrouping slow scenarios under one timeout.
+SPLIT_FACTOR(32)
 
 TEST_SRCS(
     test_e2e.py

@@ -28,7 +28,7 @@ PEERDIR(
 )
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(16)
+SPLIT_FACTOR(20)
 
 # SQS tests are not CPU or disk intensive,
 # but they use sleeping for some events,

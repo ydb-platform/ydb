@@ -2,7 +2,7 @@ PY3TEST()
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(3)
+SPLIT_FACTOR(5)
 
     TEST_SRCS(
         base.py

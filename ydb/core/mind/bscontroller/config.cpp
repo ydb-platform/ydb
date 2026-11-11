@@ -391,14 +391,9 @@ namespace NKikimr::NBsController {
             }
         };
 
-        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
-                TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
-
-            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking, parameters.SuppressDegradedGroupsChecking); !result) {
-                *errorDescription = result.error();
-                return false;
-            }
-
+        // Completes the set of groups getting new generation when the changes made so far are committed. It only adds the
+        // groups which would be added at commit anyway, so it may be called at any point of the transaction.
+        void TBlobStorageController::PropagateGroupContentChanged(TConfigState& state) {
             // virtual group state reported to node wardens may change without explicit group content change (for
             // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
             for (const auto& [base, overlay] : state.Groups.Diff()) {
@@ -433,6 +428,17 @@ namespace NKikimr::NBsController {
                 }
             }
             state.GroupContentChanged.insert(updates.begin(), updates.end());
+        }
+
+        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
+                TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
+
+            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking, parameters.SuppressDegradedGroupsChecking); !result) {
+                *errorDescription = result.error();
+                return false;
+            }
+
+            PropagateGroupContentChanged(state);
 
             // spin generation for every changed group
             THashSet<TGroupId> bridgeProxyGroupIds;

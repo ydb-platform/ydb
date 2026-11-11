@@ -1865,6 +1865,7 @@ private:
         bool TreatPhantomsOnlyVDisksAsWorking = false;
     };
 
+    void PropagateGroupContentChanged(TConfigState& state);
     bool ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
             TString* errorDescription, NKikimrBlobStorage::TConfigResponse* response = nullptr);
 

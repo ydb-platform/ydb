@@ -22,8 +22,10 @@ const TString A = "grpc://a:1";
 const TString A2 = "grpc://a:2";
 const TString A3 = "grpc://a:3";
 const TString B = "grpc://b:1";
-const TString FastRounds = "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 20}";
-const TString SlowRounds = "{round_interval_seconds: 10, confirm_seconds: 10, bsc_warmup_seconds: 20}";
+const TString FastRounds = "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 20, read_timeout_seconds: 5, selfcheck_operation_timeout_seconds: 12, evidence_ttl_seconds: 30}";
+const TString SlowRounds = "{round_interval_seconds: 10, confirm_seconds: 10, bsc_warmup_seconds: 20, read_timeout_seconds: 5, selfcheck_operation_timeout_seconds: 12, evidence_ttl_seconds: 30}";
+
+const TString FastRoundsWith30SecondWarmup = "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 30, read_timeout_seconds: 5, selfcheck_operation_timeout_seconds: 12, evidence_ttl_seconds: 30}";
 
 struct TStateCall {
     TRpcRequest Request;
@@ -147,6 +149,8 @@ struct THarness {
     std::set<TString> NoQuorum;
     std::map<TString, std::set<TString>> EndpointNoQuorum;
     std::set<TString> FallbackEndpoints;
+    // Decisive static-group failures, distinct from incomplete fallback parts.
+    std::set<TString> FallbackFailed;
     std::function<void(const TPersistentState&)> AfterWrite;
     std::function<void()> AfterFailedWrite;
     bool Fallback = false;
@@ -355,6 +359,19 @@ struct THarness {
                 issue->set_status(Ydb::Monitoring::StatusFlag::RED);
                 issue->set_message("System tablet BSC didn't provide information");
             }
+            for (const auto& failed : FallbackFailed) {
+                auto* group = proto.add_issue_log();
+                group->set_id("group-" + failed);
+                group->set_type("STORAGE_GROUP");
+                group->set_status(Ydb::Monitoring::StatusFlag::RED);
+                group->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(failed);
+                group->add_reason("disk-" + failed);
+                auto* disk = proto.add_issue_log();
+                disk->set_id("disk-" + failed);
+                disk->set_type("VDISK");
+                disk->set_status(Ydb::Monitoring::StatusFlag::RED);
+                disk->set_message("VDisk is not available");
+            }
             if (Truncated) {
                 auto* issue = proto.add_issue_log();
                 issue->set_type("HEALTHCHECK_STATUS");
@@ -471,8 +488,14 @@ void VerifyPileLessReplyRetainsCandidateVeto(bool fallback) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(B).SelfCheck->SentAt, cachedSend);
     UNIT_ASSERT(fixture.Endpoint(B).SelfCheck->ResponderPile == TString("b"));
     // Keeping the observation never refreshes its send time. Once it expires,
-    // current connectivity may qualify the no-BSC policy as before.
+    // node quorum alone cannot qualify b without its own usable reply.
     fixture.Run(31);
+    UNIT_ASSERT(fixture.Clients->Updates.empty());
+    UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoCandidate);
+    fixture.PileLess.erase(B);
+    fixture.Fallback = true;
+    fixture.Failed.clear();
+    fixture.Run(3);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
     UNIT_ASSERT(fixture.Clients->Updates.front().Plan.Update == TExactUpdate({
         {"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));
@@ -616,6 +639,120 @@ void VerifyDispatchAtTtlBoundary(EMode mode, bool slowPersistence) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSkipperActor) {
+    Y_UNIT_TEST(DefaultTimingConfirmsLostPrimaryWithin20Seconds) {
+        THarness fixture(EMode::Auto, {}, 1, "{}");
+        fixture.Failed.clear();
+        fixture.Run(35);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("a").Verdict.Verdict == EPileVerdict::Healthy);
+        const auto faultAt = fixture.Runtime.GetCurrentMonotonicTime();
+        fixture.NoQuorum = {"a"};
+        fixture.Fallback = true;
+        for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+            fixture.Held.insert({A, method});
+        }
+        fixture.Run(20);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        const auto& update = fixture.Clients->Updates.front();
+        UNIT_ASSERT(update.SentAt - faultAt <= TDuration::Seconds(20));
+        UNIT_ASSERT(update.Plan.Update == TExactUpdate({{"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));
+        UNIT_ASSERT_VALUES_EQUAL(update.Plan.ExpectedGeneration, 7);
+        UNIT_ASSERT_VALUES_EQUAL(update.Request.Endpoint, B);
+    }
+
+    Y_UNIT_TEST(DefaultTimingConfirmsBscFailureWithinAFewSeconds) {
+        THarness fixture(EMode::Auto, {}, 1, "{}");
+        fixture.Failed.clear();
+        fixture.Run(35);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("a").Verdict.Verdict == EPileVerdict::Healthy);
+        const auto faultAt = fixture.Runtime.GetCurrentMonotonicTime();
+        fixture.Failed = {"a"};
+        fixture.Run(5);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        const auto& update = fixture.Clients->Updates.front();
+        UNIT_ASSERT(update.SentAt - faultAt <= TDuration::Seconds(5));
+        UNIT_ASSERT(update.Plan.Update == TExactUpdate({{"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));
+        UNIT_ASSERT_VALUES_EQUAL(update.Plan.ExpectedGeneration, 7);
+        UNIT_ASSERT_VALUES_EQUAL(update.Request.Endpoint, B);
+    }
+
+    Y_UNIT_TEST(DefaultTimingConfirmsFallbackFailureDuringBindingWithin20Seconds) {
+        THarness fixture(EMode::Auto, {}, 1, "{}");
+        fixture.Failed.clear();
+        fixture.Run(35);
+        const auto faultAt = fixture.Runtime.GetCurrentMonotonicTime();
+        fixture.FallbackFailed = {"a"};
+        fixture.NoQuorum = {"a"};
+        fixture.Binding = true;
+        fixture.Fallback = true;
+        for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+            fixture.Held.insert({A, method});
+        }
+        fixture.Run(20);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        const auto& update = fixture.Clients->Updates.front();
+        UNIT_ASSERT(update.SentAt - faultAt <= TDuration::Seconds(20));
+        UNIT_ASSERT(update.Plan.Update == TExactUpdate({{"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));
+        UNIT_ASSERT_VALUES_EQUAL(update.Plan.ExpectedGeneration, 7);
+        UNIT_ASSERT_VALUES_EQUAL(update.Request.Endpoint, B);
+    }
+
+    Y_UNIT_TEST(CachedSettledLossDoesNotDelayFreshFallbackFailure) {
+        THarness fixture(EMode::Auto, {}, 1, "{}");
+        fixture.Failed.clear();
+        fixture.Run(35);
+        const auto faultAt = fixture.Runtime.GetCurrentMonotonicTime();
+        fixture.Fallback = true;
+        for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+            fixture.Held.insert({A, method});
+        }
+        // The survivor first detects loss after interconnect convergence. A
+        // settled report is then retained while newer reports are binding.
+        fixture.Run(12);
+        fixture.NoQuorum = {"a"};
+        fixture.FallbackFailed = {"a"};
+        fixture.Step();
+        fixture.Binding = true;
+        fixture.Run(7);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        const auto& update = fixture.Clients->Updates.front();
+        UNIT_ASSERT(update.SentAt - faultAt <= TDuration::Seconds(20));
+        UNIT_ASSERT(update.Plan.Update == TExactUpdate({{"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));
+        UNIT_ASSERT_VALUES_EQUAL(update.Plan.ExpectedGeneration, 7);
+    }
+
+    Y_UNIT_TEST(DefaultTimingDoesNotTurnMissingFailureEvidenceIntoAuthorization) {
+        THarness fixture(EMode::Auto, {}, 1, "{}");
+        fixture.Failed.clear();
+        fixture.Run(35);
+        fixture.NoQuorum = {"a"};
+        fixture.Binding = true;
+        fixture.Fallback = true;
+        for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+            fixture.Held.insert({A, method});
+        }
+        fixture.Run(30);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("a").Verdict.Verdict == EPileVerdict::Unknown);
+    }
+
+    Y_UNIT_TEST(DefaultTimingDoesNotFailOverDuringABriefPrimaryOutage) {
+        THarness fixture(EMode::Auto, {}, 1, "{}");
+        fixture.Failed.clear();
+        fixture.Run(35);
+        fixture.NoQuorum = {"a"};
+        fixture.Fallback = true;
+        for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+            fixture.Held.insert({A, method});
+        }
+        fixture.Run(3);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+        fixture.Held.clear();
+        fixture.NoQuorum.clear();
+        fixture.Fallback = false;
+        fixture.Run(15);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+    }
+
     Y_UNIT_TEST(PileLessSelfCheckPreservesFreshBscVeto) {
         VerifyPileLessReplyRetainsCandidateVeto(false);
     }
@@ -1897,7 +2034,7 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
     // t = 10 restarts the survivor's clean window, so the primary's loss at t = 20,
     // confirmed by t = 26, is acted on only at t = 40, when b becomes Healthy.
     Y_UNIT_TEST(FailoverWaitsForTheWarmupAfterARoleChangeAndForConfirmation) {
-        THarness fixture(EMode::Auto, {}, 1, "{round_interval_seconds: 1, confirm_seconds: 5, bsc_warmup_seconds: 30}");
+        THarness fixture(EMode::Auto, {}, 1, "{round_interval_seconds: 1, confirm_seconds: 5, bsc_warmup_seconds: 30, read_timeout_seconds: 5, selfcheck_operation_timeout_seconds: 12, evidence_ttl_seconds: 30}");
         fixture.Piles = {{"a", EPileState::Synchronized}, {"b", EPileState::Primary}};
         fixture.Failed.clear();
         fixture.Run(10);
@@ -1945,7 +2082,7 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
 
     Y_UNIT_TEST(SuccessfulRoleChangeKeepsWarmupHistoryThroughStaleSelection) {
         THarness fixture(EMode::Auto, {}, 1,
-            "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 30}");
+            FastRoundsWith30SecondWarmup);
         fixture.Failed = {"a"};
         fixture.Run(32);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
@@ -1989,7 +2126,7 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
 
     Y_UNIT_TEST(ViewConflictRecoveryPreservesAnEstablishedRoleBoundary) {
         THarness fixture(EMode::Manual, {}, 1,
-            "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 30}");
+            FastRoundsWith30SecondWarmup);
         fixture.Failed.clear();
         fixture.ReplyReads();
         fixture.Tick();
@@ -2029,7 +2166,7 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
 
     Y_UNIT_TEST(InitialViewDelayPreservesStartupHealthSendTimes) {
         THarness fixture(EMode::Manual, {}, 1,
-            "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 30}");
+            FastRoundsWith30SecondWarmup);
         fixture.Failed.clear();
         for (const auto& endpoint : {A, B}) {
             fixture.Held.insert({endpoint, EYdbMethod::PlainState});
@@ -2065,7 +2202,7 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
 
     // S14 (B1): slow SelfCheck replies do not starve the BSC warm-up.
     Y_UNIT_TEST(SlowSelfCheckRepliesDoNotStarveTheWarmup) {
-        THarness fixture(EMode::Manual, {}, 1, "{round_interval_seconds: 10, confirm_seconds: 10, bsc_warmup_seconds: 30}");
+        THarness fixture(EMode::Manual, {}, 1, "{round_interval_seconds: 10, confirm_seconds: 10, bsc_warmup_seconds: 30, read_timeout_seconds: 5, selfcheck_operation_timeout_seconds: 12, evidence_ttl_seconds: 30}");
         fixture.Failed.clear();
         fixture.SelfCheckDelay = TDuration::Seconds(12);
         fixture.Run(50);

@@ -14,6 +14,7 @@
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/index_metadata.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -1183,6 +1184,9 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
             Ydb::Table::ChangefeedDescription changefeed;
             const auto& cdcStream = cdcStreams.at(i);
             FillChangefeedDescription(changefeed, cdcStream);
+            if (NBackup::IsChangefeedOmittedFromBackup(changefeed)) {
+                continue;
+            }
 
             Ydb::Topic::DescribeTopicResult topic;
             const auto& pq = persQueues.at(i);

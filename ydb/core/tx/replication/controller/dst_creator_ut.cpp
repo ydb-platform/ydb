@@ -9,6 +9,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -98,6 +99,83 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         CheckTableReplica(tableDesc, replicatedDesc, mode, consistency);
         UNIT_ASSERT(!replicatedDesc.GetReplicationConfig().HasImportState());
+    }
+
+    // The destination of a table with a serial column has to get the sequence as well: the column
+    // default references it, and the sequence position is then advanced by replication.
+    Y_UNIT_TEST(CreateTableWithSerialColumn) {
+        TEnv env;
+
+        NKikimrSchemeOp::TIndexedTableCreationConfig config;
+        auto& tableDesc = *config.MutableTableDescription();
+        tableDesc.SetName("Table");
+        {
+            auto* column = tableDesc.AddColumns();
+            column->SetName("id");
+            column->SetType("Int64");
+            column->SetDefaultFromSequence("_serial_column_id");
+        }
+        {
+            auto* column = tableDesc.AddColumns();
+            column->SetName("value");
+            column->SetType("Utf8");
+        }
+        tableDesc.AddKeyColumnNames("id");
+        {
+            auto* sequence = config.AddSequenceDescription();
+            sequence->SetName("_serial_column_id");
+            sequence->SetMinValue(1);
+            sequence->SetDataType("Int64");
+            sequence->MutableSetVal()->SetNextValue(42);
+            sequence->MutableSetVal()->SetNextUsed(true);
+        }
+
+        env.CreateIndexedTable("/Root", config);
+        UNIT_ASSERT(env.GetDescription("/Root/Table").GetPathDescription().HasTable());
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Table_replica",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
+
+        auto desc = env.GetDescription("/Root/Table_replica");
+        const auto& replicatedDesc = desc.GetPathDescription().GetTable();
+
+        const auto* idColumn = FindIfPtr(replicatedDesc.GetColumns(), [](const auto& column) {
+            return column.GetName() == "id";
+        });
+        UNIT_ASSERT(idColumn);
+        UNIT_ASSERT_VALUES_EQUAL(idColumn->GetDefaultFromSequence(), "_serial_column_id");
+
+        UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.SequencesSize(), 1);
+        const auto& sequence = replicatedDesc.GetSequences(0);
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetName(), "_serial_column_id");
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetDataType(), "Int64");
+
+        // The sequence position is only returned by a table describe asked for it, the scheme
+        // description above never has it.
+        env.RunCall([&] {
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.DescribeTable("/Root/Table_replica",
+                NYdb::NTable::TDescribeTableSettings().WithSetVal(true)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            const auto columns = result.GetTableDescription().GetTableColumns();
+            const auto* column = FindIfPtr(columns, [](const auto& column) {
+                return column.Name == "id";
+            });
+            UNIT_ASSERT(column);
+            UNIT_ASSERT(column->SequenceDescription);
+            UNIT_ASSERT(column->SequenceDescription->SetVal);
+            UNIT_ASSERT_VALUES_EQUAL(column->SequenceDescription->SetVal->NextValue, 42);
+            UNIT_ASSERT(column->SequenceDescription->SetVal->NextUsed);
+        });
     }
 
     Y_UNIT_TEST(Basic) {
@@ -778,9 +856,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType, bool enableAsyncIndexReplication = false) {
         TFeatureFlags featureFlags;
         featureFlags.SetEnableChangefeedsOnIndexTables(true);
-        if (enableAsyncIndexReplication) {
-            featureFlags.SetEnableAsyncIndexReplication(true);
-        }
+        featureFlags.SetEnableAsyncIndexReplication(enableAsyncIndexReplication);
         TEnv env(featureFlags);
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 

@@ -1122,6 +1122,11 @@ message TEvControllerUpdateSyncerState {
         optional uint64 BlobsDone = 13;
         optional uint64 BlobsTotal = 14;
         optional uint64 BlobsError = 15;
+
+        // what the stage has to copy, found by its blob scan, in blob bytes (see TSyncerDataStats)
+        optional uint64 BytesToCopy = 16;
+        optional uint64 BytesCopied = 17;
+        optional bool ScanFinished = 18;
     }
 
     repeated TSyncer Syncers = 1;
@@ -1600,6 +1605,9 @@ message TEvControllerDistconfRequest {
         // check that parts of bridged groups in the pile being removed (BridgePileId) can be deleted without committing:
         // every group having VDisks in the pile has to be bridged one
         ValidateRemoveBridgePile = 4;
+        // check that pools and groups can be made ordinary ones without committing, when the bridged cluster is being
+        // rolled back
+        ValidateBridgeRollback = 5;
     }
 
     optional EOperation Operation = 1;

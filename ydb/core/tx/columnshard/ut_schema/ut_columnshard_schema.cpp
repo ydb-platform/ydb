@@ -978,6 +978,39 @@ void TestDropWriteRace() {
     PlanCommit(runtime, sender, planStep + 1, commitTxId);
 }
 
+void TestDropQueuedWrite() {
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    const ui64 tableId = 1;
+    const TestTableDescription table;
+    ui64 txId = 10;
+    Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+    std::vector<ui64> writeIds;
+    UNIT_ASSERT(WriteData(runtime, sender, 1, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds));
+    const TPlanStep commitStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+    PlanCommit(runtime, sender, commitStep, txId);
+
+    // any loaded portion is over a zero metadata limit, so the queue holds the next write
+    runtime.GetAppData().ColumnShardConfig.MutableIndexMetadataMemoryLimit()->SetAbsoluteValue(0);
+    UNIT_ASSERT(WriteData(runtime, sender, 2, tableId, MakeTestBlob({ 100, 110 }, table.Schema), table.Schema, false));
+    TAutoPtr<IEventHandle> handle;
+    UNIT_ASSERT(!runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(handle, TDuration::Seconds(1)));
+
+    const TPlanStep dropStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), ++txId);
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(dropStep, txId));
+    // the queue's own retry is a scheduled wakeup, which the test runtime drops
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvents::TEvWakeup(1));
+
+    UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED);
+}
+
 void TestDropMvccAndCleanupWithActiveScan(const bool enableSnapshotsLocking) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1513,6 +1546,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
     Y_UNIT_TEST(DropWriteRace) {
         TestDropWriteRace();
+    }
+    Y_UNIT_TEST(DropAnswersQueuedWriteSchemeChanged) {
+        TestDropQueuedWrite();
     }
     Y_UNIT_TEST_DUO(DropMvccAndCleanupWithActiveScan, EnableSnapshotsLocking) {
         TestDropMvccAndCleanupWithActiveScan(EnableSnapshotsLocking);

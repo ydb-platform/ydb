@@ -206,6 +206,7 @@ private:
 
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
     void SendInfoToAutopartitioningManager(const TWriteMsg& p);
+    static ECumulativeCounters UserActCounter(TEvPQ::TEvSetClientInfo::ESetClientInfoType type, bool ok);
 
     TActorId ReplyTo(const ui64 destination, const TActorId& replyTo) const;
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo = {});

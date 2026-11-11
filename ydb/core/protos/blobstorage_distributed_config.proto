@@ -39,6 +39,7 @@ message TStorageConfig { // contents of storage metadata
     optional uint64 ExpectedStorageYamlVersion = 15;
     NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones
     NKikimrBridge.TClusterStateDetails ClusterStateDetails = 17; // history of unsynced state changes
+    NKikimrBridge.TBridgeRollbackRecord BridgeRollback = 18; // set when the bridged cluster has been rolled back
 }
 
 message TPDiskMetadataRecord {
@@ -374,6 +375,7 @@ message TEvNodeConfigInvokeOnRoot {
     // Sent by BSC when it has converted all of its groups into bridged ones (and no groups remain that can't be
     // converted yet); clears ClusterStateDetails.BscConversionPending flag.
     message TNotifyBscConversionFinished {
+        uint64 BscConversionId = 1; // TClusterStateDetails.BscConversionId of the conversion BSC has performed
     }
 
     // Add INACTIVE pile to the cluster: allocate its parts of static groups and state storage, make it DISCONNECTED,
@@ -398,6 +400,19 @@ message TEvNodeConfigInvokeOnRoot {
 
     // Read the static-node connectivity of the top of this binding component, even without global quorum.
     message TQueryPileConnectivity {}
+
+    // Report how far the rollback of the bridge mode has gone: whether the cluster still has its cluster state, and
+    // which nodes still run with BridgeConfig.
+    message TQueryBridgeRollbackStatus {}
+
+    // Roll the bridged cluster back to ordinary one: its only pile has to be the implicit (original) one, and every
+    // bridged group has to be inline in it. Static groups become ordinary ones right away, BSC makes its pools and
+    // groups ordinary ones afterwards, then the cluster state is removed.
+    message TRollbackBridge {
+        // don't ask BSC whether it can make its groups ordinary ones before static groups are made such; for the case
+        // when BSC can't start, as it relies on static groups (BSC reports what blocks it when it starts)
+        bool SkipBscValidation = 1;
+    }
 
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
@@ -428,6 +443,8 @@ message TEvNodeConfigInvokeOnRoot {
         TNotifyBridgePileOperation NotifyBridgePileOperation = 29;
         TRemoveBridgePile RemoveBridgePile = 30;
         TQueryPileConnectivity QueryPileConnectivity = 31;
+        TQueryBridgeRollbackStatus QueryBridgeRollbackStatus = 32;
+        TRollbackBridge RollbackBridge = 33;
     }
 }
 
@@ -489,6 +506,14 @@ message TEvNodeConfigInvokeOnRootResult {
         repeated TPile Piles = 5; // free registry slots are omitted
     }
 
+    message TBridgeRollbackStatus {
+        bool HasClusterState = 1; // the cluster is bridged one (converted), its storage has to be rolled back first
+        repeated uint32 BridgeConfigNodeIds = 2; // connected nodes running with BridgeConfig
+        repeated uint32 UnreportedStaticNodeIds = 3; // static nodes not connected (or of older versions not reporting)
+        bool RollbackInProgress = 4; // the rollback of the bridged cluster is pending, BSC is making its groups ordinary
+        optional string ErrorReason = 5; // why BSC has failed to do its part last time (it retries meanwhile)
+    }
+
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
@@ -503,6 +528,7 @@ message TEvNodeConfigInvokeOnRootResult {
         TReassignGroupDisk ReassignGroupDisk = 13;
         TValidateTargetedProposition ValidateTargetedProposition = 14;
         TPileConnectivity PileConnectivity = 15;
+        TBridgeRollbackStatus BridgeRollbackStatus = 16;
     }
 }
 

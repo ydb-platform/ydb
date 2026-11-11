@@ -1,6 +1,9 @@
+* `export s3`, `export nfs` and `export yt` now honor `__omit_backup = "true"`; `tools dump` honors it for tables and changefeeds. S3 export/import now skip async replication changefeeds.
+* Added `ydb admin cluster bridge rollback` to roll a converted cluster back to ordinary mode. `ydb admin cluster bridge list piles` shows its progress.
 * Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.
-* Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--target-database`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.
-* Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data (asks for confirmation unless `-y` is given).
+* Added `piles`, `databases`, and `groups` views to `ydb admin cluster bridge list` for synchronization diagnostics.
+* Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--database-path`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.
+* Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data.
 * Added `ydb admin cluster bridge provision-pile` command to provision a pile listed in the bridge config in a running bridged cluster.
 * Renamed `ydb admin cluster bridge rejoin` to `ydb admin cluster bridge join-pile`; `rejoin` remains available as an alias.
 

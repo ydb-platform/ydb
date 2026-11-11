@@ -78,6 +78,39 @@ EPart ClassifyBscPart(const TIssue& group, const TIssuesById& issues) {
     return replication ? EPart::ReplicatingPart : EPart::RedPart;
 }
 
+// Static whiteboard fallback must retain a complete VDisk reason chain.
+// Replication-only, absent, ambiguous and GREY reasons are not failure proof.
+EPart ClassifyFallbackPart(const TIssue& group, const TIssuesById& issues) {
+    if (group.type() != "STORAGE_GROUP" || group.reason().empty()) {
+        return EPart::Incomplete;
+    }
+    bool failed = false;
+    for (const auto& id : group.reason()) {
+        const auto it = issues.find(id);
+        if (it == issues.end() || !it->second || it->second->type() != "VDISK") {
+            return EPart::Incomplete;
+        }
+        const auto& disk = *it->second;
+        switch (disk.status()) {
+            case TStatus::RED:
+                failed = true;
+                break;
+            case TStatus::BLUE:
+                if (disk.message() != "Replication in progress") {
+                    return EPart::Incomplete;
+                }
+                break;
+            case TStatus::GREEN:
+            case TStatus::YELLOW:
+            case TStatus::ORANGE:
+                break;
+            default:
+                return EPart::Incomplete;
+        }
+    }
+    return failed ? EPart::FallbackRed : EPart::Incomplete;
+}
+
 int Rank(EPart part) {
     return part == EPart::ReplicatingPart ? 0 : part == EPart::Incomplete ? 1 : 2;
 }
@@ -164,7 +197,7 @@ TSelfCheckClassification ClassifySelfCheck(const Ydb::Monitoring::SelfCheckResul
             continue;
         }
         const auto part = classification.Mode == ESelfCheckMode::Fallback
-            ? EPart::FallbackRed
+            ? ClassifyFallbackPart(issue, issues)
             : ClassifyBscPart(issue, issues);
         AddPart(classification, group.pile().name(), part);
     }
@@ -238,6 +271,15 @@ THealthEvaluation EvaluatePiles(
         state.CleanSince.clear();
         state.Primary = primary;
         state.Promoted = promoted;
+    }
+
+    if (state.Generation != view.Generation) {
+        state.Generation = view.Generation;
+        state.GenerationChangedAt = now;
+    }
+    auto fallbackFrom = state.GenerationChangedAt;
+    if (state.RolesChangedAt) {
+        fallbackFrom = std::max(fallbackFrom, *state.RolesChangedAt + params.BscWarmup);
     }
 
     std::vector<const TSelfCheckReply*> bsc;
@@ -315,8 +357,20 @@ THealthEvaluation EvaluatePiles(
             continue;
         }
         auto& verdict = evaluation.Piles[pile];
+        bool outsideFallback = false;
+        bool allFallbackRed = true;
+        TMonotonic newestFallback;
         for (const auto* reply : fallback) {
+            const auto& responder = FindEndpoint(replies, reply->Endpoint)->Pile;
             verdict.FallbackRed |= Part(*reply, pile).has_value();
+            verdict.OwnFallback |= responder == pile && reply->ResponderPile == pile
+                && !reply->Classification.Truncated;
+            if (responder != pile && reply->SentAt >= fallbackFrom) {
+                outsideFallback = true;
+                allFallbackRed &= reply->ResponderPile == responder && !reply->Classification.Truncated
+                    && Part(*reply, pile) == EPart::FallbackRed;
+                newestFallback = std::max(newestFallback, reply->SentAt);
+            }
         }
         bool outside = false;
         bool outsideLost = true;
@@ -369,6 +423,16 @@ THealthEvaluation EvaluatePiles(
             verdict.Verdict = EPileVerdict::Failed;
             verdict.NewestEvidenceSentAt = newestBsc;
             verdict.Reasons.push_back("Every BSC-mode reply reports a RED group part");
+        } else if (bscHost && pile == *bscHost && bsc.empty() && !verdict.SelfQuorum
+            && outsideFallback && allFallbackRed)
+        {
+            // A retained settled report can keep Lost evidence frozen while
+            // newer reports are binding. Prefer the independently qualified
+            // fallback failure so fresh samples can advance its confirmation.
+            verdict.Verdict = EPileVerdict::Failed;
+            verdict.FallbackFailure = true;
+            verdict.NewestEvidenceSentAt = newestFallback;
+            verdict.Reasons.push_back("Every current outside fallback reply reports a decisive RED static group part");
         } else if (outside && outsideLost && !verdict.SelfQuorum) {
             verdict.Verdict = EPileVerdict::Lost;
             verdict.NewestEvidenceSentAt = newestLost;

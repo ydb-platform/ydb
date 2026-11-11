@@ -29,12 +29,12 @@ Y_UNIT_TEST_SUITE(TSkipperConfiguration) {
         UNIT_ASSERT_VALUES_EQUAL(config.HealthEndpointsPerPile, 2);
         const auto& t = config.Timing;
         UNIT_ASSERT_VALUES_EQUAL(t.StatePollInterval, TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(t.ReadTimeout, TDuration::Seconds(5));
-        UNIT_ASSERT_VALUES_EQUAL(t.RoundInterval, TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL(t.SelfCheckOperationTimeout, TDuration::Seconds(12));
-        UNIT_ASSERT_VALUES_EQUAL(t.SelfCheckClientTimeout, TDuration::Seconds(14));
-        UNIT_ASSERT_VALUES_EQUAL(t.EvidenceTtl, TDuration::Seconds(30));
-        UNIT_ASSERT_VALUES_EQUAL(t.Confirm, TDuration::Seconds(20));
+        UNIT_ASSERT_VALUES_EQUAL(t.ReadTimeout, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(t.RoundInterval, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(t.SelfCheckOperationTimeout, TDuration::Seconds(4));
+        UNIT_ASSERT_VALUES_EQUAL(t.SelfCheckClientTimeout, TDuration::Seconds(6));
+        UNIT_ASSERT_VALUES_EQUAL(t.EvidenceTtl, TDuration::Seconds(8));
+        UNIT_ASSERT_VALUES_EQUAL(t.Confirm, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(t.BscWarmup, TDuration::Seconds(30));
         UNIT_ASSERT_VALUES_EQUAL(t.MutationOperationTimeout, TDuration::Seconds(25));
         UNIT_ASSERT_VALUES_EQUAL(t.MutationClientTimeout, TDuration::Seconds(27));
@@ -48,11 +48,21 @@ Y_UNIT_TEST_SUITE(TSkipperConfiguration) {
         UNIT_ASSERT(!credentials.Token);
         UNIT_ASSERT_VALUES_EQUAL(config.ClusterId, "production-bridge-01");
         UNIT_ASSERT_VALUES_EQUAL(config.Endpoints.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(config.Timing.Confirm, TDuration::Seconds(2));
+    }
+
+    Y_UNIT_TEST(ExplicitLegacyTimingProfileIsPreserved) {
+        const auto config = ParseConfig(Minimal(
+            "timing: {state_poll_interval_seconds: 1, read_timeout_seconds: 5, round_interval_seconds: 10, "
+            "selfcheck_operation_timeout_seconds: 12, evidence_ttl_seconds: 30, confirm_seconds: 20}\n"));
+        UNIT_ASSERT_VALUES_EQUAL(config.Timing.ReadTimeout, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(config.Timing.SelfCheckClientTimeout, TDuration::Seconds(14));
+        UNIT_ASSERT_VALUES_EQUAL(config.Timing.EvidenceTtl, TDuration::Seconds(30));
         UNIT_ASSERT_VALUES_EQUAL(config.Timing.Confirm, TDuration::Seconds(20));
     }
 
     Y_UNIT_TEST(ClientDeadlinesAreDerivedFromOperationTimeouts) {
-        const auto config = ParseConfig(Minimal("timing: {selfcheck_operation_timeout_seconds: 7, mutation_operation_timeout_seconds: 10}\n"));
+        const auto config = ParseConfig(Minimal("timing: {selfcheck_operation_timeout_seconds: 7, evidence_ttl_seconds: 12, mutation_operation_timeout_seconds: 10}\n"));
         UNIT_ASSERT_VALUES_EQUAL(config.Timing.SelfCheckClientTimeout, TDuration::Seconds(9));
         UNIT_ASSERT_VALUES_EQUAL(config.Timing.MutationClientTimeout, TDuration::Seconds(12));
     }
@@ -123,15 +133,15 @@ Y_UNIT_TEST_SUITE(TSkipperConfiguration) {
     }
 
     Y_UNIT_TEST(EveryTimingConstraintHasBoundaryCoverage) {
-        Reject(Minimal("timing: {read_timeout_seconds: 29}\n"), "state_poll_interval_seconds + read_timeout_seconds < evidence_ttl_seconds");
-        Reject(Minimal("timing: {state_poll_interval_seconds: 25}\n"), "state_poll_interval_seconds + read_timeout_seconds < evidence_ttl_seconds");
-        Reject(Minimal("timing: {selfcheck_operation_timeout_seconds: 18}\n"), "selfcheck_operation_timeout_seconds + 2 + round_interval_seconds < evidence_ttl_seconds");
-        Reject(Minimal("timing: {evidence_ttl_seconds: 24}\n"), "selfcheck_operation_timeout_seconds + 2 + round_interval_seconds < evidence_ttl_seconds");
+        Reject(Minimal("timing: {read_timeout_seconds: 7}\n"), "state_poll_interval_seconds + read_timeout_seconds < evidence_ttl_seconds");
+        Reject(Minimal("timing: {state_poll_interval_seconds: 7}\n"), "state_poll_interval_seconds + read_timeout_seconds < evidence_ttl_seconds");
+        Reject(Minimal("timing: {selfcheck_operation_timeout_seconds: 5}\n"), "selfcheck_operation_timeout_seconds + 2 + round_interval_seconds < evidence_ttl_seconds");
+        Reject(Minimal("timing: {evidence_ttl_seconds: 7}\n"), "selfcheck_operation_timeout_seconds + 2 + round_interval_seconds < evidence_ttl_seconds");
         Reject(Minimal("timing: {bsc_warmup_seconds: 19}\n"), "bsc_warmup_seconds >= 20");
         UNIT_ASSERT_NO_EXCEPTION(ParseConfig(Minimal(
-            "timing: {read_timeout_seconds: 28, selfcheck_operation_timeout_seconds: 17, "
+            "timing: {read_timeout_seconds: 6, selfcheck_operation_timeout_seconds: 4, "
             "confirm_seconds: 10, bsc_warmup_seconds: 20, mutation_operation_timeout_seconds: 30}\n")));
-        UNIT_ASSERT_NO_EXCEPTION(ParseConfig(Minimal("timing: {state_poll_interval_seconds: 24}\n")));
+        UNIT_ASSERT_NO_EXCEPTION(ParseConfig(Minimal("timing: {state_poll_interval_seconds: 6}\n")));
     }
 
     Y_UNIT_TEST(NumericAndTypedValidationCannotBeBypassed) {

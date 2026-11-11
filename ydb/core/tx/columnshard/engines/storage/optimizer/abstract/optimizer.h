@@ -196,6 +196,10 @@ protected:
         return false;
     }
 
+    virtual bool DoLimitsPortionOverlaps() const {
+        return true;
+    }
+
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
 
@@ -372,6 +376,10 @@ public:
 
     bool UsesPullCompactionScheduling() const {
         return DoUsesPullCompactionScheduling();
+    }
+
+    bool LimitsPortionOverlaps() const {
+        return DoLimitsPortionOverlaps();
     }
 
     TOptimizationPriority GetUsefulMetric() const {

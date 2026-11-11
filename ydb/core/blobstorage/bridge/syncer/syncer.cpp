@@ -66,9 +66,7 @@ namespace NKikimr::NBridge {
             SourceState.SkipBarriersUpTo.emplace(TargetState.SkipBarriersUpTo.emplace());
         }
 
-        if (Stage == NKikimrBridge::TGroupState::BLOCKS ||
-                (Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP && Step == 1)) {
-            // blobs not needed only at the first stage, when we are syncing blocks, or when we are syncing barriers solely
+        if (!ScansBlobs()) {
             SourceState.SkipBlobsUpTo.emplace(TargetState.SkipBlobsUpTo.emplace());
         }
 
@@ -79,6 +77,20 @@ namespace NKikimr::NBridge {
         // issue requests
         IssueAssimilateRequest(false);
         IssueAssimilateRequest(true);
+    }
+
+    bool TSyncerActor::ScansBlobs() const {
+        // blobs not needed only at the first stage, when we are syncing blocks, or when we are syncing barriers solely
+        return Stage != NKikimrBridge::TGroupState::BLOCKS &&
+            (Stage != NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP || Step != 1);
+    }
+
+    void TSyncerActor::CountToCopy(const TLogoBlobID& id) {
+        SyncerDataStats->BytesToCopy += id.BlobSize();
+    }
+
+    void TSyncerActor::CountCopied(const TLogoBlobID& id) {
+        SyncerDataStats->BytesCopied += id.BlobSize();
     }
 
     void TSyncerActor::PassAway() {
@@ -187,15 +199,25 @@ namespace NKikimr::NBridge {
 
             const auto& [blobId] = key;
 
+            // Is the target missing the data of this source blob? A Keep flag reaches the target before the data
+            // does, so the target may have a record of the blob with no data in it.
+            const bool missingData = sourceItem && (!targetItem || !targetItem->HasData);
+
             switch (Stage) {
                 case NKikimrBridge::TGroupState::WRITE_KEEP:
                     if (sourceItem && sourceItem->Keep && targetItem && !targetItem->Keep) {
                         // we have target blob and it misses the Keep flag -- go recover it
                         keepToIssue.push_back(blobId);
                     }
+                    if (missingData) {
+                        CountToCopy(blobId); // an estimate for the data stage
+                    }
                     break;
 
                 case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
+                    if (missingData) {
+                        CountToCopy(blobId); // an estimate for the data stage
+                    }
                     if (sourceItem && sourceItem->DoNotKeep && (!targetItem || !targetItem->DoNotKeep)) {
                         doNotKeepToIssue.push_back(blobId);
                     } else if (!sourceItem && targetItem && targetItem->Keep && !targetItem->DoNotKeep) {
@@ -214,6 +236,10 @@ namespace NKikimr::NBridge {
                         break;
                     }
                     RestoreQueue.push_back(blobId);
+                    if (missingData) {
+                        CountToCopy(blobId);
+                        CountedToCopy.insert(blobId);
+                    }
                     if (sourceItem->Keep || sourceItem->DoNotKeep) {
                         SourceBlobFlags.emplace(blobId, TSourceBlobFlags{sourceItem->Keep, sourceItem->DoNotKeep});
                     }
@@ -271,6 +297,9 @@ namespace NKikimr::NBridge {
         MERGE(Blobs)
 #undef MERGE
 
+        if (ScansBlobs()) {
+            SyncerDataStats->ScanFinished = true;
+        }
         finish();
         Finished = true;
         CheckIfDone();
@@ -491,6 +520,7 @@ namespace NKikimr::NBridge {
         if (success) {
             SyncerDataStats->BytesDone += msg.Id.BlobSize();
             ++SyncerDataStats->BlobsDone;
+            CountCopied(msg.Id);
         } else {
             SyncerDataStats->BytesError += msg.Id.BlobSize();
             ++SyncerDataStats->BlobsError;
@@ -542,6 +572,7 @@ namespace NKikimr::NBridge {
                     // so we don't need to issue any keep flags
                     SyncerDataStats->BytesDone += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsDone;
+                    CountCopied(r.Id);
                 } else if (r.Status == NKikimrProto::ERROR) { // an error occured when reading this exact blob
                     SyncerDataStats->BytesError += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsError;
@@ -557,6 +588,9 @@ namespace NKikimr::NBridge {
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
                     // blob exists and okay; its redundancy has been restored; its keep flag was synced earlier, unless
                     // the blob has been written since then without it, as the bridge proxy restoring it may do
+                    if (CountedToCopy.erase(r.Id)) {
+                        CountCopied(r.Id); // it has been written since the scan
+                    }
                     const auto sourceFlags = TakeSourceBlobFlags(r.Id);
                     if (sourceFlags.Keep && !sourceFlags.DoNotKeep && !r.Keep && !r.DoNotKeep) {
                         if (!keep) {
@@ -568,11 +602,15 @@ namespace NKikimr::NBridge {
                     ++SyncerDataStats->BlobsDone;
                 } else if (r.Status == NKikimrProto::NODATA) {
                     // we have to query this blob and do full rewrite -- there was no data for it
+                    if (!CountedToCopy.erase(r.Id)) {
+                        CountToCopy(r.Id); // the target has a record of the blob, but its data can't be read
+                    }
                     // the rate limits traffic between piles, and the read brings about one copy of the blob data across
                     IssueQuery(false, std::make_unique<TEvBlobStorage::TEvGet>(r.Id, 0, 0, TInstant::Max(),
                         NKikimrBlobStorage::AsyncRead), {}, r.Id.BlobSize());
                 } else if (r.Status == NKikimrProto::ERROR) {
                     SourceBlobFlags.erase(r.Id);
+                    CountedToCopy.erase(r.Id);
                     SyncerDataStats->BytesError += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsError;
                     errorReason = "TEvGet from target group failed with ERROR";

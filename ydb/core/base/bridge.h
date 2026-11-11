@@ -179,6 +179,12 @@ namespace NKikimr {
                 : TBridgePileId();
         }
 
+        // The bridged cluster is being rolled back to ordinary one (see TPendingPileOperation.ROLLBACK).
+        inline bool IsRollbackPending(const NKikimrBridge::TClusterStateDetails& details) {
+            return details.HasPendingPileOperation() && details.GetPendingPileOperation().GetKind() ==
+                NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ROLLBACK;
+        }
+
         // Make an entry for the part of the bridged group in the designated pile, which the group has no part in yet
         // (filling the gap with absent entries); returns the entry to fill in.
         NKikimrBridge::TGroupState::TPile *AddGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId);

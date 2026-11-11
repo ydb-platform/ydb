@@ -9,6 +9,7 @@
 #include <yql/essentials/public/udf/udf_type_builder.h>
 
 #include <util/generic/ptr.h>
+#include <util/generic/array_ref.h>
 #include <util/generic/vector.h>
 #include <util/generic/maybe.h>
 #include <util/generic/hash.h>
@@ -148,6 +149,13 @@ inline TStringBuf ModuleName(const TStringBuf& name) {
 
 const TStringBuf StaticModulePrefix(TStringBuf("<static>::"));
 
+using TStaticUdfLibrariesGetter = const NYql::NUdf::TYqlUdfStaticLibrary* const* (*)(size_t* count);
+
+// Register before starting runtime workers. The callback and descriptors must
+// outlive the runtime; repeated registration must use the same callback.
+void SetStaticUdfLibrariesGetter(TStaticUdfLibrariesGetter getter);
+
 void FillStaticModules(IMutableFunctionRegistry& registry, bool skipLoaded = false);
+void FillStaticModules(IMutableFunctionRegistry& registry, TArrayRef<const NYql::NUdf::TYqlUdfStaticLibrary* const> libraries, bool skipLoaded = false);
 
 } // namespace NKikimr::NMiniKQL

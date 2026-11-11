@@ -93,6 +93,7 @@ class TEnv {
         Sender = Server.GetRuntime()->AllocateEdgeActor();
     }
 
+public:
     Ydb::StatusIds::StatusCode LoginStatus(const TString& database, const TString& user, const TString& password) {
         Ydb::Auth::LoginRequest request;
         request.set_user(user);
@@ -116,6 +117,7 @@ class TEnv {
         return operation.status();
     }
 
+private:
     void Login(const TString& database, const TString& user, const TString& password) {
         UNIT_ASSERT_VALUES_EQUAL(LoginStatus(database, user, password), Ydb::StatusIds::SUCCESS);
     }
@@ -272,6 +274,11 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(Client.SyncCall(request, reply), NBus::MESSAGE_OK);
         const auto& response = dynamic_cast<NMsgBusProxy::TBusConsoleResponse*>(reply.Get())->Record;
         UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+    }
+
+    template <typename... Args>
+    auto CreateIndexedTable(Args&&... args) {
+        return RunCall([&] { return Client.CreateIndexedTable(std::forward<Args>(args)...); });
     }
 
     template <typename... Args>

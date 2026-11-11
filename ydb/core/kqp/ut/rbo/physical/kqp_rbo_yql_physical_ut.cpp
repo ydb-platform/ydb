@@ -1406,6 +1406,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 "Unexpected full sort. Query: " << query << " AST: " << ast);
             UNIT_ASSERT_C(!ast.Contains("WideTopSortBlocks"), "Unexpected block top-N. Query: " << query << " AST: " << ast);
         };
+        // A row table read returns its rows in the key order, and a merge connection keeps it, so a sort by the key
+        // needs no sort at all. The limit after the merge applies the offset.
+        const auto assertSortedRead = [](const TString& ast, const TString& query) {
+            UNIT_ASSERT_C(ast.Contains("'\"Sorted\"") && ast.Contains("DqCnMerge"), "Expected a sorted read. Query: " << query << " AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("TopSort") && !ast.Contains("WideSort") && !ast.Contains("(Sort "),
+                "Unexpected sort. Query: " << query << " AST: " << ast);
+        };
 
         struct TSortedCase {
             TString Query;
@@ -1503,7 +1510,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
                 const TString keyOrder = pragma + sortedQuery("a", limit, "8");
                 const auto keyOrderAst = explain(keyOrder);
-                assertSort(keyOrderAst, keyOrder);
+                if (isColumnTable) {
+                    assertSort(keyOrderAst, keyOrder);
+                } else {
+                    assertSortedRead(keyOrderAst, keyOrder);
+                }
                 assertReadLimit(keyOrderAst, keyOrder, 1);
                 CompareYson("[[8];[9]]", FormatResultSetYson(execute(keyOrder, noParams)));
 
@@ -1520,16 +1531,24 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 UNIT_ASSERT_VALUES_EQUAL_C(execute(unsorted, noParams).RowsCount(), 2, unsorted);
             }
 
-            // A limit that is not a literal: column shards get it computed, and the sort stays a top-N.
+            // A limit that is not a literal: column shards get it computed, and the sort stays a top-N. A row table
+            // read takes no limit then, but its rows still come in the key order.
+            const auto assertKeyOrder = [&](const TString& ast, const TString& query) {
+                if (isColumnTable) {
+                    assertTopSort(ast, query);
+                } else {
+                    assertSortedRead(ast, query);
+                }
+            };
             const TString expression = pragma + sortedQuery("a", "1 + 2", "1 + 1");
             const auto expressionAst = explain(expression);
-            assertTopSort(expressionAst, expression);
+            assertKeyOrder(expressionAst, expression);
             assertReadLimit(expressionAst, expression, isColumnTable ? 1 : 0);
             CompareYson("[[2];[3];[4]]", FormatResultSetYson(execute(expression, noParams)));
 
             const TString sortedParams = declare + sortedQuery("a", "$limit", "$offset");
             const auto sortedParamsAst = explain(sortedParams);
-            assertTopSort(sortedParamsAst, sortedParams);
+            assertKeyOrder(sortedParamsAst, sortedParams);
             assertReadLimit(sortedParamsAst, sortedParams, isColumnTable ? 1 : 0);
             CompareYson("[[2];[3];[4]]", FormatResultSetYson(execute(sortedParams, makeParams(3, 2))));
             CompareYson("[[8];[9]]", FormatResultSetYson(execute(sortedParams, makeParams(maxLimit, 8))));
@@ -1844,7 +1863,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {"select x, y from (select a as x, a as y from `/Root/olap1` union all select a as x, b as y from `/Root/olap2`) order by x, y limit 1", "[[1;1]]", std::nullopt, std::nullopt},
             // More inputs, and a row table.
             {"select a from (select a, b from `/Root/olap1` union all select a, b from `/Root/olap2` union all select a, b from `/Root/nullable`) order by a limit 2", "[[1];[2]]", 4, 3},
-            {"select a from (select a, b from `/Root/olap1` union all select a, b from `/Root/row`) order by a limit 2", "[[1];[2]]", 3, std::nullopt},
+            // The read of a row table returns its rows in the key order, so its input needs no top sort.
+            {"select a from (select a, b from `/Root/olap1` union all select a, b from `/Root/row`) order by a limit 2", "[[1];[2]]", 2, std::nullopt},
             // Together with a pushed filter.
             {"select a from (" + olap12 + ") where b = 10 order by a limit 1", "[[1]]", 3, std::nullopt},
             // An input with its own top sort keeps it, and its limit applies first.

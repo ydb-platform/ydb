@@ -5,7 +5,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events_quoter.h>
 
-namespace NKikimr::NBridge {
+namespace NKikimr::NGroupSyncer {
 
     struct TSyncerDataStats {
         std::atomic_uint64_t BytesTotal = 0;
@@ -43,4 +43,4 @@ namespace NKikimr::NBridge {
     IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
         std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter);
 
-} // NKikimr::NBridge
+} // NKikimr::NGroupSyncer

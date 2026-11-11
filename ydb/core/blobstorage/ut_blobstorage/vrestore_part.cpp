@@ -1,6 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 
 #include <array>
@@ -163,9 +163,9 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
 
         TActorId edge = fixture.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         TInstant deadline = fixture.Env.Runtime->GetClock() + TDuration::Minutes(1);
-        fixture.Env.Runtime->Register(NBridge::CreateMirror3dcRepairSyncer(fixture.Info, edge), 1);
-        NBridge::TEvMirror3dcRepairScanResult::TPtr result =
-            fixture.Env.WaitForEdgeActorEvent<NBridge::TEvMirror3dcRepairScanResult>(edge, true, deadline + TDuration::Seconds(1));
+        fixture.Env.Runtime->Register(NGroupSyncer::CreateMirror3dcRepairSyncer(fixture.Info, edge), 1);
+        NGroupSyncer::TEvMirror3dcRepairScanResult::TPtr result =
+            fixture.Env.WaitForEdgeActorEvent<NGroupSyncer::TEvMirror3dcRepairScanResult>(edge, true, deadline + TDuration::Seconds(1));
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
         fixture.CheckWritten(2, 3);

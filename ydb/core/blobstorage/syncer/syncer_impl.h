@@ -12,7 +12,7 @@
 
 #include <util/generic/hash_set.h>
 
-namespace NKikimr::NBridge {
+namespace NKikimr::NGroupSyncer {
 
     class TSyncerActor : public TActorBootstrapped<TSyncerActor> {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
@@ -139,4 +139,4 @@ namespace NKikimr::NBridge {
         void Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev);
     };
 
-} // NKikimr::NBridge
+} // NKikimr::NGroupSyncer

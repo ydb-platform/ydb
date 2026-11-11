@@ -3,7 +3,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/util/stlog.h>
 
-namespace NKikimr::NBridge {
+namespace NKikimr::NGroupSyncer {
 
     TSyncerActor::TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
             std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter)
@@ -788,4 +788,4 @@ namespace NKikimr::NBridge {
             std::move(syncRateQuoter));
     }
 
-} // NKikimr::NBridge
+} // NKikimr::NGroupSyncer

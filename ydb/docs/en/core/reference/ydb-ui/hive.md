@@ -55,10 +55,6 @@ Additional pages are presented below the table:
 
 You can also view what tablets use a particular group and, vice versa, what groups are used on a particular tablet.
 
-## Settings {#settings}
-
-The **Settings** page is the Hive configuration page.
-
 ## Reassign Groups {#reassign_groups}
 
 Click **Reassign Groups** to open the window with parameters for balancing:

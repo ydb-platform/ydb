@@ -1241,11 +1241,11 @@ private:
 
 TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNode::TPtr& predicate,
     const TJoinLabels& labels, const TExprNode& row, const THashMap<TString, TString>& backRenameMap,
-    TExprContext& ctx, bool rotateJoinTree)
+    TExprContext& ctx, bool rotateJoinTree, bool allowAggrEquals)
 {
     TExprNode::TPtr left;
     TExprNode::TPtr right;
-    if (!IsMemberEquality(predicate, row, left, right)) {
+    if (!IsMemberEquality(predicate, row, left, right, allowAggrEquals)) {
         return equiJoin;
     }
 
@@ -2123,9 +2123,10 @@ TExprBase FlatMapOverEquiJoin(
                 }
             }
 
-            if (!IsEqualityFilterOverJoinEnabled(types) && inputs.size() == 2) {
+            const bool allowAggrEquals = IsAggrEqualsJoinKeysEnabled(*types);
+            if (inputs.size() == 2 && (!IsEqualityFilterOverJoinEnabled(types) || (allowAggrEquals && andTerm->IsCallable("AggrEquals")))) {
                 auto newJoin = DecayCrossJoinIntoInner(equiJoin.Ptr(), andTerm,
-                    labels, row, backRenameMap, ctx, types->RotateJoinTree);
+                    labels, row, backRenameMap, ctx, types->RotateJoinTree, allowAggrEquals);
                 if (newJoin != equiJoin.Ptr()) {
                     YQL_CLOG(DEBUG, Core) << "DecayCrossJoinIntoInner";
                     ret = newJoin;

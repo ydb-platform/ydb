@@ -342,6 +342,14 @@ message TBridgePileInfo {
     map<string, uint32> GroupStatuses = 5; // UNKNOWN (grey), FULL (green), PARTIAL (yellow), DEGRADED (yellow), DISINTEGRATED (red)
     optional TBridgePileSyncInfo Sync = 6; // set when some groups of the pile are not synced yet
     repeated TBridgePileStoragePool StoragePools = 7; // the pools that have groups not synced yet in the pile
+    // Alive means a node returned whiteboard system state in time and was not disconnected during collection;
+    // a node that did not answer is counted as not alive. Alive counters are absent (unknown, not zero)
+    // only when the pile cannot be queried. When bridge policy forbids interconnect, the serving node asks
+    // a viewer inside the target pile over HTTPS. INACTIVE piles remain unknown.
+    optional uint32 StorageNodes = 8; // Known static nodes.
+    optional uint32 AliveStorageNodes = 9;
+    optional uint32 ComputeNodes = 10; // Known dynamic nodes.
+    optional uint32 AliveComputeNodes = 11;
 }
 
 message TBridgeInfo {

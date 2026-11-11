@@ -256,6 +256,30 @@ TVector<TString> ExtractSortingKeys(const NYql::NNodes::TCoLambda& keySelector) 
     return sortingKeys;
 };
 
+bool OlapProcessPreservesSorting(const TExprNode::TPtr& lambda, const THashSet<TString>& sortColumns) {
+    if (!lambda) {
+        return true;
+    }
+    const auto process = TCoLambda(lambda);
+    auto input = process.Body();
+    while (input.Raw() != process.Args().Arg(0).Raw()) {
+        if (const auto filter = input.Maybe<TKqpOlapFilter>()) {
+            input = filter.Cast().Input();
+        } else if (const auto projections = input.Maybe<TKqpOlapProjections>()) {
+            for (const auto& item : projections.Cast().Projections()) {
+                if (sortColumns.contains(item.Cast<TKqpOlapProjection>().ColumnName().StringValue())) {
+                    return false;
+                }
+            }
+            input = projections.Cast().Input();
+        } else {
+            // Aggregation, distinct and unknown operations do not supply the storage's PK order.
+            return false;
+        }
+    }
+    return true;
+}
+
 bool IsSortKeyPrimary(
     const NYql::NNodes::TCoLambda& keySelector,
     const NYql::TKikimrTableDescription& tableDesc,

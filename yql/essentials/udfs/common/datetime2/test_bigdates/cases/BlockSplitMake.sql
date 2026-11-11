@@ -1,18 +1,13 @@
-/* syntax version 1 */
-pragma UseBlocks;
-INSERT INTO @t SELECT
-    UNWRAP(CAST(fdate32 AS Date32)) AS fdate32,
-    UNWRAP(CAST(fdatetime64 AS Datetime64)) AS fdatetime64,
-    UNWRAP(CAST(ftimestamp64 AS Timestamp64)) AS ftimestamp64,
-    UNWRAP(CAST(ftzpdate32 AS TzDate32)) AS ftzpdate32,
-    UNWRAP(CAST(ftzpdatetime64 AS TzDatetime64)) AS ftzpdatetime64,
-    UNWRAP(CAST(ftzptimestamp64 AS TzTimestamp64)) AS ftzptimestamp64,
-    UNWRAP(CAST(ftzmdate32 AS TzDate32)) AS ftzmdate32,
-    UNWRAP(CAST(ftzmdatetime64 AS TzDatetime64)) AS ftzmdatetime64,
-    UNWRAP(CAST(ftzmtimestamp64 AS TzTimestamp64)) AS ftzmtimestamp64,
-FROM Input;
+$rows = [
+    <|fdate32: Date32("-1-01-01"), fdatetime64: Datetime64("-1-01-01T23:59:59Z"), ftimestamp64: Timestamp64("-1-01-01T23:59:59.999999Z"), ftzpdate32: TzDate32("-1-01-01,Europe/Moscow"), ftzpdatetime64: TzDatetime64("-1-01-01T23:59:59,Europe/Moscow"), ftzptimestamp64: TzTimestamp64("-1-01-01T23:59:59.999999,Europe/Moscow"), ftzmdate32: TzDate32("-1-01-01,America/Los_Angeles"), ftzmdatetime64: TzDatetime64("-1-01-01T23:59:59,America/Los_Angeles"), ftzmtimestamp64: TzTimestamp64("-1-01-01T23:59:59.999999,America/Los_Angeles")|>,
+    <|fdate32: Date32("1-01-01"), fdatetime64: Datetime64("1-01-01T00:00:00Z"), ftimestamp64: Timestamp64("1-01-01T00:00:00.000000Z"), ftzpdate32: TzDate32("1-01-01,Europe/Moscow"), ftzpdatetime64: TzDatetime64("1-01-01T00:00:00,Europe/Moscow"), ftzptimestamp64: TzTimestamp64("1-01-01T00:00:00.000000,Europe/Moscow"), ftzmdate32: TzDate32("1-01-01,America/Los_Angeles"), ftzmdatetime64: TzDatetime64("1-01-01T00:00:00,America/Los_Angeles"), ftzmtimestamp64: TzTimestamp64("1-01-01T00:00:00.000000,America/Los_Angeles")|>,
+    <|fdate32: Date32("1969-12-31"), fdatetime64: Datetime64("1969-12-31T23:59:59Z"), ftimestamp64: Timestamp64("1969-12-31T23:59:59.999999Z"), ftzpdate32: TzDate32("1969-12-31,Europe/Moscow"), ftzpdatetime64: TzDatetime64("1969-12-31T23:59:59,Europe/Moscow"), ftzptimestamp64: TzTimestamp64("1969-12-31T23:59:59.999999,Europe/Moscow"), ftzmdate32: TzDate32("1969-12-31,America/Los_Angeles"), ftzmdatetime64: TzDatetime64("1969-12-31T23:59:59,America/Los_Angeles"), ftzmtimestamp64: TzTimestamp64("1969-12-31T23:59:59.999999,America/Los_Angeles")|>,
+    <|fdate32: Date32("1970-01-01"), fdatetime64: Datetime64("1970-01-01T00:00:00Z"), ftimestamp64: Timestamp64("1970-01-01T00:00:00.000000Z"), ftzpdate32: TzDate32("1970-01-01,Europe/Moscow"), ftzpdatetime64: TzDatetime64("1970-01-01T00:00:00,Europe/Moscow"), ftzptimestamp64: TzTimestamp64("1970-01-01T00:00:00.000000,Europe/Moscow"), ftzmdate32: TzDate32("1970-01-01,America/Los_Angeles"), ftzmdatetime64: TzDatetime64("1970-01-01T00:00:00,America/Los_Angeles"), ftzmtimestamp64: TzTimestamp64("1970-01-01T00:00:00.000000,America/Los_Angeles")|>,
+    <|fdate32: Date32("2025-01-01"), fdatetime64: Datetime64("2025-01-01T00:00:00Z"), ftimestamp64: Timestamp64("2025-01-01T00:00:00.000000Z"), ftzpdate32: TzDate32("2025-01-01,Europe/Moscow"), ftzpdatetime64: TzDatetime64("2025-01-01T00:00:00,Europe/Moscow"), ftzptimestamp64: TzTimestamp64("2025-01-01T00:00:00.000000,Europe/Moscow"), ftzmdate32: TzDate32("2025-01-01,America/Los_Angeles"), ftzmdatetime64: TzDatetime64("2025-01-01T00:00:00,America/Los_Angeles"), ftzmtimestamp64: TzTimestamp64("2025-01-01T00:00:00.000000,America/Los_Angeles")|>,
+    <|fdate32: Date32("2106-01-01"), fdatetime64: Datetime64("2106-01-01T00:00:00Z"), ftimestamp64: Timestamp64("2106-01-01T00:00:00.000000Z"), ftzpdate32: TzDate32("2106-01-01,Europe/Moscow"), ftzpdatetime64: TzDatetime64("2106-01-01T00:00:00,Europe/Moscow"), ftzptimestamp64: TzTimestamp64("2106-01-01T00:00:00.000000,Europe/Moscow"), ftzmdate32: TzDate32("2106-01-01,America/Los_Angeles"), ftzmdatetime64: TzDatetime64("2106-01-01T00:00:00,America/Los_Angeles"), ftzmtimestamp64: TzTimestamp64("2106-01-01T00:00:00.000000,America/Los_Angeles")|>,
+];
 
-COMMIT;
+pragma UseBlocks;
 
 SELECT
     DateTime::MakeDate32(fdate32) AS rdate32,
@@ -24,4 +19,4 @@ SELECT
     DateTime::MakeTzDate32(ftzmdate32) AS rtzmdate32,
     DateTime::MakeTzDatetime64(ftzmdatetime64) AS rtzmdatetime64,
     DateTime::MakeTzTimestamp64(ftzmtimestamp64) AS rtzmtimestamp64,
-FROM @t;
+FROM AS_TABLE($rows);

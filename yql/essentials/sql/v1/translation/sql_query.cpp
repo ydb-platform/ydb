@@ -1,5 +1,6 @@
 #include "sql_query.h"
 
+#include "sql_checksum.h"
 #include "sql_ddl_backup.h"
 #include "sql_ddl_identity.h"
 #include "sql_ddl_resource_pool.h"
@@ -1739,6 +1740,15 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!node) {
                 return false;
             }
+            AddStatementToBlocks(blocks, node);
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore74: {
+            auto node = TChecksumTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core74().GetRule_checksum_table_stmt1());
+            if (!node) {
+                return false;
+            }
+
             AddStatementToBlocks(blocks, node);
             break;
         }

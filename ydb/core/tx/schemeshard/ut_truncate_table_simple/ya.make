@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
 
-FORK_SUBTESTS()
-
 PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/testlib/default

@@ -5,9 +5,9 @@ PRAGMA AnsiImplicitCrossJoin;
 SELECT
     Sum(l_extendedprice * ($to_decimal(1) - l_discount)) AS revenue
 FROM
-    `/Root/lineitem` as lineitem
+    `lineitem` as lineitem
 ,
-    `/Root/part` as part
+    `part` as part
 WHERE
     (
         p_partkey == l_partkey

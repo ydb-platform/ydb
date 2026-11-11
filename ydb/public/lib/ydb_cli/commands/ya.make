@@ -14,6 +14,7 @@ SRCS(
     ydb_admin.cpp
     ydb_benchmark.cpp
     ydb_bridge.cpp
+    ydb_bridge_list.cpp
     ydb_cluster.cpp
     ydb_database_attribute.cpp
     ydb_config.cpp

@@ -21,6 +21,7 @@ SRCS(
     kqp_rbo_lookup_join.cpp
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
+    remove_redundant_sorts.cpp
     analysis/logical_liveness.cpp
     explain/kqp_connection_explain.cpp
     explain/kqp_expression_explain.cpp

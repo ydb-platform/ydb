@@ -1,20 +1,14 @@
-/* syntax version 1 */
+$rows = [
+    <|fdate: Just(Date("2018-12-15")), fdatetime: Just(Datetime("2018-12-15T01:02:03Z")), ftimestamp: Just(Timestamp("2018-12-15T01:02:03.456789Z")), ftzdate: Just(TzDate("2018-12-15,Europe/Moscow")), ftzdatetime: Just(TzDatetime("2018-12-15T01:02:03,Europe/Moscow")), ftztimestamp: Just(TzTimestamp("2018-12-15T01:02:03.456789,Europe/Moscow"))|>,
+];
+
 $format = DateTime::Format("%Y%m%d %H%M%S %Z");
 
 select
-    $format(`date`),
-    $format(`datetime`),
-    $format(`timestamp`),
-    $format(`tzdate`),
-    $format(`tzdatetime`),
-    $format(`tztimestamp`)
-from (
-    select
-        cast(fdate as Date) as `date`,
-        cast(fdatetime as Datetime) as `datetime`,
-        cast(ftimestamp as Timestamp) as `timestamp`,
-        cast(ftzdate as TzDate) as `tzdate`,
-        cast(ftzdatetime as TzDatetime) as `tzdatetime`,
-        cast(ftztimestamp as TzTimestamp) as `tztimestamp`
-    from Input
-);
+    $format(fdate),
+    $format(fdatetime),
+    $format(ftimestamp),
+    $format(ftzdate),
+    $format(ftzdatetime),
+    $format(ftztimestamp)
+FROM AS_TABLE($rows);

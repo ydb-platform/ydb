@@ -10,7 +10,9 @@
 #include <yql/essentials/minikql/mkql_node.h>
 
 #include <library/cpp/json/json_value.h>
-#include <library/cpp/testing/benchmark/bench.h>
+#include <benchmark/benchmark.h>
+
+#include <util/generic/yexception.h>
 
 #include <util/random/fast.h>
 
@@ -22,6 +24,8 @@ using namespace NYql::NUdf;
 using namespace NYql::NJsonPath;
 using namespace NJson;
 using namespace NKikimr::NMiniKQL;
+
+namespace {
 
 TString RandomString(ui32 min, ui32 max) {
     static TReallyFastRng32 Rand(0);
@@ -70,38 +74,39 @@ const size_t MAX_PARSE_ERRORS = 100;
     THolderFactory HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get());                         \
     TDefaultValueBuilder ValueBuilder(HolderFactory);
 
-// NOLINTNEXTLINE(misc-use-anonymous-namespace)
-Y_CPU_BENCHMARK(JsonPath, iface) {
+void JsonPath(benchmark::State& state) {
     PREPARE()
 
     const TString json = GenerateRandomJson();
     const TUnboxedValue dom = TryParseJsonDom(json, &ValueBuilder);
 
-    for (size_t i = 0; i < iface.Iterations(); i++) {
+    for (auto _ : state) {
         TIssues issues;
         const auto jsonPath = ParseJsonPath("$.'_id'.issueId", issues, MAX_PARSE_ERRORS);
-        const auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
-        Y_ABORT_UNLESS(!result.IsError());
+        auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
+        Y_ENSURE(!result.IsError(), "JSONPath execution failed");
+        benchmark::DoNotOptimize(result);
     }
 }
+BENCHMARK(JsonPath);
 
-// NOLINTNEXTLINE(misc-use-anonymous-namespace)
-Y_CPU_BENCHMARK(JsonPathLikeRegexWithCompile, iface) {
+void JsonPathLikeRegexWithCompile(benchmark::State& state) {
     PREPARE()
 
     const TString json = GenerateRandomJson();
     const TUnboxedValue dom = TryParseJsonDom(json, &ValueBuilder);
 
-    for (size_t i = 0; i < iface.Iterations(); i++) {
+    for (auto _ : state) {
         TIssues issues;
         const auto jsonPath = ParseJsonPath("$[*] like_regex \"[0-9]+\"", issues, MAX_PARSE_ERRORS);
-        const auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
-        Y_ABORT_UNLESS(!result.IsError());
+        auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
+        Y_ENSURE(!result.IsError(), "JSONPath execution failed");
+        benchmark::DoNotOptimize(result);
     }
 }
+BENCHMARK(JsonPathLikeRegexWithCompile);
 
-// NOLINTNEXTLINE(misc-use-anonymous-namespace)
-Y_CPU_BENCHMARK(JsonPathLikeRegex, iface) {
+void JsonPathLikeRegex(benchmark::State& state) {
     PREPARE()
 
     const TString json = GenerateRandomJson();
@@ -109,8 +114,12 @@ Y_CPU_BENCHMARK(JsonPathLikeRegex, iface) {
 
     TIssues issues;
     const auto jsonPath = ParseJsonPath("$[*] like_regex \"[0-9]+\"", issues, MAX_PARSE_ERRORS);
-    for (size_t i = 0; i < iface.Iterations(); i++) {
-        const auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
-        Y_ABORT_UNLESS(!result.IsError());
+    for (auto _ : state) {
+        auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
+        Y_ENSURE(!result.IsError(), "JSONPath execution failed");
+        benchmark::DoNotOptimize(result);
     }
 }
+BENCHMARK(JsonPathLikeRegex);
+
+} // namespace

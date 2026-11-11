@@ -99,6 +99,17 @@ def rebase_pnpm_settings(settings, source_dir, target_dir):
     return result
 
 
+def load_effective_pnpm_config(pj, sources_root, target_dir=None):
+    """Load common/local settings and express paths relative to target_dir."""
+    directory = os.path.dirname(pj.path)
+    target_dir = target_dir or directory
+    filename, catalogs, settings = load_common_config(pj, sources_root, include_settings=True)
+    if filename:
+        settings = rebase_pnpm_settings(settings, os.path.join(sources_root, os.path.dirname(filename)), target_dir)
+    local = rebase_pnpm_settings(select_pnpm_settings(pj.data.get("pnpm")), directory, target_dir)
+    return filename, catalogs, join_pnpm_settings(settings, local)
+
+
 def workspace_settings_paths(settings):
     overrides = list(settings.get("overrides", {}).values())
     specs = list(overrides)
@@ -113,15 +124,15 @@ def workspace_settings_paths(settings):
     return paths
 
 
-def common_config_inputs(pj, sources_root):
+def common_config_inputs(pj, sources_root, effective_config=None):
     """Only the target's explicit config and effective patches are build inputs."""
     inputs = set()
-    filename, _, settings = load_common_config(pj, sources_root, include_settings=True)
+    if effective_config is None:
+        effective_config = load_effective_pnpm_config(pj, sources_root)
+    filename, _, settings = effective_config
     directory = os.path.dirname(pj.path)
     if filename:
         inputs.add(filename)
-        settings = rebase_pnpm_settings(settings, os.path.join(sources_root, os.path.dirname(filename)), directory)
-    settings = join_pnpm_settings(settings, select_pnpm_settings(pj.data.get("pnpm")))
     inputs.update(
         os.path.relpath(os.path.normpath(os.path.join(directory, p)), sources_root)
         for p in settings.get("patchedDependencies", {}).values()

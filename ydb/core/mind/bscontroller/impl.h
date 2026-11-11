@@ -976,6 +976,13 @@ public:
             return !BlobDepotId && DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE;
         }
 
+        // Do the writes to this group (to its parts, for a bridged one) go to VDisks? The group to be decommitted keeps
+        // taking them until it is switched to BlobDepot (see TBlobStorageGroupInfo::DecommitBlocksWrites).
+        bool WritesGoToVDisks() const {
+            return !BlobDepotId && (DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE ||
+                DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING);
+        }
+
         // is this group a pile of its own (a group converted from non-bridged one); such group has both its own VDisks
         // and BridgeGroupInfo referencing itself
         bool IsInlinePile() const {

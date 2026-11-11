@@ -68,7 +68,7 @@ namespace NActors {
             auto now = ctx.Monotonic();
 
             for (auto& pending : PendingRequests) {
-                if (pending.Request && pending.Deadline > now) {
+                if (pending.Request && pending.Deadline <= now) {
                     YDB_LOG_ERROR("Unknown",
                         {"marker", "ICN06"},
                         {"nodeId", pending.Request->Get()->NodeId});

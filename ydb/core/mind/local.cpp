@@ -107,9 +107,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TInstant StartTime;
     std::unordered_map<TTabletId, TTabletEntry> InbootTablets;
     std::unordered_map<TTabletId, TOnlineTabletEntry> OnlineTablets;
-<<<<<<< HEAD
-    std::unordered_map<TTabletId, ui32> UpdatedTabletMetrics;
-=======
     struct TUpdatedTabletMetrics {
         bool InFlight = false;
         bool UpdatedAfterSend = false;
@@ -122,12 +119,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     ui64 TabletMetricsInFlightCookie = 0;
     ui64 TabletMetricsScheduleGeneration = 0;
     bool TabletMetricsAckCookiesSupported = false;
-    // Promotion keeps the same actor online as a follower and in boot as a
-    // leader, so each state needs its own reverse index.
-    THashMap<TActorId, TTabletId> InbootTabletsByActor;
-    THashMap<TActorId, TTabletId> OnlineTabletsByActor;
-
->>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
     bool SendTabletMetricsInProgress;
     TInstant SendTabletMetricsTime;
     TDuration LastSendTabletMetricsDuration = {};
@@ -386,11 +377,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 for (const auto &x : OnlineTablets)
                     ctx.Send(x.second.Tablet, new TEvents::TEvPoisonPill());
                 OnlineTablets.clear();
-<<<<<<< HEAD
-=======
-                OnlineTabletsByActor.clear();
                 UpdatedTabletMetrics.clear();
->>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
             }
 
             ResourceProfiles = new TResourceProfiles;
@@ -447,15 +434,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void FinishPromotion(TTabletId tabletId, TTabletEntry& entry) {
         TTabletId promotedTablet{tabletId.first, entry.PromotingFromFollower};
-<<<<<<< HEAD
-        OnlineTablets.erase(promotedTablet);
-=======
         UpdatedTabletMetrics.erase(promotedTablet);
-        auto it = OnlineTablets.find(promotedTablet);
-        if (it != OnlineTablets.end()) {
-            EraseTablet(OnlineTablets, OnlineTabletsByActor, it);
-        }
->>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
+        OnlineTablets.erase(promotedTablet);
         entry.IsPromoting = false;
         entry.PromotingFromFollower = 0;
     }
@@ -510,12 +490,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     return;
                 }
                 ctx.Send(it->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
-<<<<<<< HEAD
-                OnlineTablets.erase(it);
-=======
                 UpdatedTabletMetrics.erase(tabletId);
-                EraseTablet(OnlineTablets, OnlineTabletsByActor, it);
->>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
+                OnlineTablets.erase(it);
             }
         }
 
@@ -964,15 +940,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     InbootTablets.erase(inbootIt);
                 }
             }
-<<<<<<< HEAD
-            OnlineTablets.erase(onlineIt);
-=======
-            if (onlineIt->first.second == 0) { // leader
-                RetainedCutHistory.erase(onlineIt->first.first);
-            }
             UpdatedTabletMetrics.erase(onlineIt->first);
-            EraseTablet(OnlineTablets, OnlineTabletsByActor, onlineIt);
->>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
+            OnlineTablets.erase(onlineIt);
             UpdateEstimate();
             return;
         }

@@ -65,17 +65,13 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-<<<<<<< HEAD
-        SideEffects.Complete(ctx);
-=======
         // Revisions are unique across tablet incarnations within this Hive.
         for (const auto& saved : PersistedProtoMetrics) {
             if (auto* tablet = Self->FindTablet(saved.TabletId)) {
                 tablet->ConfirmProtoMetricsPersistence(saved.Revision);
             }
         }
-        SideEffects.Complete(ctx, Self->Requests);
->>>>>>> b34aa0dbc3e (Hive metrics optimization production (#55185))
+        SideEffects.Complete(ctx);
     }
 };
 

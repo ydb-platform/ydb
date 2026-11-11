@@ -66,7 +66,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/blobstorage/bridge/syncer
+    ydb/core/blobstorage/syncer
     ydb/core/blobstorage/dsproxy
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/ut_blobstorage/lib

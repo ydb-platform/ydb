@@ -1198,6 +1198,11 @@ private:
         VisitAllFields(TRule_analyze_stmt::GetDescriptor(), msg);
     }
 
+    void VisitChecksumTable(const TRule_checksum_table_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_checksum_table_stmt::GetDescriptor(), msg);
+    }
+
     void VisitBackup(const TRule_backup_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_backup_stmt::GetDescriptor(), msg);
@@ -3440,6 +3445,7 @@ TStaticData::TStaticData()
           {TRule_alter_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterBackupCollection)},
           {TRule_drop_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropBackupCollection)},
           {TRule_analyze_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAnalyze)},
+          {TRule_checksum_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitChecksumTable)},
           {TRule_create_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePoolClassifier)},
           {TRule_alter_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePoolClassifier)},
           {TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePoolClassifier)},

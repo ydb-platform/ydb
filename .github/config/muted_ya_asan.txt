@@ -1,4 +1,5 @@
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.BatchWriteThenReadMultiTabletInterleaved_Sequential_WithRestarts_PDiskFallback
+ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.BatchWriteThenReadMultiTabletInterleaved_Sequential_WithRestarts_Uring
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.Mirror3dcReadsFromRestoredRealmAfterSourceDisconnection
@@ -30,6 +31,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommi
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.RestartStreamingQueryWithExactlyOnceWriting-LocalTopics-ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.StreamingQueryWithDeferredComitPublicationCreation-LocalTopics
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
+ydb/core/kqp/ut/olap KqpOlapTiering.OversizedNGrammIndexOnTiering
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
@@ -134,6 +136,7 @@ ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_read_write
 ydb/tests/fq/streaming_optimize py3test.sole chunk
 ydb/tests/fq/streaming_optimize test_sql_negative.py.test[watermarks-bad_type-default.txt]
 ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopExprKey-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopListKey-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_gs_simp-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_ru_join-]
@@ -176,6 +179,7 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-dedup_state_key
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-group_by_column_alias_reuse-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-group_by_expr_with_where-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 test.py.test[aggregate-group_by_expr_semi_join-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 test.py.test[aggregate-group_by_gs_alt_duo-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 test.py.test[aggregate-group_by_gs_flatten_columns-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 py3test.sole chunk
@@ -183,6 +187,7 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_mul_ru_
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_rollup_duo-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_rollup_udf-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 test.py.test[aggregate-aggregate_with_lambda_inside_avg-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 test.py.test[aggregate-aggrs_no_grouping_via_map-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 test.py.test[aggregate-compare_by_tuple-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part5 py3test.sole chunk
@@ -196,6 +201,7 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 test.py.test[action-evaluate_queries-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 test.py.test[aggregate-GroupByTwoFields-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 test.py.test[aggregate-group_by_cube_grouping_and_expr-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 test.py.test[aggregate-aggrs_no_grouping-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 test.py.test[aggregate-group_by_cube_expr_trio-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 test.py.test[aggregate-group_by_cube_join_count-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part9 py3test.sole chunk

@@ -2,6 +2,7 @@
 """Partition invariants for shard_graph.py. No ya and no network."""
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import tempfile
@@ -851,6 +852,46 @@ class ShardProgressTest(unittest.TestCase):
         store = _Fake()
         store.update(1, "body", '"etag-1"')
         self.assertEqual(store.calls, [None])
+
+    def test_finalize_writes_summary_without_pr(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for shard_id, tests in ((0, 10), (1, 5)):
+                state = shard_progress.apply_shard(
+                    shard_progress.empty_state("9", "relwithdebinfo", "ydb/", 2),
+                    shard_id=shard_id,
+                    result="success",
+                    started_at="2026-11-11T11:00:00Z",
+                    finished_at="2026-11-11T12:00:00Z",
+                    job_url=f"https://example.test/job/{shard_id}",
+                    log_prefix=f"shard_{shard_id}",
+                    failed_tests=[],
+                    run_url="https://example.test/run/9",
+                    counts={
+                        "tests": tests,
+                        "passed": tests,
+                        "errors": 0,
+                        "failed": 0,
+                        "skipped": 0,
+                        "muted": 0,
+                    },
+                )
+                folder = root / f"event-{shard_id}"
+                folder.mkdir()
+                (folder / "shard_event.json").write_text(json.dumps(state), encoding="utf-8")
+            summary = root / "summary.md"
+            args = argparse.Namespace(
+                state_dir=str(root),
+                preset="relwithdebinfo",
+                run_id="9",
+                pr="",
+                summary_file=str(summary),
+                now="2026-11-11T12:01:00Z",
+            )
+            self.assertEqual(shard_progress._cmd_finalize(args), 0)
+            body = summary.read_text(encoding="utf-8")
+            self.assertIn("Combined Run-tests", body)
+            self.assertIn("| 15 |", body)
 
     def test_shard_job_note_is_not_the_combined_table(self) -> None:
         state = shard_progress.apply_shard(

@@ -1339,28 +1339,34 @@ def _cmd_finalize(args: argparse.Namespace) -> int:
     states = [
         state for state in load_state_files(args.state_dir) if str(state.get("preset") or "") == args.preset
     ]
-    if not args.pr:
-        print("No PR number; nothing to finalize.", file=sys.stderr)
-        return 0
     token = os.environ.get("GITHUB_TOKEN", "")
     repository = os.environ.get("GITHUB_REPOSITORY", "")
-    if not token or not repository:
-        print("GITHUB_TOKEN or GITHUB_REPOSITORY is empty.", file=sys.stderr)
-        return 1
-    store = GithubCommentStore(token, repository, int(args.pr))
     header = marker(args.run_id, args.preset)
-    matches = store.list_marker(header)
-    parsed = [parse_state(item.body) for item in matches]
-    states.extend(item for item in parsed if item)
+    if args.pr and token and repository:
+        try:
+            store = GithubCommentStore(token, repository, int(args.pr))
+            matches = store.list_marker(header)
+            parsed = [parse_state(item.body) for item in matches]
+            states.extend(item for item in parsed if item)
+        except (OSError, RuntimeError, urllib.error.URLError, json.JSONDecodeError, TimeoutError, ValueError) as exc:
+            print(f"warning: could not load PR shard comments ({exc})", file=sys.stderr)
+    elif not args.pr:
+        print("No PR number; writing the combined summary from shard artifacts only.", file=sys.stderr)
     if not states:
-        print("No shard progress comment to finalize.", file=sys.stderr)
+        print("No shard progress state to finalize.", file=sys.stderr)
         return 0
     merged = merge_states(states)
     now = args.now or format_time(datetime.now(timezone.utc))
     written = render_comment(merged, now)
     heading = f"## Combined Run-tests `{_md(args.preset)}`\n\n"
     _write_summary(args.summary_file, heading + visible_comment(written) + "\n")
+    if not args.pr:
+        return 0
+    if not token or not repository:
+        print("GITHUB_TOKEN or GITHUB_REPOSITORY is empty; wrote the combined summary only.", file=sys.stderr)
+        return 0
     try:
+        store = GithubCommentStore(token, repository, int(args.pr))
         written = sync_comment(store, header, merged, now)
     except (OSError, RuntimeError, urllib.error.URLError, json.JSONDecodeError, TimeoutError, ValueError) as exc:
         print(f"warning: comment update failed ({exc}); wrote the combined summary only.", file=sys.stderr)

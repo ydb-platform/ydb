@@ -3576,6 +3576,8 @@ public:
         }
     }
 
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Error = "Must use POST request";

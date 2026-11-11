@@ -57,7 +57,7 @@ private:
 public:
     TTxReassignTablets(TEvHive::TEvReassignTablets::TPtr& ev, THive* hive);
 
-    TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
+    TTxType GetTxType() const override { return NHive::TXTYPE_REASSIGN_TABLETS; }
     bool Execute(TTransactionContext& txc, const TActorContext&) override;
     void Complete(const TActorContext& ctx) override;
 };

@@ -27,6 +27,19 @@ namespace NKikimr::NBridge {
         std::atomic_bool ScanFinished = false;
     };
 
+    struct TEvMirror3dcRepairScanResult
+        : TEventLocal<TEvMirror3dcRepairScanResult, TEvBlobStorage::EvMirror3dcRepairScanResult>
+    {
+        NKikimrProto::EReplyStatus Status;
+
+        explicit TEvMirror3dcRepairScanResult(NKikimrProto::EReplyStatus status)
+            : Status(status)
+        {}
+    };
+
+    // Run one pass over the observed placements at this generation.
+    IActor* CreateMirror3dcRepairSyncer(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId notifyId);
+
     IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
         std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter);
 

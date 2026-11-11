@@ -1,6 +1,7 @@
 LIBRARY()
     SRCS(
         defs.h
+        mirror3dc_repair.cpp
         syncer.cpp
         syncer.h
     )

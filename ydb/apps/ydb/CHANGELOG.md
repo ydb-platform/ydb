@@ -1,4 +1,15 @@
+<<<<<<< HEAD
 * Async replication descriptions and SQL dumps now include the availability period.
+=======
+* `export s3`, `export nfs` and `export yt` now honor `__omit_backup = "true"`; `tools dump` honors it for tables and changefeeds. S3 export/import now skip async replication changefeeds.
+* Added `ydb admin cluster bridge rollback` to roll a converted cluster back to ordinary mode. `ydb admin cluster bridge list piles` shows its progress.
+* Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.
+* Added `piles`, `databases`, and `groups` views to `ydb admin cluster bridge list` for synchronization diagnostics.
+* Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--database-path`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.
+* Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data.
+* Added `ydb admin cluster bridge provision-pile` command to provision a pile listed in the bridge config in a running bridged cluster.
+* Renamed `ydb admin cluster bridge rejoin` to `ydb admin cluster bridge join-pile`; `rejoin` remains available as an alias.
+>>>>>>> 2c6ec512ef7 (feat: add __omit_backup and exclude replication changefeeds from backups (#58444))
 
 * Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
 * Fixed a memory leak when closing producers in `ydb workload topic run write|full`.

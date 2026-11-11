@@ -318,6 +318,12 @@ public:
             return result;
         }
 
+        if (newStreamDesc.HasHeartbeatMode() || newStreamDesc.HasAggregatorTabletId()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "HeartbeatMode and AggregatorTabletId are assigned by SchemeShard and cannot be set in a request");
+            return result;
+        }
+
         if (!newStreamDesc.GetAwsRegion().empty()) {
             switch (newStreamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:

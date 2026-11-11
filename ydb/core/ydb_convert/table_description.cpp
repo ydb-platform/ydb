@@ -2397,7 +2397,10 @@ bool ValidateIndexImplTableDescriptions(const NKikimrSchemeOp::TTableDescription
         }
 
         const TVector<TString> keys(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());
-        const auto expected = NTableIndex::GetImplTables(index.GetType(), keys).size();
+        // HNSW descriptions use the same table settings layout as KMeans.
+        const auto expected = index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+            ? (keys.size() > 1 ? NTableIndex::NKMeans::PrefixTablePosition : NTableIndex::NKMeans::PostingTablePosition) + 1
+            : NTableIndex::GetImplTables(index.GetType(), keys).size();
         if (static_cast<size_t>(index.IndexImplTableDescriptionsSize()) < expected) {
             error = TStringBuilder() << "Incomplete description of index '" << index.GetName()
                 << "': expected at least " << expected << " implementation table descriptions, got "

@@ -546,6 +546,7 @@ def deploy(arguments, actor_system_config=None):
         pdisk_store_path=pdisk_store_path,
         domain_name='local',
         pq_client_service_types=pq_client_service_types(arguments),
+        enable_pq=(getattr(arguments, "enable_pq", False) or os.getenv("YDB_ENABLE_PQ") == "true"),
         enable_pqcd=enable_pqcd(arguments),
         suppress_version_check=arguments.suppress_version_check,
         udfs_path=arguments.ydb_udfs_dir,

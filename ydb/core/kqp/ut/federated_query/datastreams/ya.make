@@ -59,6 +59,8 @@ PEERDIR(
 
 ENV(YDB_FEATURE_FLAGS="enable_topic_deferred_publish")
 
+ENV(YDB_ENABLE_PQ="true")
+
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)

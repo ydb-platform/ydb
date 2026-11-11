@@ -67,7 +67,7 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
                 userToken,
                 Database,
                 actorSystem,
-                {.RetryPolicy = NSecret::MakeLongRetryPolicy()});
+                {.RetryPolicy = RetryPolicy});
             future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
                 actorSystem->Send(replyActorId, new NKqp::TEvDescribeSecretsResponse(result.GetValue()));
             });
@@ -135,13 +135,15 @@ public:
             const TPathId& pathId,
             const TString& secretName,
             const ui64 cookie,
-            const TString& database)
+            const TString& database,
+            IRetryPolicy<>::TPtr retryPolicy)
         : Parent(parent)
         , ReplicationId(rid)
         , PathId(pathId)
         , SecretName(secretName)
         , Cookie(cookie)
         , Database(database)
+        , RetryPolicy(std::move(retryPolicy))
         , LogPrefix(CreateActorLogPrefix("SecretResolver", ReplicationId))
     {
     }
@@ -184,6 +186,7 @@ private:
     const TString SecretName;
     const ui64 Cookie;
     const TString Database;
+    const IRetryPolicy<>::TPtr RetryPolicy;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     static constexpr auto RetryInterval = TDuration::Seconds(1);
@@ -194,7 +197,7 @@ private:
 IActor* CreateSecretResolver(const TActorId& parent, ui64 rid,
         const TPathId& pathId, const TString& secretName, const ui64 cookie, const TString& database)
 {
-    return new TSecretResolver(parent, rid, pathId, secretName, cookie, database);
+    return new TSecretResolver(parent, rid, pathId, secretName, cookie, database, NSecret::MakeLongRetryPolicy());
 }
 
 bool IsNewSecretRevision(const TString& previous, const TString& next) {
@@ -212,8 +215,9 @@ bool IsNewSecretRevision(const TString& previous, const TString& next) {
         && TryFromString(next.substr(newEnd + 1), newVersion) && newVersion > oldVersion;
 }
 
-// Only an authentication Error owns this actor. Each resolve/probe and its
-// deadline live in the coroutine; cancelling the owner cancels outstanding work.
+// Only an authentication Error owns this actor. It owns the retry cadence;
+// single-attempt secret lookups cannot leave service-owned retry chains after
+// the resolver is cancelled. Each resolve/probe deadline lives in the coroutine.
 class TSecretRefresh: public TActorBootstrapped<TSecretRefresh> {
     const TActorId Parent;
     const ui64 ReplicationId;
@@ -235,8 +239,9 @@ public:
         ui64 cookie = 0;
         for (;;) {
             co_await NActors::AsyncSleepFor(TDuration::Seconds(30));
-            const auto resolver = Register(CreateSecretResolver(SelfId(), ReplicationId, PathId,
-                Params.GetStaticCredentials().GetPasswordSecretName(), ++cookie, Database));
+            const auto resolver = Register(new TSecretResolver(SelfId(), ReplicationId, PathId,
+                Params.GetStaticCredentials().GetPasswordSecretName(), ++cookie, Database,
+                IRetryPolicy<>::GetNoRetryPolicy()));
             Y_DEFER { SelfId().Send(resolver, new TEvents::TEvPoison()); };
             auto resolved = co_await NActors::WithTimeout(TDuration::Seconds(30), [&]() -> NActors::async<TEvPrivate::TEvResolveSecretResult::TPtr> {
                 co_return co_await NActors::ActorWaitForEvent<TEvPrivate::TEvResolveSecretResult>(cookie);

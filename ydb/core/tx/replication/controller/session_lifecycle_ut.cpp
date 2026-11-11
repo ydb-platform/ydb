@@ -14,6 +14,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/services/scheme_secret/service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -381,6 +382,55 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             }
         }
     };
+
+    Y_UNIT_TEST(SecretRefreshDoesNotLeaveDetachedResolutionRetries) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        runtime.GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        const TString secretName = "/Root/refresh-secret";
+        using TDescription = NKqp::TEvDescribeSecretsResponse::TDescription;
+        TVector<NThreading::TFuture<TDescription>> resolutions;
+        ui32 navigations = 0;
+        auto observeRequests = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->HasEvent()) {
+                if (auto* request = dynamic_cast<NSecret::TDescribeSchemaSecretsService::TEvResolveSecret*>(ev->GetBase())) {
+                    if (request->SecretNames == TVector<TString>{secretName}) {
+                        resolutions.push_back(request->Promise.GetFuture());
+                    }
+                }
+            }
+        });
+        auto unavailable = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySet>(
+            [&](TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) {
+                const auto& entries = ev->Get()->Request->ResultSet;
+                if (entries.size() != 1 || entries.front().Path != SplitPath(secretName)) {
+                    return;
+                }
+                auto request = ev->Get()->Request;
+                ++navigations;
+                request->ResultSet.front().Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
+                request->ResultSet.front().DomainInfo = nullptr;
+                request->ErrorCount = 1;
+                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                    new TEvTxProxySchemeCache::TEvNavigateKeySetResult(request), 0, ev->Cookie));
+                ev.Reset();
+            });
+        NKikimrReplication::TConnectionParams params;
+        params.MutableStaticCredentials()->SetPasswordSecretName(secretName);
+        const auto refresh = runtime.Register(CreateSecretRefresh(s.Env.GetSender(), 1, s.PathId,
+            "/Root", params, "schema:1:2:0", {}));
+        Y_DEFER { runtime.Send(new IEventHandle(refresh, s.Env.GetSender(), new TEvents::TEvPoison())); };
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        UNIT_ASSERT_VALUES_EQUAL(resolutions.size(), 1);
+        UNIT_ASSERT_C(resolutions.front().HasValue(), "Refresh left a schema-secret request retrying independently");
+        UNIT_ASSERT(resolutions.front().GetValueSync().Status != Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(navigations, 1);
+        runtime.Send(new IEventHandle(refresh, s.Env.GetSender(), new TEvents::TEvPoison()));
+        runtime.WaitFor("refresh stopped", [&] { return !runtime.FindActor(refresh); }, TDuration::Seconds(5));
+        runtime.SimulateSleep(TDuration::Minutes(2));
+        UNIT_ASSERT_VALUES_EQUAL(resolutions.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(navigations, 1);
+    }
 
     Y_UNIT_TEST(SecretRevisionRequiresSameObjectAndNewerVersion) {
         UNIT_ASSERT(IsNewSecretRevision("schema:1:2:3", "schema:1:2:4"));

@@ -74,7 +74,7 @@ def state_rpc(node, connectivity=True):
 
 
 class Skipper:
-    def __init__(self, binary, directory, piles, port):
+    def __init__(self, binary, directory, piles, port, *, timing=None, health_endpoints_per_pile=2):
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.url = "http://127.0.0.1:%d" % port
@@ -83,7 +83,8 @@ class Skipper:
         token.chmod(0o600)
         config = dict(cluster_id="functional-test", endpoints={
             name: ["grpc://" + node.endpoint for node in nodes] for name, nodes in piles.items()},
-            auth=dict(token_file=str(token)), http=dict(listen="127.0.0.1:%d" % port))
+            auth=dict(token_file=str(token)), http=dict(listen="127.0.0.1:%d" % port),
+            timing=timing or {}, health_endpoints_per_pile=health_endpoints_per_pile)
         config_path = self.directory / "config.json"
         config_path.write_text(json.dumps(config, indent=2))
         self.log = (self.directory / "skipper.log").open("w")
@@ -219,9 +220,11 @@ class RealSkipperCluster(BridgeKiKiMRTest):
         self.rows[999] = "after-failover"
         self.check_data(pile)
 
-    def start_skipper(self):
+    def start_skipper(self, piles=None, *, timing=None, health_endpoints_per_pile=2):
         binary = yatest.common.binary_path("ydb/apps/bridge_skipper/bridge_skipper")
-        self.skipper = Skipper(binary, self.output / "controller", self.pile_nodes, self.ports.get_port())
+        endpoints = self.pile_nodes if piles is None else {name: self.pile_nodes[name] for name in piles}
+        self.skipper = Skipper(binary, self.output / "controller", endpoints, self.ports.get_port(),
+                               timing=timing, health_endpoints_per_pile=health_endpoints_per_pile)
         self.cleanup.callback(self.skipper.close)
         self.wait_snapshot(lambda s: len(s["cards"]) == len(self.pile_names)
                            and all(card["verdict"] == "HEALTHY" for card in s["cards"]),

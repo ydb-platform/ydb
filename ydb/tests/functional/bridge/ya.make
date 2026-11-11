@@ -5,6 +5,7 @@ TEST_SRCS(
     state_storage_selfheal.py
     test_bridge.py
     test_skipper.py
+    test_skipper_membership.py
     test_conversion.py
     test_discovery.py
     test_pile_ops.py

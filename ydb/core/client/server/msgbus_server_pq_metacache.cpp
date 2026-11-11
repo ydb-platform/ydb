@@ -10,7 +10,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>

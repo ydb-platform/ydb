@@ -11,15 +11,15 @@ SELECT
     s_phone,
     s_comment
 FROM
-    `/Root/part` as part
+    `part` as part
 ,
-    `/Root/supplier` as supplier
+    `supplier` as supplier
 ,
-    `/Root/partsupp` as partsupp
+    `partsupp` as partsupp
 ,
-    `/Root/nation` as nation
+    `nation` as nation
 ,
-    `/Root/region` as region
+    `region` as region
 WHERE
     p_partkey == ps_partkey
     AND s_suppkey == ps_suppkey
@@ -32,13 +32,13 @@ WHERE
         SELECT
             min(ps_supplycost)
         FROM
-            `/Root/partsupp` as partsupp
+            `partsupp` as partsupp
         ,
-            `/Root/supplier` as supplier
+            `supplier` as supplier
         ,
-            `/Root/nation` as nation
+            `nation` as nation
         ,
-            `/Root/region` as region
+            `region` as region
         WHERE
             p_partkey == ps_partkey
             AND s_suppkey == ps_suppkey

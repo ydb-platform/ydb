@@ -66,6 +66,13 @@ namespace NKikimr::NBsController {
             : nullptr;
     }
 
+    const TStoragePoolPileOverrideRules *TBlobStorageController::GetPileOverrideRulesWith(
+            const NKikimrBlobStorage::TStorageConfig& config) const {
+        // the same choice TTxUpdatePileOverrides makes
+        const auto& rules = config.GetBlobStorageConfig().GetStoragePoolPileOverrides();
+        return AppliedPileOverrides && CheckGroupsAgainstPileOverrides(rules) ? &AppliedPileOverrides->GetRule() : &rules;
+    }
+
     std::optional<TString> TBlobStorageController::ValidateStoragePoolPileOverrides(
             const NKikimrBlobStorage::TStorageConfig& config) const {
         if (auto error = NKikimr::ValidateStoragePoolPileOverrides(config.GetBlobStorageConfig())) {
@@ -249,7 +256,7 @@ namespace NKikimr::NBsController {
             const auto [erasure, inserted] = erasures.try_emplace(group->BridgePileId);
             if (inserted) {
                 erasure->second = Self.ResolveStoragePoolForPile(id, storagePool, group->BridgePileId,
-                    BridgeInfo.get(), Self.GetPileOverrideRules()).ErasureSpecies;
+                    BridgeInfo.get(), GetPileOverrideRules()).ErasureSpecies;
             }
             if (group->ErasureSpecies != erasure->second) {
                 throw TExError() << "GroupId# " << it->second << " has different erasure species";
@@ -908,6 +915,11 @@ namespace NKikimr::NBsController {
 
         const bool virtualGroupsOnly = cmd.GetVirtualGroupsOnly();
 
+        // The config reported is the one the commands executed so far make, and the groups they have changed get new
+        // generation at commit; report it too, so that it agrees with the placement shown (and may be used in further
+        // commands like ReassignGroupDisk once the request is committed).
+        Self.PropagateGroupContentChanged(*this);
+
         THashSet<TGroupId> groupFilter;
         THashSet<TVSlotId> vslotFilter;
         THashSet<TPDiskId> pdiskFilter;
@@ -942,7 +954,11 @@ namespace NKikimr::NBsController {
             }};
             VSlots.ForEach([&](TVSlotId vslotId, const TVSlotInfo& vslotInfo) {
                 if (vslotInfo.Group && (!virtualGroupsOnly || vslotFilter.contains(vslotId))) {
-                    Serialize(pb->AddVSlot(), vslotInfo, vslotFinder);
+                    auto *vslot = pb->AddVSlot();
+                    Serialize(vslot, vslotInfo, vslotFinder);
+                    if (GroupContentChanged.contains(vslotInfo.GroupId)) {
+                        vslot->SetGroupGeneration(vslotInfo.Group->Generation + 1);
+                    }
                 }
             });
         }
@@ -955,6 +971,9 @@ namespace NKikimr::NBsController {
                 if (!virtualGroupsOnly || groupFilter.contains(groupId)) {
                     auto* group = pb->AddGroup();
                     Serialize(group, groupInfo, finder, BridgeInfo.get());
+                    if (GroupContentChanged.contains(groupId)) {
+                        group->SetGroupGeneration(groupInfo.Generation + 1);
+                    }
                     if (group->FailRealmsSize()) {
                         for (const TVSlotInfo* slot : groupInfo.VDisksInGroup) {
                             UpdateFailRealmDataCenter(group->MutableFailRealms(slot->RingIdx),

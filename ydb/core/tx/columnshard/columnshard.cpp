@@ -489,7 +489,6 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     }
 
     ui64 storageBytes =
-        Counters.GetTabletCounters()->GetValue(COUNTER_PREPARED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_COMMITTED_BYTES) +
         Counters.GetTabletCounters()->GetValue(COUNTER_INSERTED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_COMPACTED_BYTES) +
         Counters.GetTabletCounters()->GetValue(COUNTER_SPLIT_COMPACTED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_INACTIVE_BYTES);
 

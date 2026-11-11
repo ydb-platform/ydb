@@ -128,6 +128,16 @@ struct TSequenceDescription {
         bool NextUsed;
     };
     std::optional<TSetVal> SetVal;
+    // Name of the sequence: serial columns use `_serial_column_<column>` by default, while
+    // sequences provisioned for index columns have their own names.
+    std::string Name;
+    std::optional<int64_t> MinValue;
+    std::optional<int64_t> MaxValue;
+    std::optional<int64_t> StartValue;
+    std::optional<uint64_t> Cache;
+    std::optional<int64_t> Increment;
+    std::optional<bool> Cycle;
+    std::optional<TType> DataType;
 };
 
 struct TTableColumn {

@@ -190,6 +190,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 GetTableProfiles();
             } else {
                 Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, NYdb::NTable::TDescribeTableSettings()
+                    .WithSetVal(true)
                     .WithKeyShardBoundary(true)),
                     0,
                     RetryGeneration);
@@ -278,7 +279,18 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Ydb::StatusIds::StatusCode status;
         TString error;
 
-        if (!FillTableDescription(TxBody, scheme, TableProfiles, status, error, scheme.indexes_size())) {
+        // Sequences (e.g. for serial columns) are only created by the indexed flavor of the create
+        // operation, so it is required whenever some column defaults from a sequence.
+        bool hasSequences = false;
+        for (const auto& column : scheme.columns()) {
+            if (column.has_from_sequence()) {
+                hasSequences = true;
+                break;
+            }
+        }
+        const bool indexedTable = scheme.indexes_size() || hasSequences;
+
+        if (!FillTableDescription(TxBody, scheme, TableProfiles, status, error, indexedTable)) {
             return Error(NKikimrScheme::StatusSchemeError, error);
         }
 
@@ -290,7 +302,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         TxBody.SetWorkingDir(pathPair.first);
 
         NKikimrSchemeOp::TTableDescription* desc = nullptr;
-        if (scheme.indexes_size()) {
+        if (indexedTable) {
             NeedToCheck = true;
             TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
             TxBody.SetInternal(true);

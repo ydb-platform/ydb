@@ -20,14 +20,14 @@ enum ECumulativeCounters {
     COUNTER_PQ_SET_CLIENT_OFFSET_ERROR = 7                           [(CounterOpts) = {Name: "SetClientOffsetError"}];
 
     COUNTER_PQ_GET_CLIENT_OFFSET_OK = 8                              [(CounterOpts) = {Name: "GetClientOffsetOk"}];
-    COUNTER_PQ_GET_CLIENT_OFFSET_ERROR = 9                           [(CounterOpts) = {Name: "GetClientOffsetError"}];
+    COUNTER_PQ_GET_CLIENT_OFFSET_ERROR_DEPRECATED = 9                [deprecated = true];
 
     COUNTER_PQ_READ_OK = 10                                          [(CounterOpts) = {Name: "ReadOk"}];
     COUNTER_PQ_READ_ERROR = 11                                       [(CounterOpts) = {Name: "ReadError"}];
     COUNTER_PQ_READ_ERROR_NO_SESSION = 12                            [(CounterOpts) = {Name: "ReadErrorNoSession"}];
     COUNTER_PQ_READ_ERROR_SMALL_OFFSET = 13                          [(CounterOpts) = {Name: "ReadErrorSmallOffset"}];
     COUNTER_PQ_READ_ERROR_BIG_OFFSET = 14                            [(CounterOpts) = {Name: "ReadErrorBigOffset"}];
-    COUNTER_PQ_READ_ERROR_IN_PROGRESS = 15                           [(CounterOpts) = {Name: "ReadErrorInProgress"}];
+    COUNTER_PQ_READ_ERROR_IN_PROGRESS_DEPRECATED = 15                [deprecated = true];
     COUNTER_PQ_READ_HEAD_ONLY_OK = 16                                [(CounterOpts) = {Name: "ReadHeadOnlyOk"}];
     COUNTER_PQ_READ_SUBSCRIPTION_OK = 17                             [(CounterOpts) = {Name: "ReadSubscriptionOk"}];
     COUNTER_PQ_READ_SUBSCRIPTION_ERROR = 18                          [(CounterOpts) = {Name: "ReadSubscriptionError"}];

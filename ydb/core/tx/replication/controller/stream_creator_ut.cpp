@@ -12,6 +12,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/size_literals.h>
+
 namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(ReplicationTestEnv) {
@@ -162,7 +164,11 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         const auto topic = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicResponse>(env.GetSender());
         UNIT_ASSERT(topic);
         UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
-        const auto& consumers = topic->Get()->Result.GetTopicDescription().GetConsumers();
+        const auto& topicDescription = topic->Get()->Result.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetPartitionWriteSpeedBytesPerSecond(), 10_MB);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetPartitionWriteBurstBytes(), 1_MB);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetRetentionPeriod(), TDuration::Seconds(1));
+        const auto& consumers = topicDescription.GetConsumers();
         UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(consumers[0].GetConsumerName(), "replicationConsumer");
     }

@@ -505,7 +505,6 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(128);
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(512);
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(1_KB);
-    appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(10_KB);
     appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
 
     appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);

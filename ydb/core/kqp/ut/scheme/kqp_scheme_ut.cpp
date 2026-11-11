@@ -9082,7 +9082,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        { // default (10 MB/s)
+        { // default (1 MB/s)
             auto query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
@@ -9095,7 +9095,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond(), 1_MB);
+        }
+
+        {
+            const auto changefeed = TChangefeedDescription("replicationFeed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+                .AddAttribute("__async_replication", R"({"id":"1","path":"/Root/replica"})");
+            const auto result = session.AlterTable("/Root/table", TAlterTableSettings()
+                .AppendAddChangefeeds(changefeed)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto desc = pq.DescribeTopic("/Root/table/replicationFeed").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond(), 10_MB);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteBurstBytes(), 1_MB);
         }
 
         { // alter (2 MB/s)

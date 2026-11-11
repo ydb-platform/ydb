@@ -32,6 +32,7 @@
 
 #include <util/generic/hash_set.h>
 #include <util/generic/hash.h>
+#include <util/generic/size_literals.h>
 
 #include <optional>
 
@@ -816,6 +817,10 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
         auto op = modifyScheme->MutableCreateCdcStream();
         op->SetTableName(name);
+
+        if (add.attributes().contains("__async_replication")) {
+            op->SetTopicWriteSpeedInBytesPerSecond(10_MB);
+        }
 
         if (add.has_retention_period()) {
             op->SetRetentionPeriodSeconds(add.retention_period().seconds());

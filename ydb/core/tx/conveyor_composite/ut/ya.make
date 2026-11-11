@@ -17,17 +17,17 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base
     ydb/core/cms/console
+    ydb/core/kqp/predictor
     ydb/core/kqp/runtime
     ydb/core/tablet
     ydb/core/tablet_flat
-    ydb/core/tx/columnshard/counters
-    yql/essentials/sql/pg_dummy
-    yql/essentials/core/arrow_kernels/request
     ydb/core/testlib/default
-    ydb/core/tx/columnshard/test_helper
+    ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
-
+    ydb/core/tx/columnshard/test_helper
+    yql/essentials/core/arrow_kernels/request
+    yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/json2
 )
 

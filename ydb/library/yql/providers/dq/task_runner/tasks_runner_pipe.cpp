@@ -25,6 +25,7 @@
 #include <util/system/shellcommand.h>
 #include <util/system/thread.h>
 #include <util/system/fs.h>
+#include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/stream/pipe.h>
 #include <util/stream/length.h>
@@ -198,6 +199,9 @@ public:
 #ifdef _win_
         Y_ABORT_UNLESS(false);
 #else
+        // Preparing Porto bind targets may throw. Do it before opening raw pipe FDs.
+        PrepareForExec();
+
         int input[2];
         int output[2];
         int error[2];
@@ -206,7 +210,6 @@ public:
         Y_ABORT_UNLESS(pipe(output) == 0);
         Y_ABORT_UNLESS(pipe(error) == 0);
 
-        PrepareForExec();
         const int pid = fork();
         Y_ABORT_UNLESS(pid >= 0);
 
@@ -336,8 +339,15 @@ struct TProcessHolder {
         Running.clear();
         Watcher->Join();
         if (!Processes.empty()) {
-            YQL_CLOG(DEBUG, ProviderDq) << "Releasing unused pool processes on shutdown (Count: " << Processes.size() << ")";
+            YQL_CLOG(DEBUG, ProviderDq) << "Stopping unused pool processes on shutdown (Count: " << Processes.size() << ")";
         }
+        // This also runs if initial pool warmup throws after starting some runners.
+        for (const auto& [key, process] : Processes) {
+            process->Kill();
+            process->Wait(TDuration::Seconds(1));
+        }
+        Processes.clear();
+        UpdatePoolSize();
     }
 
     i64 Size() {
@@ -415,12 +425,13 @@ struct TPortoSettings {
     bool Enable;
     TMaybe<ui64> MemoryLimit;
     TString Layer;
+    bool UseJobRoot;
     TString ContainerNamePrefix;
     bool EnableAnonLimitRaiseBeforeDestroy;
     TMaybe<TLocalJobProxySettings> LocalJobProxy;
 
     bool operator == (const TPortoSettings& o) const {
-        return Enable == o.Enable && MemoryLimit == o.MemoryLimit && Layer == o.Layer;
+        return Enable == o.Enable && MemoryLimit == o.MemoryLimit && Layer == o.Layer && UseJobRoot == o.UseJobRoot;
     }
 
     bool operator != (const TPortoSettings& o) const {
@@ -428,7 +439,7 @@ struct TPortoSettings {
     }
 
     TString ToString() const {
-        return TStringBuilder() << Enable << "," << MemoryLimit << "," << Layer;
+        return TStringBuilder() << Enable << "," << MemoryLimit << "," << Layer << "," << UseJobRoot;
     }
 };
 
@@ -439,6 +450,7 @@ public:
         : TChildProcess(exeName, args, env, workDir)
         , PortoCtl(portoCtl)
         , PortoLayer(portoSettings.Layer)
+        , UseJobRoot(portoSettings.UseJobRoot)
         , LocalJobProxy(portoSettings.LocalJobProxy)
         , MemoryLimit(portoSettings.MemoryLimit)
         , EnablePortoAnonLimitRaiseBeforeDestroy(portoSettings.EnableAnonLimitRaiseBeforeDestroy)
@@ -472,7 +484,7 @@ public:
         if (Started) {
             --*Counters->PortoContainersAlive;
             if (!DestroyReported) {
-                // Pool shutdown also releases unused owners without destroy; this does not prove a live-container leak.
+                // An owner can outlive its child; this does not prove a live-container leak.
                 if (DestroyAttempted) {
                     ++*Counters->PortoOwnerReleasedAfterDestroyFailure;
                 } else {
@@ -573,6 +585,70 @@ private:
             << ", Destroyed: " << destroyed << ")";
     }
 
+    TString PrepareBindMounts(const TString& exeDir, const TString& exeName) {
+        // Sources belong to the parent YT job; destinations belong to this runner:
+        //   executable                         -> /usr/local/bin/<name> (ro)
+        //   WorkDir = <cache>/Slot-N            -> /mnt/work             (rw)
+        //   TmpDir = TmpDirSlot-N               -> /tmp                  (rw)
+        //   optional local job-proxy socket    -> /tmp/yt-job-proxy.sock
+        // WorkDir contains only resources assigned to this runner, not the whole cache.
+        // The tar/overlay mode keeps its historical executable-directory bind.
+        // Reusing root=/ also inherits the job's mounts, so it needs private mount
+        // targets and must hide the original paths to the cache and sandbox below.
+        TStringBuilder bind;
+        TString sandboxDir;
+
+        // 1. Prepare read-only destinations before mounting files/directories into them.
+        if (UseJobRoot) {
+            sandboxDir = NFs::CurrentWorkingDirectory();
+            const auto cacheDir = TFsPath(WorkDir).Parent();
+            // Private /mnt and /usr/local/bin binds can hide an external cache before
+            // Porto opens it as a source. Keep all runner resources in the job sandbox.
+            YQL_ENSURE(sandboxDir != "/" && cacheDir.IsSubpathOf(sandboxDir),
+                "Job-root Porto requires the file cache to be inside the job sandbox"
+                << " (cache: " << cacheDir.GetPath() << ", sandbox: " << sandboxDir << ")");
+
+            // A directory bind would either expose unrelated sandbox files or miss
+            // the executable if YT mounted it separately. Bind only the executable
+            // into a private directory. Create its mountpoint before making that
+            // directory read-only; otherwise Porto cannot create the target file.
+            const TString binDir = TmpDir + "/bin";
+            NFs::MakeDirectoryRecursive(binDir);
+            TFileOutput(binDir + '/' + exeName).Finish();
+            bind << binDir << ' ' << InternalExeDir << " ro;";
+            bind << ExeName << ' ' << InternalExeDir << '/' << exeName << " ro;";
+
+            // Porto makes the root read-only before applying binds. The YT root may
+            // lack /mnt/work, so supply /mnt with an existing work directory first.
+            const TString mountDir = TmpDir + "/mnt";
+            NFs::MakeDirectoryRecursive(mountDir + "/work");
+            bind << mountDir << " /mnt ro;";
+        }
+
+        // 2. Expose this runner's resources. Keep /tmp before its optional socket bind.
+        bind << WorkDir << ' ' << InternalWorkDir() << " rw;"; // see YQL-11392
+        if (!UseJobRoot) {
+            // Preserve the tar-mode bind order: work directory, executable, tmp.
+            bind << exeDir << ' ' << InternalExeDir << " ro;";
+        }
+        bind << TmpDir << " /tmp rw;";
+        if (LocalJobProxy) {
+            bind << LocalJobProxy->GetPortoBind();
+        }
+
+        // 3. Close alternate paths to other runners' files, after binding our sources.
+        if (UseJobRoot) {
+            // root_readonly affects the root mount, not inherited submounts such as
+            // YT's writable cache tmpfs. Cover their original paths with an empty
+            // directory; the explicit /mnt/work and /tmp binds remain accessible.
+            // The cache is inside this sandbox, as checked before preparing the binds.
+            const TString emptyDir = TmpDir + "/empty";
+            NFs::MakeDirectoryRecursive(emptyDir);
+            bind << emptyDir << ' ' << sandboxDir << " ro;";
+        }
+        return bind;
+    }
+
     void PrepareForExec() override {
         auto pos = ExeName.rfind("/");
         TString exeDir = ExeName.substr(0, pos);
@@ -595,19 +671,14 @@ private:
         }
         env << "TMPDIR=/tmp;";
 
-        TStringBuilder bind;
-        bind << WorkDir << ' ' << InternalWorkDir() << " rw;"; // see YQL-11392
-        bind << exeDir << ' ' << InternalExeDir << " ro;";
-        bind << TmpDir << " /tmp rw;";
-        if (LocalJobProxy) {
-            bind << LocalJobProxy->GetPortoBind();
-        }
+        const auto bind = PrepareBindMounts(exeDir, exeName);
 
-        ArgsElems = TVector<TString>{
-            "portoctl",
-            "exec",
-            "-L",
-            PortoLayer.empty() ? "/" : PortoLayer,
+        ArgsElems = {"portoctl", "exec"};
+        if (!UseJobRoot) {
+            ArgsElems.push_back("-L");
+            ArgsElems.push_back(PortoLayer.empty() ? "/" : PortoLayer);
+        }
+        ArgsElems.insert(ArgsElems.end(), {
             ContainerName,
             "command=" + command,
             "capabilities=" + caps,
@@ -616,7 +687,12 @@ private:
             "root_readonly=true",
             "weak=false",
             "cpu_policy=idle"
-        };
+        });
+        if (UseJobRoot) {
+            // -L would allocate a new overlay volume even for the existing job root.
+            ArgsElems.push_back("root=/");
+            ArgsElems.push_back("cwd=/");
+        }
         if (MemoryLimit) {
             ArgsElems.push_back("anon_limit=" + ToString(*MemoryLimit));
         }
@@ -639,6 +715,7 @@ private:
 
     const TString PortoCtl;
     const TString PortoLayer;
+    const bool UseJobRoot;
     const TMaybe<TLocalJobProxySettings> LocalJobProxy;
     const TMaybe<ui64> MemoryLimit;
     const bool EnablePortoAnonLimitRaiseBeforeDestroy;
@@ -2131,20 +2208,31 @@ class TPipeFactory: public IProxyFactory {
             , Counters(std::move(counters))
         { }
 
+        ~TStopJob() override {
+            // Scheduler shutdown discards queued tasks without calling Process().
+            StopProcesses();
+        }
+
         TInstant Process() override {
+            StopProcesses();
+            return TInstant::Max();
+        }
+
+    private:
+        void StopProcesses() {
             if (!StopList.empty()) {
                 YQL_CLOG(DEBUG, ProviderDq) << "Stopping evicted pool processes (Count: " << StopList.size()
                     << ", QueueDelayMs: " << (TInstant::Now() - ScheduledAt).MilliSeconds() << ")";
             }
-            for (const auto& job : StopList) {
+            while (!StopList.empty()) {
+                const auto& job = StopList.front();
                 *Counters->PoolStopDelayTotalUs += (TInstant::Now() - ScheduledAt).MicroSeconds();
                 ++*Counters->PoolStopDelayCount;
                 job->Kill();
                 job->Wait(TDuration::Seconds(1));
                 --*Counters->ProcessesPendingStop;
+                StopList.pop_front();
             }
-
-            return TInstant::Max();
         }
     };
 
@@ -2156,6 +2244,7 @@ public:
                 EnablePorto,
                 Nothing(),
                 options.PortoLayer,
+                options.UseJobRoot,
                 options.ContainerName,
                 options.EnablePortoAnonLimitRaiseBeforeDestroy,
                 options.LocalJobProxy,
@@ -2175,6 +2264,11 @@ public:
     {
         Start(ExePath, PortoSettings);
         TaskScheduler.Start();
+    }
+
+    ~TPipeFactory() override {
+        // Refill callbacks capture this: finish them while all members are alive.
+        TaskScheduler.Stop();
     }
 
     ITaskRunner::TPtr GetOld(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& tmp, const TString& traceId) override {
@@ -2327,11 +2421,15 @@ private:
         auto key = GetKey(exePath, portoSettings);
         TList<THolder<TChildProcess>> stopList;
         THolder<TChildProcess> result = ProcessHolder.Acquire(key, &stopList);
+        // Transfer evicted runners to cleanup before preparing their replacement,
+        // which can throw while creating Porto bind targets.
+        if (!stopList.empty()) {
+            StopJobs(std::move(stopList));
+        }
         if (!result) {
             result = StartOne(exePath, portoSettings);
         }
         ProcessJobs(exePath, portoSettings);
-        StopJobs(std::move(stopList));
         return result;
     }
 

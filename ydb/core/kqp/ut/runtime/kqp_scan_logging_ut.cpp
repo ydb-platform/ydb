@@ -13,6 +13,8 @@ namespace {
 
 TKikimrSettings AppSettings(const TCapturedLog& logStream) {
     TKikimrSettings serverSettings;
+    serverSettings.SetWithSampleTables(true);
+    serverSettings.SetWithSampleTables(true);
     serverSettings.LogCapture = logStream;
 
     return serverSettings;
@@ -95,7 +97,7 @@ Y_UNIT_TEST_TWIN(GraceJoin, EnabledLogs) {
 }
 
 Y_UNIT_TEST(ReadDecimalWithTraceLogs) {
-    TKikimrRunner kikimr;
+    TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
 
     auto db = kikimr.GetQueryClient();

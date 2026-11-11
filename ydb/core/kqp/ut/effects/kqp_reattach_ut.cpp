@@ -18,6 +18,8 @@ Y_UNIT_TEST_SUITE(KqpReattach) {
 
     Y_UNIT_TEST(ReattachDeliveryProblem) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false).SetEnableDataShardVolatileTransactions(false);
 
         TKikimrRunner kikimr(settings);

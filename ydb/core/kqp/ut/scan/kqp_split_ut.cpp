@@ -427,6 +427,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 Server = providedServer;
             } else {
                 TKikimrSettings settings;
+                settings.SetWithSampleTables(true);
+                settings.SetWithSampleTables(true);
                 settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(testActorType == ETestActorType::SorceRead);
                 settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
                 settings.SetDomainRoot(KikimrDefaultUtDomainRoot);

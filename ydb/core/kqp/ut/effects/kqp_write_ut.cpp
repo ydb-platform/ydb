@@ -442,6 +442,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
     Y_UNIT_TEST(OutOfSpace) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);

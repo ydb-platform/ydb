@@ -283,6 +283,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
     Y_UNIT_TEST_TWIN(DecimalOutOfPrecisionBulk, EnableParameterizedDecimal) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         serverSettings.FeatureFlags.SetEnableParameterizedDecimal(EnableParameterizedDecimal);
         serverSettings.WithSampleTables = false;
 
@@ -342,6 +343,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
     Y_UNIT_TEST_TWIN(DecimalOutOfPrecision, EnableParameterizedDecimal) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         serverSettings.FeatureFlags.SetEnableParameterizedDecimal(EnableParameterizedDecimal);
         serverSettings.WithSampleTables = false;
 
@@ -529,7 +531,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
     Y_UNIT_TEST(ExecuteDataQueryCollectMeta) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true)
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
@@ -729,7 +731,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(QueryTimeout) {
-        TKikimrRunner kikimr{ TKikimrSettings() };
+        TKikimrRunner kikimr{ TKikimrSettings().SetWithSampleTables(true) };
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -773,6 +775,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
     Y_UNIT_TEST(QueryClientTimeout) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         TKikimrRunner kikimr(serverSettings);
 
         auto db = kikimr.GetTableClient();
@@ -809,6 +812,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
     Y_UNIT_TEST(QueryClientTimeoutPrecompiled) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1126,7 +1130,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetSqlVersion(0);
         appConfig.MutableTableServiceConfig()->SetEnforceSqlVersionV1(false);
 
-        TKikimrRunner kikimr{TKikimrSettings(appConfig)};
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetWithSampleTables(true)};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1399,6 +1403,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
     Y_UNIT_TEST(QueryStats) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2978,7 +2983,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST_TWIN(ReadOverloaded, StreamLookup) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
@@ -3703,7 +3708,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
     TKikimrRunner CreateKikimrWithDiscardSelect(bool useRealThreads = true) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableDiscardSelect(true);
-        auto settings = TKikimrSettings(appConfig).SetUseRealThreads(useRealThreads);
+        auto settings = TKikimrSettings(appConfig).SetWithSampleTables(true).SetUseRealThreads(useRealThreads);
         return TKikimrRunner(settings);
     }
 

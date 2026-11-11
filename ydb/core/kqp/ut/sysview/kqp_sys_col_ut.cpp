@@ -22,7 +22,7 @@ TDataQueryResult ExecuteDataQuery(TKikimrRunner& kikimr, const TString& query) {
 }
 
 TDataQueryResult ExecuteDataQuery(const TString& query) {
-    TKikimrRunner kikimr;
+    TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
     return ExecuteDataQuery(kikimr, query);
 }
 
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(KqpSysCol) {
     }
 
     Y_UNIT_TEST(UpdateAndDelete) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         {
             auto query = Q_(R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(KqpSysCol) {
     }
 
     Y_UNIT_TEST(StreamSelectRowAsterisk) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto query = R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Key = 1;
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(KqpSysCol) {
     }
 
     Y_UNIT_TEST(StreamSelectRowById) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto query = R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT * FROM `/Root/TwoShard` WHERE _yql_partition_id = 72075186224037888ul;
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(KqpSysCol) {
     }
 
     Y_UNIT_TEST(StreamSelectRange) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto query = R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT _yql_partition_id FROM `/Root/TwoShard` WHERE Key < 3;
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(KqpSysCol) {
     }
 
     Y_UNIT_TEST(StreamInnerJoinTables) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto query = R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             PRAGMA DisableSimpleColumns;
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(KqpSysCol) {
     }
 
     Y_UNIT_TEST(StreamInnerJoinSelect) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto query = R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT * FROM `/Root/Join1` AS t1
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(KqpSysCol) {
     }
 
     Y_UNIT_TEST(StreamInnerJoinSelectAsterisk) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto query = R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT * FROM `/Root/Join1` AS t1

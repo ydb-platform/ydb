@@ -189,7 +189,7 @@ Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, AstCache) {
 }
 
 Y_UNIT_TEST_TWIN(PathAliasesInvalidateCompilationCache, AstCache) {
-    auto settings = TKikimrSettings().SetUseRealThreads(false);
+    auto settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
     config->SetEnableAstCache(AstCache);
     auto* rule = settings.AppConfig.MutableResourcePathPrefixMapping()->AddRules();
@@ -443,6 +443,7 @@ template <typename Iterator>
 TCollectedStreamResult JoinStatsBasic(
         std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getIter, bool StreamLookupJoin = false) {
     TKikimrSettings settings;
+    settings.SetWithSampleTables(true);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
     TKikimrRunner kikimr(settings);
@@ -1106,7 +1107,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanTableFullScanActualStats) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableNewRBO(false);
 
-    TKikimrRunner kikimr{TKikimrSettings(app)};
+    TKikimrRunner kikimr{TKikimrSettings(app).SetWithSampleTables(true)};
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1164,7 +1165,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanQueryServiceTableFullScanActualStats) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableNewRBO(false);
 
-    TKikimrRunner kikimr{TKikimrSettings(app)};
+    TKikimrRunner kikimr{TKikimrSettings(app).SetWithSampleTables(true)};
     auto client = kikimr.GetQueryClient();
     auto settings = NYdb::NQuery::TExecuteQuerySettings()
         .StatsMode(NYdb::NQuery::EStatsMode::Full);
@@ -1195,7 +1196,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanQueryServiceTableFullScanActualStats) {
 // Per-stage per-node task distribution: Stats.Nodes = [{NodeId, Tasks, Finished}] in FULL mode.
 // Literal phases carry no node info, so only stages that have Nodes are checked against their totals.
 Y_UNIT_TEST(StageNodesFull) {
-    TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
+    TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetNodeCount(2));
     auto client = kikimr.GetQueryClient();
     auto settings = NYdb::NQuery::TExecuteQuerySettings()
         .StatsMode(NYdb::NQuery::EStatsMode::Full);
@@ -1282,7 +1283,7 @@ Y_UNIT_TEST_TWIN(NodeMemQueryAllocatedProfile, EnableComputeSchedulerMemory) {
     NKikimrConfig::TAppConfig app;
     app.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
     app.MutableTableServiceConfig()->SetEnableChannelMemoryTracking(true);
-    TKikimrRunner kikimr{TKikimrSettings(app)};
+    TKikimrRunner kikimr{TKikimrSettings(app).SetWithSampleTables(true)};
 
     auto it = GetScanStreamIterator(kikimr, ECollectQueryStatsMode::Profile, R"(
         SELECT COUNT(*) FROM `/Root/EightShard`;
@@ -1325,7 +1326,7 @@ Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
 
-    TKikimrRunner kikimr{ TKikimrSettings(app) };
+    TKikimrRunner kikimr{ TKikimrSettings(app).SetWithSampleTables(true) };
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1369,7 +1370,7 @@ Y_UNIT_TEST(SelfJoin) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
 
-    TKikimrRunner kikimr{ TKikimrSettings(app) };
+    TKikimrRunner kikimr{ TKikimrSettings(app).SetWithSampleTables(true) };
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1399,7 +1400,7 @@ Y_UNIT_TEST(SelfJoin) {
 }
 
 Y_UNIT_TEST(SysViewClientLost) {
-    TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
+    TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false));
 
     auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
     auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
@@ -1567,7 +1568,7 @@ Y_UNIT_TEST(OneShardLocalExec) {
 }
 
 Y_UNIT_TEST(OneShardNonLocalExec) {
-    TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
+    TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetNodeCount(2));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1860,7 +1861,7 @@ Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
 }
 
 Y_UNIT_TEST_TWIN(UpsertWithReturningStats, UseStreamIndex) {
-    auto serverSettings = TKikimrSettings();
+    auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
     TKikimrRunner kikimr(serverSettings);
     auto client = kikimr.GetQueryClient();
@@ -1906,7 +1907,7 @@ Y_UNIT_TEST_TWIN(UpsertWithReturningStats, UseStreamIndex) {
 }
 
 Y_UNIT_TEST_TWIN(ReturningStatsModes, UseStreamIndex) {
-    auto serverSettings = TKikimrSettings();
+    auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
     TKikimrRunner kikimr(serverSettings);
     auto client = kikimr.GetQueryClient();
@@ -1980,7 +1981,7 @@ Y_UNIT_TEST_TWIN(ReturningStatsModes, UseStreamIndex) {
 }
 
 Y_UNIT_TEST_TWIN(ReturningStatsWithIndex, UseStreamIndex) {
-    auto serverSettings = TKikimrSettings();
+    auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
     TKikimrRunner kikimr(serverSettings);
     auto client = kikimr.GetQueryClient();
@@ -2023,7 +2024,7 @@ Y_UNIT_TEST_TWIN(ReturningStatsWithIndex, UseStreamIndex) {
 }
 
 Y_UNIT_TEST_TWIN(ReturningStatsNeedsLookup, UseStreamIndex) {
-    auto serverSettings = TKikimrSettings();
+    auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
     TKikimrRunner kikimr(serverSettings);
     auto client = kikimr.GetQueryClient();

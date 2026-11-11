@@ -2689,7 +2689,7 @@ void CheckScriptResults(TScriptExecutionOperation scriptExecutionOperation, TScr
 
 Y_UNIT_TEST_SUITE(WorkloadManagerResourcePool) {
     Y_UNIT_TEST(ExecuteQueryWithWorkloadManager) {
-        NKqp::TKikimrSettings serverSettings = NKqp::TKikimrSettings().SetEnableResourcePools(true);
+        NKqp::TKikimrSettings serverSettings = NKqp::TKikimrSettings().SetWithSampleTables(true).SetEnableResourcePools(true);
         serverSettings.AppConfig.MutableFeatureFlags()->SetEnableResourcePools(true);
         auto kikimr = NKqp::TKikimrRunner(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2720,7 +2720,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerResourcePool) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        auto kikimr = NKqp::TKikimrRunner(NKqp::TKikimrSettings(config).SetEnableResourcePools(true));
+        auto kikimr = NKqp::TKikimrRunner(NKqp::TKikimrSettings(config).SetWithSampleTables(true).SetEnableResourcePools(true));
         auto db = kikimr.GetQueryClient();
 
         const TString userSID = TStringBuilder() << "test@" << BUILTIN_ACL_DOMAIN;
@@ -2761,7 +2761,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerResourcePool) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        auto kikimr = NKqp::TKikimrRunner(NKqp::TKikimrSettings(config).SetEnableResourcePools(true).SetEnableScriptExecutionOperations(true));
+        auto kikimr = NKqp::TKikimrRunner(NKqp::TKikimrSettings(config).SetWithSampleTables(true).SetEnableResourcePools(true).SetEnableScriptExecutionOperations(true));
         auto db = kikimr.GetQueryClient();
 
         TExecuteScriptSettings settings;

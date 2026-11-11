@@ -443,7 +443,7 @@ Y_UNIT_TEST_SUITE(KqpWriteNewRbo) {
     }
 
     Y_UNIT_TEST(OutOfSpace) {
-        auto settings = TKikimrSettings(NewRboAppConfig())
+        auto settings = TKikimrSettings(NewRboAppConfig()).SetWithSampleTables(true)
             .SetEnableScriptExecutionOperations(true)
             .SetUseRealThreads(false);
 

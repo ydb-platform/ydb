@@ -101,7 +101,7 @@ public:
     TString DomainRoot = KikimrDefaultUtDomainRoot;
     ui32 NodeCount = 1;
     ui32 DynamicNodeCount = 0;
-    bool WithSampleTables = true;
+    bool WithSampleTables = false;
     bool UseRealThreads = true;
     bool UseRealInterconnect = false;
     bool EnableForceFollowers = false;
@@ -305,7 +305,8 @@ inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSet
 {
     auto settings = TKikimrSettings(appConfig)
         .SetKqpSettings(kqpSettings)
-        .SetEnableScriptExecutionOperations(true);
+        .SetEnableScriptExecutionOperations(true)
+        .SetWithSampleTables(true);
 
     return TKikimrRunner{settings};
 }

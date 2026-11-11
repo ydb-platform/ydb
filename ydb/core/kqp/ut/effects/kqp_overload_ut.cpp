@@ -18,6 +18,8 @@ Y_UNIT_TEST_SUITE(KqpOverload) {
 
     Y_UNIT_TEST_TWIN(OltpOverloaded, Distributed) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);

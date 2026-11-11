@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(KqpMkqlMemoryLimitException, EnableComputeSchedulerMemory) {
-        auto settings = TKikimrSettings();
+        auto settings = TKikimrSettings().SetWithSampleTables(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 10, 10, 1'000'000, 1);
@@ -943,7 +943,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
     void DoCancelAfterRo(bool follower, bool dependedRead) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
@@ -1107,7 +1107,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         - expect it to happen strictly after all EvState events
      */
     Y_UNIT_TEST(WaitCAsStateOnAbort) {
-        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false));
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
 
@@ -1161,7 +1161,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         - expect it to happen strictly after all EvState events
      */
     Y_UNIT_TEST(WaitCAsTimeout) {
-        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false));
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
 

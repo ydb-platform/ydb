@@ -117,6 +117,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
     // causing the session to get stuck in CleanupState forever.
     Y_UNIT_TEST(CloseSessionDuringNonFinalCleanup) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
         auto kikimr = TKikimrRunner(settings);
         auto runtime = kikimr.GetTestServer().GetRuntime();
@@ -228,6 +230,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
     Y_UNIT_TEST(FinalCleanupIntentIsPreservedWhileClosingLegacyWorker) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
         auto kikimr = TKikimrRunner(settings);
         auto runtime = kikimr.GetTestServer().GetRuntime();
@@ -292,6 +296,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
     Y_UNIT_TEST(UndeliveredIdleCloseReleasesSessionQuota) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
 
         auto kikimr = TKikimrRunner(settings);
@@ -357,6 +363,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
     Y_UNIT_TEST(UndeliveredCloseNotifiesAttachedSessions) {
         TCapturedLog logs;
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false).SetNodeCount(2).SetLogCapture(logs);
         auto kikimr = TKikimrRunner(settings);
         auto runtime = kikimr.GetTestServer().GetRuntime();
@@ -428,6 +436,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
     Y_UNIT_TEST_TWIN(TableUndeliveredFinalizeAfterCancelReleasesSession, commit) {
         TCapturedLog logs;
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false).SetLogCapture(logs);
         settings.FeatureFlags.SetEnableForceImmediateEffectsExecution(true);
         settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);
@@ -514,6 +524,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
     Y_UNIT_TEST(TableCommitTimeoutAfterBufferCompletionReleasesSession) {
         TCapturedLog logs;
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
         settings.SetLogCapture(logs);
         settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);
@@ -587,6 +599,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
     Y_UNIT_TEST(TableNoOpWriteTimeoutDuringRollbackReleasesSession) {
         TCapturedLog logs;
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
         settings.SetLogCapture(logs);
         settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);

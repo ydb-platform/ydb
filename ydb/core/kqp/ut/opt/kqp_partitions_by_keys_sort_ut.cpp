@@ -12,7 +12,7 @@ namespace {
 void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitionsByKeys) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(useSortForPartitionsByKeys);
-    TKikimrRunner kikimr(appConfig);
+    TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(true));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -53,7 +53,7 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2, bo
         MakeDirIfNotExist("./spilling");
     }
 
-    TKikimrRunner kikimr(appConfig);
+    TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(true));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
     const TString query = TStringBuilder() << "--!syntax_v1\n"
@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
     Y_UNIT_TEST(WindowFunctionFullFrameAggregateInputDropsUnusedColumn) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
-        TKikimrRunner kikimr(appConfig);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(true));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 

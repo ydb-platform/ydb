@@ -34,6 +34,8 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
     Y_UNIT_TEST(TestNoLocksIssue) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);
@@ -130,7 +132,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST(TestNoLocksIssueInteractiveTx) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -248,7 +250,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST_TWIN(TestNoWrite, EnableIndexStreamWrite) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(settings);
@@ -329,7 +331,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST(TestSnapshotIfInsertRead) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -401,7 +403,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST_TWIN(TestSecondaryIndexWithoutSnapshot, StreamIndex) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
 
         TKikimrRunner kikimr(settings);
@@ -455,7 +457,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST(TestSnapshotWithDependentReads) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -561,7 +563,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST_TWIN(TestSnapshotWithOnlineRO, AllowInconsistentReads) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -603,7 +605,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST_TWIN(TestSnapshotWithOnlineROOneShard, AllowInconsistentReads) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -644,7 +646,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST(LockIssueWithImmediateEffectsOnEffectlessTx) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
         settings.SetEnableForceImmediateEffectsExecution(true);
 
         TKikimrRunner kikimr(settings);

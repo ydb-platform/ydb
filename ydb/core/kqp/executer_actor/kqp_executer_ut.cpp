@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         - Do not crash or get undefined behavior.
      */
     Y_UNIT_TEST(TestSuddenAbortAfterReady) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
         settings.AppConfig.MutableTableServiceConfig()->MutableComputeSchedulerSettings()->SetAccountDefaultPool(true);
 
         TKikimrRunner kikimr(settings);
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
     }
 
     Y_UNIT_TEST(ResultChannelFlowControlSmoke) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
     }
 
     Y_UNIT_TEST_TWIN(ResultChannelFlowControlPauseResume, ClientStats) {
-        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false);
         settings.AppConfig.MutableFeatureFlags()->SetEnableKqpRuntimeStats(true);
 
         TKikimrRunner kikimr(settings);
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
     */
     Y_UNIT_TEST(OversizedTaskReturnsLimitExceeded) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         serverSettings.SetNodeCount(2);
         TKikimrRunner kikimr(serverSettings);
 

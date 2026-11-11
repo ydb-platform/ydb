@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     // Copy paste from table service but with some modifications for query service
     // Checks read iterators/session/sdk counters have expected values
     Y_UNIT_TEST(CloseSessionsWithLoad) {
-        auto kikimr = std::make_shared<TKikimrRunner>();
+        auto kikimr = std::make_shared<TKikimrRunner>(TKikimrSettings().SetWithSampleTables(true));
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);

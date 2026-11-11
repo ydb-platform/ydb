@@ -19,6 +19,8 @@ Y_UNIT_TEST_SUITE(KqpFail) {
 
     Y_UNIT_TEST(Immediate) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);
@@ -102,6 +104,8 @@ Y_UNIT_TEST_SUITE(KqpFail) {
 
     Y_UNIT_TEST(OnPrepare) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);
@@ -187,6 +191,8 @@ Y_UNIT_TEST_SUITE(KqpFail) {
 
     Y_UNIT_TEST(OnCommit) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);

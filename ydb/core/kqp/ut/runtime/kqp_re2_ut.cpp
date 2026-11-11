@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(KqpRe2) {
 
 Y_UNIT_TEST(IncorrectRegexNoError) {
     NKikimrConfig::TAppConfig appCfg;
-    TKikimrRunner kikimr(appCfg);
+    TKikimrRunner kikimr(TKikimrSettings(appCfg).SetWithSampleTables(true));
 
     auto db = kikimr.GetQueryClient();
     auto query = R"(
@@ -54,7 +54,7 @@ Y_UNIT_TEST(IncorrectRegexNoError) {
 
 Y_UNIT_TEST(IncorrectRegexWithoutExecutionNoError) {
     NKikimrConfig::TAppConfig appCfg;
-    TKikimrRunner kikimr(appCfg);
+    TKikimrRunner kikimr(TKikimrSettings(appCfg).SetWithSampleTables(true));
 
     auto db = kikimr.GetQueryClient();
 

@@ -21,6 +21,8 @@ const bool EnableOpt = false;
 
 TKikimrRunner GetKikimrRunner() {
     TKikimrSettings serverSettings;
+    serverSettings.SetWithSampleTables(true);
+    serverSettings.SetWithSampleTables(true);
     return {serverSettings};
 }
 
@@ -1030,6 +1032,8 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
 
     Y_UNIT_TEST(PhasesCount) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
+        serverSettings.SetWithSampleTables(true);
         TKikimrRunner kikimr(serverSettings);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 

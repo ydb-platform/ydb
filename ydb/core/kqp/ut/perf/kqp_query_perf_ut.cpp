@@ -149,8 +149,7 @@ std::tuple<Ydb::TableStats::QueryStats, NYdb::TResultSets> ExecQuery(const TKiki
 
 Y_UNIT_TEST_SUITE(KqpQueryPerf) {
     Y_UNIT_TEST_TWIN(KvRead, QueryService) {
-        TKikimrRunner kikimr;
-
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto params = TParamsBuilder()
             .AddParam("$key").Uint64(102).Build()
             .Build();
@@ -184,8 +183,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
     }
 
     Y_UNIT_TEST_TWIN(RangeLimitRead, QueryService) {
-        TKikimrRunner kikimr;
-
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto params = TParamsBuilder()
             .AddParam("$from").Int32(1).Build()
             .AddParam("$to").Int32(5).Build()
@@ -232,8 +230,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
     }
 
     Y_UNIT_TEST_TWIN(RangeRead, QueryService) {
-        TKikimrRunner kikimr;
-
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto params = TParamsBuilder()
             .AddParam("$from").Int32(2).Build()
             .AddParam("$to").Int32(7).Build()
@@ -278,6 +275,8 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
     Y_UNIT_TEST_QUAD(IndexLookupJoin, EnableStreamLookup, QueryService) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(EnableStreamLookup);
         TKikimrRunner kikimr{settings};
 
@@ -601,6 +600,8 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
     Y_UNIT_TEST_TWIN(IdxLookupJoin, QueryService) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
 
         auto params = TParamsBuilder()
@@ -625,6 +626,8 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
     Y_UNIT_TEST_TWIN(IdxLookupJoinThreeWay, QueryService) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
 
         auto params = TParamsBuilder()
@@ -649,8 +652,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
     }
 
     Y_UNIT_TEST_TWIN(ComputeLength, QueryService) {
-        TKikimrRunner kikimr;
-
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto [stats, results] = ExecQuery(kikimr, QueryService, Q1_(R"(
             SELECT COUNT(*) FROM EightShard;
         )"), TParamsBuilder().Build());
@@ -661,8 +663,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
     }
 
     Y_UNIT_TEST_TWIN(AggregateToScalar, QueryService) {
-        TKikimrRunner kikimr;
-
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto params = TParamsBuilder()
             .AddParam("$group").Uint32(1).Build()
             .Build();
@@ -718,8 +719,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
     }
 
     Y_UNIT_TEST_TWIN(MultiRead, QueryService) {
-        TKikimrRunner kikimr;
-
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto [stats, _] = ExecQuery(kikimr, QueryService, Q1_(R"(
             SELECT * FROM `/Root/KeyValueLargePartition` WHERE Key > 101;
             SELECT * FROM `/Root/KeyValueLargePartition` Where Key < 201;

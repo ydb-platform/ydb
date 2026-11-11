@@ -51,6 +51,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
+            serverSettings.SetWithSampleTables(true);
+            serverSettings.SetWithSampleTables(true);
             serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
 
@@ -92,6 +94,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
+            serverSettings.SetWithSampleTables(true);
+            serverSettings.SetWithSampleTables(true);
             serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(isOlap);
             serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
@@ -150,6 +154,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
+            serverSettings.SetWithSampleTables(true);
+            serverSettings.SetWithSampleTables(true);
             serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
@@ -182,6 +188,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
+            serverSettings.SetWithSampleTables(true);
+            serverSettings.SetWithSampleTables(true);
             serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
@@ -216,6 +224,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
+            serverSettings.SetWithSampleTables(true);
+            serverSettings.SetWithSampleTables(true);
             serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
@@ -283,6 +293,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
+            serverSettings.SetWithSampleTables(true);
+            serverSettings.SetWithSampleTables(true);
             serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);

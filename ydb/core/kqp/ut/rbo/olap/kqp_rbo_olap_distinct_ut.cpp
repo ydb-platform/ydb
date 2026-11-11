@@ -34,6 +34,7 @@ namespace {
 // The new optimizer without falling back to the YQL one.
 TKikimrSettings NewRboSettings() {
     TKikimrSettings settings;
+    settings.SetWithSampleTables(true);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
     return settings;

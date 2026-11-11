@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(KqpScanSpilling) {
 
 Y_UNIT_TEST(SpillingPragmaParseError) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfg());
+    TKikimrRunner kikimr(TKikimrSettings(AppCfg()).SetWithSampleTables(true));
 
     auto db = kikimr.GetQueryClient();
     auto query = R"(
@@ -137,7 +137,7 @@ Y_UNIT_TEST_QUAD(SpillingInRuntimeNodes, EnabledSpilling, EnableComputeScheduler
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
     auto appCfg = AppCfgLowComputeLimits(reasonableTreshold);
     appCfg.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
-    TKikimrRunner kikimr(appCfg);
+    TKikimrRunner kikimr(TKikimrSettings(appCfg).SetWithSampleTables(true));
 
     auto db = kikimr.GetQueryClient();
 
@@ -166,7 +166,7 @@ Y_UNIT_TEST_TWIN(HandleErrorsCorrectly, EnableComputeSchedulerMemory) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
     auto appCfg = AppCfgLowComputeLimits(0.01, true, true);
     appCfg.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
-    TKikimrRunner kikimr(appCfg);
+    TKikimrRunner kikimr(TKikimrSettings(appCfg).SetWithSampleTables(true));
 
     auto db = kikimr.GetQueryClient();
 
@@ -197,7 +197,7 @@ Y_UNIT_TEST(SelfJoinQueryService) {
         NYql::NDq::GetDqExecutionSettingsForTests().Reset();
     };
 
-    TKikimrRunner kikimr(AppCfg());
+    TKikimrRunner kikimr(TKikimrSettings(AppCfg()).SetWithSampleTables(true));
 
     auto db = kikimr.GetQueryClient();
 
@@ -255,7 +255,7 @@ Y_UNIT_TEST(SelfJoin) {
         NYql::NDq::GetDqExecutionSettingsForTests().Reset();
     };
 
-    TKikimrRunner kikimr(AppCfg());
+    TKikimrRunner kikimr(TKikimrSettings(AppCfg()).SetWithSampleTables(true));
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
 
@@ -305,7 +305,7 @@ Y_UNIT_TEST(WideSortSpillingPragmaParsed) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
     auto appCfg = AppCfg();
     appCfg.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
-    TKikimrRunner kikimr(appCfg);
+    TKikimrRunner kikimr(TKikimrSettings(appCfg).SetWithSampleTables(true));
 
     auto db = kikimr.GetQueryClient();
 
@@ -317,7 +317,7 @@ Y_UNIT_TEST(WideSortSpillingPragmaParsed) {
 
 Y_UNIT_TEST(WideSortSpillingPragmaParseError) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfg());
+    TKikimrRunner kikimr(TKikimrSettings(AppCfg()).SetWithSampleTables(true));
 
     auto db = kikimr.GetQueryClient();
     auto query = R"(
@@ -339,7 +339,7 @@ Y_UNIT_TEST_QUAD(WideSortSpillingInRuntimeNodes, EnabledSpilling, EnableComputeS
     auto appCfg = AppCfgLowComputeLimits(reasonableTreshold);
     appCfg.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
     appCfg.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
-    TKikimrRunner kikimr(appCfg);
+    TKikimrRunner kikimr(TKikimrSettings(appCfg).SetWithSampleTables(true));
 
     auto db = kikimr.GetQueryClient();
 

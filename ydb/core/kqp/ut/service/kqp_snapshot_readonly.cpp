@@ -103,7 +103,7 @@ void CreateRowTableForJoin(NYdb::NTable::TSession& session) {
 Y_UNIT_TEST_SUITE(KqpSnapshotReadOnly) {
 
     Y_UNIT_TEST(SnapshotReadOnlyCheckNoLocks) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetQueryClient();
         auto tc = kikimr.GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();

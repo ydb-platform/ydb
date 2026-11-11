@@ -817,7 +817,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(Followers) {
-        auto kikimr = TKikimrRunner(TKikimrSettings().SetUseRealThreads(false));
+        auto kikimr = TKikimrRunner(TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false));
         auto db = kikimr.GetQueryClient();
 
         TExecuteQuerySettings settings;
@@ -1366,7 +1366,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST(Ddl) {
         NKikimrConfig::TAppConfig appConfig;
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings(appConfig).SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings(appConfig).SetWithSampleTables(true).SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -1511,7 +1511,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         };
 
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({ setting });
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({ setting });
 
         TTestHelper testHelper(serverSettings);
         auto& kikimr = testHelper.GetKikimr();
@@ -1642,7 +1642,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(DdlUser) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -1685,7 +1685,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(CreateTempTable) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
@@ -1790,7 +1790,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(CreateTempTableDisabled) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting}).SetAuthToken("user0@builtin");
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting}).SetAuthToken("user0@builtin");
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(false);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
@@ -1818,7 +1818,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(AlterTempTable) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
@@ -1978,7 +1978,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(TempTablesDrop) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
@@ -2053,7 +2053,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(DdlGroup) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2247,7 +2247,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(DdlPermission) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2504,7 +2504,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(DdlSecret) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         serverSettings.FeatureFlags.SetDisableOldSecretCreation(false);
 
         TKikimrRunner kikimr(serverSettings);
@@ -2592,7 +2592,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ShowCreateTable) {
-        auto serverSettings = TKikimrSettings();
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2624,7 +2624,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ShowCreateSysView) {
-        auto serverSettings = TKikimrSettings();
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2670,7 +2670,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ShowCreateTableNotSuccess) {
-        auto serverSettings = TKikimrSettings();
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2698,7 +2698,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ShowCreateTableOnView) {
-        auto serverSettings = TKikimrSettings();
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2723,7 +2723,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ShowCreateView) {
-        auto serverSettings = TKikimrSettings();
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2752,7 +2752,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ShowCreateViewOnTable) {
-        auto serverSettings = TKikimrSettings();
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2770,7 +2770,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(DdlCache) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2814,7 +2814,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(DdlTx) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2831,7 +2831,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(DdlExecuteScript) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true)
             .SetKqpSettings({setting})
             .SetEnableScriptExecutionOperations(true);
 
@@ -2867,7 +2867,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(DdlMixedDml) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2973,7 +2973,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(DdlWithExplicitTransaction) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
 
@@ -3036,7 +3036,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(Ddl_Dml) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
 
@@ -3332,7 +3332,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(CTASWithoutPerStatement) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true)
             .SetKqpSettings({setting})
             .SetWithSampleTables(false)
             .SetEnableTempTables(true);
@@ -3410,7 +3410,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(SeveralCTAS) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true)
             .SetKqpSettings({setting})
             .SetWithSampleTables(false)
             .SetEnableTempTables(true);
@@ -3454,7 +3454,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
      Y_UNIT_TEST_TWIN(CTAS_BadKey, IsOlap) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true)
             .SetKqpSettings({setting})
             .SetWithSampleTables(false)
             .SetEnableTempTables(true);
@@ -3495,7 +3495,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(CheckIsolationLevelFroPerStatementMode) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
 
@@ -5330,7 +5330,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST_QUAD(AlterTable_SetNotNull_Invalid, WithSecondaryIndex, WithQueryService) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
-        auto kikimr = TKikimrRunner(TKikimrSettings(config));
+        auto kikimr = TKikimrRunner(TKikimrSettings(config).SetWithSampleTables(true));
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -5408,7 +5408,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST_QUAD(AlterTable_SetNotNull_Valid, WithSecondaryIndex, WithQueryService) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
-        auto kikimr = TKikimrRunner(TKikimrSettings(config));
+        auto kikimr = TKikimrRunner(TKikimrSettings(config).SetWithSampleTables(true));
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -5619,7 +5619,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(CreateAndDropTopic) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
@@ -5688,7 +5688,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(CreateAndAlterTopic) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         TKikimrRunner kikimr{serverSettings};
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::PQ_SCHEMA, NActors::NLog::PRI_DEBUG);
         auto client = kikimr.GetQueryClient(NYdb::NQuery::TClientSettings{}.AuthToken("root@builtin"));
@@ -5748,7 +5748,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(CreateOrDropTopicOverTable) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         TKikimrRunner kikimr{serverSettings};
         auto tableClient = kikimr.GetTableClient();
 
@@ -5815,7 +5815,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(AlterCdcTopic) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({setting});
         TKikimrRunner kikimr{serverSettings};
         auto tableClient = kikimr.GetTableClient();
 

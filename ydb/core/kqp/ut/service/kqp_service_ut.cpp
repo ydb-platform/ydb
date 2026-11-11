@@ -203,6 +203,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
     Y_UNIT_TEST(CloseSessionAbortQueryExecution) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
         auto kikimr = TKikimrRunner(settings);
 
@@ -272,6 +273,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
     // longer, so delivery-time observation would silently pass even on the old code.
     Y_UNIT_TEST(CancelTerminatesAllComputeActors) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
         auto kikimr = TKikimrRunner(settings);
 
@@ -432,6 +434,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
     // assertion fails).
     Y_UNIT_TEST(RemoteClientLostSubscriptionRaceTerminatesComputeActors) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
         auto kikimr = TKikimrRunner(settings);
         auto runtime = kikimr.GetTestServer().GetRuntime();
@@ -985,7 +988,7 @@ struct TDictCase {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableShuttingDownNodeState(true);
 
-        TKikimrRunner kikimr(TKikimrSettings()
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true)
                                         .SetFeatureFlags(featureFlags)
                                         .SetNodeCount(3)
                                         .SetUseRealThreads(false));
@@ -1026,7 +1029,7 @@ struct TDictCase {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableShuttingDownNodeState(true);
 
-        TKikimrRunner kikimr(TKikimrSettings()
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true)
                                     .SetFeatureFlags(featureFlags)
                                     .SetNodeCount(2)
                                     .SetUseRealThreads(false));
@@ -1092,7 +1095,7 @@ struct TDictCase {
           and not with the non-retriable INTERNAL_ERROR.
      */
     Y_UNIT_TEST(RetriesExhaustedByActorUnknownIsUnavailable) {
-        TKikimrSettings settings = TKikimrSettings()
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true)
                                     .SetNodeCount(2)
                                     .SetUseRealThreads(false);
         auto* retriesConfig = settings.AppConfig.MutableTableServiceConfig()->MutableExecuterRetriesConfig();

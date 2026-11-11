@@ -67,6 +67,7 @@ private:
 
 inline TEffectsKikimrRunner NewRboKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings = {}) {
     return TEffectsKikimrRunner(TKikimrSettings(NewRboAppConfig())
+        .SetWithSampleTables(true)
         .SetKqpSettings(kqpSettings)
         .SetEnableScriptExecutionOperations(true));
 }

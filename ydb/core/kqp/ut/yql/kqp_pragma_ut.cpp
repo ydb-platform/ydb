@@ -203,6 +203,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
 
     Y_UNIT_TEST(MatchRecognizeWithTimeOrderRecoverer) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableQueryServiceConfig()->SetEnableMatchRecognize(true);
 
         TKikimrRunner kikimr(settings);
@@ -244,6 +245,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
 
     Y_UNIT_TEST(MatchRecognizeWithoutTimeOrderRecoverer) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableQueryServiceConfig()->SetEnableMatchRecognize(true);
 
         TKikimrRunner kikimr(settings);

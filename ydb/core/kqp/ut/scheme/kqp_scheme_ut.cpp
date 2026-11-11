@@ -1210,7 +1210,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(TableMetricsLevelCreateTableAs) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableDataShardDetailedMetrics(true);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         TKikimrRunner kikimr(settings);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -1571,7 +1571,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         //YDBREQUESTS-1324
         //some cases fail
 
-        TKikimrSettings settings = TKikimrSettings();
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(streamIndex);
 
         TKikimrRunner kikimr(settings);
@@ -2724,7 +2724,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DataShardBloomFilterIndex) {
-        auto serverSettings = TKikimrSettings();
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
         serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2868,7 +2868,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // engine keeps its length-only ByKeyFilterPrefix. From a single CREATE, verify every
         // observable of that mirror: schemeshard children, DescribeTable (no double-listing) and
         // SHOW CREATE rendering; then that DROP INDEX by name removes both the object and the prefix.
-        auto serverSettings = TKikimrSettings();
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
         serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2956,7 +2956,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // clears its config and the alter still reaches the datashard, which must drop its engine
         // filter (previously it kept a stale filter because an empty prefix list looked like
         // "no change"). The table must remain fully queryable, and a bloom index can be re-added.
-        auto serverSettings = TKikimrSettings();
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
         serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3011,7 +3011,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(DataShardBloomFilterIndexCreateBadPrefix) {
         // CREATE-time validation: bloom filter columns must be a left prefix of the primary key,
         // because the named scheme object stores the columns while the engine prefix is length-only.
-        auto serverSettings = TKikimrSettings();
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
         serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3059,7 +3059,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // With EnableLocalIndexAsSchemeObject OFF, a row-table bloom filter index drives only the
         // engine ByKeyFilterPrefixes (unchanged legacy behavior) and is NOT registered as a named
         // TTableIndex scheme object, so DROP INDEX by name is rejected.
-        auto serverSettings = TKikimrSettings();
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true);
         serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3728,6 +3728,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithPartitionAtKeysUuid) {
         TKikimrSettings kikimrSettings;
+        kikimrSettings.SetWithSampleTables(true);
         TKikimrRunner kikimr(kikimrSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -3772,6 +3773,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithUniformPartitionsUuid) {
         TKikimrSettings kikimrSettings;
+        kikimrSettings.SetWithSampleTables(true);
         TKikimrRunner kikimr(kikimrSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4363,7 +4365,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     void AlterTableAddIndex(EIndexTypeSql type) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_DEBUG);
 
@@ -4693,7 +4695,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(AlterTableAlterVectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4732,7 +4734,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST_TWIN(AlterIndexImplTable, VectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAccessToIndexImplTables(true);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         kikimr.GetTestClient().GrantConnect("user@builtin");
@@ -4944,7 +4946,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST_TWIN(CopyIndexImplTable, EnableAccessToIndexImplTables) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAccessToIndexImplTables(EnableAccessToIndexImplTables);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -5573,7 +5575,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     void ValidatingUniqIndex(bool sqlInterface, bool isUnique) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAddUniqueIndex(true);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
@@ -5678,7 +5680,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(UniqueIndexMultipleNulls) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAddUniqueIndex(true);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
@@ -5765,7 +5767,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(AlterTableAddUniqIndexSqlFeatureOff) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAddUniqueIndex(false);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
@@ -5801,7 +5803,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(AlterTableAddUniqIndexPublicApiFeatureOff) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAddUniqueIndex(false);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
 
         auto db = kikimr.GetTableClient();
@@ -5831,7 +5833,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithVectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -5863,7 +5865,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCovered) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -5908,7 +5910,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCaseIncentive) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6427,7 +6429,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithVectorIndexPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6465,7 +6467,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCoveredPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6505,7 +6507,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(AlterTableRenameVectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6538,7 +6540,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(RebuildVectorIndexSameColumnsSql) {
         // Rebuild without changing the column set (columns omitted entirely) must still work.
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6579,7 +6581,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(RebuildVectorIndexInvalidClustersAndLevelsSql) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6615,7 +6617,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // metric/vector_type/vector_dimension must not be overridable on REBUILD INDEX.
         // These are rejected already at the KQP exec layer before reaching schemeshard.
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6657,7 +6659,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(RebuildNonExistentIndexSql) {
         // Rebuilding an index that does not exist must fail with a clear message.
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6693,7 +6695,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // REBUILD INDEX is only supported for vector_kmeans_tree indexes; rebuilding a
         // plain secondary index must be rejected at the KQP exec layer.
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6724,7 +6726,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(RenameTableWithVectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto settings = TKikimrSettings().SetWithSampleTables(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -8284,6 +8286,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(ModifyPermissionsByRelativePathQueryClient) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         TTestHelper testHelper(runnerSettings);
         auto client = testHelper.GetKikimr().GetQueryClient();
         auto db = testHelper.GetKikimr().GetTableClient();
@@ -8484,7 +8487,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     void AddChangefeed(EChangefeedMode mode, EChangefeedFormat format) {
-        TKikimrRunner kikimr(TKikimrSettings()
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true)
             .SetPQConfig(DefaultPQConfig())
             .SetEnableChangefeedDynamoDBStreamsFormat(true)
             .SetEnableChangefeedDebeziumJsonFormat(true));
@@ -8567,7 +8570,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AddChangefeedWhenDisabled) {
-        TKikimrRunner kikimr(TKikimrSettings()
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true)
             .SetPQConfig(DefaultPQConfig())
             .SetEnableChangefeeds(false));
         auto db = kikimr.GetTableClient();
@@ -8601,7 +8604,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AddChangefeedNegative) {
-        TKikimrRunner kikimr(TKikimrSettings()
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true)
             .SetPQConfig(DefaultPQConfig())
             .SetEnableChangefeedDynamoDBStreamsFormat(true)
             .SetEnableChangefeedDebeziumJsonFormat(true));
@@ -8707,7 +8710,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(ChangefeedBarriersIntervalBelowOneSecondSql) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -8731,7 +8734,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(ChangefeedBarriersIntervalBelowOneSecondApi) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -8752,7 +8755,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(ChangefeedAwsRegion) {
-        TKikimrRunner kikimr(TKikimrSettings()
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true)
             .SetPQConfig(DefaultPQConfig())
             .SetEnableChangefeedDynamoDBStreamsFormat(true));
         auto db = kikimr.GetTableClient();
@@ -8790,7 +8793,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DropChangefeedNegative) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -8830,7 +8833,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(ChangefeedSchemaChanges, UseQueryService) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -8891,7 +8894,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(ChangefeedRetentionPeriod) {
         using namespace NTopic;
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -8986,7 +8989,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST_TWIN(ChangefeedRetentionStorage, UseQueryService) {
         using namespace NTopic;
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();
@@ -9052,7 +9055,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST_TWIN(ChangefeedWriteSpeed, UseQueryService) {
         using namespace NTopic;
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();
@@ -9118,7 +9121,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST_TWIN(ChangefeedWriteBurst, UseQueryService) {
         using namespace NTopic;
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();
@@ -9184,7 +9187,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(ChangefeedTopicPartitions) {
         using namespace NTopic;
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -9293,7 +9296,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(ChangefeedTopicAutoPartitioning) {
         using namespace NTopic;
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -9349,7 +9352,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(ChangefeedAttributes) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().ExtractValueSync().GetSession();
 
@@ -9385,7 +9388,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(ChangefeedOnIndexTable) {
-        TKikimrRunner kikimr(TKikimrSettings()
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true)
             .SetPQConfig(DefaultPQConfig())
             .SetEnableChangefeedsOnIndexTables(true));
         auto db = kikimr.GetTableClient();
@@ -9455,7 +9458,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreatedAt) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto scheme = NYdb::NScheme::TSchemeClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -9512,6 +9515,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(NEG_CreateTableWithUnsupportedStoreType) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
@@ -9536,6 +9540,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateAlterDropTableStore) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
@@ -9574,6 +9579,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 #if 0 // TODO
     Y_UNIT_TEST(CreateDropInheritedColumnTable) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
@@ -9639,6 +9645,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableStoreNegative) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
@@ -9687,6 +9694,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateAlterDropColumnTableInStore) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
@@ -9743,6 +9751,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateDropColumnTable) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
@@ -9803,6 +9812,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(OlapSharding_KeyOnly) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
@@ -9828,6 +9838,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateDropColumnTableNegative) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
@@ -9966,6 +9977,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const bool enableTree = Arg<0>() == ETieringObjectKeyTree::Enabled;
         const bool inStore = Arg<1>() == ETieringTableLocation::InStore;
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.WithSampleTables = false;
         settings.SetEnableTieringInColumnShard(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableTieringObjectKeyTree(enableTree);
@@ -10045,6 +10057,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(AlterColumnTableTiering) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         runnerSettings.SetEnableTieringInColumnShard(true);
         TTestHelper testHelper(runnerSettings);
@@ -10138,6 +10151,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(AlterSequence) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TKikimrRunner kikimr(runnerSettings);
         auto client = kikimr.GetQueryClient();
@@ -10239,6 +10253,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(AlterSequenceRestartWith) {
        TKikimrSettings runnerSettings;
+       runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TKikimrRunner kikimr(runnerSettings);
         auto client = kikimr.GetQueryClient();
@@ -11034,7 +11049,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableReplicationConfig()->SetConsumerAvailabilityPeriodSeconds(7201);
         config.MutableFeatureFlags()->SetEnableTopicDiskSubDomainQuota(true);
-        TKikimrRunner kikimr(TKikimrSettings(config)
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(true)
             .SetFeatureFlags(config.GetFeatureFlags())
             .SetUseRealThreads(false));
         auto session = kikimr.RunCall([&] {
@@ -12042,6 +12057,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTransfer) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -12329,6 +12345,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTransfer_QueryService) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto client = kikimr.GetQueryClient();
@@ -12647,6 +12664,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(TransferMetricsLevel) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto client = kikimr.GetQueryClient();
@@ -12722,6 +12740,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         using namespace NReplication;
 
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         serverSettings.FeatureFlags.SetDisableOldSecretCreation(false);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
@@ -13094,6 +13113,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         using namespace NReplication;
 
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         serverSettings.FeatureFlags.SetDisableOldSecretCreation(false);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
@@ -13492,6 +13512,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(DropTransfer) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -13561,6 +13582,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(DropTransfer_QueryService) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto client = kikimr.GetQueryClient();
@@ -14065,7 +14087,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST_TWIN(CreateAndAlterTopicYqlSettings, UseQueryService) {
         using namespace NTopic;
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto queryClient = kikimr.GetQueryClient();
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -14267,7 +14289,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST_TWIN(AddAndAlterChangefeedYqlTopicSettings, UseQueryService) {
         using namespace NTopic;
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto queryClient = kikimr.GetQueryClient();
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -14392,7 +14414,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             size_t PartitionCount;
         };
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto topicClient = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
@@ -14520,7 +14542,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto pqConfig = DefaultPQConfig();
         pqConfig.MutableBillingMeteringConfig()->SetEnabled(true);
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(pqConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(pqConfig));
         auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto queryClient = kikimr.GetQueryClient();
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -14540,7 +14562,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST_TWIN(AlterTopicContentBasedDeduplication, UseQueryService) {
         using namespace NTopic;
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetPQConfig(DefaultPQConfig()));
         auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto queryClient = kikimr.GetQueryClient();
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -14621,7 +14643,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableBackupService(false);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetWithSampleTables(true)
             .SetEnableBackupService(false));
 
         auto db = kikimr.GetTableClient();
@@ -14646,7 +14668,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableBackupService(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetWithSampleTables(true)
             .SetEnableBackupService(true));
 
         auto db = kikimr.GetTableClient();
@@ -15464,7 +15486,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(SecretsDisabled) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableSchemaSecrets(false);
-        const auto settings = TKikimrSettings()
+        const auto settings = TKikimrSettings().SetWithSampleTables(true)
             .SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -15525,7 +15547,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableSchemaSecrets(true);
         featureFlags.SetDisableOldSecretCreation(true);
-        const auto settings = TKikimrSettings()
+        const auto settings = TKikimrSettings().SetWithSampleTables(true)
             .SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -16075,6 +16097,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(DropTable) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16107,6 +16130,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(AddColumnLongPk) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16131,6 +16155,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(CreateTableWithTtl) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16160,6 +16185,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(CreateTableWithoutTtl) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16190,6 +16216,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
@@ -16385,6 +16412,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         void Run() {
             TKikimrSettings runnerSettings;
+            runnerSettings.SetWithSampleTables(true);
             runnerSettings.WithSampleTables = false;
             runnerSettings.SetColumnShardAlterObjectEnabled(true);
             TTestHelper testHelper(runnerSettings);
@@ -16462,6 +16490,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(AddColumnOldSchemeBulkUpsert) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16493,6 +16522,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 /*
     Y_UNIT_TEST(AddColumnOnSchemeChange) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16520,6 +16550,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 */
     Y_UNIT_TEST(AddColumnWithStore) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16584,6 +16615,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(AddPgColumnWithStore) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16637,6 +16669,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(AddColumnErrors) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16658,6 +16691,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(NullColumnError) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16693,6 +16727,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(DropColumn) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16730,6 +16765,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 /*
     Y_UNIT_TEST(DropColumnOnSchemeChange) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16757,6 +16793,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(DropColumnOldSchemeBulkUpsert) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16784,6 +16821,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(DropColumnAfterAdd) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16824,6 +16862,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
 
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16926,6 +16965,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(DropColumnErrors) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16954,6 +16994,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(DropColumnTableStoreErrors) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -16992,6 +17033,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         const ui64 alterColumnsTo = 9999;
 
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -17029,6 +17071,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(NullKeySchema) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -17052,6 +17095,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -17084,6 +17128,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -17136,6 +17181,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -17168,6 +17214,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -17311,6 +17358,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
     Y_UNIT_TEST(Timestamp) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
 
         TTestHelper testHelper(runnerSettings);
@@ -17336,6 +17384,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
     Y_UNIT_TEST(Decimal) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
 
         TTestHelper testHelper(runnerSettings);
@@ -17416,6 +17465,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
     Y_UNIT_TEST(Decimal35) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
 
         TTestHelper testHelper(runnerSettings);
@@ -17496,6 +17546,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
     Y_UNIT_TEST(DecimalCsv) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
 
         TTestHelper testHelper(runnerSettings);
@@ -17530,6 +17581,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
     Y_UNIT_TEST(NegativeTimestampErr) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
 
         TTestHelper testHelper(runnerSettings);
@@ -17588,6 +17640,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
     Y_UNIT_TEST(JsonImport) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
 
         TTestHelper testHelper(runnerSettings);
@@ -17616,6 +17669,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
     void CheckPgColumnRejected(const TString& typeName) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -17654,6 +17708,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
     Y_UNIT_TEST(PgMultipleTypesColumn) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
@@ -17677,7 +17732,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableBackupService(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetWithSampleTables(true)
             .SetEnableBackupService(true));
 
         auto db = kikimr.GetTableClient();
@@ -17719,7 +17774,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableBackupService(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetWithSampleTables(true)
             .SetEnableBackupService(true));
 
         auto db = kikimr.GetTableClient();
@@ -17777,7 +17832,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableBackupService(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetWithSampleTables(true)
             .SetEnableBackupService(true));
 
         auto db = kikimr.GetTableClient();
@@ -17817,7 +17872,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableBackupService(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetWithSampleTables(true)
             .SetEnableBackupService(true));
 
         auto db = kikimr.GetTableClient();
@@ -17867,7 +17922,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableBackupService(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetWithSampleTables(true)
             .SetEnableBackupService(true));
 
         auto db = kikimr.GetTableClient();

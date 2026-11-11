@@ -17,7 +17,7 @@ using namespace NYdb::NQuery;
 Y_UNIT_TEST_SUITE(KqpReattachNewRbo) {
 
     Y_UNIT_TEST(ReattachDeliveryProblem) {
-        auto settings = TKikimrSettings(NewRboAppConfig())
+        auto settings = TKikimrSettings(NewRboAppConfig()).SetWithSampleTables(true)
             .SetEnableScriptExecutionOperations(true)
             .SetUseRealThreads(false)
             .SetEnableDataShardVolatileTransactions(false);

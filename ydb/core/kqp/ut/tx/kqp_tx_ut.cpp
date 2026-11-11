@@ -683,6 +683,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_Basic) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
@@ -704,6 +705,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_RequiresFeatureFlag) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -718,6 +720,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_UsesEvWritePrepare) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings
             .SetUseRealThreads(false)
             .SetEnableStrictSerializableIsolation(true);
@@ -754,6 +757,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_SnapshotTaken) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings
             .SetUseRealThreads(false)
             .SetEnableStrictSerializableIsolation(true);
@@ -790,6 +794,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_UpdateUsesEvWritePrepare) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings
             .SetUseRealThreads(false)
             .SetEnableStrictSerializableIsolation(true);
@@ -829,6 +834,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_InsertUsesEvWritePrepare) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings
             .SetUseRealThreads(false)
             .SetEnableStrictSerializableIsolation(true);
@@ -874,6 +880,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ExecuteQuery) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
@@ -904,6 +911,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ExplicitCommit) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
@@ -928,6 +936,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ReadOnly) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
@@ -943,6 +952,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ReadOnly_ExplicitCommit) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
@@ -964,6 +974,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_CommitTimestamp_SerializableRW) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
@@ -979,6 +990,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_CommitTimestamp_SnapshotRW) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
@@ -994,6 +1006,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_CommitTimestamp_Order) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
@@ -1072,6 +1085,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_ReadOnlySingleShard_SnapshotInEvRead) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings
             .SetUseRealThreads(false)
             .SetEnableStrictSerializableIsolation(true);
@@ -1110,6 +1124,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_CommitTimestamp_CrossSessionOrdering) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings
             .SetUseRealThreads(false)
             .SetEnableStrictSerializableIsolation(true);
@@ -1186,6 +1201,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_TableApi_Basic) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetTableClient();
@@ -1220,6 +1236,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_TableApi_RequiresFeatureFlag) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1237,6 +1254,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_FailedWrite_NoCommitTimestamp) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
@@ -1258,6 +1276,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_Rollback_NoEffects) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
@@ -1284,6 +1303,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_DefaultTxModePragma) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
@@ -1310,6 +1330,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(StrictSerializable_DefaultTxModePragma_RequiresFeatureFlag) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();

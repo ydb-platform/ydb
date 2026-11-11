@@ -91,6 +91,8 @@ Y_UNIT_TEST_SUITE(KqpPeepholeRules) {
 
     Y_UNIT_TEST(NonDeterministicProducerKeepsTypes) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         auto* tableService = settings.AppConfig.MutableTableServiceConfig();
         tableService->SetEnableNewRBO(false);
         tableService->SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO);

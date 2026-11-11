@@ -553,6 +553,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(ExplainDataQuery) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -585,6 +586,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(FewEffects) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -935,6 +937,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(IdxFullscan) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
 
         TKikimrRunner kikimr(settings);
@@ -974,6 +977,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(MultiJoinCteLinks) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(false);
         TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
@@ -1142,6 +1146,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateConditional, UseStreamIndex) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1184,6 +1189,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(UpdateConditionalKey) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1225,6 +1231,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(UpdateOn) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1266,6 +1273,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(UpsertWithReturningPlan) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1353,6 +1361,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateSecondaryConditional, UseStreamIndex) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1421,6 +1430,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateSecondaryConditionalPrimaryKey, UseStreamIndex) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1488,6 +1498,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateSecondaryConditionalSecondaryKey, UseStreamIndex) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1559,6 +1570,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateOnSecondary, UseStreamIndex) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1630,6 +1642,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(UpdateOnSecondaryWithoutSecondaryKey) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1766,6 +1779,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(UpsertWithIndex) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1886,6 +1900,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(UpsertSelectCommonSubexpressionReturningTableClient) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1913,6 +1928,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(UpsertSelectCommonSubexpressionReturningQueryClient) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

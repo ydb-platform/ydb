@@ -227,6 +227,8 @@ void ExecuteStreamQueryAndCheck(NYdb::NTable::TTableClient& db, const TString& q
 
 void RunTestOverIntTable(const TString& query, const TString& expectedYson, ui64 partitions, ui32 rangesPerPartition) {
     TKikimrSettings kikimrSettings;
+    kikimrSettings.SetWithSampleTables(true);
+    kikimrSettings.SetWithSampleTables(true);
     TKikimrRunner kikimr(kikimrSettings);
 
     auto db = kikimr.GetTableClient();
@@ -237,7 +239,7 @@ void RunTestOverIntTable(const TString& query, const TString& expectedYson, ui64
 }
 
 void RunPredicateTest(const std::vector<TString>& predicates, bool withNulls) {
-    TKikimrRunner kikimr;
+    TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -354,7 +356,7 @@ void RunPredicateTest(const std::vector<TString>& predicates, bool withNulls) {
 
 Y_UNIT_TEST_SUITE(KqpRanges) {
     Y_UNIT_TEST(IsNull) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -370,7 +372,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(IsNotNullSecondComponent) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -386,7 +388,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(IsNullInValue) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -404,7 +406,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(IsNullInJsonValue) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -422,7 +424,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(IsNotNullInValue) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -444,7 +446,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(IsNotNullInJsonValue) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -462,7 +464,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(IsNotNullInJsonValue2) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -481,7 +483,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(IsNullPartial) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -498,7 +500,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(NullInKey) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -515,7 +517,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(NullInKeySuffix) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -533,7 +535,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(NullInPredicate) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -558,7 +560,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(NullInPredicateRow) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -583,7 +585,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(WhereInSubquery) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -605,7 +607,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(UpdateMulti) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -629,6 +631,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
 
     Y_UNIT_TEST(UpdateWhereInNoFullScan) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -660,7 +664,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(UpdateWhereInWithNull) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
@@ -690,7 +694,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(UpdateWhereInBigLiteralList) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -717,7 +721,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(UpdateWhereInBigLiteralListPrefix) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -745,7 +749,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(UpdateWhereInMultipleUpdate) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
@@ -801,6 +805,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
 
     Y_UNIT_TEST(UpdateWhereInFullScan) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -830,6 +836,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
 
     Y_UNIT_TEST(DateKeyPredicate) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -854,7 +862,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(DuplicateKeyPredicateLiteral) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -871,7 +879,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(DuplicateKeyPredicateParam) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -901,7 +909,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(DuplicateKeyPredicateMixed) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -926,7 +934,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(DuplicateCompositeKeyPredicate) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -987,7 +995,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(ScanKeyPrefix) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1014,6 +1022,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
 
     Y_UNIT_TEST(DeleteNotFullScan) {
         TKikimrSettings serverSettings;
+        serverSettings.SetWithSampleTables(true);
+        serverSettings.SetWithSampleTables(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1046,6 +1056,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
 
     Y_UNIT_TEST(LiteralOr) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
+        settings.SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1078,7 +1090,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(LiteralOrCompisite) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1115,7 +1127,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(LiteralOrCompisiteCollision) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1237,7 +1249,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(NoFullScanAtDNFPredicate) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1342,7 +1354,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(MergeRanges) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TStreamExecScanQuerySettings scanSettings;
@@ -1390,7 +1402,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(ValidatePredicatesDataQuery) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1489,7 +1501,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(CastKeyBounds) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1519,6 +1531,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
 
     Y_UNIT_TEST(Like) {
         TKikimrSettings kikimrSettings;
+        kikimrSettings.SetWithSampleTables(true);
+        kikimrSettings.SetWithSampleTables(true);
         TKikimrRunner kikimr(kikimrSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

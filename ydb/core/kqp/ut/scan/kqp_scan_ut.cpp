@@ -238,6 +238,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(StreamExecuteScanQueryCancelation) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         // This test expects SourceRead is enabled for ScanQuery
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
         TKikimrRunner kikimr{settings};
@@ -2480,7 +2481,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(DqSourceFullScan) {
-        TKikimrSettings settings = TKikimrSettings().SetDomainRoot(KikimrDefaultUtDomainRoot);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
 
         TKikimrRunner kikimr(settings);
@@ -2496,7 +2497,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(DqSource) {
-        TKikimrSettings settings = TKikimrSettings().SetDomainRoot(KikimrDefaultUtDomainRoot);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
 
         TKikimrRunner kikimr(settings);
@@ -2513,7 +2514,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(DqSourceLiteralRange) {
-        TKikimrSettings settings = TKikimrSettings().SetDomainRoot(KikimrDefaultUtDomainRoot);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(true).SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -3460,6 +3461,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(DecimalColumnCsvBulkUpsertScan) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
         settings.SetEnableArrowFormatAtDatashard(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);

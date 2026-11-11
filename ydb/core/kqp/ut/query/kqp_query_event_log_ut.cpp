@@ -106,6 +106,7 @@ const TReqJsonEntry* FindCompleted(const TVector<TReqJsonEntry>& entries) {
 
 TKikimrSettings MakeStreamSettings(const TCapturedLog& logStream) {
     TKikimrSettings settings;
+    settings.SetWithSampleTables(true);
     settings.LogCapture = logStream;
     return settings;
 }

@@ -4321,6 +4321,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(DuplicatesInIncomingBatch) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
         Tests::NCommon::TLoggerInit(testHelper.GetRuntime()).Initialize();
@@ -4348,6 +4349,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(BulkUpsertUpdate) {
         TKikimrSettings runnerSettings;
+        runnerSettings.SetWithSampleTables(true);
         runnerSettings.WithSampleTables = false;
         runnerSettings.SetColumnShardAlterObjectEnabled(true);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();

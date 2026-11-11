@@ -17,7 +17,7 @@ using namespace NYdb::NQuery;
 Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
 
     Y_UNIT_TEST_TWIN(OltpOverloaded, Distributed) {
-        auto settings = TKikimrSettings(NewRboAppConfig())
+        auto settings = TKikimrSettings(NewRboAppConfig()).SetWithSampleTables(true)
             .SetEnableScriptExecutionOperations(true)
             .SetUseRealThreads(false);
 

@@ -958,7 +958,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     Y_UNIT_TEST(CompileCacheQueriesOrderByDesc) {
         // Test ORDER BY DESC for compile_cache_queries sys view
         // Primary key: NodeId, QueryId
-        auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({ NKikimrKqp::TKqpSetting() });
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
         auto client = kikimr.GetQueryClient();
@@ -1435,7 +1435,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST_TWIN(CompileCachePeerScanWarnings, Disconnect) {
-        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true).SetUseRealThreads(false));
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         runtime.GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
         const ui32 liveNodeId = runtime.GetNodeId(0);
@@ -1590,7 +1590,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST_TWIN(CompileCacheBasic, EnableCompileCacheView) {
-        auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({ NKikimrKqp::TKqpSetting() });
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(EnableCompileCacheView);
         auto tableClient = kikimr.GetTableClient();
@@ -1819,7 +1819,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(CompileCacheTenantMismatchReturnsEmpty) {
-        auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(true).SetKqpSettings({ NKikimrKqp::TKqpSetting() });
         TKikimrRunner kikimr(serverSettings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
@@ -1964,6 +1964,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
     Y_UNIT_TEST(CompileCacheUserIsolation) {
         TKikimrSettings settings;
+        settings.SetWithSampleTables(true);
         settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();

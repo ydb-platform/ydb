@@ -10,7 +10,7 @@ using namespace NYdb::NTable;
 namespace {
 
 TKikimrRunner RunnerWithArrowFormatEnabled(bool forceSources = false) {
-    auto settings = TKikimrSettings().SetEnableArrowFormatAtDatashard(true);
+    auto settings = TKikimrSettings().SetWithSampleTables(true).SetEnableArrowFormatAtDatashard(true);
     if (forceSources) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
     }
@@ -104,12 +104,12 @@ Y_UNIT_TEST_SUITE(KqpScanArrowFormat) {
     }
 
     Y_UNIT_TEST(AllTypesColumns) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         InsertAllColumnsAndCheckSelectAll(&kikimr);
     }
 
     Y_UNIT_TEST(AllTypesColumnsCellvec) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(true));
         InsertAllColumnsAndCheckSelectAll(&kikimr);
     }
 

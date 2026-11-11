@@ -15,6 +15,7 @@
 #include <ydb/core/mon/mon.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/security/util.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
@@ -177,7 +178,7 @@ public:
             {"scope", scope},
             {"user", user},
             {"ticket", NKikimr::MaskTicket(token)},
-            {"request", request.DebugString()});
+            {"request", NKikimr::SecureDebugString(request)});
         switch (request.setting().connection_case()) {
             case FederatedQuery::ConnectionSetting::kDataStreams: {
                 Register(CreateTestDataStreamsConnectionActor(*request.mutable_setting()->mutable_data_streams(), CommonConfig, DbResolver,
@@ -208,7 +209,7 @@ public:
                     {"scope", scope},
                     {"user", user},
                     {"ticket", NKikimr::MaskTicket(token)},
-                    {"request", request.DebugString()});
+                    {"request", NKikimr::SecureDebugString(request)});
                 Send(ev->Sender, new TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{ MakeErrorIssue(TIssuesIds::INTERNAL_ERROR,
                                      "Unimplemented yet") }), 0, ev->Cookie);
             }

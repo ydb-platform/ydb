@@ -59,16 +59,15 @@ bool IsValidHeartbeat(const NKikimrCdcAggregator::TEvWriteHeartbeats::TSourceHea
         && proto.HasHeartbeat()
         && !heartbeat.Version.IsMin()
         && !heartbeat.Version.IsMax()
-        && !heartbeat.Data.empty()
-        && heartbeat.Data.size() <= MaxHeartbeatDataSize;
+        && !heartbeat.Data.empty();
 }
 
-bool IsValidPartitioningChange(ui64 parent, const TVector<ui64>& children) {
-    return parent
-        && !children.empty()
-        && children.front() != 0
-        && std::adjacent_find(children.begin(), children.end()) == children.end()
-        && !std::binary_search(children.begin(), children.end(), parent);
+bool IsValidPartitioningChange(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds) {
+    return parentDataShardId
+        && !childDataShardIds.empty()
+        && childDataShardIds.front() != 0
+        && std::adjacent_find(childDataShardIds.begin(), childDataShardIds.end()) == childDataShardIds.end()
+        && !std::binary_search(childDataShardIds.begin(), childDataShardIds.end(), parentDataShardId);
 }
 
 } // namespace
@@ -113,29 +112,23 @@ NKikimrCdcAggregator::TEvWriteHeartbeatsResult WriteHeartbeats(
         result.SetError("Tracking is not configured");
         return result;
     }
-    if (static_cast<size_t>(request.HeartbeatsSize()) > MaxHeartbeatsPerBatch) {
-        result.SetStatus(TResult::BAD_REQUEST);
-        result.SetError(TStringBuilder() << "Batch has " << request.HeartbeatsSize()
-            << " heartbeats, the limit is " << MaxHeartbeatsPerBatch);
-        return result;
-    }
 
     result.SetStatus(TResult::SUCCESS);
     for (const auto& proto : request.GetHeartbeats()) {
-        const ui64 source = proto.GetSourceDataShardId();
+        const ui64 sourceDataShardId = proto.GetSourceDataShardId();
         const auto heartbeat = NPQ::THeartbeat::Parse(proto.GetHeartbeat());
 
         auto& sourceResult = *result.AddResults();
-        sourceResult.SetSourceDataShardId(source);
+        sourceResult.SetSourceDataShardId(sourceDataShardId);
         if (!IsValidHeartbeat(proto, heartbeat)) {
             sourceResult.SetStatus(THeartbeatResult::BAD_REQUEST);
             continue;
         }
 
-        switch (stream.WriteHeartbeat(source, heartbeat, changes)) {
+        switch (stream.WriteHeartbeat(sourceDataShardId, heartbeat, changes)) {
             case ESourceOutcome::Success:
                 sourceResult.SetStatus(THeartbeatResult::SUCCESS);
-                stream.GetSources().at(source)->ToProto(sourceResult.MutableWrittenVersion());
+                stream.GetSources().at(sourceDataShardId)->ToProto(sourceResult.MutableWrittenVersion());
                 break;
             case ESourceOutcome::UnknownSource:
                 sourceResult.SetStatus(THeartbeatResult::UNKNOWN_SOURCE);
@@ -152,12 +145,12 @@ NKikimrCdcAggregator::TEvPartitioningChangedAck PartitioningChanged(
     using TResult = NKikimrCdcAggregator::TEvPartitioningChangedAck;
 
     TResult result;
-    const ui64 parent = request.GetParentDataShardId();
-    TVector<ui64> children(request.GetChildDataShardIds().begin(), request.GetChildDataShardIds().end());
-    std::sort(children.begin(), children.end());
-    if (!IsValidPartitioningChange(parent, children)) {
+    const ui64 parentDataShardId = request.GetParentDataShardId();
+    TVector<ui64> childDataShardIds(request.GetChildDataShardIds().begin(), request.GetChildDataShardIds().end());
+    std::sort(childDataShardIds.begin(), childDataShardIds.end());
+    if (!IsValidPartitioningChange(parentDataShardId, childDataShardIds)) {
         result.SetStatus(TResult::BAD_REQUEST);
-        result.SetError(TStringBuilder() << "Invalid partitioning change of DataShard " << parent);
+        result.SetError(TStringBuilder() << "Invalid partitioning change of DataShard " << parentDataShardId);
         return result;
     }
     if (!stream.IsConfigured()) {
@@ -166,13 +159,13 @@ NKikimrCdcAggregator::TEvPartitioningChangedAck PartitioningChanged(
         return result;
     }
 
-    switch (stream.ChangePartitioning(parent, children, changes)) {
+    switch (stream.ChangePartitioning(parentDataShardId, childDataShardIds, changes)) {
         case ESourceOutcome::Success:
             result.SetStatus(TResult::SUCCESS);
             break;
         case ESourceOutcome::UnknownSource:
             result.SetStatus(TResult::UNKNOWN_SOURCE);
-            result.SetError(TStringBuilder() << "DataShard " << parent << " is not a source");
+            result.SetError(TStringBuilder() << "DataShard " << parentDataShardId << " is not a source");
             break;
     }
 

@@ -30,12 +30,12 @@ struct TTrackingConfig {
 };
 
 struct TStreamChanges {
-    bool Config = false;
+    bool ConfigChanged = false;
     THashSet<ui64> UpsertedSources;
     THashSet<ui64> ErasedSources;
     TMap<TRowVersion, TString> UpsertedHeartbeats;
     TSet<TRowVersion> ErasedHeartbeats;
-    bool CurrentHeartbeat = false;
+    bool CurrentHeartbeatChanged = false;
 
     bool IsEmpty() const;
 };
@@ -73,12 +73,12 @@ public:
     }
 
     EConfigureOutcome Configure(const TTrackingConfig& config, TStreamChanges& changes);
-    ESourceOutcome WriteHeartbeat(ui64 source, const NPQ::THeartbeat& heartbeat, TStreamChanges& changes);
-    ESourceOutcome ChangePartitioning(ui64 parent, const TVector<ui64>& children, TStreamChanges& changes);
+    ESourceOutcome WriteHeartbeat(ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat, TStreamChanges& changes);
+    ESourceOutcome ChangePartitioning(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds, TStreamChanges& changes);
 
 private:
-    void AddSource(ui64 source, TStreamChanges& changes);
-    void EraseSource(ui64 source, TStreamChanges& changes);
+    void AddSource(ui64 sourceDataShardId, TStreamChanges& changes);
+    void EraseSource(ui64 sourceDataShardId, TStreamChanges& changes);
     void HoldHeartbeat(const NPQ::THeartbeat& heartbeat, TStreamChanges& changes);
     void ReleaseHeartbeat(const TRowVersion& version, TStreamChanges& changes);
     void AdvanceCurrentHeartbeat(TStreamChanges& changes);

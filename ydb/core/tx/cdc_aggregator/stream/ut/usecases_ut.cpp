@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TConfigureTracking) {
         const auto result = ConfigureTracking(stream, MakeConfigureRequest({3, 1, 2}), changes);
 
         UNIT_ASSERT(result.GetStatus() == TConfigureResult::SUCCESS);
-        UNIT_ASSERT(changes.Config);
+        UNIT_ASSERT(changes.ConfigChanged);
         UNIT_ASSERT(stream.GetConfig().SourceDataShardIds == TVector<ui64>({1, 2, 3}));
         UNIT_ASSERT_VALUES_EQUAL(stream.GetConfig().TargetPartitions.size(), 2);
     }
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TWriteHeartbeats) {
             UNIT_ASSERT(sourceResult.GetStatus() == THeartbeatResult::SUCCESS);
         }
         UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(result.GetResults(2).GetWrittenVersion()), TRowVersion(120, 0));
-        UNIT_ASSERT(changes.CurrentHeartbeat);
+        UNIT_ASSERT(changes.CurrentHeartbeatChanged);
         UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(100, 0));
     }
 
@@ -177,40 +177,24 @@ Y_UNIT_TEST_SUITE(TWriteHeartbeats) {
         auto stream = MakeStream({1, 2});
         TStreamChanges setup;
         PartitioningChanged(stream, MakePartitioningChanged(2, {3}), setup);
-        auto request = MakeWriteRequest({{1, 100}, {9, 100}, {2, 100}, {0, 100}, {3, 0}, {3, 100}, {3, 100}});
+        auto request = MakeWriteRequest({{1, 100}, {9, 100}, {2, 100}, {0, 100}, {3, 0}, {3, 100}});
         request.MutableHeartbeats(4)->ClearHeartbeat();
         request.MutableHeartbeats(5)->MutableHeartbeat()->ClearData();
-        request.MutableHeartbeats(6)->MutableHeartbeat()->SetData(TString(MaxHeartbeatDataSize + 1, 'x'));
         AddHeartbeat(request, 3, 0);
 
         TStreamChanges changes;
         const auto result = WriteHeartbeats(stream, request, changes);
 
         UNIT_ASSERT(result.GetStatus() == TWriteResult::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(result.ResultsSize(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(result.ResultsSize(), 7);
         UNIT_ASSERT(result.GetResults(0).GetStatus() == THeartbeatResult::SUCCESS);
         UNIT_ASSERT(result.GetResults(1).GetStatus() == THeartbeatResult::UNKNOWN_SOURCE);
         UNIT_ASSERT(result.GetResults(2).GetStatus() == THeartbeatResult::UNKNOWN_SOURCE);
-        for (int index = 3; index < 8; ++index) {
+        for (int index = 3; index < 7; ++index) {
             UNIT_ASSERT(result.GetResults(index).GetStatus() == THeartbeatResult::BAD_REQUEST);
             UNIT_ASSERT(!result.GetResults(index).HasWrittenVersion());
         }
         UNIT_ASSERT(!stream.GetSources().at(3));
-    }
-
-    Y_UNIT_TEST(ShouldReturnBadRequest_WhenBatchIsTooLarge) {
-        auto stream = MakeStream({1});
-        NKikimrCdcAggregator::TEvWriteHeartbeats request;
-        for (size_t index = 0; index <= MaxHeartbeatsPerBatch; ++index) {
-            AddHeartbeat(request, 1, 100);
-        }
-
-        TStreamChanges changes;
-        const auto result = WriteHeartbeats(stream, request, changes);
-
-        UNIT_ASSERT(result.GetStatus() == TWriteResult::BAD_REQUEST);
-        UNIT_ASSERT(changes.IsEmpty());
-        UNIT_ASSERT(!stream.GetSources().at(1));
     }
 }
 

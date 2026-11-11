@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorStream) {
         const auto outcome = stream.Configure(MakeConfig({1, 2, 3}), changes);
 
         UNIT_ASSERT(outcome == EConfigureOutcome::Success);
-        UNIT_ASSERT(changes.Config);
+        UNIT_ASSERT(changes.ConfigChanged);
         UNIT_ASSERT_VALUES_EQUAL(changes.UpsertedSources.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(stream.GetSources().size(), 3);
         UNIT_ASSERT(!stream.GetSources().at(1));
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorStream) {
         TStreamChanges changes;
         stream.WriteHeartbeat(3, MakeHeartbeat(120), changes);
 
-        UNIT_ASSERT(changes.CurrentHeartbeat);
+        UNIT_ASSERT(changes.CurrentHeartbeatChanged);
         UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(100, 0));
         UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Data, MakeHeartbeat(100).Data);
     }
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorStream) {
         TStreamChanges changes;
         stream.WriteHeartbeat(3, MakeHeartbeat(110), changes);
 
-        UNIT_ASSERT(!changes.CurrentHeartbeat);
+        UNIT_ASSERT(!changes.CurrentHeartbeatChanged);
         UNIT_ASSERT(!stream.GetCurrentHeartbeat());
     }
 
@@ -207,8 +207,8 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorStream) {
         TStreamChanges secondChild;
         stream.WriteHeartbeat(4, MakeHeartbeat(140), secondChild);
 
-        UNIT_ASSERT(!firstChild.CurrentHeartbeat);
-        UNIT_ASSERT(secondChild.CurrentHeartbeat);
+        UNIT_ASSERT(!firstChild.CurrentHeartbeatChanged);
+        UNIT_ASSERT(secondChild.CurrentHeartbeatChanged);
         UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(110, 0));
     }
 
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorStream) {
         TStreamChanges changes;
         stream.WriteHeartbeat(3, MakeHeartbeat(90), changes);
 
-        UNIT_ASSERT(!changes.CurrentHeartbeat);
+        UNIT_ASSERT(!changes.CurrentHeartbeatChanged);
         UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(100, 0));
     }
 
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorStream) {
         UNIT_ASSERT(!changes.UpsertedSources.contains(3));
         UNIT_ASSERT_VALUES_EQUAL(stream.GetSources().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(*stream.GetSources().at(3), TRowVersion(120, 0));
-        UNIT_ASSERT(changes.CurrentHeartbeat);
+        UNIT_ASSERT(changes.CurrentHeartbeatChanged);
         UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(120, 0));
         UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Data, MakeHeartbeat(120).Data);
     }
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorStream) {
         TStreamChanges changes;
         stream.WriteHeartbeat(4, MakeHeartbeat(120), changes);
 
-        UNIT_ASSERT(changes.CurrentHeartbeat);
+        UNIT_ASSERT(changes.CurrentHeartbeatChanged);
         UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Version, TRowVersion(110, 0));
         UNIT_ASSERT_VALUES_EQUAL(stream.GetCurrentHeartbeat()->Data, MakeHeartbeat(110).Data);
     }

@@ -7,12 +7,12 @@
 namespace NKikimr::NCdcAggregator {
 
 bool TStreamChanges::IsEmpty() const {
-    return !Config
+    return !ConfigChanged
         && UpsertedSources.empty()
         && ErasedSources.empty()
         && UpsertedHeartbeats.empty()
         && ErasedHeartbeats.empty()
-        && !CurrentHeartbeat;
+        && !CurrentHeartbeatChanged;
 }
 
 TStream TStream::Restore(
@@ -53,7 +53,7 @@ EConfigureOutcome TStream::Configure(const TTrackingConfig& config, TStreamChang
     }
 
     Config = config;
-    changes.Config = true;
+    changes.ConfigChanged = true;
     for (const auto source : config.SourceDataShardIds) {
         AddSource(source, changes);
     }
@@ -61,10 +61,10 @@ EConfigureOutcome TStream::Configure(const TTrackingConfig& config, TStreamChang
     return EConfigureOutcome::Success;
 }
 
-ESourceOutcome TStream::WriteHeartbeat(ui64 source, const NPQ::THeartbeat& heartbeat, TStreamChanges& changes) {
+ESourceOutcome TStream::WriteHeartbeat(ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat, TStreamChanges& changes) {
     Y_ENSURE(Config, "Tracking is not configured");
 
-    auto it = Sources.find(source);
+    auto it = Sources.find(sourceDataShardId);
     if (it == Sources.end()) {
         return ESourceOutcome::UnknownSource;
     }
@@ -81,26 +81,26 @@ ESourceOutcome TStream::WriteHeartbeat(ui64 source, const NPQ::THeartbeat& heart
     }
     version = heartbeat.Version;
     HoldHeartbeat(heartbeat, changes);
-    changes.UpsertedSources.insert(source);
+    changes.UpsertedSources.insert(sourceDataShardId);
 
     AdvanceCurrentHeartbeat(changes);
     return ESourceOutcome::Success;
 }
 
-ESourceOutcome TStream::ChangePartitioning(ui64 parent, const TVector<ui64>& children, TStreamChanges& changes) {
+ESourceOutcome TStream::ChangePartitioning(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds, TStreamChanges& changes) {
     Y_ENSURE(Config, "Tracking is not configured");
 
-    if (!Sources.contains(parent)) {
-        const bool applied = std::all_of(children.begin(), children.end(), [this](ui64 child) {
-            return Sources.contains(child);
+    if (!Sources.contains(parentDataShardId)) {
+        const bool applied = std::all_of(childDataShardIds.begin(), childDataShardIds.end(), [this](ui64 childDataShardId) {
+            return Sources.contains(childDataShardId);
         });
         return applied ? ESourceOutcome::Success : ESourceOutcome::UnknownSource;
     }
 
-    EraseSource(parent, changes);
-    for (const auto child : children) {
-        if (!Sources.contains(child)) {
-            AddSource(child, changes);
+    EraseSource(parentDataShardId, changes);
+    for (const auto childDataShardId : childDataShardIds) {
+        if (!Sources.contains(childDataShardId)) {
+            AddSource(childDataShardId, changes);
         }
     }
 
@@ -108,21 +108,21 @@ ESourceOutcome TStream::ChangePartitioning(ui64 parent, const TVector<ui64>& chi
     return ESourceOutcome::Success;
 }
 
-void TStream::AddSource(ui64 source, TStreamChanges& changes) {
-    const bool inserted = Sources.emplace(source, std::nullopt).second;
-    Y_ENSURE(inserted, "Duplicate source " << source);
-    changes.UpsertedSources.insert(source);
+void TStream::AddSource(ui64 sourceDataShardId, TStreamChanges& changes) {
+    const bool inserted = Sources.emplace(sourceDataShardId, std::nullopt).second;
+    Y_ENSURE(inserted, "Duplicate source DataShard " << sourceDataShardId);
+    changes.UpsertedSources.insert(sourceDataShardId);
 }
 
-void TStream::EraseSource(ui64 source, TStreamChanges& changes) {
-    auto it = Sources.find(source);
-    Y_ENSURE(it != Sources.end(), "Unknown source " << source);
+void TStream::EraseSource(ui64 sourceDataShardId, TStreamChanges& changes) {
+    auto it = Sources.find(sourceDataShardId);
+    Y_ENSURE(it != Sources.end(), "Unknown source DataShard " << sourceDataShardId);
     if (const auto& version = it->second) {
         ReleaseHeartbeat(*version, changes);
         --SourcesWithHeartbeat;
     }
     Sources.erase(it);
-    changes.ErasedSources.insert(source);
+    changes.ErasedSources.insert(sourceDataShardId);
 }
 
 void TStream::HoldHeartbeat(const NPQ::THeartbeat& heartbeat, TStreamChanges& changes) {
@@ -156,7 +156,7 @@ void TStream::AdvanceCurrentHeartbeat(TStreamChanges& changes) {
     }
 
     CurrentHeartbeat = NPQ::THeartbeat{.Version = version, .Data = held.Data};
-    changes.CurrentHeartbeat = true;
+    changes.CurrentHeartbeatChanged = true;
 }
 
 } // namespace NKikimr::NCdcAggregator

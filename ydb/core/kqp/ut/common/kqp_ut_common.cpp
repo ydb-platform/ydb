@@ -297,7 +297,7 @@ TString TKikimrRunner::CreateDatabase(const TString& name, const TString& storag
 
 TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken,
     const TString& domainRoot, ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings().SetWithSampleTables(true)
+    : TKikimrRunner(TKikimrSettings()
         .SetKqpSettings(kqpSettings)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
@@ -305,7 +305,7 @@ TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings
 
 TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const TString& authToken,
     const TString& domainRoot, ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings(appConfig).SetWithSampleTables(true)
+    : TKikimrRunner(TKikimrSettings(appConfig)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
         .SetNodeCount(nodeCount)) {}
@@ -313,7 +313,7 @@ TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const T
 TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig,
     const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken, const TString& domainRoot,
     ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings(appConfig).SetWithSampleTables(true)
+    : TKikimrRunner(TKikimrSettings(appConfig)
         .SetKqpSettings(kqpSettings)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
@@ -321,20 +321,20 @@ TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig,
 
 TKikimrRunner::TKikimrRunner(const NKikimrConfig::TFeatureFlags& featureFlags, const TString& authToken,
     const TString& domainRoot, ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings().SetWithSampleTables(true)
+    : TKikimrRunner(TKikimrSettings()
         .SetFeatureFlags(featureFlags)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
         .SetNodeCount(nodeCount)) {}
 
 TKikimrRunner::TKikimrRunner(const TString& authToken, const TString& domainRoot, ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings().SetWithSampleTables(true)
+    : TKikimrRunner(TKikimrSettings()
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
         .SetNodeCount(nodeCount)) {}
 
 TKikimrRunner::TKikimrRunner(const NFake::TStorage& storage)
-    : TKikimrRunner(TKikimrSettings().SetWithSampleTables(true)
+    : TKikimrRunner(TKikimrSettings()
         .SetStorage(storage)) {}
 
 void TKikimrRunner::CreateSampleTables() {

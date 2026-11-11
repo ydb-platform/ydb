@@ -608,6 +608,7 @@ def parse_report_chunks(
             "ram_kb": ram_kb(metrics),
             "suite_start_timestamp": metrics.get("suite_start_timestamp"),
             "suite_finish_timestamp": metrics.get("suite_finish_timestamp"),
+            "suite_delay_until_first_test_secs": metrics.get("suite_delay_until_first_test_secs"),
             "hid": item.get("hid"),
             "id": item.get("id"),
         }
@@ -814,6 +815,57 @@ def parse_report_chunks(
             "affected_chunks": int(len(affected_chunk_labels)),
         },
     )
+
+
+def collect_report_chunk_tests(
+    report_obj: dict[str, Any] | list[Any],
+    chunks: dict[tuple[str, Optional[str], int], dict[str, Any]],
+) -> dict[tuple[str, Optional[str], int], list[dict[str, Any]]]:
+    """Individual tests (chunk=false) grouped by the report chunk they ran in."""
+    try:
+        from ..resources_loader import normalize_report_links
+    except ImportError:
+        from resources_loader import normalize_report_links  # type: ignore[no-redef]
+    results = report_obj.get("results", []) if isinstance(report_obj, dict) else report_obj
+    hid_to_chunk_key: dict[Any, tuple[str, Optional[str], int]] = {}
+    for key, meta in chunks.items():
+        if meta.get("_fallback_alias"):
+            continue
+        hid = meta.get("hid")
+        if hid is not None:
+            hid_to_chunk_key[hid] = key
+    out: dict[tuple[str, Optional[str], int], list[dict[str, Any]]] = defaultdict(list)
+    for item in results or []:
+        if not isinstance(item, dict) or item.get("type") != "test" or item.get("chunk"):
+            continue
+        chunk_key = hid_to_chunk_key.get(item.get("chunk_hid"))
+        if chunk_key is None:
+            suite_raw = str(item.get("path", ""))
+            sub = str(item.get("subtest_name", ""))
+            group = chunk_group_from_subtest(sub)
+            idx: Optional[int] = None
+            match = CHUNK_FROM_SUBTEST_RE.search(sub)
+            if match:
+                idx = int(match.group(1))
+            elif CHUNK_SOLE_RE.search(sub) or CHUNK_BRACKET_ONLY_RE.search(sub):
+                idx = 0
+            if suite_raw and idx is not None:
+                if (suite_raw, group, idx) in chunks:
+                    chunk_key = (suite_raw, group, idx)
+                elif (suite_raw, None, idx) in chunks:
+                    chunk_key = (suite_raw, None, idx)
+        if chunk_key is None:
+            continue
+        out[chunk_key].append(
+            {
+                "name": str(item.get("subtest_name") or item.get("name") or "").strip() or "test",
+                "duration_sec": float(item.get("duration") or 0.0),
+                "status": str(item.get("status") or ""),
+                "error_type": str(item.get("error_type") or ""),
+                "links": normalize_report_links(item.get("links")),
+            }
+        )
+    return dict(out)
 
 
 def build_test_event_times_direct(
@@ -1252,9 +1304,9 @@ def _build_resources_overlay(
 ) -> Optional[dict[str, Any]]:
     """Load resources JSONL and convert to evlog timeline for overlay on CPU/RAM charts."""
     try:
-        from ..resources_loader import load_resources_jsonl
+        from ..resources_loader import is_host_record, load_resources_jsonl
     except ImportError:
-        from resources_loader import load_resources_jsonl  # type: ignore[no-redef]
+        from resources_loader import is_host_record, load_resources_jsonl  # type: ignore[no-redef]
     if records is None:
         records = load_resources_jsonl(resources_path)
     if not records or not enriched_runs:
@@ -1285,6 +1337,8 @@ def _build_resources_overlay(
     # cpu_cores is in the first record; fallback: search all records (monitor adds it only to first)
     cpu_cores = 1
     for rec in records:
+        if not is_host_record(rec):
+            continue
         v = rec.get("cpu_cores")
         if v is not None and (isinstance(v, (int, float)) and v > 0):
             cpu_cores = int(v)
@@ -1294,15 +1348,25 @@ def _build_resources_overlay(
     ram_gb: list[float] = []
     disk_read_mb: list[float] = []
     disk_write_mb: list[float] = []
+    host_signal_keys = (
+        "cpu_iowait_pct",
+        "pressure_cpu_some_pct",
+        "pressure_cpu_full_pct",
+        "pressure_memory_some_pct",
+        "pressure_memory_full_pct",
+        "pressure_io_some_pct",
+        "pressure_io_full_pct",
+        "disk_io_in_progress",
+        "disk_busy_pct",
+        "disk_weighted_io_time_ms_delta",
+    )
+    host_signals: dict[str, list[float | None]] = {key: [] for key in host_signal_keys}
+    host_signal_seen: set[str] = set()
     for r in records:
         # Host overlay is /proc machine totals. Newer monitors also emit
         # kind=test cgroup rows (suite/chunk) without cpu_total_pct /
-        # ram_used_kb. Filling those as 0.0 zeros out headline p95/median
-        # (~97% of samples on squeeze2) and dilutes avg to ~1–2 cores.
-        kind = str(r.get("kind") or "").lower()
-        if kind == "test":
-            continue
-        if kind != "host" and r.get("cpu_total_pct") is None and r.get("ram_used_kb") is None:
+        # ram_used_kb. Filling those as 0.0 zeros out headline p95/median.
+        if not is_host_record(r):
             continue
         ts = float(r.get("ts", 0) or 0)
         # Missing/zero timestamps produce a nonsense negative timeline that
@@ -1316,6 +1380,11 @@ def _build_resources_overlay(
         # Prefer normalized MB/s; fallback to legacy per-sample deltas.
         disk_read_mb.append(float(r.get("disk_read_mbps", r.get("disk_read_mb_delta", 0)) or 0))
         disk_write_mb.append(float(r.get("disk_write_mbps", r.get("disk_write_mb_delta", 0)) or 0))
+        for key in host_signal_keys:
+            value = r.get(key)
+            host_signals[key].append(float(value) if value is not None else None)
+            if value is not None:
+                host_signal_seen.add(key)
     def _first_positive(key: str) -> Optional[float]:
         for rec in records:
             raw = rec.get(key)
@@ -1350,7 +1419,7 @@ def _build_resources_overlay(
                 range_lo = start
             if end and end > range_hi:
                 range_hi = end
-    return {
+    result = {
         "xs_evlog_sec": xs_evlog,
         "cpu_total_cores": cpu_total_cores,
         "ram_gb": ram_gb,
@@ -1359,7 +1428,412 @@ def _build_resources_overlay(
         "evlog_range_sec": [range_lo, range_hi],
         "cpu_cores": cpu_cores,
         "ram_total_gb": ram_total_gb,
+        "ref_start_ev": ref_start_ev,
+        "ref_report_ts": ref_report_ts,
     }
+    if host_signal_seen:
+        result["host_resource_signals"] = {
+            key: values for key, values in host_signals.items() if key in host_signal_seen
+        }
+    return result
+
+
+def _downsample_series(xs: list[float], series: list[list[Any]], max_points: int = 400) -> tuple[list[float], list[list[Any]]]:
+    n = len(xs)
+    if n <= max_points or max_points <= 0:
+        return xs, series
+    idxs = [int(i * (n - 1) / (max_points - 1)) for i in range(max_points)]
+    return [xs[i] for i in idxs], [[col[i] for i in idxs] for col in series]
+
+
+def _nearest_sample_index(xs: list[float], t: float, tol_sec: float = 4.0) -> int | None:
+    """Index of xs closest to t, or None if farther than tol_sec."""
+    if not xs:
+        return None
+    best_i = 0
+    best_d = abs(float(xs[0]) - t)
+    for i in range(1, len(xs)):
+        d = abs(float(xs[i]) - t)
+        if d < best_d:
+            best_d = d
+            best_i = i
+    return best_i if best_d <= tol_sec else None
+
+
+def _peak_signal_index(values: list[Any]) -> tuple[float, int] | None:
+    best: tuple[float, int] | None = None
+    for i, raw in enumerate(values or []):
+        if raw is None:
+            continue
+        value = float(raw)
+        if best is None or value > best[0]:
+            best = (value, i)
+    return best
+
+
+def _measured_contention_for_bucket(
+    victim_key: str,
+    bucket: dict[str, Any],
+    grouped: dict[str, dict[str, Any]],
+    *,
+    psi_field: str,
+    score_fields: tuple[str, ...],
+    score_names: tuple[str, ...],
+    psi_threshold: float = 5.0,
+    top_k: int = 5,
+    tol_sec: float = 4.0,
+) -> dict[str, Any] | None:
+    """Who used the contended resource while this cgroup waited (high PSI).
+
+    High PSI some = this cgroup stalled. Neighbors are ranked by their own
+    throughput/usage at the victim's peak-PSI sample (not by their PSI).
+    """
+    peak = _peak_signal_index(bucket.get("cgroup_signals", {}).get(psi_field, []))
+    if peak is None or peak[0] < psi_threshold:
+        return None
+    psi_pct, peak_i = peak
+    xs = [float(x) for x in (bucket.get("xs") or [])]
+    if peak_i >= len(xs):
+        return None
+    at_sec = xs[peak_i]
+
+    def _at(values: list[Any], idx: int) -> float:
+        if idx < 0 or idx >= len(values):
+            return 0.0
+        raw = values[idx]
+        return float(raw or 0.0) if raw is not None else 0.0
+
+    self_scores = {_name: round(_at(bucket.get(_field) or [], peak_i), 3) for _field, _name in zip(score_fields, score_names)}
+    # Several cgroups can share a suite+chunk label after rematch; merge by label
+    # so the Delayed-by list does not repeat the same name.
+    by_label: dict[str, dict[str, Any]] = {}
+    for other_key, other in grouped.items():
+        if other_key == victim_key:
+            continue
+        other_xs = [float(x) for x in (other.get("xs") or [])]
+        j = _nearest_sample_index(other_xs, at_sec, tol_sec=tol_sec)
+        if j is None:
+            continue
+        parts = {name: _at(other.get(field) or [], j) for field, name in zip(score_fields, score_names)}
+        score = sum(parts.values())
+        if score <= 0:
+            continue
+        label = str(other.get("label") or other_key)
+        cur = by_label.get(label)
+        other_psi = other.get("cgroup_signals", {}).get(psi_field) or []
+        peer_psi = float(other_psi[j]) if j < len(other_psi) and other_psi[j] is not None else None
+        if cur is None:
+            entry: dict[str, Any] = {
+                "key": other_key,
+                "label": label,
+                "suite": other.get("suite"),
+                "score": score,
+                "chunks": 1,
+                "_best_score": score,
+            }
+            entry.update(parts)
+            if peer_psi is not None:
+                entry["psi_pct"] = peer_psi
+            by_label[label] = entry
+            continue
+        cur["score"] = float(cur["score"]) + score
+        cur["chunks"] = int(cur.get("chunks") or 1) + 1
+        for name, value in parts.items():
+            cur[name] = float(cur.get(name) or 0.0) + value
+        if peer_psi is not None:
+            prev = cur.get("psi_pct")
+            cur["psi_pct"] = peer_psi if prev is None else max(float(prev), peer_psi)
+        if score > float(cur.get("_best_score") or 0.0):
+            cur["key"] = other_key
+            cur["suite"] = other.get("suite")
+            cur["_best_score"] = score
+    ranked: list[dict[str, Any]] = []
+    for entry in by_label.values():
+        entry.pop("_best_score", None)
+        entry["score"] = round(float(entry["score"]), 3)
+        for name in score_names:
+            entry[name] = round(float(entry.get(name) or 0.0), 3)
+        if entry.get("psi_pct") is not None:
+            entry["psi_pct"] = round(float(entry["psi_pct"]), 2)
+        ranked.append(entry)
+    ranked.sort(key=lambda row: (-float(row["score"]), str(row.get("label") or "")))
+    out: dict[str, Any] = {
+        "psi_pct": round(psi_pct, 2),
+        "at_evlog_sec": round(at_sec, 3),
+        "self": self_scores,
+        "top": ranked[:top_k],
+    }
+    return out
+
+
+def _attach_measured_contention(grouped: dict[str, dict[str, Any]], summary_row: dict[str, Any]) -> None:
+    key = str(summary_row.get("key") or "")
+    bucket = grouped.get(key)
+    if not key or not bucket:
+        return
+    dims = (
+        (
+            "io",
+            "io_psi_some_pct",
+            ("disk_write_mbps", "disk_read_mbps"),
+            ("write_mbps", "read_mbps"),
+        ),
+        (
+            "cpu",
+            "cpu_psi_some_pct",
+            ("cpu_cores",),
+            ("cpu_cores",),
+        ),
+        (
+            "memory",
+            "memory_psi_some_pct",
+            ("ram_gb",),
+            ("ram_gb",),
+        ),
+    )
+    contention: dict[str, Any] = {}
+    for dim, psi_field, score_fields, score_names in dims:
+        block = _measured_contention_for_bucket(
+            key,
+            bucket,
+            grouped,
+            psi_field=psi_field,
+            score_fields=score_fields,
+            score_names=score_names,
+        )
+        if block is not None:
+            contention[dim] = block
+    if contention:
+        summary_row["contention"] = contention
+
+
+def _build_measured_tests(
+    records: list[dict[str, Any]],
+    overlay: dict[str, Any],
+    out_json: Optional[Path] = None,
+    runs: Optional[list[dict[str, Any]]] = None,
+    chunk_tests: Optional[dict[tuple[Any, ...], list[dict[str, Any]]]] = None,
+    chunks: Optional[dict[tuple[Any, ...], dict[str, Any]]] = None,
+) -> list[dict[str, Any]]:
+    """Per-cgroup ticks from monitor_resources.py kind=test records."""
+    try:
+        from ..resources_loader import (
+            align_series,
+            is_host_record,
+            match_measured_to_runs,
+            measured_chunk_tests_by_label,
+            measured_layers_xs,
+            measured_test_key,
+            measured_test_label,
+        )
+    except ImportError:
+        from resources_loader import (  # type: ignore[no-redef]
+            align_series,
+            is_host_record,
+            match_measured_to_runs,
+            measured_chunk_tests_by_label,
+            measured_layers_xs,
+            measured_test_key,
+            measured_test_label,
+        )
+    ref_start_ev = overlay.get("ref_start_ev")
+    ref_report_ts = overlay.get("ref_report_ts")
+    evlog_range = overlay.get("evlog_range_sec") or []
+    if ref_start_ev is None or ref_report_ts is None or len(evlog_range) < 2:
+        return []
+    min_evlog = float(evlog_range[0])
+    max_evlog = float(evlog_range[1])
+    grouped: dict[str, dict[str, Any]] = {}
+    for rec in records:
+        if is_host_record(rec):
+            continue
+        ts = float(rec.get("ts", 0) or 0)
+        evlog_sec = float(ref_start_ev) + (ts - float(ref_report_ts))
+        if not (min_evlog <= evlog_sec <= max_evlog):
+            continue
+        key = measured_test_key(rec)
+        bucket = grouped.setdefault(
+            key,
+            {
+                "key": key,
+                "label": measured_test_label(rec),
+                "suite": rec.get("suite"),
+                "chunk": rec.get("chunk"),
+                "cgroup": rec.get("cgroup"),
+                "xs": [],
+                "cpu_cores": [],
+                "ram_gb": [],
+                "disk_read_mbps": [],
+                "disk_write_mbps": [],
+                "cgroup_signals": {},
+            },
+        )
+        bucket["xs"].append(round(evlog_sec, 3))
+        bucket["cpu_cores"].append(float(rec.get("cpu_used_cores", rec.get("cpu_cores", 0)) or 0))
+        bucket["ram_gb"].append(float(rec.get("ram_kb", 0) or 0) / (1024 * 1024))
+        bucket["disk_read_mbps"].append(float(rec.get("disk_read_mbps", rec.get("disk_read_mb_delta", 0)) or 0))
+        bucket["disk_write_mbps"].append(float(rec.get("disk_write_mbps", rec.get("disk_write_mb_delta", 0)) or 0))
+        signal_fields = (
+            "cpu_throttled_pct",
+            "cpu_nr_throttled_delta",
+            "cpu_throttled_usec_delta",
+            "cpu_psi_some_pct",
+            "cpu_psi_full_pct",
+            "memory_psi_some_pct",
+            "memory_psi_full_pct",
+            "io_psi_some_pct",
+            "io_psi_full_pct",
+            "memory_high_events_delta",
+            "memory_max_events_delta",
+            "memory_oom_events_delta",
+            "memory_oom_kill_events_delta",
+        )
+        for field in signal_fields:
+            values = bucket["cgroup_signals"].get(field)
+            if values is None and field not in rec:
+                continue
+            if values is None:
+                values = [None] * (len(bucket["xs"]) - 1)
+                bucket["cgroup_signals"][field] = values
+            values.append(float(rec[field]) if rec.get(field) is not None else None)
+    match_measured_to_runs(grouped, runs or [])
+    # Dense measured_layers (all cgroups × common axis × pressure) used to inflate
+    # dashboard_data.json to hundreds of MB. Charts lazy-load sparse per-suite
+    # shards from resources_tests/ instead; only the summary tree stays in the
+    # main payload. A single monolithic resources_tests.json is avoided because
+    # browsers (esp. Safari) often fail fetching the ~10–20MB blob.
+    overlay.pop("measured_layers", None)
+    overlay.pop("measured_series_url", None)
+    overlay["measured_series_dir"] = "resources_tests"
+    overlay["measured_series_overview_url"] = "resources_tests/overview.json"
+    overlay["measured_series_totals_url"] = "resources_tests/totals.json"
+    overlay["measured_series_suite_url_template"] = "resources_tests/suites/{suite}.json"
+    overlay["measured_chunk_tests"] = measured_chunk_tests_by_label(
+        grouped, runs or [], chunk_tests or {}, chunks
+    )
+    summary: list[dict[str, Any]] = []
+    series_out: dict[str, Any] = {}
+    for key, bucket in grouped.items():
+        xs, cols = _downsample_series(
+            bucket["xs"],
+            [bucket["cpu_cores"], bucket["ram_gb"], bucket["disk_read_mbps"], bucket["disk_write_mbps"]],
+        )
+        cpu, ram, dread, dwrite = cols
+        series_out[key] = {
+            "label": bucket["label"],
+            "suite": bucket["suite"],
+            "chunk": bucket["chunk"],
+            "cgroup": bucket["cgroup"],
+            "xs_evlog_sec": xs,
+            "cpu_cores": cpu,
+            "ram_gb": ram,
+            "disk_read_mbps": dread,
+            "disk_write_mbps": dwrite,
+        }
+        for field, values in bucket["cgroup_signals"].items():
+            _signal_xs, signal_cols = _downsample_series(bucket["xs"], [values])
+            series_out[key][field] = signal_cols[0]
+        def _signal_max(name: str) -> float | None:
+            vals = [float(v) for v in bucket["cgroup_signals"].get(name, []) if v is not None]
+            return max(vals) if vals else None
+
+        def _signal_sum(name: str) -> int | None:
+            vals = bucket["cgroup_signals"].get(name)
+            return sum(int(v or 0) for v in vals) if vals else None
+
+        summary_row = {
+                "key": key,
+                "label": bucket["label"],
+                "suite": bucket["suite"],
+                "chunk": bucket["chunk"],
+                "cgroup": bucket["cgroup"],
+                "samples": len(bucket["xs"]),
+                "max_cpu": round(max(bucket["cpu_cores"]) if bucket["cpu_cores"] else 0.0, 3),
+                "max_ram_gb": round(max(bucket["ram_gb"]) if bucket["ram_gb"] else 0.0, 3),
+                "max_read_mbps": round(max(bucket["disk_read_mbps"]) if bucket["disk_read_mbps"] else 0.0, 2),
+                "max_write_mbps": round(max(bucket["disk_write_mbps"]) if bucket["disk_write_mbps"] else 0.0, 2),
+            }
+        optional_summary_fields = {
+            "max_cpu_throttled_pct": _signal_max("cpu_throttled_pct"),
+            "max_cpu_psi_pct": _signal_max("cpu_psi_some_pct"),
+            "max_memory_psi_pct": _signal_max("memory_psi_some_pct"),
+            "max_io_psi_pct": _signal_max("io_psi_some_pct"),
+            "cpu_nr_throttled_delta": _signal_sum("cpu_nr_throttled_delta"),
+            "cpu_throttled_usec_delta": _signal_sum("cpu_throttled_usec_delta"),
+            "memory_high_events_delta": _signal_sum("memory_high_events_delta"),
+            "memory_max_events_delta": _signal_sum("memory_max_events_delta"),
+            "memory_oom_events_delta": _signal_sum("memory_oom_events_delta"),
+            "memory_oom_kill_events_delta": _signal_sum("memory_oom_kill_events_delta"),
+        }
+        summary_row.update({name: round(value, 3) if name.startswith("max_") else value for name, value in optional_summary_fields.items() if value is not None})
+        _attach_measured_contention(grouped, summary_row)
+        summary.append(summary_row)
+    summary.sort(key=lambda row: (-float(row["max_cpu"]), str(row["label"])))
+    if out_json is not None:
+        # Keep a tiny pointer file so older links/scripts still resolve the name.
+        out_json.write_text(
+            json.dumps(
+                {
+                    "sharded": True,
+                    "dir": "resources_tests",
+                    "overview": "resources_tests/overview.json",
+                    "suite_template": "resources_tests/suites/{suite}.json",
+                    "series_count": len(series_out),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        series_root = out_json.with_name("resources_tests")
+        suites_dir = series_root / "suites"
+        suites_dir.mkdir(parents=True, exist_ok=True)
+        by_suite: dict[str, dict[str, Any]] = defaultdict(dict)
+        for key, series in series_out.items():
+            suite = str(series.get("suite") or "unknown")
+            by_suite[suite][key] = series
+        for suite, payload in by_suite.items():
+            shard_name = suite.replace("/", ".") + ".json"
+            (suites_dir / shard_name).write_text(
+                json.dumps(payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        overview: dict[str, Any] = {}
+        for row in summary[:80]:
+            key = str(row.get("key") or "")
+            if key and key in series_out:
+                overview[key] = series_out[key]
+        (series_root / "overview.json").write_text(
+            json.dumps(overview, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        # Coarse sum of every cgroup — charts for "all" only name top-N peaks, so
+        # without this residual the stack under-counts concurrent load and the
+        # sparse top-N axis gets long Plotly triangles across empty gaps.
+        totals_xs = measured_layers_xs(grouped, max_points=2000)
+        totals = {
+            "xs_evlog_sec": totals_xs,
+            "cpu_cores": [0.0] * len(totals_xs),
+            "ram_gb": [0.0] * len(totals_xs),
+            "disk_read_mbps": [0.0] * len(totals_xs),
+            "disk_write_mbps": [0.0] * len(totals_xs),
+            "series_count": len(grouped),
+        }
+        for bucket in grouped.values():
+            bxs = [float(x) for x in (bucket.get("xs") or [])]
+            if not bxs:
+                continue
+            for field in ("cpu_cores", "ram_gb", "disk_read_mbps", "disk_write_mbps"):
+                aligned = align_series(totals_xs, bxs, [float(v or 0.0) for v in (bucket.get(field) or [])])
+                dst = totals[field]
+                for i, value in enumerate(aligned):
+                    dst[i] += value
+        for field in ("cpu_cores", "ram_gb", "disk_read_mbps", "disk_write_mbps"):
+            totals[field] = [round(float(v), 4) for v in totals[field]]
+        (series_root / "totals.json").write_text(
+            json.dumps(totals, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    return summary
 
 
 def add_counter_series(trace_events: list[dict[str, Any]], pid: int, name: str, deltas: list[tuple[float, float]]) -> None:
@@ -1850,6 +2324,16 @@ def main() -> None:
         runner_footprint,
         records=resources_records,
     )
+    if resources_overlay and resources_records:
+        measured_path = args.out_html.with_name("resources_tests.json") if args.out_html else None
+        resources_overlay["measured_tests"] = _build_measured_tests(
+            resources_records,
+            resources_overlay,
+            measured_path,
+            enriched_runs,
+            collect_report_chunk_tests(report_obj, chunks),
+            chunks,
+        )
 
     # Runner CPU-utilization series (evlog_sec, cpu_pct) for saturation-aware recommendations.
     runner_cpu_series: Optional[list[tuple[float, float]]] = None

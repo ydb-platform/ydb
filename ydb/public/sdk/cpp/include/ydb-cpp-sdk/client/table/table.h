@@ -741,6 +741,7 @@ public:
     TChangefeedDescription& WithResolvedTimestamps(const TDuration& interval);
     // Customise retention period of underlying topic (24h by default).
     TChangefeedDescription& WithRetentionPeriod(const TDuration& value);
+    TChangefeedDescription& WithPartitionWriteSpeedBytesPerSecond(uint64_t value);
     // Initial scan will output the current state of the table first
     TChangefeedDescription& WithInitialScan();
     // Enable UserSIDs
@@ -792,6 +793,7 @@ private:
     bool SchemaChanges_ = false;
     std::optional<TDuration> ResolvedTimestamps_;
     std::optional<TDuration> RetentionPeriod_;
+    std::optional<uint64_t> PartitionWriteSpeedBytesPerSecond_;
     bool InitialScan_ = false;
     bool UserSIDs_ = false;
     bool TraceIds_ = false;

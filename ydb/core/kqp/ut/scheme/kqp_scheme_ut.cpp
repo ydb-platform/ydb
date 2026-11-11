@@ -29,6 +29,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
@@ -9110,6 +9111,34 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond(), 10_MB);
             UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteBurstBytes(), 1_MB);
+        }
+
+        for (const bool replication : {false, true}) {
+            const TString feedName = replication ? "explicitReplicationFeed" : "explicitFeed";
+            auto changefeed = TChangefeedDescription(feedName, EChangefeedMode::Updates, EChangefeedFormat::Json)
+                .WithPartitionWriteSpeedBytesPerSecond(3_MB);
+            if (replication) {
+                changefeed.AddAttribute("__async_replication", R"({"id":"1","path":"/Root/replica"})");
+            }
+            Ydb::Table::Changefeed proto;
+            changefeed.SerializeTo(proto);
+            const auto result = session.AlterTable("/Root/table", TAlterTableSettings()
+                .AppendAddChangefeeds(NYdb::TProtoAccessor::FromProto(proto))
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto desc = pq.DescribeTopic("/Root/table/" + feedName).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond(), 3_MB);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteBurstBytes(), 1_MB);
+        }
+
+        for (const ui64 writeSpeed : {ui64(0), ui64(Max<ui32>()) + 1}) {
+            const auto result = session.AlterTable("/Root/table", TAlterTableSettings()
+                .AppendAddChangefeeds(TChangefeedDescription("invalidFeed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+                    .WithPartitionWriteSpeedBytesPerSecond(writeSpeed))
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
 
         { // alter (2 MB/s)

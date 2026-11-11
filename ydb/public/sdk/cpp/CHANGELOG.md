@@ -1,3 +1,5 @@
+* Added `TChangefeedDescription::WithPartitionWriteSpeedBytesPerSecond()` to set the underlying topic's per-partition write quota during changefeed creation. Without an explicit value, replication changefeeds use 10 MiB/s and ordinary changefeeds use 1 MiB/s.
+
 * Added draft `TBridgeClient::Rollback()` to roll a cluster converted into a bridged one back to ordinary mode, and `TBridgeClient::GetRollbackStatus()` to show the progress of the rollback.
 
 * Topic and PersQueue writers now schedule RAW and pre-encoded messages on the configured compression executor, reducing request construction on the caller thread.

@@ -596,11 +596,11 @@ public:
         IsDisabled = true;
     }
 
-    RingState CountState(TInstant now, TDuration retryTime, TDuration duration, const TString &requestId) const;
+    RingState CountState(TInstant now, TDuration retryTime, TDuration duration, const TString &requestId,
+                         TDuration restartCooldown) const;
 
     ui32 RingId = 0;
     bool IsDisabled = false;
-    const TDuration Timeout = TDuration::Minutes(2);
 
     TVector<TNodeInfoPtr> Replicas;
 };

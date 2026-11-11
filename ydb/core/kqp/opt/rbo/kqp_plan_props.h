@@ -204,6 +204,8 @@ struct TPlanProps {
     bool PgSyntax = false;
     bool WithEffects = false;
     bool WithReturning = false;
+    // The result has no top-level ORDER BY.
+    bool UnorderedResult = false;
 };
 
 }

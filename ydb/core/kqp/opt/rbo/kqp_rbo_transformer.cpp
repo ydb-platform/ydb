@@ -159,6 +159,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
             // Match whole elements that are tuples (TKqpOpRoot, columns) or (Unordered(TKqpOpRoot), columns)
             if (node->IsList()) {
                 TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> roots;
+                THashSet<const TExprNode*> unorderedRoots;
                 for (const auto& child : node->Children()) {
                     if (!child->IsList() || child->ChildrenSize()==0) {
                         continue;
@@ -170,6 +171,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
 
                     if (TCoUnordered::Match(child->ChildPtr(0).Get()) && TKqpOpRoot::Match(child->ChildPtr(0)->ChildPtr(0).Get())) {
                         roots.push_back(std::make_pair(child->ChildPtr(0)->ChildPtr(0), queryColumns));
+                        unorderedRoots.insert(child->ChildPtr(0)->ChildPtr(0).Get());
                     }
                     else if (TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
                         roots.push_back(std::make_pair(child->ChildPtr(0), queryColumns));
@@ -182,6 +184,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
 
                 for (const auto& root: roots) {
                     auto opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root.first, root.second);
+                    opRoot->PlanProps.UnorderedResult = unorderedRoots.contains(root.first.Get());
                     opRoot->ComputeParents();
                     Roots.push_back(std::move(opRoot));
                 }
@@ -680,6 +683,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Push map elements", std::move(pushMapRules)));
+    RBO.AddStage(std::make_unique<TRemoveRedundantSortsStage>("Remove redundant sorts"));
 
     // Logical state I
     TVector<std::unique_ptr<IRule>> logicalStage_I_Rules;

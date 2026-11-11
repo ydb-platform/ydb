@@ -3512,6 +3512,303 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
         UNIT_ASSERT_C(ast.Contains("'\"false\""), ast);
     }
 
+    // As in the old optimizer, the column shard computes JSON_VALUE and JSON_EXISTS itself, with the native kernels
+    // that can use JSON indexes, and passes only the JSON_VALUE result into a KqpOlapApply.
+    Y_UNIT_TEST(PredicatePushdown_JsonUsesNativeKernels) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/foo` (
+                    id Int64 NOT NULL,
+                    j Json,
+                    jd JsonDocument,
+                    PRIMARY KEY (id)
+                ) WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [id, json] : std::vector<std::pair<i64, std::optional<std::string>>>{
+                 {1, R"({"x": "v", "n": "5"})"}, {2, R"({"x": "w", "n": "1"})"}, {3, R"({"y": 1})"}, {4, std::nullopt}}) {
+            rows.AddListItem().BeginStruct().AddMember("id").Int64(id).AddMember("j").OptionalJson(json)
+                .AddMember("jd").OptionalJsonDocument(json).EndStruct();
+        }
+        rows.EndList();
+        const auto upsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        struct TCase {
+            TString Predicate;
+            TString Expected;
+            // Callables the plan must have, and must not have. "(KqpOlapApply " is not KqpOlapApplyColumnArg.
+            std::vector<TString> Present;
+            std::vector<TString> Absent;
+        };
+
+        const std::vector<TCase> cases = {
+            {R"(JSON_VALUE(jd, "$.x") = "v")", "[[1]]", {"KqpOlapJsonValue"}, {"(KqpOlapApply ", "Json2."}},
+            {R"(JSON_VALUE(j, "$.x") = "v")", "[[1]]", {"KqpOlapJsonValue"}, {"(KqpOlapApply ", "Json2."}},
+            {R"(JSON_EXISTS(jd, "$.y"))", "[[3]]", {"KqpOlapJsonExists"}, {"(KqpOlapApply ", "Json2."}},
+            {R"(NOT JSON_EXISTS(jd, "$.x"))", "[[3]]", {"KqpOlapJsonExists"}, {"(KqpOlapApply ", "Json2."}},
+            {R"(JSON_VALUE(jd, "$.x") = "v" OR JSON_EXISTS(jd, "$.y"))", "[[1];[3]]", {"KqpOlapJsonValue", "KqpOlapJsonExists"},
+                {"(KqpOlapApply ", "Json2."}},
+            // KqpOlapApply gets the JSON_VALUE result, not the whole JSON column.
+            {R"(CAST(JSON_VALUE(jd, "$.n") AS Int32) > 1)", "[[1]]", {"(KqpOlapApply ", "KqpOlapJsonValue"}, {"Json2."}},
+            // With RETURNING the semantics differ from the native kernel, so the whole column goes to KqpOlapApply.
+            {R"(JSON_VALUE(jd, "$.x" RETURNING Utf8) = "v")", "[[1]]", {"(KqpOlapApply "}, {"KqpOlapJsonValue"}},
+        };
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "SELECT id FROM `/Root/foo` WHERE " + testCase.Predicate + " ORDER BY id;";
+            auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_C(ast.Contains("KqpOlapFilter"), query << ", AST: " << ast);
+            for (const auto& callable : testCase.Present) {
+                UNIT_ASSERT_C(ast.Contains(callable), query << ": no " << callable << ", AST: " << ast);
+            }
+            for (const auto& callable : testCase.Absent) {
+                UNIT_ASSERT_C(!ast.Contains(callable), query << ": unexpected " << callable << ", AST: " << ast);
+            }
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // As in the old optimizer, a simple ILIKE runs as a direct kernel of the column shard, not through KqpOlapApply,
+    // and OptEnableOlapFastAsciiIgnoreCase picks the fast contains kernel.
+    Y_UNIT_TEST(PredicatePushdown_SimpleILikeUsesDirectKernel) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/foo` (
+                    id Int64 NOT NULL,
+                    str String,
+                    u_str Utf8,
+                    PRIMARY KEY (id)
+                ) WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [id, value] : std::vector<std::pair<i64, std::optional<std::string>>>{
+                 {1, "foobar"}, {2, "baz"}, {3, "fooqux"}, {4, std::nullopt}}) {
+            rows.AddListItem().BeginStruct().AddMember("id").Int64(id).AddMember("str").OptionalString(value)
+                .AddMember("u_str").OptionalUtf8(value).EndStruct();
+        }
+        rows.EndList();
+        const auto upsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        struct TCase {
+            TString Pragmas;
+            TString Predicate;
+            TString Expected;
+            TString Kernel;
+        };
+
+        const TString like = "PRAGMA OptimizeSimpleILike; PRAGMA AnsiLike; ";
+        const TString fast = like + "PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = 'true'; ";
+        const std::vector<TCase> cases = {
+            {like, "str ILIKE '%FOO%'", "[[1];[3]]", "String._yql_AsciiContainsIgnoreCase"},
+            {like, "u_str ILIKE '%FOO%'", "[[1];[3]]", "String._yql_AsciiContainsIgnoreCase"},
+            {like, "u_str ILIKE 'FOO%'", "[[1];[3]]", "String._yql_AsciiStartsWithIgnoreCase"},
+            {like, "str ILIKE '%QUX'", "[[3]]", "String._yql_AsciiEndsWithIgnoreCase"},
+            {like, "u_str ILIKE 'BAZ'", "[[2]]", "String._yql_AsciiEqualsIgnoreCase"},
+            // The IgnoreCase callables take a NULL as no match, so NOT ILIKE keeps the NULL row, also without pushdown.
+            {like, "str NOT ILIKE '%FOO%'", "[[2];[4]]", "String._yql_AsciiContainsIgnoreCase"},
+            {fast, "str ILIKE '%FOO%'", "[[1];[3]]", "OlapKernels._yql_AsciiContainsIgnoreCase"},
+            {fast, "u_str ILIKE '%FOO%'", "[[1];[3]]", "OlapKernels._yql_AsciiContainsIgnoreCase"},
+        };
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = testCase.Pragmas + "SELECT id FROM `/Root/foo` WHERE " + testCase.Predicate + " ORDER BY id;";
+            auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_C(ast.Contains("KqpOlapUdf") && ast.Contains(testCase.Kernel), query << ", AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("(KqpOlapApply "), query << ", AST: " << ast);
+            if (testCase.Kernel.StartsWith("OlapKernels.")) {
+                UNIT_ASSERT_C(!ast.Contains("String._yql_AsciiContainsIgnoreCase"), query << ", AST: " << ast);
+            }
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // Pins the kernels each kind of predicate is pushed with, so that a change of the pushdown for some predicates
+    // keeps the plans of the others, and checks the rows against the same query without pushdown.
+    Y_UNIT_TEST(PredicatePushdown_KernelsByPredicate) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/t` (
+                    id Int64 NOT NULL,
+                    i32 Int32,
+                    i64 Int64,
+                    d Double,
+                    s String,
+                    u Utf8,
+                    j Json,
+                    jd JsonDocument,
+                    ts Timestamp,
+                    PRIMARY KEY (id)
+                ) WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        struct TRow {
+            i64 Id;
+            std::optional<i32> I32;
+            std::optional<i64> I64;
+            std::optional<double> D;
+            std::optional<std::string> S;
+            std::optional<std::string> U;
+            std::optional<std::string> Json;
+            std::optional<TInstant> Ts;
+        };
+        const std::vector<TRow> tableRows = {
+            {1, 1, 10, 0.5, "a", "a", R"({"x": "v", "n": "5", "a.b": "v", "a": [{"b": "v"}]})", TInstant::ParseIso8601("2021-01-01T00:00:00Z")},
+            {2, 2, 3, 2.0, "abcx", "ABC", R"({"x": "w", "n": "1", "y": 1, "a": [{"b": "w"}]})", TInstant::ParseIso8601("2019-01-01T00:00:00Z")},
+            {3, std::nullopt, 7, 1.0, "xABC", "zabcz", R"({"x": "abc"})", std::nullopt},
+            {4, 3, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, TInstant::ParseIso8601("2022-01-01T00:00:00Z")},
+            {5, 0, 0, 3.0, "abc", "b", R"({"y": 2})", TInstant::ParseIso8601("2020-06-01T00:00:00Z")},
+        };
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& row : tableRows) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("id").Int64(row.Id)
+                .AddMember("i32").OptionalInt32(row.I32)
+                .AddMember("i64").OptionalInt64(row.I64)
+                .AddMember("d").OptionalDouble(row.D)
+                .AddMember("s").OptionalString(row.S)
+                .AddMember("u").OptionalUtf8(row.U)
+                .AddMember("j").OptionalJson(row.Json)
+                .AddMember("jd").OptionalJsonDocument(row.Json)
+                .AddMember("ts").OptionalTimestamp(row.Ts)
+                .EndStruct();
+        }
+        rows.EndList();
+        const auto upsert = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        // "(KqpOlapApply " is a call, unlike KqpOlapApplyColumnArg.
+        const std::vector<TString> kernels = {"KqpOlapFilter", "KqpOlapJsonValue", "KqpOlapJsonExists", "KqpOlapUdf", "(KqpOlapApply ", "Json2.",
+            "OlapKernels."};
+        struct TCase {
+            TString Pragmas;
+            TString Predicate;
+            // The kernels from the list above which the plan has.
+            std::vector<TString> Kernels;
+        };
+
+        const TString like = "PRAGMA OptimizeSimpleILike; PRAGMA AnsiLike; ";
+        const TString fast = like + "PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = 'true'; ";
+        const std::vector<TString> filter = {"KqpOlapFilter"};
+        const std::vector<TString> apply = {"KqpOlapFilter", "(KqpOlapApply "};
+        const std::vector<TCase> cases = {
+            {"", "i32 = 1", filter},
+            {"", "i32 > 1 AND s = 'a'", filter},
+            {"", "i32 = 1 OR u = 'a'u", filter},
+            {"", "NOT (i32 = 1)", filter},
+            {"", "i32 IN (1, 2, 3)", filter},
+            {"", "s LIKE 'ab%'", filter},
+            {"", "u LIKE '%ab%'", filter},
+            {"", "s ILIKE '%ab%'", apply},
+            {"", "COALESCE(i32, 0) > 1", apply},
+            {"", "IF(i32 > 1, i32, 0) = 2", apply},
+            {"", "i32 + 1 = 2", filter},
+            {"", "i64 * 2 > 10", filter},
+            {"", "d < 1.5", filter},
+            {"", "ts > Timestamp('2020-01-01T00:00:00Z')", filter},
+            {"", "s IS NULL", filter},
+            {"", "u IS NOT NULL", filter},
+            {"", "LENGTH(s) > 2", apply},
+            {"", "s || 'x' = 'ax'", {}},
+            {"", "StartsWith(u, 'a'u)", filter},
+            {"", "CAST(s AS Utf8) = 'a'u", apply},
+            {"", "i32 = 1 AND (s = 'a' OR NOT (u = 'b'u))", filter},
+            {"", "s = 'a' XOR i32 = 2", apply},
+            // The column shard computes JSON_VALUE and JSON_EXISTS itself, as in the old optimizer.
+            {"", R"(JSON_VALUE(j, "$.x") = "v")", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            {"", R"(JSON_VALUE(jd, "$.x") = "v")", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            {"", R"(JSON_VALUE(jd, "$.\"a.b\"") = "v")", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            {"", R"(JSON_VALUE(jd, "$.a[0].b") != "v")", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            {"", R"(JSON_EXISTS(j, "$.x"))", {"KqpOlapFilter", "KqpOlapJsonExists"}},
+            {"", R"(NOT JSON_EXISTS(jd, "$.x"))", {"KqpOlapFilter", "KqpOlapJsonExists"}},
+            {"", R"(JSON_VALUE(jd, "$.x") = "v" AND i32 = 1)", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            {"", R"(JSON_VALUE(jd, "$.x") = "v" OR JSON_EXISTS(jd, "$.y"))", {"KqpOlapFilter", "KqpOlapJsonValue", "KqpOlapJsonExists"}},
+            {"", R"(JSON_VALUE(jd, "$.x") LIKE "%v%")", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            // KqpOlapApply gets the JSON_VALUE result, not the whole JSON column.
+            {"", R"(CAST(JSON_VALUE(jd, "$.n") AS Int32) > 1)", {"KqpOlapFilter", "KqpOlapJsonValue", "(KqpOlapApply "}},
+            {"", R"(LENGTH(JSON_VALUE(j, "$.x")) > 1)", {"KqpOlapFilter", "KqpOlapJsonValue", "(KqpOlapApply "}},
+            {"", R"(COALESCE(JSON_VALUE(jd, "$.x"), "d") = "v")", {"KqpOlapFilter", "KqpOlapJsonValue", "(KqpOlapApply "}},
+            // RETURNING has other semantics than the native kernel, so the whole column goes to KqpOlapApply.
+            {"", R"(JSON_VALUE(jd, "$.x" RETURNING Int32) = 1)", {"KqpOlapFilter", "(KqpOlapApply ", "Json2."}},
+            // A simple ILIKE is a direct kernel, and the pragma picks the fast contains kernel.
+            {like, "s ILIKE '%abc%'", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, "u ILIKE 'abc%'", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, "s ILIKE '%abc'", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, "u ILIKE 'abc'", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, "s NOT ILIKE '%abc%'", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, "u ILIKE '%abc%' AND i32 = 1", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, R"(JSON_VALUE(jd, "$.x") ILIKE '%abc%')", {"KqpOlapFilter", "KqpOlapJsonValue", "KqpOlapUdf"}},
+            {fast, "s ILIKE '%abc%'", {"KqpOlapFilter", "KqpOlapUdf", "OlapKernels."}},
+            {fast, "u ILIKE '%abc%'", {"KqpOlapFilter", "KqpOlapUdf", "OlapKernels."}},
+        };
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const auto execute = [&](const TString& query) {
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return FormatResultSetYson(result.GetResultSet(0));
+        };
+        for (const auto& testCase : cases) {
+            const TString select = "SELECT id FROM `/Root/t` WHERE " + testCase.Predicate + " ORDER BY id;";
+            const TString query = testCase.Pragmas + select;
+            auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            for (const auto& kernel : kernels) {
+                const bool expected = std::find(testCase.Kernels.begin(), testCase.Kernels.end(), kernel) != testCase.Kernels.end();
+                UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains(kernel), expected, query << ": " << kernel << ", AST: " << ast);
+            }
+
+            const auto withoutPushdown = execute(testCase.Pragmas + "PRAGMA Kikimr.OptEnableOlapPushdown = 'false'; " + select);
+            CompareYson(withoutPushdown, execute(query));
+        }
+    }
+
 }
 
 // Ported from ut/olap/aggregations_ut.cpp to run with the new optimizer, which aggregates blocks with

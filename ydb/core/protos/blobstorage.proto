@@ -1127,6 +1127,8 @@ message TEvControllerUpdateSyncerState {
         optional uint64 BytesToCopy = 16;
         optional uint64 BytesCopied = 17;
         optional bool ScanFinished = 18;
+        // Metadata entries consumed by the merge scan, including blocks and barriers.
+        optional uint64 ScannedItems = 19;
     }
 
     repeated TSyncer Syncers = 1;

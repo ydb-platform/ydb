@@ -2586,6 +2586,27 @@ public:
                     if (!info.GetBridgeSyncLastError().empty()) {
                         jsonGroup.SetBridgeSyncLastError(info.GetBridgeSyncLastError());
                     }
+                    if (info.HasBridgeSyncLastProgressTimestamp()) {
+                        jsonGroup.SetBridgeSyncLastProgressTimestamp(info.GetBridgeSyncLastProgressTimestamp());
+                    }
+                    if (info.HasBridgeSyncCopyBytesPerSecond()) {
+                        jsonGroup.SetBridgeSyncCopyBytesPerSecond(info.GetBridgeSyncCopyBytesPerSecond());
+                    }
+                    if (info.HasBridgeSyncRemainingBytes()) {
+                        jsonGroup.SetBridgeSyncRemainingBytes(info.GetBridgeSyncRemainingBytes());
+                    }
+                    if (info.HasBridgeSyncRemainingBytesComplete()) {
+                        jsonGroup.SetBridgeSyncRemainingBytesComplete(info.GetBridgeSyncRemainingBytesComplete());
+                    }
+                    if (info.HasBridgeSyncRunning()) {
+                        jsonGroup.SetBridgeSyncRunning(info.GetBridgeSyncRunning());
+                    }
+                    if (info.HasBridgeSyncLastErrorTimestamp()) {
+                        jsonGroup.SetBridgeSyncLastErrorTimestamp(info.GetBridgeSyncLastErrorTimestamp());
+                    }
+                    if (info.HasBridgeSyncErrorCount()) {
+                        jsonGroup.SetBridgeSyncErrorCount(info.GetBridgeSyncErrorCount());
+                    }
                 }
                 if (FieldsAvailable.test(+EGroupFields::MaxPDiskUsage) && FieldsRequested.test(+EGroupFields::MaxPDiskUsage)) {
                     jsonGroup.SetMaxPDiskUsage(group->MaxPDiskUsage);
@@ -2889,6 +2910,22 @@ public:
             "Bridge synchronization stage as reported by the storage controller. Omitted when unavailable.";
         storageGroupProperties["BridgeSyncLastError"]["description"] =
             "Last synchronization error reported by the storage controller. Omitted when no error text is available.";
+        storageGroupProperties["BridgeSyncLastProgressTimestamp"]["description"] =
+            "Unix microseconds when BSC last confirmed scan/data progress or a committed stage advance in this synchronization round. "
+            "Omitted until progress is observed. Unchanged reports do not advance this timestamp.";
+        storageGroupProperties["BridgeSyncCopyBytesPerSecond"]["description"] =
+            "Average copy rate over the last minute, in blob bytes per second.";
+        storageGroupProperties["BridgeSyncRemainingBytes"]["description"] =
+            "Blob bytes left to copy. A lower bound while BridgeSyncRemainingBytesComplete is false. Omitted when unavailable.";
+        storageGroupProperties["BridgeSyncRemainingBytesComplete"]["description"] =
+            "The remaining-byte estimate is based on a full scan of the current or preceding stage.";
+        storageGroupProperties["BridgeSyncRunning"]["description"] =
+            "BSC currently has an assigned syncer for this physical group. Omitted when unavailable.";
+        storageGroupProperties["BridgeSyncLastErrorTimestamp"]["description"] =
+            "BSC observation time of the latest reported failed synchronization attempt on the current stage, in Unix microseconds. "
+            "The failure may be retryable and its timestamp may precede the latest progress.";
+        storageGroupProperties["BridgeSyncErrorCount"]["description"] =
+            "Number of reported synchronization failures on the current stage.";
         return node;
     }
 };

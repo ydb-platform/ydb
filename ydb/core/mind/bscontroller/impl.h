@@ -2278,6 +2278,7 @@ private:
         ui64 BytesToCopy = 0;
         ui64 BytesCopied = 0;
         bool ScanFinished = false;
+        ui64 ScannedItems = 0;
     };
 
     struct TSyncersRequiringAction;
@@ -2286,8 +2287,18 @@ private:
         : TIntrusiveListItem<TSyncerState, TSyncersRequiringAction>
     {
         struct TPerNodeInfo {
+            struct TProgressBaseline {
+                ui64 BytesDone = 0;
+                ui64 BlobsDone = 0;
+                ui64 BytesCopied = 0;
+                ui64 ScannedItems = 0;
+            };
             TGroupId SourceGroupId;
             TSyncerProgress Progress;
+            std::optional<NKikimrBridge::TGroupState::EStage> ProgressStage;
+            ui64 ProgressRound = 0;
+            ui32 ProgressBaselineFields = 0;
+            TProgressBaseline ProgressBaseline;
         };
         const TGroupId BridgeProxyGroupId;
         const TGroupId TargetGroupId;
@@ -2447,11 +2458,15 @@ private:
     };
     std::optional<TBridgeSyncRemaining> GetBridgeSyncRemaining(TGroupId targetGroupId,
         NKikimrBridge::TGroupState::EStage stage) const;
+    const NKikimrBridge::TGroupState::TPile* FindBridgeSyncPile(TGroupId targetGroupId, ui64* currentRound = nullptr);
+    std::optional<TInstant> GetBridgeSyncLastProgressTimestamp(TGroupId targetGroupId);
+    void RecordBridgeSyncProgress(NIceDb::TNiceDb& db, TGroupId targetGroupId, ui64 round, TInstant timestamp);
+    void ForgetBridgeSyncProgress(NIceDb::TNiceDb& db, TGroupId targetGroupId, ui64 round);
     // the stage of the target group of a pile, if it is one
     std::optional<NKikimrBridge::TGroupState::EStage> GetBridgeSyncStage(TGroupId targetGroupId);
     // returns the bytes copied since the previous report
     ui64 UpdateBridgeSyncCopyProgress(TSyncerState& syncerState, NKikimrBridge::TGroupState::EStage stage,
-        const TSyncerProgress& progress);
+        const TSyncerProgress& progress, bool comprehensive);
     void UpdateBridgeSyncCopyRates();
     static constexpr TDuration BridgeSyncRateWindow = TDuration::Minutes(1);
 
@@ -2506,6 +2521,13 @@ private:
         std::optional<ui64> EstimatedBytesToCopy;
     };
     THashMap<TGroupId, TBridgeSyncState> BridgeSyncState;
+
+    // Progress belongs to a whole synchronization round and survives stage/error cleanup.
+    struct TBridgeSyncProgress {
+        ui64 BecameUnsyncedGeneration = 0;
+        TInstant LastConfirmedProgressAt;
+    };
+    THashMap<TGroupId, TBridgeSyncProgress> BridgeSyncProgress;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Node warden interoperation

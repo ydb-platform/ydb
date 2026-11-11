@@ -2531,7 +2531,17 @@ Y_UNIT_TEST_SUITE(Viewer) {
             auto* syncing = record.MutableEntries(0)->MutableInfo();
             syncing->SetBridgeSyncStage("BLOCKS");
             syncing->SetBridgeSyncLastError("Synchronization failed");
+            syncing->SetBridgeSyncLastProgressTimestamp(2'000'000);
+            syncing->SetBridgeSyncCopyBytesPerSecond(80'000'000);
+            syncing->SetBridgeSyncRemainingBytes(120'000'000'000);
+            syncing->SetBridgeSyncRemainingBytesComplete(false);
+            syncing->SetBridgeSyncRunning(true);
+            syncing->SetBridgeSyncLastErrorTimestamp(1'000'000);
+            syncing->SetBridgeSyncErrorCount(2);
             record.MutableEntries(1)->MutableInfo()->SetBridgeSyncStage("SYNCED");
+            record.MutableEntries(1)->MutableInfo()->SetBridgeSyncLastProgressTimestamp(3'000'000);
+            record.MutableEntries(1)->MutableInfo()->SetBridgeSyncCopyBytesPerSecond(0);
+            record.MutableEntries(1)->MutableInfo()->SetBridgeSyncRunning(false);
         });
 
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
@@ -2548,10 +2558,26 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(groups.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncStage"].GetString(), "BLOCKS");
         UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncLastError"].GetString(), "Synchronization failed");
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncLastProgressTimestamp"].GetString(), "2000000");
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncCopyBytesPerSecond"].GetString(), "80000000");
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncRemainingBytes"].GetString(), "120000000000");
+        UNIT_ASSERT(groups[0].Has("BridgeSyncRemainingBytesComplete"));
+        UNIT_ASSERT(!groups[0]["BridgeSyncRemainingBytesComplete"].GetBoolean());
+        UNIT_ASSERT(groups[0]["BridgeSyncRunning"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncLastErrorTimestamp"].GetString(), "1000000");
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncErrorCount"].GetUInteger(), 2);
         UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncStage"].GetString(), "SYNCED");
+        UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncLastProgressTimestamp"].GetString(), "3000000");
+        UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncCopyBytesPerSecond"].GetString(), "0");
+        UNIT_ASSERT(groups[1].Has("BridgeSyncRunning"));
+        UNIT_ASSERT(!groups[1]["BridgeSyncRunning"].GetBoolean());
         UNIT_ASSERT(!groups[1].Has("BridgeSyncLastError"));
         UNIT_ASSERT(!groups[2].Has("BridgeSyncStage"));
         UNIT_ASSERT(!groups[2].Has("BridgeSyncLastError"));
+        for (const char* field : {"BridgeSyncLastProgressTimestamp", "BridgeSyncCopyBytesPerSecond", "BridgeSyncRemainingBytes",
+                "BridgeSyncRemainingBytesComplete", "BridgeSyncRunning", "BridgeSyncLastErrorTimestamp", "BridgeSyncErrorCount"}) {
+            UNIT_ASSERT_C(!groups[2].Has(field), field);
+        }
     }
 
     void CheckStorageGroupsStateInfoFieldsRequired(bool whiteboard, bool missingStatuses = false) {
@@ -2644,7 +2670,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NJson::TJsonValue json;
             NJson::ReadJsonTree(response->Response->Body, &json, true);
             const auto& groups = json.GetMap().at("StorageGroups").GetArray();
-            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 14);
+            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 15);
             UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
             const auto& group = groups[0].GetMap();
             UNIT_ASSERT_VALUES_EQUAL(group.at("GroupId").GetString(), "2");

@@ -548,6 +548,13 @@ message TStorageGroupInfo {
     TStorageGroupStateInfo StateInfo = 31; // omitted when CalcState cannot determine a known status
     optional string BridgeSyncStage = 32;
     optional string BridgeSyncLastError = 33;
+    optional uint64 BridgeSyncLastProgressTimestamp = 34; // last confirmed progress, in Unix microseconds
+    optional uint64 BridgeSyncCopyBytesPerSecond = 35; // average over the last minute, in blob bytes
+    optional uint64 BridgeSyncRemainingBytes = 36;
+    optional bool BridgeSyncRemainingBytesComplete = 37; // a full scan exists for the estimate
+    optional bool BridgeSyncRunning = 38;
+    optional uint64 BridgeSyncLastErrorTimestamp = 39; // last failure report observed by BSC, in Unix microseconds
+    optional uint32 BridgeSyncErrorCount = 40; // reported failures on the current stage
 }
 
 message TStorageGroupGroup {

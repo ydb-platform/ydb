@@ -11076,7 +11076,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
     }
 
-<<<<<<< HEAD
     enum class ELocalTabletReport {
         OnlineTablets,
         InbootTablets,
@@ -11193,7 +11192,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     Y_UNIT_TEST(TestLockedTabletMetricsAfterLateInbootTablets) {
         TestLockedTabletMetricsAfterLateLocalReport(ELocalTabletReport::InbootTablets);
-=======
+    }
+
     Y_UNIT_TEST(TestCutHistoryRetainedAcrossHiveReconnect) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true, 2, [](TAppPrepare& app) {
@@ -11255,7 +11255,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         blockPing.Unblock();
 
         runtime.WaitFor("TEvShrinkStoragePoolDone after registrar reconnect replayed CutTabletHistory", [&] { return done; });
->>>>>>> 1c46e3d369b (Local: retain cut-history requests and replay them to Hive on reconnect (#51961))
     }
 
     Y_UNIT_TEST(TestLockedTabletMetricsAfterHiveRestart) {

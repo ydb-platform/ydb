@@ -597,38 +597,75 @@ TActorId StartDescriber(
     return describer;
 }
 
-class TFakeSecretService : public TActorBootstrapped<TFakeSecretService> {
-public:
-    using TEvResolveSecret = NSecret::TDescribeSchemaSecretsService::TEvResolveSecret;
-
-    explicit TFakeSecretService(THolder<TEvResolveSecret>& request)
-        : Request(request)
-    {
-    }
-
-    void Bootstrap() {
-        Become(&TThis::StateWork);
-    }
-
-    STATEFN(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvResolveSecret, Handle);
-        }
-    }
-
-private:
-    void Handle(TEvResolveSecret::TPtr& ev) {
-        Request = ev->Get()->MakeCopy();
-    }
-
-    THolder<TEvResolveSecret>& Request;
-};
-
 void FireDescribeWakeup(TTestContext& tc, TDuration delay = TDuration::Seconds(1)) {
     tc.Runtime->ResetScheduledCount();
     tc.Runtime->AdvanceCurrentTime(delay);
     DispatchFor(tc);
 }
+
+struct TSecretDescriberEnv {
+    using TEvResolveSecret = NSecret::TDescribeSchemaSecretsService::TEvResolveSecret;
+
+    TTestContext Context;
+    TControllableMirrorFactory Factory;
+    THolder<TEvTxProxySchemeCache::TEvNavigateKeySet> Navigation;
+    TActorId NavigationSender;
+    TActorId SecretService;
+    THolder<TEvResolveSecret> SecretRequest;
+    NKikimrPQ::TMirrorPartitionConfig Config = MakeMirrorConfig();
+
+    TSecretDescriberEnv() {
+        Context.Prepare();
+        Context.Runtime->SetScheduledLimit(10000);
+        Context.Runtime->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        Context.Runtime->RegisterService(MakeSchemeCacheID(), Context.Runtime->AllocateEdgeActor());
+        SecretService = Context.Runtime->AllocateEdgeActor();
+        Context.Runtime->RegisterService(
+            NSecret::MakeDescribeSchemaSecretServiceId(Context.Runtime->GetNodeId(0)), SecretService);
+        Context.Runtime->SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySet::EventType) {
+                NavigationSender = ev->Sender;
+                Navigation = ev->Release<TEvTxProxySchemeCache::TEvNavigateKeySet>();
+                return TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+        Config.MutableCredentials()->SetOauthTokenSecretName("/Root/describe-secret");
+        StartDescriber(Context, Factory, Config, "/Root", "/Root/dst-topic");
+    }
+
+    void ResolveOwner() {
+        UNIT_ASSERT(Navigation);
+        UNIT_ASSERT_VALUES_EQUAL(Navigation->Request->DatabaseName, "/Root");
+        auto response = MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(Navigation->Request.Release());
+        auto& entry = response->Request->ResultSet.at(0);
+        entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+        entry.SecurityObject = MakeIntrusive<TSecurityObject>("topic-owner@builtin", TString(), false);
+        Context.Runtime->Send(new IEventHandle(NavigationSender, MakeSchemeCacheID(), response.Release()));
+        auto request = Context.Runtime->GrabEdgeEvent<TEvResolveSecret>(SecretService, TDuration::Seconds(5));
+        UNIT_ASSERT(request);
+        SecretRequest = request->Get()->MakeCopy();
+        UNIT_ASSERT_VALUES_EQUAL(SecretRequest->Database, "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(SecretRequest->SecretNames.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(SecretRequest->SecretNames.front(), "/Root/describe-secret");
+        UNIT_ASSERT(SecretRequest->UserToken);
+        UNIT_ASSERT_VALUES_EQUAL(SecretRequest->UserToken->GetUserSID(), "topic-owner@builtin");
+    }
+
+    void ResolveSecretAndExpectDescription(const TString& value) {
+        SecretRequest->Promise.SetValue(NKqp::TEvDescribeSecretsResponse::TDescription({value}));
+        for (size_t i = 0; i < 100 && Factory.CredCalls == 0; ++i) {
+            DispatchFor(Context);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(Factory.CredCalls, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(Factory.CredTokens.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(Factory.CredTokens.front(), value);
+        FireDescribeWakeup(Context);
+        UNIT_ASSERT_VALUES_EQUAL(Factory.DescribeCalls, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(Factory.LastDescribeConfig.GetCredentials().SerializeAsString(),
+            Config.GetCredentials().SerializeAsString());
+    }
+};
 
 Y_UNIT_TEST_SUITE(TPqrbMirrorDescriber) {
 
@@ -868,68 +905,12 @@ Y_UNIT_TEST(DuplicateInitCredentialsIsIgnoredWhileInflight) {
 }
 
 Y_UNIT_TEST(SecretCredentialsAreResolvedForDescribeWithoutPersistingValue) {
-    using TEvResolveSecret = NSecret::TDescribeSchemaSecretsService::TEvResolveSecret;
-
-    TTestContext tc;
-    tc.Prepare();
-    tc.Runtime->SetScheduledLimit(10000);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
-    tc.Runtime->RegisterService(MakeSchemeCacheID(), tc.Runtime->AllocateEdgeActor());
-
-    THolder<TEvTxProxySchemeCache::TEvNavigateKeySet> navigation;
-    TActorId navigationSender;
-    THolder<TEvResolveSecret> secretRequest;
-    tc.Runtime->RegisterService(
-        NSecret::MakeDescribeSchemaSecretServiceId(tc.Runtime->GetNodeId(0)),
-        tc.Runtime->Register(new TFakeSecretService(secretRequest))
-    );
-    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-        if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySet::EventType) {
-            navigationSender = ev->Sender;
-            navigation = ev->Release<TEvTxProxySchemeCache::TEvNavigateKeySet>();
-            return TTestActorRuntimeBase::EEventAction::DROP;
-        }
-        return TTestActorRuntimeBase::EEventAction::PROCESS;
-    });
-
-    auto mirror = MakeMirrorConfig();
-    mirror.MutableCredentials()->SetOauthTokenSecretName("/Root/describe-secret");
-    TControllableMirrorFactory factory;
-    StartDescriber(tc, factory, mirror, "/Root", "/Root/dst-topic");
-
-    UNIT_ASSERT(navigation);
-    UNIT_ASSERT_VALUES_EQUAL(navigation->Request->DatabaseName, "/Root");
-    auto response = MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(navigation->Request.Release());
-    auto& entry = response->Request->ResultSet.at(0);
-    entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
-    entry.SecurityObject = MakeIntrusive<TSecurityObject>("topic-owner@builtin", TString(), false);
-    tc.Runtime->Send(new IEventHandle(navigationSender, MakeSchemeCacheID(), response.Release()));
-    for (size_t i = 0; i < 100 && !secretRequest; ++i) {
-        DispatchFor(tc);
-    }
-
-    UNIT_ASSERT(secretRequest);
-    UNIT_ASSERT_VALUES_EQUAL(secretRequest->Database, "/Root");
-    UNIT_ASSERT_VALUES_EQUAL(secretRequest->SecretNames.front(), "/Root/describe-secret");
-    UNIT_ASSERT(secretRequest->UserToken);
-    UNIT_ASSERT_VALUES_EQUAL(secretRequest->UserToken->GetUserSID(), "topic-owner@builtin");
-    secretRequest->Promise.SetValue(NKqp::TEvDescribeSecretsResponse::TDescription({"resolved-oauth"}));
-    for (size_t i = 0; i < 100 && factory.CredCalls == 0; ++i) {
-        DispatchFor(tc);
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(factory.CredCalls, 1u);
-    UNIT_ASSERT_VALUES_EQUAL(factory.CredTokens.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(factory.CredTokens.front(), "resolved-oauth");
-    FireDescribeWakeup(tc);
-    UNIT_ASSERT_VALUES_EQUAL(factory.DescribeCalls, 1u);
-    const auto& credentials = factory.LastDescribeConfig.GetCredentials();
-    UNIT_ASSERT(credentials.HasOauthTokenSecretName());
-    UNIT_ASSERT_VALUES_EQUAL(credentials.GetOauthTokenSecretName(), "/Root/describe-secret");
-    UNIT_ASSERT(!credentials.HasOauthToken());
+    TSecretDescriberEnv env;
+    env.ResolveOwner();
+    env.ResolveSecretAndExpectDescription("resolved-oauth");
 }
 
-Y_UNIT_TEST(PoisonIgnoresLateSecrets) {
+Y_UNIT_TEST(UnknownEventsAndPoisonPill) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);

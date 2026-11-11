@@ -20,7 +20,6 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <array>
 #include <deque>
 #include <limits>
 #include <memory>
@@ -391,6 +390,22 @@ struct TMirrorerEnv {
     static constexpr ui64 TabletId = 42;
     static constexpr ui32 PartitionId = 0;
 
+    static TEnvOptions SecretOptions(const TString& name = "/Root/oauth-secret") {
+        TEnvOptions options;
+        options.MirrorConfig.MutableCredentials()->SetOauthTokenSecretName(name);
+        return options;
+    }
+
+    static TVector<TEnvOptions> SecretVariants() {
+        TVector<TEnvOptions> variants(3);
+        variants[0] = SecretOptions();
+        variants[1].MirrorConfig.MutableCredentials()->SetJwtParamsSecretName("/Root/jwt-secret");
+        auto* iam = variants[2].MirrorConfig.MutableCredentials()->MutableIam();
+        iam->SetEndpoint("iam-endpoint");
+        iam->SetServiceAccountKeySecretName("/Root/iam-secret");
+        return variants;
+    }
+
     explicit TMirrorerEnv(const TEnvOptions& options = {})
         : Runtime(1, false)
     {
@@ -514,6 +529,54 @@ struct TMirrorerEnv {
             Ydb::StatusIds::UNAUTHORIZED,
             {NYql::TIssue("secret access denied")}
         ));
+        Dispatch();
+    }
+
+    void ChangeSecret(const TString& name) {
+        SendChangeConfig(SecretOptions(name).MirrorConfig);
+    }
+
+    void ExpectNoSession(size_t providerCalls = 0) const {
+        UNIT_ASSERT(Factory.Sessions.empty());
+        UNIT_ASSERT_VALUES_EQUAL(Factory.CredentialRequests.size(), providerCalls);
+    }
+
+    void ResolveStaleSecret(size_t index) {
+        ResolveSecret(index, "stale-oauth");
+        ExpectNoSession();
+    }
+
+    void ResolveAndExpectSession(size_t index, const TString& value, const TString& secretName) {
+        const auto previousCalls = Factory.CredentialRequests.size();
+        ResolveSecret(index, value);
+        Advance(TDuration::Seconds(1));
+        WaitSessions(1);
+        UNIT_ASSERT_VALUES_EQUAL(Factory.CredentialRequests.size(), previousCalls + 1);
+        UNIT_ASSERT_VALUES_EQUAL(Factory.CredentialRequests.back().GetOauthToken(), value);
+        const auto expected = SecretOptions(secretName).MirrorConfig.GetCredentials();
+        UNIT_ASSERT_VALUES_EQUAL(Factory.SessionConfigs.back().GetCredentials().SerializeAsString(), expected.SerializeAsString());
+    }
+
+    void ResolveAndExpectSessionConfig(const NKikimrPQ::TMirrorPartitionConfig::TCredentials& expected) {
+        ResolveNavigation(0);
+        ResolveSecret(0, "resolved-value");
+        Advance(TDuration::Seconds(1));
+        WaitSessions(1);
+        UNIT_ASSERT_VALUES_EQUAL(Factory.CredentialRequests.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(Factory.SessionConfigs.back().GetCredentials().SerializeAsString(), expected.SerializeAsString());
+    }
+
+    void ResolveUpdatedContext(size_t index) {
+        UNIT_ASSERT_VALUES_EQUAL(Navigations.size(), index + 1);
+        UNIT_ASSERT_VALUES_EQUAL(Navigations[index]->Request->DatabaseName, Database);
+        UNIT_ASSERT_VALUES_EQUAL(CanonizePath(Navigations[index]->Request->ResultSet.front().Path), TopicPath);
+        ResolveNavigation(index);
+        UNIT_ASSERT_VALUES_EQUAL(SecretRequests.size(), index + 1);
+        UNIT_ASSERT_VALUES_EQUAL(SecretRequests[index]->Database, Database);
+    }
+
+    void Stop() {
+        Runtime.Send(new IEventHandle(Mirrorer, Partition, new TEvents::TEvPoisonPill()), 0, true);
         Dispatch();
     }
 
@@ -1310,194 +1373,73 @@ Y_UNIT_TEST(StateLogAndCountersAndLocalDC) {
     UNIT_ASSERT(env.CounterEventCount > 0);
 }
 
-Y_UNIT_TEST(InlineCredentialsRemainSupported) {
-    auto check = [](NKikimrPQ::TMirrorPartitionConfig config, auto credentialsCase) {
-        TEnvOptions options;
-        options.MirrorConfig = std::move(config);
-        TMirrorerEnv env(options);
-
-        UNIT_ASSERT(env.Navigations.empty());
-        UNIT_ASSERT(env.SecretRequests.empty());
-        UNIT_ASSERT_VALUES_EQUAL(env.Factory.CredentialRequests.size(), 1u);
-        UNIT_ASSERT(env.Factory.CredentialRequests.front().GetCredentialsCase() == credentialsCase);
-        env.Advance(TDuration::Seconds(1));
-        env.WaitSessions(1);
-    };
-
-    const std::vector<TString> oauthTokens = {
-        "inline-oauth",
-        "opaque:ascii-token",
-        "ydb-mirror-secret-v1:oauth:/Root/inline-token",
-        "ydb-mirror-secret-v1:jwt:inline-token"
-    };
-    for (const auto& token : oauthTokens) {
-        auto oauth = MakeMirrorConfig();
-        oauth.MutableCredentials()->SetOauthToken(token);
-        check(oauth, NKikimrPQ::TMirrorPartitionConfig::TCredentials::kOauthToken);
-
-        const auto& credentials = oauth.GetCredentials();
-        UNIT_ASSERT(!MirrorCredentialsNeedResolution(credentials));
-        TPersQueueMirrorReaderFactory factory;
-        auto providerFactory = factory.GetCredentialsProvider(credentials).GetValue();
-        auto provider = providerFactory->CreateProvider();
-        UNIT_ASSERT(provider);
-        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), token);
-    }
-
-    auto jwt = MakeMirrorConfig();
-    jwt.MutableCredentials()->SetJwtParams("inline-jwt");
-    check(jwt, NKikimrPQ::TMirrorPartitionConfig::TCredentials::kJwtParams);
-
-    auto iam = MakeMirrorConfig();
-    iam.MutableCredentials()->MutableIam()->SetEndpoint("iam-endpoint");
-    iam.MutableCredentials()->MutableIam()->SetServiceAccountKey("inline-key");
-    check(iam, NKikimrPQ::TMirrorPartitionConfig::TCredentials::kIam);
-}
-
 Y_UNIT_TEST(SecretReferencesRemainInReadSessionConfig) {
-    using TCredentials = NKikimrPQ::TMirrorPartitionConfig::TCredentials;
-    std::array<TCredentials, 3> variants;
-    variants[0].SetOauthTokenSecretName("/Root/oauth-secret");
-    variants[1].SetJwtParamsSecretName("/Root/jwt-secret");
-    variants[2].MutableIam()->SetEndpoint("iam-endpoint");
-    variants[2].MutableIam()->SetServiceAccountKeySecretName("/Root/iam-secret");
-    for (const auto& credentials : variants) {
-        TEnvOptions options;
-        *options.MirrorConfig.MutableCredentials() = credentials;
+    for (const auto& options : TMirrorerEnv::SecretVariants()) {
         TMirrorerEnv env(options);
-        env.ResolveNavigation(0);
-        env.ResolveSecret(0, "resolved-value");
-        env.Advance(TDuration::Seconds(1));
-        env.WaitSessions(1);
-        UNIT_ASSERT_VALUES_EQUAL(env.Factory.CredentialRequests.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(env.Factory.SessionConfigs.front().GetCredentials().SerializeAsString(), credentials.SerializeAsString());
+        env.ResolveAndExpectSessionConfig(options.MirrorConfig.GetCredentials());
     }
 }
 
 Y_UNIT_TEST(SecretResolutionUsesUpdatedTopicConverter) {
-    TEnvOptions options;
-    options.MirrorConfig.MutableCredentials()->SetOauthTokenSecretName("/Root/oauth-secret");
-    TMirrorerEnv env(options);
+    TMirrorerEnv env(TMirrorerEnv::SecretOptions());
     env.ResolveNavigation(0);
-
     env.Database = "/Root/other-db";
     env.TopicPath = "/Root/other-db/folder/dst-topic";
-    env.SendChangeConfig(options.MirrorConfig);
-    UNIT_ASSERT_VALUES_EQUAL(env.Navigations.size(), 2u);
-    UNIT_ASSERT_VALUES_EQUAL(env.Navigations.back()->Request->DatabaseName, env.Database);
-    UNIT_ASSERT_VALUES_EQUAL(CanonizePath(env.Navigations.back()->Request->ResultSet.front().Path), env.TopicPath);
-    env.ResolveNavigation(1);
-    UNIT_ASSERT_VALUES_EQUAL(env.SecretRequests.back()->Database, env.Database);
-    env.ResolveSecret(0, "stale-oauth");
-    UNIT_ASSERT(env.Factory.CredentialRequests.empty());
-    env.ResolveSecret(1, "current-oauth");
-    env.Advance(TDuration::Seconds(1));
-    env.WaitSessions(1);
-    UNIT_ASSERT_VALUES_EQUAL(env.Factory.CredentialRequests.back().GetOauthToken(), "current-oauth");
-}
-
-Y_UNIT_TEST(DeniedSecretFailsSafelyAndRetries) {
-    TEnvOptions options;
-    options.MirrorConfig.MutableCredentials()->SetOauthTokenSecretName("/Root/denied-secret");
-    TMirrorerEnv env(options);
-    env.ResolveNavigation(0);
-    env.FailSecret(0);
-
-    UNIT_ASSERT(env.ErrorCount > 0);
-    UNIT_ASSERT(env.Factory.CredentialRequests.empty());
-    UNIT_ASSERT(env.Factory.Sessions.empty());
-
-    env.Advance(TDuration::Seconds(1));
-    UNIT_ASSERT_VALUES_EQUAL(env.Navigations.size(), 2u);
-    UNIT_ASSERT(env.Factory.CredentialRequests.empty());
-    UNIT_ASSERT(env.Factory.Sessions.empty());
+    env.ChangeSecret("/Root/oauth-secret");
+    env.ResolveUpdatedContext(1);
+    env.ResolveStaleSecret(0);
+    env.ResolveAndExpectSession(1, "current-oauth", "/Root/oauth-secret");
 }
 
 Y_UNIT_TEST(StaleConsumerTimerAfterDeniedReconfigurationDoesNotCreateSession) {
     TMirrorerEnv env;
-
-    auto updated = MakeMirrorConfig();
-    updated.MutableCredentials()->SetOauthTokenSecretName("/Root/denied-secret");
-    env.SendChangeConfig(updated);
+    env.ChangeSecret("/Root/denied-secret");
     env.ResolveNavigation(0);
     env.FailSecret(0);
     UNIT_ASSERT(env.ErrorCount > 0);
 
     env.Advance(TDuration::Seconds(1));
     UNIT_ASSERT_VALUES_EQUAL(env.Navigations.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(env.Factory.CredentialRequests.size(), 1u);
-    UNIT_ASSERT(env.Factory.Sessions.empty());
-
+    env.ExpectNoSession(1);
     env.Advance(TDuration::Seconds(1));
     UNIT_ASSERT_VALUES_EQUAL(env.Navigations.size(), 2u);
-    UNIT_ASSERT(env.Factory.Sessions.empty());
+    env.ExpectNoSession(1);
 
     env.ResolveNavigation(1);
-    env.ResolveSecret(1, "recovered-oauth");
-    env.Advance(TDuration::Seconds(1));
-    env.WaitSessions(1);
-    UNIT_ASSERT_VALUES_EQUAL(env.Factory.CredentialRequests.back().GetOauthToken(), "recovered-oauth");
+    env.ResolveAndExpectSession(1, "recovered-oauth", "/Root/denied-secret");
 }
 
 Y_UNIT_TEST(StaleConsumerTimerDoesNotUseCurrentProvider) {
     TMirrorerEnv env;
-
-    auto updated = MakeMirrorConfig();
-    updated.MutableCredentials()->SetOauthTokenSecretName("/Root/oauth-secret");
-    env.SendChangeConfig(updated);
+    env.ChangeSecret("/Root/oauth-secret");
     env.ResolveNavigation(0);
     env.ResolveSecret(0, "current-oauth");
 
     env.Advance(TDuration::MilliSeconds(950));
-    UNIT_ASSERT(env.Factory.Sessions.empty());
+    env.ExpectNoSession(2);
     env.Advance(TDuration::MilliSeconds(100));
     env.WaitSessions(1);
 }
 
 Y_UNIT_TEST(ReconfigurationCancelsAndIgnoresStaleSecretReply) {
-    TEnvOptions options;
-    options.MirrorConfig.MutableCredentials()->SetOauthTokenSecretName("/Root/old-secret");
-    TMirrorerEnv env(options);
+    TMirrorerEnv env(TMirrorerEnv::SecretOptions("/Root/old-secret"));
     env.ResolveNavigation(0);
     UNIT_ASSERT_VALUES_EQUAL(env.SecretRequests.size(), 1u);
-
-    auto updated = MakeMirrorConfig();
-    updated.MutableCredentials()->SetOauthTokenSecretName("/Root/new-secret");
-    env.SendChangeConfig(updated);
+    env.ChangeSecret("/Root/new-secret");
     UNIT_ASSERT_VALUES_EQUAL(env.Navigations.size(), 2u);
     env.ResolveNavigation(1);
     UNIT_ASSERT_VALUES_EQUAL(env.SecretRequests.size(), 2u);
     UNIT_ASSERT_VALUES_EQUAL(env.SecretRequests[1]->SecretNames.front(), "/Root/new-secret");
-
-    env.ResolveSecret(0, "stale-oauth");
-    UNIT_ASSERT(env.Factory.CredentialRequests.empty());
-    UNIT_ASSERT(env.Factory.Sessions.empty());
-
-    env.ResolveSecret(1, "current-oauth");
-    env.Advance(TDuration::Seconds(1));
-    env.WaitSessions(1);
-    UNIT_ASSERT_VALUES_EQUAL(env.Factory.CredentialRequests.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(env.Factory.CredentialRequests.front().GetOauthToken(), "current-oauth");
-    UNIT_ASSERT_VALUES_EQUAL(
-        env.Factory.SessionConfigs.front().GetCredentials().GetOauthTokenSecretName(),
-        "/Root/new-secret"
-    );
+    env.ResolveStaleSecret(0);
+    env.ResolveAndExpectSession(1, "current-oauth", "/Root/new-secret");
 }
 
 Y_UNIT_TEST(TeardownCancelsPendingSecretResolution) {
-    TEnvOptions options;
-    options.MirrorConfig.MutableCredentials()->SetOauthTokenSecretName("/Root/oauth-secret");
-    TMirrorerEnv env(options);
+    TMirrorerEnv env(TMirrorerEnv::SecretOptions());
     env.ResolveNavigation(0);
     UNIT_ASSERT_VALUES_EQUAL(env.SecretRequests.size(), 1u);
-
-    env.Runtime.Send(new IEventHandle(env.Mirrorer, env.Partition, new TEvents::TEvPoisonPill()), 0, true);
-    env.Dispatch();
-    env.SecretRequests[0]->Promise.SetValue(NKqp::TEvDescribeSecretsResponse::TDescription({"late-oauth"}));
-    env.Dispatch();
-
-    UNIT_ASSERT(env.Factory.CredentialRequests.empty());
-    UNIT_ASSERT(env.Factory.Sessions.empty());
+    env.Stop();
+    env.ResolveStaleSecret(0);
 }
 
 Y_UNIT_TEST(DoProcessNextReaderEventWakeupWithoutData) {

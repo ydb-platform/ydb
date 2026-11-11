@@ -78,6 +78,19 @@ struct TCredentialsEnv {
         UNIT_ASSERT(SecretRequest);
     }
 
+    void ResolveOwnerAndCheckRequest(const TString& secretName) {
+        UNIT_ASSERT(Navigation);
+        UNIT_ASSERT_VALUES_EQUAL(Navigation->Request->DatabaseName, "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(CanonizePath(Navigation->Request->ResultSet.front().Path), "/Root/dst-topic");
+        UNIT_ASSERT(!Factory.Received);
+        ResolveOwner();
+        UNIT_ASSERT_VALUES_EQUAL(SecretRequest->Database, "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(SecretRequest->SecretNames.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(SecretRequest->SecretNames.front(), secretName);
+        UNIT_ASSERT(SecretRequest->UserToken);
+        UNIT_ASSERT_VALUES_EQUAL(SecretRequest->UserToken->GetUserSID(), "topic-owner@builtin");
+    }
+
     void ResolveSecret(const TString& value) {
         SecretRequest->Promise.SetValue(NKqp::TEvDescribeSecretsResponse::TDescription({value}));
         auto response = Runtime.GrabEdgeEvent<TEvPQ::TEvCredentialsCreated>(Edge);
@@ -97,38 +110,25 @@ Y_UNIT_TEST_SUITE(TMirrorerCredentials) {
 
 Y_UNIT_TEST(UnresolvedSecretReferencesCannotCreateProviders) {
     TPersQueueMirrorReaderFactory factory;
-    auto check = [&factory](const NKikimrPQ::TMirrorPartitionConfig::TCredentials& credentials) {
-        UNIT_ASSERT(MirrorCredentialsNeedResolution(credentials));
-        UNIT_ASSERT(factory.GetCredentialsProvider(credentials).HasException());
-    };
-
     NKikimrPQ::TMirrorPartitionConfig::TCredentials oauth;
     oauth.SetOauthTokenSecretName("/Root/oauth-secret");
-    check(oauth);
 
     NKikimrPQ::TMirrorPartitionConfig::TCredentials jwt;
     jwt.SetJwtParamsSecretName("/Root/jwt-secret");
-    check(jwt);
 
     NKikimrPQ::TMirrorPartitionConfig::TCredentials iam;
     iam.MutableIam()->SetServiceAccountKeySecretName("/Root/iam-secret");
-    check(iam);
+    for (const auto& credentials : {oauth, jwt, iam}) {
+        UNIT_ASSERT(MirrorCredentialsNeedResolution(credentials));
+        UNIT_ASSERT(factory.GetCredentialsProvider(credentials).HasException());
+    }
 }
 
 Y_UNIT_TEST(OAuthSecretResolvedWithTopicOwnerWithoutChangingInput) {
     TCredentials credentials;
     credentials.SetOauthTokenSecretName("/Root/oauth-secret");
     TCredentialsEnv env(credentials);
-    UNIT_ASSERT(env.Navigation);
-    UNIT_ASSERT_VALUES_EQUAL(env.Navigation->Request->DatabaseName, "/Root");
-    UNIT_ASSERT_VALUES_EQUAL(CanonizePath(env.Navigation->Request->ResultSet.front().Path), "/Root/dst-topic");
-    UNIT_ASSERT(!env.Factory.Received);
-    env.ResolveOwner();
-    UNIT_ASSERT_VALUES_EQUAL(env.SecretRequest->Database, "/Root");
-    UNIT_ASSERT_VALUES_EQUAL(env.SecretRequest->SecretNames.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(env.SecretRequest->SecretNames.front(), "/Root/oauth-secret");
-    UNIT_ASSERT(env.SecretRequest->UserToken);
-    UNIT_ASSERT_VALUES_EQUAL(env.SecretRequest->UserToken->GetUserSID(), "topic-owner@builtin");
+    env.ResolveOwnerAndCheckRequest("/Root/oauth-secret");
     env.ResolveSecret("resolved-oauth");
     UNIT_ASSERT_VALUES_EQUAL(env.Factory.Received->GetOauthToken(), "resolved-oauth");
     UNIT_ASSERT(!env.Factory.Received->HasOauthTokenSecretName());
@@ -145,7 +145,6 @@ Y_UNIT_TEST(JwtAndIamSecretsUseExistingCredentialFactories) {
         jwtEnv.ResolveSecret("resolved-jwt");
         UNIT_ASSERT_VALUES_EQUAL(jwtEnv.Factory.Received->GetJwtParams(), "resolved-jwt");
         UNIT_ASSERT_VALUES_EQUAL(jwt.GetJwtParamsSecretName(), "/Root/jwt-secret");
-
     }
     {
         TCredentials iam;

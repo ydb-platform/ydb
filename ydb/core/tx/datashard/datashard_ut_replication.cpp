@@ -1,4 +1,5 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include "const.h"
 #include "datashard_active_transaction.h"
 #include "datashard_ut_common_kqp.h"
 #include "datashard_user_table.h"
@@ -8,6 +9,8 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+
+#include <util/string/strip.h>
 
 namespace NKikimr {
 
@@ -682,6 +685,385 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleCommit(runtime, sessionId, txId, "SELECT key, value FROM `/Root/table-1`;"),
             "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
+    }
+
+    void WaitForContent(TServer::TPtr server, const TString& tablePath, const TString& expected) {
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            auto content = ReadShardedTable(server, tablePath);
+            if (StripInPlace(content) == expected) {
+                return;
+            }
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(StripString(ReadShardedTable(server, tablePath)), expected);
+    }
+
+    Y_UNIT_TEST(AsyncIndexFromRowConsistentBase) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
+            .Indexes({{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}})
+        );
+
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const TString indexPath = "/Root/table-1/by_value/indexImplTable";
+
+        ApplyChanges(server, shard, tableId, "source", {
+            TChange{.Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 11},
+        });
+        WaitForContent(server, indexPath, "value = 11, key = 1");
+
+        ApplyChanges(server, shard, tableId, "source", {
+            TChange{.Offset = 1, .WriteTxId = 0, .Key = 1, .Value = 22},
+        });
+        WaitForContent(server, indexPath, "value = 22, key = 1");
+
+        ApplyChanges(server, shard, tableId, "source", {
+            TChange{.Offset = 1, .WriteTxId = 0, .Key = 1, .Value = 11},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, indexPath), "value = 22, key = 1\n");
+
+        ApplyChanges(server, shard, tableId, "source", {
+            TChange{.Offset = 2, .WriteTxId = 0, .Key = 1, .Value = 0, .Operation = TChange::EOperation::Erase},
+        });
+        WaitForContent(server, indexPath, "");
+
+        ApplyChanges(server, shard, tableId, "source", {
+            TChange{.Offset = 3, .WriteTxId = 0, .Key = 1, .Value = 33, .Operation = TChange::EOperation::Reset},
+        });
+        WaitForContent(server, indexPath, "value = 33, key = 1");
+    }
+
+    Y_UNIT_TEST(AsyncIndexRejectsOversizedKeyAtomically) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "String", false, false},
+            })
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
+            .Indexes({{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}})
+        );
+
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const TString indexPath = "/Root/table-1/by_value/indexImplTable";
+
+        using TEvResult = NKikimrTxDataShard::TEvApplyReplicationChangesResult;
+        auto apply = [&](const TVector<TString>& values, TEvResult::EStatus expectedStatus, TEvResult::EReason expectedReason) {
+            auto request = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+            request->Record.SetSource("source");
+            for (ui32 i = 0; i < values.size(); ++i) {
+                auto* change = request->Record.AddChanges();
+                change->SetSourceOffset(i);
+                const TCell keyCell = TCell::Make(i + 1);
+                change->SetKey(TSerializedCellVec::Serialize({&keyCell, 1}));
+                auto* upsert = change->MutableUpsert();
+                upsert->AddTags(2);
+                const TCell valueCell(values[i].data(), values[i].size());
+                upsert->SetData(TSerializedCellVec::Serialize({&valueCell, 1}));
+            }
+
+            auto replyTo = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, replyTo, request.Release(), 0, GetPipeConfigWithRetries());
+            auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(replyTo);
+            const auto status = result->Get()->Record.GetStatus();
+            UNIT_ASSERT_C(status == expectedStatus,
+                "Unexpected status " << TEvResult::EStatus_Name(status)
+                << ", expected " << TEvResult::EStatus_Name(expectedStatus));
+            const auto reason = result->Get()->Record.GetReason();
+            UNIT_ASSERT_C(reason == expectedReason,
+                "Unexpected reason " << TEvResult::EReason_Name(reason)
+                << ", expected " << TEvResult::EReason_Name(expectedReason));
+        };
+
+        apply({"ok", TString(NLimits::MaxWriteKeySize + 1, 'x')}, TEvResult::STATUS_REJECTED, TEvResult::REASON_BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, indexPath), "");
+
+        RebootTablet(runtime, shard, sender);
+        apply({"ok"}, TEvResult::STATUS_OK, TEvResult::REASON_NONE);
+        UNIT_ASSERT_C(!ReadShardedTable(server, "/Root/table-1").empty(), "The rejected batch advanced the source offset");
+    }
+
+    Y_UNIT_TEST_QUAD(AsyncIndexOversizedSnapshotReplay, GlobalConsistency, Reboot) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"a", "String", false, false},
+                {"b", "String", false, false},
+                {"payload", "String", false, false},
+            })
+            .Replicated(true)
+            .ReplicationConsistencyLevel(GlobalConsistency ? EConsistencyLevel::Global : EConsistencyLevel::Row)
+            .Indexes({
+                {"by_ab", {"a", "b"}, {"payload"}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+                {"by_payload", {"payload"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+            })
+        );
+
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const TString indexPath = "/Root/table-1/by_ab/indexImplTable";
+        const TString otherIndexPath = "/Root/table-1/by_payload/indexImplTable";
+        const TString large(630000, 'L');
+        using TChangeProto = NKikimrTxDataShard::TEvApplyReplicationChanges::TChange;
+        using TEvResult = NKikimrTxDataShard::TEvApplyReplicationChangesResult;
+
+        const auto makeChange = [&](i64 offset, ui32 key, const TVector<std::pair<ui32, TString>>& values, bool erase = false) {
+            TChangeProto change;
+            change.SetSourceOffset(offset);
+            change.SetWriteTxId(GlobalConsistency ? 100 + offset : 0);
+            const TCell keyCell = TCell::Make(key);
+            change.SetKey(TSerializedCellVec::Serialize({&keyCell, 1}));
+            if (erase) {
+                change.MutableErase();
+            } else {
+                auto* upsert = change.MutableUpsert();
+                TVector<TCell> cells;
+                for (const auto& [tag, value] : values) {
+                    upsert->AddTags(tag);
+                    cells.emplace_back(value.data(), value.size());
+                }
+                upsert->SetData(TSerializedCellVec::Serialize(cells));
+            }
+            return change;
+        };
+        const auto apply = [&](const TVector<TChangeProto>& changes, bool reject = false) {
+            auto request = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+            request->Record.SetSource("source");
+            for (const auto& change : changes) {
+                request->Record.AddChanges()->CopyFrom(change);
+            }
+            const auto replyTo = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, replyTo, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(replyTo);
+            const auto& record = result->Get()->Record;
+            UNIT_ASSERT_C(record.GetStatus() == (reject ? TEvResult::STATUS_REJECTED : TEvResult::STATUS_OK),
+                record.ShortDebugString());
+            UNIT_ASSERT_C(record.GetReason() == (reject ? TEvResult::REASON_BAD_REQUEST : TEvResult::REASON_NONE),
+                record.ShortDebugString());
+        };
+        const auto commit = [&](i64 offset) {
+            if (GlobalConsistency) {
+                CommitWrites(server, {"/Root/table-1"}, 100 + offset);
+            }
+        };
+        const auto reboot = [&] {
+            if (Reboot) {
+                RebootTablet(runtime, shard, sender);
+            }
+        };
+
+        // The restored snapshot already contains the later source state (S, L).
+        apply({makeChange(0, 1, {{2, "S"}, {3, large}, {4, "snapshot"}})});
+        commit(0);
+        const TString snapshotIndex = TStringBuilder() << "a = S, b = " << large << ", key = 1, payload = snapshot";
+        WaitForContent(server, indexPath, snapshotIndex);
+
+        // Explicit oversized keys must still reject the entire batch, including
+        // its valid prefix and source offsets, even with an existing pre-image.
+        apply({makeChange(1, 1, {{4, "rejected"}}), makeChange(2, 1, {{2, large}, {3, large}})}, true);
+        apply({makeChange(1, 1, {{2, TString(NLimits::MaxWriteKeySize + 1, 'X')}})}, true);
+        reboot();
+        WaitForContent(server, indexPath, snapshotIndex);
+        WaitForContent(server, otherIndexPath, "payload = snapshot, key = 1");
+
+        // An older partial update creates (L, L) only on the destination.
+        apply({makeChange(1, 1, {{2, large}})});
+        WaitForContent(server, indexPath, "");
+        reboot();
+
+        // Covered-column changes and other indexes must continue to work while
+        // this key is omitted. GLOBAL writes are still uncommitted at this point.
+        apply({makeChange(2, 1, {{4, "intermediate"}})});
+        WaitForContent(server, otherIndexPath, "payload = intermediate, key = 1");
+        WaitForContent(server, indexPath, "");
+        if (!GlobalConsistency) {
+            UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+                TStringBuilder() << "key = 1, a = " << large << ", b = " << large << ", payload = intermediate\n");
+        }
+        reboot();
+
+        // A partial update restores a valid key without deleting the oversized
+        // one. Duplicate delivery must not revert the covered columns.
+        apply({makeChange(3, 1, {{2, "S"}, {4, "recovered"}})});
+        apply({makeChange(2, 1, {{4, "duplicate"}})});
+        const TString recoveredIndex = TStringBuilder() << "a = S, b = " << large << ", key = 1, payload = recovered";
+        WaitForContent(server, indexPath, recoveredIndex);
+        WaitForContent(server, otherIndexPath, "payload = recovered, key = 1");
+        for (i64 offset = 1; offset <= 3; ++offset) {
+            commit(offset);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+            TStringBuilder() << "key = 1, a = S, b = " << large << ", payload = recovered\n");
+
+        // Deleting an omitted key must also work after restart. A following row
+        // proves that no oversized deletion has blocked the index sender.
+        apply({makeChange(4, 1, {{2, large}})});
+        WaitForContent(server, indexPath, "");
+        reboot();
+        apply({makeChange(5, 1, {}, true), makeChange(6, 2, {{2, "M"}, {3, "M"}, {4, "marker"}})});
+        WaitForContent(server, indexPath, "a = M, b = M, key = 2, payload = marker");
+        WaitForContent(server, otherIndexPath, "payload = marker, key = 2");
+        for (i64 offset = 4; offset <= 6; ++offset) {
+            commit(offset);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+            "key = 2, a = M, b = M, payload = marker\n");
+    }
+
+    Y_UNIT_TEST(AsyncIndexFromGloballyConsistentBase) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Global)
+            .Indexes({{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}})
+        );
+
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const TString indexPath = "/Root/table-1/by_value/indexImplTable";
+
+        ApplyChanges(server, shard, tableId, "source", {
+            TChange{.Offset = 0, .WriteTxId = 123, .Key = 1, .Value = 11},
+        });
+        WaitForContent(server, indexPath, "value = 11, key = 1");
+        RebootTablet(*server->GetRuntime(), shard, sender);
+
+        ApplyChanges(server, shard, tableId, "source", {
+            TChange{.Offset = 1, .WriteTxId = 234, .Key = 1, .Value = 22},
+        });
+        WaitForContent(server, indexPath, "value = 22, key = 1");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "");
+
+        CommitWrites(server, {"/Root/table-1"}, 123);
+        CommitWrites(server, {"/Root/table-1"}, 234);
+        WaitForContent(server, indexPath, "value = 22, key = 1");
+    }
+
+    Y_UNIT_TEST(AsyncIndexNewSourceAfterPageFault) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
+            .ExecutorCacheSize(1)
+            .Indexes({{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}})
+        );
+
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const TString indexPath = "/Root/table-1/by_value/indexImplTable";
+
+        ApplyChanges(server, shard, tableId, "first", {
+            TChange{.Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 11},
+        });
+        WaitForContent(server, indexPath, "value = 11, key = 1");
+
+        CompactTable(*server->GetRuntime(), shard, tableId, false);
+        RebootTablet(*server->GetRuntime(), shard, sender);
+        ApplyChanges(server, shard, tableId, "second", {
+            TChange{.Offset = 1, .WriteTxId = 0, .Key = 1, .Value = 22},
+        });
+        WaitForContent(server, indexPath, "value = 22, key = 1");
+
+        RebootTablet(*server->GetRuntime(), shard, sender);
+        ApplyChanges(server, shard, tableId, "second", {
+            TChange{.Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 33},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 22\n");
+        WaitForContent(server, indexPath, "value = 22, key = 1");
+    }
+
+    Y_UNIT_TEST(AsyncIndexRejectsChangeQueueOverflow) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetChangesQueueItemsLimit(1);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
+            .Indexes({{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}})
+        );
+
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const TString indexPath = "/Root/table-1/by_value/indexImplTable";
+
+        NActors::TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> blockedEnqueueRecords(runtime);
+
+        ApplyChanges(server, shard, tableId, "source", {
+            TChange{.Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 11},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(blockedEnqueueRecords.size(), 1u);
+
+        using TEvResult = NKikimrTxDataShard::TEvApplyReplicationChangesResult;
+        ApplyChanges(server, shard, tableId, "source", {
+            TChange{.Offset = 1, .WriteTxId = 0, .Key = 1, .Value = 22},
+        }, TEvResult::STATUS_REJECTED, TEvResult::REASON_OVERLOADED);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 11\n");
+
+        blockedEnqueueRecords.Stop().Unblock();
+        WaitForContent(server, indexPath, "value = 11, key = 1");
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        ApplyChanges(server, shard, tableId, "source", {
+            TChange{.Offset = 1, .WriteTxId = 0, .Key = 1, .Value = 22},
+        });
+        WaitForContent(server, indexPath, "value = 22, key = 1");
     }
 
     // The batch must not be applied until the sequence has been advanced past its values: the

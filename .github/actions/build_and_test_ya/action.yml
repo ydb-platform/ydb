@@ -1214,6 +1214,29 @@ runs:
       run: |
         set +e
         set -x
+        # Publish shard progress runs after this composite action and still needs
+        # report.json / last_report.json. Keep only those files outside TMP_DIR;
+        # logs and ya out trees are already on S3.
+        if [ -n "${PUBLIC_DIR:-}" ] && [ -d "${PUBLIC_DIR}" ]; then
+          KEEP_DIR="${GITHUB_WORKSPACE}/.ya_public_reports"
+          rm -rf "$KEEP_DIR"
+          mkdir -p "$KEEP_DIR"
+          if [ -f "${PUBLIC_DIR}/last_report.json" ]; then
+            cp -p "${PUBLIC_DIR}/last_report.json" "$KEEP_DIR/last_report.json"
+          fi
+          for try_dir in "${PUBLIC_DIR}"/try_*; do
+            [ -d "$try_dir" ] || continue
+            base=$(basename "$try_dir")
+            mkdir -p "$KEEP_DIR/$base"
+            if [ -f "$try_dir/report.json" ]; then
+              cp -p "$try_dir/report.json" "$KEEP_DIR/$base/report.json"
+            fi
+          done
+          echo "PUBLIC_DIR=$KEEP_DIR" >> "$GITHUB_ENV"
+          echo "LAST_BUILD_RESULTS_REPORT=$KEEP_DIR/last_report.json" >> "$GITHUB_ENV"
+          echo "Preserved ya reports for publish under $KEEP_DIR"
+          find "$KEEP_DIR" -type f -printf '%p %s\n' || find "$KEEP_DIR" -type f -exec ls -la {} \;
+        fi
         if [ -n "${TMP_DIR:-}" ]; then
           rm -rf "$TMP_DIR"
         fi

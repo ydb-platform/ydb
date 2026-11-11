@@ -922,6 +922,17 @@ jobs:
           fi
           report="${LAST_BUILD_RESULTS_REPORT:-}"
           count=$(python3 -c 'import json; print(json.load(open("test-graph/shard_plan.json"))["shard_count"])')
+          report_url=""
+          report_json_url=""
+          # PUBLIC_DIR may be reports-only after build_and_test_ya cleanup; S3 still has HTML.
+          if [ -n "${PUBLIC_DIR_URL:-}" ]; then
+            first_try=$(ls -1d "${PUBLIC_DIR:-}"/try_* 2>/dev/null | sort -V | head -n 1 || true)
+            last_try=$(ls -1d "${PUBLIC_DIR:-}"/try_* 2>/dev/null | sort -V | tail -n 1 || true)
+            first_base=$(basename "${first_try:-try_1}")
+            last_base=$(basename "${last_try:-try_1}")
+            report_url="${PUBLIC_DIR_URL}/${first_base}/ya-test.html"
+            report_json_url="${PUBLIC_DIR_URL}/${last_base}/report.json"
+          fi
           python3 .github/scripts/tests/shard_progress.py publish \
             --pr "$PR_NUMBER" \
             --run-id "$GITHUB_RUN_ID" \
@@ -939,6 +950,8 @@ jobs:
             --log-prefix "shard_${SHARD_ID}" \
             --report "$report" \
             --reports-dir "${PUBLIC_DIR:-}" \
+            --report-url "$report_url" \
+            --report-json-url "$report_json_url" \
             --state-output shard_event.json \
             --summary-file "$GITHUB_STEP_SUMMARY"
       - name: Upload shard result

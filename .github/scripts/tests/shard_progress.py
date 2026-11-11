@@ -1162,7 +1162,22 @@ def _event_state(args: argparse.Namespace) -> dict[str, Any]:
     if getattr(args, "combined_url", ""):
         base["combined_url"] = args.combined_url
     reports_dir = getattr(args, "reports_dir", "") or ""
-    report = resolve_report(reports_dir=reports_dir, report_path=args.report)
+    report_path = getattr(args, "report", "") or ""
+    report = resolve_report(reports_dir=reports_dir, report_path=report_path)
+    tries = load_tries(reports_dir)
+    counts = counts_from_report(report)
+    if not counts.get("tests"):
+        dir_note = reports_dir or "<empty>"
+        report_note = report_path or "<empty>"
+        exists_dir = os.path.isdir(reports_dir) if reports_dir else False
+        exists_report = os.path.isfile(report_path) if report_path else False
+        print(
+            "warning: publish saw 0 tests "
+            f"(reports_dir={dir_note!r} is_dir={exists_dir}; "
+            f"report={report_note!r} is_file={exists_report}; "
+            f"tries={sorted(tries)})",
+            file=sys.stderr,
+        )
     return apply_shard(
         base,
         shard_id=args.shard_id,
@@ -1175,8 +1190,8 @@ def _event_state(args: argparse.Namespace) -> dict[str, Any]:
         run_url=args.run_url,
         build=args.build_result,
         tests=args.test_result,
-        counts=counts_from_report(report),
-        tries=load_tries(reports_dir),
+        counts=counts,
+        tries=tries,
         report_url=getattr(args, "report_url", "") or "",
         report_json_url=getattr(args, "report_json_url", "") or "",
     )

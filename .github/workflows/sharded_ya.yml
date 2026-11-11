@@ -237,15 +237,15 @@ jobs:
         report_json_url=""
         combined_html=""
         combined_url=""
-        if [ -n "${PUBLIC_DIR:-}" ] && [ -n "${PUBLIC_DIR_URL:-}" ]; then
-          first_try=$(ls -1d "$PUBLIC_DIR"/try_* 2>/dev/null | sort -V | head -n 1 || true)
-          last_try=$(ls -1d "$PUBLIC_DIR"/try_* 2>/dev/null | sort -V | tail -n 1 || true)
-          if [ -n "$first_try" ] && [ -f "$first_try/ya-test.html" ]; then
-            report_url="${PUBLIC_DIR_URL}/$(basename "$first_try")/ya-test.html"
-          fi
-          if [ -n "$last_try" ] && [ -f "$last_try/report.json" ]; then
-            report_json_url="${PUBLIC_DIR_URL}/$(basename "$last_try")/report.json"
-          fi
+        # PUBLIC_DIR may be reports-only after build_and_test_ya cleanup; URLs still
+        # point at the full S3 tree (ya-test.html lives there even if not local).
+        if [ -n "${PUBLIC_DIR_URL:-}" ]; then
+          first_try=$(ls -1d "${PUBLIC_DIR:-}"/try_* 2>/dev/null | sort -V | head -n 1 || true)
+          last_try=$(ls -1d "${PUBLIC_DIR:-}"/try_* 2>/dev/null | sort -V | tail -n 1 || true)
+          first_base=$(basename "${first_try:-try_1}")
+          last_base=$(basename "${last_try:-try_1}")
+          report_url="${PUBLIC_DIR_URL}/${first_base}/ya-test.html"
+          report_json_url="${PUBLIC_DIR_URL}/${last_base}/report.json"
           case "$PUBLIC_DIR_URL" in
             */shard_${SHARD_ID})
               combined_url="${PUBLIC_DIR_URL%/shard_${SHARD_ID}}/combined"

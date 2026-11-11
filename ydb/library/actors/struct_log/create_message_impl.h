@@ -121,7 +121,7 @@ public:
             // By default, Out<T> can't write classes with ToString() method. (see TStateStorageInfo as example)
             // Because of this, OutputParam must be able to process various standard containers, variants, tuples, etc...
             s << value.ToString();
-        }  else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
+        } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
             // YDB uses several ways to store/pass optional values (see TOptionalTraits<T> below).
             // So, it is required to process optional data using this OutputParam<TValue> (instead of Out<T>).
             if (value) {

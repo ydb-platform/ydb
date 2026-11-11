@@ -50,7 +50,6 @@ struct TNativePlainTypeSupport : public std::true_type
     static constexpr inline TLength ValueLength = sizeof(T);
 
     static inline void Serialize(const T& value, TBinaryData& data) {
-
         // Write contents
         auto oldSize = data.size();
         data.resize(oldSize + ValueLength);

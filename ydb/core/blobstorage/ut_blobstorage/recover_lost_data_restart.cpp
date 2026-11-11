@@ -184,23 +184,29 @@ void TestRollingWipe(bool delaySelf) {
     env.Sim(TDuration::Minutes(1));
     const ui32 groupId = env.GetGroups().front();
     const auto info = env.GetGroupInfo(groupId);
-    const TString data(1024, 'W');
-    TLogoBlobID blob(1, 1, 1, 0, data.size(), 0);
-    TBlobStorageGroupInfo::TOrderNums subgroup;
-    do {
-        blob = TLogoBlobID(1, 1, blob.Step() + 1, 0, data.size(), 0);
-        info->GetTopology().PickSubgroup(blob.Hash(), subgroup);
-    } while (info->GetActorId(subgroup.front()).NodeId() == env.Settings.ControllerNodeId);
-    const ui32 unavailableOrder = subgroup.front();
+    ui32 unavailableOrder = 0;
+    while (info->GetActorId(unavailableOrder).NodeId() == env.Settings.ControllerNodeId) {
+        ++unavailableOrder;
+    }
     const TVDiskID unavailableDisk = info->GetVDiskId(unavailableOrder);
     const TActorId unavailableActor = info->GetActorId(unavailableOrder);
     const ui32 unavailableNode = unavailableActor.NodeId();
     env.StopNode(unavailableNode);
-    env.PutBlob(groupId, blob, data);
+    const ui64 tabletId = 1;
+    const ui32 blockedGeneration = 42;
+    const TActorId blockEdge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
+    env.Runtime->WrapInActorContext(blockEdge, [&] {
+        SendToBSProxy(blockEdge, groupId, new TEvBlobStorage::TEvBlock(tabletId, blockedGeneration, TInstant::Max()));
+    });
+    const auto block = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(blockEdge);
+    UNIT_ASSERT_VALUES_EQUAL(block->Get()->Status, NKikimrProto::OK);
     env.Sim(TDuration::Seconds(30));
 
     std::set<ui32> recoveredNodes;
     std::optional<NSyncer::EDecision> decision;
+    std::vector<std::unique_ptr<IEventHandle>> delayedReplies;
+    ui32 surveyReplies = 0;
+    bool holdingReplies = true;
     bool returning = false;
     env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
         const ui32 type = ev->GetTypeRewrite();
@@ -214,10 +220,12 @@ void TestRollingWipe(bool delaySelf) {
             if (type == TEvBlobStorage::EvVDiskGuidObtained) {
                 const ui32 order = info->GetOrderNumber(ev->Get<TEvVDiskGuidObtained>()->VDiskId);
                 // Select the first survey quorum without changing any reply contents.
-                if (delaySelf ? order == unavailableOrder :
-                        order == (unavailableOrder + 1) % 8 || order == (unavailableOrder + 2) % 8) {
+                if (holdingReplies && (delaySelf ? order == unavailableOrder :
+                        order == (unavailableOrder + 1) % 8 || order == (unavailableOrder + 2) % 8)) {
+                    delayedReplies.push_back(std::move(ev));
                     return false;
                 }
+                ++surveyReplies;
             } else if (type == TEvBlobStorage::EvVDiskGuidRecovered) {
                 decision = ev->Get<TEvVDiskGuidRecovered>()->Outcome.Decision;
             }
@@ -248,6 +256,11 @@ void TestRollingWipe(bool delaySelf) {
 
     returning = true;
     env.StartNode(unavailableNode);
+    waitUntil([&] { return surveyReplies >= 6; }, "Returning VDisk must receive a survey quorum");
+    holdingReplies = false;
+    for (auto& reply : delayedReplies) {
+        env.Runtime->Send(reply.release(), unavailableNode);
+    }
     waitUntil([&] { return decision.has_value(); }, "Returning VDisk must reach a GUID decision");
     UNIT_ASSERT_C(*decision == NSyncer::EDecision::Good, NSyncer::EDecisionToStr(*decision));
     waitUntil([&] { return recoveredNodes.contains(unavailableNode); }, "Returning VDisk must start");
@@ -255,17 +268,14 @@ void TestRollingWipe(bool delaySelf) {
     env.WaitForVDiskRepl(unavailableActor, unavailableDisk);
     env.Runtime->FilterFunction = {};
 
-    // The blob was written while this VDisk was offline. Read its own main part directly.
+    // Query this VDisk directly: a group-proxy reply can hide its missing Block metadata.
     const TActorId queue = env.CreateQueueActor(unavailableDisk, NKikimrBlobStorage::GetFastRead, 0);
     const TActorId edge = env.Runtime->AllocateEdgeActor(unavailableNode);
-    auto query = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(unavailableDisk, TInstant::Max(),
-        NKikimrBlobStorage::FastRead);
-    query->AddExtremeQuery(TLogoBlobID(blob, 1), 0, 0);
-    env.Runtime->Send(new IEventHandle(queue, edge, query.release()), unavailableNode);
-    auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge);
+    env.Runtime->Send(new IEventHandle(queue, edge,
+        new TEvBlobStorage::TEvVGetBlock(tabletId, unavailableDisk, TInstant::Max())), unavailableNode);
+    auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetBlockResult>(edge);
     UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
-    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.ResultSize(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetResult(0).GetStatus(), NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetGeneration(), blockedGeneration);
 }
 
 } // namespace

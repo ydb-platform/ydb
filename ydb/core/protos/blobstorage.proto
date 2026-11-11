@@ -1810,3 +1810,15 @@ message TEvInterpilePutResult {
 
     repeated TItem Items = 1;
 }
+
+message TEvRunMirror3dcRepair {
+    optional uint32 GroupId = 1;
+    optional uint32 Generation = 2;
+    optional bool Cancel = 3;
+}
+
+message TEvRunMirror3dcRepairResult {
+    optional uint32 GroupId = 1;
+    optional uint32 Generation = 2;
+    optional NKikimrProto.EReplyStatus Status = 3;
+}

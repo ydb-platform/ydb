@@ -16,6 +16,8 @@ namespace NKikimr::NReplication::NController {
 
 namespace {
 
+using TFamily = NKikimrReplication::TSchemaChange::TFamily;
+
 bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
     if (!schema.HasVersion() || !schema.GetSourceSchemaVersion()) {
         return false;
@@ -36,11 +38,13 @@ bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
                 return false;
             }
 
-            if (family.HasCompressionLevel()
-                && (family.GetCompression() != NKikimrReplication::TSchemaChange::TFamily::COMPRESSION_ZSTD
-                    || family.GetCompressionLevel() > static_cast<ui32>(ZSTD_maxCLevel())))
-            {
-                return false;
+            if (family.HasCompressionLevel()) {
+                if (family.GetCompression() != TFamily::COMPRESSION_ZSTD) {
+                    return false;
+                }
+                if (family.GetCompressionLevel() > static_cast<ui32>(ZSTD_maxCLevel())) {
+                    return false;
+                }
             }
 
             if (family.HasMedia() && family.GetMedia().empty()) {

@@ -8,6 +8,8 @@
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -2974,14 +2976,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         auto compressed = describeTable("/MyRoot/Table1");
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(compressed.GetPathDescription().GetTable().GetPartitionConfig()
-            .GetColumnFamilies(0).GetColumnCodec()), static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
-        UNIT_ASSERT_VALUES_EQUAL(compressed.GetPathDescription().GetTable().GetPartitionConfig()
-            .GetColumnFamilies(0).GetColumnCodecLevel(), 7);
+        const auto& compressedFamily =
+            compressed.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(compressedFamily.GetColumnCodec()),
+            static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
+        UNIT_ASSERT_VALUES_EQUAL(compressedFamily.GetColumnCodecLevel(), 7);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
         UNIT_ASSERT_VALUES_EQUAL(compressed.DebugString(), describeTable("/MyRoot/Table1").DebugString());
 
-        for (const i32 level : {0, 22}) {
+        const auto maxLevel = ZSTD_maxCLevel();
+        for (const i32 level : {0, maxLevel}) {
             TestAlterTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"_(
                 Name: "Table1"
                 PartitionConfig { ColumnFamilies { Id: 0 ColumnCodecLevel: )_" << level << " } }");
@@ -2995,7 +2999,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
             UNIT_ASSERT_VALUES_EQUAL(described.DebugString(), describeTable("/MyRoot/Table1").DebugString());
         }
-        for (const i32 level : {-1, 23}) {
+        for (const i32 level : {-1, maxLevel + 1}) {
             TestAlterTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"_(
                 Name: "Table1"
                 PartitionConfig { ColumnFamilies { Id: 0 ColumnCodecLevel: )_" << level << " } }",

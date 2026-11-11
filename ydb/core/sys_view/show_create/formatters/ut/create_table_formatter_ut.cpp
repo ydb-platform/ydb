@@ -8,6 +8,8 @@
 
 #include <util/string/builder.h>
 
+#include <optional>
+
 namespace NKikimr::NSysView {
 namespace {
 
@@ -32,6 +34,24 @@ TTableDescription MakeTableDescription() {
     cover->SetTypeId(NScheme::NTypeIds::Uint32);
     table.AddKeyColumnIds(1);
     table.AddKeyColumnNames("key");
+    return table;
+}
+
+TTableDescription MakeTableWithColumnFamilies(EColumnCodec codec, std::optional<i32> level = std::nullopt) {
+    auto table = MakeTableDescription();
+    table.MutableColumns(1)->SetFamily(1);
+    table.MutableColumns(1)->SetFamilyName("archive");
+    for (ui32 id : {0, 1}) {
+        auto* family = table.MutablePartitionConfig()->AddColumnFamilies();
+        family->SetId(id);
+        if (id) {
+            family->SetName("archive");
+        }
+        family->SetColumnCodec(codec);
+        if (level) {
+            family->SetColumnCodecLevel(*level);
+        }
+    }
     return table;
 }
 
@@ -96,18 +116,7 @@ void AssertQueryEqual(TFormatResult result, const TString& expected) {
 Y_UNIT_TEST_SUITE(CreateTableFormatter) {
     Y_UNIT_TEST(ZstdColumnFamilyCompressionLevels) {
         for (const i32 level : {0, 7, 22}) {
-            auto table = MakeTableDescription();
-            table.MutableColumns(1)->SetFamily(1);
-            table.MutableColumns(1)->SetFamilyName("archive");
-            for (ui32 id : {0, 1}) {
-                auto* family = table.MutablePartitionConfig()->AddColumnFamilies();
-                family->SetId(id);
-                if (id) {
-                    family->SetName("archive");
-                }
-                family->SetColumnCodec(ColumnCodecZSTD);
-                family->SetColumnCodecLevel(level);
-            }
+            auto table = MakeTableWithColumnFamilies(ColumnCodecZSTD, level);
 
             TCreateTableFormatter formatter;
             AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}),
@@ -126,17 +135,7 @@ Y_UNIT_TEST_SUITE(CreateTableFormatter) {
             {ColumnCodecZSTD, "zstd"},
         };
         for (const auto& [codec, compression] : cases) {
-            auto table = MakeTableDescription();
-            table.MutableColumns(1)->SetFamily(1);
-            table.MutableColumns(1)->SetFamilyName("archive");
-            for (ui32 id : {0, 1}) {
-                auto* family = table.MutablePartitionConfig()->AddColumnFamilies();
-                family->SetId(id);
-                if (id) {
-                    family->SetName("archive");
-                }
-                family->SetColumnCodec(codec);
-            }
+            auto table = MakeTableWithColumnFamilies(codec);
 
             TCreateTableFormatter formatter;
             AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}),

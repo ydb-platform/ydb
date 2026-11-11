@@ -56,6 +56,7 @@ TFamilySettings TFamilySettings::FromProto(const NKikimrSchemeOp::TFamilyDescrip
         ? TFamily::CACHE_MODE_IN_MEMORY
         : TFamily::CACHE_MODE_REGULAR;
     auto compression = TFamily::COMPRESSION_UNSPECIFIED;
+    std::optional<ui32> compressionLevel;
     switch (GetColumnCodec(*family)) {
         case NKikimrSchemeOp::ColumnCodecPlain:
             compression = TFamily::COMPRESSION_OFF;
@@ -65,15 +66,14 @@ TFamilySettings TFamilySettings::FromProto(const NKikimrSchemeOp::TFamilyDescrip
             break;
         case NKikimrSchemeOp::ColumnCodecZSTD:
             compression = TFamily::COMPRESSION_ZSTD;
+            compressionLevel = family->HasColumnCodecLevel() ? ui32(family->GetColumnCodecLevel()) : 1u;
             break;
     }
     return {
         .Media = media,
         .Compression = compression,
         .CacheMode = cacheMode,
-        .CompressionLevel = compression == TFamily::COMPRESSION_ZSTD
-            ? std::make_optional(family->HasColumnCodecLevel() ? ui32(family->GetColumnCodecLevel()) : 1u)
-            : std::nullopt,
+        .CompressionLevel = compressionLevel,
     };
 }
 

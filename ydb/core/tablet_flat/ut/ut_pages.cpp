@@ -60,16 +60,15 @@ namespace {
             auto got = NPage::TLabelWrapper().Read(*raw, NPage::EPage::Undef);
 
             if (got.Type != NPage::EPage::DataPage) {
-                /* Have to check for compression only rows page */
-            } else {
-                UNIT_ASSERT(got.Codec == codec);
-                if (codec == NPage::ECodec::ZSTD) {
-                    const NPage::TDataPage decoded(raw);
-                    const TStringBuf plain(decoded.GetData().data() + 16, decoded.GetData().size() - 16);
-                    const TString expected = NBlockCodecs::Codec(
-                        "zstd_" + ToString(codecLevel ? codecLevel : ZSTD_defaultCLevel()))->Encode(plain);
-                    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(got.Page.data(), got.Page.size()), expected);
-                }
+                continue;
+            }
+            UNIT_ASSERT(got.Codec == codec);
+            if (codec == NPage::ECodec::ZSTD) {
+                const NPage::TDataPage decoded(raw);
+                const TStringBuf plain(decoded.GetData().data() + 16, decoded.GetData().size() - 16);
+                const TString expected = NBlockCodecs::Codec(
+                    "zstd_" + ToString(codecLevel ? codecLevel : ZSTD_defaultCLevel()))->Encode(plain);
+                UNIT_ASSERT_VALUES_EQUAL(TStringBuf(got.Page.data(), got.Page.size()), expected);
             }
         }
 
@@ -93,7 +92,7 @@ Y_UNIT_TEST_SUITE(NPage) {
 
     Y_UNIT_TEST(EncodedZstd)
     {
-        for (ui32 level : {0u, 1u, 2u, 3u, 10u, 22u}) {
+        for (ui32 level : {0u, 1u, 2u, 3u, 10u, static_cast<ui32>(ZSTD_maxCLevel())}) {
             CheckEncoded(NPage::ECodec::ZSTD, level);
         }
     }
@@ -102,7 +101,7 @@ Y_UNIT_TEST_SUITE(NPage) {
     {
         NPage::TZstdPageCodec encoder;
         const auto* decoder = NPage::GetBlockCodec(NPage::ECodec::ZSTD);
-        for (ui32 level : {0u, 22u, 1u, 7u}) {
+        for (ui32 level : {0u, static_cast<ui32>(ZSTD_maxCLevel()), 1u, 7u}) {
             encoder.SetCompressionLevel(level);
             const auto* originalCodec = NBlockCodecs::Codec(
                 "zstd_" + ToString(level ? level : ZSTD_defaultCLevel()));
@@ -158,7 +157,7 @@ Y_UNIT_TEST_SUITE(NPage) {
             conf.Group(group).PageRows = 1;
         }
         conf.Group(1).CodecLevel = 0;
-        conf.Group(4).CodecLevel = 22;
+        conf.Group(4).CodecLevel = ZSTD_maxCLevel();
 
         TCheckIter wrap(TPartCook(lay, conf).Add(first).Add(second).Finish(), { });
         wrap.To(1).Has(first).Next().Has(second).Next().Is(EReady::Gone);

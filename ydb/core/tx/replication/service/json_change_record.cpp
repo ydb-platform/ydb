@@ -21,6 +21,13 @@ namespace NKikimr::NReplication::NService {
 
 namespace {
 
+bool IsSupportedSetting(TStringBuf setting) {
+    return setting == "data"
+        || setting == "compression"
+        || setting == "compressionLevel"
+        || setting == "cacheMode";
+}
+
 // NJson::ReadJson does not expose kParseFullPrecisionFlag, and its RapidJSON
 // callback adapter is private to the JSON library. This local bridge lets
 // replication parse CDC doubles exactly while retaining the existing schema
@@ -500,9 +507,7 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
             }
 
             for (const auto& [setting, value] : definition.GetMap()) {
-                if (setting != "data" && setting != "compression" && setting != "compressionLevel"
-                    && setting != "cacheMode")
-                {
+                if (!IsSupportedSetting(setting)) {
                     error = TStringBuilder() << "unsupported setting '" << setting << "' in column family " << name;
                     return false;
                 }

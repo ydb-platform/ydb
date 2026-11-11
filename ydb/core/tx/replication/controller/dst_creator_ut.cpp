@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
@@ -1107,7 +1109,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(ZstdColumnFamilyCompressionLevelMismatch) {
-        for (const i32 level : {0, 7, 22}) {
+        for (const i32 level : {0, 7, ZSTD_maxCLevel()}) {
             ExistingDstFamily("Column family compression level mismatch", [](auto& destination) {
                 destination.MutablePartitionConfig()->MutableColumnFamilies(0)->ClearColumnCodecLevel();
             }, NKikimrSchemeOp::ColumnCodecZSTD, level);
@@ -1129,7 +1131,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(ZstdColumnFamilyCompressionLevelMatches) {
-        for (const i32 level : {0, 7, 22}) {
+        for (const i32 level : {0, 7, ZSTD_maxCLevel()}) {
             ExistingDstFamily({}, [](auto&) {}, NKikimrSchemeOp::ColumnCodecZSTD, level);
         }
     }

@@ -29,13 +29,15 @@ namespace {
 
 using TFamily = NKikimrReplication::TSchemaChange::TFamily;
 
+bool IsSupportedCodec(NKikimrSchemeOp::EColumnCodec codec) {
+    return codec == NKikimrSchemeOp::ColumnCodecPlain
+        || codec == NKikimrSchemeOp::ColumnCodecLZ4
+        || codec == NKikimrSchemeOp::ColumnCodecZSTD;
+}
+
 bool HasSupportedFamilySettings(const NKikimrSchemeOp::TFamilyDescription& family) {
     if (family.HasColumnCodec()) {
-        const auto codec = family.GetColumnCodec();
-        if (codec != NKikimrSchemeOp::ColumnCodecPlain
-                && codec != NKikimrSchemeOp::ColumnCodecLZ4
-                && codec != NKikimrSchemeOp::ColumnCodecZSTD)
-        {
+        if (!IsSupportedCodec(family.GetColumnCodec())) {
             return false;
         }
     } else if (family.GetCodec() > 1) {
@@ -195,10 +197,8 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             }
         }
 
-        if (expectedSettings.CompressionLevel
-                && (!actual || actualSettings.CompressionLevel != expectedSettings.CompressionLevel))
-        {
-            changed->SetColumnCodecLevel(*expectedSettings.CompressionLevel);
+        if (const auto level = expectedSettings.CompressionLevel; level && level != actualSettings.CompressionLevel) {
+            changed->SetColumnCodecLevel(*level);
         }
 
         if (!actual || actualSettings.CacheMode != expectedSettings.CacheMode) {

@@ -300,9 +300,9 @@ TEST(TableTest, ZstdColumnFamilyRequests) {
     ASSERT_TRUE(createFuture.ExtractValueSync().IsSuccess());
     ASSERT_TRUE(tableService.LastCreateTableRequest.has_value());
     ASSERT_EQ(tableService.LastCreateTableRequest->column_families_size(), 1);
-    EXPECT_EQ(tableService.LastCreateTableRequest->column_families(0).compression(),
-              Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
-    EXPECT_EQ(tableService.LastCreateTableRequest->column_families(0).compression_level(), 7);
+    const auto& createdFamily = tableService.LastCreateTableRequest->column_families(0);
+    EXPECT_EQ(createdFamily.compression(), Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+    EXPECT_EQ(createdFamily.compression_level(), 7);
 
     auto alterFuture = tableSession->AlterTable(
         "/Root/My/DB/test_table",
@@ -318,14 +318,14 @@ TEST(TableTest, ZstdColumnFamilyRequests) {
     ASSERT_TRUE(alterFuture.ExtractValueSync().IsSuccess());
     ASSERT_TRUE(tableService.LastAlterTableRequest.has_value());
     ASSERT_EQ(tableService.LastAlterTableRequest->add_column_families_size(), 1);
-    EXPECT_EQ(tableService.LastAlterTableRequest->add_column_families(0).compression(),
-              Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
-    EXPECT_EQ(tableService.LastAlterTableRequest->add_column_families(0).compression_level(), 22);
+    const auto& addedFamily = tableService.LastAlterTableRequest->add_column_families(0);
+    EXPECT_EQ(addedFamily.compression(), Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+    EXPECT_EQ(addedFamily.compression_level(), 22);
     ASSERT_EQ(tableService.LastAlterTableRequest->alter_column_families_size(), 1);
-    EXPECT_EQ(tableService.LastAlterTableRequest->alter_column_families(0).compression(),
-              Ydb::Table::ColumnFamily::COMPRESSION_UNSPECIFIED);
-    ASSERT_TRUE(tableService.LastAlterTableRequest->alter_column_families(0).has_compression_level());
-    EXPECT_EQ(tableService.LastAlterTableRequest->alter_column_families(0).compression_level(), 0);
+    const auto& alteredFamily = tableService.LastAlterTableRequest->alter_column_families(0);
+    EXPECT_EQ(alteredFamily.compression(), Ydb::Table::ColumnFamily::COMPRESSION_UNSPECIFIED);
+    ASSERT_TRUE(alteredFamily.has_compression_level());
+    EXPECT_EQ(alteredFamily.compression_level(), 0);
 }
 
 TEST(TableTest, FulltextSuperLemmerAnalyzerRoundTrip) {

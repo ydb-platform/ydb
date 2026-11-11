@@ -192,9 +192,12 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         auto &family = tableInfo.Families[delta.GetFamilyId()];
 
         auto codec = delta.HasCodec() ? CodecFromProto(delta.GetCodec()) : family.Codec;
-        const ui32 codecLevel = delta.HasCodecLevel()
-            ? delta.GetCodecLevel()
-            : delta.HasCodec() ? 1 : family.CodecLevel;
+        ui32 codecLevel = family.CodecLevel;
+        if (delta.HasCodecLevel()) {
+            codecLevel = delta.GetCodecLevel();
+        } else if (delta.HasCodec()) {
+            codecLevel = 1;
+        }
         Y_ENSURE(codecLevel <= static_cast<ui32>(ZSTD_maxCLevel()), "Invalid page compression level " << codecLevel);
         Y_ENSURE(codec == NPage::ECodec::ZSTD || codecLevel == 1,
             "Compression level is only supported for ZSTD");

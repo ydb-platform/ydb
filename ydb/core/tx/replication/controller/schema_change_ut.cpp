@@ -25,6 +25,7 @@
 #include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/scope.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
@@ -3719,16 +3720,12 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
             UNIT_ASSERT_VALUES_EQUAL(
                 release->Get()->Record.GetSchema().SerializeAsString(), levelOnly.SerializeAsString());
             const auto updated = env.GetDescription("/Root/replica1");
-            bool found = false;
-            for (const auto& family :
-                    updated.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies())
-            {
-                if (family.GetName() == "archive") {
-                    found = true;
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetColumnCodecLevel(), 9);
-                }
-            }
-            UNIT_ASSERT(found);
+            const auto& families = updated.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies();
+            const auto* archive = FindIfPtr(families, [](const auto& family) {
+                return family.GetName() == "archive";
+            });
+            UNIT_ASSERT(archive);
+            UNIT_ASSERT_VALUES_EQUAL(archive->GetColumnCodecLevel(), 9);
             CompleteSchemaChange(env, controllerId, worker, levelOnly);
         }
 

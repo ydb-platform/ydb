@@ -66,10 +66,11 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
         const TUserTable altered(original, delta);
         NKikimrSchemeOp::TTableDescription persisted;
         altered.GetSchema(persisted);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(persisted.GetPartitionConfig().GetColumnFamilies(0).GetColumnCodec()),
+        const auto& persistedFamily = persisted.GetPartitionConfig().GetColumnFamilies(0);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(persistedFamily.GetColumnCodec()),
             static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
-        UNIT_ASSERT(persisted.GetPartitionConfig().GetColumnFamilies(0).HasColumnCodecLevel());
-        UNIT_ASSERT_VALUES_EQUAL(persisted.GetPartitionConfig().GetColumnFamilies(0).GetColumnCodecLevel(), 0);
+        UNIT_ASSERT(persistedFamily.HasColumnCodecLevel());
+        UNIT_ASSERT_VALUES_EQUAL(persistedFamily.GetColumnCodecLevel(), 0);
         const TUserTable restored(1, persisted, 0);
         UNIT_ASSERT(restored.Families.at(0).Codec == NTable::NPage::ECodec::ZSTD);
         UNIT_ASSERT_VALUES_EQUAL(restored.Families.at(0).GetCodecLevel(), 0);

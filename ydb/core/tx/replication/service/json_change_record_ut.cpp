@@ -12,6 +12,8 @@
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/testlib/helpers.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -22,6 +24,7 @@
 
 #include <cmath>
 #include <limits>
+#include <optional>
 
 namespace NKikimr::NReplication::NService {
 
@@ -824,7 +827,7 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         UNIT_ASSERT_VALUES_EQUAL(firstSchema.SerializeAsString(), secondSchema.SerializeAsString());
     }
 
-    void CheckSchemaChangeColumnFamilies(bool zstd) {
+    Y_UNIT_TEST_TWIN(SchemaChangeColumnFamilies, Zstd) {
         auto record = TChangeRecordBuilder()
             .WithBody(TStringBuilder() << R"json({
                 "ts": [10, 20],
@@ -840,7 +843,7 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
                             "default": {"compression": "off", "cacheMode": "regular"},
                             "archive": {
                                 "data": {"media": "ssd"},
-                                "compression": ")json" << (zstd ? "zstd" : "lz4") << R"json(",
+                                "compression": ")json" << (Zstd ? "zstd" : "lz4") << R"json(",
                                 "cacheMode": "in_memory"
                             }
                         }
@@ -855,48 +858,44 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).GetName(), "archive");
         UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).GetMedia(), "ssd");
         UNIT_ASSERT(schema.GetFamilies(0).GetCompression()
-            == (zstd ? TFamily::COMPRESSION_ZSTD : TFamily::COMPRESSION_LZ4));
+            == (Zstd ? TFamily::COMPRESSION_ZSTD : TFamily::COMPRESSION_LZ4));
         UNIT_ASSERT(schema.GetFamilies(0).GetCacheMode() == TFamily::CACHE_MODE_IN_MEMORY);
         UNIT_ASSERT(schema.GetFamilies(1).GetCompression() == TFamily::COMPRESSION_OFF);
         UNIT_ASSERT(schema.GetFamilies(1).GetCacheMode() == TFamily::CACHE_MODE_REGULAR);
         UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(1).GetFamily(), "archive");
     }
 
-    Y_UNIT_TEST(SchemaChangeColumnFamilies) {
-        CheckSchemaChangeColumnFamilies(false);
-    }
-
-    Y_UNIT_TEST(SchemaChangeZstdColumnFamilies) {
-        CheckSchemaChangeColumnFamilies(true);
-    }
-
     Y_UNIT_TEST(SchemaChangeZstdCompressionLevels) {
-        for (const int level : {-1, 0, 1, 22}) {
+        const std::optional<int> levels[] = {std::nullopt, 0, 1, ZSTD_maxCLevel()};
+        for (const auto level : levels) {
             TStringBuilder body;
             body << R"json({"ts":[10,20],"tableChanges":[{"table":{
                 "schemaVersion":3,"primaryKeyColumnNames":["key"],
                 "columns":{"key":{"type":"Uint64","family":"default"}},
                 "columnFamilies":{"default":{"compression":"zstd","cacheMode":"regular"
             )json";
-            if (level >= 0) {
-                body << ",\"compressionLevel\":" << level;
+            if (level) {
+                body << ",\"compressionLevel\":" << *level;
             }
             body << "}}}}]}";
             auto record = TChangeRecordBuilder().WithBody(body).Build();
             NKikimrReplication::TSchemaChange schema;
             TString error;
             UNIT_ASSERT_C(record->TryGetSchemaChange(schema, error), error);
-            UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).HasCompressionLevel(), level >= 0);
-            UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).GetCompressionLevel(), level >= 0 ? level : 1);
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).HasCompressionLevel(), level.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetFamilies(0).GetCompressionLevel(), level.value_or(1));
         }
     }
 
     Y_UNIT_TEST(SchemaChangeRejectsInvalidCompressionLevels) {
-        const std::pair<TStringBuf, TStringBuf> cases[] = {
-            {R"("compression":"zstd","compressionLevel":-1)", "must be between 0 and 22: -1"},
-            {R"("compression":"zstd","compressionLevel":23)", "must be between 0 and 22: 23"},
+        const auto maxLevel = ZSTD_maxCLevel();
+        const TString rangeError = TStringBuilder() << "must be between 0 and " << maxLevel << ": ";
+        const std::pair<TString, TString> cases[] = {
+            {R"("compression":"zstd","compressionLevel":-1)", rangeError + "-1"},
+            {TStringBuilder() << R"("compression":"zstd","compressionLevel":)" << maxLevel + 1,
+                TStringBuilder() << rangeError << maxLevel + 1},
             {R"("compression":"zstd","compressionLevel":18446744073709551615)",
-                "must be between 0 and 22: 18446744073709551615"},
+                rangeError + "18446744073709551615"},
             {R"("compression":"zstd","compressionLevel":"1")", "must be an integer"},
             {R"("compression":"zstd","compressionLevel":1.5)", "must be an integer"},
             {R"("compression":"lz4","compressionLevel":1)", "is only supported for ZSTD"},

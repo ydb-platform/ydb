@@ -914,11 +914,12 @@ namespace NTable {
 
                 Current.Bytes += raw.size(); /* before encoding */
 
-                if (g.Codec == NPage::ECodec::Plain) {
-                    /* Encoding was not enabled, keep as is */
-                } else if (keep = Encode(raw, g.Codec, g.CodecLevel, g.ForceCompression)) {
-                    std::swap(raw, keep);
-                    Current.ZstdCompressed |= g.Codec == ECodec::ZSTD;
+                if (g.Codec != ECodec::Plain) {
+                    keep = Encode(raw, g.Codec, g.CodecLevel, g.ForceCompression);
+                    if (keep) {
+                        std::swap(raw, keep);
+                        Current.ZstdCompressed |= g.Codec == ECodec::ZSTD;
+                    }
                 }
 
                 Current.Coded += raw.size(); /* after encoding */

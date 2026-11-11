@@ -39,6 +39,8 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #include <library/cpp/threading/local_executor/local_executor.h>
 
 #include <util/generic/serialized_enum.h>
@@ -3941,22 +3943,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
         checkLevels({{"default", std::nullopt}, {"archive", 0}});
 
-        auto alter = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+        const auto maxLevel = ZSTD_maxCLevel();
+        auto alter = ExecuteGeneric<UseQueryService>(queryClient, session, TStringBuilder() << R"sql(
             ALTER TABLE `/Root/ZstdCompressionLevels`
                 ALTER FAMILY default SET COMPRESSION_LEVEL 5,
-                ALTER FAMILY archive SET COMPRESSION_LEVEL 22,
+                ALTER FAMILY archive SET COMPRESSION_LEVEL )sql" << maxLevel << R"sql(,
                 ADD FAMILY cold (COMPRESSION = "zstd", COMPRESSION_LEVEL = 1);
         )sql");
         UNIT_ASSERT_VALUES_EQUAL_C(alter.GetStatus(), EStatus::SUCCESS, alter.GetIssues().ToString());
-        checkLevels({{"default", 5}, {"archive", 22}, {"cold", 1}});
+        checkLevels({{"default", 5}, {"archive", maxLevel}, {"cold", 1}});
 
-        for (const auto level : {-1, 23}) {
+        for (const auto level : {-1, maxLevel + 1}) {
             auto invalid = ExecuteGeneric<UseQueryService>(queryClient, session, TStringBuilder()
                 << "ALTER TABLE `/Root/ZstdCompressionLevels` ALTER FAMILY archive SET COMPRESSION_LEVEL "
                 << level << ";");
             UNIT_ASSERT_C(!invalid.IsSuccess(), invalid.GetIssues().ToString());
         }
-        checkLevels({{"default", 5}, {"archive", 22}, {"cold", 1}});
+        checkLevels({{"default", 5}, {"archive", maxLevel}, {"cold", 1}});
 
         auto clear = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
             ALTER TABLE `/Root/ZstdCompressionLevels` ALTER FAMILY archive SET COMPRESSION "off";

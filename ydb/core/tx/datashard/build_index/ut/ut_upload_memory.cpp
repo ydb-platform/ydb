@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         fixture.Reply(NKikimrIndexBuilder::DONE);
     }
 
-    Y_UNIT_TEST_TWIN(RejectedBrokerSubmissionRetriesWithoutFinishingUnknownTask, ExpiredOwner) {
+    Y_UNIT_TEST(RejectedBrokerSubmissionRetriesWithoutFinishingUnknownTask) {
         TAdmissionFixture fixture;
         using TBroker = NResourceBroker::TEvResourceBroker;
         bool rejectSubmissions = true;
@@ -298,11 +298,6 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
             if (event->Get()->Task.Type == "build_index" && rejectSubmissions) {
                 client = event->Sender;
                 rejectedTaskIds.insert(event->Get()->Task.TaskId);
-                if constexpr (ExpiredOwner) {
-                    // Exercise the broker's real expired-owner rejection while
-                    // keeping the executor alive to process its reply.
-                    event->Get()->Task.OwnerLease = std::weak_ptr<void>{};
-                }
             }
         });
         auto finished = fixture.Runtime.AddObserver<TBroker::TEvFinishTask>([&](auto& event) {
@@ -315,16 +310,15 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
                 ++errors;
             }
         });
-        if constexpr (!ExpiredOwner) {
-            auto event = MakeHolder<TBroker::TEvConfigure>();
-            event->Merge = true;
-            auto* queue = event->Record.AddQueues();
-            queue->SetName("queue_build_index");
-            queue->MutableLimit()->SetMemory(1);
-            fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender, event.Release()));
-            const auto reply = fixture.Runtime.GrabEdgeEventRethrow<TBroker::TEvConfigureResult>(fixture.Sender);
-            UNIT_ASSERT(reply->Get()->Record.GetSuccess());
-        }
+        auto event = MakeHolder<TBroker::TEvConfigure>();
+        event->Merge = true;
+        auto* queue = event->Record.AddQueues();
+        queue->SetName("queue_build_index");
+        queue->MutableLimit()->SetMemory(1);
+        fixture.Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), fixture.Sender, event.Release()));
+        const auto reply = fixture.Runtime.GrabEdgeEventRethrow<TBroker::TEvConfigureResult>(fixture.Sender);
+        UNIT_ASSERT(reply->Get()->Record.GetSuccess());
+
         fixture.Send(fixture.Shards[0]);
         const auto retry = fixture.Reply(NKikimrIndexBuilder::ABORTED);
         UNIT_ASSERT_GT(retry->Get()->Record.GetRetryAfterMs(), 0);
@@ -335,8 +329,8 @@ Y_UNIT_TEST_SUITE(TVectorIndexUploadMemory) {
         // Drain any extra cleanup/error round trip after the rejection replies.
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
         UNIT_ASSERT_VALUES_EQUAL(finishes, 0);
-        UNIT_ASSERT_VALUES_EQUAL(errors, ExpiredOwner ? 2 : 1);
-        UNIT_ASSERT_VALUES_EQUAL(rejectedTaskIds.size(), ExpiredOwner ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(errors, 1);
+        UNIT_ASSERT_VALUES_EQUAL(rejectedTaskIds.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Usage().Count, 0);
         rejectSubmissions = false;
         fixture.SetMemoryBudget(512_MB, 448_MB);

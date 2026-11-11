@@ -579,6 +579,11 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
+        // Cancellation is idempotent: the owner may disappear before submit
+        // is processed, or before its rejection is delivered.
+        if (cancel) {
+            return TTerminateTaskResult(true, nullptr);
+        }
         YDB_LOG_DEBUG_CTX(as, "FinishTask failed: cannot finish unknown task",
             {"taskId", taskId},
             {"client", ToString(client)});

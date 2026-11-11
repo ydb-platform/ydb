@@ -1371,6 +1371,112 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         bool& Finished;
     };
 
+    Y_UNIT_TEST_TWIN(CancelledInitialSubmissionDoesNotReportCleanupError, Timeout) {
+        for (const bool beforeSubmit : {false, true}) {
+            TMyEnvScans env;
+            auto configure = [&](ui64 memory) {
+                auto event = MakeHolder<TEvResourceBroker::TEvConfigure>();
+                event->Merge = true;
+                auto* queue = event->Record.AddQueues();
+                queue->SetName("queue_build_index");
+                queue->SetWeight(1);
+                queue->SetStrictMemoryLimit(true);
+                queue->MutableLimit()->SetMemory(memory);
+                auto* task = event->Record.AddTasks();
+                task->SetName("build_index");
+                task->SetQueueName("queue_build_index");
+                task->SetDefaultDuration(TDuration::Seconds(1).GetValue());
+                env.SendEv(MakeResourceBrokerID(), event.Release());
+                UNIT_ASSERT(env->GrabEdgeEventRethrow<TEvResourceBroker::TEvConfigureResult>(env.Edge)->Get()->Record.GetSuccess());
+            };
+            configure(0);
+            TActorId client;
+            ui64 taskId = 0;
+            ui64 serial = 0;
+            ui32 finishes = 0;
+            ui32 unknownErrors = 0;
+            ui32 failures = 0;
+            ui32 constructed = 0;
+            bool finished = false;
+            auto submitted = env->AddObserver<TEvResourceBroker::TEvSubmitTask>([&](auto& event) {
+                if (event->Get()->Task.Type == "build_index") {
+                    client = event->Sender;
+                    taskId = event->Get()->Task.TaskId;
+                }
+            });
+            auto cleanup = env->AddObserver<TEvResourceBroker::TEvFinishTask>([&](auto& event) {
+                if (event->Sender == client && event->Get()->TaskId == taskId) {
+                    ++finishes;
+                }
+            });
+            auto errors = env->AddObserver<TEvResourceBroker::TEvTaskOperationError>([&](auto& event) {
+                if (event->Recipient == client && event->Get()->TaskId == taskId &&
+                    event->Get()->Status.Code == TEvResourceBroker::TStatus::UNKNOWN_TASK) {
+                    ++unknownErrors;
+                }
+            });
+            TBlockEvents<TEvResourceBroker::TEvSubmitTask> submissions(env.Env, [&](const auto& event) {
+                return beforeSubmit && event->Get()->Task.Type == "build_index";
+            });
+            TBlockEvents<TEvResourceBroker::TEvTaskOperationError> rejections(env.Env, [&](const auto& event) {
+                return !beforeSubmit && event->Recipient == client && event->Get()->TaskId == taskId &&
+                    event->Get()->Status.Code == TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED;
+            });
+            auto queueScan = [&] {
+                env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+                    TScanOptions options;
+                    options.SetResourceBroker("build_index", 10, 1_MB);
+                    options.QueueTimeout = TDuration::MilliSeconds(100);
+                    options.OnAdmissionFailure = [&](const TString& reason, bool retry) {
+                        UNIT_ASSERT(Timeout);
+                        UNIT_ASSERT(retry);
+                        UNIT_ASSERT_VALUES_EQUAL(reason, "Timed out waiting for scan admission");
+                        ++failures;
+                    };
+                    options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                        ++constructed;
+                        return new TAdmissionReadyScan(finished);
+                    };
+                    serial = executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+                }));
+            };
+            queueScan();
+            env->WaitFor("initial submit or its rejection held", [&] {
+                return beforeSubmit ? !submissions.empty() : !rejections.empty();
+            });
+            if constexpr (Timeout) {
+                env->WaitFor("admission timeout erases the scan before rejection", [&] { return failures == 1; });
+            } else {
+                env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto& ctx) {
+                    UNIT_ASSERT(executor->CancelScan(TRowsModel::TableId, serial));
+                    ctx.Send(env.Edge, new TEvents::TEvWakeup);
+                }));
+                env.WaitForWakeUp();
+            }
+            env->WaitFor("erased scan sends cancellation", [&] { return finishes == 1; });
+            env->SimulateSleep(TDuration::MilliSeconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(unknownErrors, 0);
+            if (beforeSubmit) {
+                // This is the production expired-owner state: the executor
+                // has really released the lease while the submit is delayed.
+                UNIT_ASSERT(submissions.front()->Get()->Task.OwnerLease);
+                UNIT_ASSERT(submissions.front()->Get()->Task.OwnerLease->expired());
+            }
+            submissions.Stop().Unblock();
+            rejections.Stop().Unblock();
+            env->SimulateSleep(TDuration::MilliSeconds(100));
+            UNIT_ASSERT_VALUES_EQUAL(unknownErrors, beforeSubmit ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(finishes, 1);
+            UNIT_ASSERT_VALUES_EQUAL(failures, Timeout ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(constructed, 0);
+            UNIT_ASSERT(!finished);
+            configure(2_MB);
+            queueScan();
+            env->WaitFor("new scan succeeds after delayed rejection", [&] { return finished; });
+            UNIT_ASSERT_VALUES_EQUAL(constructed, 1);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(DeferredReadinessResumesOnlyLiveScans, Cancel) {
         TMyEnvScans env;
         bool ready = false;

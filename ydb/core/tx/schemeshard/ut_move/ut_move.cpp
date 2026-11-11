@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(Replace2) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
         ui64 txId = 100;
 
         auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
@@ -622,7 +622,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(ReplaceWithDifferentIndexNames) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
         ui64 txId = 100;
 
         auto initialDomainDesc = DescribePath(runtime, "/MyRoot");

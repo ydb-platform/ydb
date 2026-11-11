@@ -459,28 +459,6 @@ class HostCountTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             shard_graph.suite_p90_query("test_results/test_runs_column", "relwithdebinfo", "main;drop")
 
-    def test_resolve_suite_p90_falls_back_to_main_when_branch_is_empty(self) -> None:
-        calls: list[str] = []
-
-        def fake_load(build_type: str, branch: str):
-            calls.append(branch)
-            self.assertEqual(build_type, "relwithdebinfo")
-            if branch == "dev/feature":
-                return {}
-            if branch == "main":
-                return {"ydb/core/ut": {"small": 12.0}}
-            return {}
-
-        original = shard_graph.load_suite_p90
-        shard_graph.load_suite_p90 = fake_load  # type: ignore[assignment]
-        try:
-            found, used = shard_graph.resolve_suite_p90("relwithdebinfo", "dev/feature")
-        finally:
-            shard_graph.load_suite_p90 = original  # type: ignore[assignment]
-        self.assertEqual(used, "main")
-        self.assertEqual(found, {"ydb/core/ut": {"small": 12.0}})
-        self.assertEqual(calls, ["dev/feature", "main"])
-
 
 class ShardProgressTest(unittest.TestCase):
     def test_eta_is_unknown_until_the_first_result_and_done_at_the_end(self) -> None:

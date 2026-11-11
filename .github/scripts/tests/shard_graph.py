@@ -1191,37 +1191,6 @@ def load_suite_p90(build_type: str, branch: str) -> dict[str, dict[str, float]] 
     return found
 
 
-_HISTORY_FALLBACK_BRANCHES = ("main", "master")
-
-
-def resolve_suite_p90(
-    build_type: str, branch: str
-) -> tuple[dict[str, dict[str, float]] | None, str]:
-    """Load suite p90; if the checkout branch has no rows, fall back to main.
-
-    Feature-branch workflow_dispatch has almost no ``test_results`` history, so
-    packing would otherwise use timeout budgets only (Expected: 0.0 min).
-    """
-    primary = load_suite_p90(build_type, branch)
-    if primary is None:
-        return None, branch
-    if primary:
-        return primary, branch
-    for fallback in _HISTORY_FALLBACK_BRANCHES:
-        if fallback == branch:
-            continue
-        print(
-            f"suite p90 empty for branch={branch}; retrying with {fallback}",
-            file=sys.stderr,
-        )
-        secondary = load_suite_p90(build_type, fallback)
-        if secondary:
-            return secondary, fallback
-        if secondary is None:
-            return None, branch
-    return primary, branch
-
-
 def _resolve_requested_count(raw: str) -> int | None:
     text = raw.strip().lower()
     if text == "auto":
@@ -1239,9 +1208,8 @@ def _cmd_plan(args: argparse.Namespace) -> int:
     if args.context:
         context = json.loads(args.context.read_text(encoding="utf-8"))
     explicit = _resolve_requested_count(str(args.shard_count))
-    history_branch = args.branch
     if args.build_preset and args.branch:
-        p90_by_suite, history_branch = resolve_suite_p90(args.build_preset, args.branch)
+        p90_by_suite = load_suite_p90(args.build_preset, args.branch)
     else:
         print(
             "suite p90 skipped (need --build-preset and --branch); using graph timeouts",
@@ -1292,7 +1260,6 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         plan["run"] = {
             "build_preset": args.build_preset,
             "branch": args.branch,
-            "history_branch": history_branch,
             "build_target": args.build_target,
             "test_size": args.test_size,
             "threads": args.threads,

@@ -238,8 +238,9 @@ jobs:
             # If no branches specified, this is a direct workflow_dispatch run
             echo "No branches specified, using current branch: ${{ github.ref_name }}"
             echo "branch_array=[\"${{ github.ref_name }}\"]" >> $GITHUB_OUTPUT
-            # No mapping for direct workflow_dispatch - use branch as-is for test history
-            echo "branch_name_map={}" >> $GITHUB_OUTPUT
+            # Packing/history use the repo target (default) branch; checkout stays on ref_name.
+            branch_name_map=$(jq -c -n --arg src "${{ github.ref_name }}" --arg dst "${{ github.event.repository.default_branch }}" '{($src): $dst}')
+            echo "branch_name_map=$branch_name_map" >> $GITHUB_OUTPUT
             echo "pr_number_map={}" >> $GITHUB_OUTPUT
           fi
           

@@ -89,6 +89,7 @@ void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTe
 void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t, TRuntimeSetup runtimeSetup) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportCancelledAutoDropping(true);
         if (runtimeSetup) {
             runtimeSetup(runtime);
         }
@@ -118,6 +119,14 @@ void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, 
 
             if (response.GetResponse().GetEntry().GetStatus() == Ydb::StatusIds::NOT_FOUND) {
                 return;
+            }
+
+            if (runtime.GetAppData().FeatureFlags.GetEnableExportAutoDropping()
+                && (response.GetResponse().GetEntry().GetStatus() == Ydb::StatusIds::SUCCESS
+                    || runtime.GetAppData().FeatureFlags.GetEnableExportCancelledAutoDropping())) {
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/export-" + ToString(exportId)), {
+                    NLs::PathNotExist,
+                });
             }
 
             TestForgetExport(runtime, ++t.TxId, "/MyRoot", exportId);

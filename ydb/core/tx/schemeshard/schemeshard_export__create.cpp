@@ -420,6 +420,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     TEvPrivate::TEvExportUploadMetadataResult::TPtr UploadMetadataResult = nullptr;
     TEvPrivate::TEvExportCompletionUploadResult::TPtr CompletionUploadResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
+    TMaybe<ui64> ExportToResume;
 
     explicit TTxProgress(TSelf* self, ui64 id)
         : TXxport::TTxBase(self)
@@ -489,8 +490,11 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
+    void DoComplete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("TExport::TTxProgress: DoComplete");
+        if (ExportToResume) {
+            Self->Execute(Self->CreateTxProgressExport(*ExportToResume), ctx);
+        }
     }
 
 private:
@@ -1018,7 +1022,11 @@ private:
         }
     }
 
-    void PersistExportStateAndNotify(const TExportInfo::TPtr& exportInfo, NIceDb::TNiceDb& db) {
+    void PersistExportStateAndNotify(const TExportInfo::TPtr& exportInfo, NIceDb::TNiceDb& db,
+            bool allowAutoDropping = true) {
+        if (allowAutoDropping && PrepareCancelledExportDropping(Self, *exportInfo, db)) {
+            ExportToResume = exportInfo->Id;
+        }
         Self->PersistExportState(db, *exportInfo);
         Self->EraseEncryptionKey(db, *exportInfo);
         SendNotificationsIfFinished(exportInfo);
@@ -1145,6 +1153,18 @@ private:
         }
 
         case EState::Cancellation:
+            if (exportInfo->WaitTxId != InvalidTxId) {
+                // Cancellation during mkdir/copy must wait for that transaction.
+                // Its proposal result may have been lost on restart.
+                if (exportInfo->ExportPathId == InvalidPathId) {
+                    // Recover the mkdir result, including an earlier creation tx
+                    // returned for a repeated proposal after another restart.
+                    Send(Self->SelfId(), MkDirPropose(Self, exportInfo->WaitTxId, *exportInfo));
+                    break;
+                }
+                SubscribeTx(*exportInfo);
+                break;
+            }
             exportInfo->State = EState::Cancelled;
             // will be switched back to Cancellation if there is any active backup tx
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
@@ -1175,6 +1195,7 @@ private:
             PersistExportStateAndNotify(exportInfo, db);
             break;
 
+        case EState::AutoDroppingCancelled:
         case EState::AutoDropping:
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
@@ -1207,11 +1228,14 @@ private:
     }
 
     void EndExport(TExportInfo::TPtr exportInfo, EState finalState, NIceDb::TNiceDb& db) {
+        const bool wasAutoDropping = exportInfo->IsAutoDropping();
         exportInfo->State = finalState;
         exportInfo->EndTime = TAppData::TimeProvider->Now();
 
-        PersistExportStateAndNotify(exportInfo, db);
-        AuditLogExportEnd(*exportInfo, Self);
+        PersistExportStateAndNotify(exportInfo, db, !wasAutoDropping);
+        if (exportInfo->IsFinished()) {
+            AuditLogExportEnd(*exportInfo, Self);
+        }
     }
 
     void OnAllocateResult() {
@@ -1261,13 +1285,16 @@ private:
             }
             break;
 
+        case EState::AutoDroppingCancelled:
         case EState::AutoDropping:
         case EState::Dropping:
             if (exportInfo->PendingDropItems) {
                 itemIdx = PopFront(exportInfo->PendingDropItems);
                 DropTable(*exportInfo, itemIdx, txId);
-            } else {
+            } else if (exportInfo->AllItemsAreDropped() && exportInfo->WaitTxId == InvalidTxId) {
                 DropDir(*exportInfo, txId);
+            } else {
+                return;
             }
             break;
 
@@ -1322,6 +1349,14 @@ private:
             const bool isNotExist = status == NKikimrScheme::StatusPathDoesNotExist;
 
             switch (exportInfo->State) {
+            case EState::Cancellation:
+                if (itemIdx < exportInfo->Items.size()) {
+                    if (isMultipleMods) {
+                        txId = GetActiveBackupTxId(*exportInfo, itemIdx);
+                    }
+                    break;
+                }
+                [[fallthrough]];
             case EState::CreateExportDir:
             case EState::CopyTables:
                 if (isMultipleMods || isAlreadyExists) {
@@ -1339,9 +1374,10 @@ private:
                 }
                 break;
 
+            case EState::AutoDroppingCancelled:
             case EState::AutoDropping:
             case EState::Dropping:
-                if (isMultipleMods || isNotExist) {
+                if (isMultipleMods || isNotExist || status == NKikimrScheme::StatusReadOnly) {
                     if (record.GetPathDropTxId()) {
                         // We may need to wait for an earlier tx
                         txId = TTxId(record.GetPathDropTxId());
@@ -1373,6 +1409,10 @@ private:
             }
 
             if (txId == InvalidTxId) {
+                if (exportInfo->State == EState::Cancellation && itemIdx == Max<ui32>()) {
+                    exportInfo->WaitTxId = InvalidTxId;
+                    return EndExport(exportInfo, EState::Cancelled, db);
+                }
                 if (itemIdx < exportInfo->Items.size()) {
                     auto& item = exportInfo->Items.at(itemIdx);
 
@@ -1425,8 +1465,7 @@ private:
                     Self->EraseEncryptionKey(db, *exportInfo);
                 }
 
-                Self->PersistExportState(db, *exportInfo);
-                return SendNotificationsIfFinished(exportInfo);
+                return PersistExportStateAndNotify(exportInfo, db);
             }
 
             Self->TxIdToExport[txId] = {exportInfo->Id, itemIdx};
@@ -1452,6 +1491,7 @@ private:
             Self->PersistExportItemState(db, *exportInfo, itemIdx);
             break;
 
+        case EState::AutoDroppingCancelled:
         case EState::AutoDropping:
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
@@ -1470,8 +1510,27 @@ private:
                 Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
                 CancelTransferring(*exportInfo, itemIdx);
+                return;
             }
-            return;
+            if (exportInfo->ExportPathId == InvalidPathId) {
+                if (record.GetPathId()) {
+                    exportInfo->ExportPathId = Self->MakeLocalId(TLocalPathId(record.GetPathId()));
+                } else {
+                    // Retrying an in-flight transaction returns Accepted without
+                    // a path id. Only recover the path created by that transaction.
+                    const auto domainPath = TPath::Init(exportInfo->DomainPathId, Self);
+                    const auto exportPath = domainPath.Child(Sprintf("export-%" PRIu64, exportInfo->Id));
+                    if (exportPath.IsResolved() && exportPath.Base()->CreateTxId == txId) {
+                        exportInfo->ExportPathId = exportPath.Base()->PathId;
+                    }
+                }
+                if (exportInfo->ExportPathId != InvalidPathId) {
+                    Self->PersistExportPathId(db, *exportInfo);
+                }
+            }
+            exportInfo->WaitTxId = txId;
+            Self->PersistExportState(db, *exportInfo);
+            break;
 
         default:
             return; // no need to wait notification
@@ -1574,6 +1633,10 @@ private:
             return;
         }
 
+        if (exportInfo->State != EState::UploadExportMetadata
+            || exportInfo->ExportMetadataUploader != UploadMetadataResult->Sender) {
+            return;
+        }
         Self->RunningExportSchemeUploaders.erase(std::exchange(exportInfo->ExportMetadataUploader, {}));
 
         if (!exportInfo->IsInProgress()) {
@@ -1664,7 +1727,21 @@ private:
         TExportInfo::TPtr exportInfo = Self->Exports.at(id);
         NIceDb::TNiceDb db(txc.DB);
 
+        if (exportInfo->DependencyTxIds.erase(txId)) {
+            if (exportInfo->State == EState::CopyTables && exportInfo->DependencyTxIds.empty()) {
+                AllocateTxId(*exportInfo);
+            }
+            return;
+        }
+
         switch (exportInfo->State) {
+        case EState::Cancellation:
+            if (itemIdx == Max<ui32>() && exportInfo->WaitTxId == txId) {
+                exportInfo->WaitTxId = InvalidTxId;
+                EndExport(exportInfo, EState::Cancelled, db);
+            }
+            return;
+
         case EState::CreateExportDir: {
             exportInfo->WaitTxId = InvalidTxId;
 
@@ -1701,14 +1778,6 @@ private:
         }
 
         case EState::CopyTables: {
-            if (exportInfo->DependencyTxIds.contains(txId)) {
-                exportInfo->DependencyTxIds.erase(txId);
-                if (exportInfo->DependencyTxIds.empty()) {
-                    AllocateTxId(*exportInfo);
-                }
-                return;
-            }
-
             exportInfo->State = EState::Transferring;
             exportInfo->WaitTxId = InvalidTxId;
             TDeque<ui32> tables;
@@ -1764,6 +1833,7 @@ private:
             return;
         }
 
+        case EState::AutoDroppingCancelled:
         case EState::AutoDropping:
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
@@ -1780,8 +1850,9 @@ private:
             } else {
                 SendNotificationsIfFinished(exportInfo, true); // for tests
 
-                if (exportInfo->State == EState::AutoDropping) {
-                    return EndExport(exportInfo, EState::Done, db);
+                if (exportInfo->IsAutoDropping()) {
+                    return EndExport(exportInfo, exportInfo->State == EState::AutoDroppingCancelled
+                        ? EState::Cancelled : EState::Done, db);
                 }
 
                 Self->PersistRemoveExport(db, *exportInfo);
@@ -1792,8 +1863,12 @@ private:
             return SendNotificationsIfFinished(exportInfo);
         }
 
-        Self->PersistExportState(db, *exportInfo);
-        SendNotificationsIfFinished(exportInfo);
+        if (exportInfo->IsCancelled()) {
+            PersistExportStateAndNotify(exportInfo, db);
+        } else {
+            Self->PersistExportState(db, *exportInfo);
+            SendNotificationsIfFinished(exportInfo);
+        }
 
         if (exportInfo->IsFinished()) {
             AuditLogExportEnd(*exportInfo.Get(), Self);

@@ -214,6 +214,14 @@ namespace {
         const ui64 exportId = txId;
         TestGetExport(runtime, schemeshardId, exportId, dbName, expectedStatus);
 
+        if (expectedStatus == Ydb::StatusIds::CANCELLED
+            && runtime.GetAppData().FeatureFlags.GetEnableExportAutoDropping()
+            && runtime.GetAppData().FeatureFlags.GetEnableExportCancelledAutoDropping()) {
+            TestDescribeResult(DescribePath(runtime, schemeshardId, dbName + "/export-" + ToString(exportId)), {
+                NLs::PathNotExist,
+            });
+        }
+
         if (!runtime.GetAppData().FeatureFlags.GetEnableExportAutoDropping() && checkAutoDropping) {
           auto desc = DescribePath(runtime, "/MyRoot");
           Cerr << "desc: " << desc.GetPathDescription().ChildrenSize()<< Endl;
@@ -512,6 +520,52 @@ namespace {
             }
         }
 
+        void CheckCancelledExportCleanup(bool dropDirectory) {
+            using namespace NKikimr::NWrappers::NExternalStorage;
+            Env();
+            TBlockEvents<TEvPutObjectRequest> markers(Runtime(), [](auto& ev) {
+                return TString(ev->Get()->Request.GetKey()).EndsWith("data_complete.json");
+            });
+            TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> drops(Runtime(), [&](auto& ev) {
+                return ev->Get()->Record.GetTransaction(0).GetOperationType() == (dropDirectory
+                    ? NKikimrSchemeOp::ESchemeOpRmDir : NKikimrSchemeOp::ESchemeOpDropTable);
+            });
+            const ui64 exportId = StartCompletionMarkerExport();
+            Runtime().WaitFor("table marker upload", [&] { return !markers.empty(); });
+            TestCancelExport(Runtime(), 102, "/MyRoot", exportId);
+            Runtime().WaitFor("cancelled export cleanup", [&] { return !drops.empty(); });
+
+            const auto status = TestGetExport(Runtime(), exportId, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(status.GetResponse().GetEntry().GetProgress(),
+                Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
+            UNIT_ASSERT(!status.GetResponse().GetEntry().HasEndTime());
+            const auto list = ListExports();
+            UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(list.GetEntries(0).GetProgress(),
+                Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
+            TestCancelExport(Runtime(), 103, "/MyRoot", exportId);
+            TestForgetExport(Runtime(), 104, "/MyRoot", exportId, Ydb::StatusIds::PRECONDITION_FAILED);
+
+            // Cleanup already in progress must survive reboot and disabling both flags.
+            Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
+            Runtime().GetAppData().FeatureFlags.SetEnableExportCancelledAutoDropping(false);
+            drops.Stop();
+            RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+            Env().TestWaitNotification(Runtime(), exportId);
+            auto completed = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT(completed.GetResponse().GetEntry().HasEndTime());
+            UNIT_ASSERT_VALUES_EQUAL(completed.GetResponse().GetEntry().GetIssues(0).message(), "Cancelled manually");
+            TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-" + ToString(exportId)), {NLs::PathNotExist});
+            TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table"), {NLs::PathExist});
+
+            drops.Unblock();
+            markers.Stop().Unblock();
+            TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            TestForgetExport(Runtime(), 105, "/MyRoot", exportId);
+            Env().TestWaitNotification(Runtime(), exportId);
+            TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        }
+
         void RebootDuringMarkerUpload(bool operationMarker, bool afterPut) {
             using namespace NKikimr::NWrappers::NExternalStorage;
             Env();
@@ -554,6 +608,54 @@ namespace {
             TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         }
 
+        void ExportMetadataCleanup(bool cancelManually) {
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+            Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+            TestCreateTable(Runtime(), 100, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+            )");
+            Env().TestWaitNotification(Runtime(), 100);
+            TBlockEvents<NKikimr::NSchemeShard::TEvPrivate::TEvExportUploadMetadataResult> results(Runtime());
+            TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> drops(Runtime(), [](auto& ev) {
+                return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRmDir;
+            });
+            TestExport(Runtime(), 101, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    destination_prefix: "backup"
+                    items { source_path: "/MyRoot/Table" }
+                }
+            )", S3Port()));
+            Runtime().WaitFor("export metadata upload", [&] { return !results.empty(); });
+            if (cancelManually) {
+                TestCancelExport(Runtime(), 102, "/MyRoot", 101);
+            } else {
+                results.Stop();
+                const auto& result = results.front();
+                Runtime().Send(new IEventHandle(result->Recipient, result->Sender,
+                    new NKikimr::NSchemeShard::TEvPrivate::TEvExportUploadMetadataResult(
+                        101, false, "Injected metadata upload failure")), 0, true);
+                results.clear();
+            }
+            Runtime().WaitFor("export directory cleanup", [&] { return !drops.empty(); });
+            // A late successful metadata response must not restart a cancelled export.
+            results.Stop().Unblock();
+            const auto cancelling = TestGetExport(Runtime(), 101, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(cancelling.GetResponse().GetEntry().GetProgress(),
+                Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
+            drops.Stop().Unblock();
+            Env().TestWaitNotification(Runtime(), 101);
+            const auto status = TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_STRING_CONTAINS(status.GetResponse().GetEntry().GetIssues(0).message(),
+                cancelManually ? "Cancelled manually" : "Injected metadata upload failure");
+            TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-101"), {NLs::PathNotExist});
+            TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table"), {NLs::PathExist});
+        }
+
         void CompletionMarkerUploadFailure(
             bool operationMarker,
             bool retryable,
@@ -582,6 +684,8 @@ namespace {
             Env().TestWaitNotification(Runtime(), exportId);
             const auto status = TestGetExport(Runtime(), exportId, "/MyRoot",
                 success ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
+            TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-" + ToString(exportId)), {NLs::PathNotExist});
+            TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table"), {NLs::PathExist});
             UNIT_ASSERT_VALUES_EQUAL(attempts, success ? failures + 1 : (retryable ? 3 : 1));
             if (success) {
                 CheckCompletionMarkerContents(exportId);
@@ -711,10 +815,10 @@ namespace {
             TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
             TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
-            THolder<IEventHandle> delayed;
+            TVector<THolder<IEventHandle>> delayed;
             auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 if (delayFunc(ev)) {
-                    delayed.Reset(ev.Release());
+                    delayed.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 return TTestActorRuntime::EEventAction::PROCESS;
@@ -739,10 +843,10 @@ namespace {
                 UNIT_ASSERT(!line.contains("end_time"));
             }
 
-            if (!delayed) {
+            if (delayed.empty()) {
                 TDispatchOptions opts;
                 opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
-                    return bool(delayed);
+                    return !delayed.empty();
                 });
                 Runtime().DispatchEvents(opts);
             }
@@ -750,7 +854,9 @@ namespace {
             Runtime().SetObserverFunc(prevObserver);
 
             TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
-            Runtime().Send(delayed.Release(), 0, true);
+            for (auto& event : delayed) {
+                Runtime().Send(event.Release(), 0, true);
+            }
             Env().TestWaitNotification(Runtime(), exportId);
 
             // Check audit record for export end
@@ -771,6 +877,8 @@ namespace {
             }
 
             TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+
+            TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-" + ToString(exportId)), {NLs::PathNotExist});
 
             TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
             Env().TestWaitNotification(Runtime(), exportId);
@@ -1944,6 +2052,7 @@ namespace {
         TTestEnv& Env() {
             if (!TestEnv) {
                 TestEnv.ConstructInPlace(Runtime(), EnvOptions());
+                Runtime().GetAppData().FeatureFlags.SetEnableExportCancelledAutoDropping(true);
             }
             return *TestEnv;
         }
@@ -2393,6 +2502,97 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
     Y_UNIT_TEST(CompletionMarkerTableAccessDenied) { CompletionMarkerUploadFailure(false, false, 1, false); }
     Y_UNIT_TEST(CompletionMarkerOperationAccessDenied) { CompletionMarkerUploadFailure(true, false, 1, false); }
 
+    Y_UNIT_TEST(CancelledExportCleanupRebootDuringDropTable) { CheckCancelledExportCleanup(false); }
+    Y_UNIT_TEST(CancelledExportCleanupRebootDuringDropDirectory) { CheckCancelledExportCleanup(true); }
+    Y_UNIT_TEST(CancelledExportCleanupDuringMetadataUpload) { ExportMetadataCleanup(true); }
+    Y_UNIT_TEST(CancelledExportCleanupAfterMetadataUploadFailure) { ExportMetadataCleanup(false); }
+
+    Y_UNIT_TEST(CancelledExportWithoutCreatedDirectory) {
+        Env();
+        TestMkDir(Runtime(), 99, "/MyRoot", "export-101");
+        Env().TestWaitNotification(Runtime(), 99);
+        auto observer = Runtime().AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            const auto& tx = record.GetTransaction(0);
+            if (tx.GetOperationType() != NKikimrSchemeOp::ESchemeOpMkDir
+                || tx.GetMkDir().GetName() != "export-101") {
+                return;
+            }
+            auto response = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>();
+            response->Record.SetTxId(record.GetTxId());
+            response->Record.SetStatus(NKikimrScheme::StatusSchemeError);
+            response->Record.SetReason("Injected directory creation failure");
+            Runtime().Send(new IEventHandle(ev->Sender, ev->Recipient, response.Release()), 0, true);
+            ev.Reset();
+        });
+        const ui64 exportId = StartCompletionMarkerExport();
+        Env().TestWaitNotification(Runtime(), exportId);
+        const auto result = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetResponse().GetEntry().GetIssues(0).message(), "Injected directory creation failure");
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-101"), {NLs::PathExist});
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table"), {NLs::PathExist});
+        TestForgetExport(Runtime(), 102, "/MyRoot", exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-101"), {NLs::PathExist});
+    }
+
+    Y_UNIT_TEST(CancelledExportWithoutAutoDropping) {
+        using namespace NKikimr::NWrappers::NExternalStorage;
+        Env();
+        TBlockEvents<TEvPutObjectRequest> markers(Runtime(), [](auto& ev) {
+            return TString(ev->Get()->Request.GetKey()).EndsWith("data_complete.json");
+        });
+        const ui64 exportId = StartCompletionMarkerExport(false);
+        Runtime().WaitFor("table marker upload", [&] { return !markers.empty(); });
+        TestCancelExport(Runtime(), 102, "/MyRoot", exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-" + ToString(exportId) + "/0"), {NLs::PathExist});
+        TestForgetExport(Runtime(), 103, "/MyRoot", exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-" + ToString(exportId)), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table"), {NLs::PathExist});
+    }
+
+    Y_UNIT_TEST(CancelledExportAutoDroppingDisabledByDefault) {
+        using namespace NKikimr::NWrappers::NExternalStorage;
+        Env();
+        Runtime().UpdateCurrentTime(TInstant::Now());
+        Runtime().GetAppData().FeatureFlags.ClearEnableExportCancelledAutoDropping();
+        UNIT_ASSERT(!Runtime().GetAppData().FeatureFlags.GetEnableExportCancelledAutoDropping());
+        TBlockEvents<TEvPutObjectRequest> markers(Runtime(), [](auto& ev) {
+            return TString(ev->Get()->Request.GetKey()).EndsWith("data_complete.json");
+        });
+        const ui64 exportId = StartCompletionMarkerExport();
+        Runtime().WaitFor("table marker upload", [&] { return !markers.empty(); });
+        TestCancelExport(Runtime(), 102, "/MyRoot", exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-" + ToString(exportId) + "/0"), {NLs::PathExist});
+
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        const auto status = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT(status.GetResponse().GetEntry().HasEndTime());
+        UNIT_ASSERT_VALUES_EQUAL(status.GetResponse().GetEntry().GetIssues(0).message(), "Cancelled manually");
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-" + ToString(exportId) + "/0"), {NLs::PathExist});
+
+        TestForgetExport(Runtime(), 103, "/MyRoot", exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-" + ToString(exportId)), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table"), {NLs::PathExist});
+    }
+
+    Y_UNIT_TEST(SuccessfulExportCleanupWithoutCancelledAutoDropping) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.ClearEnableExportCancelledAutoDropping();
+        const ui64 exportId = StartCompletionMarkerExport();
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-" + ToString(exportId)), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table"), {NLs::PathExist});
+    }
+
     Y_UNIT_TEST(CompletionMarkerCancellation) {
         using namespace NKikimr::NWrappers::NExternalStorage;
         Env();
@@ -2443,6 +2643,7 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
         CheckNoSuchS3Files({"/backup/table/data_complete.json", "/backup/table/export_complete.json"});
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-" + ToString(exportId)), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
@@ -4412,6 +4613,7 @@ partitioning_settings {
         // Poison is sent after cancellation commits. No further response from
         // the stopped sibling should be needed to finish the export.
         Runtime().WaitFor("sibling uploader cancellation", [&] { return !poison.empty(); });
+        Env().TestWaitNotification(Runtime(), exportId);
         const auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
         const auto& entry = desc.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
@@ -4473,16 +4675,19 @@ partitioning_settings {
         UNIT_ASSERT_VALUES_EQUAL(acknowledgements.front()->Get()->Record.GetTargetTxId(), backupTxId);
         UNIT_ASSERT_VALUES_EQUAL(acknowledgements.front()->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted);
         acknowledgements.Stop().Unblock();
-        Env().TestWaitNotification(Runtime(), exportId);
-        const auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetResponse().GetEntry().GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
-        UNIT_ASSERT(desc.GetResponse().GetEntry().HasEndTime());
+        const auto cancelling = TestGetExport(Runtime(), exportId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(cancelling.GetResponse().GetEntry().GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
 
         schemaChanged.Stop().Unblock();
         subscriptions.Stop().Unblock();
         const auto writable = SendSchemeShardMonRequest(Runtime(), TTestTxConfig::SchemeShard,
             "/app?Page=AdminRequest&IsReadOnlyMode=0", HTTP_METHOD_POST);
         UNIT_ASSERT_STRING_CONTAINS(writable.Body, "IsReadOnlyMode changed from 1 to 0");
+        Env().TestWaitNotification(Runtime(), exportId);
+        const auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetResponse().GetEntry().GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+        UNIT_ASSERT(desc.GetResponse().GetEntry().HasEndTime());
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/export-" + ToString(exportId)), {NLs::PathNotExist});
         TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
         Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);

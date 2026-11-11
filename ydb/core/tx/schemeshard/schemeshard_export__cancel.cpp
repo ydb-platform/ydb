@@ -21,6 +21,7 @@ using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
     TEvExport::TEvCancelExportRequest::TPtr Request;
+    bool Progress = false;
 
     explicit TTxCancel(TSelf *self, TEvExport::TEvCancelExportRequest::TPtr& ev)
         : TXxport::TTxBase(self)
@@ -57,6 +58,11 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 
         cancel.SetStatus(Ydb::StatusIds::SUCCESS);
 
+        if (exportInfo->IsAutoDropping() || exportInfo->IsCancelling()) {
+            Send(Request->Sender, std::move(response), 0, Request->Cookie);
+            return true;
+        }
+
         const bool allItemsDone = AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone);
         const bool publishingCompletion = exportInfo->IsWorking() && allItemsDone;
         const bool committingS3Export = exportInfo->Kind == TExportInfo::EKind::S3
@@ -91,11 +97,18 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
             }
         }
 
-        if (exportInfo->State < TExportInfo::EState::Transferring) {
+        if (exportInfo->IsPreparing()) {
             exportInfo->State = TExportInfo::EState::Cancelled;
 
-            Self->TxIdToExport.erase(exportInfo->WaitTxId);
-            exportInfo->WaitTxId = InvalidTxId;
+            // A proposal may already be sent, but its result has not arrived yet.
+            // Wait for it before cleaning up: it can still create temporary paths.
+            for (const auto& [txId, target] : Self->TxIdToExport) {
+                if (target.first == exportInfo->Id && target.second == Max<ui32>()) {
+                    exportInfo->WaitTxId = txId;
+                    exportInfo->State = TExportInfo::EState::Cancellation;
+                    break;
+                }
+            }
         } else {
             exportInfo->State = TExportInfo::EState::Cancelled;
 
@@ -107,12 +120,15 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                 if (item.WaitTxId != InvalidTxId) {
                     exportInfo->State = TExportInfo::EState::Cancellation;
                     Send(Self->SelfId(), CancelPropose(*exportInfo, item.WaitTxId), 0, exportInfo->Id);
+                } else if (item.SubState == TExportInfo::TItem::ESubState::Proposed) {
+                    exportInfo->State = TExportInfo::EState::Cancellation;
                 }
             }
         }
 
         if (exportInfo->State == TExportInfo::EState::Cancelled) {
             exportInfo->EndTime = TAppData::TimeProvider->Now();
+            Progress = PrepareCancelledExportDropping(Self, *exportInfo, db);
         }
 
         Self->PersistExportState(db, *exportInfo);
@@ -128,7 +144,10 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
+    void DoComplete(const TActorContext& ctx) override {
+        if (Progress) {
+            Self->Execute(Self->CreateTxProgressExport(Request->Get()->Record.GetRequest().GetId()), ctx);
+        }
     }
 
 }; // TTxCancel
@@ -136,6 +155,7 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
     const ui64 ExportId;
     const TTxId TxId;
+    bool Progress = false;
 
     explicit TTxCancelAck(TSelf* self, ui64 exportId, TTxId txId)
         : TXxport::TTxBase(self)
@@ -176,7 +196,7 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
                 continue;
             }
 
-            if (item.WaitTxId != InvalidTxId) {
+            if (item.WaitTxId != InvalidTxId || item.SubState == TExportInfo::TItem::ESubState::Proposed) {
                 ++cancellableItems;
             }
 
@@ -204,6 +224,7 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
         if (cancelledItems == cancellableItems) {
             exportInfo->State = TExportInfo::EState::Cancelled;
             exportInfo->EndTime = TAppData::TimeProvider->Now();
+            Progress = PrepareCancelledExportDropping(Self, *exportInfo, db);
             Self->PersistExportState(db, *exportInfo);
             Self->EraseEncryptionKey(db, *exportInfo);
         }
@@ -217,7 +238,10 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
+    void DoComplete(const TActorContext& ctx) override {
+        if (Progress) {
+            Self->Execute(Self->CreateTxProgressExport(ExportId), ctx);
+        }
     }
 
 }; // TTxCancelAck

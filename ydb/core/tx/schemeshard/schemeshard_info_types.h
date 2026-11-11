@@ -3827,6 +3827,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         Dropping = 241,
         Dropped = 242,
         AutoDropping = 243,
+        AutoDroppingCancelled = 244,
         Cancellation = 250,
         Cancelled = 251,
     };
@@ -3955,7 +3956,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     }
 
     bool IsAutoDropping() const {
-        return State == EState::AutoDropping;
+        return State == EState::AutoDropping || State == EState::AutoDroppingCancelled;
     }
 
     bool IsCancelling() const {

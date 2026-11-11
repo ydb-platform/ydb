@@ -482,4 +482,8 @@ message TFeatureFlags {
     // Gate for HNSW creation and acceleration once the implementation is included.
     optional bool EnableHnswIndex = 384 [default = false];
     optional bool EnableColumnshardCutHistorySending = 385 [default = false];
+    // Allows cancelled exports to persist AutoDroppingCancelled.
+    // Enable only after the rollback version can resume this state.
+    // Disabling prevents new cleanup; cleanup already in progress continues.
+    optional bool EnableExportCancelledAutoDropping = 386 [default = false];
 }

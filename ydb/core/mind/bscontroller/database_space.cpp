@@ -10,24 +10,19 @@
 namespace NKikimr::NBsController {
 
     class TBlobStorageController::TTxUpdateDatabaseSpace : public TTransactionBase<TBlobStorageController> {
+        const std::map<TBoxStoragePoolId, bool> Latches; // the ones changed, see PersistChangedDatabaseSpaceLatches
+
     public:
-        explicit TTxUpdateDatabaseSpace(TBlobStorageController *controller)
+        TTxUpdateDatabaseSpace(TBlobStorageController *controller, std::map<TBoxStoragePoolId, bool> latches)
             : TTransactionBase(controller)
+            , Latches(std::move(latches))
         {}
 
         TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_UPDATE_DATABASE_SPACE; }
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            {
-                TDatabaseSpaceTracker::TBatch batch(Self->DatabaseSpace);
-                for (const auto& [groupId, group] : Self->GroupMap) {
-                    if (group->BridgeGroupInfo) {
-                        Self->UpdateDatabaseSpaceGroup(*group);
-                    }
-                }
-            }
             NIceDb::TNiceDb db(txc.DB);
-            Self->CommitDatabaseSpaceChanges(db);
+            Self->PersistChangedDatabaseSpaceLatches(db, Latches);
             return true;
         }
 
@@ -35,7 +30,21 @@ namespace NKikimr::NBsController {
     };
 
     void TBlobStorageController::UpdateDatabaseSpaceOnPileChanges() {
-        Execute(new TTxUpdateDatabaseSpace(this));
+        // Groups are recalculated right here, along with the BridgeInfo change, and only the latches are left to the
+        // transaction: any group recalculated later on its own (e.g. by VDisk metrics) uses the new BridgeInfo, and it
+        // must never be weighed against the groups still counted by the previous one, as hysteresis would keep the
+        // pool state that never was.
+        {
+            TDatabaseSpaceTracker::TBatch batch(DatabaseSpace);
+            for (const auto& [groupId, group] : GroupMap) {
+                if (group->BridgeGroupInfo) {
+                    UpdateDatabaseSpaceGroup(*group);
+                }
+            }
+        }
+        if (auto latches = PublishDatabaseSpaceChanges(); !latches.empty()) {
+            Execute(new TTxUpdateDatabaseSpace(this, std::move(latches)));
+        }
     }
 
     void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerSubscribeDatabaseSpace::TPtr ev) {
@@ -77,6 +86,24 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::PersistChangedDatabaseSpaceLatches(NIceDb::TNiceDb& db,
+            const std::map<TBoxStoragePoolId, bool>& changed) {
+        // The transaction persisting the latches changed outside of it may run after the ones queued before it, which
+        // have changed the same latches further (thresholds, groups) and persisted them, or have deleted the pools along
+        // with their rows. So the value taken when the latch changed may be stale by now, and the current one is
+        // written: it follows from everything executed so far, and whatever changes it later persists it again.
+        std::map<TBoxStoragePoolId, bool> latches;
+        for (const auto& [poolId, exhausted] : changed) {
+            if (!StoragePools.contains(poolId)) {
+                continue;
+            }
+            if (const auto state = DatabaseSpace.GetPoolState(poolId)) {
+                latches.emplace(poolId, state->Exhausted);
+            }
+        }
+        PersistDatabaseSpaceLatches(db, latches);
+    }
+
     std::map<TBoxStoragePoolId, bool> TBlobStorageController::PublishDatabaseSpaceChanges() {
         // pool colors are shown in system views
         for (const TBoxStoragePoolId& poolId : DatabaseSpace.TakeChangedPools()) {
@@ -115,6 +142,29 @@ namespace NKikimr::NBsController {
         UpdateDatabaseSpaceGroup(group, finder, BridgeInfo.get());
     }
 
+    namespace {
+
+        // The color of VDisks taking writes of a group: the worst color of the ones that have reported, and whether all
+        // of them have (until then the color is only known not to be better than that).
+        struct TVDisksSpaceColor {
+            std::optional<TDatabaseSpaceTracker::ESpaceColor> Color;
+            bool Complete = true;
+
+            void Add(const TBlobStorageController::TGroupInfo& group) {
+                if (const auto color = StatusFlagToValidSpaceColor(group.StatusFlags.Raw)) {
+                    Color = Color ? Max(*Color, *color) : *color;
+                }
+                for (const TBlobStorageController::TVSlotInfo *slot : group.VDisksInGroup) {
+                    if (!StatusFlagToValidSpaceColor(slot->Metrics.GetStatusFlags())) {
+                        Complete = false;
+                        break;
+                    }
+                }
+            }
+        };
+
+    } // anonymous
+
     void TBlobStorageController::UpdateDatabaseSpaceGroup(const TGroupInfo& group,
             const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo) {
         if (group.BridgeProxyGroupId && !group.IsInlinePile()) {
@@ -124,57 +174,40 @@ namespace NKikimr::NBsController {
             }
             return;
         }
-        if (!group.IsPhysicalGroup()) {
+        if (!group.WritesGoToVDisks()) {
             DatabaseSpace.RemoveGroup(group.ID);
             return;
         }
+        TVDisksSpaceColor res;
         if (group.BridgeGroupInfo) {
-            std::optional<TDatabaseSpaceTracker::ESpaceColor> color;
-            bool complete = true;
             if (!bridgeInfo) {
                 DatabaseSpace.SetGroup(group.ID, group.StoragePoolId, std::nullopt, false);
                 return;
             }
+            // the parts are counted by the rules bridge proxy follows when it sends TEvPut: the pile has to take part in
+            // data quorum, and the part has to be at the stage taking data (the one being synced or dropped is not)
             NBridge::ForEachGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId pileId,
                     const NKikimrBridge::TGroupState::TPile& pile) {
                 const TBridgeInfo::TPile *pileInfo = bridgeInfo->FindPile(pileId);
-                if (!pileInfo || !NBridge::PileStateTraits(pileInfo->State).RequiresDataQuorum) {
+                if (!pileInfo || !NBridge::PileStateTraits(pileInfo->State).RequiresDataQuorum ||
+                        !NBridge::GroupPartTakesPuts(pile.GetStage())) {
                     return;
                 }
                 const TGroupId partId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                 const TGroupInfo *part = partId == group.ID ? &group : finder(partId);
-                if (!part || !part->IsPhysicalGroup() || part->VDisksInGroup.empty()) {
-                    complete = false;
+                if (!part || part->VDisksInGroup.empty()) {
+                    res.Complete = false;
                     return;
                 }
-                const auto partColor = StatusFlagToValidSpaceColor(part->StatusFlags.Raw);
-                if (partColor) {
-                    color = color ? Max(*color, *partColor) : *partColor;
-                }
-                for (const TVSlotInfo *slot : part->VDisksInGroup) {
-                    if (!StatusFlagToValidSpaceColor(slot->Metrics.GetStatusFlags())) {
-                        complete = false;
-                        break;
-                    }
-                }
+                res.Add(*part);
             });
-            DatabaseSpace.SetGroup(group.ID, group.StoragePoolId, color, complete);
-            return;
-        }
-        if (group.VDisksInGroup.empty()) {
+        } else if (group.VDisksInGroup.empty()) {
             DatabaseSpace.RemoveGroup(group.ID);
             return;
+        } else {
+            res.Add(group);
         }
-        // group's color is the color of its worst VDisk; until every VDisk has reported its metrics, it is only known
-        // not to be better than the worst color reported
-        bool complete = true;
-        for (const TVSlotInfo *slot : group.VDisksInGroup) {
-            if (!StatusFlagToValidSpaceColor(slot->Metrics.GetStatusFlags())) {
-                complete = false;
-                break;
-            }
-        }
-        DatabaseSpace.SetGroup(group.ID, group.StoragePoolId, StatusFlagToValidSpaceColor(group.StatusFlags.Raw), complete);
+        DatabaseSpace.SetGroup(group.ID, group.StoragePoolId, res.Color, res.Complete);
     }
 
     void TBlobStorageController::UpdateDatabaseSpacePool(const TBoxStoragePoolId& poolId, const TStoragePoolInfo& pool) {

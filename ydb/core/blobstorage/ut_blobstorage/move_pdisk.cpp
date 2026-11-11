@@ -54,7 +54,44 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
         auto *destinationId = cmd->MutableDestinationPDisk()->MutableTargetPDiskId();
         destinationId->SetNodeId(destination.first);
         destinationId->SetPDiskId(destination.second);
+        request.AddCommand()->MutableQueryBaseConfig(); // the config as the move makes it
         return env.Invoke(request);
+    }
+
+    // the config reported by QueryBaseConfig in the request moving the PDisk has the generations the groups get when
+    // this request is committed, so they are usable in further commands
+    void CheckGenerationsReported(TEnvironmentSetup& env, const NKikimrBlobStorage::TConfigResponse& response,
+            TPDisk destination) {
+        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 2);
+        const auto& reported = response.GetStatus(1).GetBaseConfig();
+        const auto committed = env.FetchBaseConfig();
+
+        std::map<ui32, ui32> groupGenerations;
+        for (const auto& group : committed.GetGroup()) {
+            groupGenerations.emplace(group.GetGroupId(), group.GetGroupGeneration());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(reported.GroupSize(), committed.GroupSize());
+        for (const auto& group : reported.GetGroup()) {
+            UNIT_ASSERT_VALUES_EQUAL_C(group.GetGroupGeneration(), groupGenerations.at(group.GetGroupId()),
+                "GroupId# " << group.GetGroupId());
+        }
+
+        std::map<std::tuple<ui32, ui32, ui32>, ui32> vslotGenerations;
+        for (const auto& vslot : committed.GetVSlot()) {
+            const auto& id = vslot.GetVSlotId();
+            vslotGenerations.emplace(std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId()),
+                vslot.GetGroupGeneration());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(reported.VSlotSize(), committed.VSlotSize());
+        size_t numMoved = 0;
+        for (const auto& vslot : reported.GetVSlot()) {
+            const auto& id = vslot.GetVSlotId();
+            const auto key = std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId());
+            UNIT_ASSERT_C(vslotGenerations.contains(key), id.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(vslot.GetGroupGeneration(), vslotGenerations.at(key), id.ShortDebugString());
+            numMoved += id.GetNodeId() == destination.first && id.GetPDiskId() == destination.second;
+        }
+        UNIT_ASSERT_C(numMoved, "the config reported doesn't show VSlots on the destination PDisk");
     }
 
     void RestartPDisk(TEnvironmentSetup& env, TPDisk pdisk) {
@@ -202,6 +239,7 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
 
         // Wait until destination PDisk is restarted.
         WaitForPDiskRestart(env);
+        CheckGenerationsReported(env, response, destination);
         RestartPDisk(env, destination);
 
         // Wait and read the data back from the destination PDisk.
@@ -280,6 +318,7 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
         const auto response = InvokeMovePDisk(env, source, destination);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         WaitForPDiskRestart(env);
+        CheckGenerationsReported(env, response, destination);
         RestartPDisk(env, destination);
         env.Sim(TDuration::Seconds(30));
 

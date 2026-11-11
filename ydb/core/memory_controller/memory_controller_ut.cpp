@@ -4,6 +4,7 @@
 #include <memory_controller_config.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/scan_admission.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -566,6 +567,29 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Reserved"), 0);
+}
+
+Y_UNIT_TEST(IndexBuildBrokerCapacityRefreshWaitsForAcknowledgement) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(16_GB);
+    TControllerFixture fixture(config);
+    auto broker = fixture.Runtime.Register(NResourceBroker::CreateResourceBrokerActor(
+        NResourceBroker::MakeDefaultConfig(), MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+    fixture.Runtime.RegisterService(NResourceBroker::MakeResourceBrokerID(), broker);
+    using TAck = NResourceBroker::TEvResourceBroker::TEvConfigureResult;
+    TBlockEvents<TAck> acks(fixture.Runtime, [&](const TAck::TPtr& event) {
+        return event->Recipient == fixture.MemoryController;
+    });
+    fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(32_MB);
+    fixture.Tick();
+    fixture.Runtime.WaitFor("broker configuration acknowledgement held", [&] { return !acks.empty(); });
+    auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
+    const ui64 capacity = quota.GetActiveByteLimit(32_MB);
+    quota.RestrictBrokerLimit(1);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(32_MB), 1);
+    acks.Stop().Unblock();
+    fixture.Runtime.WaitFor("broker capacity confirmed", [&] { return quota.GetActiveByteLimit(32_MB) == capacity; });
 }
 
 Y_UNIT_TEST(IndexBuildBudgetOnSmallNodes) {

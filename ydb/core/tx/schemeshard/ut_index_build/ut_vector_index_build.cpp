@@ -167,18 +167,24 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         auto& config = runtime.GetAppData().SchemeShardConfig;
         config.SetIndexBuildRequestCountLimit(ByBytes ? 128 : 1);
         ui32 requests = 0;
+        ui64 secondBuildId = 0;
+        ui64 secondRound = 0;
         auto observer = runtime.AddObserver<TEvDataShard::TEvLocalKMeansRequest>([&](auto& event) {
             ++requests;
+            if (event->Get()->Record.GetId() == secondBuildId && !secondRound) {
+                secondRound = event->Get()->Record.GetSeqNoRound();
+            }
             if (ByBytes && requests == 1) {
                 const auto& rec = event->Get()->Record;
-                config.SetIndexBuildRequestBytesLimit(rec.SpaceUsedLong() + rec.ByteSizeLong() + 4_KB + 1024);
+                const ui64 bytes = rec.SpaceUsedLong() + rec.ByteSizeLong() + 4_KB;
+                config.SetIndexBuildRequestBytesLimit(2 * bytes - 256);
             }
         });
         TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> replies(runtime);
         const ui64 first = ++txId;
         TestBuildVectorIndex(runtime, first, schemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/TableA", "index1", {"embedding"});
         runtime.WaitFor("first build holds sender credits", [&] { return replies.size() > 0; });
-        const ui64 second = ++txId;
+        const ui64 second = secondBuildId = ++txId;
         TestBuildVectorIndex(runtime, second, schemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/TableB", "index1", {"embedding"});
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(requests, 1);
@@ -186,6 +192,9 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, first, schemeShard);
         env.TestWaitNotification(runtime, second, schemeShard);
         UNIT_ASSERT_GE(requests, 2);
+        // A byte-limited request is sized once before its size is known. Full
+        // count windows avoid construction entirely; retries consume no rounds.
+        UNIT_ASSERT_VALUES_EQUAL(secondRound, ByBytes ? 2 : 1);
         for (const ui64 build : {first, second}) {
             const auto result = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
             UNIT_ASSERT_VALUES_EQUAL(result.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);

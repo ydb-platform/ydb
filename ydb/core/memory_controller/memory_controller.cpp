@@ -640,6 +640,15 @@ private:
 
     void Handle(TEvResourceBroker::TEvConfigureResult::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
+        if (const auto it = PendingIndexBuildLimits.find(ev->Cookie); it != PendingIndexBuildLimits.end()) {
+            if (msg->Record.GetSuccess() && ev->Cookie > LastConfirmedBrokerConfig) {
+                AppData()->BuildIndexScanAdmission->ConfirmBrokerLimit(it->second);
+                LastConfirmedBrokerConfig = ev->Cookie;
+            } else if (!msg->Record.GetSuccess() && ev->Cookie == NextBrokerConfig) {
+                CurrentResourceBrokerConfig.reset();
+            }
+            PendingIndexBuildLimits.erase(it);
+        }
         YDB_LOG_CTX(ctx, msg->Record.GetSuccess() ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR, "ResourceBroker configure result",
             {"ev", msg->Record});
     }
@@ -753,7 +762,8 @@ private:
         // The index budget is a combined bound on active and pending scans.
         auto& activeIndexLimit = config.QueueLimits["queue_build_index"];
         activeIndexLimit = Min(activeIndexLimit, indexBuildLimit - pendingLimit);
-        AppData()->BuildIndexScanAdmission->SetTotalLimit(indexBuildLimit, Min(activeIndexLimit, config.LimitBytes));
+        AppData()->BuildIndexScanAdmission->SetTotalLimit(indexBuildLimit, Min(activeIndexLimit, config.LimitBytes),
+            config != CurrentResourceBrokerConfig);
 
         // TODO: counters and logs for all column table queues
         if (Collections.contains(EMemoryConsumerKind::QueryExecution)) {
@@ -793,7 +803,10 @@ private:
             queue->MutableLimit()->SetMemory(limitBytes);
         }
 
-        Send(MakeResourceBrokerID(), configure.Release());
+        const ui64 cookie = ++NextBrokerConfig;
+        PendingIndexBuildLimits.clear(); // Only the latest configuration can supersede a rejection hint.
+        PendingIndexBuildLimits[cookie] = Min(config.QueueLimits.at("queue_build_index"), config.LimitBytes);
+        Send(MakeResourceBrokerID(), configure.Release(), 0, cookie);
 
         CurrentResourceBrokerConfig.emplace(std::move(config));
     }
@@ -857,6 +870,9 @@ private:
     TMap<EMemoryConsumerKind, TConsumerCounters> ConsumerCounters;
     std::optional<TResourceBrokerConfig> CurrentResourceBrokerConfig;
     ui64 PendingIndexBuildCharge = 0;
+    ui64 NextBrokerConfig = 0;
+    ui64 LastConfirmedBrokerConfig = 0;
+    THashMap<ui64, ui64> PendingIndexBuildLimits;
 };
 
 }

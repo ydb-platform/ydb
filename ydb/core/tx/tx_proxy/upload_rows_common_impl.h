@@ -1512,6 +1512,18 @@ private:
 
     void ReplyWithResult(const TUploadStatus& status, const TActorContext& ctx) {
         UploadCountersGuard.OnReply(status, WrittenBytes);
+        if (MemoryReservation) {
+            // Drop our payload ownership before publishing completion. In a
+            // different mailbox the receiver can start its next batch immediately.
+            for (auto& [_, state] : ShardUploadRetryStates) {
+                // Keep subscription metadata for Die(), which must unsubscribe
+                // even when a request terminates with an error.
+                decltype(state.Rows){}.swap(state.Rows);
+            }
+            Rows.reset();
+            Batch.reset();
+            MemoryReservation.reset();
+        }
         SendResult(ctx, status.GetCode());
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Completed",

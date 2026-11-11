@@ -2193,6 +2193,18 @@ private:
             ? Min<ui64>(buildInfo.MaxInProgressShards, Max<ui64>(1, config.GetIndexBuildRequestsPerBuild()))
             : buildInfo.MaxInProgressShards;
         const size_t perBuild = Min(configuredPerBuild, maxInFlight);
+        if (bounded) {
+            if (!Self->IndexBuildRequestAdmission) {
+                Self->IndexBuildRequestAdmission = std::make_shared<TScanAdmissionControl>();
+                Self->IndexBuildRequestAdmission->SetTotalLimit(Max<ui64>());
+            }
+            if (!buildInfo.RequestAdmission) {
+                buildInfo.RequestAdmission = std::make_shared<TScanAdmissionControl>();
+                buildInfo.RequestAdmission->SetTotalLimit(Max<ui64>());
+            }
+        }
+        const auto stage = std::tuple<ui32, ui64, ui32, ui32, ui32>{buildInfo.KMeans.Level, buildInfo.KMeans.Parent,
+            ui32(buildInfo.KMeans.State), ui32(buildInfo.SubState), buildInfo.KMeans.K};
         // Visit waiting shards at most once, including all backoff entries, so
         // a delayed prefix cannot strand ready work behind it.
         size_t attempts = buildInfo.ToUploadShards.size();
@@ -2205,6 +2217,28 @@ private:
                 buildInfo.ToUploadShards.push_back(shardIdx);
                 ScheduleProgress(buildInfo, status.AdmissionRetryAt);
                 continue;
+            }
+            if (bounded) {
+                if (!countLimit || bytesLimit < 4_KB) {
+                    RequestAdmissionError = !countLimit ? TString("SchemeShard IndexBuildRequestCountLimit is zero")
+                        : TString("SchemeShard IndexBuildRequestBytesLimit cannot fit a request descriptor");
+                    return false;
+                }
+                const bool cached = status.CachedRequestBytes && status.CachedRequestStage == stage &&
+                    status.CachedRequestRevision == buildInfo.AdmissionRequestRevision;
+                const ui64 needed = cached ? status.CachedRequestBytes : 4_KB;
+                if (needed > bytesLimit) {
+                    RequestAdmissionError = TStringBuilder() << "Vector scan request needs " << needed
+                        << " bytes, exceeding SchemeShard IndexBuildRequestBytesLimit=" << bytesLimit;
+                    return false;
+                }
+                const ui64 buildBytes = buildInfo.RequestAdmission->GetUsage().Bytes;
+                if (!Self->IndexBuildRequestAdmission->CanAcquire(needed, countLimit, bytesLimit) ||
+                    !buildInfo.RequestAdmission->CanAcquire(needed, perBuild, buildBytes ? bytesLimit / 4 : bytesLimit)) {
+                    buildInfo.ToUploadShards.push_back(shardIdx);
+                    ScheduleProgress(buildInfo, now + TDuration::MilliSeconds(500));
+                    break;
+                }
             }
             buildInfo.InProgressShards.emplace(shardIdx);
             LastRequestBytes = 0;
@@ -2221,14 +2255,6 @@ private:
                     ToTabletSend.erase(Self->ShardInfos.at(shardIdx).TabletID);
                     return false;
                 }
-                if (!Self->IndexBuildRequestAdmission) {
-                    Self->IndexBuildRequestAdmission = std::make_shared<TScanAdmissionControl>();
-                    Self->IndexBuildRequestAdmission->SetTotalLimit(Max<ui64>());
-                }
-                if (!buildInfo.RequestAdmission) {
-                    buildInfo.RequestAdmission = std::make_shared<TScanAdmissionControl>();
-                    buildInfo.RequestAdmission->SetTotalLimit(Max<ui64>());
-                }
                 // Leave byte credits for other builds; a single large request
                 // may use more than one share, but still fits the global window.
                 const ui64 buildBytes = buildInfo.RequestAdmission->GetUsage().Bytes;
@@ -2237,6 +2263,9 @@ private:
                 auto lease = buildLease
                     ? Self->IndexBuildRequestAdmission->TryAcquire(LastRequestBytes, countLimit, bytesLimit) : nullptr;
                 if (!lease) {
+                    status.CachedRequestBytes = LastRequestBytes;
+                    status.CachedRequestRevision = buildInfo.AdmissionRequestRevision;
+                    status.CachedRequestStage = stage;
                     ToTabletSend.erase(Self->ShardInfos.at(shardIdx).TabletID);
                     buildInfo.InProgressShards.erase(shardIdx);
                     buildInfo.ToUploadShards.push_back(shardIdx);
@@ -2245,6 +2274,7 @@ private:
                     // every shard during each progress transaction.
                     break;
                 }
+                status.CachedRequestBytes = 0;
                 status.RequestReservation = std::make_shared<TIndexBuildShardStatus::TRequestReservation>(
                     TIndexBuildShardStatus::TRequestReservation{std::move(lease), std::move(buildLease)});
             }
@@ -4218,6 +4248,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
+        ++buildInfo.AdmissionRequestRevision;
         auto stats = GetMeteringStats();
         shardStatus.Processed += stats;
         buildInfo.Processed += stats;

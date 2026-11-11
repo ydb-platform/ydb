@@ -146,7 +146,10 @@ public:
                 {"debug", Debug()},
                 {"responseRecord", ToShortDebugString(Response->Record)});
         }
-        Response->MemoryReservation = GetResourceReservation();
+        if (GetResourceReservation()) {
+            Response->MemoryReservation = RetainResourceReservation(
+                Response->Record.SpaceUsedLong() + Response->Record.ByteSizeLong() + 4_KB);
+        }
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -357,17 +360,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
         }
 
 
-        const auto parent = request.GetParent();
-        NTable::TLead lead;
-        if (parent == 0) {
-            lead.To({}, NTable::ESeek::Lower);
-        } else {
-            TCell from, to;
-            const auto range = CreateRangeFrom(userTable, request.GetParent(), from, to);
-            if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
-                badRequest(TStringBuilder() << " requested range doesn't intersect with table range");
-            }
-            lead = CreateLeadFrom(range);
+        TString rangeError;
+        if (!PrepareParentKMeansLead(userTable, request, nullptr, rangeError)) {
+            badRequest(rangeError);
         }
 
         auto tags = GetAllTags(userTable);
@@ -377,36 +372,23 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error, NKikimr::NKMeans::EClustersMode::AssignOnly);
-        if (!clusters) {
+        const auto validated = PrepareKMeansClusters(request, NKikimr::NKMeans::EClustersMode::AssignOnly, false, error);
+        if (!validated) {
             badRequest(error);
-        } else if (request.ClustersSize() < 1) {
-            badRequest("Should be requested for at least one cluster");
-        } else if (!std::all_of(request.GetClusters().begin(), request.GetClusters().end(), [&](const TString& value) { return clusters->IsExpectedFormat({value.data(), value.size()}); })) {
-            badRequest("Clusters have invalid format");
         }
 
         if (trySendBadRequest()) {
             return;
         }
 
-        clusters.reset();
         StartDeferredBuildIndexScan<TEvDataShard::TEvRecomputeKMeansRequest, TEvDataShard::TEvRecomputeKMeansResponse>(
             this, ev, std::move(response), rowVersion, userTable.LocalTid,
             [tabletId = TabletID()](const TUserTable& table, const auto& req, TActorId sender, auto reply) -> TAutoPtr<NTable::IScan> {
                 NTable::TLead lead;
-                if (req.GetParent() == 0) {
-                    lead.To({}, NTable::ESeek::Lower);
-                } else {
-                    TCell from, to;
-                    const auto range = CreateRangeFrom(table, req.GetParent(), from, to);
-                    Y_ENSURE(!range.IsEmptyRange(table.KeyColumnTypes), "Scan range changed during admission");
-                    lead = CreateLeadFrom(range);
-                }
                 TString error;
-                auto clusters = NKikimr::NKMeans::CreateClusters(req.GetSettings(), 0, error);
+                Y_ENSURE(PrepareParentKMeansLead(table, req, &lead, error), error);
+                auto clusters = PrepareKMeansClusters(req, NKikimr::NKMeans::EClustersMode::Accumulate, true, error);
                 Y_ENSURE(clusters, error);
-                Y_ENSURE(clusters->SetClusters(TVector<TString>{req.GetClusters().begin(), req.GetClusters().end()}), "Invalid clusters");
                 return new TRecomputeKMeansScan(tabletId, table, std::move(lead), req, sender, std::move(reply), std::move(clusters));
             });
     } catch (const std::exception& exc) {

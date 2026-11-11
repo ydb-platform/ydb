@@ -611,7 +611,9 @@ bool TSnapshotManager::AcquireReference(const TSnapshotKey& key) {
     return true;
 }
 
-bool TSnapshotManager::ReleaseReference(const TSnapshotKey& key, NTable::TDatabase& db, TInstant now) {
+bool TSnapshotManager::ReleaseReference(const TSnapshotKey& requestedKey, NTable::TDatabase& db, TInstant now) {
+    const auto alias = ReferenceAliases.find(requestedKey);
+    const TSnapshotKey key = alias == ReferenceAliases.end() ? requestedKey : alias->second;
     auto refIt = References.find(key);
 
     if (Y_UNLIKELY(refIt == References.end() || refIt->second <= 0)) {
@@ -625,10 +627,18 @@ bool TSnapshotManager::ReleaseReference(const TSnapshotKey& key, NTable::TDataba
     }
 
     References.erase(refIt);
+    for (auto it = ReferenceAliases.begin(); it != ReferenceAliases.end();) {
+        if (it->second == key) {
+            ReferenceAliases.erase(it++);
+        } else {
+            ++it;
+        }
+    }
 
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
-        Y_DEBUG_ABORT("ReleaseReference on an already deleted snapshot");
+        // Dropping a table removes its snapshot metadata before asynchronous
+        // scan owners have necessarily delivered their release notification.
         return false;
     }
 
@@ -995,9 +1005,20 @@ void TSnapshotManager::RenameSnapshots(NTable::TDatabase& db, const TPathId& pre
         TSnapshotKey oldKey = it->first;
         TSnapshotKey newKey(newTableKey.OwnerId, newTableKey.PathId, oldKey.Step, oldKey.TxId);
 
-        Y_DEBUG_ABORT_UNLESS(!References.contains(oldKey), "Unexpected reference to snapshot during rename");
-
         PersistAddSnapshot(nicedb, newKey, it->second.Name, it->second.Flags, it->second.Timeout);
+
+        if (auto reference = References.find(oldKey); reference != References.end()) {
+            const size_t count = reference->second;
+            References.erase(reference);
+            References[newKey] += count;
+            // Keep aliases flat, including readers spanning multiple moves.
+            for (auto& [_, target] : ReferenceAliases) {
+                if (target == oldKey) {
+                    target = newKey;
+                }
+            }
+            ReferenceAliases[oldKey] = newKey;
+        }
 
         if (ExpireQueue.Has(&it->second)) {
             auto& newSnapshot = Snapshots.at(newKey);

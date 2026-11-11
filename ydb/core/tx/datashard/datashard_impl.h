@@ -395,12 +395,17 @@ class TDataShard
             EvRebuildHnswIndex,
             EvStartHnswSnapshotScan,
             EvHnswSnapshotFinished,
+            EvReleaseIndexScanSnapshot,
             EvEnd
         };
 
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
 
         struct TEvProgressTransaction : public TEventLocal<TEvProgressTransaction, EvProgressTransaction> {};
+        struct TEvReleaseIndexScanSnapshot : public TEventLocal<TEvReleaseIndexScanSnapshot, EvReleaseIndexScanSnapshot> {
+            const TSnapshotKey Key;
+            explicit TEvReleaseIndexScanSnapshot(const TSnapshotKey& key) : Key(key) {}
+        };
         struct TEvCleanupTransaction : public TEventLocal<TEvCleanupTransaction, EvCleanupTransaction> {};
         struct TEvDelayedProposeTransaction : public TEventLocal<TEvDelayedProposeTransaction, EvDelayedProposeTransaction> {};
 
@@ -1568,6 +1573,7 @@ class TDataShard
     // change receiving
     void Handle(TEvChangeExchange::TEvHandshake::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvChangeExchangeExecuteHandshakes::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvReleaseIndexScanSnapshot::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TActorContext& ctx);
     // activation
     void Handle(TEvChangeExchange::TEvActivateSender::TPtr& ev, const TActorContext& ctx);
@@ -2457,6 +2463,8 @@ public:
     }
 
     TThrRefBase* GetDataShardSysTables() { return DataShardSysTables.Get(); }
+
+    std::shared_ptr<void> AcquireIndexScanSnapshot(const TSnapshotKey& key);
 
     TSnapshotManager& GetSnapshotManager() { return SnapshotManager; }
     const TSnapshotManager& GetSnapshotManager() const { return SnapshotManager; }
@@ -3833,6 +3841,7 @@ protected:
             HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
+            HFunc(TEvPrivate::TEvReleaseIndexScanSnapshot, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
@@ -4002,6 +4011,7 @@ protected:
             HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
+            HFunc(TEvPrivate::TEvReleaseIndexScanSnapshot, Handle);
             HFunc(TEvDataShard::TEvVacuum, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {

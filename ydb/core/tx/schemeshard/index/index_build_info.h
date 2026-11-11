@@ -4,6 +4,7 @@
 #include <ydb/core/base/scan_admission.h>
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <tuple>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
@@ -24,6 +25,9 @@ struct TIndexBuildShardStatus {
     ui64 RequiredRowBytes = 0;
     TInstant AdmissionRetryAt;
     ui32 AdmissionRetries = 0;
+    ui64 CachedRequestBytes = 0;
+    ui64 CachedRequestRevision = 0;
+    std::tuple<ui32, ui64, ui32, ui32, ui32> CachedRequestStage;
     size_t Index = 0; // used only in prefixed vector index: a unique number of shard in the list
 
     // Used in fulltext index build:
@@ -212,6 +216,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TIndexBuildId Id;
     TInstant AdmissionRetryScheduledAt;
+    ui64 AdmissionRequestRevision = 1;
     TString Uid;
     TMaybe<TString> UserSID;
 

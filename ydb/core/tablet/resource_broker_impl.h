@@ -229,7 +229,8 @@ public:
     void EraseTask(TTaskPtr task, bool finished, TInstant now);
 
     TTaskPtr FrontTask();
-    void PopTask();
+    TTaskPtr FrontMemorylessTask();
+    void PopTask(TTaskPtr task);
 
     void UpdateRealResourceUsage(TInstant now);
 
@@ -253,6 +254,7 @@ public:
     ui32 Weight;
     bool StrictMemoryLimit;
     TSet<TTaskPtr, TTaskEarlier> Tasks;
+    TSet<TTaskPtr, TTaskEarlier> MemorylessTasks;
     TResourceLimit QueueLimit;
     TResourceLimitPtr TotalLimit;
     double RealResourceUsage;
@@ -330,8 +332,12 @@ public:
         const auto& queue = TaskConfig(task.Type).Queue;
         const auto bytes = task.RequiredResources[NKikimrResourceBroker::MEMORY];
         return !queue->StrictMemoryLimit ||
-            (bytes <= queue->QueueLimit.Limit[NKikimrResourceBroker::MEMORY] &&
-             bytes <= ResourceLimit->Limit[NKikimrResourceBroker::MEMORY]);
+            bytes <= GetMemoryLimit(task.Type);
+    }
+
+    ui64 GetMemoryLimit(const TString& type) const {
+        return Min(TaskConfig(type).Queue->QueueLimit.Limit[NKikimrResourceBroker::MEMORY],
+            ResourceLimit->Limit[NKikimrResourceBroker::MEMORY]);
     }
 
     bool SubmitTask(const TEvResourceBroker::TTask &task, const TActorId &client, const TActorSystem &as);

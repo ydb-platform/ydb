@@ -229,7 +229,7 @@ public:
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
-        Uploader.SetResourceReservation(GetResourceReservation());
+        Uploader.SetResourceReservation(GetResourceReservation(), GetResourceRetainer());
 
         return {EScan::Feed, {}};
     }
@@ -269,7 +269,10 @@ public:
                 {"debug", Debug()},
                 {"responseRecord", Response->Record.ShortDebugString()});
         }
-        Response->MemoryReservation = GetResourceReservation();
+        if (GetResourceReservation()) {
+            Response->MemoryReservation = RetainResourceReservation(
+                Response->Record.SpaceUsedLong() + Response->Record.ByteSizeLong() + 4_KB);
+        }
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -803,19 +806,18 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error, NKikimr::NKMeans::EClustersMode::AssignOnly);
-        if (!clusters && !NKikimr::NKMeans::ValidateSettingsPartial(request.GetSettings(), error)) {
+        if (!NKikimr::NKMeans::ValidateSettings(request.GetSettings(), error) &&
+            !NKikimr::NKMeans::ValidateSettingsPartial(request.GetSettings(), error)) {
             badRequest(error);
             auto sent = trySendBadRequest();
             Y_ENSURE(sent);
             return;
         }
-        clusters.reset();
         StartDeferredBuildIndexScan<TEvDataShard::TEvPrefixKMeansRequest, TEvDataShard::TEvPrefixKMeansResponse>(
             this, ev, std::move(response), rowVersion, userTable.LocalTid,
             [tabletId = TabletID()](const TUserTable& table, const auto& req, TActorId sender, auto reply) -> TAutoPtr<NTable::IScan> {
                 TString error;
-                auto clusters = NKikimr::NKMeans::CreateClusters(req.GetSettings(), req.GetNeedsRounds(), error);
+                auto clusters = PrepareKMeansClusters(req, NKikimr::NKMeans::EClustersMode::Accumulate, true, error);
                 Y_ENSURE(clusters || NKikimr::NKMeans::ValidateSettingsPartial(req.GetSettings(), error), error);
                 return new TPrefixKMeansScan(tabletId, table, req, sender, std::move(reply), std::move(clusters));
             });

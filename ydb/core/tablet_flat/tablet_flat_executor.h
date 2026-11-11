@@ -452,6 +452,7 @@ struct TScanOptions {
     std::shared_ptr<void> PendingReservation;
     std::function<TAutoPtr<NTable::IScan>(TScanOptions&)> Factory;
     std::function<void(const TString&, bool)> OnAdmissionFailure;
+    std::function<void(ui64)> OnMemoryLimitExceeded;
     TDuration QueueTimeout;
 
     EReadPrio ReadPrio = EReadPrio::Default;

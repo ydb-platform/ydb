@@ -192,7 +192,7 @@ public:
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
-        Uploader.SetResourceReservation(GetResourceReservation());
+        Uploader.SetResourceReservation(GetResourceReservation(), GetResourceRetainer());
 
         return {EScan::Feed, {}};
     }
@@ -228,7 +228,10 @@ public:
                 {"debug", Debug()},
                 {"responseRecord", ToShortDebugString(Response->Record)});
         }
-        Response->MemoryReservation = GetResourceReservation();
+        if (GetResourceReservation()) {
+            Response->MemoryReservation = RetainResourceReservation(
+                Response->Record.SpaceUsedLong() + Response->Record.ByteSizeLong() + 4_KB);
+        }
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;

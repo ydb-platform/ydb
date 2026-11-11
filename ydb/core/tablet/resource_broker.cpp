@@ -200,6 +200,9 @@ void TTaskQueue::InsertTask(TTaskPtr task, TInstant now)
         task->Counters->InFlyTasks->Inc();
     } else {
         Tasks.insert(task);
+        if (!task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
+            MemorylessTasks.insert(task);
+        }
 
         // Update queue/task counters
         QueueCounters.EnqueuedTasks->Inc();
@@ -233,6 +236,7 @@ void TTaskQueue::EraseTask(TTaskPtr task, bool finished, TInstant now)
             task->Counters->FinishedTasks->Inc();
         }
     } else {
+        MemorylessTasks.erase(task);
         // Removing the first element is the most common case.
         if (*Tasks.begin() == task) {
             Tasks.erase(Tasks.begin());
@@ -291,10 +295,18 @@ TTaskPtr TTaskQueue::FrontTask()
     return *Tasks.begin();
 }
 
-void TTaskQueue::PopTask()
+TTaskPtr TTaskQueue::FrontMemorylessTask()
+{
+    if (MemorylessTasks.empty()) {
+        return {};
+    }
+    return *MemorylessTasks.begin();
+}
+
+void TTaskQueue::PopTask(TTaskPtr task)
 {
     Y_ABORT_UNLESS(!Tasks.empty());
-    EraseTask(*Tasks.begin(), false, TInstant());
+    EraseTask(task, false, TInstant());
 }
 
 void TTaskQueue::HoldResources(TTaskPtr task)
@@ -613,7 +625,7 @@ bool TScheduler::RemoveTasks(const TActorId &client, const TActorSystem &as)
     for (ui64 taskId : taskIds) {
         const auto* task = FindTask(taskId, client);
         Y_DEBUG_ABORT_UNLESS(task);
-        if (task->KeepOnClientDeath) {
+        if (task->InFly && task->KeepOnClientDeath) {
             continue;
         }
         auto result = task->InFly
@@ -674,29 +686,33 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         pending.erase(pending.begin());
 
         auto task = queue->FrontTask();
-        if (task->GetRequiredResourcesMask() & blockedResources) {
+        bool blocked = task->GetRequiredResourcesMask() & blockedResources;
+        if (queue->StrictMemoryLimit && task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
+            const TResourceValues memory{{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}};
+            if (!queue->QueueLimit.HasResources(memory)) {
+                blocked = true;
+            } else if (!ResourceLimit->HasResources(memory)) {
+                // Preserve inter-queue fairness while this reservation can
+                // accumulate enough global memory. An oversized task left by
+                // reconfiguration must not block other queues indefinitely.
+                if (task->RequiredResources[NKikimrResourceBroker::MEMORY] <= ResourceLimit->Limit[NKikimrResourceBroker::MEMORY]) {
+                    blockedResources |= ui64(1) << NKikimrResourceBroker::MEMORY;
+                }
+                blocked = true;
+            }
+            if (blocked) {
+                // Legacy scans declare no memory. Keep their own priority
+                // ordering without letting a vector task monopolize the queue.
+                task = queue->FrontMemorylessTask();
+                if (!task) {
+                    continue;
+                }
+                blocked = task->GetRequiredResourcesMask() & blockedResources;
+            }
+        }
+        if (blocked) {
             YDB_LOG_DEBUG_CTX(as, "Skipping queue blocked by an earlier queue",
                 {"queueName", queue->Name});
-            continue;
-        }
-
-        // Admission-aware scan reservations are strict even when the queue
-        // and the whole broker are idle. Preserve legacy progress exceptions
-        // for the other queues.
-        const bool strictMemory = queue->StrictMemoryLimit && task->RequiredResources[NKikimrResourceBroker::MEMORY];
-        const TResourceValues memory{{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}};
-        if (strictMemory && !queue->QueueLimit.HasResources(memory)) {
-            continue;
-        }
-        if (strictMemory && !ResourceLimit->HasResources(memory)) {
-            // Preserve the scheduler's ordering across queues: later memory
-            // tasks must let this task accumulate enough global headroom.
-            // A later reconfiguration can make an already queued task larger
-            // than the entire budget. It cannot accumulate enough headroom,
-            // so let other queues run while its owner cancels or times out.
-            if (task->RequiredResources[NKikimrResourceBroker::MEMORY] <= ResourceLimit->Limit[NKikimrResourceBroker::MEMORY]) {
-                blockedResources |= ui64(1) << NKikimrResourceBroker::MEMORY;
-            }
             continue;
         }
 
@@ -725,7 +741,7 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
             {"taskId", task->GetIdString().data()},
             {"queueName", queue->Name.data()});
 
-        queue->PopTask();
+        queue->PopTask(task);
         task->InFly = true;
         task->StartTime = Now;
         task->FinishTime = Now + EstimateTaskExecutionTime(task);
@@ -948,11 +964,20 @@ TResourceBroker::TOpError TResourceBroker::SubmitTask(const TEvResourceBroker::T
 {
     with_lock(Lock) {
         Scheduler.UpdateTime(ActorSystem->Timestamp());
+        if (ev.Task.OwnerLease && ev.Task.OwnerLease->expired()) {
+            auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
+            error->TaskId = ev.Task.TaskId;
+            error->Status.Code = TEvResourceBroker::TStatus::UNKNOWN_TASK;
+            error->Status.Message = "scan reservation owner was cancelled before submission";
+            error->Cookie = ev.Task.Cookie;
+            return error;
+        }
         if (!Scheduler.FitsMemoryLimit(ev.Task)) {
             auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
             error->TaskId = ev.Task.TaskId;
             error->Status.Code = TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED;
             error->Status.Message = "scan memory reservation exceeds the current broker limit";
+            error->Status.MemoryLimit = Scheduler.GetMemoryLimit(ev.Task.Type);
             error->Cookie = ev.Task.Cookie;
             return error;
         }
@@ -975,6 +1000,9 @@ TResourceBroker::TOpError TResourceBroker::SubmitTask(const TEvResourceBroker::T
 bool TResourceBroker::SubmitTaskInstant(const TEvResourceBroker::TEvSubmitTask& ev, const TActorId& sender)
 {
     with_lock(Lock) {
+        if (ev.Task.OwnerLease && ev.Task.OwnerLease->expired()) {
+            return false;
+        }
         bool success = false;
 
         Scheduler.UpdateTime(ActorSystem->Timestamp());
@@ -1374,7 +1402,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
         }
     }
 
-    ctx.Send(ev->Sender, response.Release());
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
 void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigRequest::TPtr& ev, const TActorContext&)

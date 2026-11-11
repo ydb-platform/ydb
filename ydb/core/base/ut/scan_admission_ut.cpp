@@ -45,6 +45,11 @@ Y_UNIT_TEST_SUITE(TScanAdmission) {
         quota.SetTotalLimit(256, 192);
         UNIT_ASSERT_VALUES_EQUAL(quota.GetByteLimit(64), 64);
         UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 192);
+        quota.RestrictBrokerLimit(96);
+        quota.SetTotalLimit(256, 192);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 96);
+        quota.ConfirmBrokerLimit(192);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 192);
         quota.SetTotalLimit(256, 32);
         UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 32);
         quota.SetTotalLimit(128);

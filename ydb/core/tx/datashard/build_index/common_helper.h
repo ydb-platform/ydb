@@ -74,6 +74,7 @@ public:
 private:
     struct TUploadAttempt {
         std::shared_ptr<void> Reservation;
+        bool Completed = false;
         explicit TUploadAttempt(std::shared_ptr<void> reservation)
             : Reservation(std::move(reservation))
         {}
@@ -264,6 +265,12 @@ public:
                 response.SetStatus(NKikimrIndexBuilder::ABORTED);
             }
         }
+        if (CleanupTimedOut) {
+            response.SetStatus(NKikimrIndexBuilder::ABORTED);
+            if constexpr (requires { response.SetRetryAfterMs(1000); }) {
+                response.SetRetryAfterMs(1000);
+            }
+        }
         NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
     }
 
@@ -275,8 +282,10 @@ public:
         return UploadStatus.IsSuccess();
     }
 
-    void SetResourceReservation(std::shared_ptr<void> reservation) {
+    void SetResourceReservation(std::shared_ptr<void> reservation,
+        std::function<std::shared_ptr<void>(ui64)> retain = {}) {
         ResourceReservation = std::move(reservation);
+        RetainResource = std::move(retain);
     }
 
     void SetOwner(const TActorId& owner) {
@@ -354,6 +363,10 @@ private:
         UploadStatus.Issues = issues;
         if (!UploadStatus.IsSuccess()) {
             return false;
+        }
+
+        if (auto attempt = PreviousAttempt.lock()) {
+            attempt->Completed = true;
         }
 
         if (kind == EDestinationKind::Erase) {
@@ -445,7 +458,18 @@ private:
         }
         std::shared_ptr<void> attempt;
         if (ResourceReservation) {
-            auto token = std::make_shared<TUploadAttempt>(ResourceReservation);
+            // Include the canonical rows, protobuf payload, and row/container
+            // overhead still owned by this attempt after the scan stops.
+            ui64 bytes = 2 * Uploading.Buffer.GetBufferBytes()
+                + Uploading.Buffer.GetRows() * 256 + 4_KB;
+            for (const auto& [key, _] : *Uploading.Buffer.GetRowsData()) {
+                bytes += key.GetCells().size() * sizeof(TCell) * 2;
+            }
+            for (const auto& [name, type] : *Uploading.Types) {
+                bytes += 2 * (name.size() + type.SpaceUsedLong() + 64);
+            }
+            bytes += 2 * (Database.size() + Uploading.Table.size());
+            auto token = std::make_shared<TUploadAttempt>(RetainResource ? RetainResource(bytes) : ResourceReservation);
             PreviousAttempt = token;
             attempt = std::move(token);
         }
@@ -459,6 +483,13 @@ private:
     }
 
     bool WaitForPreviousAttempt() {
+        // Completion may race actor/event destruction in another mailbox.
+        // Allow one completed attempt to retire while the next one starts;
+        // two retained attempts remain the independent bound on overlap.
+        if (const auto attempt = PreviousAttempt.lock(); attempt && attempt->Completed && RetiringAttempt.expired()) {
+            RetiringAttempt = attempt;
+            PreviousAttempt.reset();
+        }
         if (PreviousAttempt.expired()) {
             CleanupWaitStarted.reset();
             return false;
@@ -469,16 +500,23 @@ private:
         }
         // Keep the retained payload charged, but do not leave its scan waiting
         // forever for a disconnected pipe or a stalled destination mailbox.
-        Y_ENSURE(now < *CleanupWaitStarted + TDuration::Minutes(1),
-            "Timed out waiting for previous upload payload cleanup");
-        TActivationContext::ActorContextFor(Owner).Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
+        if (now >= *CleanupWaitStarted + TDuration::Minutes(1)) {
+            CleanupTimedOut = true;
+            ythrow yexception() << "Timed out waiting for previous upload payload cleanup";
+        }
+        const auto attempt = PreviousAttempt.lock();
+        const auto delay = attempt && attempt->Completed ? TDuration::MilliSeconds(1) : TDuration::MilliSeconds(100);
+        TActivationContext::ActorContextFor(Owner).Schedule(delay, new TEvents::TEvWakeup());
         return true;
     }
 
 private:
     std::shared_ptr<void> ResourceReservation;
+    std::function<std::shared_ptr<void>(ui64)> RetainResource;
     std::weak_ptr<TUploadAttempt> PreviousAttempt;
+    std::weak_ptr<TUploadAttempt> RetiringAttempt;
     std::optional<TInstant> CleanupWaitStarted;
+    bool CleanupTimedOut = false;
     const TString Database;
     const TIndexBuildScanSettings ScanSettings;
     TActorId Owner;
@@ -535,7 +573,9 @@ inline ui64 CheckedScanMemoryMul(ui64 a, ui64 b) {
 }
 
 class TVectorIndexScan : public NTable::IScan {
+    std::shared_ptr<void> SnapshotReference;
 public:
+    void HoldSnapshotReference(std::shared_ptr<void> reference) { SnapshotReference = std::move(reference); }
     virtual void SetRowBytesLimit(ui64 limit) { RowBytesLimit = limit; }
     ui64 GetRowBytesLimit() const { return RowBytesLimit; }
 
@@ -576,8 +616,10 @@ ui64 EstimateBuildIndexScanMemory(const TRequest& request, const TUserTable& tab
         ui64 vectorBytes = CheckedScanMemoryAdd(dimensions ? CheckedScanMemoryMul(dimensions, 4) : rowLimit, 256);
         if constexpr (requires { request.ColumnsSize(); }) {
             vectorBytes = CheckedScanMemoryAdd(vectorBytes, CheckedScanMemoryMul(request.ColumnsSize(), 32));
-            // Covering-column samples need allocation/response-copy headroom.
-            vectorBytes = Max(vectorBytes, CheckedScanMemoryMul(request.GetRequiredRowBytes(), 2));
+            vectorBytes = Max(vectorBytes, CheckedScanMemoryAdd(request.GetRequiredRowBytes(),
+                CheckedScanMemoryAdd(128, CheckedScanMemoryMul(request.ColumnsSize(), 32))));
+            // Samples coexist with the response protobuf and its encoded copy.
+            vectorBytes = CheckedScanMemoryMul(vectorBytes, 3);
         }
         memory = CheckedScanMemoryAdd(memory, CheckedScanMemoryMul(clusters, vectorBytes));
         if constexpr (!std::is_same_v<TRequest, NKikimrTxDataShard::TEvReshuffleKMeansRequest> &&
@@ -627,32 +669,47 @@ ui64 FitBuildIndexScanMemory(TRequest& request, const TUserTable& table, ui64 li
     if (!limit) {
         return 0;
     }
-    const ui64 minimumRow = Max<ui64>(1, request.GetRequiredRowBytes());
+    ui64 naturalRow = 64_KB;
+    if constexpr (requires { request.GetSettings(); }) {
+        if (request.GetSettings().vector_dimension()) {
+            naturalRow = CheckedScanMemoryAdd(CheckedScanMemoryMul(request.GetSettings().vector_dimension(), 4),
+                CheckedScanMemoryAdd(512, CheckedScanMemoryMul(table.Columns.size() + table.KeyColumnIds.size(), 32)));
+        }
+    }
+    const ui64 minimumRow = Max(request.GetRequiredRowBytes(), Min(rowLimit, naturalRow));
     for (;;) {
         const ui64 memory = EstimateBuildIndexScanMemory(request, table, rowLimit, requestMemory);
         if (memory <= limit) {
             return memory;
         }
-        bool changed = false;
-        const ui64 smallerRow = Max(minimumRow, rowLimit / 2);
-        if (smallerRow < rowLimit) {
-            rowLimit = smallerRow;
-            changed = true;
+        // Preserve a useful per-row allowance while reducing batch buffers.
+        // Keep moderate batches before resorting to smaller rows, rather than
+        // reducing both to tiny values on every unsuccessful estimate.
+        if constexpr (requires { request.MutableScanSettings(); }) {
+            auto& settings = *request.MutableScanSettings();
+            if (settings.GetMaxBatchBytes() > 64_KB || settings.GetMaxBatchRows() > 128) {
+                if (settings.GetMaxBatchBytes() > 64_KB) {
+                    settings.SetMaxBatchBytes(Max<ui64>(64_KB, settings.GetMaxBatchBytes() / 2));
+                }
+                if (settings.GetMaxBatchRows() > 128) {
+                    settings.SetMaxBatchRows(Max<ui32>(128, settings.GetMaxBatchRows() / 2));
+                }
+                continue;
+            }
+        }
+        if (rowLimit > minimumRow) {
+            rowLimit = Max(minimumRow, rowLimit / 2);
+            continue;
         }
         if constexpr (requires { request.MutableScanSettings(); }) {
             auto& settings = *request.MutableScanSettings();
-            if (settings.GetMaxBatchBytes()) {
+            if (settings.GetMaxBatchBytes() || settings.GetMaxBatchRows() > 1) {
                 settings.SetMaxBatchBytes(settings.GetMaxBatchBytes() / 2);
-                changed = true;
-            }
-            if (settings.GetMaxBatchRows() > 1) {
                 settings.SetMaxBatchRows(Max<ui32>(1, settings.GetMaxBatchRows() / 2));
-                changed = true;
+                continue;
             }
         }
-        if (!changed) {
-            return 0;
-        }
+        return 0;
     }
 }
 
@@ -745,7 +802,9 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
     // RequiredRowBytes floor discovered by the existing row-reservation retry.
     const ui64 memory = FitBuildIndexScanMemory(request, table, scanLimit, rowLimit, requestMemory);
     if (!memory) {
-        reject("Minimum index scan reservation exceeds the current memory budget", false);
+        const bool retry = admission.IsBrokerConfigurationPending() &&
+            EstimateBuildIndexScanMemory(request, table, rowLimit, requestMemory) <= config.GetBuildIndexScanMemoryLimit();
+        reject("Minimum index scan reservation exceeds the current memory budget", retry);
         return;
     }
     const ui64 requestBytes = CheckedScanMemoryAdd(requestMemory, serializedBytes);
@@ -767,17 +826,31 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
         return;
     }
 
+    std::shared_ptr<void> snapshotReference;
+    if constexpr (requires { request.HasSnapshotStep(); }) {
+        if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
+            const TSnapshotKey key(pathId, request.GetSnapshotStep(), request.GetSnapshotTxId());
+            snapshotReference = self->AcquireIndexScanSnapshot(key);
+            if (!snapshotReference) {
+                reject("Requested snapshot is unavailable before scan admission", false);
+                return;
+            }
+        }
+    }
+
     struct TPending {
         // Destruction order: release the quota after freeing retained messages.
         std::shared_ptr<TScanAdmissionControl::TLease> Lease;
         typename TRequest::TPtr Event;
         THolder<TResponse> Response;
+        std::shared_ptr<void> SnapshotReference;
         bool Replied = false;
     };
     auto pending = std::make_shared<TPending>();
     pending->Lease = lease;
     pending->Event = std::move(ev);
     pending->Response = std::move(response);
+    pending->SnapshotReference = std::move(snapshotReference);
     const ui64 schemaVersion = table.GetTableSchemaVersion();
     auto fail = [self, pending, id, seqNo](const TString& reason, bool retry) {
         if (pending->Replied) {
@@ -797,6 +870,9 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
     options.PendingReservation = lease;
     options.QueueTimeout = TDuration::MilliSeconds(Max<ui32>(1, config.GetBuildIndexQueueTimeoutMs()));
     options.OnAdmissionFailure = fail;
+    options.OnMemoryLimitExceeded = [quota = AppData()->BuildIndexScanAdmission](ui64 limit) {
+        quota->RestrictBrokerLimit(limit);
+    };
     options.Factory = [self, pending, pathId, tableId, schemaVersion, rowLimit, makeScan, fail](TScanOptions& opts) mutable -> TAutoPtr<NTable::IScan> {
         try {
             const auto found = self->GetUserTables().find(pathId.LocalPathId);
@@ -810,11 +886,7 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
             if constexpr (requires { req.HasSnapshotStep(); }) {
                 explicitSnapshot = req.HasSnapshotStep() || req.HasSnapshotTxId();
                 if (explicitSnapshot) {
-                    const TSnapshotKey key(pathId, req.GetSnapshotStep(), req.GetSnapshotTxId());
-                    if (!self->GetSnapshotManager().FindAvailable(key)) {
-                        fail("Requested snapshot expired while waiting for scan admission", false);
-                        return {};
-                    }
+                    Y_ENSURE(pending->SnapshotReference, "Explicit scan snapshot was not pinned");
                 }
             }
             if (!explicitSnapshot) {
@@ -829,7 +901,9 @@ void StartDeferredBuildIndexScan(TDataShard* self, typename TRequest::TPtr& ev,
                 return {};
             }
             auto scan = makeScan(*found->second, req, pending->Event->Sender, std::move(pending->Response));
-            CheckedCast<TVectorIndexScan*>(scan.Get())->SetRowBytesLimit(rowLimit);
+            auto* vectorScan = CheckedCast<TVectorIndexScan*>(scan.Get());
+            vectorScan->SetRowBytesLimit(rowLimit);
+            vectorScan->HoldSnapshotReference(pending->SnapshotReference);
             return scan;
         } catch (const std::exception& exc) {
             fail(TStringBuilder() << "Cannot initialize admitted index scan: " << exc.what(), false);

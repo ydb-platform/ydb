@@ -20,6 +20,8 @@ class TScanAdmissionControl {
         ui64 Bytes = 0;
         ui64 TotalLimit = 512_MB;
         ui64 ActiveLimit = Max<ui64>();
+        ui64 BrokerLimit = Max<ui64>();
+        bool BrokerConfigurationPending = false;
         ::NMonitoring::TDynamicCounters::TCounterPtr CountCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr BytesCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr RejectedCounter;
@@ -85,8 +87,7 @@ public:
             }
             // Keep pending descriptors inside the same overall index-build
             // budget as the active broker queue, including on small nodes.
-            bytesLimit = CalculatePendingByteLimit(State->TotalLimit, bytesLimit);
-            if (State->Count >= countLimit || State->Bytes > bytesLimit || bytes > bytesLimit - State->Bytes) {
+            if (!CanAcquireLocked(bytes, countLimit, bytesLimit)) {
                 if (State->RejectedCounter) {
                     State->RejectedCounter->Inc();
                 }
@@ -108,15 +109,44 @@ public:
 
     ui64 GetActiveByteLimit(ui64 configuredPendingLimit) const {
         with_lock(State->Lock) {
-            return Min(State->ActiveLimit,
+            return Min(Min(State->ActiveLimit, State->BrokerLimit),
                 State->TotalLimit - CalculatePendingByteLimit(State->TotalLimit, configuredPendingLimit));
         }
     }
 
-    void SetTotalLimit(ui64 bytes, ui64 activeLimit = Max<ui64>()) {
+    bool CanAcquire(ui64 bytes, ui64 countLimit, ui64 bytesLimit) const {
+        with_lock(State->Lock) {
+            return CanAcquireLocked(bytes, countLimit, bytesLimit);
+        }
+    }
+
+    void RestrictBrokerLimit(ui64 bytes) {
+        with_lock(State->Lock) {
+            State->BrokerLimit = Min(State->BrokerLimit, bytes);
+        }
+    }
+
+    void ConfirmBrokerLimit(ui64 bytes) {
+        with_lock(State->Lock) {
+            State->BrokerLimit = bytes;
+            State->BrokerConfigurationPending = false;
+        }
+    }
+
+    bool IsBrokerConfigurationPending() const {
+        with_lock(State->Lock) {
+            return State->BrokerConfigurationPending;
+        }
+    }
+
+    void SetTotalLimit(ui64 bytes, ui64 activeLimit = Max<ui64>(), bool configurationPending = false) {
         with_lock(State->Lock) {
             State->TotalLimit = bytes;
+            if (State->ActiveLimit != activeLimit) {
+                State->BrokerLimit = Max<ui64>();
+            }
             State->ActiveLimit = activeLimit;
+            State->BrokerConfigurationPending |= configurationPending;
         }
     }
 
@@ -127,6 +157,11 @@ public:
     }
 
 private:
+    bool CanAcquireLocked(ui64 bytes, ui64 countLimit, ui64 bytesLimit) const {
+        bytesLimit = CalculatePendingByteLimit(State->TotalLimit, bytesLimit);
+        return State->Count < countLimit && State->Bytes <= bytesLimit && bytes <= bytesLimit - State->Bytes;
+    }
+
     const std::shared_ptr<TState> State = std::make_shared<TState>();
 };
 

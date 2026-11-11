@@ -7,6 +7,8 @@
 #include "util_fmt_abort.h"
 #include "flat_util_misc.h"
 #include <atomic>
+#include <util/system/spinlock.h>
+#include <util/system/guard.h>
 #include "tablet_flat_executor.h"
 
 namespace NKikimr {
@@ -51,25 +53,84 @@ namespace NTabletFlatExecutor {
             bool ManagedLease = false;
         };
 
-        // The last scan/upload buffer owner returns the broker reservation.
-        // It deliberately outlives executor/tablet shutdown when children still
-        // own memory. The broker's cookie contains no strong reference to it.
+        // The scan owns the full working-set reservation. Once it stops, only
+        // bytes retained by asynchronous payload owners remain charged, with no
+        // CPU slot. The broker cookie never owns this state.
         struct TTaskLease {
-            TActorSystem* const System;
-            const TActorId Client;
-            const ui64 TaskId;
-            std::atomic<bool> Cancel{true};
-            bool Armed = true;
+            struct TState {
+                TActorSystem* const System;
+                const TActorId Client;
+                const ui64 TaskId;
+                const TString Type;
+                const ui32 Priority;
+                const ui64 Memory;
+                TSpinLock Lock;
+                ui64 Retained = 0;
+                bool Running = true;
+                bool Armed = true;
+                std::atomic<bool> Cancel{true};
 
-            TTaskLease(TActorSystem* system, TActorId client, ui64 taskId)
-                : System(system), Client(client), TaskId(taskId)
+                TState(TActorSystem* system, TActorId client, ui64 taskId, TString type, ui32 priority, ui64 memory)
+                    : System(system), Client(client), TaskId(taskId), Type(std::move(type)), Priority(priority), Memory(memory)
+                {}
+
+                ~TState() {
+                    if (Armed) {
+                        System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
+                            new TEvResourceBroker::TEvFinishTask(TaskId, Cancel.load(std::memory_order_acquire))));
+                    }
+                }
+
+                void UpdateRetained() {
+                    if (Armed && !Running && Retained) {
+                        System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
+                            new TEvResourceBroker::TEvUpdateTask(TaskId, {{0, Retained}}, Type, Priority)));
+                    }
+                }
+            };
+
+            struct TPayload {
+                const std::shared_ptr<TState> State;
+                const ui64 Bytes;
+                bool Armed = false;
+
+                TPayload(std::shared_ptr<TState> state, ui64 bytes)
+                    : State(std::move(state)), Bytes(bytes)
+                {}
+
+                ~TPayload() {
+                    if (Armed) {
+                        with_lock(State->Lock) {
+                            Y_ABORT_UNLESS(State->Retained >= Bytes);
+                            State->Retained -= Bytes;
+                            State->UpdateRetained();
+                        }
+                    }
+                }
+            };
+
+            const std::shared_ptr<TState> State;
+
+            TTaskLease(TActorSystem* system, TActorId client, ui64 taskId, TString type, ui32 priority, ui64 memory)
+                : State(std::make_shared<TState>(system, client, taskId, std::move(type), priority, memory))
             {}
 
             ~TTaskLease() {
-                if (Armed) {
-                    System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
-                        new TEvResourceBroker::TEvFinishTask(TaskId, Cancel.load(std::memory_order_acquire))));
+                with_lock(State->Lock) {
+                    State->Running = false;
+                    State->UpdateRetained();
                 }
+            }
+
+            std::shared_ptr<void> Retain(ui64 bytes) {
+                auto payload = std::make_shared<TPayload>(State, bytes);
+                with_lock(State->Lock) {
+                    Y_ENSURE(State->Retained <= State->Memory && bytes <= State->Memory - State->Retained,
+                        "Retained scan payload exceeds its memory reservation");
+                    State->Retained += bytes;
+                    payload->Armed = true;
+                }
+                return payload;
             }
         };
 
@@ -210,7 +271,9 @@ namespace NTabletFlatExecutor {
                 const ui64 memory = overrides ? overrides->Memory : 0;
                 if (options.Factory) {
                     Y_ENSURE(memory, "Deferred scans must declare memory before construction");
-                    one.Lease = std::make_shared<TTaskLease>(ActorSystem, BrokerClient, one.TaskId);
+                    one.Lease = std::make_shared<TTaskLease>(ActorSystem, BrokerClient, one.TaskId,
+                        overrides ? overrides->Type : Tables[table].Type,
+                        overrides ? overrides->Prio : Tables[table].Prio, memory);
                     cookie->ManagedLease = true;
                 }
                 auto submit = MakeHolder<TEvResourceBroker::TEvSubmitTask>(
@@ -218,6 +281,9 @@ namespace NTabletFlatExecutor {
                     overrides ? overrides->Type : Tables[table].Type,
                     overrides ? overrides->Prio : Tables[table].Prio, cookie);
                 submit->Task.KeepOnClientDeath = bool(one.Lease);
+                if (one.Lease) {
+                    submit->Task.OwnerLease = one.Lease;
+                }
                 submit->SetOwner(Tablet, FollowerId);
                 ToBroker(submit.Release());
                 if (options.Factory && options.QueueTimeout) {
@@ -271,20 +337,18 @@ namespace NTabletFlatExecutor {
             Lookup(serial, true)->Snapshot = std::move(snapshot);
         }
 
-        TCancelled AdmissionFailed(ui64 serial, const TString& reason, bool submitted = true) {
+        TCancelled AdmissionFailed(ui64 serial, const TString& reason, bool submitted = true, bool retry = true) {
             auto* one = Lookup(serial, false);
             if (!one || one->State > EState::Ready) {
                 return {};
             }
             if (!submitted && one->Lease) {
-                one->Lease->Armed = false;
+                one->Lease->State->Armed = false;
             }
             auto callback = std::move(one->Options.OnAdmissionFailure);
             auto cancelled = Cancel(serial);
             if (callback) {
-                // A rejected submission exceeds capacity, rather than waiting
-                // for resources held by another task. Queue timeouts may retry.
-                callback(reason, submitted);
+                callback(reason, retry);
             }
             return cancelled;
         }
@@ -293,7 +357,13 @@ namespace NTabletFlatExecutor {
             if (error.Status.Code == TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED && error.Cookie) {
                 const auto* resource = CheckedCast<TResource*>(error.Cookie.Get());
                 if (resource->Source == TResource::ESource::Scan) {
-                    return AdmissionFailed(CheckedCast<const TCookie*>(resource)->Serial, error.Status.Message, false);
+                    const ui64 serial = CheckedCast<const TCookie*>(resource)->Serial;
+                    if (auto* one = Lookup(serial, false); one && error.Status.MemoryLimit && one->Options.OnMemoryLimitExceeded) {
+                        one->Options.OnMemoryLimitExceeded(*error.Status.MemoryLimit);
+                    }
+                    // Limits may be applied asynchronously. Teach admission the
+                    // actual capacity, then retry fitting against that value.
+                    return AdmissionFailed(serial, error.Status.Message, false);
                 }
             }
             return {};
@@ -444,7 +514,11 @@ namespace NTabletFlatExecutor {
 
             Y_ENSURE(one.Snapshot);
             if (one.Lease) {
-                one.Scan->HoldResourceReservation(one.Lease);
+                one.Scan->HoldResourceReservation(one.Lease, [lease = std::weak_ptr<TTaskLease>(one.Lease)](ui64 bytes) {
+                    const auto owner = lease.lock();
+                    Y_ENSURE(owner, "Scan reservation has already been released");
+                    return owner->Retain(bytes);
+                });
             }
             auto actor = MakeHolder<NOps::TDriver>(one.Serial, one.Scan, conf, one.Snapshot);
 
@@ -489,7 +563,7 @@ namespace NTabletFlatExecutor {
         TScanOutcome Throw(TOne &one, EState last, EStatus status, TAutoPtr<IDestructable> &result)
         {
             if (one.Lease && status == EStatus::Done) {
-                one.Lease->Cancel.store(false, std::memory_order_release);
+                one.Lease->State->Cancel.store(false, std::memory_order_release);
             }
             if (auto task = std::exchange(one.TaskId, 0); task && !one.Lease) {
                 if (one.State == EState::Task) {

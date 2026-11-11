@@ -319,6 +319,51 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(2, true)));
     }
 
+    Y_UNIT_TEST(LegacyScansBypassMemoryBlockedTaskInStrictQueue) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeTestConfig();
+        auto* queue = config.MutableQueues(3);
+        queue->SetStrictMemoryLimit(true);
+        queue->MutableLimit()->SetMemory(100);
+        queue->MutableLimit()->SetCpu(4);
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto broker = runtime.Register(CreateResourceBrokerActor(config, counters));
+        WaitForBootstrap(runtime);
+        SubmitTask(runtime, broker, sender, 1, 1, 60, "scan", 5);
+        WaitForResourceAllocation(runtime, 1);
+        SubmitTask(runtime, broker, sender, 2, 1, 60, "scan", 5);
+        SubmitTask(runtime, broker, sender, 3, 1, 0, "scan", 10);
+        SubmitTask(runtime, broker, sender, 4, 1, 0, "scan", 11);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 3, 60, 0, 1, 3);
+        WaitForResourceAllocation(runtime, 3);
+        WaitForResourceAllocation(runtime, 4);
+        FinishTask(runtime, broker, sender, 1);
+        WaitForResourceAllocation(runtime, 2);
+        for (ui64 id : {2, 3, 4}) {
+            FinishTask(runtime, broker, sender, id);
+        }
+    }
+
+    Y_UNIT_TEST(CancelledManagedSubmissionDoesNotAllocateResources) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        auto sender = runtime.AllocateEdgeActor();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters));
+        WaitForBootstrap(runtime);
+        auto owner = std::make_shared<int>(0);
+        auto event = MakeHolder<TEvResourceBroker::TEvSubmitTask>(1, "cancelled", TResourceValues{{1, 100}}, "scan", 5, nullptr);
+        event->Task.KeepOnClientDeath = true;
+        event->Task.OwnerLease = owner;
+        owner.reset();
+        runtime.Send(new IEventHandle(broker, sender, event.Release()));
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::UNKNOWN_TASK);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 0, 0);
+    }
+
     Y_UNIT_TEST(ManagedReservationSurvivesClientDeathAndQueuedCancel) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
@@ -336,8 +381,9 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         submit(2);
         runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvNotifyActorDied));
         GetInstantResourceBroker(runtime, broker, sender);
-        CheckCounters(counters, "queue", "queue_scan", 400, 100, 0, 1, 1);
+        CheckCounters(counters, "queue", "queue_scan", 400, 100, 0, 0, 1);
         runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(2, true)));
+        WaitForError(runtime, 2, TEvResourceBroker::TStatus::UNKNOWN_TASK);
         runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(1, true)));
         GetInstantResourceBroker(runtime, broker, sender);
         CheckCounters(counters, "queue", "queue_scan", 0, 0, 1, 0, 0);

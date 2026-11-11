@@ -130,15 +130,6 @@ public:
         , Response(std::move(response))
         , Clusters(std::move(clusters))
     {
-        if (request.HasKeyRange()) {
-            TSerializedTableRange requestedRange;
-            requestedRange.Load(request.GetKeyRange());
-            TCell fromCell, toCell;
-            auto parentRange = CreateRangeFrom(table, Parent, fromCell, toCell);
-            auto scanRange = Intersect(KeyTypes, requestedRange.ToTableRange(), parentRange);
-            Lead = CreateLeadFrom(scanRange);
-        }
-
         NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
         YDB_LOG_INFO("Scan actor created",
@@ -167,7 +158,7 @@ public:
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
-        Uploader.SetResourceReservation(GetResourceReservation());
+        Uploader.SetResourceReservation(GetResourceReservation(), GetResourceRetainer());
 
         return {EScan::Feed, {}};
     }
@@ -212,7 +203,10 @@ public:
                 {"debug", Debug()},
                 {"responseRecord", Response->Record.ShortDebugString()});
         }
-        Response->MemoryReservation = GetResourceReservation();
+        if (GetResourceReservation()) {
+            Response->MemoryReservation = RetainResourceReservation(
+                Response->Record.SpaceUsedLong() + Response->Record.ByteSizeLong() + 4_KB);
+        }
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -550,26 +544,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
             badRequest("Wrong upload");
         }
 
-        const auto parent = request.GetParent();
-        NTable::TLead lead;
-        if (parent == 0) {
-            if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
-                || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
-            {
-                badRequest("Wrong upload for zero parent");
-            }
-            lead.To({}, NTable::ESeek::Lower);
-        } else if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
-            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING)
-        {
-            badRequest("Wrong upload for non-zero parent");
-        } else {
-            TCell from, to;
-            const auto range = CreateRangeFrom(userTable, request.GetParent(), from, to);
-            if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
-                badRequest(TStringBuilder() << " requested range doesn't intersect with table range");
-            }
-            lead = CreateLeadFrom(range);
+        TString rangeError;
+        if (!PrepareParentKMeansLead(userTable, request, nullptr, rangeError)) {
+            badRequest(rangeError);
         }
 
         if (!request.GetOutputName()) {
@@ -588,36 +565,23 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error, NKikimr::NKMeans::EClustersMode::AssignOnly);
-        if (!clusters) {
+        const auto validated = PrepareKMeansClusters(request, NKikimr::NKMeans::EClustersMode::AssignOnly, false, error);
+        if (!validated) {
             badRequest(error);
-        } else if (request.ClustersSize() < 1) {
-            badRequest("Should be requested for at least one cluster");
-        } else if (!std::all_of(request.GetClusters().begin(), request.GetClusters().end(), [&](const TString& value) { return clusters->IsExpectedFormat({value.data(), value.size()}); })) {
-            badRequest("Clusters have invalid format");
         }
 
         if (trySendBadRequest()) {
             return;
         }
 
-        clusters.reset();
         StartDeferredBuildIndexScan<TEvDataShard::TEvReshuffleKMeansRequest, TEvDataShard::TEvReshuffleKMeansResponse>(
             this, ev, std::move(response), rowVersion, userTable.LocalTid,
             [tabletId = TabletID()](const TUserTable& table, const auto& req, TActorId sender, auto reply) -> TAutoPtr<NTable::IScan> {
                 NTable::TLead lead;
-                if (req.GetParent() == 0) {
-                    lead.To({}, NTable::ESeek::Lower);
-                } else {
-                    TCell from, to;
-                    const auto range = CreateRangeFrom(table, req.GetParent(), from, to);
-                    Y_ENSURE(!range.IsEmptyRange(table.KeyColumnTypes), "Scan range changed during admission");
-                    lead = CreateLeadFrom(range);
-                }
                 TString error;
-                auto clusters = NKikimr::NKMeans::CreateClusters(req.GetSettings(), 0, error, NKikimr::NKMeans::EClustersMode::AssignOnly);
+                Y_ENSURE(PrepareParentKMeansLead(table, req, &lead, error), error);
+                auto clusters = PrepareKMeansClusters(req, NKikimr::NKMeans::EClustersMode::AssignOnly, true, error);
                 Y_ENSURE(clusters, error);
-                Y_ENSURE(clusters->SetClusters(TVector<TString>{req.GetClusters().begin(), req.GetClusters().end()}), "Invalid clusters");
                 return new TReshuffleKMeansScan(tabletId, table, std::move(lead), req, sender, std::move(reply), std::move(clusters));
             });
     } catch (const std::exception& exc) {

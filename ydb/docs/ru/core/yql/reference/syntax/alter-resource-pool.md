@@ -1,6 +1,6 @@
 # ALTER RESOURCE POOL
 
-`ALTER RESOURCE POOL` изменяет определение [пула ресурсов](../../../concepts/glossary.md#resource-pool).
+`ALTER RESOURCE POOL` изменяет определение [пула ресурсов](../../../concepts/glossary.md#resource-pool.md).
 
 ## Синтаксис
 

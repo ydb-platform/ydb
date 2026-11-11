@@ -1,6 +1,6 @@
 # CREATE RESOURCE POOL
 
-`CREATE RESOURCE POOL` creates a [resource pool](../../../concepts/glossary.md#resource-pool).
+`CREATE RESOURCE POOL` creates a [resource pool](../../../concepts/glossary.md#resource-pool.md).
 
 ## Syntax
 

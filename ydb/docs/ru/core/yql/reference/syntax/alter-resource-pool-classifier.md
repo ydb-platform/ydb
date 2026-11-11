@@ -1,6 +1,6 @@
 # ALTER RESOURCE POOL CLASSIFIER
 
-`ALTER RESOURCE POOL CLASSIFIER` изменяет определение [классификатора пула ресурсов](../../../concepts/glossary.md#resource-pool-classifier).
+`ALTER RESOURCE POOL CLASSIFIER` изменяет определение [классификатора пула ресурсов](../../../concepts/glossary.md#resource-pool-classifier.md).
 
 ## Синтаксис
 

@@ -396,7 +396,7 @@ private:
         TErrorInfo &error,
         const TActorContext &ctx) const;
     bool CheckStateStorageRingGroup(ui32 ringGroupId,
-        const TSet<ui32>& affectedRings,
+        ui32 currentRing,
         const TActionOptions& options,
         TInstant now,
         TDuration duration,

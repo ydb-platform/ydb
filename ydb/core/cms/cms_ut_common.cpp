@@ -687,27 +687,6 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         GenerateExtendedInfo(*this, config, options, now);
     }
 
-    const bool disableColocatedRings = !options.CheckColocatedStateStorage
-        && (options.IsBridgeMode ? options.EnableSimpleStateStorageConfig : options.NRings <= 1);
-    if (disableColocatedRings) {
-        ColocatedStateStorageObserver = AddObserver<TEvStateStorage::TEvListStateStorageResult>([](auto& ev) {
-            auto& info = ev->Get()->Info;
-            if (!info) {
-                return;
-            }
-            // The default fixture places every replica on one node to boot the test tablets.
-            // Keep those actors running and disable their rings in the snapshot used by CMS.
-            auto cmsInfo = MakeIntrusive<TStateStorageInfo>();
-            cmsInfo->RingGroups = info->RingGroups;
-            for (auto& group : cmsInfo->RingGroups) {
-                for (auto& ring : group.Rings) {
-                    ring.IsDisabled = true;
-                }
-            }
-            info = std::move(cmsInfo);
-        });
-    }
-
     SetObserverFunc([](TAutoPtr<IEventHandle> &event) -> auto {
         bool forwardToFakeService = false;
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest

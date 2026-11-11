@@ -858,11 +858,11 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
 
     const auto now = AppData(ctx)->TimeProvider->Now();
     const TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
-    for (const auto& [ringGroupId, affectedRings] : *replicaRings) {
+    for (const auto& [ringGroupId, ringId] : *replicaRings) {
         if (ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].WriteOnly) {
             continue;
         }
-        if (!CheckStateStorageRingGroup(ringGroupId, affectedRings, opts, now, duration, defaultDeadline, error)) {
+        if (!CheckStateStorageRingGroup(ringGroupId, ringId, opts, now, duration, defaultDeadline, error)) {
             return false;
         }
     }
@@ -870,7 +870,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
 }
 
 bool TCms::CheckStateStorageRingGroup(ui32 ringGroupId,
-    const TSet<ui32>& affectedRings,
+    ui32 currentRing,
     const TActionOptions& opts,
     TInstant now,
     TDuration duration,
@@ -878,69 +878,118 @@ bool TCms::CheckStateStorageRingGroup(ui32 ringGroupId,
     TErrorInfo& error) const
 {
     const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].NToSelect;
+    ui8 currentRingState = TStateStorageRingInfo::Unknown;
     bool hasRestartRingsByThisRequest = false;
-    bool affectsEnabledRing = false;
-    ui32 newlyUnavailableRings = 0;
     ui32 restartRings = 0;
     ui32 lockedRings = 0;
     ui32 disabledRings = 0;
-    for (const auto& ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
-        const auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
+    for (auto ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
+        auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
         YDB_LOG_DEBUG("Dump ring",
-            {"ringGroup", ringGroupId},
             {"ring", ringInfo->RingId},
             {"state", TStateStorageRingInfo::RingStateToString(state)});
 
-        if (state == TStateStorageRingInfo::Disabled) {
-            ++disabledRings;
-            continue;
+        if (state == TStateStorageRingInfo::RestartByThisRequest) {
+            hasRestartRingsByThisRequest = true;
+            state = TStateStorageRingInfo::Restart;
         }
 
-        const bool affected = affectedRings.contains(ringInfo->RingId);
-        affectsEnabledRing |= affected;
+        if (ringInfo->RingId == currentRing) {
+            if (state == TStateStorageRingInfo::Disabled) {
+                return true;
+            }
+            currentRingState = state;
+            continue;
+        }
         switch (state) {
             case TStateStorageRingInfo::Ok:
-                newlyUnavailableRings += affected;
                 break;
             case TStateStorageRingInfo::Locked:
                 ++lockedRings;
                 break;
-            case TStateStorageRingInfo::RestartByThisRequest:
-                hasRestartRingsByThisRequest = true;
-                [[fallthrough]];
             case TStateStorageRingInfo::Restart:
                 ++restartRings;
+                break;
+            case TStateStorageRingInfo::Disabled:
+                ++disabledRings;
                 break;
             default:
                 break;
         }
     }
-    if (!affectsEnabledRing) {
-        return true;
-    }
+    Y_ABORT_UNLESS(currentRingState != TStateStorageRingInfo::Unknown);
+
+    // Add current ring to restart rings
+    ++restartRings;
 
     const ui32 maxAvailabilityLimit = 1;
     const ui32 keepAvailableLimit = (nToSelect - 1) / 2;
 
-    const ui32 unavailableEnabledRings = restartRings + lockedRings + newlyUnavailableRings;
-    ui32 limit = maxAvailabilityLimit;
-    bool countDisabledRings = false;
+    const bool maxAvailabilityOk = restartRings + lockedRings <= maxAvailabilityLimit;
+    const bool keepAvailableOk = restartRings + lockedRings + disabledRings <= keepAvailableLimit;
 
     switch (opts.AvailabilityMode) {
         case MODE_MAX_AVAILABILITY:
-            break;
-        case MODE_KEEP_AVAILABLE:
-            limit = keepAvailableLimit;
-            countDisabledRings = true;
-            break;
-        case MODE_FORCE_RESTART:
-            return true;
-        case MODE_SMART_AVAILABILITY:
-            if (unavailableEnabledRings > maxAvailabilityLimit && !hasRestartRingsByThisRequest) {
-                limit = keepAvailableLimit;
-                countDisabledRings = true;
+            if (!maxAvailabilityOk) {
+                error.Code = TStatus::DISALLOW_TEMP;
+                error.Reason = TReason(
+                    TStringBuilder() << "Too many unavailable state storage rings"
+                    << ". Restarting rings: "
+                    << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
+                    << ". Temporary (for a 2 minutes) locked rings: "
+                    << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
+                    << ". Maximum allowed number of unavailable rings for this mode: " << maxAvailabilityLimit,
+                    TReason::EType::TooManyUnavailableStateStorageRings
+                );
+                error.Deadline = defaultDeadline;
+                return false;
             }
             break;
+        case MODE_KEEP_AVAILABLE:
+            if (!keepAvailableOk) {
+                error.Code = TStatus::DISALLOW_TEMP;
+                error.Reason = TReason(
+                    TStringBuilder() << "Too many unavailable state storage rings"
+                    << ". Restarting rings: "
+                    << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
+                    << ". Temporary (for a 2 minutes) locked rings: "
+                    << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
+                    << ". Disabled rings: " << disabledRings
+                    << ". Maximum allowed number of unavailable rings for this mode: " << keepAvailableLimit,
+                    TReason::EType::TooManyUnavailableStateStorageRings
+                );
+                error.Deadline = defaultDeadline;
+                return false;
+            }
+            break;
+        case MODE_FORCE_RESTART:
+            break;
+        case MODE_SMART_AVAILABILITY: {
+            ui32 limit = maxAvailabilityLimit;
+            if (maxAvailabilityOk) {
+                break;
+            }
+
+            if (!hasRestartRingsByThisRequest) {
+                limit = keepAvailableLimit;
+                if (keepAvailableOk) {
+                    break;
+                }
+            }
+
+            error.Code = TStatus::DISALLOW_TEMP;
+            error.Reason = TReason(
+                TStringBuilder() << "Too many unavailable state storage rings"
+                << ". Restarting rings: "
+                << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
+                << ". Temporary (for a 2 minutes) locked rings: "
+                << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
+                << ". Maximum allowed number of unavailable rings for this mode: " << limit,
+                TReason::EType::TooManyUnavailableStateStorageRings
+            );
+            error.Deadline = defaultDeadline;
+            return false;
+        }
         default:
             error.Code = TStatus::WRONG_REQUEST;
             error.Reason = Sprintf("Unknown availability mode: %s (%" PRIu32 ")",
@@ -950,25 +999,7 @@ bool TCms::CheckStateStorageRingGroup(ui32 ringGroupId,
             return false;
     }
 
-    const ui32 unavailableRingsAfterAction = unavailableEnabledRings + (countDisabledRings ? disabledRings : 0);
-    if (unavailableRingsAfterAction <= limit) {
-        return true;
-    }
-
-    TStringBuilder reason;
-    reason << "Too many unavailable state storage rings in group " << ringGroupId
-        << ". Unavailable rings after action: " << unavailableRingsAfterAction
-        << ". Restarting rings: " << restartRings
-        << ". Temporary (for a 2 minutes) locked rings: " << lockedRings;
-    if (countDisabledRings) {
-        reason << ". Disabled rings: " << disabledRings;
-    }
-    reason << ". Maximum allowed number of unavailable rings for this mode: " << limit;
-
-    error.Code = TStatus::DISALLOW_TEMP;
-    error.Reason = TReason(reason, TReason::EType::TooManyUnavailableStateStorageRings);
-    error.Deadline = defaultDeadline;
-    return false;
+    return true;
 }
 
 bool TCms::CheckSysTabletsNode(const TActionOptions &opts,

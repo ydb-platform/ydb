@@ -1644,7 +1644,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     Y_UNIT_TEST(ManualRequestApprovalLockingAllNodes)
     {
         auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
-        opts.CheckColocatedStateStorage = true;
         TCmsTestEnv env(opts);
 
         auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
@@ -2587,20 +2586,18 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             return env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, expectedStatus,
                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(nodeIndex), 60000000, "storage"));
         };
-        auto checkDenied = [&](ui32 nodeIndex, ui32 groupIndex) {
+        auto checkDenied = [&](ui32 nodeIndex) {
             const auto response = checkRestart(nodeIndex, TStatus::DISALLOW_TEMP);
-            const TString expectedReason = TStringBuilder() << "Too many unavailable state storage rings in group "
-                << groupIndex << ". Unavailable rings after action: 2";
-            UNIT_ASSERT_STRING_CONTAINS(response.GetStatus().GetReason(), expectedReason);
+            UNIT_ASSERT_STRING_CONTAINS(response.GetStatus().GetReason(), "Too many unavailable state storage rings");
         };
 
         const auto firstPermission = checkRestart(0, TStatus::ALLOW);
-        checkDenied(sharedNodeIndex, 0);
+        checkDenied(sharedNodeIndex);
         env.CheckDonePermission("user", firstPermission.GetPermissions(0).GetId());
 
         checkRestart(3, TStatus::ALLOW);
-        checkDenied(sharedNodeIndex, 1);
-        checkDenied(4, 1);
+        checkDenied(sharedNodeIndex);
+        checkDenied(4);
 
         config.MutableRingGroups(1)->SetWriteOnly(true);
         info = BuildStateStorageInfo(config);

@@ -1012,37 +1012,36 @@ void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
 void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info) {
     StateStorageInfoReceived = true;
     Y_ABORT_UNLESS(info->RingGroups.size() > 0);
-    StateStorageNodeToRings.clear();
-    StateStorageRings.clear();
-    StateStorageRings.resize(info->RingGroups.size());
+    const ui64 rGroupSize = info->RingGroups.size();
+    StateStorageRings.resize(rGroupSize);
 
-    for (ui32 groupId = 0; groupId < info->RingGroups.size(); ++groupId) {
-        const auto& groupInfo = info->RingGroups[groupId];
+    for (ui64 rGroupId = 0; rGroupId < rGroupSize; ++rGroupId) {
+        auto& groupInfo = info->RingGroups[rGroupId];
         for (ui32 ringId = 0; ringId < groupInfo.Rings.size(); ++ringId) {
-            const auto& ring = groupInfo.Rings[ringId];
+            auto &ring = groupInfo.Rings[ringId];
             TStateStorageRingInfoPtr ringInfo = MakeIntrusive<TStateStorageRingInfo>();
             ringInfo->RingId = ringId;
             if (ring.IsDisabled)
                 ringInfo->SetDisabled();
 
-            for (const auto& replica : ring.Replicas) {
+            for(auto replica : ring.Replicas) {
                 const ui32 nodeId = replica.NodeId();
                 if (!HasNode(nodeId)) {
                     // we do not want to abort here constantly, so we just add down stub replica
                     YDB_LOG_ERROR("Node referenced by state storage ring in ring group does not exist in cluster. State storage is probably not reconfigured yet. Treating the replica as down",
                         {"nodeId", nodeId},
                         {"ringId", ringId},
-                        {"ringGroupId", groupId});
+                        {"ringGroupId", rGroupId});
                     TNodeInfoPtr stub = MakeIntrusive<TNodeInfo>();
                     stub->NodeId = nodeId;
                     ringInfo->AddNode(stub);
                     continue;
                 }
                 ringInfo->AddNode(Nodes[nodeId]);
-                StateStorageNodeToRings[nodeId][groupId].insert(ringId);
+                StateStorageNodeToRings[nodeId][rGroupId] = ringId;
             }
 
-            StateStorageRings[groupId].push_back(ringInfo);
+            StateStorageRings[rGroupId].push_back(ringInfo);
         }
     }
 }

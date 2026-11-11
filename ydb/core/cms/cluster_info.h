@@ -746,7 +746,7 @@ public:
     void GenerateSysTabletsNodesCheckers();
     void GenerateClusterNodesCheckers();
 
-    using TStateStorageReplicaRings = TMap<ui32, TSet<ui32>>;
+    using TStateStorageReplicaRings = TMap<ui32, ui32>;
 
     bool IsStateStorageReplicaNode(ui32 nodeId) const {
         return StateStorageNodeToRings.contains(nodeId);
@@ -1145,7 +1145,7 @@ private:
     ui64 RollbackPoint = 0;
     bool HasTenantsInfo = false;
     bool Outdated = false;
-    bool StateStorageInfoReceived = false;
+    bool StateStorageInfoReceived;
 
     // Fast access structures.
     TMultiMap<TString, ui32> HostNameToNodeId;

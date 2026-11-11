@@ -68,6 +68,30 @@ private:
     std::optional<NBridge::EStorageMode> StorageModeFilter;
 };
 
+class TCommandBridgeRollbackStatus : public TYdbReadOnlyCommand, public TCommandWithOutput {
+public:
+    TCommandBridgeRollbackStatus(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase;
+};
+
+class TCommandBridgeRollback : public TYdbCommand {
+public:
+    TCommandBridgeRollback(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    bool Prompt(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    bool SkipBscValidation = false;
+};
+
 class TCommandBridgeSwitchover : public TYdbCommand {
 public:
     TCommandBridgeSwitchover(bool allowEmptyDatabase);

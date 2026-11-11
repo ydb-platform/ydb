@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 import json
 from pathlib import Path
+import re
 import subprocess
 import time
 import urllib.error
@@ -17,10 +18,13 @@ from library.python.port_manager import PortManager
 
 from common import BridgeKiKiMRTest
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc
+from ydb.public.api.grpc.draft import ydb_tablet_v1_pb2_grpc as tablet_grpc
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
+from ydb.public.api.protos.draft import ydb_tablet_pb2 as tablet
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
-from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.msgbus_types import MessageBusStatus
+from ydb.tests.library.common.types import Erasure, TabletTypes
 from ydb.tests.library.harness import daemon
 
 
@@ -141,6 +145,21 @@ class RealSkipperCluster(BridgeKiKiMRTest):
         self.output.mkdir(parents=True, exist_ok=True)
         try:
             super().setup_method()
+            # The harness can attempt binding before SchemeShard is ready and
+            # ignore its error. Check the stored binding and repair it if needed.
+            pools = {pool["name"]: pool["kind"] for pool in self.configurator.dynamic_storage_pools}
+            token = self.cluster.root_token or self.configurator.default_clusteradmin
+
+            def storage_bound():
+                response = self.cluster.client.describe("/" + self.cluster.domain_name, token or "")
+                assert response.Status == MessageBusStatus.MSTATUS_OK, response
+                actual = {pool.Name: pool.Kind for pool in response.PathDescription.DomainDescription.StoragePools}
+                if actual == pools:
+                    return True
+                self.cluster.client.bind_storage_pools(self.cluster.domain_name, pools, token=token)
+                return False
+
+            eventually(storage_bound, "storage pool binding before table creation")
         except BaseException:
             self.cleanup.close()
             raise
@@ -392,3 +411,126 @@ class TestSkipperFailoverLatency(RealSkipperCluster):
         sends = [record for record in records if record.get("event") == "mutation_sent"]
         assert len(sends) == 1, sends
         assert int(sends[0]["expected_generation"]) == generation, sends
+
+
+class TestSkipperLiveStorageFailure(RealSkipperCluster):
+    erasure = Erasure.NONE
+    pile_names = ("r1", "r2")
+    nodes_count = 6
+    use_in_memory_pdisks = True
+
+    def fail_ram_storage(self, pile):
+        paths = [drive["path"] for config in self.configurator.yaml_config["host_configs"]
+                 for drive in config["drive"]]
+        assert self.use_in_memory_pdisks and paths and all(path.startswith("SectorMap:") for path in paths), paths
+
+        def fail_node(node):
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            base = "http://%s:%d/actors/pdisks/" % (node.host, node.mon_port)
+            try:
+                with opener.open(base, timeout=5) as response:
+                    index = response.read().decode()
+            except urllib.error.HTTPError as error:
+                if error.code == 404:
+                    return []
+                raise
+            disks = sorted(set(re.findall(r"href=['\"](pdisk\d+)['\"]", index)))
+            for disk in disks:
+                with opener.open(base + disk, timeout=5) as response:
+                    page = response.read().decode()
+                assert "SectorMap" in page and "stopPDisk" in page, (node.node_id, disk)
+                request = urllib.request.Request(base + disk, data=b"stopPDisk=", headers={
+                    "Content-Type": "application/x-www-form-urlencoded"})
+                with opener.open(request, timeout=10) as response:
+                    assert response.status == 200, (node.node_id, disk, response.status)
+                    response.read()
+            return [(node.node_id, disk) for disk in disks]
+
+        nodes = self.pile_nodes[pile]
+        with ThreadPoolExecutor(max_workers=len(nodes)) as executor:
+            failed = [disk for disks in executor.map(fail_node, nodes) for disk in disks]
+        assert failed, "No active RAM PDisk found in %s" % pile
+        self.logger.info("Injected DeviceIoError into RAM PDisks: %s", failed)
+
+    def check_processes(self, pids):
+        assert all(node.is_alive() and node.pid == pids[node_id]
+                   for node_id, node in self.cluster.nodes.items()), pids
+
+    @pytest.mark.parametrize("prepare_fallback", (False, True), ids=("auto_before_fault", "fallback_before_auto"))
+    def test_primary_storage_error_fails_over_with_live_nodes(self, prepare_fallback):
+        self.create_data()
+        before = self.start_skipper()
+        if not prepare_fallback:
+            self.skipper.mode("auto")
+        generation = int(before["view"]["generation"])
+        pids = {node_id: node.pid for node_id, node in self.cluster.nodes.items()}
+        started = time.monotonic()
+        self.fail_ram_storage("r1")
+        self.check_processes(pids)
+        # Storage failure does not remove node quorum. Capture the primary's
+        # own report before the automatic commit changes the participating set.
+        report = state_rpc(self.pile_nodes["r1"][0])
+        assert report.generation == generation and report.pile_connectivity.generation == generation, report
+        assert any(p.pile_name == "r1" and p.has_node_quorum for p in report.pile_connectivity.piles), report
+        if prepare_fallback:
+            # BSC may keep serving RED from memory after disk failure. Restart
+            # just that tablet so this case must use the new fallback proof.
+            # One bounded call: an uncertain poison must not be retried.
+            node = self.pile_nodes["r2"][0]
+            with grpc.insecure_channel(node.endpoint) as channel:
+                response = tablet_grpc.TabletServiceStub(channel).RestartTablet(
+                    tablet.RestartTabletRequest(tablet_id=TabletTypes.FLAT_BS_CONTROLLER.tablet_id_for(0)),
+                    metadata=TOKEN, timeout=5)
+            assert response.status in (StatusIds.SUCCESS, StatusIds.UNAVAILABLE), response
+
+            def storage_failed(state):
+                self.check_processes(pids)
+                primary = next((pile for pile in state["piles"] if pile["name"] == "r1"), {})
+                return primary.get("verdict") == "FAILED" and primary.get("self_quorum") and any(
+                    "PDisk DeviceIoError" in reason for reason in primary.get("reasons", []))
+
+            self.wait_snapshot(storage_failed, "explicit storage proof with live primary quorum",
+                               timeout=max(0, 20 - (time.monotonic() - started)))
+            self.skipper.mode("auto")
+        expected = {"r1": "DISCONNECTED", "r2": "PRIMARY"}
+
+        def committed(state):
+            self.check_processes(pids)
+            return state["view"] and {pile["name"]: pile["state"] for pile in state["view"]["piles"]} == expected
+
+        state = self.wait_snapshot(committed, "storage failover while every node remains alive",
+                                   timeout=max(0, 20 - (time.monotonic() - started)))
+        elapsed = time.monotonic() - started
+        assert elapsed <= 20, (elapsed, state)
+        assert state["controller_boot_id"] == before["controller_boot_id"], state
+        attempt = state["last_mutation"]
+        assert int(attempt["expected_generation"]) == generation and attempt["update"] == expected, attempt
+        self.check_data("r2")
+        self.write_after_fault("r2")
+        self.check_processes(pids)
+        time.sleep(3)
+        records = [json.loads(line) for line in (self.skipper.directory / "skipper.log").read_text().splitlines()]
+        sends = [record for record in records if record.get("event") == "mutation_sent"]
+        assert len(sends) == 1 and int(sends[0]["expected_generation"]) == generation, sends
+
+    def test_storage_error_candidate_is_not_promoted(self):
+        self.create_data()
+        before = self.start_skipper()
+        pids = {node_id: node.pid for node_id, node in self.cluster.nodes.items()}
+        self.fail_ram_storage("r2")
+        primary = self.pile_nodes["r1"]
+        for node in primary:
+            self.cleanup.callback(lambda node=node: node.unfreeze() if node.is_alive() else None)
+        with ThreadPoolExecutor(max_workers=len(primary)) as executor:
+            list(executor.map(lambda node: node.freeze(), primary))
+        state = self.wait_snapshot(lambda s: s["decision"]["blocker"] == "NO_CANDIDATE",
+                                   "damaged candidate blocks promotion", timeout=30)
+        self.skipper.mode("auto")
+        until = time.monotonic() + 30
+        while time.monotonic() < until:
+            self.check_processes(pids)
+            assert state["decision"]["blocker"] == "NO_CANDIDATE", state
+            assert state["last_mutation"] is None, state
+            assert state["view"] and state["view"]["generation"] == before["view"]["generation"], state
+            time.sleep(0.25)
+            state = self.skipper.state()

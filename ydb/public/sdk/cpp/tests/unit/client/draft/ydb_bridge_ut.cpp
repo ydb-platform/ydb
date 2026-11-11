@@ -152,6 +152,42 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
         UNIT_ASSERT(result.GetPendingPileOperation()->Kind == TPendingPileOperation::EKind::ADD);
         UNIT_ASSERT_VALUES_EQUAL(result.GetPendingPileOperation()->ErrorReason, "retrying provisioning");
         UNIT_ASSERT(!fixture.Service.Cluster.LastRequest.include_pile_connectivity());
+        UNIT_ASSERT(!fixture.Service.Cluster.LastRequest.include_unbridged_status());
+        UNIT_ASSERT(!result.GetUnbridgedStatus());
+    }
+
+    Y_UNIT_TEST(ClusterStateUnbridgedStatusSettingsAndPresence) {
+        TFixture fixture;
+        auto& reply = fixture.Service.Cluster;
+        const auto settings = TGetClusterStateSettings().IncludeUnbridgedStatus(true);
+
+        reply.Result.set_generation(10);
+        const auto omitted = fixture.Client.GetClusterState(settings).GetValueSync();
+        UNIT_ASSERT(omitted.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(omitted.GetGeneration(), 10);
+        UNIT_ASSERT(reply.LastRequest.include_unbridged_status());
+        UNIT_ASSERT(!omitted.GetUnbridgedStatus());
+
+        reply.Result.clear_generation();
+        auto* report = reply.Result.mutable_unbridged_status();
+        const auto empty = fixture.Client.GetClusterState(settings).GetValueSync();
+        UNIT_ASSERT(empty.IsSuccess());
+        UNIT_ASSERT(empty.GetUnbridgedStatus());
+        UNIT_ASSERT(empty.GetUnbridgedStatus()->BridgeConfigNodeIds.empty());
+        UNIT_ASSERT(empty.GetUnbridgedStatus()->UnreportedStaticNodeIds.empty());
+
+        report->add_bridge_config_node_ids(3);
+        report->add_bridge_config_node_ids(5);
+        report->add_unreported_static_node_ids(7);
+        const auto populated = fixture.Client.GetClusterState(settings).GetValueSync();
+        UNIT_ASSERT(populated.IsSuccess());
+        UNIT_ASSERT(populated.GetUnbridgedStatus());
+        const auto& status = *populated.GetUnbridgedStatus();
+        UNIT_ASSERT_VALUES_EQUAL(status.BridgeConfigNodeIds.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(status.BridgeConfigNodeIds[0], 3);
+        UNIT_ASSERT_VALUES_EQUAL(status.BridgeConfigNodeIds[1], 5);
+        UNIT_ASSERT_VALUES_EQUAL(status.UnreportedStaticNodeIds.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(status.UnreportedStaticNodeIds[0], 7);
     }
 
     Y_UNIT_TEST(PileSynchronizationAndOperationSettings) {

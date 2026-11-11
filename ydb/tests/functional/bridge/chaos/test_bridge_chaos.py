@@ -6,15 +6,18 @@ The ordinary 8-node cluster starts with config v1, it is migrated to distconf, c
 cluster, and gets the second pile; every restart on the way is kill -9 of a node. Then, until the deadline, random pile
 operations (switchover, failover, disconnection and rejoin, removal of the pile and its addition again) mix with random
 failures (one or two nodes of a pile, the node running BSC, more nodes than the failure model allows, the whole cluster,
-a rolling restart of a pile). Finally the cluster keeps only one of its piles, the original (inline) one or the added one.
-KV and table workloads run all the time.
+a rolling restart of a pile). Then the cluster keeps its original pile only and is rolled back into the ordinary one,
+its nodes are restarted without bridge config, and it is converted again and gets the pile of the same name on fresh
+hosts, with another random phase following. Finally the cluster keeps only one of its piles, the original (inline) one
+or the added one. KV and table workloads run all the time.
 
 The test fails when an acknowledged write is lost or reads back with another value, when a node dies without being
 killed, or when an operation doesn't finish in time once the failures are healed.
 
 Environment:
     BRIDGE_CHAOS_SEED -- seed of the random choices of the run; it is logged, so the run can be repeated
-    BRIDGE_CHAOS_SECONDS -- length of the random phase, 900 by default
+    BRIDGE_CHAOS_SECONDS -- length of the random phases, 900 by default; the rollback splits it in two halves
+    BRIDGE_CHAOS_ROLLBACK -- roll the cluster back and convert it again between the random phases, 1 by default
     BRIDGE_CHAOS_READD -- hosts of the pile added again after its removal: fresh (formatted ones, the default), same,
         or random; the same hosts never get synchronized yet, as their cluster state history diverges from the cluster's
     BRIDGE_CHAOS_TABLE -- run the table workload, 1 by default
@@ -590,6 +593,7 @@ class TestBridgeChaos(object):
         self.rng = random.Random(self.seed)  # chaos decisions only, so that the run is repeated by the seed
         self.chaos_seconds = float(os.getenv("BRIDGE_CHAOS_SECONDS", "900"))
         self.readd_mode = os.getenv("BRIDGE_CHAOS_READD", "fresh")
+        self.rollback = os.getenv("BRIDGE_CHAOS_ROLLBACK", "1") == "1"
         assert self.readd_mode in ("fresh", "same", "random"), self.readd_mode
         log_configs = {
             'BS_NODE': LogLevels.DEBUG,
@@ -624,6 +628,7 @@ class TestBridgeChaos(object):
         self.pdisk_files = []  # temporary files of the drives of the nodes added later, kept until the end
         self.states = None  # pile states the cluster has to be in, None until it gets bridged
         self.down = set()  # nodes stopped on purpose
+        self.retired = set()  # nodes of the pile removed before the rollback, stopped for good
         self.held_ports = {}  # node id -> listening sockets keeping the ports of the stopped node, see hold_ports()
         self.incarnations = {}  # node id -> number of its restarts by the test
         self.endpoints = ()
@@ -649,7 +654,7 @@ class TestBridgeChaos(object):
 
     def check_health(self):
         for node_id, node in self.cluster.nodes.items():
-            if node_id not in self.down and not node.is_alive():
+            if node_id not in self.down and node_id not in self.retired and not node.is_alive():
                 raise ChaosFailure("node {} has died without being killed{}".format(node_id, self.stderr_tail(node)))
         for workload in self.workloads():
             if workload.failures:
@@ -1084,6 +1089,7 @@ class TestBridgeChaos(object):
                 "drive": [{"path": pdisk_file.name, "type": "ROT"}],
             })
             section["hosts"].append({
+                "node_id": node_id,  # hosts without it get the ids of their positions, not the ones of the nodes
                 "host": "localhost",
                 "port": self.configurator.port_allocator.get_node_port_allocator(node_id).ic_port,
                 "host_config_id": host_config_id,
@@ -1121,7 +1127,7 @@ class TestBridgeChaos(object):
         self.rejoin(ADDED_PILE)
         self.verify()
 
-    def chaos(self):
+    def chaos(self, seconds):
         actions = [
             (3, self.act_kill_nodes),
             (2, self.act_restart_bsc),
@@ -1132,7 +1138,7 @@ class TestBridgeChaos(object):
             (1, self.act_remove_and_add),
             (1, self.act_rolling_restart),
         ]
-        deadline = time.monotonic() + self.chaos_seconds
+        deadline = time.monotonic() + seconds
         step = 0
         while time.monotonic() < deadline:
             step += 1
@@ -1144,8 +1150,8 @@ class TestBridgeChaos(object):
             assert sorted(self.states.values()) == sorted([PRIMARY, SYNC]), state_names(self.states)
             self.verify()
 
-    def shrink(self):
-        survivor = self.rng.choice((ORIGINAL_PILE, ADDED_PILE))
+    def shrink(self, survivor=None):
+        survivor = survivor or self.rng.choice((ORIGINAL_PILE, ADDED_PILE))
         removed = self.other(survivor)
         logger.info("Keeping pile %s only", survivor)
         if self.primary() != survivor:
@@ -1156,6 +1162,72 @@ class TestBridgeChaos(object):
         self.verify(full=True)  # the survivor serves alone
         self.rolling_restart(self.piles[survivor])
         self.verify()
+
+    def roll_back(self):
+        """The cluster which has kept its original pile only gets back to the ordinary one: the removed pile goes away
+        from the config, the rollback is requested, then the bridge config and the pile names go away, and every node is
+        restarted without them."""
+        logger.info("Rolling the cluster back into the ordinary one")
+        retired = self.piles.pop(ADDED_PILE)
+        del self.states[ADDED_PILE]
+        for node_id in retired:
+            self.release_ports(node_id)
+            self.down.discard(node_id)
+            self.retired.add(node_id)
+        cfg = self.fetch_config()
+        section = cfg["config"]
+        section["bridge_config"]["piles"] = [pile for pile in section["bridge_config"]["piles"]
+                                             if pile["name"] != ADDED_PILE]
+        section["hosts"] = [host for host in section["hosts"]
+                            if host.get("location", {}).get("bridge_pile_name") != ADDED_PILE]
+        system_tablets = section.get("system_tablets", {})
+        if "default_node" in system_tablets:
+            system_tablets["default_node"] = [node_id for node_id in system_tablets["default_node"]
+                                              if node_id not in self.retired]
+        for tablets in system_tablets.values():
+            for tablet in tablets if isinstance(tablets, list) else []:
+                if isinstance(tablet, dict) and "node" in tablet:
+                    tablet["node"] = [node_id for node_id in tablet["node"] if node_id not in self.retired]
+        self.replace_config(cfg)
+
+        def status(client):
+            result = client.get_rollback_status_result()
+            if result is None:
+                raise NotYet("no rollback status")
+            return result
+
+        def rollback(client):
+            if not status(client).bridged:
+                return True  # rolled back already, maybe by the request which response has been lost
+            response = client.rollback()
+            if response.operation.status == StatusIds.SUCCESS:
+                return True
+            raise NotYet(str(response.operation))  # nodes bound to the ones stopped may take a while to report
+        self.bridge(rollback, "rollback")
+
+        def rolled_back(client):
+            result = status(client)
+            if result.bridged:
+                raise NotYet(str(result))
+            return True
+        self.bridge(rolled_back, "rollback of BSC groups", timeout=RECOVERY_TIMEOUT)
+        self.states = None
+        self.verify(full=True)  # served as the ordinary cluster by the nodes running with bridge config
+
+        cfg = self.fetch_config()
+        del cfg["config"]["bridge_config"]
+        for host in cfg["config"]["hosts"]:
+            host.get("location", {}).pop("bridge_pile_name", None)  # pile names are refused without bridge config
+        self.replace_config(cfg)
+        self.rolling_restart(self.piles[ORIGINAL_PILE])
+
+        def complete(client):
+            result = status(client)
+            if not result.complete or result.bridge_config_node_ids or result.unreported_static_node_ids:
+                raise NotYet(str(result))
+            return True
+        self.bridge(complete, "rollback completion")
+        self.verify(full=True)
 
     ####################################################################################################################
     # Chaos actions; each one leaves the cluster with all its piles synchronized and its nodes running
@@ -1253,7 +1325,15 @@ class TestBridgeChaos(object):
         self.migrate_to_v2()
         self.convert()
         self.add_pile()
-        self.chaos()
+        if self.rollback:
+            self.chaos(self.chaos_seconds / 2)
+            self.shrink(ORIGINAL_PILE)
+            self.roll_back()
+            self.convert()
+            self.add_pile()  # the pile of the same name on fresh hosts
+            self.chaos(self.chaos_seconds / 2)
+        else:
+            self.chaos(self.chaos_seconds)
         self.shrink()
 
         for workload in self.workloads():

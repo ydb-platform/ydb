@@ -22,6 +22,8 @@
 
 * Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
 
+* Fixed a Topic read session crash (Panic in `OnUserRetrievedEvent`) when an unrecoverable stream read error tore down the session while data events were still queued for delivery; the teardown now releases the accounting for undelivered events exactly once.
+
 ## v3.26.0
 
 * Federated topic read sessions now follow federation membership. After the initial discovery, databases that join the federation are read and databases that leave it are dropped; partition sessions of a dropped database get `TPartitionSessionClosedEvent` with the `ConnectionLost` reason. A listed database that becomes unavailable keeps its subsession. The refresh period is `TFederatedTopicClientSettings::FederationDiscoveryInterval` (30 seconds by default).

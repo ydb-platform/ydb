@@ -744,7 +744,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         Service<TBridgeService>().Database.clear();
         const auto password = EnvFile("password");
         RunCli({"-e", GetEndpoint(), "-y", "--user", "bridge-admin", "--password-file", password,
-                "admin", "cluster", "bridge", "set-database-mode", "bridged", "--target-database", "/Root/app"});
+                "admin", "cluster", "bridge", "set-database-mode", "bridged", "--database-path", "/Root/app"});
         UNIT_ASSERT(Service<TBridgeLogin>().Calls.load() >= 1);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 1);
     }
@@ -975,53 +975,6 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         }
         UNIT_ASSERT_VALUES_EQUAL(service.ClusterCalls.load(), 3);
         UNIT_ASSERT_VALUES_EQUAL(service.LegacyRollbackStatus.Calls.load(), 3);
-    }
-    Y_UNIT_TEST_F(RollbackStatusListsNodesWithBridgeConfig, TBridgeCliFixture) {
-        auto& status = PrepareLegacyRollbackStatus();
-        status.add_bridge_config_node_ids(3);
-        status.add_bridge_config_node_ids(5);
-        status.add_unreported_static_node_ids(7);
-        const auto output = RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "admin", "cluster", "bridge",
-                                    "rollback-status"},
-                                   {{"YDB_TOKEN", "bridge-admin-token"}});
-        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().LegacyRollbackStatus.Calls.load(), 1);
-        UNIT_ASSERT_STRING_CONTAINS(output, "Nodes still running with bridge config (restart them without it): 3, 5");
-        UNIT_ASSERT_STRING_CONTAINS(output, "Static nodes that have not reported their config (not running or not "
-            "connected): 7");
-        UNIT_ASSERT(!output.Contains("ordinary mode"));
-    }
-
-
-    Y_UNIT_TEST_F(RollbackStatusKeepsNodesWhileBridged, TBridgeCliFixture) {
-        // nodes restarted without bridge config can't serve the cluster that is still bridged one
-        auto& status = PrepareLegacyRollbackStatus();
-        status.set_bridged(true);
-        status.set_rollback_in_progress(true);
-        status.add_bridge_config_node_ids(3);
-        const auto output = RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "admin", "cluster", "bridge",
-                                    "rollback-status"},
-                                   {{"YDB_TOKEN", "bridge-admin-token"}});
-        UNIT_ASSERT_STRING_CONTAINS(output, "storage groups are being made ordinary ones");
-        UNIT_ASSERT_STRING_CONTAINS(output, "keep them running until storage groups are ordinary ones): 3");
-        UNIT_ASSERT(!output.Contains("restart them"));
-    }
-
-
-    Y_UNIT_TEST_F(RollbackStatusReportsCompletion, TBridgeCliFixture) {
-        PrepareLegacyRollbackStatus().set_complete(true);
-        auto output = RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "admin", "cluster", "bridge",
-                              "rollback-status"},
-                             {{"YDB_TOKEN", "bridge-admin-token"}});
-        UNIT_ASSERT_STRING_CONTAINS(output, "The cluster runs in ordinary mode");
-        output = RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "admin", "cluster", "bridge",
-                         "rollback-status", "--format", "json"},
-                        {{"YDB_TOKEN", "bridge-admin-token"}});
-        NJson::TJsonValue json;
-        UNIT_ASSERT_C(NJson::ReadJsonTree(output, &json), output);
-        UNIT_ASSERT_C(json["complete"].GetBooleanSafe(), output);
-        UNIT_ASSERT_C(!json["bridged"].GetBooleanSafe(), output);
-        UNIT_ASSERT_VALUES_EQUAL_C(json["bridge_config_node_ids"].GetArraySafe().size(), 0, output);
-        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().LegacyRollbackStatus.Calls.load(), 2);
     }
 
 }

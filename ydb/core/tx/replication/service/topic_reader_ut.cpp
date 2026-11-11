@@ -401,6 +401,9 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         explicit TRetentionGapTest(ui64 initialOffset = 0)
             : InitialOffset(initialOffset)
         {
+            // SDK/gRPC callbacks run in real threads and must get time to complete
+            // before the simulated session-start and retention deadlines expire.
+            Env.GetRuntime().SetFastSimulatedTime(false);
             Env.GetRuntime().GetAppData().FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);
             const auto create = Env.Send<TEvYdbProxy::TEvCreateTopicResponse>(Env.GetYdbProxy(),
                 new TEvYdbProxy::TEvCreateTopicRequest(TopicPath, NYdb::NTopic::TCreateTopicSettings()

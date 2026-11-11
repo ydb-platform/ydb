@@ -18,6 +18,8 @@
 // quota limits or page faults. Continuations keep the cursor and any unfinished
 // selected interval, so unread rows retain their selection decision.
 
+#include "datashard_read_data.h"
+
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -47,8 +49,8 @@ int CompareSamplingPos(
 TSamplingPos SamplingStart(const NTable::TBounds& bounds);
 TSamplingPos SamplingEnd(const NTable::TBounds& bounds);
 
-TSamplingPos SamplingRangeStart(const TSerializedTableRange& range);
-TSamplingPos SamplingRangeEnd(const TSerializedTableRange& range);
+TSamplingPos SamplingRangeStart(const TReadRangeView& range);
+TSamplingPos SamplingRangeEnd(const TReadRangeView& range);
 
 // Empty when [from, to) does not intersect bounds.
 std::optional<NTable::TBounds> ClipSamplingBounds(

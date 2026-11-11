@@ -5134,55 +5134,6 @@ void TDataShard::OnTableCreated(TTransactionContext &txc, const TActorContext &c
 
 } // NDataShard
 
-TString TEvDataShard::TEvRead::ToString() const {
-    TStringStream ss;
-    ss << TBase::ToString();
-    if (!Keys.empty()) {
-        ss << " KeysSize: " << Keys.size();
-    }
-    if (!Ranges.empty()) {
-        ss << " RangesSize: " << Ranges.size();
-    }
-    return ss.Str();
-}
-
-TEvDataShard::TEvRead* TEvDataShard::TEvRead::Load(const TEventSerializedData* data) {
-    TEvRead* event = TBase::Load(data);
-    auto& record = event->Record;
-
-    event->Keys.reserve(record.KeysSize());
-    for (const auto& key: record.GetKeys()) {
-        event->Keys.emplace_back(key);
-    }
-
-    event->Ranges.reserve(record.RangesSize());
-    for (const auto& range: record.GetRanges()) {
-        event->Ranges.emplace_back(range);
-    }
-
-    return event;
-}
-
-// really ugly hacky, because Record is not mutable and calling members are const
-void TEvDataShard::TEvRead::FillRecord() {
-    if (!Keys.empty()) {
-        Record.MutableKeys()->Reserve(Keys.size());
-        for (auto& key: Keys) {
-            Record.AddKeys(key.ReleaseBuffer());
-        }
-        Keys.clear();
-    }
-
-    if (!Ranges.empty()) {
-        Record.MutableRanges()->Reserve(Ranges.size());
-        for (auto& range: Ranges) {
-            auto* pbRange = Record.AddRanges();
-            range.Serialize(*pbRange);
-        }
-        Ranges.clear();
-    }
-}
-
 TString TEvDataShard::TEvReadResult::ToString() const {
     TStringStream ss;
     ss << TBase::ToString();

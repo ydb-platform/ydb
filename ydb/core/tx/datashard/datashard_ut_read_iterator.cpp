@@ -1016,6 +1016,61 @@ void TestReadRangeMovies(NKikimrDataEvents::EDataFormat format) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(DataShardReadIterator) {
+    void CheckCompactReadContinuations(bool ranges, bool reverse) {
+        TTestHelper helper;
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_CELLVEC);
+        request->Record.SetMaxRows(1024);
+        request->Record.SetMaxBytes(1024 * 1024);
+        request->Record.SetMaxRowsInResult(7);
+        request->Record.SetReverse(reverse);
+        for (size_t i = 0; i < 128; ++i) {
+            if (ranges) {
+                AddRangeQuery<ui32>(*request, { 8 }, true, { 8 }, true);
+            } else {
+                AddKeyQuery(*request, { 8 });
+            }
+        }
+        NActors::TAllocChunkSerializer serializer;
+        UNIT_ASSERT(request->SerializeToArcadiaStream(&serializer));
+        auto data = serializer.Release(request->CreateSerializationInfo(false));
+        request.reset(TEvDataShard::TEvRead::Load(data.Get()));
+        data.Reset();
+        UNIT_ASSERT(request->UsesCompactReadData());
+        auto result = helper.SendRead("table-1", request.release());
+        size_t rows = 0;
+        size_t batches = 0;
+        while (true) {
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            for (size_t i = 0; i < result->GetRowsCount(); ++i) {
+                const auto cells = result->GetCells(i);
+                const size_t offset = reverse ? 3 - (rows % 4) : rows % 4;
+                UNIT_ASSERT_VALUES_EQUAL(cells[0].AsValue<ui32>(), 8);
+                UNIT_ASSERT_VALUES_EQUAL(cells[1].AsValue<ui32>(), offset / 2);
+                UNIT_ASSERT_VALUES_EQUAL(cells[2].AsValue<ui32>(), offset % 2);
+                ++rows;
+            }
+            ++batches;
+            if (result->Record.GetFinished()) {
+                break;
+            }
+            if (result->Record.GetLimitReached()) {
+                helper.SendReadAck("table-1", result->Record, 1024, 1024 * 1024);
+            }
+            result = helper.WaitReadResult(TDuration::Seconds(60));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rows, 512);
+        UNIT_ASSERT(batches > 1);
+    }
+
+    Y_UNIT_TEST(ShouldReadCompactKeyPrefixesWithContinuation) {
+        CheckCompactReadContinuations(false, false);
+    }
+
+    Y_UNIT_TEST(ShouldReadCompactRangesReverseWithContinuation) {
+        CheckCompactReadContinuations(true, true);
+    }
+
     Y_UNIT_TEST(ShouldReadKeyCellVec) {
         TestReadKey(NKikimrDataEvents::FORMAT_CELLVEC);
     }

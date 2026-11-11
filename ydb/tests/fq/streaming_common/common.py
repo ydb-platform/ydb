@@ -51,6 +51,9 @@ def set_test_env(request):
     os.environ["YDB_TEST_LEASE_CHECK_STARTUP_TIMEOUT_SEC"] = param.get("lease_check_startup_timeout_sec", "1")
     rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
+    os.environ["YDB_TEST_ROW_DISPATCHER_START_SESSION_TIMEOUT_SEC"] = param.get(
+        "row_dispatcher_start_session_timeout_sec", "1"
+    )
 
 
 def get_ydb_config(request, enable_fq_connector=None):

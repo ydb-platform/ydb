@@ -5,11 +5,81 @@ import pytest
 import time
 from typing import Callable, Self
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, counter_nodes, get_sensors
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.test_meta import link_test_case
+from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 
 logger = logging.getLogger(__name__)
 DEFAULT_INITIAL_TS = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+
+
+class _TopicQueryCounters:
+    _input_labels = {"subsystem": "DqSourceTracker", "source": "PqRead", "sensor": "DataRate"}
+    _output_labels = {"subsystem": "DqSinkTracker", "sink": "PqSink", "sensor": "EgressDataRate"}
+
+    def __init__(self, kikimr: Kikimr, query_name: str, input_topic: str, shared_reading: bool):
+        self.kikimr = kikimr
+        self.query_name = query_name
+        self.input_topic = input_topic
+        self.shared_reading = shared_reading
+        self._previous_tx_ids = self._counter_tx_ids()
+        self._tx_ids: set[str] = set()
+
+    def _sensors(self, labels: dict[str, str]) -> list[dict]:
+        return [
+            sensor
+            for node_id in counter_nodes(self.kikimr.cluster)
+            for sensor in get_sensors(self.kikimr.cluster, node_id, "kqp").data
+            if all(sensor["labels"].get(label) == value for label, value in labels.items())
+        ]
+
+    def _counter_tx_ids(self) -> set[str]:
+        return {
+            sensor["labels"]["tx_id"] for sensor in self._sensors(self._output_labels) if "tx_id" in sensor["labels"]
+        }
+
+    def _bind_query(self) -> None:
+        self._tx_ids = self._counter_tx_ids() - self._previous_tx_ids
+        assert self._tx_ids, f"No PqSink/EgressDataRate counters for {self.query_name}"
+
+    def _query_bytes(self, labels: dict[str, str]) -> int:
+        if not self._tx_ids:
+            self._bind_query()
+        return sum(sensor["value"] for sensor in self._sensors(labels) if sensor["labels"].get("tx_id") in self._tx_ids)
+
+    def input_bytes(self, partition_id: int | None = None) -> int:
+        if not self.shared_reading:
+            return self._query_bytes(self._input_labels)
+        labels = {"subsystem": "row_dispatcher", "topic": self.input_topic, "sensor": "SessionDataRate"}
+        if partition_id is not None:
+            labels["partition"] = str(partition_id)
+        return sum(sensor["value"] for sensor in self._sensors(labels))
+
+    def output_bytes(self) -> int:
+        return self._query_bytes(self._output_labels)
+
+    def _wait_bytes(self, get_value: Callable[[], int], expected_value: int, counter_name: str) -> None:
+        actual = 0
+
+        def ready():
+            nonlocal actual
+            actual = get_value()
+            return actual >= expected_value
+
+        assert wait_for(
+            ready,
+            timeout_seconds=plain_or_under_sanitizer_wrapper(120, 150),
+            step_seconds=0.2,
+        ), f"{counter_name} for {self.query_name}: {actual}, expected >= {expected_value}"
+
+    def wait_input_bytes(self, expected_value: int, partition_id: int | None = None) -> None:
+        self._wait_bytes(
+            lambda: self.input_bytes(partition_id), expected_value, f"Input counter, partition {partition_id}"
+        )
+
+    def wait_output_bytes(self, expected_value: int) -> None:
+        self._wait_bytes(self.output_bytes, expected_value, "Output counter")
 
 
 @pytest.mark.usefixtures("wait_initial_resources")
@@ -174,8 +244,11 @@ class TestWatermarksInYdb(StreamingTestBase):
             FROM $output;
             END DO;
         '''
+        counters = _TopicQueryCounters(kikimr, query_name, self.input_topic, shared_reading)
         kikimr.ydb_client.query(sql)
         self.wait_completed_checkpoints(kikimr, query_name)
+        self._query_counters = getattr(self, "_query_counters", {})
+        self._query_counters[query_name] = counters
         return query_name
 
     def _write_topic(
@@ -194,25 +267,11 @@ class TestWatermarksInYdb(StreamingTestBase):
         message: str,
         partition_id: int = 0,
     ) -> None:
-        input_bytes_before = self.get_streaming_query_metric(kikimr, query_name, "streaming.query.input.bytes")
+        counters = self._query_counters[query_name]
+        input_bytes_before = counters.input_bytes(partition_id)
         self._write_topic(ydb_client, [message], partition_id=partition_id)
-        self.wait_streaming_query_metric(
-            kikimr,
-            query_name,
-            "streaming.query.input.bytes",
-            expected_value=input_bytes_before + 1,
-        )
+        counters.wait_input_bytes(input_bytes_before + 1, partition_id)
         self.wait_completed_checkpoints(kikimr, query_name)
-
-    def _wait_for_idle(self, shared_reading: bool, tasks: int) -> None:
-        if shared_reading and tasks > 1:
-            # Allow idle timeout to fire in shared reading.
-            time.sleep(2 * self.idle_timeout_seconds)
-
-    def _wait_for_shared_reading_start(self, shared_reading: bool) -> None:
-        if shared_reading:
-            # Allow shared-reading workers to start consuming partitions.
-            time.sleep(self.idle_timeout_seconds + 1)
 
     def _read_topic(self, ydb_client: YdbClient, messages_count: int) -> list[str]:
         return ydb_client.topic_read(self.output_topic, self.consumer_name, messages_count)
@@ -229,6 +288,7 @@ class TestWatermarksInYdb(StreamingTestBase):
 
     def _drop_query(self, kikimr: Kikimr, query_name: str) -> None:
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+        getattr(self, "_query_counters", {}).pop(query_name, None)
 
     @link_test_case("#28595")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -255,7 +315,6 @@ class TestWatermarksInYdb(StreamingTestBase):
                     self._event(60, "60", filter=True),
                 ],
             )
-            self._wait_for_idle(shared_reading, tasks)
 
             expected = ['["40"]', '["50"]']
             self._read_topic_check(ydb_client, expected)
@@ -289,7 +348,6 @@ class TestWatermarksInYdb(StreamingTestBase):
                     self._event(60, "60", filter=True),
                 ],
             )
-            self._wait_for_idle(shared_reading, tasks)
 
             expected = ['[["40"]]', '[["50"]]']
             self._read_topic_check(ydb_client, expected)
@@ -320,7 +378,6 @@ class TestWatermarksInYdb(StreamingTestBase):
             partitions_count=2,
             idle_timeout_seconds=idle_timeout_seconds,
         )
-        self._wait_for_shared_reading_start(shared_reading)
 
         try:
             self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(0, "fst-0"), partition_id=0)
@@ -332,18 +389,13 @@ class TestWatermarksInYdb(StreamingTestBase):
             self.wait_completed_checkpoints(kikimr, query_name)
 
             while True:
-                input_bytes_before = self.get_streaming_query_metric(kikimr, query_name, "streaming.query.input.bytes")
+                input_bytes_before = self._query_counters[query_name].input_bytes(partition_id=0)
                 self._write_topic(
                     ydb_client,
                     [self._event(10, "keepalive", filter=True)],
                     partition_id=0,
                 )
-                self.wait_streaming_query_metric(
-                    kikimr,
-                    query_name,
-                    "streaming.query.input.bytes",
-                    expected_value=input_bytes_before + 1,
-                )
+                self._query_counters[query_name].wait_input_bytes(input_bytes_before + 1, partition_id=0)
                 if time.monotonic() - idle_started >= idle_timeout_seconds + 1:
                     break
                 time.sleep(keep_alive_interval)
@@ -384,7 +436,6 @@ class TestWatermarksInYdb(StreamingTestBase):
             partitions_count=2,
             idle_timeout_seconds=idle_timeout_seconds,
         )
-        self._wait_for_shared_reading_start(shared_reading)
 
         try:
             self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(0, "fst-0"), partition_id=0)
@@ -420,7 +471,6 @@ class TestWatermarksInYdb(StreamingTestBase):
         query_name = self._create_query(
             kikimr, entity_name, query_name, local_topics, shared_reading, idle_timeout_seconds=idle_timeout_seconds
         )
-        self._wait_for_shared_reading_start(shared_reading)
 
         try:
             self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(0, "fst-0"), partition_id=0)
@@ -436,22 +486,12 @@ class TestWatermarksInYdb(StreamingTestBase):
             # window [20,21) is never closed, so they must not appear in the output.
             # Wait for ingest and for output to advance (windows closed) before reading —
             # a bare checkpoint wait here can hang under load after a full-topic idle.
-            output_bytes_before = self.get_streaming_query_metric(kikimr, query_name, "streaming.query.output.bytes")
-            input_bytes_before = self.get_streaming_query_metric(kikimr, query_name, "streaming.query.input.bytes")
+            output_bytes_before = self._query_counters[query_name].output_bytes()
+            input_bytes_before = self._query_counters[query_name].input_bytes()
             self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
             self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
-            self.wait_streaming_query_metric(
-                kikimr,
-                query_name,
-                "streaming.query.input.bytes",
-                expected_value=input_bytes_before + 2,
-            )
-            self.wait_streaming_query_metric(
-                kikimr,
-                query_name,
-                "streaming.query.output.bytes",
-                expected_value=output_bytes_before + 1,
-            )
+            self._query_counters[query_name].wait_input_bytes(input_bytes_before + 2)
+            self._query_counters[query_name].wait_output_bytes(output_bytes_before + 1)
 
             expected = ["fst-0", "snd-0", "fst-10", "snd-10"]
             self._read_topic_check_rows(ydb_client, expected)
@@ -481,7 +521,6 @@ class TestWatermarksInYdb(StreamingTestBase):
             partitions_count=2,
             idle_timeout_seconds=idle_timeout_seconds,
         )
-        self._wait_for_shared_reading_start(shared_reading)
 
         try:
             self._write_topic(ydb_client, [self._event(0, "fst-0")], partition_id=0)
@@ -500,17 +539,11 @@ class TestWatermarksInYdb(StreamingTestBase):
             # Let the second partition exceed idle timeout without idling the first.
             time.sleep(idle_timeout_seconds / 2 + 1)
 
-            # Capture the query's cumulative input byte counter before reactivating the
-            # second partition, so we can confirm snd-20 was actually ingested.
-            input_bytes_before = self.get_streaming_query_metric(kikimr, query_name, "streaming.query.input.bytes")
+            # Capture the input byte counter before reactivating the second partition.
+            input_bytes_before = self._query_counters[query_name].input_bytes(partition_id=1)
             self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
 
-            self.wait_streaming_query_metric(
-                kikimr,
-                query_name,
-                "streaming.query.input.bytes",
-                expected_value=input_bytes_before + 1,
-            )
+            self._query_counters[query_name].wait_input_bytes(input_bytes_before + 1, partition_id=1)
             self.wait_completed_checkpoints(kikimr, query_name)
 
             time.sleep(idle_timeout_seconds + 1)
@@ -551,7 +584,6 @@ class TestWatermarksInYdb(StreamingTestBase):
                     f'{self._event(40, "40")}..{self._event(50, "50")}.{self._event(60, "60", filter=True)}',
                 ],
             )
-            self._wait_for_idle(shared_reading, tasks)
 
             expected = ['["40"]', '["50"]']
             self._read_topic_check(ydb_client, expected)
@@ -592,7 +624,6 @@ class TestWatermarksInYdb(StreamingTestBase):
                     f'{self._event(40, "40")}..{self._event(50, "50")}..{self._event(60, "60", filter=True)}',
                 ],
             )
-            self._wait_for_idle(shared_reading, tasks)
 
             expected = ["40", "40", "50", "50"]
             self._read_topic_check_rows(ydb_client, expected)
@@ -625,7 +656,6 @@ class TestWatermarksInYdb(StreamingTestBase):
                     self._event(4 * 60, "240", initial_ts=now, filter=True),
                 ],
             )
-            self._wait_for_idle(shared_reading, tasks)
 
             expected = ['["0"]']
             self._read_topic_check(ydb_client, expected)
@@ -673,7 +703,6 @@ class TestWatermarksInYdb(StreamingTestBase):
                     self._event(55, "55"),
                 ],
             )
-            self._wait_for_idle(shared_reading, tasks)
 
             self._read_topic_check_rows(ydb_client, ["50"])
 
@@ -685,7 +714,6 @@ class TestWatermarksInYdb(StreamingTestBase):
                     self._event(70, "70", filter=True),
                 ],
             )
-            self._wait_for_idle(shared_reading, tasks)
 
             self._read_topic_check_rows(ydb_client, expected)
         finally:
@@ -810,8 +838,6 @@ class TestWatermarksInYdb(StreamingTestBase):
                 ],
                 producer_id='1',
             )
-            if shared_reading and tasks > 1:
-                time.sleep(10)  # leave a bit more time to fire up idle timeout
 
             expected = [
                 '[[["1970-01-01T00:00:40Z","one"]]]',

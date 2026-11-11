@@ -1014,6 +1014,87 @@ class ShardProgressTest(unittest.TestCase):
         self.assertNotIn("| Shard |", body)
         self.assertNotIn("| result |", body)
 
+    def test_try_url_for_uses_combined_directory_layout(self) -> None:
+        state = _progress_state(2)
+        state["combined_url"] = "https://example.test/combined"
+        state["shards"] = {
+            "0": {
+                "report_url": "https://example.test/shard_0/try_1/ya-test.html",
+                "report_json_url": "https://example.test/shard_0/try_1/report.json",
+            }
+        }
+        self.assertEqual(
+            shard_progress.try_url_for(state, "1", try_count=2),
+            "https://example.test/combined/try_1/ya-test.html",
+        )
+        self.assertEqual(
+            shard_progress.try_url_for(state, "2", try_count=2),
+            "https://example.test/combined/try_2/ya-test.html",
+        )
+
+    def test_try_url_for_rewrites_shard_report_when_no_combined(self) -> None:
+        state = _progress_state(2)
+        state["shards"] = {
+            "0": {"report_url": "https://example.test/shard_0/try_1/ya-test.html"},
+        }
+        self.assertEqual(
+            shard_progress.try_url_for(state, "2", try_count=2),
+            "https://example.test/shard_0/try_2/ya-test.html",
+        )
+
+    def test_with_sibling_shard_reports_fills_missing_urls(self) -> None:
+        state = _progress_state(2)
+        state["total"] = 2
+        state["shards"] = {
+            "0": {
+                "report_url": "https://example.test/run/shard_0/try_1/ya-test.html",
+                "report_json_url": "https://example.test/run/shard_0/try_2/report.json",
+            }
+        }
+        filled = shard_progress.with_sibling_shard_reports(state)
+        self.assertEqual(
+            filled["shards"]["1"]["report_json_url"],
+            "https://example.test/run/shard_1/try_2/report.json",
+        )
+        self.assertIn("/shard_1/", filled["shards"]["1"]["report_url"])
+
+    def test_comment_links_retries_without_try_urls(self) -> None:
+        state = shard_progress.apply_shard(
+            _progress_state(2),
+            shard_id=0,
+            result="failure",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:05:00Z",
+            job_url="https://example.test/job/0",
+            log_prefix="shard_0",
+            failed_tests=["ydb/a/Foo"],
+            run_url="https://example.test/run/99",
+            counts={"tests": 10, "passed": 8, "errors": 0, "failed": 2, "skipped": 0, "muted": 0},
+            tries={
+                "1": {"tests": 10, "passed": 7, "errors": 0, "failed": 3, "skipped": 0, "muted": 0},
+                "2": {"tests": 3, "passed": 1, "errors": 0, "failed": 2, "skipped": 0, "muted": 0},
+            },
+            report_url="https://example.test/shard_0/try_1/ya-test.html",
+            report_json_url="https://example.test/shard_0/try_2/report.json",
+        )
+        state = shard_progress.apply_shard(
+            state,
+            shard_id=1,
+            result="success",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:06:00Z",
+            job_url="https://example.test/job/1",
+            log_prefix="shard_1",
+            failed_tests=[],
+            run_url="https://example.test/run/99",
+            counts={"tests": 5, "passed": 5, "errors": 0, "failed": 0, "skipped": 0, "muted": 0},
+            tries={"1": {"tests": 5, "passed": 5, "errors": 0, "failed": 0, "skipped": 0, "muted": 0}},
+        )
+        state["combined_url"] = "https://example.test/combined"
+        body = shard_progress.render_comment(state, "2026-10-04T12:06:00Z")
+        self.assertIn("[15](https://example.test/combined/try_1/ya-test.html)", body)
+        self.assertIn("[2](https://example.test/combined/try_2/ya-test.html#FAIL)", body)
+
 
 class _MemComment:
     def __init__(self, comment_id: int, body: str, etag: str) -> None:

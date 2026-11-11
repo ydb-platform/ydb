@@ -274,7 +274,12 @@ def href_url(url: str) -> str:
 def report_url_for(state: dict[str, Any]) -> str:
     combined = str(state.get("combined_url") or "")
     if combined:
-        return combined
+        if combined.endswith("/ya-test.html"):
+            return combined
+        urls = state.get("try_urls") or {}
+        if isinstance(urls, dict) and urls.get("1"):
+            return str(urls["1"])
+        return f"{combined.rstrip('/')}/try_1/ya-test.html"
     for shard_id in sorted(state.get("shards") or {}, key=lambda item: int(item)):
         url = str((state["shards"][shard_id] or {}).get("report_url") or "")
         if url:
@@ -282,18 +287,71 @@ def report_url_for(state: dict[str, Any]) -> str:
     return ""
 
 
+def _rewrite_try_url(url: str, try_index: str | int) -> str:
+    """Point .../try_N/ya-test.html (or report.json) at try_{try_index}."""
+    if not url:
+        return ""
+    key = str(try_index)
+    if re.search(r"/try_\d+/ya-test\.html(?:\?.*)?$", url):
+        return re.sub(r"/try_\d+/ya-test\.html", f"/try_{key}/ya-test.html", url, count=1)
+    if re.search(r"/try_\d+/report\.json(?:\?.*)?$", url):
+        return re.sub(r"/try_\d+/report\.json", f"/try_{key}/report.json", url, count=1)
+    return url
+
+
 def try_url_for(state: dict[str, Any], key: str, *, try_count: int = 1) -> str:
     urls = state.get("try_urls") or {}
     if isinstance(urls, dict) and urls.get(str(key)):
         return str(urls[str(key)])
     combined = str(state.get("combined_url") or "")
-    if try_count <= 1:
-        return combined or report_url_for(state)
-    if combined.endswith("/ya-test.html"):
-        return combined[: -len("/ya-test.html")] + f"/try_{key}/ya-test.html"
     if combined:
-        return f"{combined.rstrip('/')}/try_{key}/ya-test.html"
-    return ""
+        # Directory-style combined/ URL (S3 layout): always .../try_N/ya-test.html.
+        if not combined.endswith("/ya-test.html"):
+            return f"{combined.rstrip('/')}/try_{key}/ya-test.html"
+        # Legacy combined/.../ya-test.html: keep the bare file for a single try,
+        # rewrite into try_N/ only when there are retries to show.
+        if try_count <= 1:
+            return combined
+        return combined[: -len("/ya-test.html")] + f"/try_{key}/ya-test.html"
+    # No merged combined/ report yet: still link the table to a real ya-test.html
+    # (first shard), rewriting the try index so retries are not bare numbers.
+    return _rewrite_try_url(report_url_for(state), key)
+
+
+def with_sibling_shard_reports(state: dict[str, Any]) -> dict[str, Any]:
+    """Fill missing shard report_json_url slots from a known sibling URL.
+
+    Combined HTML is built on each shard host; without a PR comment to merge,
+    the local state only knows this shard. Other shards' report.json are already
+    public on S3 under shard_N/, so rewrite the path and let fetch fill them in.
+    """
+    updated = merge_states([state])
+    shards = updated.get("shards") or {}
+    sample = ""
+    for row in shards.values():
+        if isinstance(row, dict) and row.get("report_json_url"):
+            sample = str(row.get("report_json_url") or "")
+            break
+    if not sample or not re.search(r"/shard_\d+/", sample):
+        return updated
+    total = int(updated.get("total") or 0)
+    if total < 1:
+        total = len(shards) or 1
+    for shard_id in range(total):
+        key = str(shard_id)
+        row = dict(shards.get(key) or {})
+        if row.get("report_json_url") and row.get("report_url"):
+            shards[key] = row
+            continue
+        json_url = re.sub(r"/shard_\d+/", f"/shard_{shard_id}/", sample, count=1)
+        html_url = _rewrite_try_url(json_url.replace("report.json", "ya-test.html"), 1)
+        if not row.get("report_json_url"):
+            row["report_json_url"] = json_url
+        if not row.get("report_url"):
+            row["report_url"] = html_url
+        shards[key] = row
+    updated["shards"] = shards
+    return updated
 
 
 def format_comment_time(value: str) -> str:
@@ -1301,6 +1359,7 @@ def _cmd_publish(args: argparse.Namespace) -> int:
                 preview = merge_states([item for item in existing if item] + [state])
             except (OSError, RuntimeError, urllib.error.URLError, json.JSONDecodeError, TimeoutError, ValueError):
                 preview = state
+        preview = with_sibling_shard_reports(preview)
         try_urls = write_try_htmls(
             args.combined_html,
             preview,
@@ -1356,6 +1415,18 @@ def _cmd_finalize(args: argparse.Namespace) -> int:
         print("No shard progress state to finalize.", file=sys.stderr)
         return 0
     merged = merge_states(states)
+    merged = with_sibling_shard_reports(merged)
+    # Prefer a stable combined/ URL even when publish could not upload HTML yet:
+    # try_url_for rewrites it to try_N/ya-test.html for each table.
+    if not merged.get("combined_url"):
+        for row in (merged.get("shards") or {}).values():
+            if not isinstance(row, dict):
+                continue
+            sample = str(row.get("report_url") or row.get("report_json_url") or "")
+            match = re.search(r"^(?P<prefix>.*/)shard_\d+(?P<suffix>/.*)$", sample)
+            if match:
+                merged["combined_url"] = f"{match.group('prefix')}combined"
+                break
     now = args.now or format_time(datetime.now(timezone.utc))
     written = render_comment(merged, now)
     heading = f"## Combined Run-tests `{_md(args.preset)}`\n\n"

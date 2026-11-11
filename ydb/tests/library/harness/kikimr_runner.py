@@ -398,8 +398,8 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             self.update_command(self.__make_run_command())
             super(KiKiMRNode, self).start()
         finally:
+            # Skip ydbd -V: it only fed this log line and paid a full process start per node.
             logger.info("Started node %s", self)
-            logger.info("Node %s version:\n%s", self.node_id, self.get_node_binary_version())
 
     def read_node_config(self):
         config_file = os.path.join(self.__config_path, "config.yaml")

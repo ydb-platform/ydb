@@ -210,6 +210,9 @@ namespace NTabletFlatExecutor {
             THolder<TScanSnapshot> Snapshot;
             EState State = EState::None;
             bool NeedsReadmission = false;
+            // Bounds the entire volatile wait and readmission, without
+            // evicting ordinary queued scans which have not chosen a version.
+            TInstant ReadinessDeadline;
             ui64 TimeoutGeneration = 0;
             TActorId Actor;     /* Valid just after EState::Scan*/
             TAutoPtr<IScan> Scan;   /* Valid before EState::Scan    */
@@ -361,6 +364,8 @@ namespace NTabletFlatExecutor {
 
         bool AwaitReadiness(ui64 serial) {
             auto& one = *Lookup(serial, true);
+            Y_ENSURE(!one.ReadinessDeadline || TActivationContext::Now() < one.ReadinessDeadline,
+                "Timed out waiting for scan readiness and readmission");
             if (!one.Options.OnAdmissionReady) {
                 return true;
             }
@@ -371,6 +376,10 @@ namespace NTabletFlatExecutor {
                     // Transactions being waited on may need broker resources.
                     one.Lease->Suspend();
                     one.NeedsReadmission = true;
+                    if (!one.ReadinessDeadline && one.Options.QueueTimeout) {
+                        one.ReadinessDeadline = TActivationContext::Now() + one.Options.QueueTimeout;
+                    }
+                    ScheduleAdmissionTimeout(one);
                 }
                 return false;
             }
@@ -434,10 +443,14 @@ namespace NTabletFlatExecutor {
 
         TCancelled AdmissionTimedOut(ui64 serial, ui64 generation) {
             auto* one = Lookup(serial, false);
-            if (!one || one->State != EState::Task || one->TimeoutGeneration != generation) {
+            if (!one || (one->State != EState::Task && one->State != EState::Ready) ||
+                one->TimeoutGeneration != generation) {
                 return {};
             }
-            if (one->Options.OnAdmissionTimeout && one->Options.OnAdmissionTimeout()) {
+            if (one->ReadinessDeadline && TActivationContext::Now() >= one->ReadinessDeadline) {
+                return AdmissionFailed(serial, "Timed out waiting for scan readiness and readmission");
+            }
+            if (one->State == EState::Task && one->Options.OnAdmissionTimeout && one->Options.OnAdmissionTimeout()) {
                 // A heartbeat must not cancel and reinsert a queued task: that
                 // would lose its FIFO position under a sustained backlog.
                 ScheduleAdmissionTimeout(*one);
@@ -447,6 +460,15 @@ namespace NTabletFlatExecutor {
         }
 
         TCancelled Rejected(const TEvResourceBroker::TEvTaskOperationError& error) {
+            if (error.Status.Code == TEvResourceBroker::TStatus::UNKNOWN_TASK) {
+                // UpdateTask errors have no cookie. Match the live deferred
+                // task by id, ignoring errors for running or unrelated work.
+                for (const auto& [serial, one] : Scans) {
+                    if (one.TaskId == error.TaskId && one.Lease && one.Options.Factory && one.State <= EState::Ready) {
+                        return AdmissionFailed(serial, error.Status.Message, false);
+                    }
+                }
+            }
             if (error.Status.Code == TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED && error.Cookie) {
                 const auto* resource = CheckedCast<TResource*>(error.Cookie.Get());
                 if (resource->Source == TResource::ESource::Scan) {
@@ -713,7 +735,10 @@ namespace NTabletFlatExecutor {
         void ScheduleAdmissionTimeout(TOne& one) {
             ++one.TimeoutGeneration;
             if (one.Options.Factory && one.Options.QueueTimeout) {
-                TActivationContext::ActorContextFor(BrokerClient).Schedule(one.Options.QueueTimeout,
+                const auto delay = one.ReadinessDeadline
+                    ? Min(one.Options.QueueTimeout, one.ReadinessDeadline - TActivationContext::Now())
+                    : one.Options.QueueTimeout;
+                TActivationContext::ActorContextFor(BrokerClient).Schedule(delay,
                     new NOps::TEvAdmissionTimeout(one.Serial, one.TimeoutGeneration));
             }
         }

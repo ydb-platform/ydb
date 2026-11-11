@@ -267,7 +267,13 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         const TShardIdx& shardIdx = item.first;
         const TIndexBuildShardStatus& status = item.second;
 
-        if (status.Status != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
+        if (indexInfo.IsBuildVectorIndex() && indexInfo.State == TIndexBuildInfo::EState::Filling &&
+            status.Status == NKikimrIndexBuilder::ABORTED && status.DebugMessage) {
+            // Memory pressure may recover, but a permanently small budget
+            // must not leave an apparently healthy build waiting silently.
+            AddIssue(index.MutableIssues(), TStringBuilder() << "Retrying index scan: " << status.DebugMessage,
+                NYql::TSeverityIds::S_WARNING);
+        } else if (status.Status != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
             if (status.UploadStatus != Ydb::StatusIds::SUCCESS) {
                 if (status.DebugMessage) {
                     AddIssue(index.MutableIssues(), status.ToString(shardIdx));

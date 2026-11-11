@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
     }
 
-    Y_UNIT_TEST(SingleShardAutodetectRespectsRetryHint) {
+    Y_UNIT_TEST_TWIN(SingleShardAutodetectRespectsRetryHintAndReportsBudgetIssue, PendingBytes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -489,15 +489,28 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         record.SetRetryAfterMs(30000);
         record.ClearRows();
         record.ClearProbabilities();
+        record.ClearMeteringStats();
+        record.ClearIssues();
+        const TString reason = PendingBytes ? "Index scan request exceeds the current node pending byte budget"
+            : "Minimum index scan reservation exceeds the current memory budget";
+        record.AddIssues()->set_message(reason);
         const auto rejectedAt = runtime.GetCurrentTime();
         replies.Stop().Unblock();
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(probes, 1);
+        for (ui32 poll = 0; poll < 2; ++poll) {
+            const auto pending = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
+            UNIT_ASSERT_VALUES_EQUAL(pending.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
+            UNIT_ASSERT_VALUES_EQUAL(pending.GetIndexBuild().IssuesSize(), 1);
+            UNIT_ASSERT_STRING_CONTAINS(pending.GetIndexBuild().GetIssues(0).message(), reason);
+            UNIT_ASSERT_VALUES_EQUAL(pending.GetIndexBuild().GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_WARNING));
+        }
         env.TestWaitNotification(runtime, build, schemeShard);
         UNIT_ASSERT_VALUES_EQUAL(probes, 2);
         UNIT_ASSERT(retriedAt >= rejectedAt + TDuration::Seconds(30));
-        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build)
-            .GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        const auto done = TestGetBuildIndex(runtime, schemeShard, "/MyRoot/ServerLessDB", build);
+        UNIT_ASSERT_VALUES_EQUAL(done.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(done.GetIndexBuild().IssuesSize(), 0);
     }
 
     Y_UNIT_TEST(BackoffAtFrontDoesNotDelayReadyShards) {

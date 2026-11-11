@@ -7,11 +7,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 29,
-                "ColumnName": "EnableConfigV2",
-                "ColumnType": "Bool"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -22,18 +17,8 @@
                 "ColumnType": "Uint32"
             },
             {
-                "ColumnId": 33,
-                "ColumnName": "BridgeSyncTotalRate",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 4,
                 "ColumnName": "SchemaVersion",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 34,
-                "ColumnName": "BridgeSyncMaxSyncers",
                 "ColumnType": "Uint32"
             },
             {
@@ -152,6 +137,21 @@
                 "ColumnType": "Uint64"
             },
             {
+                "ColumnId": 29,
+                "ColumnName": "EnableConfigV2",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 33,
+                "ColumnName": "BridgeSyncTotalRate",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 34,
+                "ColumnName": "BridgeSyncMaxSyncers",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 35,
                 "ColumnName": "AppliedPileOverrides",
                 "ColumnType": "String"
@@ -161,12 +161,9 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    29,
                     1,
                     2,
-                    33,
                     4,
-                    34,
                     5,
                     6,
                     7,
@@ -190,6 +187,9 @@
                     26,
                     27,
                     28,
+                    29,
+                    33,
+                    34,
                     35
                 ],
                 "RoomID": 0,

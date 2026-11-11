@@ -1435,8 +1435,6 @@ class GnuToolchain(Toolchain):
                     if target.is_x86_64:
                         if host.is_linux and not self.tc.is_gcc:
                             self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/lib/x86_64-linux-gnu')
-                        elif host.is_macos:
-                            self.setup_tools(project='build/platform/binutils', var='$BINUTILS_ROOT_RESOURCE_GLOBAL', bin='x86_64-linux-gnu/bin', ldlibs=None)
                     elif target.is_powerpc:
                         self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/x86_64-linux-gnu/powerpc64le-linux-gnu/lib')
                     elif target.is_armv8 or target.is_armv9a:

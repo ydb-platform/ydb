@@ -79,8 +79,9 @@ void TCommandBridgeSetDatabaseMode::Config(TConfig& config) {
     config.Opts->GetOpts().GetFreeArgSpec(0)
         .Completer(NLastGetopt::NComp::Choice({{"bridged", "Enable bridge replication"},
                                              {"ordinary", "Disable bridge replication"}}));
-    config.Opts->AddLongOption("target-database", "Absolute path of the database to change. "
+    config.Opts->AddLongOption("database-path", "Absolute path of the database to change. "
             "Does not change the connection or authentication database set by global --database.")
+        .AddLongName("target-database")
         .Required().RequiredArgument("PATH").StoreResult(&TargetDatabase);
     config.Opts->AddLongOption("retain-pile", "With mode ordinary, keep data in this pile, which must already have synchronized copies. "
             "By default, select copies automatically; they may be in different piles. Does not relocate existing ordinary data.")
@@ -279,11 +280,12 @@ int TCommandBridgeRollbackStatus::Run(TConfig& config) {
 }
 
 TCommandBridgeRollback::TCommandBridgeRollback(bool allowEmptyDatabase)
-    : TYdbCommand("rollback", {}, "Roll a cluster converted from an ordinary one back to it. The cluster must have the "
-        "only pile, the original one, and every storage group must be inline in it. Static storage groups become "
-        "ordinary ones right away, the other ones and the cluster state follow; see rollback-status. Then remove "
-        "bridge_config along with bridge_pile_name of hosts from the cluster configuration in a single change, and "
-        "restart every node without them (dynamic nodes without --bridge-pile-name).")
+    : TYdbCommand("rollback", {}, "Roll back bridge conversion.\n"
+        "Requires the original pile to be the only pile and all bridged storage groups to be inline in it. "
+        "Storage groups retain their IDs and data. Monitor progress with \"ydb admin cluster bridge list piles\". "
+        "Wait for storage rollback to finish before removing bridge_config and hosts' bridge_pile_name in one configuration change. "
+        "Then restart all nodes without bridge configuration. Start dynamic nodes without --bridge-pile-name. "
+        "The report covers static and connected dynamic nodes.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
     CompletionDescription = "Roll a converted cluster back to ordinary mode";
@@ -322,8 +324,7 @@ int TCommandBridgeRollback::Run(TConfig& config) {
         .SkipBscValidation(SkipBscValidation)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    Cout << "Rollback started: static storage groups are ordinary ones now. Watch rollback-status until the cluster is "
-        "not a bridged one anymore, then remove bridge_config and restart the nodes." << Endl;
+    Cout << "Rollback started. Monitor progress with \"ydb admin cluster bridge list piles\"." << Endl;
 
     return EXIT_SUCCESS;
 }
@@ -489,7 +490,7 @@ void TCommandBridgeConvert::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
     config.Opts->AddLongOption("skip-storage-pool-conversion",
             "Leave existing storage pools and their groups non-bridged. They will not be replicated to added piles "
-            "until converted separately (ydb admin cluster bridge set-database-mode bridged --target-database PATH). "
+            "until converted separately (ydb admin cluster bridge set-database-mode bridged --database-path PATH). "
             "Static storage groups are still converted to bridge mode. Requires bridge_config.enable_non_uniform_storage=true.")
         .StoreTrue(&SkipStoragePoolConversion);
 }

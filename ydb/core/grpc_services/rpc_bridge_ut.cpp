@@ -81,6 +81,12 @@ struct TUpdateOptions {
     NKikimrBridge::TClusterState::EPileState SecondaryState = NKikimrBridge::TClusterState::SYNCHRONIZED;
 };
 
+struct TGetOptions {
+    bool Connectivity = true;
+    bool UnbridgedStatus = false;
+    bool Bridged = true;
+};
+
 struct TSetup {
     TTestBasicRuntime Runtime;
     TActorId NodeWarden;
@@ -116,18 +122,19 @@ struct TSetup {
         return std::pair{rpc, promise.GetFuture()};
     }
 
-    auto StartGet(bool connectivity = true) {
+    auto StartGet(TGetOptions options = {}) {
         using TGetRpc = TGrpcRequestOperationCall<Ydb::Bridge::GetClusterStateRequest,
             Ydb::Bridge::GetClusterStateResponse>;
         Ydb::Bridge::GetClusterStateRequest request;
         NRpcService::SetRequestSyncOperationMode(request);
-        request.set_include_pile_connectivity(connectivity);
+        request.set_include_pile_connectivity(options.Connectivity);
+        request.set_include_unbridged_status(options.UnbridgedStatus);
         auto promise = NThreading::NewPromise<TGetRpc::TResponse>();
         using TCb = NRpcService::TPromiseWrapper<TGetRpc::TResponse>;
         auto ctx = std::make_unique<NRpcService::TLocalRpcCtx<TGetRpc, TCb>>(
             std::move(request), TCb(promise), "/Root", Nothing(), Nothing(), false);
         Runtime.Register(new TStartRequest(std::move(ctx), DoGetClusterState));
-        const auto rpc = ReplyWithConfig();
+        const auto rpc = ReplyWithConfig(options.Bridged ? std::optional<ui64>(1) : std::nullopt);
         return std::pair{rpc, promise.GetFuture()};
     }
 
@@ -160,7 +167,7 @@ struct TSetup {
         Runtime.Send(new IEventHandle(rpc, NodeWarden, response.release()), 0, true);
     }
 
-    TActorId ReplyWithConfig(ui64 generation = 1,
+    TActorId ReplyWithConfig(std::optional<ui64> generation = 1,
             NKikimrBridge::TClusterState::EPileState secondaryState = NKikimrBridge::TClusterState::SYNCHRONIZED)
     {
         const auto query = Runtime.GrabEdgeEventIf<TEvNodeWardenQueryStorageConfig>(NodeWarden,
@@ -171,13 +178,19 @@ struct TSetup {
 
         auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
         config->MutableSelfManagementConfig()->SetEnabled(true);
+        auto bridge = std::make_shared<TBridgeInfo>();
+        if (!generation) {
+            // A prepared cluster can already have implicit pile information before it has a cluster state.
+            bridge->IsImplicit = true;
+            Runtime.Send(new IEventHandle(rpc, NodeWarden, new TEvNodeWardenStorageConfig(config, true, bridge)), 0, true);
+            return rpc;
+        }
         auto *state = config->MutableClusterState();
-        state->SetGeneration(generation);
+        state->SetGeneration(*generation);
         TBridgePileId::FromPileIndex(0).CopyToProto(state, &NKikimrBridge::TClusterState::SetPrimaryPile);
         TBridgePileId::FromPileIndex(0).CopyToProto(state, &NKikimrBridge::TClusterState::SetPromotedPile);
         state->AddPerPileState(NKikimrBridge::TClusterState::SYNCHRONIZED);
         state->AddPerPileState(secondaryState);
-        auto bridge = std::make_shared<TBridgeInfo>();
         bridge->Piles.resize(2);
         for (ui32 i = 0; i != 2; ++i) {
             bridge->Piles[i].BridgePileId = TBridgePileId::FromPileIndex(i);
@@ -436,7 +449,8 @@ Y_UNIT_TEST_SUITE(BridgeRpcLifecycle) {
 Y_UNIT_TEST_SUITE(BridgeGetClusterStateConnectivity) {
     Y_UNIT_TEST(ConnectivityIsQueriedOnRequest) {
         TSetup setup;
-        auto [rpc, future] = setup.StartGet();
+        setup.Runtime.GetAppData().AdministrationAllowedSIDs = {"admin"};
+        auto [rpc, future] = setup.StartGet({.UnbridgedStatus = true});
         const auto invoke = setup.GrabInvoke(rpc);
         UNIT_ASSERT_C(invoke, "RPC did not query connectivity");
         UNIT_ASSERT(invoke->HasQueryPileConnectivity());
@@ -466,6 +480,7 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateConnectivity) {
         Ydb::Bridge::GetClusterStateResult result;
         UNIT_ASSERT(reply.operation().result().UnpackTo(&result));
         UNIT_ASSERT(result.has_pile_connectivity());
+        UNIT_ASSERT(!result.has_unbridged_status());
         UNIT_ASSERT_VALUES_EQUAL(result.generation(), 1);
         const auto& connectivity = result.pile_connectivity();
         UNIT_ASSERT_VALUES_EQUAL(connectivity.reporter_node_id(), 9);
@@ -488,12 +503,13 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateConnectivity) {
 
     Y_UNIT_TEST(NoConnectivityQueryByDefault) {
         TSetup setup;
-        auto [rpc, future] = setup.StartGet(false);
+        auto [rpc, future] = setup.StartGet({.Connectivity = false});
         const auto reply = setup.Runtime.WaitFuture(future);
         UNIT_ASSERT_VALUES_EQUAL(reply.operation().status(), Ydb::StatusIds::SUCCESS);
         Ydb::Bridge::GetClusterStateResult result;
         UNIT_ASSERT(reply.operation().result().UnpackTo(&result));
         UNIT_ASSERT(!result.has_pile_connectivity());
+        UNIT_ASSERT(!result.has_unbridged_status());
         const auto invoke = setup.GrabInvoke(rpc, TDuration::MilliSeconds(10));
         UNIT_ASSERT(!invoke);
     }
@@ -559,6 +575,102 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateConnectivity) {
 
     Y_UNIT_TEST(MissingPayloadIsRejected) {
         TestError(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, Ydb::StatusIds::GENERIC_ERROR);
+    }
+}
+
+Y_UNIT_TEST_SUITE(BridgeGetClusterStateUnbridgedStatus) {
+    Y_UNIT_TEST(OnlyQueriesUnbridgedStatusWithoutLocalBridgeState) {
+        TSetup setup;
+        setup.Runtime.GetAppData().AdministrationAllowedSIDs = {"admin"};
+        auto [rpc, future] = setup.StartGet({.Connectivity = false, .UnbridgedStatus = true});
+        const auto reply = setup.Runtime.WaitFuture(future);
+        UNIT_ASSERT_VALUES_EQUAL(reply.operation().status(), Ydb::StatusIds::SUCCESS);
+        Ydb::Bridge::GetClusterStateResult result;
+        UNIT_ASSERT(reply.operation().result().UnpackTo(&result));
+        UNIT_ASSERT_VALUES_EQUAL(result.pile_states_size(), 2);
+        UNIT_ASSERT(!result.has_unbridged_status());
+        UNIT_ASSERT(!setup.GrabInvoke(rpc, TDuration::MilliSeconds(10)));
+    }
+
+    Y_UNIT_TEST(AbsentBridgeStateRequiresOptInAndAdministrator) {
+        for (const bool include : {false, true}) {
+            TSetup setup;
+            setup.Runtime.GetAppData().AdministrationAllowedSIDs = {"admin"};
+            auto [rpc, future] = setup.StartGet({.UnbridgedStatus = include, .Bridged = false});
+            const auto reply = setup.Runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL(reply.operation().status(), include ? Ydb::StatusIds::UNAUTHORIZED : Ydb::StatusIds::NOT_FOUND);
+            UNIT_ASSERT(!reply.operation().has_result());
+            UNIT_ASSERT(!setup.GrabInvoke(rpc, TDuration::MilliSeconds(10)));
+        }
+    }
+
+    Y_UNIT_TEST(ReturnsOnlyUnbridgedNodeReport) {
+        for (const bool withNodes : {false, true}) {
+            TSetup setup;
+            auto [rpc, future] = setup.StartGet({.UnbridgedStatus = true, .Bridged = false});
+            const auto invoke = setup.GrabInvoke(rpc);
+            UNIT_ASSERT(invoke && invoke->HasQueryBridgeRollbackStatus());
+            UNIT_ASSERT(!future.HasValue());
+            auto response = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+            response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+            auto* report = response->Record.MutableBridgeRollbackStatus();
+            if (withNodes) {
+                report->AddBridgeConfigNodeIds(3);
+                report->AddUnreportedStaticNodeIds(5);
+            }
+            setup.Runtime.Send(new IEventHandle(rpc, setup.NodeWarden, response.release()), 0, true);
+
+            const auto reply = setup.Runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL(reply.operation().status(), Ydb::StatusIds::SUCCESS);
+            Ydb::Bridge::GetClusterStateResult result;
+            UNIT_ASSERT(reply.operation().result().UnpackTo(&result));
+            UNIT_ASSERT(result.has_unbridged_status());
+            const auto& status = result.unbridged_status();
+            UNIT_ASSERT_VALUES_EQUAL(status.bridge_config_node_ids_size(), withNodes ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(status.unreported_static_node_ids_size(), withNodes ? 1 : 0);
+            if (withNodes) {
+                UNIT_ASSERT_VALUES_EQUAL(status.bridge_config_node_ids(0), 3);
+                UNIT_ASSERT_VALUES_EQUAL(status.unreported_static_node_ids(0), 5);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.pile_states_size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(result.generation(), 0);
+            UNIT_ASSERT(!result.has_pending_pile_operation());
+            UNIT_ASSERT(!result.has_pile_connectivity());
+        }
+    }
+
+    Y_UNIT_TEST(RejectsRacesAndUnavailableReports) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        struct TCase {
+            TResult::EStatus RootStatus;
+            bool RootHasBridgeState;
+            Ydb::StatusIds::StatusCode Expected;
+        };
+        for (const TCase& test : {
+            TCase{TResult::OK, true, Ydb::StatusIds::ABORTED},
+            TCase{TResult::OK, false, Ydb::StatusIds::INTERNAL_ERROR},
+            TCase{TResult::NO_QUORUM, false, Ydb::StatusIds::UNAVAILABLE},
+        }) {
+            TSetup setup;
+            auto [rpc, future] = setup.StartGet({.UnbridgedStatus = true, .Bridged = false});
+            const auto invoke = setup.GrabInvoke(rpc);
+            UNIT_ASSERT(invoke && invoke->HasQueryBridgeRollbackStatus());
+            auto response = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+            response->Record.SetStatus(test.RootStatus);
+            if (test.RootHasBridgeState) {
+                response->Record.MutableBridgeRollbackStatus()->SetHasClusterState(true);
+            }
+            if (test.RootStatus == TResult::NO_QUORUM) {
+                response->Record.SetErrorReason("node reports unavailable");
+            }
+            setup.Runtime.Send(new IEventHandle(rpc, setup.NodeWarden, response.release()), 0, true);
+            const auto reply = setup.Runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(reply.operation().status(), test.Expected, reply.operation().DebugString());
+            UNIT_ASSERT(!reply.operation().has_result());
+            if (test.RootStatus == TResult::NO_QUORUM) {
+                UNIT_ASSERT_STRING_CONTAINS(reply.operation().DebugString(), "node reports unavailable");
+            }
+        }
     }
 }
 
@@ -933,7 +1045,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
 
     Y_UNIT_TEST(DefaultClusterStateDoesNotContactController) {
         TStorageSetup setup;
-        auto [rpc, future] = setup.StartGet(false);
+        auto [rpc, future] = setup.StartGet({.Connectivity = false});
         const auto result = OperationResult<Ydb::Bridge::GetClusterStateResult>(setup.Runtime.WaitFuture(future));
         UNIT_ASSERT_VALUES_EQUAL(result.generation(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result.pile_states_size(), 2);

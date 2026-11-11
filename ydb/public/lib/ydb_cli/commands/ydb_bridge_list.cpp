@@ -366,6 +366,56 @@ namespace NYdb::NConsoleClient {
                     "databases_pending", "databases_not_required", "databases_unknown", "cluster_unattributed_storage_pools", "generation"};
         }
 
+        void PrintUnbridgedStatus(const NBridge::TUnbridgedStatus& status, EDataFormat format, bool detailed) {
+            const auto& bridgeNodes = status.BridgeConfigNodeIds;
+            const auto& unreportedNodes = status.UnreportedStaticNodeIds;
+            if (format == EDataFormat::Json) {
+                NJson::TJsonValue json(NJson::JSON_MAP);
+                json.InsertValue("piles", NJson::TJsonValue(NJson::JSON_ARRAY));
+                NJson::TJsonValue report(NJson::JSON_MAP);
+                for (const auto& [key, nodeIds] : {
+                        std::make_pair("bridge_config_node_ids", &bridgeNodes),
+                        std::make_pair("unreported_static_node_ids", &unreportedNodes)}) {
+                    NJson::TJsonValue ids(NJson::JSON_ARRAY);
+                    for (const auto id : *nodeIds) {
+                        ids.AppendValue(id);
+                    }
+                    report.InsertValue(key, std::move(ids));
+                }
+                json.InsertValue("unbridged_status", std::move(report));
+                PrintJson(json);
+                return;
+            }
+            if (format == EDataFormat::Csv) {
+                WriteCsvRow(PileCsvHeaders(detailed));
+                Cerr << "Node configuration status is available with --format json." << Endl;
+                return;
+            }
+
+            if (bridgeNodes.empty() && unreportedNodes.empty()) {
+                Cout << "Cluster mode: ordinary" << Endl;
+                return;
+            }
+            Cout << (bridgeNodes.empty() ? "Bridge configuration status incomplete" : "Bridge configuration still in use") << Endl;
+            const auto printNodes = [detailed](TStringBuf countLabel, TStringBuf idsLabel, const std::vector<uint32_t>& nodes) {
+                if (nodes.empty()) {
+                    return;
+                }
+                Cout << (detailed ? idsLabel : countLabel) << ": ";
+                if (detailed) {
+                    Cout << MakeRangeJoiner(", ", nodes);
+                } else {
+                    Cout << nodes.size();
+                }
+                Cout << Endl;
+            };
+            printNodes("Nodes with bridge config", "Node IDs with bridge config", bridgeNodes);
+            printNodes("Unreported static nodes", "Unreported static node IDs", unreportedNodes);
+            if (!bridgeNodes.empty()) {
+                Cout << "To return to ordinary mode, remove bridge configuration and restart the nodes." << Endl;
+            }
+        }
+
         void PrintDatabaseRows(const std::vector<NBridge::TDatabaseSynchronization>& databases, bool detailed, bool csv) {
             TVector<TString> headers = csv
                                            ? TVector<TString>{"database_path", "storage_pools", "storage_mode", "pile_name", "pile_name_present", "groups_synced", "groups_required"}
@@ -505,7 +555,11 @@ namespace NYdb::NConsoleClient {
                 Cout << "Conversion from non-bridged cluster is in progress, piles can't be added yet" << Endl;
             }
             if (const auto& op = result.GetPendingPileOperation()) {
-                Cout << "Pending operation on pile " << op->PileName << ": " << PendingPileOperationKindToString(op->Kind) << Endl;
+                if (op->Kind == NBridge::TPendingPileOperation::EKind::ROLLBACK) {
+                    Cout << "Rollback: storage in progress" << Endl;
+                } else {
+                    Cout << "Pending operation on pile " << op->PileName << ": " << PendingPileOperationKindToString(op->Kind) << Endl;
+                }
                 if (!op->ErrorReason.empty()) {
                     Cout << "Last attempt has failed (being retried): " << op->ErrorReason << Endl;
                 }
@@ -524,7 +578,7 @@ namespace NYdb::NConsoleClient {
     } // namespace
 
     TCommandBridgeList::TCommandBridgeList(bool allowEmptyDatabase)
-        : TYdbReadOnlyCommand("list", {}, "List bridge state and storage synchronization.")
+        : TYdbReadOnlyCommand("list", {}, "List bridge state, storage synchronization and rollback progress.")
         , AllowEmptyDatabase(allowEmptyDatabase)
     {
     }
@@ -541,7 +595,7 @@ namespace NYdb::NConsoleClient {
         }));
 
         AddOutputFormats(config, {EDataFormat::Pretty, EDataFormat::Json, EDataFormat::Csv});
-        config.Opts->AddLongOption("detailed", "Show database counts for piles. "
+        config.Opts->AddLongOption("detailed", "Show database counts for piles or node IDs when bridge state is absent. "
             "Show group counts and the last error for databases, "
             "or physical group IDs, synchronization phases and the last error for groups. "
             "Database and group JSON includes available details by default.")
@@ -625,8 +679,34 @@ namespace NYdb::NConsoleClient {
         NBridge::TBridgeClient client(driver);
         const bool csv = OutputFormat == EDataFormat::Csv;
         if (View == EView::Piles) {
-            const auto cluster = client.GetClusterState().GetValueSync();
+            const auto cluster = client.GetClusterState(NBridge::TGetClusterStateSettings()
+                .IncludeUnbridgedStatus(!PileName)).GetValueSync();
+            if (!PileName && cluster.GetStatus() == EStatus::NOT_FOUND) {
+                // Servers predating IncludeUnbridgedStatus expose the node report through GetRollbackStatus.
+                const auto rollback = client.GetRollbackStatus().GetValueSync();
+                if (rollback.GetStatus() != EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+                    NStatusHelpers::ThrowOnErrorOrPrintIssues(rollback);
+                    if (rollback.IsBridged() || rollback.IsRollbackInProgress()) {
+                        Cerr << "Bridge cluster state changed. Retry the request." << Endl;
+                        return EXIT_FAILURE;
+                    }
+                    const NBridge::TUnbridgedStatus unbridged{
+                        .BridgeConfigNodeIds = rollback.GetBridgeConfigNodeIds(),
+                        .UnreportedStaticNodeIds = rollback.GetUnreportedStaticNodeIds(),
+                    };
+                    if (!rollback.IsComplete() && unbridged.BridgeConfigNodeIds.empty() && unbridged.UnreportedStaticNodeIds.empty()) {
+                        Cerr << "Unbridged status report is incomplete." << Endl;
+                        return EXIT_FAILURE;
+                    }
+                    PrintUnbridgedStatus(unbridged, OutputFormat, Detailed);
+                    return EXIT_SUCCESS;
+                }
+            }
             NStatusHelpers::ThrowOnErrorOrPrintIssues(cluster);
+            if (const auto& unbridged = cluster.GetUnbridgedStatus()) {
+                PrintUnbridgedStatus(*unbridged, OutputFormat, Detailed);
+                return EXIT_SUCCESS;
+            }
             auto state = cluster.GetState();
             if (PileName) {
                 std::erase_if(state, [&](const auto& pile) { return pile.PileName != *PileName; });

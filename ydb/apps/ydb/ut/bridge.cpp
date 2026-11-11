@@ -52,6 +52,7 @@ public:
     }
 };
 
+
 template <class TRequest, class TResult>
 struct TDiagnosticReply {
     std::optional<TRequest> ExpectedRequest;
@@ -78,7 +79,10 @@ public:
     bool Bridged = true;
     TString RetainPile;
     Ydb::Bridge::GetClusterStateResult ClusterResult;
+    bool ClusterStateNotFound = false;
     std::atomic<size_t> ClusterCalls{0};
+    std::atomic<size_t> UnbridgedStatusRequests{0};
+    TDiagnosticReply<Ydb::Bridge::GetRollbackStatusRequest, Ydb::Bridge::GetRollbackStatusResult> LegacyRollbackStatus;
     TDiagnosticReply<Ydb::Bridge::ListPileSynchronizationRequest, Ydb::Bridge::ListPileSynchronizationResult> Summary;
     TDiagnosticReply<Ydb::Bridge::ListDatabaseSynchronizationRequest, Ydb::Bridge::ListDatabaseSynchronizationResult> Databases;
     TDiagnosticReply<Ydb::Bridge::ListGroupSynchronizationRequest, Ydb::Bridge::ListGroupSynchronizationResult> Groups;
@@ -86,17 +90,29 @@ public:
     std::atomic<size_t> JoinCalls{0};
     std::atomic<size_t> ProvisionCalls{0};
     std::atomic<size_t> DestroyCalls{0};
-    std::atomic<size_t> RollbackStatusCalls{0};
     std::atomic<size_t> RollbackCalls{0};
     std::atomic<bool> SkipBscValidation{false};
-    Ydb::Bridge::GetRollbackStatusResult RollbackStatus; // set before the CLI runs
 
-    grpc::Status GetClusterState(grpc::ServerContext* context, const Ydb::Bridge::GetClusterStateRequest*,
+    grpc::Status GetClusterState(grpc::ServerContext* context, const Ydb::Bridge::GetClusterStateRequest* request,
             Ydb::Bridge::GetClusterStateResponse* response) override {
         ++ClusterCalls;
+        if (request->include_unbridged_status()) {
+            ++UnbridgedStatusRequests;
+        }
         const auto status = ReplySuccess(context, response);
-        response->mutable_operation()->mutable_result()->PackFrom(ClusterResult);
+        auto* operation = response->mutable_operation();
+        if (ClusterStateNotFound) {
+            operation->set_status(Ydb::StatusIds::NOT_FOUND);
+            operation->add_issues()->set_message("Bridge cluster state is not configured");
+        } else {
+            operation->mutable_result()->PackFrom(ClusterResult);
+        }
         return status;
+    }
+
+    grpc::Status GetRollbackStatus(grpc::ServerContext* context, const Ydb::Bridge::GetRollbackStatusRequest* request,
+            Ydb::Bridge::GetRollbackStatusResponse* response) override {
+        return ReplyDiagnostic(context, *request, *response, LegacyRollbackStatus);
     }
 
     grpc::Status ListPileSynchronization(grpc::ServerContext* context, const Ydb::Bridge::ListPileSynchronizationRequest* request,
@@ -149,15 +165,6 @@ public:
         ++DestroyCalls;
         CHECK_EXP(request->pile_name() == "secondary", "Incorrect pile to destroy");
         return ReplySuccess(context, response);
-    }
-
-    grpc::Status GetRollbackStatus(grpc::ServerContext* context,
-                                   const Ydb::Bridge::GetRollbackStatusRequest* /*request*/,
-                                   Ydb::Bridge::GetRollbackStatusResponse* response) override {
-        ++RollbackStatusCalls;
-        auto status = ReplySuccess(context, response);
-        response->mutable_operation()->mutable_result()->PackFrom(RollbackStatus);
-        return status;
     }
 
     grpc::Status Rollback(grpc::ServerContext* context,
@@ -230,6 +237,20 @@ public:
         result.mutable_observed_at()->set_seconds(1);
     }
 
+    Ydb::Bridge::UnbridgedStatus& PrepareUnbridgedStatus() {
+        auto& result = Service<TBridgeService>().ClusterResult;
+        result.clear_generation();
+        result.clear_pile_states();
+        return *result.mutable_unbridged_status();
+    }
+
+    Ydb::Bridge::GetRollbackStatusResult& PrepareLegacyRollbackStatus() {
+        auto& service = Service<TBridgeService>();
+        service.ClusterStateNotFound = true;
+        service.LegacyRollbackStatus.ExpectedRequest.emplace();
+        return service.LegacyRollbackStatus.Result;
+    }
+
     Ydb::Bridge::ListPileSynchronizationResult& PrepareSummary() {
         auto& reply = Service<TBridgeService>().Summary;
         reply.ExpectedRequest.emplace();
@@ -271,6 +292,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().Summary.Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().Databases.Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().Groups.Calls.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().UnbridgedStatusRequests.load(), 2);
     }
 
     Y_UNIT_TEST_F(DefaultListMachineFormatsAndPileFilterAreUnchanged, TBridgeCliFixture) {
@@ -287,7 +309,29 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_VALUES_EQUAL(RunList({"piles", "--pile", "", "--format", "csv"}),
             "pile_name,state,generation\n,SYNCHRONIZED,42\n");
         UNIT_ASSERT_VALUES_EQUAL(service.ClusterCalls.load(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(service.UnbridgedStatusRequests.load(), 2);
         UNIT_ASSERT_VALUES_EQUAL(service.Summary.Calls.load(), 0);
+    }
+
+    Y_UNIT_TEST_F(PileListPreservesPendingRollback, TBridgeCliFixture) {
+        auto& service = Service<TBridgeService>();
+        auto* pending = service.ClusterResult.mutable_pending_pile_operation();
+        pending->set_pile_name("primary");
+        pending->set_kind(Ydb::Bridge::PendingPileOperation::ROLLBACK);
+        pending->set_error_reason("storage controller unavailable");
+
+        UNIT_ASSERT_VALUES_EQUAL(RunList({"piles"}),
+            "Pile primary: PRIMARY\nPile secondary: SYNCHRONIZED\nGeneration: 42\n"
+            "Rollback: storage in progress\n"
+            "Last attempt has failed (being retried): storage controller unavailable\n");
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"piles", "--format", "json"}), &json));
+        const auto& operation = json["pending_pile_operation"];
+        UNIT_ASSERT_VALUES_EQUAL(operation["pile_name"].GetString(), "primary");
+        UNIT_ASSERT_VALUES_EQUAL(operation["kind"].GetString(), "ROLLBACK");
+        UNIT_ASSERT_VALUES_EQUAL(operation["error_reason"].GetString(), "storage controller unavailable");
+        UNIT_ASSERT_VALUES_EQUAL(service.ClusterCalls.load(), 2);
     }
 
     Y_UNIT_TEST_F(ListHelpShowsViewsAndOptions, TBridgeCliFixture) {
@@ -302,7 +346,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
 
     Y_UNIT_TEST_F(InvalidListOptionsAreRejectedBeforeRpc, TBridgeCliFixture) {
         const TVector<TList<TString>> invalid = {
-            {"unknown"}, {"databases", "groups"}, {"--database-path", "/Root/app"}, {"--pool", "pool"},
+            {"unknown"}, {"rollback"}, {"databases", "groups"}, {"--database-path", "/Root/app"}, {"--pool", "pool"},
             {"piles", "--database-path", "/Root/app"},
             {"databases", "--pool", "pool"}, {"groups", "--database-path", "/Root/app", "--pool", "pool"},
             {"--not-synced"}, {"--detailed", "--not-synced"},
@@ -686,7 +730,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         ExpectLogin();
         const auto password = EnvFile("password");
         RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "-y", "--user", "bridge-admin", "--password-file", password,
-                "admin", "cluster", "bridge", "set-database-mode", "bridged", "--target-database", "/Root/app"});
+                "admin", "cluster", "bridge", "set-database-mode", "bridged", "--database-path", "/Root/app"});
         UNIT_ASSERT(Service<TBridgeLogin>().Calls.load() >= 1);
         UNIT_ASSERT(Service<TBridgeDiscovery>().Calls.load() >= 1);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 1);
@@ -714,7 +758,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
 
     Y_UNIT_TEST_F(DatabaseModeIsRequired, TBridgeCliFixture) {
         ExpectFail();
-        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "--target-database", "/Root/app"});
+        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "--database-path", "/Root/app"});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeLogin>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeDiscovery>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 0);
@@ -723,7 +767,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
     Y_UNIT_TEST_F(RetainPileRequiresOrdinaryMode, TBridgeCliFixture) {
         ExpectFail();
         RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "bridged",
-                "--target-database", "/Root/app", "--retain-pile", "secondary"});
+                "--database-path", "/Root/app", "--retain-pile", "secondary"});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeLogin>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeDiscovery>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 0);
@@ -735,7 +779,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         Service<TBridgeService>().Bridged = false;
         Service<TBridgeService>().RetainPile = "secondary";
         RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "ordinary",
-                "--target-database", "/Root/app", "--retain-pile", "secondary"},
+                "--database-path", "/Root/app", "--retain-pile", "secondary"},
                {{"YDB_TOKEN", "bridge-admin-token"}});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 1);
     }
@@ -743,7 +787,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
     Y_UNIT_TEST_F(UnknownDatabaseModeIsRejected, TBridgeCliFixture) {
         ExpectFail();
         RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "unknown",
-                "--target-database", "/Root/app"});
+                "--database-path", "/Root/app"});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeLogin>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeDiscovery>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 0);
@@ -779,6 +823,10 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
     }
 
     Y_UNIT_TEST_F(RollbackRequiresConfirmation, TBridgeCliFixture) {
+        const auto help = RunCli({"admin", "cluster", "bridge", "rollback", "--help"});
+        UNIT_ASSERT_STRING_CONTAINS(help, "\"ydb admin cluster bridge list piles\"");
+        UNIT_ASSERT_STRING_CONTAINS(help, "The report covers static and connected dynamic nodes.");
+
         ExpectFail();
         RunCliWithInput({"-e", GetEndpoint(), "-d", GetDatabase(), "admin", "cluster", "bridge", "rollback"},
                         "n\n",
@@ -788,6 +836,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
                              {{"YDB_TOKEN", "bridge-admin-token"}});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().RollbackCalls.load(), 1);
         UNIT_ASSERT_STRING_CONTAINS(output, "Rollback started");
+        UNIT_ASSERT_STRING_CONTAINS(output, "\"ydb admin cluster bridge list piles\"");
     }
 
     Y_UNIT_TEST_F(RollbackSkipsBscValidation, TBridgeCliFixture) {
@@ -798,24 +847,153 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().RollbackCalls.load(), 1);
     }
 
+    Y_UNIT_TEST_F(OrdinaryPileListShowsBridgeConfiguration, TBridgeCliFixture) {
+        auto& status = PrepareUnbridgedStatus();
+        status.add_bridge_config_node_ids(3);
+        status.add_bridge_config_node_ids(5);
+        status.add_unreported_static_node_ids(7);
+
+        UNIT_ASSERT_VALUES_EQUAL(RunList(),
+            "Bridge configuration still in use\n"
+            "Nodes with bridge config: 2\n"
+            "Unreported static nodes: 1\n"
+            "To return to ordinary mode, remove bridge configuration and restart the nodes.\n");
+        UNIT_ASSERT_VALUES_EQUAL(RunList({"piles", "--detailed"}),
+            "Bridge configuration still in use\n"
+            "Node IDs with bridge config: 3, 5\n"
+            "Unreported static node IDs: 7\n"
+            "To return to ordinary mode, remove bridge configuration and restart the nodes.\n");
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--format", "json"}), &json));
+        UNIT_ASSERT(json["piles"].GetArray().empty());
+        UNIT_ASSERT(!json.Has("generation"));
+        const auto& report = json["unbridged_status"];
+        const auto& configured = report["bridge_config_node_ids"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(configured.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(configured[0].GetUInteger(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(configured[1].GetUInteger(), 5);
+        const auto& unreported = report["unreported_static_node_ids"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(unreported.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(unreported[0].GetUInteger(), 7);
+
+        TString error;
+        UNIT_ASSERT_VALUES_EQUAL(RunList({"--format", "csv"}, &error), "pile_name,state,generation\n");
+        UNIT_ASSERT_VALUES_EQUAL(error, "Node configuration status is available with --format json.\n");
+        UNIT_ASSERT_VALUES_EQUAL(RunList({"--detailed", "--format", "csv"}, &error),
+            "pile_name,pile_name_present,state,databases_synced,databases_total,databases_syncing,databases_pending,"
+            "databases_not_required,databases_unknown,cluster_unattributed_storage_pools,generation\n");
+        UNIT_ASSERT_VALUES_EQUAL(error, "Node configuration status is available with --format json.\n");
+        const auto& service = Service<TBridgeService>();
+        UNIT_ASSERT_VALUES_EQUAL(service.ClusterCalls.load(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(service.UnbridgedStatusRequests.load(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(service.Summary.Calls.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(service.LegacyRollbackStatus.Calls.load(), 0);
+    }
+
+    Y_UNIT_TEST_F(OrdinaryPileListShowsIncompleteReport, TBridgeCliFixture) {
+        auto& status = PrepareUnbridgedStatus();
+        status.add_unreported_static_node_ids(7);
+        UNIT_ASSERT_VALUES_EQUAL(RunList(),
+            "Bridge configuration status incomplete\n"
+            "Unreported static nodes: 1\n");
+
+        status.clear_unreported_static_node_ids();
+        UNIT_ASSERT_VALUES_EQUAL(RunList(), "Cluster mode: ordinary\n");
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--format", "json"}), &json));
+        const auto& report = json["unbridged_status"];
+        UNIT_ASSERT(report["bridge_config_node_ids"].IsArray());
+        UNIT_ASSERT(report["bridge_config_node_ids"].GetArray().empty());
+        UNIT_ASSERT(report["unreported_static_node_ids"].IsArray());
+        UNIT_ASSERT(report["unreported_static_node_ids"].GetArray().empty());
+    }
+
+    Y_UNIT_TEST_F(UnbridgedPileListFallsBackToLegacyRollbackStatus, TBridgeCliFixture) {
+        auto& status = PrepareLegacyRollbackStatus();
+        status.add_bridge_config_node_ids(3);
+        status.add_unreported_static_node_ids(7);
+        const auto& service = Service<TBridgeService>();
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"piles", "--detailed", "--format", "json"}), &json));
+        UNIT_ASSERT(json["piles"].GetArray().empty());
+        UNIT_ASSERT(!json.Has("generation"));
+        const auto& report = json["unbridged_status"];
+        UNIT_ASSERT_VALUES_EQUAL(report["bridge_config_node_ids"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(report["bridge_config_node_ids"][0].GetUInteger(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(report["unreported_static_node_ids"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(report["unreported_static_node_ids"][0].GetUInteger(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(service.ClusterCalls.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(service.LegacyRollbackStatus.Calls.load(), 1);
+
+        status.Clear();
+        status.set_complete(true);
+        UNIT_ASSERT_VALUES_EQUAL(RunList({"piles"}), "Cluster mode: ordinary\n");
+        UNIT_ASSERT_VALUES_EQUAL(service.ClusterCalls.load(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(service.LegacyRollbackStatus.Calls.load(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(service.UnbridgedStatusRequests.load(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(service.Summary.Calls.load(), 0);
+    }
+
+    Y_UNIT_TEST_F(PileListPreservesNotFoundWithoutLegacyRollbackStatus, TBridgeCliFixture) {
+        PrepareLegacyRollbackStatus();
+        auto& service = Service<TBridgeService>();
+        service.LegacyRollbackStatus.RpcStatus = grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "legacy RPC unavailable");
+
+        ExpectFail();
+        TString error;
+        UNIT_ASSERT(RunList({"piles", "--format", "json"}, &error).empty());
+        UNIT_ASSERT_STRING_CONTAINS(error, "Bridge cluster state is not configured");
+        UNIT_ASSERT(!error.Contains("legacy RPC unavailable"));
+        UNIT_ASSERT_VALUES_EQUAL(service.LegacyRollbackStatus.Calls.load(), 1);
+
+        ExpectFail();
+        UNIT_ASSERT(RunList({"piles", "--pile", "secondary"}, &error).empty());
+        UNIT_ASSERT_STRING_CONTAINS(error, "Bridge cluster state is not configured");
+        UNIT_ASSERT_VALUES_EQUAL(service.ClusterCalls.load(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(service.UnbridgedStatusRequests.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(service.LegacyRollbackStatus.Calls.load(), 1);
+    }
+
+    Y_UNIT_TEST_F(PileListRejectsUnconfirmedLegacyRollbackStatus, TBridgeCliFixture) {
+        auto& status = PrepareLegacyRollbackStatus();
+        const auto& service = Service<TBridgeService>();
+        TString error;
+
+        ExpectFail();
+        UNIT_ASSERT(RunList({"piles"}, &error).empty());
+        UNIT_ASSERT_STRING_CONTAINS(error, "Unbridged status report is incomplete.");
+
+        for (const bool rollbackInProgress : {false, true}) {
+            status.set_bridged(!rollbackInProgress);
+            status.set_rollback_in_progress(rollbackInProgress);
+            ExpectFail();
+            UNIT_ASSERT(RunList({"piles"}, &error).empty());
+            UNIT_ASSERT_STRING_CONTAINS(error, "Bridge cluster state changed. Retry the request.");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(service.ClusterCalls.load(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(service.LegacyRollbackStatus.Calls.load(), 3);
+    }
     Y_UNIT_TEST_F(RollbackStatusListsNodesWithBridgeConfig, TBridgeCliFixture) {
-        auto& status = Service<TBridgeService>().RollbackStatus;
+        auto& status = PrepareLegacyRollbackStatus();
         status.add_bridge_config_node_ids(3);
         status.add_bridge_config_node_ids(5);
         status.add_unreported_static_node_ids(7);
         const auto output = RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "admin", "cluster", "bridge",
                                     "rollback-status"},
                                    {{"YDB_TOKEN", "bridge-admin-token"}});
-        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().RollbackStatusCalls.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().LegacyRollbackStatus.Calls.load(), 1);
         UNIT_ASSERT_STRING_CONTAINS(output, "Nodes still running with bridge config (restart them without it): 3, 5");
         UNIT_ASSERT_STRING_CONTAINS(output, "Static nodes that have not reported their config (not running or not "
             "connected): 7");
         UNIT_ASSERT(!output.Contains("ordinary mode"));
     }
 
+
     Y_UNIT_TEST_F(RollbackStatusKeepsNodesWhileBridged, TBridgeCliFixture) {
         // nodes restarted without bridge config can't serve the cluster that is still bridged one
-        auto& status = Service<TBridgeService>().RollbackStatus;
+        auto& status = PrepareLegacyRollbackStatus();
         status.set_bridged(true);
         status.set_rollback_in_progress(true);
         status.add_bridge_config_node_ids(3);
@@ -827,8 +1005,9 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT(!output.Contains("restart them"));
     }
 
+
     Y_UNIT_TEST_F(RollbackStatusReportsCompletion, TBridgeCliFixture) {
-        Service<TBridgeService>().RollbackStatus.set_complete(true);
+        PrepareLegacyRollbackStatus().set_complete(true);
         auto output = RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "admin", "cluster", "bridge",
                               "rollback-status"},
                              {{"YDB_TOKEN", "bridge-admin-token"}});
@@ -841,6 +1020,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_C(json["complete"].GetBooleanSafe(), output);
         UNIT_ASSERT_C(!json["bridged"].GetBooleanSafe(), output);
         UNIT_ASSERT_VALUES_EQUAL_C(json["bridge_config_node_ids"].GetArraySafe().size(), 0, output);
-        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().RollbackStatusCalls.load(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().LegacyRollbackStatus.Calls.load(), 2);
     }
+
 }

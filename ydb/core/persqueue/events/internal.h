@@ -253,6 +253,7 @@ struct TEvPQ {
         EvReplicationData,
         EvReplicationDataAck,
         EvPersistDone,
+        EvEmitHeartbeat,
         EvEnd,
     };
 
@@ -896,6 +897,16 @@ struct TEvPQ {
         const ui64 Cookie;
         TVector<TDeregisterBody> Deregistrations;
         TVector<TRegisterBody> Registrations;
+    };
+
+    struct TEvEmitHeartbeat : TEventLocal<TEvEmitHeartbeat, EvEmitHeartbeat> {
+        TEvEmitHeartbeat(ui64 cookie, THeartbeat&& heartbeat)
+            : Cookie(cookie)
+            , Heartbeat(std::move(heartbeat))
+        {}
+
+        const ui64 Cookie;
+        THeartbeat Heartbeat;
     };
 
     struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> {

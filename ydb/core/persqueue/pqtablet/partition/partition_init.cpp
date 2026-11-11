@@ -356,6 +356,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
         Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
         Partition()->MessageIdDeduplicator.NextMessageIdDeduplicatorWAL = meta.GetNextMessageIdDeduplicatorWAL();
+        Partition()->LastEmittedHeartbeat = TRowVersion(meta.GetLastEmittedHeartbeatStep(), meta.GetLastEmittedHeartbeatTxId());
         if (Partition()->IsSupportive()) {
             const auto& counterData = meta.GetCounterData();
             Partition()->BytesWrittenGrpc.SetSavedValue(counterData.GetBytesWrittenGrpc());

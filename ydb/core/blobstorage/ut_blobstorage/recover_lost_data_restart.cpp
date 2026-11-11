@@ -254,6 +254,16 @@ void TestRollingWipe(bool delaySelf) {
         env.Sim(TDuration::Seconds(30));
     }
 
+    auto getBlock = [&](ui32 order) {
+        const TVDiskID disk = info->GetVDiskId(order);
+        const TActorId queue = env.CreateQueueActor(disk, NKikimrBlobStorage::GetFastRead, 0);
+        return env.SyncQuery<TEvBlobStorage::TEvVGetBlockResult, TEvBlobStorage::TEvVGetBlock>(
+            queue, tabletId, disk, TInstant::Max());
+    };
+    const auto peerBlock = getBlock((unavailableOrder + 1) % 8);
+    UNIT_ASSERT_VALUES_EQUAL(peerBlock->Record.GetStatus(), NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(peerBlock->Record.GetGeneration(), blockedGeneration);
+
     returning = true;
     env.StartNode(unavailableNode);
     waitUntil([&] { return surveyReplies >= 6; }, "Returning VDisk must receive a survey quorum");
@@ -269,13 +279,9 @@ void TestRollingWipe(bool delaySelf) {
     env.Runtime->FilterFunction = {};
 
     // Query this VDisk directly: a group-proxy reply can hide its missing Block metadata.
-    const TActorId queue = env.CreateQueueActor(unavailableDisk, NKikimrBlobStorage::GetFastRead, 0);
-    const TActorId edge = env.Runtime->AllocateEdgeActor(unavailableNode);
-    env.Runtime->Send(new IEventHandle(queue, edge,
-        new TEvBlobStorage::TEvVGetBlock(tabletId, unavailableDisk, TInstant::Max())), unavailableNode);
-    auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetBlockResult>(edge);
-    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
-    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetGeneration(), blockedGeneration);
+    const auto result = getBlock(unavailableOrder);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetGeneration(), blockedGeneration);
 }
 
 } // namespace

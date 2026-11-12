@@ -1885,7 +1885,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     }
 
     if (writeTx->IsReadOnlyPrepare(Self->GetSysLocks())) {
-        writeOp->SetReadOnlyFlag();
+        writeOp->SetFlag(TTxFlags::ReadOnlyPrepare);
     }
 
     return writeOp;

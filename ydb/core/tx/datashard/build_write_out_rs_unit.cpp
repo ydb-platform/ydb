@@ -70,7 +70,7 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
             AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
         KqpFillOutReadSets(
             op->OutReadSets(), kqpLocks, true, DataShard.SysLocksTable(), allowAncestorLocks,
-            op->IsReadOnly());
+            op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare));
     } catch (const TNotReadyTabletException&) {
         YDB_LOG_CRIT_CTX(ctx, "TBuildWriteOutRSUnit::Execute: unexpected TNotReadyTabletException while building out readset");
         return OnTabletNotReady(*writeOp, txc, ctx);

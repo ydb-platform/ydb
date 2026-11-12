@@ -2087,12 +2087,17 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 }
             }
         });
-        auto readSnapshot = [&](ui64 readId) {
+        auto sendSnapshotRead = [&](ui64 readId) {
             auto request = GetBaseReadRequest(sourceTableId, sourceInfo.at(sourceTableId.PathId).GetDescription(), readId,
                 NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion(planStep, transactionId));
             AddKeyQuery(*request, { 1 });
             AddKeyQuery(*request, { 2 });
-            const auto result = SendRead(server, sourceShard, request.release(), sender);
+            SendReadAsync(server, sourceShard, request.release(), sender);
+        };
+        auto checkSnapshotRead = [&](ui64 readId) {
+            const auto result = WaitReadResult(server);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetReadId(), readId);
             UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(result.get()), "1, 10\n");
         };
         SendProposeToCoordinator(runtime, sender, { sourceShard, targetShard },
@@ -2107,7 +2112,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             runtime.WaitFor("planned transaction before progress", [&] {
                 return planStep && !blockedProgress.empty();
             });
-            readSnapshot(2);
+            sendSnapshotRead(2);
+            UNIT_ASSERT(!WaitReadResult(server, TDuration::MilliSeconds(10)));
             blockedProgress.Stop().Unblock();
         }
         THashSet<ui64> completedShards;
@@ -2130,7 +2136,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT(completedShards.contains(sourceShard));
         UNIT_ASSERT(completedShards.contains(targetShard));
         if (validateSnapshot) {
-            readSnapshot(3);
+            checkSnapshotRead(2);
+            sendSnapshotRead(3);
+            checkSnapshotRead(3);
         }
         UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, targetShards, targetTableId), writerRole ? "key = 1, value = 10\n" : "");
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2164,7 +2172,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         CheckReadLocksPrepareChange(Volatile, EReadLocksChange::BufferedWriteInWriterRole);
     }
 
-    Y_UNIT_TEST(ReadLocksPrepareSnapshotBeforeDurableCommit) {
+    Y_UNIT_TEST(ReadLocksPrepareSnapshotWaitsForDurableCommit) {
         auto [runtime, server, sender] = CreateCdcQueueServer(false);
         TDisableDataShardLogBatching disableDataShardLogBatching;
         TShardedTableOptions tableOptions;
@@ -2241,14 +2249,20 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             return planStep && !blockedOperation.empty();
         });
         UNIT_ASSERT_VALUES_EQUAL(blockedOperation.size(), 1u);
-        auto readSnapshot = [&](ui64 readId) {
+        auto sendSnapshotRead = [&](ui64 readId) {
             auto request = GetBaseReadRequest(sourceTableId, sourceInfo.at(sourceTableId.PathId).GetDescription(), readId,
                 NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion(planStep, transactionId));
             AddKeyQuery(*request, { 1 });
-            const auto result = SendRead(server, sourceShard, request.release(), sender);
+            SendReadAsync(server, sourceShard, request.release(), sender);
+        };
+        auto checkSnapshotRead = [&](ui64 readId) {
+            const auto result = WaitReadResult(server);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetReadId(), readId);
             UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(result.get()), "1, 10\n");
         };
-        readSnapshot(2);
+        sendSnapshotRead(2);
+        checkSnapshotRead(2);
         TBlockEvents<TEvBlobStorage::TEvPut> blockedCommits(runtime, [sourceShard](const auto& event) {
             return event->Get()->Id.TabletID() == sourceShard && event->Get()->Id.Channel() == 0;
         });
@@ -2257,7 +2271,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         runtime.WaitFor("read-lock transaction durable commit", [&] {
             return !blockedCommits.empty();
         });
-        readSnapshot(3);
+        sendSnapshotRead(3);
+        UNIT_ASSERT(!WaitReadResult(server, TDuration::MilliSeconds(10)));
         UNIT_ASSERT(!sourceCompleted);
         blockedCommits.Stop().Unblock();
 
@@ -2267,7 +2282,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
         UNIT_ASSERT(completedShards.contains(sourceShard));
         UNIT_ASSERT(completedShards.contains(targetShard));
-        readSnapshot(4);
+        checkSnapshotRead(3);
+        sendSnapshotRead(4);
+        checkSnapshotRead(4);
         UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, targetShards, targetTableId), "key = 1, value = 10\n");
     }
 

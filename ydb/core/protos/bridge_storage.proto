@@ -23,6 +23,8 @@ message TStorageQuery {
     TStoragePoolId StoragePoolId = 9;
     repeated ESynchronizationStatus Statuses = 10;
     optional EStorageMode StorageMode = 11;
+    // Explicit pool selection. Requires FilterPools and excludes other pool selectors.
+    repeated TStoragePoolId StoragePoolIds = 12;
 }
 
 message TStorageState {

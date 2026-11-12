@@ -70,17 +70,7 @@ namespace NKikimr::NBsController::NBridgeStorage {
     }
 
     ECopyState TCounts::GetStatus() const {
-        const ui64 required = Total - NotRequired;
-        if (!required) {
-            return NKikimrBridge::NOT_REQUIRED;
-        }
-        if (Synced == required) {
-            return NKikimrBridge::SYNCED;
-        }
-        if (Running) {
-            return NKikimrBridge::SYNCING;
-        }
-        return Unknown ? NKikimrBridge::UNKNOWN : NKikimrBridge::PENDING;
+        return GetBridgeSynchronizationStatus(Total - NotRequired, Synced, Running, Unknown);
     }
 
     void TCounts::ToProto(NKikimrBridge::TGroupSyncCounts* to) const {
@@ -237,6 +227,28 @@ namespace NKikimr::NBsController {
             selected.insert(key);
             return Ydb::StatusIds::SUCCESS;
         }
+        if (query.GetFilterPools() && !query.PoolNamesSize() && !query.HasStoragePool()) {
+            for (const auto& id : query.GetStoragePoolIds()) {
+                if (!budget.Visit()) {
+                    error = TString(LimitError);
+                    return Ydb::StatusIds::PRECONDITION_FAILED;
+                }
+                if (!id.pool_id()) {
+                    error = "Storage pool ID must be nonzero";
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
+                const TBoxStoragePoolId key(id.box_id(), id.pool_id());
+                if (selected.contains(key)) {
+                    continue;
+                }
+                if (!StoragePools.contains(key)) {
+                    error = "Storage pool not found";
+                    return Ydb::StatusIds::NOT_FOUND;
+                }
+                selected.insert(key);
+            }
+            return Ydb::StatusIds::SUCCESS;
+        }
         THashSet<TString> requested(query.GetPoolNames().begin(), query.GetPoolNames().end());
         THashMap<TString, ui32> matches;
         ui32 namedMatches = 0;
@@ -295,8 +307,12 @@ namespace NKikimr::NBsController {
         if (query.HasStoragePool() && query.GetStoragePool().empty()) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Storage pool name must not be empty");
         }
-        if (query.HasStoragePoolId() && (!query.GetStoragePoolId().pool_id() || query.HasStoragePool() || query.GetFilterPools())) {
+        if (query.HasStoragePoolId() && (!query.GetStoragePoolId().pool_id() || query.HasStoragePool() ||
+                query.GetFilterPools() || query.StoragePoolIdsSize())) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Select storage pools by database, name, or a nonzero pool ID");
+        }
+        if (query.StoragePoolIdsSize() && (!query.GetFilterPools() || query.HasStoragePool() || query.PoolNamesSize())) {
+            return fail(Ydb::StatusIds::BAD_REQUEST, "A storage pool ID list requires FilterPools and excludes other pool selectors");
         }
         if ((query.StatusesSize() && query.GetView() != TQuery::GROUPS) || (query.GetNotSynced() && query.GetView() != TQuery::DATABASES)) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Synchronization statuses filter groups; incomplete summaries filter databases");

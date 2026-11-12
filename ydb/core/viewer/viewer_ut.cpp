@@ -1528,6 +1528,222 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT(!tenant.Has("BridgeSyncStatus"));
     }
 
+    enum class EBridgeStorageScopeCase {
+        Dedicated,
+        Shared,
+        SharedOnly,
+        MissingPool,
+        AmbiguousPool,
+        MissingMetadata,
+        MissingResourceMetadata,
+        EmptyPools,
+        EmptyResult,
+    };
+
+    void CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase testCase) {
+        TPortManager ports;
+        auto settings = TServerSettings(ports.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        auto& appData = runtime.GetAppData();
+        appData.BridgeModeEnabled = true;
+        const auto root = appData.DomainsInfo->GetDomain()->SchemeRoot;
+        const TPathId databaseKey(root, 10);
+        const TPathId resourceKey(root, 20);
+        const bool shared = testCase == EBridgeStorageScopeCase::Shared ||
+            testCase == EBridgeStorageScopeCase::SharedOnly || testCase == EBridgeStorageScopeCase::MissingResourceMetadata;
+        const bool unavailable = testCase == EBridgeStorageScopeCase::MissingPool ||
+            testCase == EBridgeStorageScopeCase::AmbiguousPool || testCase == EBridgeStorageScopeCase::MissingMetadata ||
+            testCase == EBridgeStorageScopeCase::MissingResourceMetadata;
+        THashSet<TActorId> actors;
+        ui32 bridgeRequests = 0;
+        auto mode = NKikimrBridge::BRIDGED;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySet &&
+                    dynamic_cast<TViewerPipeClient*>(runtime.FindActor(ev->Sender))) {
+                actors.insert(ev->Sender);
+                auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+                request->ResultSet.resize(1);
+                auto& entry = request->ResultSet.front();
+                const auto& incoming = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request->ResultSet.front();
+                const bool resource = incoming.TableId.PathId == resourceKey;
+                entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+                entry.Path = SplitPath(resource ? "/Root/shared" : "/Root/db");
+                auto* domain = new NSchemeCache::TDomainInfo(resource ? resourceKey : databaseKey,
+                    shared ? resourceKey : databaseKey);
+                domain->Params.SetHive(appData.DomainsInfo->GetHive());
+                domain->Params.SetSchemeShard(root);
+                entry.DomainInfo = domain;
+                if (testCase != EBridgeStorageScopeCase::MissingMetadata &&
+                        !(resource && testCase == EBridgeStorageScopeCase::MissingResourceMetadata)) {
+                    auto* description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
+                    if (testCase != EBridgeStorageScopeCase::EmptyPools &&
+                            (resource || testCase != EBridgeStorageScopeCase::SharedOnly)) {
+                        description->Description.AddStoragePools()->SetName(resource ? "shared-pool" : "database-pool");
+                    }
+                    entry.DomainDescription = description;
+                }
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new TEvTxProxySchemeCache::TEvNavigateKeySetResult(request.release()), 0, ev->Cookie));
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == TEvStateStorage::EvBoardInfo &&
+                    actors.contains(ev->GetRecipientRewrite()) &&
+                    ev->Get<TEvStateStorage::TEvBoardInfo>()->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+                runtime.Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
+                    new TEvStateStorage::TEvBoardInfo(TEvStateStorage::TEvBoardInfo::EStatus::Ok,
+                        ev->Get<TEvStateStorage::TEvBoardInfo>()->Path), 0, ev->Cookie));
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse &&
+                    actors.contains(ev->GetRecipientRewrite())) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                record.ClearEntries();
+                auto addPool = [&](ui64 id, const TString& name) {
+                    auto* pool = record.AddEntries();
+                    pool->MutableKey()->SetBoxId(1);
+                    pool->MutableKey()->SetStoragePoolId(id);
+                    pool->MutableInfo()->SetName(name);
+                };
+                if (testCase != EBridgeStorageScopeCase::MissingPool) {
+                    addPool(10, "database-pool");
+                }
+                addPool(11, "shared-pool");
+                addPool(12, "other-database-pool");
+                if (testCase == EBridgeStorageScopeCase::AmbiguousPool) {
+                    addPool(13, "database-pool");
+                }
+            }
+            if (ev->GetTypeRewrite() != TEvBlobStorage::EvControllerQueryBridgeStorage || !actors.contains(ev->Sender)) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            ++bridgeRequests;
+            const auto& query = ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record;
+            UNIT_ASSERT(query.GetView() == NKikimrBridge::TStorageQuery::DATABASES);
+            UNIT_ASSERT(query.GetFilterPools());
+            UNIT_ASSERT(!query.HasStoragePoolId());
+            UNIT_ASSERT_VALUES_EQUAL(query.PoolNamesSize(), 0);
+            std::set<std::pair<ui64, ui64>> actual;
+            for (const auto& pool : query.GetStoragePoolIds()) {
+                actual.emplace(pool.box_id(), pool.pool_id());
+            }
+            std::set<std::pair<ui64, ui64>> expected;
+            if (testCase != EBridgeStorageScopeCase::EmptyPools) {
+                if (testCase != EBridgeStorageScopeCase::SharedOnly) {
+                    expected.emplace(1, 10);
+                }
+                if (shared) {
+                    expected.emplace(1, 11);
+                }
+            }
+            UNIT_ASSERT(actual == expected);
+            auto result = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>();
+            auto& record = result->Record;
+            record.SetStatus(mode == NKikimrBridge::STORAGE_MODE_UNSPECIFIED ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::SUCCESS);
+            if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
+                auto* databases = record.MutableDatabases();
+                if (!expected.empty() && testCase != EBridgeStorageScopeCase::EmptyResult) {
+                    for (ui32 pile = 0; pile < 2; ++pile) {
+                        auto* row = databases->add_databases();
+                        row->set_storage_mode(mode);
+                        if (mode != NKikimrBridge::ORDINARY) {
+                            auto* counts = row->mutable_groups();
+                            counts->set_required(1);
+                            counts->set_synced(pile == 0);
+                            counts->set_pending(pile == 1);
+                        }
+                    }
+                }
+            }
+            runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), result.release(), 0, ev->Cookie));
+            return TTestActorRuntime::EEventAction::DROP;
+        });
+        const auto sender = runtime.AllocateEdgeActor();
+        auto getTenant = [&] {
+            const auto before = bridgeRequests;
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                "GET /viewer/tenantinfo?database=/Root/db&storage=false&direct=true HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
+            UNIT_ASSERT_VALUES_EQUAL(bridgeRequests - before, unavailable ? 0 : 1);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response->Response->Body, &json, true);
+            const auto& tenants = json["TenantInfo"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
+            const auto& tenant = tenants.front();
+            UNIT_ASSERT_VALUES_EQUAL(tenant["Name"].GetString(), "/Root/db");
+            return tenant;
+        };
+        auto tenant = getTenant();
+        if (unavailable || testCase == EBridgeStorageScopeCase::EmptyPools || testCase == EBridgeStorageScopeCase::EmptyResult) {
+            UNIT_ASSERT(!tenant.Has("BridgeMode"));
+            UNIT_ASSERT(!tenant.Has("BridgeSyncStatus"));
+        } else {
+            UNIT_ASSERT(tenant["BridgeMode"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "PENDING");
+        }
+        if (testCase == EBridgeStorageScopeCase::Dedicated) {
+            mode = NKikimrBridge::ORDINARY;
+            tenant = getTenant();
+            UNIT_ASSERT(tenant.Has("BridgeMode"));
+            UNIT_ASSERT(!tenant["BridgeMode"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "NOT_REQUIRED");
+            mode = NKikimrBridge::MIXED;
+            tenant = getTenant();
+            UNIT_ASSERT(!tenant.Has("BridgeMode"));
+            UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "PENDING");
+            mode = NKikimrBridge::STORAGE_MODE_UNSPECIFIED;
+            tenant = getTenant();
+            UNIT_ASSERT(!tenant.Has("BridgeMode"));
+            UNIT_ASSERT(!tenant.Has("BridgeSyncStatus"));
+        }
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageScoped) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::Dedicated);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageShared) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::Shared);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageSharedOnly) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::SharedOnly);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageMissingPool) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::MissingPool);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageAmbiguousPool) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::AmbiguousPool);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageMissingMetadata) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::MissingMetadata);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageMissingResourceMetadata) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::MissingResourceMetadata);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageEmptyPools) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::EmptyPools);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageEmptyResult) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::EmptyResult);
+    }
+
     Y_UNIT_TEST(TenantInfoStorageLimitWithGroupSizeInUnits)
     {
         CheckStorageLimitWithGroupSizeInUnits(false);

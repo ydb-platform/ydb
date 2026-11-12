@@ -749,6 +749,124 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         UNIT_ASSERT(!emptyScope.HasGroups());
     }
 
+    Y_UNIT_TEST(StorageDiagnosticsPoolIdScope) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool(2);
+        CreateOrdinaryPool(env, 2, 1, 1);
+        CreateOrdinaryPool(env, 3, 1, 0);
+        const auto logical = GetLogicalPoolGroups(env, 1);
+        UNIT_ASSERT_VALUES_EQUAL(logical.size(), 2);
+        WaitUntil(env, [&] {
+            return std::ranges::all_of(logical, [&](ui32 id) { return IsFullyBridged(GetGroupInfo(env, id)); });
+        }, "groups synchronized before scoped diagnostics");
+
+        NKikimrBlobStorage::TConfigRequest setOwners;
+        for (ui64 poolId : {1, 2, 3}) {
+            auto pool = ReadStoragePool(env, poolId);
+            pool.MutableScopeId()->SetX1(1000);
+            pool.MutableScopeId()->SetX2(poolId == 3 ? 6 : 5);
+            if (poolId == 3) {
+                pool.SetName(ReadStoragePool(env, 1).GetName());
+            }
+            setOwners.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        }
+        const auto assigned = env.Invoke(setOwners);
+        UNIT_ASSERT_C(assigned.GetSuccess(), assigned.GetErrorDescription());
+
+        NKikimrBridge::TStorageQuery query;
+        query.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+        query.SetFilterPools(true);
+        auto addPoolId = [&](ui64 poolId) {
+            auto* id = query.AddStoragePoolIds();
+            id->set_box_id(1);
+            id->set_pool_id(poolId);
+        };
+        addPoolId(1);
+        addPoolId(2);
+        addPoolId(1);
+        const auto databases = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(databases.GetStatus() == Ydb::StatusIds::SUCCESS, databases.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(databases.OwnersSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(databases.GetDatabases().databases_size(), 2);
+        for (const auto& row : databases.GetDatabases().databases()) {
+            UNIT_ASSERT(row.storage_mode() == NKikimrBridge::MIXED);
+            UNIT_ASSERT_VALUES_EQUAL(row.storage_pools_size(), 2);
+            std::set<ui64> pools;
+            for (const auto& pool : row.storage_pools()) {
+                UNIT_ASSERT_VALUES_EQUAL(pool.id().box_id(), 1);
+                pools.insert(pool.id().pool_id());
+            }
+            UNIT_ASSERT(pools == std::set<ui64>({1, 2}));
+            UNIT_ASSERT_VALUES_EQUAL(row.groups().required(), logical.size());
+            UNIT_ASSERT_VALUES_EQUAL(row.groups().synced(), logical.size());
+            UNIT_ASSERT_VALUES_EQUAL(row.groups().syncing(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(row.groups().pending(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(row.groups().unknown(), 0);
+        }
+
+        query.SetView(NKikimrBridge::TStorageQuery::GROUPS);
+        const auto groups = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(groups.GetStatus() == Ydb::StatusIds::SUCCESS, groups.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(groups.GetGroups().groups_size(), 2 * logical.size() + 1);
+        std::set<std::pair<ui32, TString>> identities;
+        for (const auto& row : groups.GetGroups().groups()) {
+            UNIT_ASSERT(row.has_storage_pool());
+            const ui64 poolId = row.storage_pool().id().pool_id();
+            UNIT_ASSERT(poolId == 1 || poolId == 2);
+            UNIT_ASSERT_VALUES_EQUAL(row.storage_pool().id().box_id(), 1);
+            UNIT_ASSERT(identities.emplace(row.group_id(), row.pile_name()).second);
+            UNIT_ASSERT(row.sync_status() == (poolId == 1 ? NKikimrBridge::SYNCED : NKikimrBridge::NOT_REQUIRED));
+        }
+
+        query.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+        auto checkRejected = [&](const auto& invalid, Ydb::StatusIds::StatusCode expected) {
+            const auto response = QueryStorageDiagnostics(env, invalid);
+            UNIT_ASSERT_C(response.GetStatus() == expected, response.DebugString());
+            UNIT_ASSERT(!response.HasDatabases());
+            UNIT_ASSERT(!response.HasGroups());
+            UNIT_ASSERT_VALUES_EQUAL(response.OwnersSize(), 0);
+        };
+        auto invalid = query;
+        invalid.SetFilterPools(false);
+        checkRejected(invalid, Ydb::StatusIds::BAD_REQUEST);
+        invalid = query;
+        invalid.AddPoolNames(ReadStoragePool(env, 2).GetName());
+        checkRejected(invalid, Ydb::StatusIds::BAD_REQUEST);
+        invalid = query;
+        invalid.SetStoragePool(ReadStoragePool(env, 2).GetName());
+        checkRejected(invalid, Ydb::StatusIds::BAD_REQUEST);
+        invalid = query;
+        invalid.MutableStoragePoolId()->set_box_id(1);
+        invalid.MutableStoragePoolId()->set_pool_id(2);
+        checkRejected(invalid, Ydb::StatusIds::BAD_REQUEST);
+        addPoolId(0);
+        checkRejected(query, Ydb::StatusIds::BAD_REQUEST);
+        query.MutableStoragePoolIds(query.StoragePoolIdsSize() - 1)->set_pool_id(10000);
+        checkRejected(query, Ydb::StatusIds::NOT_FOUND);
+
+        query.ClearStoragePoolIds();
+        const auto emptyDatabase = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(emptyDatabase.GetStatus() == Ydb::StatusIds::SUCCESS, emptyDatabase.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(emptyDatabase.GetDatabases().databases_size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(emptyDatabase.OwnersSize(), 0);
+        query.SetView(NKikimrBridge::TStorageQuery::GROUPS);
+        const auto emptyGroups = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(emptyGroups.GetStatus() == Ydb::StatusIds::SUCCESS, emptyGroups.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(emptyGroups.GetGroups().groups_size(), 0);
+
+        query.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+        addPoolId(2);
+        const auto ordinary = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(ordinary.GetStatus() == Ydb::StatusIds::SUCCESS, ordinary.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(ordinary.GetDatabases().databases_size(), 1);
+        const auto& row = ordinary.GetDatabases().databases(0);
+        UNIT_ASSERT(row.storage_mode() == NKikimrBridge::ORDINARY);
+        UNIT_ASSERT_VALUES_EQUAL(row.storage_pools_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(row.storage_pools(0).id().pool_id(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(row.pile_name(), "pile_2");
+        UNIT_ASSERT_VALUES_EQUAL(row.groups().required(), 0);
+    }
+
     // ordinary groups residing in single piles become inline piles, get their parts in the other pile, which are synced
     // while the groups are written to, and then the groups don't rely on their original parts anymore
     Y_UNIT_TEST(SyncersAreLimited) {

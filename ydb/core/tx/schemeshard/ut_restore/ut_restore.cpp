@@ -10496,8 +10496,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     bool IsKesusCreation(const TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        return record.TransactionSize() && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateKesus
-            && record.GetTransaction(0).GetKesus().GetName() == "Restored";
+        return record.TransactionSize() && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateKesus;
     }
 
     Y_UNIT_TEST_FLAGS(RoundTrip, Fs, Encrypted) {

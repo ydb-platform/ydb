@@ -6,6 +6,7 @@ import threading
 import time
 
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.wait_for import retry_assertions
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
@@ -150,15 +151,19 @@ class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
         assert_eq(len(rg["Ring"]), 9)
         self.validate_contains_nodes(rg, [4])
         self.kill_nodes(lambda hosts, i: i == 3)
-        time.sleep(25)
-        rg2 = get_ring_group(self.do_request_config(), configName)
-        assert_eq(rg["NToSelect"], 9)
-        assert_eq(len(rg["Ring"]), 9)
-        self.validate_not_contains_nodes(rg2, [4])
-        assert_that("RingGroupActorIdOffset" not in rg2)  # reassign node api used instead adding new ring groups test
-        for ring in rg2:
-            assert_that("IsDisabled" not in rg)
-        assert_that(rg != rg2)
+
+        def wait_node_removed():
+            rg2 = get_ring_group(self.do_request_config(), configName)
+            assert_eq(rg["NToSelect"], 9)
+            assert_eq(len(rg["Ring"]), 9)
+            self.validate_not_contains_nodes(rg2, [4])
+            assert_that("RingGroupActorIdOffset" not in rg2)  # reassign node api used instead adding new ring groups test
+            for ring in rg2:
+                assert_that("IsDisabled" not in rg)
+            assert_that(rg != rg2)
+            return rg2
+
+        rg2 = retry_assertions(wait_node_removed, timeout_seconds=40, step_seconds=1.0)
         self.cluster.nodes[4].start()
         time.sleep(25)
         rg3 = get_ring_group(self.do_request_config(), configName)
@@ -174,17 +179,25 @@ class TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration(KiKiMRDistConfN
         rg = get_ring_group(self.do_request_config(), configName)
         self.validate_contains_nodes(rg, [2, 3, 12, 15])
         self.kill_nodes(lambda hosts, i: i == 1 or i == 2)
-        time.sleep(30)
-        rg = self.do_request_config()[f"{configName}Config"]["Ring"]
-        self.validate_not_contains_nodes(rg, [2, 3])
-        self.validate_contains_nodes(rg, [6, 12, 15])
-        assert_eq(rg["RingGroupActorIdOffset"], 1)  # full reconfiguration applied
+
+        def wait_first_reassign():
+            rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+            self.validate_not_contains_nodes(rg, [2, 3])
+            self.validate_contains_nodes(rg, [6, 12, 15])
+            assert_eq(rg["RingGroupActorIdOffset"], 1)  # full reconfiguration applied
+            return rg
+
+        retry_assertions(wait_first_reassign, timeout_seconds=40, step_seconds=1.0)
         self.cluster.nodes[12].stop()
-        time.sleep(30)
-        rg = self.do_request_config()[f"{configName}Config"]["Ring"]
-        self.validate_not_contains_nodes(rg, [12])
-        self.validate_contains_nodes(rg, [6, 9, 15])  # 12 -> 9 reassigned
-        assert_eq(rg["RingGroupActorIdOffset"], 1)  # offset not changed -> reassign node api used
+
+        def wait_second_reassign():
+            rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+            self.validate_not_contains_nodes(rg, [12])
+            self.validate_contains_nodes(rg, [6, 9, 15])  # 12 -> 9 reassigned
+            assert_eq(rg["RingGroupActorIdOffset"], 1)  # offset not changed -> reassign node api used
+            return rg
+
+        retry_assertions(wait_second_reassign, timeout_seconds=40, step_seconds=1.0)
 
 
 class TestKiKiMRDistConfSelfHeal2NodesDisconnected(KiKiMRDistConfNodeStatusTest):
@@ -197,12 +210,16 @@ class TestKiKiMRDistConfSelfHeal2NodesDisconnected(KiKiMRDistConfNodeStatusTest)
         assert_eq(len(rg["Ring"]), 9)
         self.validate_contains_nodes(rg, [2, 3])
         self.kill_nodes(lambda hosts, i: i == 1 or i == 2)
-        time.sleep(25)
-        rg2 = get_ring_group(self.do_request_config(), configName)
-        assert_eq(rg["NToSelect"], 9)
-        assert_eq(len(rg["Ring"]), 9)
-        self.validate_not_contains_nodes(rg2, [2, 3])
-        assert_that(rg != rg2)
+
+        def wait_two_nodes_removed():
+            rg2 = get_ring_group(self.do_request_config(), configName)
+            assert_eq(rg["NToSelect"], 9)
+            assert_eq(len(rg["Ring"]), 9)
+            self.validate_not_contains_nodes(rg2, [2, 3])
+            assert_that(rg != rg2)
+            return rg2
+
+        retry_assertions(wait_two_nodes_removed, timeout_seconds=40, step_seconds=1.0)
 
 
 class TestKiKiMRDistConfSelfHealDCDisconnected(KiKiMRDistConfNodeStatusTest):
@@ -245,14 +262,17 @@ class TestKiKiMRDistConfSelfHealPileupReplicas(KiKiMRDistConfNodeStatusTest):
     def do_test(self, configName):
         rgSS = get_ring_group(self.do_request_config(), "StateStorage")
         rgSSB = get_ring_group(self.do_request_config(), "StateStorageBoard")
-        time.sleep(25)
-        rgSS2 = get_ring_group(self.do_request_config(), "StateStorage")
-        rgSSB2 = get_ring_group(self.do_request_config(), "StateStorageBoard")
-        rgSB2 = get_ring_group(self.do_request_config(), "SchemeBoard")
-        assert_eq(rgSS["Ring"], rgSS2["Ring"])
-        assert_eq(rgSS["Ring"], rgSSB2["Ring"])
-        assert_eq(rgSS["Ring"], rgSB2["Ring"])
-        assert_ne(rgSSB["Ring"], rgSSB2["Ring"])
+
+        def wait_pileup():
+            rgSS2 = get_ring_group(self.do_request_config(), "StateStorage")
+            rgSSB2 = get_ring_group(self.do_request_config(), "StateStorageBoard")
+            rgSB2 = get_ring_group(self.do_request_config(), "SchemeBoard")
+            assert_eq(rgSS["Ring"], rgSS2["Ring"])
+            assert_eq(rgSS["Ring"], rgSSB2["Ring"])
+            assert_eq(rgSS["Ring"], rgSB2["Ring"])
+            assert_ne(rgSSB["Ring"], rgSSB2["Ring"])
+
+        retry_assertions(wait_pileup, timeout_seconds=40, step_seconds=1.0)
 
 
 class TestKiKiMRDistConfSelfHealOverrides(KiKiMRDistConfNodeStatusTest):
@@ -262,11 +282,13 @@ class TestKiKiMRDistConfSelfHealOverrides(KiKiMRDistConfNodeStatusTest):
     override_rings_count = 3
 
     def do_test(self, configName):
-        time.sleep(25)
-        rg2 = get_ring_group(self.do_request_config(), configName)
-        assert_eq(rg2["NToSelect"], 3)
-        assert_eq(len(rg2["Ring"]), 3)
-        assert_eq(len(rg2["Ring"][0]["Node"]), 2)
+        def wait_overrides():
+            rg2 = get_ring_group(self.do_request_config(), configName)
+            assert_eq(rg2["NToSelect"], 3)
+            assert_eq(len(rg2["Ring"]), 3)
+            assert_eq(len(rg2["Ring"][0]["Node"]), 2)
+
+        retry_assertions(wait_overrides, timeout_seconds=40, step_seconds=1.0)
 
 
 class TestKiKiMRDistConfSelfHealReplicasSpecificVolume(KiKiMRDistConfNodeStatusTest):
@@ -276,8 +298,10 @@ class TestKiKiMRDistConfSelfHealReplicasSpecificVolume(KiKiMRDistConfNodeStatusT
     replicas_specific_volume = 4
 
     def do_test(self, configName):
-        time.sleep(25)
-        rg2 = get_ring_group(self.do_request_config(), configName)
-        assert_eq(rg2["NToSelect"], 3)
-        assert_eq(len(rg2["Ring"]), 3)
-        assert_eq(len(rg2["Ring"][0]["Node"]), 4)
+        def wait_volume():
+            rg2 = get_ring_group(self.do_request_config(), configName)
+            assert_eq(rg2["NToSelect"], 3)
+            assert_eq(len(rg2["Ring"]), 3)
+            assert_eq(len(rg2["Ring"][0]["Node"]), 4)
+
+        retry_assertions(wait_volume, timeout_seconds=40, step_seconds=1.0)

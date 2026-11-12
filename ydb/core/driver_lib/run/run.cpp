@@ -1510,7 +1510,8 @@ void TKikimrRunner::InitializeXdsBootstrapConfig(const TKikimrRunConfig& runConf
                 xdsServerJson.EraseValue("channel_creds");
                 for (auto& channelCredJson : channelCreds) {
                     if (channelCredJson.Has("config")) {
-                        ConvertStringToJsonValue(channelCredJson["config"].GetString(), &channelCredJson["config"]);
+                        const TString configJson = channelCredJson["config"].GetString();
+                        ConvertStringToJsonValue(configJson, &channelCredJson["config"]);
                     }
                     xdsServerJson["channel_creds"].AppendValue(channelCredJson);
                 }
@@ -1578,7 +1579,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     const auto& pathMapping = runConfig.AppConfig.GetResourcePathPrefixMapping();
     if (pathMapping.RulesSize()) {
-        AppData->PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping);
+        AppData->SetPathNormalizer(std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping, Counters));
     }
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;

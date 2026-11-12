@@ -517,6 +517,10 @@ public:
 
                 if (dirPath.IsDirectory()) {
                     truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
+                } else if (!dirPath.IsSymlink() && dirPath.IsFile() && (marker.empty() || prefix > marker)) {
+                    Aws::S3::Model::Object obj;
+                    obj.SetKey(Aws::String(prefix.data(), prefix.size()));
+                    awsResult.AddContents(std::move(obj));
                 }
             }
 

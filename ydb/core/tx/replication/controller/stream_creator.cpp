@@ -8,6 +8,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/util/proto_duration.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -26,14 +27,18 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             const TString& name,
             const TDuration& retentionPeriod,
             const std::optional<TDuration>& resolvedTimestamps,
-            const NJson::TJsonMap& attrs)
+            const NJson::TJsonMap& attrs,
+            bool initialScan)
     {
         using namespace NYdb::NTable;
 
         auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
             .WithRetentionPeriod(retentionPeriod)
-            .WithInitialScan()
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
+
+        if (initialScan) {
+            desc.WithInitialScan();
+        }
 
         if (resolvedTimestamps) {
             desc
@@ -70,7 +75,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
-                .AppendAddChangefeeds(Changefeed)));
+                .AppendAddChangefeeds(Changefeed)),
+                0,
+                ++RequestCookie);
             break;
         case TReplication::ETargetKind::Transfer:
             return CreateConsumer();
@@ -84,13 +91,16 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             {"actorState", "StateCreateStream"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
-            sFunc(TEvents::TEvWakeup, CreateStream);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
     }
 
     void Handle(TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
+        if (ev->Cookie != RequestCookie) {
+            return;
+        }
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
@@ -98,7 +108,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 YDB_LOG_DEBUG("Retry CreateStream");
-                return Schedule(RetryDelay, new TEvents::TEvWakeup);
+                return Retry();
             }
 
             YDB_LOG_ERROR("Error",
@@ -123,57 +133,98 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
     }
 
-    void CreateConsumer() {
-        const auto streamPath = BuildStreamPath();
-        const auto settings = NYdb::NTopic::TAlterTopicSettings()
-            .BeginAddConsumer()
-                .ConsumerName(SrcConsumerName)
-            .EndAddConsumer();
-
-        Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(streamPath, settings));
-        Become(&TThis::StateCreateConsumer);
+    bool IsOwnedChangefeed() const {
+        return Kind != TReplication::ETargetKind::Transfer;
     }
 
-    STATEFN(StateCreateConsumer) {
+    enum class ETopicOperation {
+        CreateConsumer,
+        ConfigureConsumer,
+        SetRetention,
+    };
+
+    void AlterTopic(ETopicOperation operation) {
+        TopicOperation = operation;
+        NYdb::NTopic::TAlterTopicSettings settings;
+        switch (operation) {
+        case ETopicOperation::CreateConsumer: {
+            auto& consumer = settings.BeginAddConsumer(SrcConsumerName);
+            if (IsOwnedChangefeed()) {
+                consumer.Important(ConsumerImportant).AvailabilityPeriod(ConsumerAvailabilityPeriod);
+            }
+            break;
+        }
+        case ETopicOperation::ConfigureConsumer:
+            settings.BeginAlterConsumer(SrcConsumerName)
+                .SetImportant(ConsumerImportant)
+                .SetAvailabilityPeriod(ConsumerAvailabilityPeriod);
+            break;
+        case ETopicOperation::SetRetention:
+            settings.SetRetentionPeriod(StreamRetentionPeriod);
+            break;
+        }
+
+        Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(BuildStreamPath(), settings), 0, ++RequestCookie);
+        Become(&TThis::StateAlterTopic);
+    }
+
+    void CreateConsumer() {
+        AlterTopic(ETopicOperation::CreateConsumer);
+    }
+
+    STATEFN(StateAlterTopic) {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState", "StateCreateConsumer"});
+            {"actorState", "StateAlterTopic"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTopicResponse, Handle);
-            sFunc(TEvents::TEvWakeup, CreateConsumer);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
     }
 
     void Handle(TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev) {
+        if (ev->Cookie != RequestCookie) {
+            return;
+        }
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
 
-        if (result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
+        if (TopicOperation == ETopicOperation::CreateConsumer && result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
+            if (IsOwnedChangefeed()) {
+                // A previous attempt may have installed an ordinary or important
+                // consumer. Reconcile its protection before shortening retention.
+                return AlterTopic(ETopicOperation::ConfigureConsumer);
+            }
             return Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         }
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                YDB_LOG_DEBUG("Retry CreateConsumer");
-                return Schedule(RetryDelay, new TEvents::TEvWakeup);
+                YDB_LOG_DEBUG("Retry AlterTopic");
+                return Retry();
             }
 
             YDB_LOG_ERROR("Error",
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});
-        } else {
-            YDB_LOG_INFO("Success",
-                {"issues", result.GetIssues().ToOneLineString()});
+            return Reply(std::move(result));
+        }
+
+        if (IsOwnedChangefeed() && TopicOperation != ETopicOperation::SetRetention) {
+            // Keep the bootstrap retention until the consumer's protection
+            // has been installed and confirmed by the source.
+            return CheckConsumerExists(true);
         }
 
         Reply(std::move(result));
     }
 
-    void CheckConsumerExists() {
+    void CheckConsumerExists(bool verifySettings = false) {
+        VerifyConsumerSettings = verifySettings;
         const auto streamPath = BuildStreamPath();
-        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(streamPath, {}));
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(streamPath, {}), 0, ++RequestCookie);
         Become(&TThis::StateCheckConsumerExists);
     }
 
@@ -182,13 +233,16 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             {"actorState", "StateCheckConsumerExists"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
-            sFunc(TEvents::TEvWakeup, CheckConsumerExists);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        if (ev->Cookie != RequestCookie) {
+            return;
+        }
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
 
@@ -199,7 +253,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                     {"streamPath", BuildStreamPath()},
                     {"ev", ev->Get()->ToString()},
                     {"outcome", "retry"});
-                return Schedule(RetryDelay, new TEvents::TEvWakeup);
+                return Retry();
             }
 
             YDB_LOG_ERROR("Error of resolving topic",
@@ -210,11 +264,21 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             return Reply(NYdb::TStatus(result.GetStatus(), std::move(issues)));
         }
 
-        bool exists = AnyOf(result.GetTopicDescription().GetConsumers(), [&](const auto& consumer) {
+        const auto& consumers = result.GetTopicDescription().GetConsumers();
+        const auto consumer = FindIf(consumers, [&](const auto& consumer) {
             return consumer.GetConsumerName() == SrcConsumerName;
         });
 
-        if (exists) {
+        if (consumer != consumers.end() && VerifyConsumerSettings) {
+            if (consumer->GetImportant() != ConsumerImportant || consumer->GetAvailabilityPeriod() != ConsumerAvailabilityPeriod) {
+                NYdb::NIssue::TIssues issues;
+                issues.AddIssue("Source did not apply the replication consumer's availability policy");
+                return Reply(NYdb::TStatus(NYdb::EStatus::PRECONDITION_FAILED, std::move(issues)));
+            }
+            return AlterTopic(ETopicOperation::SetRetention);
+        }
+
+        if (consumer != consumers.end()) {
             Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         } else {
             NYdb::NIssue::TIssues issues;
@@ -223,8 +287,46 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
     }
 
+    void Retry() {
+        Schedule(RetryDelay, new TEvents::TEvWakeup(RequestCookie));
+    }
+
+    void RetryCurrentOperation() {
+        const auto state = CurrentStateFunc();
+        if (state == &TThis::StateCreateStream) {
+            CreateStream();
+        } else if (state == &TThis::StateAlterTopic) {
+            AlterTopic(TopicOperation);
+        } else if (state == &TThis::StateCheckConsumerExists) {
+            CheckConsumerExists(VerifyConsumerSettings);
+        }
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == RequestCookie) {
+            RetryCurrentOperation();
+        }
+    }
+
+    void Handle(TEvPrivate::TEvUpdateYdbProxy::TPtr& ev) {
+        if (YdbProxy != ev->Get()->YdbProxy) {
+            YdbProxy = ev->Get()->YdbProxy;
+            // Keep the controller's existing scheme-operation permission. Only
+            // replay the pending source operation, which may have committed.
+            RetryCurrentOperation();
+        }
+    }
+
     void Reply(NYdb::TStatus&& status) {
-        Send(Parent, new TEvPrivate::TEvCreateStreamResult(ReplicationId, TargetId, std::move(status)));
+        auto result = MakeHolder<TEvPrivate::TEvCreateStreamResult>(ReplicationId, TargetId, std::move(status));
+        Send(Parent, result.Release());
+        PassAway();
+    }
+
+    void Cancel() {
+        // Cancellation only releases the limiter; it must not change the
+        // persisted stream state as a successful or failed creation would.
+        Send(Parent, new TEvPrivate::TEvCancelCreateStream());
         PassAway();
     }
 
@@ -244,7 +346,11 @@ public:
             const TDuration& retentionPeriod,
             const std::optional<TDuration>& resolvedTimestamps,
             bool supportsTopicAutopartitioning,
-            bool needCreate)
+            bool needCreate,
+            bool initialScan,
+            TDuration streamRetentionPeriod,
+            TDuration consumerAvailabilityPeriod,
+            bool consumerImportant)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -256,7 +362,10 @@ public:
             {"path", config->GetDstPath()},
             {"id", ToString(rid)},
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning},
-        }))
+        }, initialScan))
+        , StreamRetentionPeriod(streamRetentionPeriod)
+        , ConsumerAvailabilityPeriod(consumerAvailabilityPeriod)
+        , ConsumerImportant(consumerImportant)
         , NeedCreate(needCreate)
         , LogPrefix(CreateActorLogPrefix("StreamCreator", ReplicationId, TargetId))
     {
@@ -264,6 +373,14 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        if (IsOwnedChangefeed()
+            && (StreamRetentionPeriod < TDuration::Seconds(1) || (!ConsumerImportant && !ConsumerAvailabilityPeriod)))
+        {
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue("Replication stream retention must be at least one second and finite consumer availability must be positive");
+            return Reply(NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, std::move(issues)));
+        }
+
         if (NeedCreate) {
             RequestPermission();
         } else {
@@ -275,19 +392,26 @@ public:
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
             {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
+            hFunc(TEvPrivate::TEvUpdateYdbProxy, Handle);
+            sFunc(TEvents::TEvPoison, Cancel);
         }
     }
 
 private:
     const TActorId Parent;
-    const TActorId YdbProxy;
+    TActorId YdbProxy;
+    ui64 RequestCookie = 0;
     const ui64 ReplicationId;
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
     const TString SrcConsumerName;
     const NYdb::NTable::TChangefeedDescription Changefeed;
+    const TDuration StreamRetentionPeriod;
+    const TDuration ConsumerAvailabilityPeriod;
+    const bool ConsumerImportant;
+    ETopicOperation TopicOperation = ETopicOperation::CreateConsumer;
+    bool VerifyConsumerSettings = false;
     const bool NeedCreate;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
@@ -304,22 +428,32 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         : std::nullopt;
     const bool needCreate = !config.HasTransferSpecific() || !config.GetTransferSpecific().GetTarget().HasConsumerName();
     const bool supportsTopicAutopartitioning = !consistency.HasGlobal() && AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication();
+    const bool initialScan = config.GetInitialScan();
+    const bool consumerImportant = !config.HasTransferSpecific() && config.GetAvailabilityPeriod().HasUnlimited();
+    // Preserve the cluster-wide finite window for legacy configurations without a policy.
+    const auto consumerAvailabilityPeriod = consumerImportant ? TDuration::Zero()
+        : config.GetAvailabilityPeriod().HasDuration() ? GetDuration(config.GetAvailabilityPeriod().GetDuration())
+        : TDuration::Seconds(AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds());
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),
         target->GetConfig(), target->GetStreamName(), target->GetStreamConsumerName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
-        supportsTopicAutopartitioning, needCreate);
+        supportsTopicAutopartitioning, needCreate, initialScan,
+        TDuration::Seconds(AppData()->ReplicationConfig.GetStreamRetentionPeriodSeconds()),
+        consumerAvailabilityPeriod, consumerImportant);
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
         const TReplication::ITarget::IConfig::TPtr& config,
         const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
-        bool supportsTopicAutopartitioning, bool needCreate)
+        bool supportsTopicAutopartitioning, bool needCreate, bool initialScan,
+        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
-        streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning, needCreate);
+        streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
+        needCreate, initialScan, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant);
 }
 
 }

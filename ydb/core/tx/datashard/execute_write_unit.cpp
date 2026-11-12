@@ -229,15 +229,20 @@ public:
 
                 TSmallVec<TRawTypeValue> key;
 
-                if (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
+                const bool operationNeedsRead =
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT ||
-                    userDb.NeedToReadBeforeWrite(fullTableId))
-                {
+                    (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT
+                        && validatedOperation.GetDefaultFilledColumnCount() != 0);
+
+                if (operationNeedsRead || userDb.NeedToReadBeforeWrite(fullTableId)) {
+                    const auto* collector = userDb.GetChangeCollector(fullTableId);
                     for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
                         FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
-                        userDb.PrechargeRow(fullTableId, key);
+                        const bool needsMvccRead = collector && collector->NeedHistoricalPrecharge(fullTableId, key);
+                        userDb.PrechargeRow(fullTableId, key, needsMvccRead);
                     }
                 }
             }

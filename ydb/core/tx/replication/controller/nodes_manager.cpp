@@ -16,6 +16,15 @@ bool TNodesManager::HasNodes(const TString& tenant) const {
     return !GetNodes(tenant).empty();
 }
 
+bool TNodesManager::HasNode(ui32 nodeId) const {
+    for (const auto& [_, nodes] : TenantNodes) {
+        if (nodes.contains(nodeId)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const THashSet<ui32>& TNodesManager::GetNodes(const TString& tenant) const {
     Y_ABORT_UNLESS(HasTenant(tenant));
     return TenantNodes.at(tenant);

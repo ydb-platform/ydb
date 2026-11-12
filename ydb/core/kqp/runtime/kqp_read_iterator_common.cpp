@@ -2,6 +2,8 @@
 
 #include <library/cpp/threading/hot_swap/hot_swap.h>
 
+#include <ydb/core/protos/kqp_stats.pb.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -121,6 +123,61 @@ ui64 MaxBytesPerFetchStreamLookup() {
 
 ui64 MaxInFlightLocksStreamLookup() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxInFlightLocksStreamLookup;
+}
+
+void TReadLockInfo::Add(const NKikimrTxDataShard::TEvReadResult& record) {
+    for (auto& lock : record.GetTxLocks()) {
+        Locks.push_back(lock);
+    }
+
+    for (auto& lock : record.GetBrokenTxLocks()) {
+        BrokenLocks.push_back(lock);
+    }
+
+    // Collect deferred breaker info for TLI logging
+    {
+        const auto& traceIds = record.GetDeferredBreakerQuerySpanIds();
+        const auto& nodeIds = record.GetDeferredBreakerNodeIds();
+        for (int i = 0; i < traceIds.size(); ++i) {
+            DeferredBreakers.push_back({traceIds[i], i < nodeIds.size() ? nodeIds[i] : 0u});
+        }
+    }
+
+    if (record.HasDeferredVictimQuerySpanId() && DeferredVictimQuerySpanId == 0) {
+        DeferredVictimQuerySpanId = record.GetDeferredVictimQuerySpanId();
+    }
+}
+
+NKikimrTxDataShard::TEvKqpInputActorResultInfo TReadLockInfo::GetExtraData() {
+    NKikimrTxDataShard::TEvKqpInputActorResultInfo resultInfo;
+    for (auto& lock : Locks) {
+        resultInfo.AddLocks()->CopyFrom(lock);
+    }
+    for (auto& lock : BrokenLocks) {
+        resultInfo.AddLocks()->CopyFrom(lock);
+    }
+    // Add deferred breaker info for TLI logging
+    for (const auto& breaker : DeferredBreakers) {
+        resultInfo.AddDeferredBreakerQuerySpanIds(breaker.QuerySpanId);
+        resultInfo.AddDeferredBreakerNodeIds(breaker.NodeId);
+    }
+    if (DeferredVictimQuerySpanId) {
+        resultInfo.SetDeferredVictimQuerySpanId(DeferredVictimQuerySpanId);
+    }
+    return resultInfo;
+}
+
+void TReadLockInfo::FillExtraStats(NYql::NDqProto::TDqTaskStats* stats) {
+    // Add lock stats for broken locks from read operations
+    if (!BrokenLocks.empty()) {
+        NKqpProto::TKqpTaskExtraStats extraStats;
+        if (stats->HasExtra()) {
+            stats->GetExtra().UnpackTo(&extraStats);
+        }
+        extraStats.MutableLockStats()->SetBrokenAsVictim(
+            extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+        stats->MutableExtra()->PackFrom(extraStats);
+    }
 }
 
 } // namespace NKqp

@@ -205,10 +205,8 @@ public:
     TString FamilyString() const;
     void ChangeVolatileState(EVolatileState state);
 
-    bool IsReadyToBoot() const {
-        return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
-    }
-
+    bool IsReadyToWork() const;
+    bool IsReadyToBoot() const;
     bool IsReadyToStart(TInstant now) const;
     bool IsStarting() const;
     bool IsStartingOnNode(TNodeId nodeId) const;
@@ -217,7 +215,7 @@ public:
     bool IsAlive() const;
     bool CanBeAlive() const; // IsAlive() + <Unknown>
 
-    bool IsAliveOnLocal(const TActorId& local) const;
+    bool IsPresentOnLocal(const TActorId& local) const;
     bool IsStopped() const;
     bool InitiateBoot(TNodeId node = 0);
     bool BecomeStarting(TNodeId nodeId);
@@ -314,6 +312,9 @@ public:
     }
 
     void NotifyOnRestart(const TString& status, TSideEffects& sideEffects);
+
+private:
+    void ChangeNode(TNodeId nodeId);
 };
 
 

@@ -380,6 +380,7 @@ template <size_t Batch, typename... Args> class TBenchmark {
                         checksum += ReadUnaligned<ui32>(it);
                         matches += 
                             ReadUnaligned<ui8>(row + 2 * sizeof(ui32) + (1 + 7) / 8);
+                        return true;
                     });
                 }
             });

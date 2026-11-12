@@ -730,7 +730,7 @@ public:
     bool CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr, std::optional<TPathElement::EPathType> pathType = {});
     bool CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr) const;
     bool CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr) const;
-    bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr) const;
+    bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr, ui64 count = 1) const;
     bool CheckInFlightLimit(NKikimrSchemeOp::EOperationType opType, TString& errStr) const;
     bool CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const;
 
@@ -1006,6 +1006,8 @@ public:
     void PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId);
     void PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId, const TExternalDataSourceInfo::TPtr externalDataSource);
     void PersistRemoveExternalDataSource(NIceDb::TNiceDb& db, TPathId pathId);
+    void AddExternalDataSourceReference(TPathId pathId, const TPath& referrer);
+    void RemoveExternalDataSourceReference(TPathId pathId, TPathId referrer);
     void PersistExternalDataSourceReference(NIceDb::TNiceDb &db, TPathId pathId, const TPath& referrer);
     void PersistRemoveExternalDataSourceReference(NIceDb::TNiceDb &db, TPathId pathId, TPathId referrer);
 
@@ -1654,6 +1656,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TTxId completedTxId);
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvPrivate::TEvExportUploadMetadataResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvPrivate::TEvExportCompletionUploadResult::TPtr& ev);
 
     void Handle(TEvExport::TEvCreateExportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvExport::TEvGetExportRequest::TPtr& ev, const TActorContext& ctx);
@@ -1663,6 +1666,7 @@ public:
     void Handle(TAutoPtr<TEventHandle<NSchemeShard::NBackground::TEvListRequest>>& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvExportUploadMetadataResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvExportCompletionUploadResult::TPtr& ev, const TActorContext& ctx);
 
     void ResumeExports(const TVector<ui64>& exportIds, const TActorContext& ctx);
     // } // NExport
@@ -1879,6 +1883,7 @@ public:
     bool PersistBuildIndexSampleForgetAll(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
     void PersistBuildIndexClustersToSample(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClusterSize(NIceDb::TNiceDb& db, const TIndexBuildInfo& info, ui32 i);
     void PersistBuildIndexClustersUpdate(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexClustersForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     bool PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);

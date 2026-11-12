@@ -19,7 +19,7 @@ namespace NKikimr {
         Info->GetTopology().PickSubgroup(id.Hash(), nums);
         ui32 blobReplyCounter = 0;
         for (ui32 i = 0; i < nums.size(); ++i) {
-            const TVDiskID& vdiskId = Info->GetVDiskId(i); // obtain VDisk
+            const TVDiskID& vdiskId = Info->GetVDiskId(nums[i]); // obtain VDisk
             if (TVDiskIdShort(vdiskId) != VCtx->ShortSelfVDisk) {
                 AddExtremeQuery(vdiskId, id, deadline, i);
                 ++blobReplyCounter;
@@ -121,6 +121,8 @@ namespace NKikimr {
             for (auto it = begin; it != end; ) {
                 TPerBlobInfo& info = it->second;
                 if (auto context = info.Context.lock()) { // context acquired, request is still intact
+                    info.Item->Keep |= res.GetKeep();
+                    info.Item->DoNotKeep |= res.GetDoNotKeep();
                     if (status == NKikimrProto::DEADLINE && now < context->Iterator->first) {
                         auto& deadline = rerequest[fullId];
                         deadline = Max(deadline, context->Iterator->first);

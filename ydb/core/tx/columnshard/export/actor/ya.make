@@ -12,6 +12,8 @@ PEERDIR(
     ydb/core/kqp/compute_actor
 )
 
+GENERATE_ENUM_SERIALIZATION(export_actor.h)
+
 END()
 
 RECURSE_FOR_TESTS(

@@ -10,6 +10,7 @@
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
@@ -1228,6 +1229,127 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
 
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetMainConfigUnknownFields().size(), 0);
+    }
+
+    Y_UNIT_TEST(YamlConfigSemanticInvalidSelectorRejected) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: base
+allowed_labels:
+  tenant:
+    type: string
+incompatibility_overrides:
+  disable_rules:
+    - builtin_tenant_must_be_defined
+selector_config:
+- description: bad tenant
+  selector:
+    tenant: bad
+  config: !inherit
+    auth_config: !inherit
+      account_lockout: !inherit
+        attempt_reset_duration: not-a-duration
+)",
+            "Cannot parse attempt reset duration");
+    }
+
+    // Shared inputs may vary under selectors, including redundant writes.
+
+    Y_UNIT_TEST(YamlConfigSharedSectionVariationAccepted) {
+        for (bool selected : {false, true}) {
+            TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+            const TString yaml = TStringBuilder() << R"(
+metadata:
+  cluster: ""
+  version: 0
+config:
+  domains_config:
+    domain: [{name: sample}]
+    state_storage: [{ssid: 1, ring: {node: [1], nto_select: 1}}]
+    security_config: {enforce_user_token_requirement: true}
+allowed_labels:
+  deployment: {type: string}
+selector_config:
+- description: shared input variant
+  selector: {deployment: selected}
+  config:
+    domains_config: !inherit
+      security_config: !inherit
+        enforce_user_token_requirement: )" << (selected ? "true" : "false") << "\n";
+            CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yaml);
+            CheckMainConfigReplacedWith(runtime, yaml);
+        }
+    }
+
+    Y_UNIT_TEST(YamlConfigSharedSectionViolationRejected) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, R"(
+metadata:
+  cluster: ""
+  version: 0
+config:
+  domains_config:
+    domain: [{name: sample}]
+    state_storage: [{ssid: 1, ring: {node: [1], nto_select: 1}}]
+    security_config: {enforce_user_token_requirement: true}
+  monitoring_config: {require_counters_authentication: true}
+allowed_labels:
+  deployment: {type: string}
+selector_config:
+- description: violates monitoring dependency
+  selector: {deployment: selected}
+  config:
+    domains_config: !inherit
+      security_config: !inherit
+        enforce_user_token_requirement: false
+)", "EnforceUserTokenRequirement");
+    }
+
+    // A valid config exercising the projection machinery end-to-end on the
+    // console actor: two independent labels, a deep-merge selector and an
+    // untagged (wholesale-replace) empty-mapping selector must be ACCEPTED.
+
+    Y_UNIT_TEST(YamlConfigEmptyInheritTypeMismatchRejected) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, R"(
+metadata: {cluster: "", version: 0}
+config:
+  log_config: {cluster_name: base}
+allowed_labels:
+  a: {type: string}
+selector_config:
+- description: invalid merge
+  selector: {a: x}
+  config:
+    log_config: !inherit
+      cluster_name: !inherit {}
+)", "Overriding value with different types");
+    }
+
+    Y_UNIT_TEST(YamlConfigSelectorsRepairEveryBaseVariant) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
+metadata: {cluster: "", version: 0}
+config:
+  log_config: {cluster_name: base}
+  auth_config:
+    password_complexity: {min_length: 1, min_lower_case_count: 2}
+allowed_labels:
+  a: {type: enum, values: {x: {}}}
+selector_config:
+- description: repair every realizable value
+  selector: {a: {in: ['', x]}}
+  config:
+    auth_config:
+      password_complexity: {min_length: 20, min_lower_case_count: 2}
+)");
     }
 
     // An unknown field nested inside a selector_config entry is reported with a path that
@@ -3860,6 +3982,116 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
 }
 
 Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
+    Y_UNIT_TEST(TestPendingUpdatesCoalesceAndDrainAfterSubscriptionChanges) {
+        auto config = DefaultConsoleTestConfig();
+        config.CreateConsole = false;
+        TTenantTestRuntime runtime(config);
+        runtime.SetLogPriority(NKikimrServices::CMS_CONFIGS, NLog::PRI_ERROR);
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        const auto provider = runtime.Register(new TConfigsProvider(runtime.Sender, counters));
+        auto scheduled = counters->GetCounter("ScheduledConfigUpdates", false);
+        auto inflight = counters->GetCounter("InflightConfigUpdates", false);
+
+        constexpr ui32 maxInflight = 50;
+        constexpr ui32 subscriberCount = maxInflight + 5;
+        TVector<TActorId> subscribers;
+        THashMap<TActorId, TVector<NKikimrConsole::TConfigSubscriptionNotification>> notifications;
+        auto observer = runtime.AddObserver<TEvConsole::TEvConfigSubscriptionNotification>([&](auto& ev) {
+            if (ev->Sender == provider) {
+                // Allow the real sender's cooldown timer to release throttle slots.
+                runtime.EnableScheduleForActor(ev->GetRecipientRewrite());
+            } else if (auto it = notifications.find(ev->GetRecipientRewrite()); it != notifications.end()) {
+                it->second.push_back(ev->Get()->Record);
+                ev.Reset();
+            }
+        });
+        TBlockEvents<TConfigsProvider::TEvPrivate::TEvWorkerCoolDown> cooldowns(runtime,
+            [&](const auto& ev) { return ev->GetRecipientRewrite() == provider; });
+
+        auto send = [&](TActorId sender, IEventBase* event) {
+            runtime.Send(new IEventHandle(provider, sender, event), 0, true);
+        };
+        auto subscribe = [&](TActorId subscriber, ui64 generation) {
+            auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionRequest>();
+            request->Record.SetGeneration(generation);
+            request->Record.MutableOptions()->SetNodeId(runtime.GetNodeId());
+            request->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
+            request->Record.SetServeYaml(true);
+            request->Record.SetYamlApiVersion(1);
+            send(subscriber, request.Release());
+            auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionResponse>(subscriber);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetGeneration(), generation);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        };
+        auto sync = [&]() {
+            send(runtime.Sender, new TConfigsProvider::TEvPrivate::TEvUpdateConfigs({},
+                new IEventHandle(runtime.Sender, provider, new TEvents::TEvWakeup())));
+            runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(runtime.Sender);
+        };
+        auto updateYaml = [&](ui64 version) {
+            const TString yaml = TStringBuilder() << "metadata:\n  version: " << version << "\nconfig: {}\n";
+            send(runtime.Sender, new TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig(yaml));
+        };
+
+        for (ui32 i = 0; i < subscriberCount; ++i) {
+            auto subscriber = runtime.AllocateEdgeActor();
+            subscribers.push_back(subscriber);
+            notifications.emplace(subscriber, TVector<NKikimrConsole::TConfigSubscriptionNotification>{});
+            subscribe(subscriber, 1);
+        }
+        runtime.WaitFor("first batch waiting for cooldown", [&]() { return cooldowns.size() == maxInflight; });
+        UNIT_ASSERT_VALUES_EQUAL(inflight->Val(), maxInflight);
+        UNIT_ASSERT_VALUES_EQUAL(scheduled->Val(), subscriberCount - maxInflight);
+
+        // Cancel one queued subscription and replace another without retaining its old generation.
+        const auto canceled = subscribers[maxInflight];
+        const auto replaced = subscribers[maxInflight + 1];
+        send(canceled, new TEvConsole::TEvConfigSubscriptionCanceled(1));
+        subscribe(replaced, 2);
+        send(replaced, new TEvConsole::TEvConfigSubscriptionCanceled(1));
+        sync();
+        UNIT_ASSERT_VALUES_EQUAL(scheduled->Val(), subscriberCount - maxInflight - 1);
+
+        // YAML updates share one pending entry and cannot downgrade an initial full update.
+        updateYaml(1);
+        updateYaml(2);
+        sync();
+        UNIT_ASSERT_VALUES_EQUAL(scheduled->Val(), subscriberCount - 1);
+
+        // A config change upgrades pending YAML work to All; another YAML update preserves All.
+        NKikimrConsole::TConfigItem item;
+        item.MutableId()->SetId(1);
+        item.MutableId()->SetGeneration(1);
+        item.SetKind(NKikimrConsole::TConfigItem::LogConfigItem);
+        item.MutableConfig()->MutableLogConfig()->SetClusterName("queued-config");
+        TConfigModifications modifications;
+        modifications.AddedItems.push_back(new TConfigItem(item));
+        send(runtime.Sender, new TConfigsProvider::TEvPrivate::TEvUpdateConfigs(modifications, {}));
+        updateYaml(3);
+        sync();
+        UNIT_ASSERT_VALUES_EQUAL(scheduled->Val(), subscriberCount - 1);
+        UNIT_ASSERT_VALUES_EQUAL(inflight->Val(), maxInflight);
+
+        cooldowns.Stop().Unblock();
+        runtime.WaitFor("all pending updates and cooldowns drained", [&]() {
+            return scheduled->Val() == 0 && inflight->Val() == 0;
+        });
+        for (ui32 i = 0; i < subscriberCount; ++i) {
+            const auto subscriber = subscribers[i];
+            const auto& updates = notifications.at(subscriber);
+            if (subscriber == canceled) {
+                UNIT_ASSERT(updates.empty());
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(updates.size(), i < maxInflight ? 2 : 1);
+            const auto& last = updates.back();
+            UNIT_ASSERT_VALUES_EQUAL(last.GetGeneration(), subscriber == replaced ? 2 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(last.GetOrder(), updates.size());
+            UNIT_ASSERT_VALUES_EQUAL(last.GetConfig().GetLogConfig().GetClusterName(), "queued-config");
+            UNIT_ASSERT_STRING_CONTAINS(last.GetMainYamlConfig(), "version: 3");
+        }
+    }
+
     Y_UNIT_TEST(TestSubscriptionCreate) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
@@ -5296,6 +5528,27 @@ config:
     const TString PermissiveTenantUserAttribute      = TString(NConsole::TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS);
     const TString NotAllowedErrorSubstring           = "\\'selector_config\\' and \\'allowed_labels\\' are not allowed";
     const TString ForbiddenTenantLabelErrorSubstring = "\\'tenant\\' label is forbidden";
+
+    Y_UNIT_TEST(TestDatabaseConfigAllowlistRemainsBaseOnly) {
+        NKikimrConfig::TAppConfig appcfg;
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+        TTenantTestRuntime runtime(DatabaseSelectorsTestConfig(), appcfg);
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}});
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+            PermissiveTenantUserAttribute, "true");
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfigForSelectors);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
+metadata: {kind: DatabaseConfig, database: "/dc-1/users/tenant-1", version: 0}
+config: {}
+allowed_labels:
+  deployment: {type: string}
+selector_config:
+- description: existing database selector policy
+  selector: {deployment: selected}
+  config:
+    auth_config: {account_lockout: {attempt_reset_duration: 1s}}
+)");
+    }
 
     Y_UNIT_TEST(TestAllowDatabaseConfigSelectorsOnlyWithPermissiveTenantUserAttribute) {
         NKikimrConfig::TAppConfig appcfg;

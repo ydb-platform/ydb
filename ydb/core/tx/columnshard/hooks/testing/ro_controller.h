@@ -19,6 +19,7 @@ private:
     YDB_READONLY(TAtomicCounter, CompactionStartedCounter, 0);
     YDB_READONLY(TAtomicCounter, CleaningFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, CleaningStartedCounter, 0);
+    YDB_READONLY(TAtomicCounter, PortionsErasedCounter, 0);
 
     YDB_READONLY(TAtomicCounter, FilteredRecordsCount, 0);
 

@@ -12,7 +12,6 @@ import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/s3_settings.proto";
 import "ydb/core/protos/schemeshard/operations.proto";
 import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/test_shard_control.proto";
@@ -51,6 +50,7 @@ message TDrop {
     optional string Name = 1;
     optional EDropWaitPolicy WaitPolicy = 2;
     optional uint64 Id = 3;
+    optional NKikimrReplication.ESourceCleanupPolicy ReplicationSourceCleanup = 4 [default = SOURCE_CLEANUP_POLICY_DROP];
 }
 
 enum EColumnCodec {
@@ -361,8 +361,16 @@ message TTableReplicationConfig {
         CONSISTENCY_LEVEL_ROW = 2;
     }
 
+    enum EImportState {
+        IMPORT_STATE_NONE = 0;
+        WAITING_IMPORT = 1;
+        IMPORTING = 2;
+        IMPORTED = 3;
+    }
+
     optional EReplicationMode Mode = 1;
     optional EConsistencyLevel ConsistencyLevel = 2;
+    optional EImportState ImportState = 3;
 }
 
 message TTableIncrementalBackupConfig {
@@ -2645,7 +2653,8 @@ message TExportMetadata {
 
 message TSysViewDescription {
     optional string Name = 1;
-    optional NKikimrSysView.ESysViewType Type = 2;
+    // Numeric ESysViewType
+    optional int32 Type = 2 [default = 1];
     optional NKikimrProto.TPathID SourceObject = 3;
 }
 

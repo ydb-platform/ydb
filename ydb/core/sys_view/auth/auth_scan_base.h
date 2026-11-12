@@ -164,6 +164,12 @@ protected:
         Y_ABORT_UNLESS(request->ResultSet.size() == 1);
         auto& entry = request->ResultSet.back();
 
+        if (entry.Status == TNavigate::EStatus::PathErrorUnknown && !DeepFirstSearchStack.empty()) {
+            // A child may disappear after its parent was listed. Its index is already advanced.
+            ContinueScan();
+            return;
+        }
+
         if (entry.Status != TNavigate::EStatus::Ok) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() <<
                 "Failed to navigate " << CanonizePath(entry.Path) << ": " << entry.Status);

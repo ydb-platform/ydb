@@ -70,6 +70,7 @@ public:
 public:
     virtual void OnRestart() = 0;
     virtual bool NeedToReadKeys() const = 0;
+    virtual bool NeedHistoricalPrecharge(const TTableId& tableId, TArrayRef<const TRawTypeValue> key) const = 0;
 
     virtual void CommitLockChanges(ui64 lockId, const TRowVersion& writeVersion) = 0;
 
@@ -77,12 +78,18 @@ public:
     virtual TVector<TChange>&& GetCollected() = 0;
 };
 
+enum class EAsyncIndexKeySizePolicy {
+    Reject,
+    SkipOversizedIntermediateKeys,
+};
+
 IDataShardChangeCollector* CreateChangeCollector(
         TDataShard& dataShard,
         IDataShardUserDb& userDb,
         IDataShardChangeGroupProvider& groupProvider,
         NTable::TDatabase& db,
-        const TUserTable& table);
+        const TUserTable& table,
+        EAsyncIndexKeySizePolicy indexKeySizePolicy = EAsyncIndexKeySizePolicy::Reject);
 IDataShardChangeCollector* CreateChangeCollector(
         TDataShard& dataShard,
         IDataShardUserDb& userDb,

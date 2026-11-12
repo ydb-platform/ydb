@@ -404,6 +404,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDone::TPtr&
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::CheckACL(const TActorContext& ctx) {
+    if (!Token) {
+        CloseSession("Cannot check ACL without a user token", PersQueue::ErrorCode::ACCESS_DENIED, ctx);
+        return;
+    }
     //AFL_ENSURE(ACLCheckInProgress);
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
@@ -439,6 +443,10 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
     InitSpan = GenerateInitSpan();
     THolder<TEvWriteInit> event(ev->Release());
+
+    if constexpr (!UseMigrationProtocol) {
+        Request->CountResourcePath(event->Request.init_request().path());
+    }
 
     if (State != ES_CREATED) {
         //answer error
@@ -1541,6 +1549,11 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        CloseSession("Client data writes are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        return;
+    }
     RequestNotChecked = true;
 
     if (State != ES_INITED) {

@@ -253,6 +253,7 @@ namespace NCloudEvents {
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         auto* request = ev->Record.MutableRequest();
 
+        request->SetIsInternalCall(true);
         request->SetKeepSession(!isDeleteQuery);
 
         if (!SessionId.empty()) {

@@ -61,6 +61,17 @@ public:
         }
 
         if (Replication->GetState() == TReplication::EState::Removing) {
+            if (record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON) {
+                NIceDb::TNiceDb db(txc.DB);
+                // An older controller may have admitted this FORCE as ordinary DROP.
+                for (auto* target : Replication->GetTargets()) {
+                    if (target->GetStreamState() != TReplication::EStreamState::Removed) {
+                        target->SetStreamState(TReplication::EStreamState::Removed);
+                        db.Table<Schema::SrcStreams>().Key(Replication->GetId(), target->GetId()).Update(
+                            NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
+                    }
+                }
+            }
             Replication->SetDropOp(PubEv->Sender, std::make_pair(opId.GetTxId(), opId.GetPartId()));
             return true;
         }
@@ -80,7 +91,9 @@ public:
 
             target->Shutdown(ctx);
 
-            target->SetStreamState(TReplication::EStreamState::Removing);
+            target->SetStreamState(record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON
+                ? TReplication::EStreamState::Removed
+                : TReplication::EStreamState::Removing);
             db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
@@ -133,6 +146,7 @@ public:
             Result = MakeHolder<IEventHandle>(op->Sender, ctx.SelfID, ev.Release());
         }
 
+        Replication->Shutdown(ctx);
         Self->Remove(rid);
         Replication.Reset();
 

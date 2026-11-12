@@ -108,12 +108,14 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
 
 namespace {
 
-std::pair<TString, TString> SplitPathIntoWorkingDirAndName(const TString& path) {
+bool SplitPathIntoWorkingDirAndName(const TString& path, std::pair<TString, TString>& result, TString& error) {
     auto splitPos = path.find_last_of('/');
     if (splitPos == path.npos || splitPos + 1 == path.size()) {
-        ythrow yexception() << "wrong path format '" << path << "'" ;
+        error = TStringBuilder() << "wrong path format '" << path << "'";
+        return false;
     }
-    return {path.substr(0, splitPos), path.substr(splitPos + 1)};
+    result = {path.substr(0, splitPos), path.substr(splitPos + 1)};
+    return true;
 }
 
 bool ValidateRenameIndexRequest(
@@ -357,11 +359,8 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
     std::pair<TString, TString> pathPair;
-    try {
-        pathPair = SplitPathIntoWorkingDirAndName(path);
-    } catch (const std::exception&) {
+    if (!SplitPathIntoWorkingDirAndName(path, pathPair, error)) {
         code = Ydb::StatusIds::BAD_REQUEST;
-        error = "Invalid table path";
         return false;
     }
 
@@ -543,9 +542,7 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
 
     const auto OpType = *ops.begin();
 
-    try {
-        pathPair = SplitPathIntoWorkingDirAndName(path);
-    } catch (const std::exception&) {
+    if (!SplitPathIntoWorkingDirAndName(path, pathPair, error)) {
         code = Ydb::StatusIds::BAD_REQUEST;
         return false;
     }
@@ -979,6 +976,27 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
 
         if (column.HasColumnFamilyName()) {
             newColumn->set_family(column.GetColumnFamilyName());
+        }
+
+        const auto& compression = column.GetSerializer().GetArrowCompression();
+        if (compression.HasCodec()) {
+            auto* newCompression = newColumn->mutable_compression();
+            switch (compression.GetCodec()) {
+                case NKikimrSchemeOp::ColumnCodecPlain:
+                    newCompression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_OFF);
+                    break;
+                case NKikimrSchemeOp::ColumnCodecLZ4:
+                    newCompression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_LZ4);
+                    break;
+                case NKikimrSchemeOp::ColumnCodecZSTD:
+                    newCompression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_ZSTD);
+                    break;
+                default:
+                    ythrow yexception() << "Unsupported column compression codec: " << static_cast<int>(compression.GetCodec());
+            }
+            if (compression.HasLevel()) {
+                newCompression->set_compression_level(compression.GetLevel());
+            }
         }
 
         if (column.HasDataAccessorConstructor()) {
@@ -1488,9 +1506,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
     const auto OpType = *ops.begin();
 
     std::pair<TString, TString> pathPair;
-    try {
-        pathPair = SplitPathIntoWorkingDirAndName(path);
-    } catch (const std::exception&) {
+    if (!SplitPathIntoWorkingDirAndName(path, pathPair, error)) {
         status = Ydb::StatusIds::BAD_REQUEST;
         return false;
     }
@@ -2814,6 +2830,59 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 
     tableDesc->MutableKeyColumnNames()->CopyFrom(in.primary_key());
 
+    // A restored table describes its sequences from the backup separately (FillDefaultValues in the
+    // import flow), so nothing is derived here: the parameters must come from the backup verbatim.
+    if (indexedTable && !tableDesc->GetIsRestore()) {
+        // A column may default from a sequence (e.g. a serial column): the scheme description then
+        // needs the sequence itself, otherwise the column would reference a non-existent object.
+        // Parameters are copied from the request when present (a table described and serialized by
+        // the SDK, which keeps them in the column) and derived from the column type otherwise.
+        auto* indexed = out.MutableCreateIndexedTable();
+
+        for (int i = 0; i < in.columns_size(); ++i) {
+            const auto& column = in.columns(i);
+            if (!column.has_from_sequence()) {
+                continue;
+            }
+
+            const auto& fromSequence = column.from_sequence();
+            auto* sequence = indexed->AddSequenceDescription();
+            sequence->SetName(fromSequence.name());
+            if (fromSequence.has_min_value()) {
+                sequence->SetMinValue(fromSequence.min_value());
+            }
+            if (fromSequence.has_max_value()) {
+                sequence->SetMaxValue(fromSequence.max_value());
+            }
+            if (fromSequence.has_start_value()) {
+                sequence->SetStartValue(fromSequence.start_value());
+            }
+            if (fromSequence.has_cache()) {
+                sequence->SetCache(fromSequence.cache());
+            }
+            if (fromSequence.has_increment()) {
+                sequence->SetIncrement(fromSequence.increment());
+            }
+            if (fromSequence.has_cycle()) {
+                sequence->SetCycle(fromSequence.cycle());
+            }
+            if (fromSequence.has_set_val()) {
+                sequence->MutableSetVal()->SetNextValue(fromSequence.set_val().next_value());
+                sequence->MutableSetVal()->SetNextUsed(fromSequence.set_val().next_used());
+            }
+
+            // The sequence has to produce values the column can store: prefer the type the request
+            // carries (a restored table or a sequence provisioned for an index column) and fall
+            // back to the column type.
+            if (fromSequence.has_data_type() && fromSequence.data_type().has_type_id()) {
+                const auto typeId = static_cast<NScheme::TTypeId>(fromSequence.data_type().type_id());
+                sequence->SetDataType(NScheme::TypeName(NScheme::TTypeInfo(typeId)));
+            } else if ((size_t)i < tableDesc->ColumnsSize()) {
+                sequence->SetDataType(tableDesc->GetColumns((size_t)i).GetType());
+            }
+        }
+    }
+
     if (!profiles.ApplyTableProfile(in.profile(), *tableDesc, status, error)) {
         return false;
     }
@@ -3076,7 +3145,9 @@ bool FillSysViewDescription(Ydb::Table::DescribeSystemViewResult& out, const NKi
 
     const auto sysViewType = in.GetSysViewDescription().GetType();
     out.set_sys_view_id(sysViewType);
-    TString sysViewTypeName = NKikimrSysView::ESysViewType_Name(sysViewType).substr(1);
+    TString sysViewTypeName = NKikimrSysView::ESysViewType_IsValid(sysViewType)
+        ? NKikimrSysView::ESysViewType_Name(static_cast<NKikimrSysView::ESysViewType>(sysViewType)).substr(1)
+        : "UnknownType";
     NProtobufJson::ToSnakeCase(&sysViewTypeName);
     out.set_sys_view_name(std::move(sysViewTypeName));
 

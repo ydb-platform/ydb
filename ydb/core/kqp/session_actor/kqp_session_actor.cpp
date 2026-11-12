@@ -1526,6 +1526,20 @@ public:
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
 
+        const bool allowModifications = QueryState->IsInternalCall() || QueryState->IsCreateTableAs()
+            || AppData()->FeatureFlags.GetEnableClientModifications();
+        if (!allowModifications) {
+            for (const auto& op : phyQuery.GetTableOps()) {
+                if (TYdbOperation(op.GetOperation()) & KikimrModifyOps()) {
+                    const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
+                    std::vector<TIssue> issues{YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                        "Client data writes are disabled")};
+                    ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "", MessageFromIssues(issues));
+                    return false;
+                }
+            }
+        }
+
         auto checkSchemeTx = [&]() {
             for (const auto &tx : phyQuery.GetTransactions()) {
                 if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
@@ -1775,35 +1789,27 @@ public:
         AFL_ENSURE(txCtx.TxManager);
         const bool broken = !!txCtx.TxManager->GetLockIssue();
 
-        if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
+        if ((txCtx.TxHasEffects() && broken) || txCtx.TxManager->BrokenLocks()) {
             EmitVictimTliLog(
                 txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,
                 txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+
+            if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            } else if (txCtx.TxHasEffects() && broken) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            } else {
+                AFL_ENSURE(txCtx.TxManager->BrokenLocks());
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            }
             return false;
         }
 
-        if (tx && tx->GetHasEffects() && broken) {
-            EmitVictimTliLog(
-                txCtx.TxManager->GetVictimQuerySpanId(),
-                std::nullopt,
-                txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
-            return false;
-        }
-
-        if (txCtx.TxManager->BrokenLocks()) {
-            EmitVictimTliLog(
-                txCtx.TxManager->GetVictimQuerySpanId(),
-                std::nullopt,
-                txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
-            return false;
-        }
+        AFL_ENSURE(!tx || !tx->GetHasEffects() || !broken);
 
         return true;
     }
@@ -3625,6 +3631,10 @@ public:
 
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
+            if (isFinal) {
+                // Drop snapshot handle early
+                txCtx->SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+            }
             if (txCtx->IsInvalidated()) {
                 Transactions.AddToBeAborted(txCtx);
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
@@ -3690,7 +3700,7 @@ public:
             }
         }
 
-        YDB_LOG_INFO("Cleanup start",
+        YDB_LOG(QueryState && QueryState->IsWarmupCompilation_ ? PRI_DEBUG : PRI_INFO, "Cleanup start",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
             {"isFinal", isFinal},
@@ -3700,6 +3710,7 @@ public:
             {"workloadServiceCleanup", CleanupCtx ? CleanupCtx->IsWaitingForWorkloadServiceCleanup : false},
             {"traceId", TraceId()});
         if (CleanupCtx) {
+            CleanupCtx->Final = isFinal;
             Become(&TKqpSessionActor::CleanupState);
         } else {
             EndCleanup(isFinal);
@@ -4066,6 +4077,8 @@ private:
             return "ExecuteState";
         } else if (func == &TThis::CleanupState) {
             return "CleanupState";
+        } else if (func == &TThis::FinalCleanupState) {
+            return "FinalCleanupState";
         } else {
             return "unknown state";
         }

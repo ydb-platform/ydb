@@ -6,6 +6,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <google/protobuf/text_format.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
@@ -1585,6 +1586,101 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
         });
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId(), aggregatorTabletId);
+    }
+
+    Y_UNIT_TEST(AggregatorRejectsTopicAutoPartitioning) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              ResolvedTimestampsIntervalMs: 1000
+            }
+            TopicAutoPartitioning: true
+            MaxPartitionCount: 10
+        )", {{NKikimrScheme::StatusInvalidParameter, "topic autopartitioning"}});
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(AggregatorCreatedOnRotation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              ResolvedTimestampsIntervalMs: 1000
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 oldAggregatorTabletId = DescribePrivatePath(runtime, "/MyRoot/Table/Stream")
+            .GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId();
+        UNIT_ASSERT(oldAggregatorTabletId);
+
+        auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(++txId, TTestTxConfig::SchemeShard);
+        auto& transaction = *request->Record.AddTransaction();
+        transaction.SetWorkingDir("/MyRoot");
+        transaction.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream);
+        UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(R"(
+            TableName: "Table"
+            OldStreamName: "Stream"
+            NewStream {
+              TableName: "Table"
+              StreamDescription {
+                Name: "RotatedStream"
+                Mode: ECdcStreamModeKeysOnly
+                Format: ECdcStreamFormatProto
+                ResolvedTimestampsIntervalMs: 1000
+              }
+            }
+        )", transaction.MutableRotateCdcStream()));
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request.release(), 0);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateDisabled),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(runtime, "/MyRoot/Table/Stream")
+            .GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId(), oldAggregatorTabletId);
+
+        const auto rotatedDescribeResult = DescribePrivatePath(runtime, "/MyRoot/Table/RotatedStream");
+        TestDescribeResult(rotatedDescribeResult, {
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
+            NLs::StreamHasAggregatorTabletId(true),
+        });
+        UNIT_ASSERT_VALUES_UNEQUAL(rotatedDescribeResult.GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId(), oldAggregatorTabletId);
     }
 
     Y_UNIT_TEST(AggregatorDroppedWithStream) {

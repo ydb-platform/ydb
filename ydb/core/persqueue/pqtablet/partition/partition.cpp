@@ -1184,29 +1184,26 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
     if (readOffset >= static_cast<i64>(GetEndOffset())) {
         result.LastReadMessage.CreateTimestamp = now;
         result.LastReadMessage.WriteTimestamp = now;
-    } else if (userInfo.ReadOffset == -1) {
-        // No read since restart: estimate by the first unread message's write time.
+    } else if (userInfo.ReadOffset == -1 || !userInfo.ReadWriteTimestamp) {
+        // No read since restart, or no cached read timestamps: readOffset is
+        // the first UNREAD message, estimate by its own write time.
         auto timestamp = GetWriteTimeEstimate(readOffset, /*firstUnreadMessage=*/true);
         if (timestamp == TInstant::Zero()) {
             // No record for this offset (keyless gap): fall back to the
             // committed message estimate, as callers expect a real write time.
             timestamp = result.LastCommittedMessage.WriteTimestamp;
+            if (timestamp == TInstant::Zero()) {
+                // The committed estimate is unknown too (e.g. emptied
+                // partition): report "now" so the unsigned ReadLag below
+                // does not wrap to an epoch-scale value.
+                timestamp = now;
+            }
         }
         result.LastReadMessage.CreateTimestamp = timestamp;
         result.LastReadMessage.WriteTimestamp = timestamp;
-    } else if (userInfo.ReadWriteTimestamp) {
+    } else {
         result.LastReadMessage.CreateTimestamp = userInfo.ReadCreateTimestamp;
         result.LastReadMessage.WriteTimestamp = userInfo.ReadWriteTimestamp;
-    } else {
-        // readOffset is the first UNREAD message: estimate by its own write time.
-        auto timestamp = GetWriteTimeEstimate(readOffset, /*firstUnreadMessage=*/true);
-        if (timestamp == TInstant::Zero()) {
-            // No record for this offset (keyless gap): fall back to the
-            // committed message estimate, as callers expect a real write time.
-            timestamp = result.LastCommittedMessage.WriteTimestamp;
-        }
-        result.LastReadMessage.CreateTimestamp = timestamp;
-        result.LastReadMessage.WriteTimestamp = timestamp;
     }
 
     if (readOffset < (i64)GetEndOffset()) {

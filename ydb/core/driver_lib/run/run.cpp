@@ -204,19 +204,6 @@ namespace NKikimr {
 
 namespace {
 
-<<<<<<< HEAD
-void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
-=======
-// client_certificate_authorization (request/required) applies to grpc_config.ssl_port only.
-void FillGrpcSslDataFromClientCertificateAuthorization(
-    NYdbGrpc::TSslData& sslData,
-    const NKikimrConfig::TAppConfig& appConfig
-) {
-    const auto& clientCertificateAuthorization = appConfig.GetClientCertificateAuthorization();
-    sslData.DoRequestClientCertificate = clientCertificateAuthorization.GetRequestClientCertificate();
-    sslData.ClientCertificateRequired = clientCertificateAuthorization.GetClientCertificateRequired();
-}
-
 template <typename TFunc>
 void ForEachGRpcServer(TGRpcServersWrapper& wrapper, TFunc&& func) {
     for (auto* servers : {&wrapper.Servers, &wrapper.RetiredServers}) {
@@ -241,7 +228,6 @@ void StopAcceptingGRpcRequests(std::weak_ptr<TGRpcServersWrapper> grpcServersWra
 }
 
 void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper) {
->>>>>>> 9999a3580af (Fix node crash on bridge pile takedown with in-flight gRPC requests (#56646))
     auto wrapper = grpcServersWrapper.lock();
     if (!wrapper) {
         return;
@@ -308,12 +294,8 @@ class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     bool Started = false;
     bool StopScheduled = false;
-<<<<<<< HEAD
-    bool WaitingForDisconnectRequest = false;
-=======
     bool RetiredServersCheckScheduled = false;
-    THashSet<TActorId> DisconnectRequests;
->>>>>>> 9999a3580af (Fix node crash on bridge pile takedown with in-flight gRPC requests (#56646))
+    bool WaitingForDisconnectRequest = false;
     TDuration WarmupTimeout = TDuration::Zero();
     bool WarmupReceived = false;
 

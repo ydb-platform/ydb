@@ -93,6 +93,15 @@ enum class ETaskReason: ui8 {
     AdvanceMove,
 };
 
+/// Why the composition of a task stopped taking portions (2026-11-07): nothing more to take, the portion cap, the byte
+/// cap, or, for an advance, a line portion another task holds. Counted per task kind under TilingCompactionOptimizer.
+enum class EStopCause: ui8 {
+    Exhausted,
+    PortionsLimit,
+    BytesLimit,
+    Held,
+};
+
 /// What the core hands back; the adapter turns it into engine changes.
 template <std::totally_ordered TKey, typename TPortion>
 struct TTask {
@@ -120,14 +129,18 @@ struct TTask {
     /// Persisted as the outputs' CompactionLevel; only 1 has a meaning for placement.
     ui8 TargetLevel = 0;
     TOptimizationPriority Priority = TOptimizationPriority::Zero();
+    /// Raw bytes of the inputs (2026-11-07; blob bytes before): the size the task holds in memory.
     ui64 Bytes = 0;
-    /// For an advance merge, the bytes the task would have had without the budget: the window swept on past the cut
+    /// For an advance merge, the raw bytes the task would have had without the budget: the window swept on past the cut
     /// (2026-10-26); equal to Bytes when the window was complete, zero for other kinds and reasons.
     ui64 IdealBytes = 0;
+    /// The dry sweep behind IdealBytes stopped at its cap with candidates left (2026-11-08): IdealBytes is a lower bound.
+    bool IdealCapped = false;
+    EStopCause StopCause = EStopCause::Exhausted;
 };
 
 /// The leveled interval planner of design.md: one class owning the accumulator, the tree levels and the line.
-/// TPortion must provide GetPortionId, IndexKeyStart, IndexKeyEnd, GetTotalBlobBytes, GetCompactionLevel,
+/// TPortion must provide GetPortionId, IndexKeyStart, IndexKeyEnd, GetTotalBlobBytes, GetTotalRawBytes, GetCompactionLevel,
 /// GetProduced and RecordSnapshotMin; the unit tests use a plain struct, the engine uses TPortionInfo.
 template <std::totally_ordered TKey, typename TPortion, std::totally_ordered TSnapshot>
 class TSnapshotTiling {
@@ -249,6 +262,7 @@ public:
             RaisePlacementThreshold(advanceTarget->RecordSnapshotMin());
             RecordAdvance(*best);
         }
+        RecordStop(*best);
         HandOut(*best);
         return best;
     }
@@ -266,6 +280,7 @@ public:
         }
         RaisePlacementThreshold(advance->second->RecordSnapshotMin());
         RecordAdvance(advance->first);
+        RecordStop(advance->first);
         HandOut(advance->first);
         return std::move(advance->first);
     }
@@ -277,12 +292,48 @@ public:
             return;
         }
         Counters.AdvanceIdealTaskBytes->Collect(static_cast<i64>(task.IdealBytes));
+        if (task.IdealCapped) {
+            Counters.AdvanceIdealCapped->Inc();
+        }
         if (task.IdealBytes > task.Bytes) {
             Counters.AdvanceBudgetCuts->Inc();
-            if (task.IdealBytes > Settings.TaskBytes) {
-                Counters.AdvanceMemoryShortageBytes->Add(task.IdealBytes - Settings.TaskBytes);
+            if (task.IdealBytes > Settings.SnapshotTaskBytes) {
+                Counters.AdvanceMemoryShortageBytes->Add(task.IdealBytes - Settings.SnapshotTaskBytes);
             }
         }
+    }
+
+    /// Why the handed-out task stopped taking portions, counted per task kind (2026-11-07).
+    void RecordStop(const TTask& task) const {
+        const NTiling::TTaskStopCounters& counters = StopCountersFor(task);
+        switch (task.StopCause) {
+            case EStopCause::Exhausted:
+                counters.Exhausted->Inc();
+                break;
+            case EStopCause::PortionsLimit:
+                counters.PortionsLimit->Inc();
+                break;
+            case EStopCause::BytesLimit:
+                counters.BytesLimit->Inc();
+                break;
+            case EStopCause::Held:
+                counters.Held->Inc();
+                break;
+        }
+    }
+
+    const NTiling::TTaskStopCounters& StopCountersFor(const TTask& task) const {
+        switch (task.Reason) {
+            case ETaskReason::Accumulator:
+                return *Counters.AccumulatorStops;
+            case ETaskReason::Level:
+                return *Counters.LevelStops;
+            case ETaskReason::AdvanceMerge:
+            case ETaskReason::AdvancePrefix:
+            case ETaskReason::AdvanceMove:
+                return *Counters.SnapshotStops;
+        }
+        return *Counters.SnapshotStops;
     }
 
     /// Whether the advance has a settled target at all, whatever the lag of S.
@@ -701,12 +752,44 @@ private:
         return NormalizePriority(Settings.DelayTrigger.Seconds(), Settings.DelayOverload.Seconds(), delay);
     }
 
-    bool FitsBudget(const TTask& task, const TPortion& candidate) const {
-        return task.Portions.size() < Settings.TaskPortions && task.Bytes + candidate.GetTotalBlobBytes() <= Settings.TaskBytes;
+    struct TBudget {
+        ui64 Bytes = 0;
+        ui64 Portions = 0;
+    };
+
+    /// The budget of the task's kind (2026-11-07): the accumulator, the levels and the snapshot advance each have their own.
+    TBudget BudgetFor(const TTask& task) const {
+        switch (task.Reason) {
+            case ETaskReason::Accumulator:
+                return TBudget{ .Bytes = Settings.AccumulatorTaskBytes, .Portions = Settings.AccumulatorTaskPortions };
+            case ETaskReason::Level:
+                return TBudget{ .Bytes = Settings.LevelTaskBytes, .Portions = Settings.LevelTaskPortions };
+            case ETaskReason::AdvanceMerge:
+            case ETaskReason::AdvancePrefix:
+            case ETaskReason::AdvanceMove:
+                return TBudget{ .Bytes = Settings.SnapshotTaskBytes, .Portions = Settings.SnapshotTaskPortions };
+        }
+        AFL_VERIFY(false)("reason", (ui32)task.Reason);
+        return TBudget{};
+    }
+
+    /// Whether the candidate fits the budget of the task's kind, in raw bytes (2026-11-07); when it does not, the task
+    /// remembers which cap stopped it.
+    bool FitsBudget(TTask& task, const TPortion& candidate) const {
+        const TBudget budget = BudgetFor(task);
+        if (task.Portions.size() >= budget.Portions) {
+            task.StopCause = EStopCause::PortionsLimit;
+            return false;
+        }
+        if (task.Bytes + candidate.GetTotalRawBytes() > budget.Bytes) {
+            task.StopCause = EStopCause::BytesLimit;
+            return false;
+        }
+        return true;
     }
 
     static void Append(TTask& task, const TConstPtr& p) {
-        task.Bytes += p->GetTotalBlobBytes();
+        task.Bytes += p->GetTotalRawBytes();
         task.Portions.push_back(p);
     }
 
@@ -848,31 +931,6 @@ private:
         return !Registry.at(p->GetPortionId()).HandedOut && !isLocked(p);
     }
 
-    /// Unlocked portions of a tree level intersecting [start, end], one id excluded: those ending inside the range
-    /// plus the stack at the end key.
-    std::vector<TConstPtr> Intersecting(
-        const TTreeLevel& level, const TKey& start, const TKey& end, const ui64 excludeId, TIsLocked isLocked) const {
-        std::vector<TConstPtr> result;
-        for (auto it = level.Portions.lower_bound(start); it != level.Portions.end() && !(end < (*it)->IndexKeyEnd()); ++it) {
-            if ((*it)->GetPortionId() != excludeId && !isLocked(*it)) {
-                result.push_back(*it);
-            }
-        }
-        auto range = level.Tree.FindRange(end);
-        if (range) {
-            range.ForEachValue([&](const ui64 id) {
-                if (id != excludeId) {
-                    const auto& p = Registry.at(id).Portion;
-                    if (end < p->IndexKeyEnd() && !isLocked(p)) {
-                        result.push_back(p);
-                    }
-                }
-                return true;
-            });
-        }
-        return result;
-    }
-
     /// The key window of an advance (decision 20, revised 2026-10-26): [Left, Right] inclusive when the sweep ran out of
     /// intersecting portions, [Left, Cut) when the budget or a portion held by another task stopped it.
     struct TWindow {
@@ -883,14 +941,77 @@ private:
         bool LineTaken = false;
         /// The bytes of the window swept on without the budget: the task's bytes when nothing was cut.
         ui64 IdealBytes = 0;
+        /// The dry sweep reached its cap with candidates left (2026-11-08): IdealBytes is a lower bound.
+        bool IdealCapped = false;
     };
 
     struct TCandidate {
         TConstPtr Portion;
         /// The start clamped to the window's left border: the order of the sweep.
         TKey EffectiveStart;
+        /// The end key and the id, read once when the candidate is pushed (2026-11-08): the engine's key accessors build a
+        /// row on every call, and the comparison below runs on every heap step.
+        TKey End;
+        ui64 Id = 0;
         bool Line = false;
     };
+
+    /// The order of the sweep: the clamped start, line portions first at equal starts, then the end key and the id, which
+    /// makes the order total and the walk deterministic. Written out rather than as tuples so that it copies no key.
+    static bool SweepsBefore(const TCandidate& a, const TCandidate& b) {
+        if (a.EffectiveStart < b.EffectiveStart) {
+            return true;
+        }
+        if (b.EffectiveStart < a.EffectiveStart) {
+            return false;
+        }
+        if (a.Line != b.Line) {
+            return a.Line;
+        }
+        if (a.End < b.End) {
+            return true;
+        }
+        if (b.End < a.End) {
+            return false;
+        }
+        return a.Id < b.Id;
+    }
+
+    /// The candidates of a sweep, as a heap in sweep order (2026-11-08). Before, a vector scanned with min_element and
+    /// erased from on every step made a sweep quadratic in its candidates, and its comparator built four keys per
+    /// comparison; on the log load, with the dry sweep chaining through thousands of portions, that took thirteen cores
+    /// of write-completion time.
+    class TSweepQueue {
+        std::vector<TCandidate> Heap;
+
+        static bool After(const TCandidate& a, const TCandidate& b) {
+            return SweepsBefore(b, a);
+        }
+
+    public:
+        bool Empty() const {
+            return Heap.empty();
+        }
+
+        void Push(TCandidate candidate) {
+            Heap.push_back(std::move(candidate));
+            std::push_heap(Heap.begin(), Heap.end(), After);
+        }
+
+        TCandidate Pop() {
+            std::pop_heap(Heap.begin(), Heap.end(), After);
+            TCandidate first = std::move(Heap.back());
+            Heap.pop_back();
+            return first;
+        }
+    };
+
+    /// How far the dry sweep behind IdealBytes goes: ideal_sweep_budgets snapshot byte budgets, saturating.
+    ui64 IdealSweepLimit() const {
+        const ui64 budget = Settings.SnapshotTaskBytes;
+        const ui64 factor = Settings.IdealSweepBudgets;
+        return budget > Max<ui64>() / factor ? Max<ui64>() : budget * factor;
+    }
 
     /// Decision 20, revised 2026-10-26: the window starts at the target, or at the first line portion the target
     /// intersects, and takes every unlocked portion of the line and of every tree level that intersects it, in order of
@@ -901,6 +1022,9 @@ private:
     /// held line portion covering the left border blocks the target. When the portion that does not fit covers the left
     /// border itself no cut leaves a non-empty window, so the window closes at the end of the first line portion, the only
     /// one inside, before the first line portion when none was taken yet, or at the target's end without the line.
+    /// The candidates come from cursors that only move right (2026-11-08): the window only grows right, so each level's
+    /// end-ordered set is read on from where the last growth stopped, and only the stack at the new right border is asked
+    /// of the level's tree; a growth step costs the portions it uncovers, not a lookup per level.
     std::optional<TWindow> SweepWindow(TTask& task, const TConstPtr& target, TIsLocked isLocked) const {
         const TKey start = target->IndexKeyStart();
         const TKey end = target->IndexKeyEnd();
@@ -914,36 +1038,62 @@ private:
             }
         }
         THashSet<ui64> seen{ targetId };
-        std::vector<TCandidate> queue;
+        TSweepQueue queue;
         const auto push = [&](const TConstPtr& p, const bool line) {
-            if (!seen.insert(p->GetPortionId()).second) {
+            const ui64 id = p->GetPortionId();
+            if (!seen.insert(id).second) {
                 return;
             }
-            const TKey& portionStart = p->IndexKeyStart();
-            queue.push_back(TCandidate{ .Portion = p, .EffectiveStart = portionStart < window.Left ? window.Left : portionStart, .Line = line });
+            TKey effectiveStart = p->IndexKeyStart();
+            if (effectiveStart < window.Left) {
+                effectiveStart = window.Left;
+            }
+            queue.Push(TCandidate{ .Portion = p, .EffectiveStart = std::move(effectiveStart), .End = p->IndexKeyEnd(), .Id = id, .Line = line });
         };
-        const auto collect = [&](const TKey& from, const TKey& to) {
-            for (auto it = Line.lower_bound(from); it != Line.end() && !(to < (*it)->IndexKeyStart()); ++it) {
-                push(*it, true);
+        // Line portions enter the queue whatever their state and are judged when popped: a held one cuts the window.
+        // Tree portions enter unlocked only.
+        auto lineNext = Line.lower_bound(window.Left);
+        std::vector<typename TEndSorted::const_iterator> levelNext;
+        for (ui8 level = FIRST_TREE_LEVEL; level <= Settings.TopLevel(); ++level) {
+            levelNext.push_back(TreeLevelAt(level).Portions.lower_bound(window.Left));
+        }
+        const auto extend = [&](const TKey& to) {
+            for (; lineNext != Line.end() && !(to < (*lineNext)->IndexKeyStart()); ++lineNext) {
+                push(*lineNext, true);
             }
             for (ui8 level = FIRST_TREE_LEVEL; level <= Settings.TopLevel(); ++level) {
-                for (const auto& p : Intersecting(TreeLevelAt(level), from, to, targetId, isLocked)) {
-                    push(p, false);
+                const TTreeLevel& treeLevel = TreeLevelAt(level);
+                if (treeLevel.Portions.empty()) {
+                    continue;
+                }
+                // Portions ending inside the window: the end-ordered set, read on from the last growth.
+                auto& next = levelNext[level - FIRST_TREE_LEVEL];
+                for (; next != treeLevel.Portions.end() && !(to < (*next)->IndexKeyEnd()); ++next) {
+                    if (!isLocked(*next)) {
+                        push(*next, false);
+                    }
+                }
+                // Portions reaching beyond the right border: the stack there. Those that covered the old border too were
+                // pushed by an earlier step and are skipped before their registry lookup.
+                if (auto range = treeLevel.Tree.FindRange(to)) {
+                    range.ForEachValue([&](const ui64 id) {
+                        if (!seen.contains(id)) {
+                            const TConstPtr& p = Registry.at(id).Portion;
+                            if (to < p->IndexKeyEnd() && !isLocked(p)) {
+                                push(p, false);
+                            }
+                        }
+                        return true;
+                    });
                 }
             }
         };
-        const auto before = [](const TCandidate& a, const TCandidate& b) {
-            return std::tuple(a.EffectiveStart, !a.Line, a.Portion->IndexKeyEnd(), a.Portion->GetPortionId()) <
-                   std::tuple(b.EffectiveStart, !b.Line, b.Portion->IndexKeyEnd(), b.Portion->GetPortionId());
-        };
-        collect(window.Left, window.Right);
+        extend(window.Right);
         bool neighbourTaken = false;
         std::optional<TKey> lineEnd;
         std::optional<TCandidate> overBudget;
-        while (!queue.empty()) {
-            const auto next = std::min_element(queue.begin(), queue.end(), before);
-            const TCandidate candidate = *next;
-            queue.erase(next);
+        while (!queue.Empty()) {
+            TCandidate candidate = queue.Pop();
             const TConstPtr& p = candidate.Portion;
             if (candidate.Line && !IsAvailable(p, isLocked)) {
                 if (!(window.Left < p->IndexKeyStart())) {
@@ -951,43 +1101,46 @@ private:
                 }
                 window.Cut = p->IndexKeyStart();
                 window.Complete = false;
+                task.StopCause = EStopCause::Held;
                 break;
             }
             if (!TryAppend(task, p, neighbourTaken)) {
                 window.Cut = p->IndexKeyStart();
                 window.Complete = false;
-                overBudget = candidate;
+                overBudget = std::move(candidate);
                 break;
             }
             if (candidate.Line) {
                 window.LineTaken = true;
-                if (!lineEnd || *lineEnd < p->IndexKeyEnd()) {
-                    lineEnd = p->IndexKeyEnd();
+                if (!lineEnd || *lineEnd < candidate.End) {
+                    lineEnd = candidate.End;
                 }
             }
-            if (window.Right < p->IndexKeyEnd()) {
-                const TKey from = window.Right;
-                window.Right = p->IndexKeyEnd();
-                collect(from, window.Right);
+            if (window.Right < candidate.End) {
+                window.Right = candidate.End;
+                extend(window.Right);
             }
         }
-        // The memory shortage (2026-10-26): sweep on without taking anything, to learn what the uncut window would cost.
+        // The memory shortage (2026-10-26): sweep on without taking anything, to learn what the uncut window would cost,
+        // up to ideal_sweep_budgets budgets (2026-11-08): the walk is diagnostic and must not cost the write path a table.
         window.IdealBytes = task.Bytes;
         if (overBudget) {
+            const ui64 limit = IdealSweepLimit();
             TKey dryRight = window.Right;
             const auto consider = [&](const TCandidate& candidate) {
-                window.IdealBytes += candidate.Portion->GetTotalBlobBytes();
-                if (dryRight < candidate.Portion->IndexKeyEnd()) {
-                    const TKey from = dryRight;
-                    dryRight = candidate.Portion->IndexKeyEnd();
-                    collect(from, dryRight);
+                window.IdealBytes += candidate.Portion->GetTotalRawBytes();
+                if (dryRight < candidate.End) {
+                    dryRight = candidate.End;
+                    extend(dryRight);
                 }
             };
             consider(*overBudget);
-            while (!queue.empty()) {
-                const auto next = std::min_element(queue.begin(), queue.end(), before);
-                const TCandidate candidate = *next;
-                queue.erase(next);
+            while (!queue.Empty()) {
+                if (window.IdealBytes >= limit) {
+                    window.IdealCapped = true;
+                    break;
+                }
+                const TCandidate candidate = queue.Pop();
                 if (candidate.Line && !IsAvailable(candidate.Portion, isLocked)) {
                     break;
                 }
@@ -1077,6 +1230,7 @@ private:
         ApplyWindow(task, *window);
         FinalizeCheckPoints(task);
         task.IdealBytes = std::max(window->IdealBytes, task.Bytes);
+        task.IdealCapped = window->IdealCapped;
         return task;
     }
 
@@ -1229,6 +1383,7 @@ private:
         }
         FinalizeCheckPoints(task);
         task.IdealBytes = std::max(window->IdealBytes, task.Bytes);
+        task.IdealCapped = window->IdealCapped;
         return task;
     }
 

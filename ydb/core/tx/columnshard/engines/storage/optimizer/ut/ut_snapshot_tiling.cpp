@@ -49,6 +49,11 @@ struct TTestPortion {
         return BlobBytes;
     }
 
+    /// Tests give a portion one size: the budget reads raw bytes, the small-portion rule blob bytes.
+    ui64 GetTotalRawBytes() const {
+        return BlobBytes;
+    }
+
     ui64 RecordSnapshotMin() const {
         return Snapshot;
     }
@@ -71,7 +76,7 @@ TSnapshotTilingSettings TestSettings() {
     TSnapshotTilingSettings settings;
     settings.AccumulatorPortionSizeLimit = 1'000;
     settings.PortionExpectedSize = 4'000;
-    settings.TaskBytes = 64'000;
+    settings.AccumulatorTaskBytes = settings.LevelTaskBytes = settings.SnapshotTaskBytes = 64'000;
     // Test clocks are small integers read as seconds; the delay source stays out of the way unless a test asks for it.
     settings.DelayTrigger = TDuration::Seconds(100'000);
     settings.DelayOverload = TDuration::Seconds(200'000);
@@ -217,10 +222,47 @@ Y_UNIT_TEST_SUITE(SnapshotTilingSettings) {
 
     Y_UNIT_TEST(BudgetMustHoldSixteenExpectedPortions) {
         TSnapshotTilingSettings settings;
+        // 256 MB holds sixteen 8 MB portions; 32 MB portions need 512 MB in the budget of every kind.
         settings.PortionExpectedSize = 8ULL * 1024 * 1024;
-        UNIT_ASSERT(!settings.Validate().IsSuccess());
-        settings.TaskBytes = 128ULL * 1024 * 1024;
         UNIT_ASSERT(settings.Validate().IsSuccess());
+        settings.PortionExpectedSize = 32ULL * 1024 * 1024;
+        UNIT_ASSERT(!settings.Validate().IsSuccess());
+        settings.AccumulatorTaskBytes = settings.SnapshotTaskBytes = 512ULL * 1024 * 1024;
+        UNIT_ASSERT(!settings.Validate().IsSuccess());
+        settings.LevelTaskBytes = 512ULL * 1024 * 1024;
+        UNIT_ASSERT(settings.Validate().IsSuccess());
+    }
+
+    Y_UNIT_TEST(TaskBudgetKeysSetEveryKindOrOne) {
+        TSnapshotTilingSettings settings;
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["task_bytes"] = 128ULL * 1024 * 1024;
+        json["task_portions"] = 500;
+        json["snapshot_task_portions"] = 300;
+        const auto status = settings.DeserializeFromJson(json);
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetErrorMessage());
+        UNIT_ASSERT_VALUES_EQUAL(settings.AccumulatorTaskBytes, 128ULL * 1024 * 1024);
+        UNIT_ASSERT_VALUES_EQUAL(settings.LevelTaskBytes, 128ULL * 1024 * 1024);
+        UNIT_ASSERT_VALUES_EQUAL(settings.SnapshotTaskBytes, 128ULL * 1024 * 1024);
+        UNIT_ASSERT_VALUES_EQUAL(settings.AccumulatorTaskPortions, 500);
+        UNIT_ASSERT_VALUES_EQUAL(settings.LevelTaskPortions, 500);
+        // A key of its own wins over the shorthand whatever the order the keys are read in.
+        UNIT_ASSERT_VALUES_EQUAL(settings.SnapshotTaskPortions, 300);
+        const auto back = settings.SerializeToJson();
+        UNIT_ASSERT_VALUES_EQUAL(back["snapshot_task_portions"].GetUInteger(), 300);
+        UNIT_ASSERT_VALUES_EQUAL(back["accumulator_task_bytes"].GetUInteger(), 128ULL * 1024 * 1024);
+        UNIT_ASSERT(!back.Has("task_bytes"));
+    }
+
+    Y_UNIT_TEST(IdealSweepBudgetsKey) {
+        TSnapshotTilingSettings settings;
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["ideal_sweep_budgets"] = 4;
+        UNIT_ASSERT(settings.DeserializeFromJson(json).IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(settings.IdealSweepBudgets, 4);
+        UNIT_ASSERT_VALUES_EQUAL(settings.SerializeToJson()["ideal_sweep_budgets"].GetUInteger(), 4);
+        json["ideal_sweep_budgets"] = 0;
+        UNIT_ASSERT(!settings.DeserializeFromJson(json).IsSuccess());
     }
 
     Y_UNIT_TEST(TriggerBelowOverload) {
@@ -636,11 +678,14 @@ Y_UNIT_TEST_SUITE(SnapshotTilingTasks) {
         UNIT_ASSERT(f.Core.IsOverloaded());
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTaskPriority()->GetLevel(), 10);
 
+        const i64 bytesStops = f.Counters.LevelStops->BytesLimit->Val();
         const auto task = f.Take();
         UNIT_ASSERT(task);
         // 64 000 bytes of budget, 4 000 per portion: sixteen.
         UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 16);
         UNIT_ASSERT_VALUES_EQUAL(task->Bytes, 64'000);
+        UNIT_ASSERT(task->StopCause == EStopCause::BytesLimit);
+        UNIT_ASSERT_VALUES_EQUAL(f.Counters.LevelStops->BytesLimit->Val(), bytesStops + 1);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHeight(FIRST_TREE_LEVEL), 4);
         UNIT_ASSERT(!f.Core.IsOverloaded());
         UNIT_ASSERT(!f.Core.GetTaskPriority());
@@ -686,6 +731,25 @@ Y_UNIT_TEST_SUITE(SnapshotTilingTasks) {
         UNIT_ASSERT(task);
         UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(task->Bytes, 80'000);
+        UNIT_ASSERT(task->StopCause == EStopCause::BytesLimit);
+    }
+
+    Y_UNIT_TEST(LevelPortionCapStopsTheStack) {
+        auto settings = TestSettings();
+        settings.LevelTaskPortions = 5;
+        TFixture f(settings);
+        f.Load({ Portion(1, 1'000, 1'009, 10) });
+        for (ui64 i = 0; i < 20; ++i) {
+            f.Add(Portion(10 + i, 0, 10, 11 + i));
+        }
+        const i64 portionStops = f.Counters.LevelStops->PortionsLimit->Val();
+        const auto task = f.Take();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(task->Bytes, 20'000);
+        UNIT_ASSERT(task->StopCause == EStopCause::PortionsLimit);
+        UNIT_ASSERT_VALUES_EQUAL(f.Counters.LevelStops->PortionsLimit->Val(), portionStops + 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHeight(FIRST_TREE_LEVEL), 15);
     }
 
     Y_UNIT_TEST(LockedPortionsAreSkippedButKeepCounting) {
@@ -734,16 +798,40 @@ Y_UNIT_TEST_SUITE(SnapshotTilingTasks) {
         f.Add(Portion(3, 50, 51, 11, SMALL));
         UNIT_ASSERT(!f.Take());
         f.Add(Portion(4, 20, 21, 11, SMALL));
+        const i64 exhausted = f.Counters.AccumulatorStops->Exhausted->Val();
         const auto task = f.Take();
         UNIT_ASSERT(task);
         UNIT_ASSERT(task->Reason == ETaskReason::Accumulator);
         UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 3);
+        // The whole accumulator fit: the task stopped because nothing was left.
+        UNIT_ASSERT(task->StopCause == EStopCause::Exhausted);
+        UNIT_ASSERT_VALUES_EQUAL(f.Counters.AccumulatorStops->Exhausted->Val(), exhausted + 1);
         // End-key order, so that neighbours meet.
         UNIT_ASSERT_VALUES_EQUAL(task->Portions[1]->GetPortionId(), 4);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetAccumulatorSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 11);
         f.Finish(*task, { Portion(5, 0, 51, 11) });
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(5), FIRST_TREE_LEVEL);
+    }
+
+    Y_UNIT_TEST(AccumulatorPortionCapSplitsTheTrigger) {
+        auto settings = TestSettings();
+        settings.AccumulatorTriggerPortions = 3;
+        settings.AccumulatorOverloadPortions = 10;
+        settings.AccumulatorTaskPortions = 2;
+        TFixture f(settings);
+        f.Load({ Portion(1, 1'000, 1'009, 10) });
+        f.Add(Portion(2, 0, 1, 11, SMALL));
+        f.Add(Portion(3, 50, 51, 11, SMALL));
+        f.Add(Portion(4, 20, 21, 11, SMALL));
+        const i64 portionStops = f.Counters.AccumulatorStops->PortionsLimit->Val();
+        const auto task = f.Take();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT(task->Reason == ETaskReason::Accumulator);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 2);
+        UNIT_ASSERT(task->StopCause == EStopCause::PortionsLimit);
+        UNIT_ASSERT_VALUES_EQUAL(f.Counters.AccumulatorStops->PortionsLimit->Val(), portionStops + 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetAccumulatorSize(), 1);
     }
 
     Y_UNIT_TEST(HigherPriorityUnitWins) {
@@ -1039,6 +1127,34 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetLineSize(), 20);
         // The memory shortage: the uncut window would have taken the target and all twenty line portions.
         UNIT_ASSERT_VALUES_EQUAL(task->IdealBytes, 84'000);
+        UNIT_ASSERT(task->StopCause == EStopCause::BytesLimit);
+    }
+
+    Y_UNIT_TEST(IdealSweepStopsAtItsCap) {
+        // The dry sweep behind IdealBytes goes ideal_sweep_budgets budgets far, eight of 64'000 here: 128 portions.
+        for (const ui64 chain : { 100, 200 }) {
+            TFixture f;
+            f.Load({ Portion(1, 1'000'000, 1'000'009, 10) });
+            for (ui64 i = 0; i < chain; ++i) {
+                f.Add(Portion(100 + i, 10 * i, 10 * i + 15, 11));
+            }
+            const auto cappedBefore = f.Counters.AdvanceIdealCapped->Val();
+            const auto task = f.TakeAdvance();
+            UNIT_ASSERT(task);
+            UNIT_ASSERT(task->Reason == ETaskReason::AdvancePrefix);
+            UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 16);
+            UNIT_ASSERT_VALUES_EQUAL(task->Bytes, 64'000);
+            UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "[160 ");
+            if (chain == 100) {
+                UNIT_ASSERT_VALUES_EQUAL(task->IdealBytes, 400'000);
+                UNIT_ASSERT(!task->IdealCapped);
+                UNIT_ASSERT_VALUES_EQUAL(f.Counters.AdvanceIdealCapped->Val(), cappedBefore);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(task->IdealBytes, 512'000);
+                UNIT_ASSERT(task->IdealCapped);
+                UNIT_ASSERT_VALUES_EQUAL(f.Counters.AdvanceIdealCapped->Val(), cappedBefore + 1);
+            }
+        }
     }
 
     Y_UNIT_TEST(EveryIntersectingPortionOfTheLevelJoins) {
@@ -1143,6 +1259,9 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         UNIT_ASSERT_EQUAL(f.Ids(*second), (std::vector<ui64>{ 1, 3 }));
         UNIT_ASSERT_VALUES_EQUAL(second->TargetLevel, LINE_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*second), "[20 ");
+        UNIT_ASSERT(first->StopCause == EStopCause::Exhausted);
+        UNIT_ASSERT(second->StopCause == EStopCause::Held);
+        UNIT_ASSERT(f.Counters.SnapshotStops->Held->Val() >= 1);
     }
 
     Y_UNIT_TEST(PortionsCoveringTheLeftBorderBeyondTheBudgetCloseAtTheLinePortion) {
@@ -1345,6 +1464,11 @@ struct TRowPortion {
         return BlobBytes;
     }
 
+    /// Tests give a portion one size: the budget reads raw bytes, the small-portion rule blob bytes.
+    ui64 GetTotalRawBytes() const {
+        return BlobBytes;
+    }
+
     ui64 RecordSnapshotMin() const {
         return Snapshot;
     }
@@ -1522,6 +1646,39 @@ Y_UNIT_TEST_SUITE(SnapshotTilingBench) {
                 found += take().has_value();
             }
             Cerr << "TakeNextTask x100 more: " << Micros(timer, 100) << " us each, found " << found << Endl;
+        }
+    }
+
+    /// The advance window over a chain of overlapping tree portions (2026-11-08): the sweep that took 13 cores of
+    /// write-completion time on the log load, with the ideal sweep running to the end of the chain. Prints the cost of one
+    /// composition; the ideal sweep must stop at its cap.
+    Y_UNIT_TEST(AdvanceWindowOverAnOverlappingChain) {
+        for (const auto& [chain, width] :
+            std::initializer_list<std::pair<ui64, ui64>>{ { 3'000, 150 }, { 600, 5'000'000 }, { 3'000, 5'000'000 } }) {
+            NTiling::TCounters counters;
+            TRowCore core(TestSettings(), counters);
+            core.UpdateClock({ .Now = 1'000, .SettledBefore = 990 });
+            // Bootstrap: one line portion far to the right, so that the chain arrives outside the line.
+            core.ModifyPortions({ RowPortion(1, 100'000'000, 100'000'009, 10, LARGE) }, {});
+            std::vector<TRowPortion::TPtr> added;
+            for (ui64 i = 0; i < chain; ++i) {
+                added.push_back(RowPortion(100 + i, i * 100, i * 100 + width, 11, LARGE));
+            }
+            THPTimer timer;
+            core.ModifyPortions(added, {});
+            Cerr << "chain of " << chain << " portions " << width << " wide: add " << timer.Passed() * 1e3 << " ms";
+            const auto isLocked = [](const TRowPortion::TConstPtr&) {
+                return false;
+            };
+            timer.Reset();
+            const auto task = core.TakeAdvanceTask(isLocked);
+            Cerr << ", compose advance " << timer.Passed() * 1e3 << " ms" << Endl;
+            UNIT_ASSERT(task);
+            UNIT_ASSERT(task->Reason == ETaskReason::AdvancePrefix);
+            UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 16);
+            UNIT_ASSERT_VALUES_EQUAL(task->Bytes, 64'000);
+            UNIT_ASSERT(task->IdealCapped);
+            UNIT_ASSERT_VALUES_EQUAL(task->IdealBytes, 8 * 64'000);
         }
     }
 }

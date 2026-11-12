@@ -214,6 +214,24 @@ public:
     }
 };
 
+/// Why the composition of a task stopped (tiling-s, 2026-11-07), per task kind, so that a graph tells whether tasks end
+/// on the portion cap, the byte cap, a run-out of portions, or, for the advance, a line portion another task holds.
+class TTaskStopCounters {
+public:
+    const NMonitoring::TDynamicCounters::TCounterPtr Exhausted;
+    const NMonitoring::TDynamicCounters::TCounterPtr PortionsLimit;
+    const NMonitoring::TDynamicCounters::TCounterPtr BytesLimit;
+    const NMonitoring::TDynamicCounters::TCounterPtr Held;
+
+    explicit TTaskStopCounters(const NColumnShard::TCommonCountersOwner& owner)
+        : Exhausted(owner.GetDeriviative("Tasks/Stop/Exhausted/Count"))
+        , PortionsLimit(owner.GetDeriviative("Tasks/Stop/PortionsLimit/Count"))
+        , BytesLimit(owner.GetDeriviative("Tasks/Stop/BytesLimit/Count"))
+        , Held(owner.GetDeriviative("Tasks/Stop/Held/Count"))
+    {
+    }
+};
+
 class TGlobalCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
@@ -224,14 +242,20 @@ private:
     const NMonitoring::TDynamicCounters::TCounterPtr TasksSkippedByPriorityGap;
     const NMonitoring::THistogramPtr GeneratedTasksPriorityLevel;
     /// The memory shortage of the advance (tiling-s, 2026-10-26): the bytes an advance would have taken had the budget
-    /// not cut its window, the shortfall against the budget summed over cut windows, and the number of cut windows.
+    /// not cut its window, the shortfall against the budget summed over cut windows, the number of cut windows, and the
+    /// windows whose dry sweep stopped at its cap (2026-11-08), so that their ideal is a lower bound.
     const NMonitoring::THistogramPtr AdvanceIdealTaskBytes;
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMemoryShortageBytes;
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceBudgetCuts;
+    const NMonitoring::TDynamicCounters::TCounterPtr AdvanceIdealCapped;
     /// Outcome of a committed metadata move (decision 26, 2026-10-28): the portion landed in the line, or its
     /// destination was taken while it ran and the arrival rule put it back outside the line, to be advanced again.
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMoveLanded;
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMoveReturned;
+    /// Stop causes per task kind (2026-11-07), under the subgroup kind=accumulator|level|snapshot.
+    const std::shared_ptr<TTaskStopCounters> AccumulatorStops;
+    const std::shared_ptr<TTaskStopCounters> LevelStops;
+    const std::shared_ptr<TTaskStopCounters> SnapshotStops;
     /// Time spent inside the tiling-s adapter per engine call, in microseconds (2026-10-27): the planner's share of the
     /// shard's transaction Complete phases.
     const NMonitoring::THistogramPtr PlannerModifyPortionsUs;
@@ -248,8 +272,12 @@ public:
         , AdvanceIdealTaskBytes(TBase::GetHistogram("Advance/IdealTaskBytes", NColumnShard::THistorgamBorders::TaskBytesHistogram()))
         , AdvanceMemoryShortageBytes(TBase::GetDeriviative("Advance/MemoryShortage/Bytes"))
         , AdvanceBudgetCuts(TBase::GetDeriviative("Advance/BudgetCut/Count"))
+        , AdvanceIdealCapped(TBase::GetDeriviative("Advance/IdealCapped/Count"))
         , AdvanceMoveLanded(TBase::GetDeriviative("Advance/Move/Landed/Count"))
         , AdvanceMoveReturned(TBase::GetDeriviative("Advance/Move/Returned/Count"))
+        , AccumulatorStops(std::make_shared<TTaskStopCounters>(TBase::CreateSubGroup("kind", "accumulator")))
+        , LevelStops(std::make_shared<TTaskStopCounters>(TBase::CreateSubGroup("kind", "level")))
+        , SnapshotStops(std::make_shared<TTaskStopCounters>(TBase::CreateSubGroup("kind", "snapshot")))
         , PlannerModifyPortionsUs(TBase::GetHistogram("Planner/ModifyPortionsUs", NMonitoring::ExponentialHistogram(22, 2)))
         , PlannerUsefulMetricUs(TBase::GetHistogram("Planner/UsefulMetricUs", NMonitoring::ExponentialHistogram(22, 2)))
         , PlannerNextTaskUs(TBase::GetHistogram("Planner/NextTaskUs", NMonitoring::ExponentialHistogram(22, 2)))
@@ -306,12 +334,28 @@ public:
         return Singleton<TGlobalCounters>()->AdvanceBudgetCuts;
     }
 
+    static const NMonitoring::TDynamicCounters::TCounterPtr& GetAdvanceIdealCapped() {
+        return Singleton<TGlobalCounters>()->AdvanceIdealCapped;
+    }
+
     static const NMonitoring::TDynamicCounters::TCounterPtr& GetAdvanceMoveLanded() {
         return Singleton<TGlobalCounters>()->AdvanceMoveLanded;
     }
 
     static const NMonitoring::TDynamicCounters::TCounterPtr& GetAdvanceMoveReturned() {
         return Singleton<TGlobalCounters>()->AdvanceMoveReturned;
+    }
+
+    static const std::shared_ptr<TTaskStopCounters>& GetAccumulatorStops() {
+        return Singleton<TGlobalCounters>()->AccumulatorStops;
+    }
+
+    static const std::shared_ptr<TTaskStopCounters>& GetLevelStops() {
+        return Singleton<TGlobalCounters>()->LevelStops;
+    }
+
+    static const std::shared_ptr<TTaskStopCounters>& GetSnapshotStops() {
+        return Singleton<TGlobalCounters>()->SnapshotStops;
     }
 
     static const NMonitoring::THistogramPtr& GetPlannerModifyPortionsUs() {
@@ -357,10 +401,15 @@ public:
     const NMonitoring::THistogramPtr AdvanceIdealTaskBytes;
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMemoryShortageBytes;
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceBudgetCuts;
+    const NMonitoring::TDynamicCounters::TCounterPtr AdvanceIdealCapped;
     /// Outcome of a committed metadata move (decision 26, 2026-10-28): the portion landed in the line, or its
     /// destination was taken while it ran and the arrival rule put it back outside the line, to be advanced again.
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMoveLanded;
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMoveReturned;
+    /// Stop causes per task kind (2026-11-07), under the subgroup kind=accumulator|level|snapshot.
+    const std::shared_ptr<TTaskStopCounters> AccumulatorStops;
+    const std::shared_ptr<TTaskStopCounters> LevelStops;
+    const std::shared_ptr<TTaskStopCounters> SnapshotStops;
     const NMonitoring::THistogramPtr PlannerModifyPortionsUs;
     const NMonitoring::THistogramPtr PlannerUsefulMetricUs;
     const NMonitoring::THistogramPtr PlannerNextTaskUs;
@@ -375,8 +424,12 @@ public:
         , AdvanceIdealTaskBytes(TGlobalCounters::GetAdvanceIdealTaskBytes())
         , AdvanceMemoryShortageBytes(TGlobalCounters::GetAdvanceMemoryShortageBytes())
         , AdvanceBudgetCuts(TGlobalCounters::GetAdvanceBudgetCuts())
+        , AdvanceIdealCapped(TGlobalCounters::GetAdvanceIdealCapped())
         , AdvanceMoveLanded(TGlobalCounters::GetAdvanceMoveLanded())
         , AdvanceMoveReturned(TGlobalCounters::GetAdvanceMoveReturned())
+        , AccumulatorStops(TGlobalCounters::GetAccumulatorStops())
+        , LevelStops(TGlobalCounters::GetLevelStops())
+        , SnapshotStops(TGlobalCounters::GetSnapshotStops())
         , PlannerModifyPortionsUs(TGlobalCounters::GetPlannerModifyPortionsUs())
         , PlannerUsefulMetricUs(TGlobalCounters::GetPlannerUsefulMetricUs())
         , PlannerNextTaskUs(TGlobalCounters::GetPlannerNextTaskUs())

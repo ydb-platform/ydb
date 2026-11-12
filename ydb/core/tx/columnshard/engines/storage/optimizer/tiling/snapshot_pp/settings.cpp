@@ -4,6 +4,7 @@
 
 #include <util/string/builder.h>
 
+#include <optional>
 #include <type_traits>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSnapshotTiling {
@@ -21,8 +22,12 @@ TConclusionStatus TSnapshotTilingSettings::Validate() const {
     if (AccumulatorTriggerPortions < 2 || AccumulatorOverloadPortions <= AccumulatorTriggerPortions) {
         return TConclusionStatus::Fail("tiling-s: accumulator_trigger_portions must be at least 2 and below accumulator_overload_portions");
     }
-    if (TaskPortions < 2) {
-        return TConclusionStatus::Fail("tiling-s: task_portions must be at least 2");
+    for (const auto& [name, portions] :
+        std::initializer_list<std::pair<const char*, ui64>>{ { "accumulator_task_portions", AccumulatorTaskPortions },
+            { "level_task_portions", LevelTaskPortions }, { "snapshot_task_portions", SnapshotTaskPortions } }) {
+        if (portions < 2) {
+            return TConclusionStatus::Fail(TStringBuilder() << "tiling-s: " << name << " must be at least 2");
+        }
     }
     if (PortionExpectedSize == 0) {
         return TConclusionStatus::Fail("tiling-s: portion_expected_size must be positive");
@@ -30,10 +35,16 @@ TConclusionStatus TSnapshotTilingSettings::Validate() const {
     if (AccumulatorPortionSizeLimit > PortionExpectedSize) {
         return TConclusionStatus::Fail("tiling-s: accumulator_portion_size_limit must not exceed portion_expected_size");
     }
-    if (TaskBytes < static_cast<ui64>(MinTaskPortionsFactor) * PortionExpectedSize) {
-        return TConclusionStatus::Fail(TStringBuilder() << "tiling-s: task_bytes (" << TaskBytes << ") must hold at least "
-                                                        << MinTaskPortionsFactor << " expected portions of " << PortionExpectedSize
-                                                        << " bytes; raise task_bytes or lower portion_expected_size");
+    for (const auto& [name, bytes] : std::initializer_list<std::pair<const char*, ui64>>{ { "accumulator_task_bytes", AccumulatorTaskBytes },
+             { "level_task_bytes", LevelTaskBytes }, { "snapshot_task_bytes", SnapshotTaskBytes } }) {
+        if (bytes < static_cast<ui64>(MinTaskPortionsFactor) * PortionExpectedSize) {
+            return TConclusionStatus::Fail(TStringBuilder() << "tiling-s: " << name << " (" << bytes << ") must hold at least "
+                                                            << MinTaskPortionsFactor << " expected portions of " << PortionExpectedSize
+                                                            << " bytes; raise it or lower portion_expected_size");
+        }
+    }
+    if (IdealSweepBudgets < 1) {
+        return TConclusionStatus::Fail("tiling-s: ideal_sweep_budgets must be at least 1");
     }
     if (SettleTime == TDuration::Zero()) {
         return TConclusionStatus::Fail("tiling-s: settle_time must be positive");
@@ -53,8 +64,13 @@ NJson::TJsonValue TSnapshotTilingSettings::SerializeToJson() const {
     json["overload_height"] = OverloadHeight;
     json["accumulator_trigger_portions"] = AccumulatorTriggerPortions;
     json["accumulator_overload_portions"] = AccumulatorOverloadPortions;
-    json["task_bytes"] = TaskBytes;
-    json["task_portions"] = TaskPortions;
+    json["accumulator_task_bytes"] = AccumulatorTaskBytes;
+    json["level_task_bytes"] = LevelTaskBytes;
+    json["snapshot_task_bytes"] = SnapshotTaskBytes;
+    json["accumulator_task_portions"] = AccumulatorTaskPortions;
+    json["level_task_portions"] = LevelTaskPortions;
+    json["snapshot_task_portions"] = SnapshotTaskPortions;
+    json["ideal_sweep_budgets"] = static_cast<ui64>(IdealSweepBudgets);
     json["portion_expected_size"] = PortionExpectedSize;
     json["min_task_portions_factor"] = static_cast<ui64>(MinTaskPortionsFactor);
     json["settle_time_seconds"] = SettleTime.Seconds();
@@ -80,6 +96,11 @@ TConclusionStatus TSnapshotTilingSettings::DeserializeFromJson(const NJson::TJso
         field = static_cast<std::remove_reference_t<decltype(field)>>(parsed);
         return TConclusionStatus::Success();
     };
+    // The shorthands task_bytes and task_portions set every kind that no key of its own sets, whatever the key order.
+    std::optional<ui64> taskBytes;
+    std::optional<ui64> taskPortions;
+    bool accumulatorBytesSet = false, levelBytesSet = false, snapshotBytesSet = false;
+    bool accumulatorPortionsSet = false, levelPortionsSet = false, snapshotPortionsSet = false;
     for (const auto& [name, value] : json.GetMapSafe()) {
         TConclusionStatus status = TConclusionStatus::Success();
         if (name == "accumulator_portion_size_limit") {
@@ -97,9 +118,29 @@ TConclusionStatus TSnapshotTilingSettings::DeserializeFromJson(const NJson::TJso
         } else if (name == "accumulator_overload_portions") {
             status = readUnsigned(name, value, Max<ui64>(), AccumulatorOverloadPortions);
         } else if (name == "task_bytes") {
-            status = readUnsigned(name, value, Max<ui64>(), TaskBytes);
+            status = readUnsigned(name, value, Max<ui64>(), taskBytes.emplace());
         } else if (name == "task_portions") {
-            status = readUnsigned(name, value, Max<ui64>(), TaskPortions);
+            status = readUnsigned(name, value, Max<ui64>(), taskPortions.emplace());
+        } else if (name == "accumulator_task_bytes") {
+            status = readUnsigned(name, value, Max<ui64>(), AccumulatorTaskBytes);
+            accumulatorBytesSet = true;
+        } else if (name == "level_task_bytes") {
+            status = readUnsigned(name, value, Max<ui64>(), LevelTaskBytes);
+            levelBytesSet = true;
+        } else if (name == "snapshot_task_bytes") {
+            status = readUnsigned(name, value, Max<ui64>(), SnapshotTaskBytes);
+            snapshotBytesSet = true;
+        } else if (name == "accumulator_task_portions") {
+            status = readUnsigned(name, value, Max<ui64>(), AccumulatorTaskPortions);
+            accumulatorPortionsSet = true;
+        } else if (name == "level_task_portions") {
+            status = readUnsigned(name, value, Max<ui64>(), LevelTaskPortions);
+            levelPortionsSet = true;
+        } else if (name == "snapshot_task_portions") {
+            status = readUnsigned(name, value, Max<ui64>(), SnapshotTaskPortions);
+            snapshotPortionsSet = true;
+        } else if (name == "ideal_sweep_budgets") {
+            status = readUnsigned(name, value, Max<ui32>(), IdealSweepBudgets);
         } else if (name == "portion_expected_size") {
             status = readUnsigned(name, value, Max<ui64>(), PortionExpectedSize);
         } else if (name == "min_task_portions_factor") {
@@ -133,6 +174,28 @@ TConclusionStatus TSnapshotTilingSettings::DeserializeFromJson(const NJson::TJso
         }
         if (status.IsFail()) {
             return status;
+        }
+    }
+    if (taskBytes) {
+        if (!accumulatorBytesSet) {
+            AccumulatorTaskBytes = *taskBytes;
+        }
+        if (!levelBytesSet) {
+            LevelTaskBytes = *taskBytes;
+        }
+        if (!snapshotBytesSet) {
+            SnapshotTaskBytes = *taskBytes;
+        }
+    }
+    if (taskPortions) {
+        if (!accumulatorPortionsSet) {
+            AccumulatorTaskPortions = *taskPortions;
+        }
+        if (!levelPortionsSet) {
+            LevelTaskPortions = *taskPortions;
+        }
+        if (!snapshotPortionsSet) {
+            SnapshotTaskPortions = *taskPortions;
         }
     }
     return Validate();

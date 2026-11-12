@@ -135,6 +135,8 @@ private:
             {"portions", task.Portions.size()},
             {"bytes", task.Bytes},
             {"ideal_bytes", task.IdealBytes},
+            {"ideal_capped", task.IdealCapped},
+            {"stop_cause", (ui32)task.StopCause},
             {"target_level", (ui32)task.TargetLevel},
             {"cuts", task.CheckPoints.size()});
         return result;

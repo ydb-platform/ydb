@@ -152,9 +152,15 @@ public:
         HistogramCompactionDuration = TBase::GetHistogram("Compaction/DurationMs", NMonitoring::ExponentialHistogram(25, 2));
         HistogramTaskGenerationDuration = TBase::GetHistogram("TaskGeneration/DurationUs", NMonitoring::ExponentialHistogram(25, 2));
         HistogramTaskGenerationCount = TBase::GetHistogram("TaskGeneration/Count", NMonitoring::LinearHistogram(20, 0, 1));
+        // Every reason the planners emit exists from the start (2026-11-06), so that a ratio over a reason that has
+        // not run yet, the levels on a fresh node, draws zero instead of nothing: the monitoring system has no series
+        // to sum until the first task of that reason creates them.
+        for (const char* reason : { "accumulator", "level", "snapshot_merge", "snapshot_prefix", "snapshot_move", "generic" }) {
+            ByReason.emplace(reason, std::make_shared<TCompactionTaskReasonCounters>(CreateSubGroup("reason", reason)));
+        }
     }
 
-    /// The counters of a task reason, created on first use; the set of reasons is the planners' to define.
+    /// The counters of a task reason: the known ones exist from the start, an unknown one is created on first use.
     static const TCompactionTaskReasonCounters& ForReason(const TString& reason) {
         auto* self = Singleton<TGeneralCompactionCounters>();
         TGuard<TMutex> guard(self->ReasonsMutex);

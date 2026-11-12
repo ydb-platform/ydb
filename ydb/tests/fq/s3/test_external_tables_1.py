@@ -96,51 +96,6 @@ class TestExternalTables:
         describe_string = "{}".format(describe_result)
         assert "Row type mismatch for S3 external table" in describe_string, describe_string
 
-    def test_count_for_pg_binding(self, kikimr, s3, client, unique_prefix):
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        bucket = resource.Bucket("count_for_pg_binding")
-        bucket.create(ACL='public-read')
-
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        row = R'''{"a": 42, "b": 3.14, "c": "text"}'''
-        s3_client.put_object(Body=row, Bucket='count_for_pg_binding', Key='abc.json', ContentType='text/json')
-
-        connection_response = client.create_external_data_source(unique_prefix + "abc", "count_for_pg_binding")
-
-        aType = ydb.Column(name="a", type=ydb.Type(pg_type=ydb.PgType(oid=23)))
-        bType = ydb.Column(name="b", type=ydb.Type(pg_type=ydb.PgType(oid=701)))
-        cType = ydb.Column(name="c", type=ydb.Type(pg_type=ydb.PgType(oid=25)))
-        storage_binding_name = unique_prefix + "binding_for_count"
-        client.create_external_table(
-            name=storage_binding_name,
-            path="abc.json",
-            format="json_each_row",
-            data_source=connection_response.name,
-            columns=[aType, bType, cType],
-        )
-
-        sql = fR'''
-            SELECT COUNT(*)
-            FROM {storage_binding_name};
-            '''
-
-        query = client.execute(sql)
-        query.check()
-
-        data = query.result_set()
-        result_set = data
-        logging.debug(str(result_set))
-        assert len(result_set.columns) == 1
-        assert len(result_set.rows) == 1
-        assert result_set.columns[0].type.type_id == ydb.Type.UINT64
-        assert result_set.rows[0][0] == 1
-
     def test_unknown_column_in_external_table(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"

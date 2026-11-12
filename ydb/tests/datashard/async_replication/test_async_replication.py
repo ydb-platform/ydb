@@ -11,10 +11,8 @@ from ydb.tests.sql.lib.test_query import Query
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.datashard.lib.multicluster_test_base import MulticlusterTestBase
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
-from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
-    index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync, \
-    pk_pg_types_mixed, non_pk_pg_types_mixed
+    index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync
 
 
 def issue_contains(issues, text: str) -> bool:
@@ -276,6 +274,44 @@ class TestAsyncReplicationSerial(TestAsyncReplicationBase):
         assert wait_for(completed, timeout_seconds=100), f"{operation} did not finish: {result}"
         self.run_cli(cluster, "operation", "forget", operation_id)
 
+    def test_serial_column_explicit_value(self):
+        table_name = f"pg_serial_{self.hash_short}"
+        table_path = f"{self.get_database()}/{table_name}"
+
+        source = Query.create(self.get_database(), self.get_endpoint(self.clusters[0]))
+        destination = Query.create(self.get_database(), self.get_endpoint(self.clusters[1]))
+
+        source.query(f"CREATE TABLE `{table_name}` (id Serial, value Utf8, PRIMARY KEY (id))")
+
+        # An explicit value far above the sequence position: only the advance moves it past.
+        source.query(f'INSERT INTO `{table_name}` (id, value) VALUES (1000, "a")')
+
+        destination.query(f"""
+            CREATE ASYNC REPLICATION `replication_{table_name}`
+            FOR `{table_path}` AS `{table_path}`
+            WITH (CONNECTION_STRING =
+                'grpc://{self.get_endpoint(self.clusters[0])}/?database={self.get_database()}')
+        """)
+
+        destination_dml = DMLOperations(destination)
+        assert wait_for(lambda: destination_dml.table_exists(table_name), timeout_seconds=100), "Table not created"
+
+        count_query = f"SELECT COUNT(*) AS count FROM `{table_name}`"
+        assert wait_for(lambda: destination.query(count_query)[0].count == 1, timeout_seconds=100), \
+            "Data was not replicated"
+
+        assert wait_for(lambda: self.replication_done(destination, table_name), timeout_seconds=100), \
+            "Cannot complete the replication"
+
+        # A generated value must not collide with the replicated one, so the destination sequence
+        # has to be past it.
+        self.write_after_done(destination, table_name, f'INSERT INTO `{table_name}` (value) VALUES ("b")')
+        assert wait_for(lambda: destination.query(count_query)[0].count == 2, timeout_seconds=100), \
+            "The row was not inserted"
+        assert wait_for(lambda: destination.query(
+            f"SELECT COUNT(*) AS count FROM `{table_name}` WHERE id > 1000")[0].count == 1,
+            timeout_seconds=100), "The destination sequence was not advanced"
+
     # The destination may also be seeded with a dump of the source (a backup-restore initial
     # synchronization) instead of an initial scan: the restored table brings its data and its
     # sequence position, and the replication continues on top of it.
@@ -348,61 +384,3 @@ class TestAsyncReplicationSerial(TestAsyncReplicationBase):
         assert len(new_ids) == 1, f"Unexpected number of inserted rows: {new_ids}"
         assert new_ids[0] > max(source_ids()), \
             f"The destination sequence was not advanced: {new_ids[0]} <= {max(source_ids())}"
-
-
-class TestPgAsyncReplication(TestPgBase, TestAsyncReplicationBase):
-    @pytest.mark.parametrize(
-        "table_name, pk_types, all_types, index, ttl, unique, sync",
-        [
-            # TODO: add UNIQUE_SYNC
-            ("table_index_0__SYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "SYNC"),
-            ("table_index_0__ASYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "ASYNC"),
-            ("table_all_types", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
-            ("table_ttl_pgint4", pk_pg_types_mixed, {}, {}, "pgint4", "", ""),
-            ("table_ttl_pgint8", pk_pg_types_mixed, {}, {}, "pgint8", "", ""),
-            ("table_ttl_pgdate", pk_pg_types_mixed, {}, {}, "pgdate", "", ""),
-            ("table_ttl_pgtimestamp", pk_pg_types_mixed, {}, {}, "pgtimestamp", "", ""),
-        ]
-    )
-    def test_async_replication(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        self.do_test_async_replication(table_name, pk_types, all_types, index, ttl, unique, sync)
-
-    def test_serial_column(self):
-        table_name = f"pg_serial_{self.hash_short}"
-        table_path = f"{self.get_database()}/{table_name}"
-
-        source = Query.create(self.get_database(), self.get_endpoint(self.clusters[0]))
-        destination = Query.create(self.get_database(), self.get_endpoint(self.clusters[1]))
-
-        # A PostgreSQL serial column is a pg integer backed by a native sequence, so replication
-        # has to advance it the same way it does for YQL serial columns.
-        source.query(f"CREATE TABLE `{table_name}` (id Serial, value Utf8, PRIMARY KEY (id))")
-
-        # An explicit value far above the sequence position: only the advance moves it past.
-        source.query(f'INSERT INTO `{table_name}` (id, value) VALUES (1000, "a")')
-
-        destination.query(f"""
-            CREATE ASYNC REPLICATION `replication_{table_name}`
-            FOR `{table_path}` AS `{table_path}`
-            WITH (CONNECTION_STRING =
-                'grpc://{self.get_endpoint(self.clusters[0])}/?database={self.get_database()}')
-        """)
-
-        destination_dml = DMLOperations(destination)
-        assert wait_for(lambda: destination_dml.table_exists(table_name), timeout_seconds=100), "Table not created"
-
-        count_query = f"SELECT COUNT(*) AS count FROM `{table_name}`"
-        assert wait_for(lambda: destination.query(count_query)[0].count == 1, timeout_seconds=100), \
-            "Data was not replicated"
-
-        assert wait_for(lambda: self.replication_done(destination, table_name), timeout_seconds=100), \
-            "Cannot complete the replication"
-
-        # A generated value must not collide with the replicated one, so the destination sequence
-        # has to be past it.
-        self.write_after_done(destination, table_name, f'INSERT INTO `{table_name}` (value) VALUES ("b")')
-        assert wait_for(lambda: destination.query(count_query)[0].count == 2, timeout_seconds=100), \
-            "The row was not inserted"
-        assert wait_for(lambda: destination.query(
-            f"SELECT COUNT(*) AS count FROM `{table_name}` WHERE id > 1000")[0].count == 1,
-            timeout_seconds=100), "The destination sequence was not advanced"

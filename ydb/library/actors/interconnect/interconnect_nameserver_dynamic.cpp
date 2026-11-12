@@ -162,7 +162,8 @@ namespace NActors {
                     node.Address, node.Host, node.ResolveHost, node.Port, node.Location);
 
                 for (auto& pending : PendingRequests) {
-                    if (pending.Request && pending.Request->Get()->NodeId == node.NodeId) {
+                    if (pending.Request && pending.Request->Get()->NodeId == node.NodeId
+                            && pending.Deadline > ctx.Monotonic()) {
                         YDB_LOG_TRACE("Pending discovered",
                             {"marker", "ICN05"},
                             {"nodeId", node.NodeId});

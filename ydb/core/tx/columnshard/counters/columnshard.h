@@ -116,9 +116,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr OverloadSmallBlobsQuotaBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadSmallBlobsQuotaCount;
 
-    std::shared_ptr<TValueAggregationClient> InternalCompactionGranuleBytes;
-    std::shared_ptr<TValueAggregationClient> InternalCompactionGranulePortionsCount;
-
     std::shared_ptr<TValueAggregationClient> SplitCompactionGranuleBytes;
     std::shared_ptr<TValueAggregationClient> SplitCompactionGranulePortionsCount;
 
@@ -126,8 +123,6 @@ private:
     NMonitoring::THistogramPtr HistogramFailedWritePutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramWriteTxCompleteDurationMs;
 
-    NMonitoring::TDynamicCounters::TCounterPtr WritePutBlobsCount;
-    NMonitoring::TDynamicCounters::TCounterPtr WriteRequests;
     THashMap<EWriteFailReason, NMonitoring::TDynamicCounters::TCounterPtr> FailedWriteRequests;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
     std::vector<NMonitoring::TDynamicCounters::TCounterPtr> WaitingOverloads;
@@ -143,14 +138,9 @@ public:
 
     void OnWriteOverload(const EOverloadStatus status, const ui32 size) const;
 
-    void OnStartWriteRequest() const {
-        WriteRequests->Add(1);
-    }
-
     void OnFailedWriteResponse(const EWriteFailReason reason) const;
 
     void OnSuccessWriteResponse() const {
-        WriteRequests->Sub(1);
         SuccessWriteRequests->Add(1);
     }
 
@@ -164,11 +154,6 @@ public:
 
     void OnWriteTxComplete(const TDuration d) const {
         HistogramWriteTxCompleteDurationMs->Collect(d.MilliSeconds());
-    }
-
-    void OnInternalCompactionInfo(const ui64 bytes, const ui32 portionsCount) const {
-        InternalCompactionGranuleBytes->SetValue(bytes);
-        InternalCompactionGranulePortionsCount->SetValue(portionsCount);
     }
 
     void OnSplitCompactionInfo(const ui64 bytes, const ui32 portionsCount) const {

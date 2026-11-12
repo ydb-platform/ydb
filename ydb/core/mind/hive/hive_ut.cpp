@@ -3617,9 +3617,22 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(tabletInfo2.GetGeneration(), tabletInfo1.GetGeneration());
     }
 
-    Y_UNIT_TEST(TestLocalReconnectsToNewHiveBeforeOldPipeRetry) {
+    enum class ELocalNewHivePipeState {
+        Retrying,
+        Connecting,
+        Connected,
+    };
+
+    void TestLocalNewHiveGeneration(ELocalNewHivePipeState pipeState) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
+        auto waitFor = [&](const TString& description, auto&& condition, TDuration timeout) {
+            const TInstant deadline = runtime.GetCurrentTime() + timeout;
+            while (!condition() && runtime.GetCurrentTime() < deadline) {
+                runtime.SimulateSleep(Min(TDuration::MilliSeconds(10), deadline - runtime.GetCurrentTime()));
+            }
+            UNIT_ASSERT_C(condition(), description);
+        };
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 testerTablet = MakeTabletID(false, 1);
         const TActorId sender = runtime.AllocateEdgeActor();
@@ -3643,7 +3656,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const TActorId registrar = runtime.GetLocalServiceId(
             MakeLocalRegistrarID(runtime.GetNodeId(0), hiveTablet), 0);
         auto runningGeneration = [&]() {
-            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(tabletId));
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(tabletId, false));
             TAutoPtr<IEventHandle> handle;
             const auto* info = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
             UNIT_ASSERT_VALUES_EQUAL(info->Record.TabletsSize(), 1);
@@ -3654,27 +3667,27 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const auto originalTabletGeneration = runningGeneration();
 
         // Capture the registrar's first new pipe after the old Hive is killed.
-        // Other pipes (including the replacement created after the new Ping)
-        // retain their normal retry and connection behavior.
-        TActorId retryingPipe;
+        TActorId firstPipe;
         auto capturePipe = runtime.AddObserver<IEventHandle>([&](auto& ev) {
-            if (!retryingPipe && ev->Sender == registrar
+            if (!firstPipe && ev->Sender == registrar
                     && ev->Type == TEvLocal::EvRegisterNode
                     && ev->GetTypeRewrite() == TEvTabletPipe::EvSend) {
-                retryingPipe = ev->GetRecipientRewrite();
-                runtime.EnableScheduleForActor(retryingPipe, true);
+                firstPipe = ev->GetRecipientRewrite();
+                runtime.EnableScheduleForActor(firstPipe, true);
             }
         });
         // Retry timers have no sender, which the verbose TBlockEvents logger
         // cannot name. Keep their original handles without changing the timer.
         std::deque<TEvTabletPipe::TEvClientRetry::TPtr> oldRetry;
         auto holdOldRetry = runtime.AddObserver<TEvTabletPipe::TEvClientRetry>([&](auto& ev) {
-            if (retryingPipe && ev->GetRecipientRewrite() == retryingPipe) {
+            if (pipeState == ELocalNewHivePipeState::Retrying
+                    && firstPipe && ev->GetRecipientRewrite() == firstPipe) {
                 oldRetry.emplace_back(ev.Release());
             }
         });
         auto rejectConnect = runtime.AddObserver<TEvTabletPipe::TEvConnect>([&](auto& ev) {
-            if (retryingPipe && ev->Sender == retryingPipe
+            if (pipeState == ELocalNewHivePipeState::Retrying
+                    && firstPipe && ev->Sender == firstPipe
                     && ev->Get()->Record.GetTabletId() == hiveTablet) {
                 runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
                     new TEvTabletPipe::TEvConnectResult(NKikimrProto::TRYLATER,
@@ -3688,15 +3701,59 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 && ev->Get()->Record.GetHiveGeneration() > initialHiveGeneration;
         });
 
+        TBlockEvents<TEvTabletPipe::TEvConnectResult> newConnectResult(runtime, [&](const auto& ev) {
+            return pipeState == ELocalNewHivePipeState::Connecting
+                && firstPipe && ev->GetRecipientRewrite() == firstPipe
+                && ev->Get()->Record.GetTabletId() == hiveTablet
+                && ev->Get()->Record.GetStatus() == NKikimrProto::OK
+                && ev->Get()->Record.GetGeneration() > initialHiveGeneration;
+        });
+        TBlockEvents<TEvTabletPipe::TEvClientConnected> newConnected(runtime, [&](const auto& ev) {
+            return pipeState == ELocalNewHivePipeState::Connected
+                && firstPipe && ev->GetRecipientRewrite() == registrar
+                && ev->Get()->ClientId == firstPipe && ev->Get()->Status == NKikimrProto::OK
+                && ev->Get()->Generation > initialHiveGeneration;
+        });
+
         RebootTablet(runtime, hiveTablet, sender);
-        runtime.WaitFor("new Hive Ping while the registrar pipe is backing off", [&] {
-            return !newPing.empty() && !oldRetry.empty();
+        waitFor("new Hive Ping and the controlled pipe state", [&] {
+            if (newPing.empty()) {
+                return false;
+            }
+            switch (pipeState) {
+            case ELocalNewHivePipeState::Retrying:
+                return !oldRetry.empty();
+            case ELocalNewHivePipeState::Connecting:
+                return !newConnectResult.empty();
+            case ELocalNewHivePipeState::Connected:
+                return !newConnected.empty();
+            }
+            return false;
         }, TDuration::Seconds(10));
         const TActorId newHive = newPing.front()->Sender;
         const auto currentPing = newPing.front()->Get()->Record;
         UNIT_ASSERT_UNEQUAL(initialHive, newHive);
         rejectConnect.Remove();
         capturePipe.Remove();
+
+        ui32 closedFirstPipe = 0;
+        ui32 additionalRegistrations = 0;
+        TActorId synchronizingPipe;
+        auto preservePipe = runtime.AddObserver<IEventHandle>([&](auto& ev) {
+            if (ev->Sender != registrar) {
+                return;
+            }
+            if (ev->GetTypeRewrite() == TEvents::TEvPoisonPill::EventType
+                    && ev->GetRecipientRewrite() == firstPipe) {
+                ++closedFirstPipe;
+            }
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvSend) {
+                additionalRegistrations += ev->Type == TEvLocal::EvRegisterNode;
+                if (ev->Type == TEvLocal::EvSyncTablets) {
+                    synchronizingPipe = ev->GetRecipientRewrite();
+                }
+            }
+        });
 
         ui32 readyStatuses = 0;
         ui32 outdatedStatuses = 0;
@@ -3711,10 +3768,26 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         });
         newPing.Stop().Unblock();
-        runtime.WaitFor("registrar available to new Hive before the old retry", [&] {
+        if (pipeState != ELocalNewHivePipeState::Retrying) {
+            // The pipe has already reached the new Hive. Processing its Ping
+            // must preserve that handshake, even before the owner notification.
+            runtime.SimulateSleep(TDuration::MilliSeconds(10));
+            UNIT_ASSERT_VALUES_EQUAL_C(closedFirstPipe, 0, "new Hive Ping closed its in-progress pipe");
+            UNIT_ASSERT_VALUES_EQUAL_C(additionalRegistrations, 0, "new Hive Ping created a replacement pipe");
+            newConnectResult.Stop().Unblock();
+            newConnected.Stop().Unblock();
+        }
+        waitFor("registrar available to new Hive before releasing the old retry", [&] {
             return readyStatuses > 0;
         }, TDuration::Seconds(1));
-        UNIT_ASSERT(!oldRetry.empty());
+        if (pipeState == ELocalNewHivePipeState::Retrying) {
+            UNIT_ASSERT(!oldRetry.empty());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(closedFirstPipe, 0);
+            UNIT_ASSERT_VALUES_EQUAL(additionalRegistrations, 0);
+            UNIT_ASSERT_VALUES_EQUAL(synchronizingPipe, firstPipe);
+        }
+        preservePipe.Remove();
 
         // The new Hive must have reconciled the surviving tablet, preserving its
         // running instance rather than requiring an unrelated retry to finish.
@@ -3737,7 +3810,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // A genuine earlier Ping may arrive late. Its recorded sender and
         // generation must be rejected without disturbing the new connection.
         replayPing(initialHive, initialPing);
-        runtime.WaitFor("outdated reply to the former Hive", [&] {
+        waitFor("outdated reply to the former Hive", [&] {
             return outdatedStatuses == 1;
         }, TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(registrations, 0);
@@ -3748,7 +3821,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // reason to recreate a healthy pipe or replay the tablet synchronization.
         const auto readyBeforeDuplicate = readyStatuses;
         replayPing(newHive, currentPing);
-        runtime.WaitFor("status refresh after the duplicate current Ping", [&] {
+        waitFor("status refresh after the duplicate current Ping", [&] {
             return readyStatuses > readyBeforeDuplicate;
         }, TDuration::Seconds(1));
         runtime.SimulateSleep(TDuration::MilliSeconds(10));
@@ -3760,6 +3833,136 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             runtime.Send(oldRetry.front().Release(), 0, true);
             oldRetry.pop_front();
         }
+    }
+
+    Y_UNIT_TEST(TestLocalReconnectsToNewHiveBeforeOldPipeRetry) {
+        TestLocalNewHiveGeneration(ELocalNewHivePipeState::Retrying);
+    }
+
+    Y_UNIT_TEST(TestLocalKeepsPipeConnectingToNewHive) {
+        TestLocalNewHiveGeneration(ELocalNewHivePipeState::Connecting);
+    }
+
+    Y_UNIT_TEST(TestLocalKeepsPipeConnectedToNewHiveBeforeNotification) {
+        TestLocalNewHiveGeneration(ELocalNewHivePipeState::Connected);
+    }
+
+    Y_UNIT_TEST(TestLocalNewHivePingInvalidatesOldBootBeforePipeNotification) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        auto waitFor = [&](const TString& description, auto&& condition) {
+            const TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(10);
+            while (!condition() && runtime.GetCurrentTime() < deadline) {
+                runtime.SimulateSleep(Min(TDuration::MilliSeconds(10), deadline - runtime.GetCurrentTime()));
+            }
+            UNIT_ASSERT_C(condition(), description);
+        };
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId sender = runtime.AllocateEdgeActor();
+        ui32 initialHiveGeneration = 0;
+        TActorId initialHive;
+        auto firstPing = runtime.AddObserver<TEvLocal::TEvPing>([&](auto& ev) {
+            if (ev->Get()->Record.GetHiveId() == hiveTablet) {
+                initialHiveGeneration = ev->Get()->Record.GetHiveGeneration();
+                initialHive = ev->Sender;
+            }
+        });
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        const ui64 onlineTabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500, TTabletTypes::Dummy, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, onlineTabletId, 0);
+        UNIT_ASSERT(initialHiveGeneration > 0);
+        firstPing.Remove();
+        const TActorId registrar = runtime.GetLocalServiceId(
+            MakeLocalRegistrarID(runtime.GetNodeId(0), hiveTablet), 0);
+        auto runningGeneration = [&]() {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(onlineTabletId, false));
+            TAutoPtr<IEventHandle> handle;
+            const auto* info = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(info->Record.TabletsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(info->Record.GetTablets(0).GetVolatileState()),
+                static_cast<ui32>(NKikimrHive::TABLET_VOLATILE_STATE_RUNNING));
+            return info->Record.GetTablets(0).GetGeneration();
+        };
+        const auto originalGeneration = runningGeneration();
+
+        ui64 pendingTabletId = 0;
+        auto identifyPendingBoot = runtime.AddObserver<TEvLocal::TEvBootTablet>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == registrar && ev->Sender == initialHive
+                    && ev->Get()->Record.GetInfo().GetTabletID() != onlineTabletId) {
+                pendingTabletId = ev->Get()->Record.GetInfo().GetTabletID();
+            }
+        });
+        TBlockEvents<TEvTablet::TEvReady> oldReady(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == registrar && ev->Get()->TabletID == pendingTabletId;
+        });
+        const ui64 requestedTabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100501, TTabletTypes::Dummy, BINDED_CHANNELS), 0, false);
+        waitFor("the second tablet is booting with its real Ready held", [&] { return !oldReady.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(pendingTabletId, requestedTabletId);
+        const TActorId oldBootActor = oldReady.front()->Sender;
+        identifyPendingBoot.Remove();
+
+        // The pipe can die before Local sees its notification. Keep Local's
+        // previous connected state until after the new Hive's Ping is handled.
+        TBlockEvents<TEvTabletPipe::TEvClientDestroyed> oldDestroyed(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == registrar && ev->Get()->TabletId == hiveTablet;
+        });
+        TBlockEvents<TEvLocal::TEvPing> newPing(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == registrar && ev->Get()->Record.GetHiveId() == hiveTablet
+                && ev->Get()->Record.GetHiveGeneration() > initialHiveGeneration;
+        });
+        // A replacement boot must not independently remove the old attempt
+        // and mask whether Ping itself invalidates Local's in-boot state.
+        TBlockEvents<TEvLocal::TEvBootTablet> replacementBoot(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == registrar && ev->Sender != initialHive
+                && ev->Get()->Record.GetInfo().GetTabletID() == pendingTabletId;
+        });
+        ui32 poisonedOldBoot = 0;
+        auto poison = runtime.AddObserver<TEvents::TEvPoisonPill>([&](auto& ev) {
+            if (ev->Sender == registrar && ev->GetRecipientRewrite() == oldBootActor) {
+                ++poisonedOldBoot;
+            }
+        });
+
+        RebootTablet(runtime, hiveTablet, sender);
+        waitFor("new Hive Ping before the old pipe notification", [&] {
+            return !newPing.empty() && !oldDestroyed.empty();
+        });
+        const TActorId newHive = newPing.front()->Sender;
+        std::vector<NKikimrLocal::TEvSyncTablets> syncs;
+        auto sync = runtime.AddObserver<TEvLocal::TEvSyncTablets>([&](auto& ev) {
+            if (ev->Sender == registrar && ev->GetRecipientRewrite() == newHive) {
+                syncs.emplace_back(ev->Get()->Record);
+            }
+        });
+        ui32 readyStatuses = 0;
+        auto status = runtime.AddObserver<TEvLocal::TEvStatus>([&](auto& ev) {
+            if (ev->Sender == registrar && ev->GetRecipientRewrite() == newHive
+                    && ev->Get()->Record.GetStatus() == TEvLocal::TEvStatus::StatusOk) {
+                ++readyStatuses;
+            }
+        });
+
+        newPing.Stop().Unblock();
+        waitFor("new Hive Ping invalidates the old boot before pipe notification", [&] {
+            return poisonedOldBoot > 0;
+        });
+        UNIT_ASSERT(!oldDestroyed.empty());
+        oldDestroyed.Stop().Unblock();
+        waitFor("the new Hive receives Local's cleaned synchronization", [&] {
+            return !syncs.empty() && readyStatuses > 0;
+        });
+        for (const auto& record : syncs) {
+            for (const auto& tablet : record.GetInbootTablets()) {
+                UNIT_ASSERT_VALUES_UNEQUAL(tablet.GetTabletId(), pendingTabletId);
+            }
+            for (const auto& tablet : record.GetOnlineTablets()) {
+                UNIT_ASSERT_VALUES_UNEQUAL(tablet.GetTabletId(), pendingTabletId);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(runningGeneration(), originalGeneration);
     }
 
     Y_UNIT_TEST(TestLimitedNodeList) {
@@ -11892,6 +12095,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
             UNIT_ASSERT_VALUES_EQUAL(reportedTablets.size(), NUM_TABLETS);
 
+            // Suppress old-pile traffic through the end of this scenario;
+            // queued events are deliberately discarded. Only the captured
+            // oldReports are replayed explicitly as late resyncs below.
             TBlockEvents<TEvLocal::TEvPing> oldPings(runtime, [&](const auto& ev) {
                 return oldPileNode(ev->GetRecipientRewrite().NodeId());
             });

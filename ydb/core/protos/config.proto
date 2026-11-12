@@ -2825,6 +2825,11 @@ message THiveConfig {
         HIVE_BOOT_STRATEGY_FAST = 1 [(EnumDescription) = "when the per-node startup limit is reached on one node, continue starting tablets on other nodes"];
     }
 
+    enum EBridgeTabletPlacement {
+        PRIMARY_PILE_ONLY = 0 [(EnumDescription) = "tablets run only in the primary pile (followers that must be present in all data centers still run in all synchronized piles)"];
+        ALL_SYNCHRONIZED_PILES = 1 [(EnumDescription) = "tablets run in any synchronized pile"];
+    }
+
     message TBootPriority {
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
         optional double Priority = 2;
@@ -2951,6 +2956,7 @@ message THiveConfig {
         optional uint64 DefaultMaximum = 4 [(ParamDescription) = "Node capacity for the resource when the node does not report one. Without it such nodes are ignored when balancing the resource."];
     }
     repeated TNamedResourceSettings NamedResources = 97 [(ParamDescription) = "Settings of named resources (e.g. resource broker queues). Entries override built-in defaults."];
+    optional EBridgeTabletPlacement BridgeTabletPlacement = 98 [default = PRIMARY_PILE_ONLY, (ParamDescription) = "In bridge mode, which piles tablets may run in. Tablets in piles no longer allowed are moved away."];
 }
 
 message THealthCheckConfig {

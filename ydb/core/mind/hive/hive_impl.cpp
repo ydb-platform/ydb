@@ -3023,7 +3023,16 @@ void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
     YDB_LOG_DEBUG("Handle TEvConsole::TEvConfigNotificationRequest: merged config",
         {"logPrefix", GetLogPrefix()},
         {"config", CurrentConfig});
+    OnBridgeTabletPlacementChanged(previousConfig.GetBridgeTabletPlacement());
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+}
+
+void THive::OnBridgeTabletPlacementChanged(NKikimrConfig::THiveConfig::EBridgeTabletPlacement previous) {
+    // switching to a wider placement needs no action: tablets spread out lazily
+    if (BridgeInfo && previous != GetBridgeTabletPlacement()
+            && GetBridgeTabletPlacement() == NKikimrConfig::THiveConfig::PRIMARY_PILE_ONLY) {
+        UpdatePiles();
+    }
 }
 
 void THive::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {

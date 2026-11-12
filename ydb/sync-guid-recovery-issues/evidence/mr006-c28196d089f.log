@@ -1,0 +1,129 @@
+------- [TL] {default-linux-x86_64, relwithdebinfo} ydb/core/blobstorage/ut_blobstorage/ut_replication/unittest >> Rec
+Test command err:
+RandomSeed# 15597632264116703423
+2026-11-11T21:29:21.751765Z 1 00h01m00.010512s :PIPE_SERVER ERROR: Node disconnected
+2026-11-11T21:29:21.802360Z 1 00h01m30.061536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:0:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:21.802659Z 1 00h01m30.061536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:0:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 8780823727046379786]
+2026-11-11T21:29:21.803485Z 1 00h01m30.061536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:0:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:21.852356Z 3 00h02m00.201024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:2:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:21.852661Z 3 00h02m00.201024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:2:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 13360671766360471118]
+2026-11-11T21:29:21.853457Z 3 00h02m00.201024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:2:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:21.903059Z 4 00h02m30.311536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:3:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:21.903368Z 4 00h02m30.311536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:3:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 12822632821805865933]
+2026-11-11T21:29:21.904176Z 4 00h02m30.311536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:3:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:21.955784Z 5 00h03m00.452048s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:4:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:21.956100Z 5 00h03m00.452048s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:4:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 14563084175495174977]
+2026-11-11T21:29:21.956885Z 5 00h03m00.452048s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:4:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:22.009114Z 6 00h03m30.561536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:5:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:22.009428Z 6 00h03m30.561536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:5:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 11106867798157995978]
+2026-11-11T21:29:22.010234Z 6 00h03m30.561536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:5:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:22.060949Z 7 00h04m00.701024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:6:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:22.061277Z 7 00h04m00.701024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:6:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 13916352990991747831]
+2026-11-11T21:29:22.062070Z 7 00h04m00.701024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:6:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:22.114225Z 8 00h04m30.803072s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:7:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:22.114531Z 8 00h04m30.803072s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:7:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 11514048660227764909]
+2026-11-11T21:29:22.115312Z 8 00h04m30.803072s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:7:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:22.172741Z 2 00h05m00.912048s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:1:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# Inconsistency Explanation# "VDisk Quorum Decision is Empty, but local state is [State# Final Guid# 4657620393144907240 DbBirthLsn# 0]"]
+2026-11-11T21:29:22.172765Z 2 00h05m00.912048s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:1:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# Inconsistency Guid# 0 Explanation# VDisk Quorum Decision is Empty, but local state is [State# Final Guid# 4657620393144907240 DbBirthLsn# 0]]
+2026-11-11T21:29:22.173042Z 1 00h05m00.961536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:0:0]: (2181038080) TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): NOT OK: msg# {TEvVSyncGuidResult: Status# VDISK_ERROR_STATE VDiskId# [82000000:1:0:1:0]}
+2026-11-11T21:29:22.173053Z 3 00h05m00.961536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:2:0]: (2181038080) TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): NOT OK: msg# {TEvVSyncGuidResult: Status# VDISK_ERROR_STATE VDiskId# [82000000:1:0:1:0]}
+2026-11-11T21:29:22.173060Z 4 00h05m00.961536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:3:0]: (2181038080) TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): NOT OK: msg# {TEvVSyncGuidResult: Status# VDISK_ERROR_STATE VDiskId# [82000000:1:0:1:0]}
+2026-11-11T21:29:22.173067Z 5 00h05m00.961536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:4:0]: (2181038080) TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): NOT OK: msg# {TEvVSyncGuidResult: Status# VDISK_ERROR_STATE VDiskId# [82000000:1:0:1:0]}
+2026-11-11T21:29:22.173074Z 6 00h05m00.961536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:5:0]: (2181038080) TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): NOT OK: msg# {TEvVSyncGuidResult: Status# VDISK_ERROR_STATE VDiskId# [82000000:1:0:1:0]}
+2026-11-11T21:29:22.173081Z 7 00h05m00.961536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:6:0]: (2181038080) TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): NOT OK: msg# {TEvVSyncGuidResult: Status# VDISK_ERROR_STATE VDiskId# [82000000:1:0:1:0]}
+2026-11-11T21:29:22.173088Z 8 00h05m00.961536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:7:0]: (2181038080) TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): NOT OK: msg# {TEvVSyncGuidResult: Status# VDISK_ERROR_STATE VDiskId# [82000000:1:0:1:0]}
+assertion failed at ydb/core/blobstorage/ut_blobstorage/recover_lost_data_restart.cpp:275, void (anonymous namespace)::TestRollingWipe(bool): (*decision == NSyncer::EDecision::Good) Inconsistency
+TBackTrace::Capture()+28 (0xAFDF9FC)
+NUnitTest::NPrivate::RaiseError(char const*, TBasicString<char, std::__y1::char_traits<char>> const&, bool)+128 (0xB0B1D30)
+??+0 (0xAEEA20A)
+NTestSuiteRecoverLostDataRestart::TCurrentTest::Execute()::'lambda'()::operator()() const+71 (0xAEECDD7)
+NUnitTest::TTestBase::Run(std::__y1::function<void ()>, TBasicString<char, std::__y1::char_traits<char>> const&, char const*, bool)+120 (0xB0B4238)
+NTestSuiteRecoverLostDataRestart::TCurrentTest::Execute()+440 (0xAEEC778)
+NUnitTest::TTestFactory::Execute()+771 (0xB0B4973)
+NUnitTest::RunMain(int, char**)+3213 (0xB0C296D)
+__libc_start_main+243 (0x7F0BEED9E083)
+_start+41 (0xA35C029)
+
+------- [TL] {default-linux-x86_64, relwithdebinfo} ydb/core/blobstorage/ut_blobstorage/ut_replication/unittest >> Rec
+Test command err:
+RandomSeed# 6691124020764341658
+2026-11-11T21:29:21.717168Z 1 00h01m00.010512s :PIPE_SERVER ERROR: Node disconnected
+2026-11-11T21:29:21.769310Z 1 00h01m30.061536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:0:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:21.769615Z 1 00h01m30.061536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:0:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 15063561191948322398]
+2026-11-11T21:29:21.770446Z 1 00h01m30.061536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:0:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:21.818518Z 3 00h02m00.201024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:2:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:21.818833Z 3 00h02m00.201024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:2:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 11479629396131854759]
+2026-11-11T21:29:21.819604Z 3 00h02m00.201024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:2:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:21.868434Z 4 00h02m30.311536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:3:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:21.868753Z 4 00h02m30.311536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:3:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 8061865922673293528]
+2026-11-11T21:29:21.869540Z 4 00h02m30.311536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:3:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:21.919044Z 5 00h03m00.452048s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:4:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:21.919346Z 5 00h03m00.452048s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:4:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 3212383966941674881]
+2026-11-11T21:29:21.920118Z 5 00h03m00.452048s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:4:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:21.972817Z 6 00h03m30.561536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:5:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:21.973137Z 6 00h03m30.561536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:5:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 1347917619098532470]
+2026-11-11T21:29:21.973922Z 6 00h03m30.561536s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:5:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:22.024474Z 7 00h04m00.701024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:6:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:22.024784Z 7 00h04m00.701024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:6:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 10736525577522829975]
+2026-11-11T21:29:22.025512Z 7 00h04m00.701024s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:6:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+2026-11-11T21:29:22.075939Z 8 00h04m30.803072s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:7:0]: (2181038080) TVDiskGuidRecoveryActor: DECISION: [Decision# LostData SubsequentFailure# 0]
+2026-11-11T21:29:22.076248Z 8 00h04m30.803072s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:7:0]: (2181038080) TVDiskGuidRecoveryActor: FINISH: [Decision# LostData Guid# 8677823997755800370]
+2026-11-11T21:29:22.077068Z 8 00h04m30.803072s :BS_SYNCER ERROR: PDiskId# 1000 VDISK[82000000:_:0:7:0]: (2181038080) THullOsirisActor: FINISH: BlobsResurrected# 0 PartsResurrected# 0
+assertion failed at ydb/core/blobstorage/ut_blobstorage/recover_lost_data_restart.cpp:283, void (anonymous namespace)::TestRollingWipe(bool): (result->Record.GetStatus() == NKikimrProto::OK) failed: (NODATA != OK) , with diff:
+(N|)O(DATA|K)
+TBackTrace::Capture()+28 (0xAFDF9FC)
+NUnitTest::NPrivate::RaiseError(char const*, TBasicString<char, std::__y1::char_traits<char>> const&, bool)+128 (0xB0B1D30)
+??+0 (0xAEEAC25)
+NTestSuiteRecoverLostDataRestart::TCurrentTest::Execute()::'lambda'()::operator()() const+71 (0xAEECDD7)
+NUnitTest::TTestBase::Run(std::__y1::function<void ()>, TBasicString<char, std::__y1::char_traits<char>> const&, char const*, bool)+120 (0xB0B4238)
+NTestSuiteRecoverLostDataRestart::TCurrentTest::Execute()+440 (0xAEEC778)
+NUnitTest::TTestFactory::Execute()+771 (0xB0B4973)
+NUnitTest::RunMain(int, char**)+3213 (0xB0C296D)
+__libc_start_main+243 (0x7F5C6E001083)
+_start+41 (0xA35C029)
+
+Number of suites by filter RecoverLostDataRestart::RollingWipe*
+
+ydb/core/blobstorage/ut_blobstorage/ut_replication <unittest> [size:large] nchunks:10 [tags: sb:logs_ttl=1, sb:ttl=1, ya:fat]
+------ [0/10] chunk ran 1 test (total:3.97s - test:3.93s)
+[fail] RecoverLostDataRestart::RollingWipeWithDelayedSelfGuid [default-linux-x86_64-relwithdebinfo] (0.72s)
+assertion failed at ydb/core/blobstorage/ut_blobstorage/recover_lost_data_restart.cpp:275, void (anonymous namespace)::TestRollingWipe(bool): (*decision == NSyncer::EDecision::Good) Inconsistency
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+TIntrusivePtr<TStdString<std::__y1::basic_string<char, std::__y1::char_traits<char>, std::__y1::allocator<char>>>, TStringPtrOps<TStdString<std::__y1::basic_string<char, std::__y1::char_traits<char>, std::__y1::allocator<char>>>>>::Get() const at /-S/util/generic/ptr.h:626:16
+TIntrusivePtr<TStdString<std::__y1::basic_string<char, std::__y1::char_traits<char>, std::__y1::allocator<char>>>, TStringPtrOps<TStdString<std::__y1::basic_string<char, std::__y1::char_traits<char>, std::__y1::allocator<char>>>>>::UnRef() at /-S/util/generic/ptr.h:671:13
+NTestSuiteRecoverLostDataRestart::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/blobstorage/ut_blobstorage/recover_lost_data_restart.cpp:0:1
+std::__y1::__function::__value_func<void ()>::~__value_func[abi:fe210000]() at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:266:16
+TIntrusivePtr<TStdString<std::__y1::basic_string<char, std::__y1::char_traits<char>, std::__y1::allocator<char>>>, TStringPtrOps<TStdString<std::__y1::basic_string<char, std::__y1::char_traits<char>, std::__y1::allocator<char>>>>>::UnRef() at /-S/util/generic/ptr.h:671:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+Logsdir: /tmp/sync-guid-recovery-d73ac283d28/ydb/core/blobstorage/ut_blobstorage/ut_replication/test-results/unittest/chunk0/testing_out_stuff
+Stderr: /tmp/sync-guid-recovery-d73ac283d28/ydb/core/blobstorage/ut_blobstorage/ut_replication/test-results/unittest/chunk0/testing_out_stuff/RecoverLostDataRestart.RollingWipeWithDelayedSelfGuid.err
+Stdout: /tmp/sync-guid-recovery-d73ac283d28/ydb/core/blobstorage/ut_blobstorage/ut_replication/test-results/unittest/chunk0/testing_out_stuff/RecoverLostDataRestart.RollingWipeWithDelayedSelfGuid.out
+------ [1/10] chunk ran 1 test (total:4.06s - test:4.03s)
+[fail] RecoverLostDataRestart::RollingWipeWithPreservedLocalState [default-linux-x86_64-relwithdebinfo] (0.82s)
+assertion failed at ydb/core/blobstorage/ut_blobstorage/recover_lost_data_restart.cpp:283, void (anonymous namespace)::TestRollingWipe(bool): (result->Record.GetStatus() == NKikimrProto::OK) failed: (NODATA != OK) , with diff:
+(N|)O(DATA|K)
+TBackTrace::Capture() at /-S/util/system/backtrace.cpp:284:14
+TIntrusivePtr<TStdString<std::__y1::basic_string<char, std::__y1::char_traits<char>, std::__y1::allocator<char>>>, TStringPtrOps<TStdString<std::__y1::basic_string<char, std::__y1::char_traits<char>, std::__y1::allocator<char>>>>>::Get() const at /-S/util/generic/ptr.h:626:16
+NPrivateStringBuilder::TStringBuilder::~TStringBuilder() at /-S/util/string/builder.h:8:11
+NTestSuiteRecoverLostDataRestart::TCurrentTest::Execute()::'lambda'()::operator()() const at /-S/ydb/core/blobstorage/ut_blobstorage/recover_lost_data_restart.cpp:0:1
+std::__y1::__function::__value_func<void ()>::~__value_func[abi:fe210000]() at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:266:16
+TIntrusivePtr<TStdString<std::__y1::basic_string<char, std::__y1::char_traits<char>, std::__y1::allocator<char>>>, TStringPtrOps<TStdString<std::__y1::basic_string<char, std::__y1::char_traits<char>, std::__y1::allocator<char>>>>>::UnRef() at /-S/util/generic/ptr.h:671:13
+NUnitTest::TTestFactory::Execute() at /-S/library/cpp/testing/unittest/registar.cpp:0:19
+NUnitTest::RunMain(int, char**) at /-S/library/cpp/testing/unittest/utmain.cpp:0:0
+?? at ??:0:0
+_start at ??:0:0
+
+Logsdir: /tmp/sync-guid-recovery-d73ac283d28/ydb/core/blobstorage/ut_blobstorage/ut_replication/test-results/unittest/chunk1/testing_out_stuff
+Stderr: /tmp/sync-guid-recovery-d73ac283d28/ydb/core/blobstorage/ut_blobstorage/ut_replication/test-results/unittest/chunk1/testing_out_stuff/RecoverLostDataRestart.RollingWipeWithPreservedLocalState.err
+Stdout: /tmp/sync-guid-recovery-d73ac283d28/ydb/core/blobstorage/ut_blobstorage/ut_replication/test-results/unittest/chunk1/testing_out_stuff/RecoverLostDataRestart.RollingWipeWithPreservedLocalState.out
+------ FAIL: 2 - FAIL ydb/core/blobstorage/ut_blobstorage/ut_replication
+
+Total 1 suite:
+	1 - FAIL
+Total 2 tests:
+	2 - FAIL
+Failed

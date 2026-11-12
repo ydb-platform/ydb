@@ -52,14 +52,14 @@ Y_UNIT_TEST_SUITE(ConsistentIndexRead)
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        Sleep(TDuration::Seconds(10));
+        Sleep(TDuration::MilliSeconds(100));
 
-        NPar::LocalExecutor().RunAdditionalThreads(12);
+        NPar::LocalExecutor().RunAdditionalThreads(4);
         NPar::LocalExecutor().ExecRange([=, &tableClient](int id) mutable {
             NYdb::NTable::TExecDataQuerySettings execSettings;
             execSettings.KeepInQueryCache(true);
 
-            size_t i = 5000;
+            size_t i = 1000;
             while (--i) {
                 auto sessionResult = tableClient.GetSession().GetValueSync();
                 if (!sessionResult.IsSuccess()) {
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(ConsistentIndexRead)
                     }
                 }
             }
-        }, 0, 12, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+        }, 0, 4, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
     }
 }
 

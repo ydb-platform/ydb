@@ -57,22 +57,33 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
 
         send_messages()
 
+        def leaders_ready(leaders, node_index):
+            return sum(leaders) == len(queues) and leaders[node_index] == len(queues)
+
+        deadline = time.time() + 480
         while True:
+            assert time.time() < deadline, (
+                f'timed out waiting for {len(queues)} leaders on node=0, last={self.get_leaders_per_nodes()}'
+            )
             for node_index in range(len(self.cluster.nodes))[1:]:
                 self._kick_tablets_from_node(node_index)
             leaders = self.get_leaders_per_nodes()
             logging.info(f'started leaders {leaders}, expected {len(queues)} only on node=0.')
-            if sum(leaders) == len(queues) and leaders[0] == len(queues):
+            if leaders_ready(leaders, 0):
                 break
-            time.sleep(5)
+            time.sleep(0.5)
 
         self._kick_tablets_from_node(0)
         self._enable_tablets_on_node(1)
 
+        deadline = time.time() + 480
         while True:
             leaders = self.get_leaders_per_nodes()
             logging.info(f'started leaders {leaders}, expected {len(queues)} only on node=1.')
-            if sum(leaders) == len(queues) and leaders[1] == len(queues):
+            if leaders_ready(leaders, 1):
                 break
-            time.sleep(5)
+            assert time.time() < deadline, (
+                f'timed out waiting for {len(queues)} leaders on node=1, last={leaders}'
+            )
+            time.sleep(0.5)
         send_messages()

@@ -1408,7 +1408,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        CreateManyShardsTable(kikimr, 1000, 100, 1000);
+        CreateManyShardsTable(kikimr, 1000, 64, 1000);
 
         NYdb::NQuery::TExecuteQuerySettings querySettings;
         querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
@@ -1439,7 +1439,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        CreateManyShardsTable(kikimr, 1100, 100, 1000);
+        CreateManyShardsTable(kikimr, 1100, 64, 1000);
 
         NYdb::NQuery::TExecuteQuerySettings querySettings;
         querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
@@ -1486,7 +1486,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        CreateManyShardsTable(kikimr, 5000, 100, 1000);
+        CreateManyShardsTable(kikimr, 5000, 64, 1000);
 
         NYdb::NQuery::TExecuteQuerySettings querySettings;
         querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);

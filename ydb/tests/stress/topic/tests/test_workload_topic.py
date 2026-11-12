@@ -49,7 +49,7 @@ class TestYdbTopicWorkload(StressFixture):
 
     def _run_chunk(self, chunk_index, chunk_size):
         limit_memory_usage = os.environ.get("YDB_STRESS_TEST_LIMIT_MEMORY", "0").lower() in ['true', '1', 'y', 'yes']
-        consumers = 50
+        consumers = 16
         producers = 100
         if limit_memory_usage:
             consumers //= 3

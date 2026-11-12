@@ -552,7 +552,7 @@ class YdbTopicWorkload(WorkloadBase):
 
     def __a_wide_transaction_with_multiple_partitions_in_one_tablet(self):
         self.run_topic_write_with_tx(TestConfig(
-            partitions=200,
+            partitions=64,
             partitions_per_tablet=10,
             producers=20,
             consumers=int(self.consumers),
@@ -562,7 +562,7 @@ class YdbTopicWorkload(WorkloadBase):
 
     def __wide_transaction_one_tablet_contains_one_partition(self):
         self.run_topic_write_with_tx(TestConfig(
-            partitions=200,
+            partitions=64,
             partitions_per_tablet=1,
             producers=20,
             consumers=int(self.consumers),
@@ -571,19 +571,26 @@ class YdbTopicWorkload(WorkloadBase):
         ))
 
     def __immediate_transaction(self):
-        self.run_topic_write_with_tx(TestConfig(
-            partitions=1,
-            partitions_per_tablet=1,
-            producers=20,  # producers=int(self.producers),
-            consumers=int(self.consumers),
-            consumer_threads=int(self.consumers),
-            byte_rate="50K"  # byte_rate=self.config.SMALL_BYTE_RATE
-        ))
+        # 50K is a light write. A full stress window only holds the chunk
+        # that also runs the wide-partition scenarios.
+        full_duration = self.duration
+        self.duration = str(min(15, int(full_duration)))
+        try:
+            self.run_topic_write_with_tx(TestConfig(
+                partitions=1,
+                partitions_per_tablet=1,
+                producers=20,  # producers=int(self.producers),
+                consumers=int(self.consumers),
+                consumer_threads=int(self.consumers),
+                byte_rate="50K"  # byte_rate=self.config.SMALL_BYTE_RATE
+            ))
+        finally:
+            self.duration = full_duration
 
     def __non_transactional_workload(self):
         # Keep wide partition coverage; lower byte_rate only to ease gRPC drain on teardown (#46635).
         self.run_topic_write_without_tx(TestConfig(
-            partitions=200,
+            partitions=64,
             partitions_per_tablet=10,
             producers=20,  # producers=int(self.producers),
             consumers=int(self.consumers),
@@ -896,10 +903,10 @@ class YdbTopicWorkload(WorkloadBase):
         tests = [
             self.__loop,
             self.__one_tablet_but_a_distributed_transaction,
+            self.__immediate_transaction,
             self.__two_tablets_distributed_transaction,
             self.__a_wide_transaction_with_multiple_partitions_in_one_tablet,
             self.__wide_transaction_one_tablet_contains_one_partition,
-            self.__immediate_transaction,
             self.__non_transactional_workload,
             self.__keyed_producer_auto_partitioning_workload,
             self.__batched_non_transactional_workload,

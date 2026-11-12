@@ -26,3 +26,8 @@ PEERDIR(
     contrib/python/boto3
     contrib/python/botocore
 )
+
+FORK_SUBTESTS()
+# 15 collected cases (migration skips 4 of test_has_messages_counters).
+# A larger split only schedules empty chunks.
+SPLIT_FACTOR(15)

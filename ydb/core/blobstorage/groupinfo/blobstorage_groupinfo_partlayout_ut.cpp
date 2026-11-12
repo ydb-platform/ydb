@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include "blobstorage_groupinfo_partlayout.h"
+#include <algorithm>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -39,7 +40,8 @@ class TCheckQueue {
 
 public:
     TCheckQueue(TBlobStorageGroupType gtype) {
-        for (int n = std::thread::hardware_concurrency(); n; --n) {
+        const unsigned workerCount = std::min(4u, std::thread::hardware_concurrency());
+        for (unsigned n = workerCount; n; --n) {
             Threads.emplace_back([=] {
                 for (;;) {
                     TSubgroupPartLayout layout;

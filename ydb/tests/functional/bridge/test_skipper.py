@@ -447,6 +447,7 @@ class TestSkipperFailoverLatency(RealSkipperCluster):
                 try:
                     if session is None:
                         session = driver.table_client.session().create(settings=settings())
+                    if query is None:
                         query = session.prepare(statement, settings=settings())
                     serial += 1
                     key = (worker + 1) * 1_000_000_000 + serial

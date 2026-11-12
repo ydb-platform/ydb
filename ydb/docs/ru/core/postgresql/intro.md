@@ -16,6 +16,8 @@
 | --- | --- |
 | **Сетевой протокол PostgreSQL (pgwire)** | Подключение через psql, pgAdmin и драйверы PostgreSQL (lib/pq, psycopg2, JDBC в режиме PostgreSQL) на порту 5432 |
 | **Диалект SQL PostgreSQL** | Запросы с `--!syntax_pg`, `ydb sql --syntax pg` и настройка кластера `enable_pg_syntax` |
+| **Типы колонок PostgreSQL** | `pgint4`, `pgtext` и другие PG-типы, включая использование с настройкой `enable_table_pg_types` |
+| **UDF Pg::** | Функции и литералы в стиле PostgreSQL внутри YQL |
 | **Инструменты для PostgreSQL** | `ydb tools pg-convert` и сценарии импорта через `pg_dump` в слой совместимости |
 | **Системные представления в стиле PostgreSQL** | `.sys/pg_tables`, `.sys/pg_class` и связанные каталоги pgwire |
 
@@ -35,8 +37,6 @@
 Удаление совместимости с PostgreSQL **не затрагивает** следующие отдельные возможности:
 
 * **[Federated Query](../concepts/query_execution/federated_query/postgresql.md)** — выполнение YQL-запросов к **внешним** кластерам PostgreSQL
-* **[UDF Pg::](../yql/reference/udf/list/postgres.md)** — функции и литералы в стиле PostgreSQL внутри YQL
-* **Типы колонок PostgreSQL** (`pgint4`, `pgtext` и другие) — опциональные типы колонок таблиц в YQL, управляются настройкой `enable_table_pg_types`
 
 ## Вопросы и обратная связь
 

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+import pytest
 from hamcrest import assert_that, raises
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -34,6 +35,27 @@ class TestExecuteSchemeOperations(object):
                 session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
             session.execute_scheme(
                 'CREATE TABLE %s (id Uint64, name String, PRIMARY KEY(id))' % name)
+
+    @pytest.mark.parametrize("scheme_query, query", [
+        (True, "CREATE TABLE PgUnsupported (id PgInt4, PRIMARY KEY (id))"),
+        (False, "SELECT 1p"),
+        (False, "DECLARE $value AS PgInt4; SELECT $value"),
+        (False, "SELECT Pg::version()"),
+        (False, "SELECT Pg::abs(1)"),
+        (False, "SELECT ToPg(1)"),
+    ])
+    def test_pg_types_are_not_supported(self, scheme_query, query):
+        session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
+        try:
+            with pytest.raises((ydb.BadRequest, ydb.GenericError), match="PostgreSQL types are not supported"):
+                if scheme_query:
+                    session.execute_scheme(query)
+                else:
+                    session.prepare(query)
+            result = session.transaction().execute("SELECT 1 AS value", commit_tx=True)
+            assert result[0].rows[0].value == 1
+        finally:
+            session.delete()
 
     def test_create_table_if_it_is_created_fail_add_new_column(self):
         # Arrange

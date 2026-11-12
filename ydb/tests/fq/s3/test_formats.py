@@ -39,26 +39,6 @@ class TestS3Formats:
         assert result_set.rows[2][1] == 15
         assert result_set.rows[2][2] == 33
 
-    def validate_pg_result(self, result_set):
-        logging.debug(str(result_set))
-        assert len(result_set.columns) == 3
-        assert result_set.columns[0].name == "Fruit"
-        assert result_set.columns[0].type.pg_type.oid == 25
-        assert result_set.columns[1].name == "Price"
-        assert result_set.columns[1].type.pg_type.oid == 23
-        assert result_set.columns[2].name == "Weight"
-        assert result_set.columns[2].type.pg_type.oid == 20
-        assert len(result_set.rows) == 3
-        assert result_set.rows[0][0] == "Banana"
-        assert result_set.rows[0][1] == "3"
-        assert result_set.rows[0][2] == "100"
-        assert result_set.rows[1][0] == "Apple"
-        assert result_set.rows[1][1] == "2"
-        assert result_set.rows[1][2] == "22"
-        assert result_set.rows[2][0] == "Pear"
-        assert result_set.rows[2][1] == "15"
-        assert result_set.rows[2][2] == "33"
-
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -654,27 +634,6 @@ Pear,15
         assert len(result_set.rows) == 1
         assert result_set.rows[0][0] == 3
         assert result_set.rows[0][1] == 0
-
-    def test_simple_pg_types(self, kikimr, s3, client, unique_prefix):
-        self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = client.path(unique_prefix + "fruitbucket")
-        client.create_external_data_source(storage_connection_name, "fbucket")
-
-        sql = f'''
-            SELECT *
-            FROM `{storage_connection_name}`.`test.parquet`
-            WITH (format=parquet, SCHEMA (
-                Fruit pgtext,
-                Price pgint4,
-                Weight pgint8
-            ));
-            '''
-
-        query = client.execute(sql)
-        query.check()
-        data = query.result_set()
-        result_set = data
-        self.validate_pg_result(result_set)
 
     def test_precompute(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)

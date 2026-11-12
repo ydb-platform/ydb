@@ -1,7 +1,9 @@
 #pragma once
 #include <bitset>
+#include <deque>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/reassign_tablets.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/bridge.h>
@@ -282,6 +284,8 @@ protected:
     TSubActorId StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
     // continues reassigns of tablets that were left in the middle of it (e.g. by a Hive restart)
     void ContinueInterruptedReassigns(std::vector<TReassignOperation> operations);
+    NKikimrReassignTablets::TEvGetResponse GetReassignTabletsResult(TSubActorId id);
+    void PruneReassignResults();
     void StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IMoveDataCallback> callback, bool fastFail);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
@@ -528,6 +532,12 @@ protected:
     std::unordered_set<TNodeId> ConnectedNodes;
     TString LastReassignStatus;
     ui32 ReassignsRunning = 0;
+    struct TReassignResult {
+        TSubActorId Id;
+        TInstant ExpiresAt;
+        NKikimrReassignTablets::TEvGetResponse Record;
+    };
+    std::deque<TReassignResult> ReassignResults;
     TRequests Requests;
 
     // normalized to be sorted list of unique values
@@ -603,8 +613,9 @@ protected:
     void Handle(TEvents::TEvUndelivered::TPtr&);
     void Handle(TEvHive::TEvTabletMetrics::TPtr&);
     void Handle(TEvHive::TEvReassignTablet::TPtr&);
-    void Handle(TEvHive::TEvReassignTablets::TPtr&);
-    void Handle(TEvHive::TEvStopReassignTablets::TPtr&);
+    void Handle(TEvReassignTablets::TEvCreateRequest::TPtr&);
+    void Handle(TEvReassignTablets::TEvCancelRequest::TPtr&);
+    void Handle(TEvReassignTablets::TEvGetRequest::TPtr&);
     void Handle(TEvHive::TEvInitiateBlockStorage::TPtr&);
     void Handle(TEvLocal::TEvSyncTablets::TPtr&);
     void Handle(TEvTabletBase::TEvBlockBlobStorageResult::TPtr&);

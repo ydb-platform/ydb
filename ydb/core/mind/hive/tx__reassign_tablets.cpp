@@ -1,5 +1,7 @@
 #include "tx__reassign_tablets.h"
 
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 #include <ranges>
 
 namespace NKikimr::NHive {
@@ -10,7 +12,7 @@ TTxReassignTablets::TTxReassignTablets(const TActorId& source, THive* hive, TStr
     , Source(source)
 {}
 
-TTxReassignTablets::TTxReassignTablets(TEvHive::TEvReassignTablets::TPtr& ev, THive* hive)
+TTxReassignTablets::TTxReassignTablets(TEvReassignTablets::TEvCreateRequest::TPtr& ev, THive* hive)
     : TTxReassignTablets(ev->Sender, hive, ev->Get()->Record.GetUserSID())
 {
     const auto& record = ev->Get()->Record;
@@ -149,11 +151,11 @@ bool TTxReassignTablets::Execute(TTransactionContext& txc, const TActorContext&)
 }
 
 void TTxReassignTablets::Complete(const TActorContext& ctx) {
-    auto reply = std::make_unique<TEvHive::TEvReassignTabletsReply>();
-    reply->Record.SetStatus(Error ? NKikimrProto::ERROR : NKikimrProto::OK);
+    auto reply = std::make_unique<TEvReassignTablets::TEvCreateResponse>();
+    reply->Record.SetStatus(Error ? Ydb::StatusIds::PRECONDITION_FAILED : Ydb::StatusIds::SUCCESS);
     reply->Record.SetSelectedTablets(SelectedTablets);
     if (Error) {
-        reply->Record.SetError(Error);
+        NYql::IssueToMessage(NYql::TIssue(Error), reply->Record.AddIssues());
     } else {
         reply->Record.SetReassignId(ReassignId);
         reply->Record.SetHiveGeneration(Self->HiveGeneration);
@@ -161,7 +163,7 @@ void TTxReassignTablets::Complete(const TActorContext& ctx) {
     ctx.Send(Source, reply.release(), 0, Cookie);
 }
 
-void THive::Handle(TEvHive::TEvReassignTablets::TPtr& ev) {
+void THive::Handle(TEvReassignTablets::TEvCreateRequest::TPtr& ev) {
     Execute(new TTxReassignTablets(ev, this));
 }
 

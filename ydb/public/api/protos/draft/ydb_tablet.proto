@@ -2,6 +2,7 @@ syntax = "proto3";
 option cc_enable_arenas = true;
 
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 
@@ -83,32 +84,15 @@ message ReassignTabletsRequest {
     bool async = 6;
 }
 
-message ReassignTabletsId {
-    uint64 hive_id = 1;
-    uint64 hive_generation = 2;
-    uint64 reassign_id = 3;
-}
-
 message ReassignTabletsResponse {
-    Ydb.StatusIds.StatusCode status = 1;
-    repeated Ydb.Issue.IssueMessage issues = 2;
-
-    // Number selected by Hive.
-    // SUCCESS means the job was started, not that these tablets have finished reassignment.
-    uint64 selected_tablets = 3;
-
-    // Identifier for StopReassignTablets. Valid for the current Hive incarnation.
-    ReassignTabletsId id = 4;
+    // Always asynchronous. Poll with GetOperation; stop with CancelOperation.
+    // Cancellation stops scheduling new tablets; dispatched work continues without rollback.
+    // State is kept in Hive memory and lost on restart. Completed operations are retained
+    // for up to 10 minutes, limited to the most recent 1024 jobs. Expired IDs return NOT_FOUND.
+    Ydb.Operations.Operation operation = 1;
 }
 
-message StopReassignTabletsRequest {
-    ReassignTabletsId id = 1;
-}
-
-message StopReassignTabletsResponse {
-    // SUCCESS means no further tablets will be scheduled by this job.
-    // Reassignments already dispatched continue; completed changes are not rolled back.
-    // NOT_FOUND means the job is no longer running, including after a Hive restart.
-    Ydb.StatusIds.StatusCode status = 1;
-    repeated Ydb.Issue.IssueMessage issues = 2;
+message ReassignTabletsMetadata {
+    uint64 selected_tablets = 1;
+    uint64 completed_tablets = 2;
 }

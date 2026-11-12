@@ -697,30 +697,3 @@ message TEvShrinkStoragePoolDone {
     optional string StoragePool = 1;
     repeated uint32 GroupsToRemove = 2;
 }
-
-message TEvReassignTablets {
-    optional string StoragePool = 1;
-    optional uint32 MaxInFlight = 2 [default = 1];
-    optional uint32 Percent = 3 [default = 100];
-    optional bool Async = 4 [default = false];
-    optional string UserSID = 5;
-    optional uint32 GroupId = 6 [default = 0];
-}
-
-message TEvReassignTabletsReply {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional string Error = 2;
-    optional uint64 SelectedTablets = 3;
-    optional uint64 ReassignId = 4;
-    optional uint64 HiveGeneration = 5;
-}
-
-message TEvStopReassignTablets {
-    optional uint64 ReassignId = 1;
-    optional uint64 HiveGeneration = 2;
-    optional string UserSID = 3;
-}
-
-message TEvStopReassignTabletsReply {
-    optional NKikimrProto.EReplyStatus Status = 1;
-}

@@ -5,12 +5,8 @@
 
 namespace NKikimr::NGRpcService {
 
-using TEvReassignTabletsRequest = TGrpcRequestNoOperationCall<
+using TEvReassignTabletsRequest = TGrpcRequestOperationCall<
     Ydb::Tablet::ReassignTabletsRequest,
     Ydb::Tablet::ReassignTabletsResponse>;
-
-using TEvStopReassignTabletsRequest = TGrpcRequestNoOperationCall<
-    Ydb::Tablet::StopReassignTabletsRequest,
-    Ydb::Tablet::StopReassignTabletsResponse>;
 
 } // namespace NKikimr::NGRpcService

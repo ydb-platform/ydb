@@ -3850,8 +3850,9 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvTabletBase::TEvBlockBlobStorageResult, Handle);
         hFunc(TEvTabletBase::TEvDeleteTabletResult, Handle);
         hFunc(TEvHive::TEvReassignTablet, Handle);
-        hFunc(TEvHive::TEvReassignTablets, Handle);
-        hFunc(TEvHive::TEvStopReassignTablets, Handle);
+        hFunc(TEvReassignTablets::TEvCreateRequest, Handle);
+        hFunc(TEvReassignTablets::TEvCancelRequest, Handle);
+        hFunc(TEvReassignTablets::TEvGetRequest, Handle);
         hFunc(TEvHive::TEvInitiateBlockStorage, Handle);
         hFunc(TEvHive::TEvDeleteTablet, Handle);
         hFunc(TEvHive::TEvDeleteOwnerTablets, Handle);
@@ -3974,8 +3975,9 @@ STFUNC(THive::StateWork) {
         fFunc(TEvTabletBase::TEvBlockBlobStorageResult::EventType, EnqueueIncomingEvent);
         fFunc(TEvTabletBase::TEvDeleteTabletResult::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvReassignTablet::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvReassignTablets::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvStopReassignTablets::EventType, EnqueueIncomingEvent);
+        fFunc(TEvReassignTablets::TEvCreateRequest::EventType, EnqueueIncomingEvent);
+        fFunc(TEvReassignTablets::TEvCancelRequest::EventType, EnqueueIncomingEvent);
+        fFunc(TEvReassignTablets::TEvGetRequest::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvInitiateBlockStorage::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvDeleteTablet::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvDeleteOwnerTablets::EventType, EnqueueIncomingEvent);

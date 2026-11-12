@@ -4,12 +4,25 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NGRpcService {
 
 using namespace Tests;
+using NOperationId::TOperationId;
+using TEvGetOperationRequest = TGrpcRequestOperationCall<Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>;
+using TEvCancelOperationRequest = TGrpcRequestNoOperationCall<Ydb::Operations::CancelOperationRequest, Ydb::Operations::CancelOperationResponse>;
+
+TString MakeReassignOperationId() {
+    TOperationId id;
+    id.SetKind(TOperationId::REASSIGN_TABLETS);
+    id.AddOptionalValue("hive_id", "1");
+    id.AddOptionalValue("hive_generation", "2");
+    id.AddOptionalValue("reassign_id", "3");
+    return id.ToString();
+}
 
 Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
     struct TTestEnv {
@@ -73,16 +86,28 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
         request.set_percent(0);
         const auto response = NRpcService::DoLocalRpc<TEvReassignTabletsRequest>(
             std::move(request), "", "", runtime.GetActorSystem(0)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SUCCESS, response.DebugString());
-        UNIT_ASSERT_VALUES_EQUAL(response.selected_tablets(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(response.id().hive_id(), tenantHive);
-        UNIT_ASSERT(response.id().hive_generation());
-        UNIT_ASSERT(response.id().reassign_id());
-        Ydb::Tablet::StopReassignTabletsRequest stop;
-        *stop.mutable_id() = response.id();
-        const auto stopped = NRpcService::DoLocalRpc<TEvStopReassignTabletsRequest>(
-            std::move(stop), "", "", runtime.GetActorSystem(0)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(stopped.status(), Ydb::StatusIds::NOT_FOUND); // Empty job has finished.
+        UNIT_ASSERT(!response.operation().ready());
+        Ydb::Tablet::ReassignTabletsMetadata metadata;
+        UNIT_ASSERT(response.operation().metadata().UnpackTo(&metadata));
+        UNIT_ASSERT_VALUES_EQUAL(metadata.selected_tablets(), 0);
+        const TOperationId id(response.operation().id());
+        UNIT_ASSERT(id.GetKind() == TOperationId::REASSIGN_TABLETS);
+        UNIT_ASSERT_VALUES_EQUAL(*id.GetValue("hive_id").at(0), ToString(tenantHive));
+
+        Ydb::Operations::GetOperationRequest get;
+        get.set_id(response.operation().id());
+        const auto finished = NRpcService::DoLocalRpc<TEvGetOperationRequest>(
+            Ydb::Operations::GetOperationRequest(get), "", "", runtime.GetActorSystem(0)).ExtractValueSync();
+        UNIT_ASSERT(finished.operation().ready());
+        UNIT_ASSERT_VALUES_EQUAL(finished.operation().status(), Ydb::StatusIds::SUCCESS);
+        Ydb::Operations::CancelOperationRequest cancel;
+        cancel.set_id(get.id());
+        const auto cancelled = NRpcService::DoLocalRpc<TEvCancelOperationRequest>(
+            std::move(cancel), "", "", runtime.GetActorSystem(0)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(cancelled.status(), Ydb::StatusIds::SUCCESS); // Already finished: no change.
+        const auto afterCancel = NRpcService::DoLocalRpc<TEvGetOperationRequest>(
+            std::move(get), "", "", runtime.GetActorSystem(0)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(afterCancel.operation().status(), Ydb::StatusIds::SUCCESS);
 
         // Root database metadata has no explicit Hive; it uses the configured root Hive.
         Ydb::Tablet::ReassignTabletsRequest rootRequest;
@@ -91,8 +116,9 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
         rootRequest.set_percent(0);
         const auto rootResponse = NRpcService::DoLocalRpc<TEvReassignTabletsRequest>(
             std::move(rootRequest), "", "", runtime.GetActorSystem(0)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(rootResponse.status(), Ydb::StatusIds::SUCCESS, rootResponse.DebugString());
-        UNIT_ASSERT_VALUES_EQUAL(rootResponse.id().hive_id(), runtime.GetAppData().DomainsInfo->GetHive());
+        UNIT_ASSERT(!rootResponse.operation().ready());
+        UNIT_ASSERT_VALUES_EQUAL(*TOperationId(rootResponse.operation().id()).GetValue("hive_id").at(0),
+            ToString(runtime.GetAppData().DomainsInfo->GetHive()));
     }
 
     Y_UNIT_TEST(RequiresAdministrator) {
@@ -100,13 +126,14 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
         Ydb::Tablet::ReassignTabletsRequest start;
         start.set_database("/Root/db");
         start.set_storage_pool("test-pool");
-        Ydb::Tablet::StopReassignTabletsRequest stop;
-        stop.mutable_id()->set_hive_id(1);
-        stop.mutable_id()->set_hive_generation(2);
-        stop.mutable_id()->set_reassign_id(3);
+        Ydb::Operations::GetOperationRequest get;
+        get.set_id(MakeReassignOperationId());
+        Ydb::Operations::CancelOperationRequest cancel;
+        cancel.set_id(get.id());
         for (const TString& token : {TString(), NACLib::TUserToken("reader", {"monitoring"}).SerializeAsString()}) {
-            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start, token).status(), Ydb::StatusIds::UNAUTHORIZED);
-            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvStopReassignTabletsRequest>(stop, token).status(), Ydb::StatusIds::UNAUTHORIZED);
+            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start, token).operation().status(), Ydb::StatusIds::UNAUTHORIZED);
+            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvGetOperationRequest>(get, token).operation().status(), Ydb::StatusIds::UNAUTHORIZED);
+            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvCancelOperationRequest>(cancel, token).status(), Ydb::StatusIds::UNAUTHORIZED);
         }
     }
 
@@ -114,22 +141,28 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
         TTestEnv env;
         Ydb::Tablet::ReassignTabletsRequest start;
         start.set_storage_pool("test-pool");
-        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start).status(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start).operation().status(), Ydb::StatusIds::BAD_REQUEST);
         start.set_database("/Root/db");
         start.clear_storage_pool();
-        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start).status(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start).operation().status(), Ydb::StatusIds::BAD_REQUEST);
         start.set_storage_pool("test-pool");
         start.set_max_in_flight(0);
-        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start).status(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start).operation().status(), Ydb::StatusIds::BAD_REQUEST);
         start.clear_max_in_flight();
         start.set_percent(101);
-        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start).status(), Ydb::StatusIds::BAD_REQUEST);
-        Ydb::Tablet::StopReassignTabletsRequest stop;
-        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvStopReassignTabletsRequest>(stop).status(), Ydb::StatusIds::BAD_REQUEST);
-        stop.mutable_id()->set_hive_id(1);
-        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvStopReassignTabletsRequest>(stop).status(), Ydb::StatusIds::BAD_REQUEST);
-        stop.mutable_id()->set_hive_generation(2);
-        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvStopReassignTabletsRequest>(stop).status(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start).operation().status(), Ydb::StatusIds::BAD_REQUEST);
+        const TString prefix = "ydb://reassigntablets/17?";
+        for (const TString& id : {TString(), TString("invalid"), prefix,
+                prefix + "hive_id=0&hive_generation=2&reassign_id=3",
+                prefix + "hive_id=1&hive_id=2&hive_generation=2&reassign_id=3",
+                prefix + "hive_id=1&hive_generation=bad&reassign_id=3"}) {
+            Ydb::Operations::GetOperationRequest get;
+            get.set_id(id);
+            Ydb::Operations::CancelOperationRequest cancel;
+            cancel.set_id(id);
+            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvGetOperationRequest>(get).operation().status(), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvCancelOperationRequest>(cancel).status(), Ydb::StatusIds::BAD_REQUEST);
+        }
     }
 }
 

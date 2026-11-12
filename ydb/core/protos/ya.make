@@ -138,6 +138,7 @@ SRCS(
     pqevents_global.proto
     profiler.proto
     query_stats.proto
+    reassign_tablets.proto
     recoveryshard_config.proto
     replication.proto
     resource_broker.proto

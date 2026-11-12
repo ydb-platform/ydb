@@ -55,7 +55,7 @@ private:
     TInstant GetMaxTimestamp(const TReassignOperation& operation) const;
 
 public:
-    TTxReassignTablets(TEvHive::TEvReassignTablets::TPtr& ev, THive* hive);
+    TTxReassignTablets(TEvReassignTablets::TEvCreateRequest::TPtr& ev, THive* hive);
 
     TTxType GetTxType() const override { return NHive::TXTYPE_REASSIGN_TABLETS; }
     bool Execute(TTransactionContext& txc, const TActorContext&) override;

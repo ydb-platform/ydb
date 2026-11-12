@@ -33,11 +33,8 @@ service TabletService {
 
     // Start reassigning tablet channels belonging to a storage pool.
     // Requires cluster administrator access. Hive is resolved from the database path.
-    // A successful response acknowledges the start; reassignment continues in the background.
+    // Returns an asynchronous Operation. GetOperation and CancelOperation also require
+    // cluster administrator access. Operation state is lost when Hive restarts.
     rpc ReassignTablets(ReassignTabletsRequest) returns (ReassignTabletsResponse);
-
-    // Stop scheduling new reassignments for the specified job. Already dispatched work continues.
-    // Requires cluster administrator access.
-    rpc StopReassignTablets(StopReassignTabletsRequest) returns (StopReassignTabletsResponse);
 
 }

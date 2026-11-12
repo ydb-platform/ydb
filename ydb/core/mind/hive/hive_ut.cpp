@@ -2,6 +2,7 @@
 #include <math.h>
 #include <ranges>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/reassign_tablets.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -10431,14 +10432,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const auto excludedBefore = info(excluded);
 
         TBlockEvents<TEvHive::TEvReassignTablet> blocked(runtime);
-        auto request = std::make_unique<TEvHive::TEvReassignTablets>();
+        auto request = std::make_unique<NHive::TEvReassignTablets::TEvCreateRequest>();
         request->Record.SetStoragePool("def1");
         request->Record.SetMaxInFlight(1);
         runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
-        const auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+        const auto* response = runtime.GrabEdgeEventRethrow<NHive::TEvReassignTablets::TEvCreateResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSelectedTablets(), 2);
+
+        const auto job = response->Record;
 
         THashSet<ui64> seen;
         for (ui32 i = 0; i < 2; ++i) {
@@ -10464,13 +10467,23 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 excludedBefore.GetTabletChannels(channel).SerializeAsString());
         }
 
+        auto get = std::make_unique<NHive::TEvReassignTablets::TEvGetRequest>();
+        get->Record.SetReassignId(job.GetReassignId());
+        get->Record.SetHiveGeneration(job.GetHiveGeneration());
+        runtime.SendToPipe(hiveTablet, sender, get.release(), 0, GetPipeConfigWithRetries());
+        const auto completed = runtime.GrabEdgeEventRethrow<NHive::TEvReassignTablets::TEvGetResponse>(handle)->Record;
+        UNIT_ASSERT_VALUES_EQUAL(completed.GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(completed.GetReady());
+        UNIT_ASSERT(!completed.GetCancelled());
+        UNIT_ASSERT_VALUES_EQUAL(completed.GetCompletedTablets(), 2);
+
         // Pool and group filters are intersected, just as in the HTTP handler.
-        request = std::make_unique<TEvHive::TEvReassignTablets>();
+        request = std::make_unique<NHive::TEvReassignTablets::TEvCreateRequest>();
         request->Record.SetStoragePool("def1");
         request->Record.SetGroupId(excludedBefore.GetTabletChannels(0).GetHistory().rbegin()->GetGroup());
         runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
-        response = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+        response = runtime.GrabEdgeEventRethrow<NHive::TEvReassignTablets::TEvCreateResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSelectedTablets(), 0);
         runtime.SimulateSleep(TDuration::MilliSeconds(100));
         UNIT_ASSERT(blocked.empty());
@@ -10488,13 +10501,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         }
         UNIT_ASSERT(!expected.empty());
-        request = std::make_unique<TEvHive::TEvReassignTablets>();
+        request = std::make_unique<NHive::TEvReassignTablets::TEvCreateRequest>();
         request->Record.SetStoragePool("def1");
         request->Record.SetGroupId(group);
         request->Record.SetMaxInFlight(2);
         runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
-        response = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+        response = runtime.GrabEdgeEventRethrow<NHive::TEvReassignTablets::TEvCreateResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSelectedTablets(), expected.size());
         runtime.WaitFor("pool and group reassign", [&] { return blocked.size() == expected.size(); });
         for (const auto& event : blocked) {
@@ -10508,12 +10521,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(blocked.empty());
 
-        request = std::make_unique<TEvHive::TEvReassignTablets>();
+        request = std::make_unique<NHive::TEvReassignTablets::TEvCreateRequest>();
         request->Record.SetStoragePool("def1");
         request->Record.SetPercent(50);
         request->Record.SetAsync(true);
         runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
-        response = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle);
+        response = runtime.GrabEdgeEventRethrow<NHive::TEvReassignTablets::TEvCreateResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSelectedTablets(), 1);
         runtime.WaitFor("partial pool reassign", [&] { return !blocked.empty(); });
         UNIT_ASSERT(blocked.front()->Get()->Record.GetAsync());
@@ -10541,24 +10554,32 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         TBlockEvents<TEvHive::TEvReassignTablet> blocked(runtime);
         auto start = [&](const TString& pool) {
-            auto request = std::make_unique<TEvHive::TEvReassignTablets>();
+            auto request = std::make_unique<NHive::TEvReassignTablets::TEvCreateRequest>();
             request->Record.SetStoragePool(pool);
             request->Record.SetMaxInFlight(1);
             runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
             TAutoPtr<IEventHandle> handle;
-            const auto reply = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle)->Record;
-            UNIT_ASSERT_VALUES_EQUAL(reply.GetStatus(), NKikimrProto::OK);
+            const auto reply = runtime.GrabEdgeEventRethrow<NHive::TEvReassignTablets::TEvCreateResponse>(handle)->Record;
+            UNIT_ASSERT_VALUES_EQUAL(reply.GetStatus(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(reply.GetSelectedTablets(), 2);
             UNIT_ASSERT(reply.GetReassignId());
             return reply;
         };
         auto stop = [&](ui64 id, ui64 generation) {
-            auto request = std::make_unique<TEvHive::TEvStopReassignTablets>();
+            auto request = std::make_unique<NHive::TEvReassignTablets::TEvCancelRequest>();
             request->Record.SetReassignId(id);
             request->Record.SetHiveGeneration(generation);
             runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
             TAutoPtr<IEventHandle> handle;
-            return runtime.GrabEdgeEventRethrow<TEvHive::TEvStopReassignTabletsReply>(handle)->Record.GetStatus();
+            return runtime.GrabEdgeEventRethrow<NHive::TEvReassignTablets::TEvCancelResponse>(handle)->Record.GetStatus();
+        };
+        auto get = [&](const NKikimrReassignTablets::TEvCreateResponse& job) {
+            auto request = std::make_unique<NHive::TEvReassignTablets::TEvGetRequest>();
+            request->Record.SetReassignId(job.GetReassignId());
+            request->Record.SetHiveGeneration(job.GetHiveGeneration());
+            runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            return runtime.GrabEdgeEventRethrow<NHive::TEvReassignTablets::TEvGetResponse>(handle)->Record;
         };
 
         const auto first = start("def1");
@@ -10568,10 +10589,18 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_UNEQUAL(first.GetReassignId(), second.GetReassignId());
         const ui64 secondStartedTablet = blocked.back()->Get()->Record.GetTabletID();
         UNIT_ASSERT(secondPool.contains(secondStartedTablet));
+        const auto running = get(first);
+        UNIT_ASSERT_VALUES_EQUAL(running.GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(!running.GetReady());
+        UNIT_ASSERT_VALUES_EQUAL(running.GetSelectedTablets(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(running.GetCompletedTablets(), 0);
 
-        UNIT_ASSERT_VALUES_EQUAL(stop(first.GetReassignId(), first.GetHiveGeneration() + 1), NKikimrProto::NODATA);
-        UNIT_ASSERT_VALUES_EQUAL(stop(first.GetReassignId(), first.GetHiveGeneration()), NKikimrProto::OK);
-        UNIT_ASSERT_VALUES_EQUAL(stop(first.GetReassignId(), first.GetHiveGeneration()), NKikimrProto::NODATA);
+        UNIT_ASSERT_VALUES_EQUAL(stop(first.GetReassignId(), first.GetHiveGeneration() + 1), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(stop(first.GetReassignId(), first.GetHiveGeneration()), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(stop(first.GetReassignId(), first.GetHiveGeneration()), Ydb::StatusIds::SUCCESS);
+        const auto cancelled = get(first);
+        UNIT_ASSERT(cancelled.GetReady());
+        UNIT_ASSERT(cancelled.GetCancelled());
 
         // Both requests already dispatched are allowed to finish; only the second job continues.
         blocked.Unblock();
@@ -10581,10 +10610,20 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 nextTablet = blocked.front()->Get()->Record.GetTabletID();
         UNIT_ASSERT(secondPool.contains(nextTablet));
         UNIT_ASSERT_VALUES_UNEQUAL(nextTablet, secondStartedTablet);
-        UNIT_ASSERT_VALUES_EQUAL(stop(second.GetReassignId(), second.GetHiveGeneration()), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(stop(second.GetReassignId(), second.GetHiveGeneration()), Ydb::StatusIds::SUCCESS);
         blocked.Unblock();
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(blocked.empty());
+
+        runtime.AdvanceCurrentTime(TDuration::Minutes(11));
+        UNIT_ASSERT_VALUES_EQUAL(get(first).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(stop(first.GetReassignId(), first.GetHiveGeneration()), Ydb::StatusIds::NOT_FOUND);
+
+        const auto beforeRestart = start("def1");
+        RebootTablet(runtime, hiveTablet, sender);
+        UNIT_ASSERT_VALUES_EQUAL(get(beforeRestart).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(stop(beforeRestart.GetReassignId(), beforeRestart.GetHiveGeneration()), Ydb::StatusIds::NOT_FOUND);
+        blocked.Stop().Unblock();
     }
 
     Y_UNIT_TEST(TestReassignTabletsWithoutCountConfirmation) {
@@ -10621,18 +10660,18 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_STRING_CONTAINS(rejected->Blob, "400 Bad Request");
         UNIT_ASSERT_STRING_CONTAINS(rejected->Blob, "must confirm number of tablets");
 
-        auto request = std::make_unique<TEvHive::TEvReassignTablets>();
+        auto request = std::make_unique<NHive::TEvReassignTablets::TEvCreateRequest>();
         request->Record.SetStoragePool("def1");
         runtime.SendToPipe(hiveTablet, sender, request.release(), 0, GetPipeConfigWithRetries());
-        const auto response = runtime.GrabEdgeEventRethrow<TEvHive::TEvReassignTabletsReply>(handle)->Record;
-        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrProto::OK);
+        const auto response = runtime.GrabEdgeEventRethrow<NHive::TEvReassignTablets::TEvCreateResponse>(handle)->Record;
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetSelectedTablets(), tabletCount);
 
-        auto stop = std::make_unique<TEvHive::TEvStopReassignTablets>();
+        auto stop = std::make_unique<NHive::TEvReassignTablets::TEvCancelRequest>();
         stop->Record.SetReassignId(response.GetReassignId());
         stop->Record.SetHiveGeneration(response.GetHiveGeneration());
         runtime.SendToPipe(hiveTablet, sender, stop.release(), 0, GetPipeConfigWithRetries());
-        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEventRethrow<TEvHive::TEvStopReassignTabletsReply>(handle)->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEventRethrow<NHive::TEvReassignTablets::TEvCancelResponse>(handle)->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
 
         sendHttp(ToString(tabletCount));
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle)->Json, "{}");

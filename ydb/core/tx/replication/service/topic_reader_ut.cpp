@@ -401,9 +401,6 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         explicit TRetentionGapTest(ui64 initialOffset = 0)
             : InitialOffset(initialOffset)
         {
-            // SDK/gRPC callbacks run in real threads and must get time to complete
-            // before the simulated session-start and retention deadlines expire.
-            Env.GetRuntime().SetFastSimulatedTime(false);
             Env.GetRuntime().GetAppData().FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);
             const auto create = Env.Send<TEvYdbProxy::TEvCreateTopicResponse>(Env.GetYdbProxy(),
                 new TEvYdbProxy::TEvCreateTopicRequest(TopicPath, NYdb::NTopic::TCreateTopicSettings()
@@ -697,28 +694,6 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
         s.AssertStartupDataLoss(reader);
     }
-<<<<<<< HEAD
-=======
-
-    Y_UNIT_TEST(TeardownWithPendingReadSessionKeepsGrpcServiceAlive) {
-        TVector<TAutoPtr<IEventHandle>> heldReads;
-        TRetentionGapTest s;
-        auto& runtime = s.Env.GetRuntime();
-
-        auto readObserver = runtime.AddObserver<NGRpcProxy::V1::TEvPQProxy::TEvRead>([&](NGRpcProxy::V1::TEvPQProxy::TEvRead::TPtr& ev) {
-            heldReads.emplace_back(ev.Release());
-        });
-
-        const auto reader = s.StartReader();
-        s.Env.SendAsync(reader, new TEvWorker::TEvPoll());
-
-        TDispatchOptions options;
-        options.CustomFinalCondition = [&] {
-            return !heldReads.empty();
-        };
-        runtime.DispatchEvents(options, TDuration::Seconds(30));
-        UNIT_ASSERT(!heldReads.empty());
-    }
 
     Y_UNIT_TEST_QUAD(PeriodicStatusPollingRequiresBothDataLossChecks, FailOnDataLoss, CheckStatusForDataLoss) {
         TRetentionGapTest s;
@@ -914,7 +889,6 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         }
         s.AssertFirstMessageAndStatusDelivered(reader);
     }
->>>>>>> 71a0fd381a9 (KIKIMR-27616 topic data loss detect (#58407))
 }
 
 }

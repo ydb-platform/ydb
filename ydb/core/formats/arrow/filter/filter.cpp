@@ -221,7 +221,7 @@ void VerifyFilterSize(const TColumnFilter& filter, const ui32 recordsCount, cons
                 {"count", context.GetCount()});
             YDB_LOG_VERIFY(*context.GetCount() == (size_t)recordsCount,
                 {"count", context.GetCount()},
-                {"batch_size", recordsCount});
+                {"batchSize", recordsCount});
         } else {
             YDB_LOG_VERIFY(filter.GetRecordsCountVerified() == (size_t)recordsCount,
                 {"filterSize", filter.GetRecordsCountVerified()},

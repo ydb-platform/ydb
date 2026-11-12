@@ -2,10 +2,10 @@
 
 namespace NKikimr::NCdcAggregator {
 
-class TCdcAggregator::TTxInit : public NTabletFlatExecutor::TTransactionBase<TCdcAggregator> {
+class TCdcAggregator::TTxInit : public TTxBase {
 public:
     explicit TTxInit(TCdcAggregator* self)
-        : TTransactionBase(self)
+        : TTxBase(self)
     {
     }
 

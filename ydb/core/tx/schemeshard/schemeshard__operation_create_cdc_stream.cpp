@@ -309,6 +309,12 @@ public:
             return result;
         }
 
+        if (shouldAggregateHeartbeats && op.GetTopicAutoPartitioning()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "RESOLVED_TIMESTAMPS with topic autopartitioning are not supported when CDC heartbeats are aggregated");
+            return result;
+        }
+
         if (!streamDesc.GetAwsRegion().empty()) {
             switch (streamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:

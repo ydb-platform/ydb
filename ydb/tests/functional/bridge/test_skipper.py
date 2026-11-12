@@ -416,7 +416,6 @@ class TestSkipperFailoverLatency(RealSkipperCluster):
         assert len(sends) == 1, sends
         assert int(sends[0]["expected_generation"]) == generation, sends
 
-
     def test_default_failover_restores_loaded_writes_within_20_seconds(self):
         self.create_data()
         self.query("r2", "CREATE TABLE `/Root/rto_load` (id Uint64, value Utf8, PRIMARY KEY(id));", scheme=True)

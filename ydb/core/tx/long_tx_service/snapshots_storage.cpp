@@ -53,13 +53,13 @@ TDuration Age(const TInstant now, const TInstant since) {
     return now > since ? now - since : TDuration::Zero();
 }
 
+} // namespace
+
 ui64 PromotionCutoffStep(const TInstant now, const TDuration promotionTime) {
     const ui64 nowMs = now.MilliSeconds();
     const ui64 promotionMs = promotionTime.MilliSeconds();
     return nowMs > promotionMs ? nowMs - promotionMs : 0;
 }
-
-} // namespace
 
 bool TLocalSnapshotsStorage::Insert(TLocalSnapshotInfo snapshot) {
     const auto it = LocalSnapshots.find(snapshot);
@@ -84,6 +84,9 @@ void TLocalSnapshotsStorage::CleanExpired() {
 }
 
 void TLocalSnapshotsStorage::Clear() {
+    for (const auto& snapshot : LocalSnapshots) {
+        snapshot.AliveFlag->store(false);
+    }
     LocalSnapshots.clear();
 }
 

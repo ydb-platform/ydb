@@ -202,7 +202,8 @@ namespace NLongTxService {
 
             TString DatabaseName;
             TVector<NKikimr::TTableId> TableIds;
-            // Register this exact version; readers must still check that its history exists
+            // Register this exact version within the local promotion window; locking must be enabled.
+            // Readers must still check that its history exists.
             TMaybe<TRowVersion> Snapshot;
             NLWTrace::TOrbit Orbit;
         };

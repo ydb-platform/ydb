@@ -9898,6 +9898,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableExternalDataSourceImport);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
@@ -9916,7 +9917,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                         DATABASE_NAME = 'clickhouse',
                         LOGIN = 'my_login',
                         PROTOCOL = 'NATIVE',
-                        USE_TLS = 'TRUE'
+                        USE_TLS = 'TRUE',
+                        INSTALLATION = 'CREATE VIEW CREATE ASYNC REPLICATION CREATE TRANSFER CREATE EXTERNAL DATA SOURCE CREATE EXTERNAL TABLE'
                     );
                 )"
             }
@@ -9942,10 +9944,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DataSource"), {
+        const auto imported = DescribePath(runtime, "/MyRoot/DataSource");
+        TestDescribeResult(imported, {
             NLs::Finished,
             NLs::IsExternalDataSource,
         });
+        UNIT_ASSERT_VALUES_EQUAL(imported.GetPathDescription().GetExternalDataSourceDescription().GetInstallation(),
+            "CREATE VIEW CREATE ASYNC REPLICATION CREATE TRANSFER CREATE EXTERNAL DATA SOURCE CREATE EXTERNAL TABLE");
     }
 
     Y_UNIT_TEST_FLAG(ExternalDataSourceExportImport, EnableDataShardDirectPartImport) {
@@ -9957,6 +9962,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableExternalDataSourceExport);
+        TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableExternalDataSourceImport);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
@@ -9964,6 +9971,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             Name: "DataSource"
             SourceType: "ClickHouse"
             Location: "https://clickhousedb.net"
+            Installation: "CREATE VIEW CREATE ASYNC REPLICATION CREATE TRANSFER CREATE EXTERNAL DATA SOURCE CREATE EXTERNAL TABLE 'quoted'\\path 0A café"
             Auth {
                 Basic {
                     Login: "my_login",
@@ -10026,10 +10034,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DataSource"), {
-            NLs::Finished,
-            NLs::IsExternalDataSource,
-        });
+        const auto restored = DescribePath(runtime, "/MyRoot/DataSource");
+        TestDescribeResult(restored, {
+                                         NLs::Finished, NLs::IsExternalDataSource,
+                                     });
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetPathDescription().GetExternalDataSourceDescription().GetInstallation(), "CREATE VIEW CREATE ASYNC REPLICATION CREATE TRANSFER CREATE EXTERNAL DATA SOURCE CREATE EXTERNAL TABLE 'quoted'\\path 0A café");
     }
 
     Y_UNIT_TEST_FLAG(ExternalTableImport, EnableDataShardDirectPartImport) {

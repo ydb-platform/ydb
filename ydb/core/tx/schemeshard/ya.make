@@ -417,6 +417,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/dump/util
+    yql/essentials/ast
     yql/essentials/minikql
     yql/essentials/providers/common/proto
     yql/essentials/public/udf

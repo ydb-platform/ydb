@@ -128,12 +128,15 @@ namespace TEvPrivate {
         const ui32 ItemIdx;
         const bool Success;
         const TString Error;
+        const NKikimrSchemeOp::EPathType PathType;
 
-        TEvImportSchemeReady(ui64 id, ui32 itemIdx, bool success, const TString& error)
+        TEvImportSchemeReady(ui64 id, ui32 itemIdx, bool success, const TString& error,
+            NKikimrSchemeOp::EPathType pathType = NKikimrSchemeOp::EPathTypeInvalid)
             : ImportId(id)
             , ItemIdx(itemIdx)
             , Success(success)
             , Error(error)
+            , PathType(pathType)
         {}
     };
 

@@ -61,8 +61,16 @@ ui64 PromotionCutoffStep(const TInstant now, const TDuration promotionTime) {
 
 } // namespace
 
-void TLocalSnapshotsStorage::Insert(TLocalSnapshotInfo snapshot) {
+bool TLocalSnapshotsStorage::Insert(TLocalSnapshotInfo snapshot) {
+    const auto it = LocalSnapshots.find(snapshot);
+    if (it != LocalSnapshots.end()) {
+        if (it->AliveFlag->load()) {
+            return false;
+        }
+        LocalSnapshots.erase(it);
+    }
     LocalSnapshots.emplace(std::move(snapshot));
+    return true;
 }
 
 void TLocalSnapshotsStorage::CleanExpired() {

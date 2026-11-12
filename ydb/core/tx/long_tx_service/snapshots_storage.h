@@ -60,7 +60,7 @@ struct TRemoteSnapshotInfo {
 
 class TLocalSnapshotsStorage : public TThrRefBase {
 public:
-    void Insert(TLocalSnapshotInfo snapshot);
+    bool Insert(TLocalSnapshotInfo snapshot);
     void CleanExpired();
     void Clear();
 

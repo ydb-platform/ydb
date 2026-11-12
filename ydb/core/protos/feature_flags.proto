@@ -485,4 +485,6 @@ message TFeatureFlags {
     optional bool EnableCdcAggregator = 386 [default = false];
     // Requires EnableSnapshotsLocking to publish the registry consumed by DataShard.
     optional bool EnableDataShardSnapshotLocking = 387 [default = false];
+    // Logical table checksums for server-side S3 and FS export/import
+    optional bool EnableBackupTableChecksum = 388 [default = false];
 }

@@ -226,6 +226,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 exportInfo->IncludeIndexData = settings.include_index_data();
             }
             if (enableFeatureFlags) {
+                exportInfo->EnableBackupTableChecksum = AppData()->FeatureFlags.GetEnableBackupTableChecksum();
                 exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
                 exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
             }
@@ -1089,13 +1090,31 @@ private:
         return output;
     }
 
+    void RetainChecksumSnapshots(TExportInfo& exportInfo) {
+        if (!exportInfo.EnableBackupTableChecksum || !exportInfo.IsInProgress()) {
+            return;
+        }
+        const auto database = TPath::Init(exportInfo.DomainPathId, Self).PathString();
+        for (ui32 idx : xrange(exportInfo.Items.size())) {
+            const auto pathId = ItemPathId(Self, exportInfo, idx);
+            const auto path = Self->PathsById.FindPtr(pathId);
+            if (!path || !(*path)->StepCreated) {
+                continue;
+            }
+            const TRowVersion version(ui64((*path)->StepCreated), ui64((*path)->CreateTxId));
+            if (auto request = MakeExportChecksumSnapshotRequest(exportInfo, version, database)) {
+                Send(NLongTxService::MakeLongTxServiceID(Self->SelfId().NodeId()), request.Release(), 0, exportInfo.Id);
+            }
+        }
+    }
+
     void Resume(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(Self->Exports.contains(Id));
         TExportInfo::TPtr exportInfo = Self->Exports.at(Id);
 
-        YDB_LOG_DEBUG("TExport::TTxProgress: Resume",
-            {"id", Id},
-        );
+        RetainChecksumSnapshots(*exportInfo);
+
+        YDB_LOG_DEBUG("TExport::TTxProgress: Resume", { "id", Id }, );
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -1804,6 +1823,18 @@ private:
 
 ITransaction* TSchemeShard::CreateTxCreateExport(TEvExport::TEvCreateExportRequest::TPtr& ev) {
     return new TExport::TTxCreate(this, ev);
+}
+
+void TSchemeShard::Handle(
+    NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev, const TActorContext&) {
+    auto info = Exports.Value(ev->Cookie, nullptr);
+    if (!info || !info->IsInProgress() || ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        return;
+    }
+    const auto it = info->ChecksumSnapshots.find(ev->Get()->Snapshot);
+    if (it != info->ChecksumSnapshots.end()) {
+        it->second.emplace(std::move(ev->Get()->SnapshotHandle));
+    }
 }
 
 ITransaction* TSchemeShard::CreateTxProgressExport(ui64 id) {

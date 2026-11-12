@@ -413,6 +413,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
 
     // TODO: we need to filter allowed databases
 
+    if (msg->Snapshot) {
+        RegisterRequestedSnapshot(ev, databaseName);
+        return;
+    }
+
     auto& state = DatabaseSnapshots[databaseName];
     {
         auto& req = state.PendingUserRequests.emplace_back();
@@ -427,6 +432,33 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
     }
 
     ScheduleAcquireSnapshot(databaseName, state);
+}
+
+void TLongTxServiceActor::RegisterRequestedSnapshot(
+    TEvLongTxService::TEvAcquireReadSnapshot::TPtr& ev, const TString& databaseName) {
+    auto* msg = ev->Get();
+    const auto snapshot = *msg->Snapshot;
+    if (!snapshot.Step || snapshot.Step == Max<ui64>()) {
+        Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::BAD_REQUEST,
+                             NYql::TIssues{ NYql::TIssue("Invalid requested snapshot version") },
+                             std::move(msg->Orbit)), 0, ev->Cookie);
+        return;
+    }
+
+    NKqp::TSnapshotHandle handle;
+    if (AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
+        TLocalSnapshotInfo info(snapshot, ev->Sender, std::move(msg->TableIds));
+        handle = NKqp::TSnapshotHandle(info.AliveFlag);
+        if (!LocalSnapshotsStorage->Insert(std::move(info))) {
+            Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::BAD_REQUEST,
+                                 NYql::TIssues{ NYql::TIssue("Snapshot already registered by this actor") },
+                                 std::move(msg->Orbit)), 0, ev->Cookie);
+            return;
+        }
+    }
+    Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, snapshot, std::move(handle),
+                         std::move(msg->Orbit)), 0, ev->Cookie);
+    return;
 }
 
 void TLongTxServiceActor::ScheduleAcquireSnapshot(const TString& databaseName, TDatabaseSnapshotState& state) {

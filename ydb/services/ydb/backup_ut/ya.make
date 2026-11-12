@@ -15,6 +15,7 @@ SRCS(
     encrypted_backup_ut.cpp
     fs_backup_validation_ut.cpp
     list_objects_in_s3_export_ut.cpp
+    table_checksum_ut.cpp
     ydb_backup_ut.cpp
 )
 
@@ -22,6 +23,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/fmt
     library/cpp/streams/zstd
+    ydb/core/kqp/ut/common
     ydb/core/testlib/pg
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
@@ -40,6 +42,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/value
     ydb/library/backup
     ydb/library/testlib/parquet_helpers
+    yql/essentials/udfs/common/digest
 )
 
 YQL_LAST_ABI_VERSION()

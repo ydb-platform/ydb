@@ -4750,6 +4750,11 @@ void TDataShard::Handle(TEvDataShard::TEvStoreS3UploadId::TPtr& ev, const TActor
     Execute(new TTxStoreS3UploadId(this, ev), ctx);
 }
 
+void TDataShard::Handle(TEvDataShard::TEvStoreBackupChecksumRequest::TPtr& ev, const TActorContext& ctx)
+{
+    Execute(new TTxStoreBackupChecksum(this, ev), ctx);
+}
+
 void TDataShard::Handle(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx)
 {
     Execute(new TTxChangeS3UploadStatus(this, ev), ctx);

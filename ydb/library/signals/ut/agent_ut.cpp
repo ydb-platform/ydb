@@ -23,4 +23,32 @@ TEST(TValueAggregationAgentTest, MinMaxSum) {
     EXPECT_EQ(group->FindCounter("Aggregation/SUM/Value")->Val(), 10);
 }
 
+TEST(TValueAggregationAgentTest, RegistersAfterClientWrite) {
+    auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    TCommonCountersOwner owner("test", root);
+    TValueAggregationAgent agent("Value", owner);
+    auto client = agent.GetClient();
+    agent.ResendStatus();
+    auto group = root->FindSubgroup("module_id", "test");
+    EXPECT_FALSE(group->FindCounter("Aggregation/SUM/Value"));
+
+    client->SetValue(5);
+    agent.ResendStatus();
+    EXPECT_EQ(group->FindCounter("Aggregation/SUM/Value")->Val(), 5);
+    EXPECT_EQ(group->FindCounter("Aggregation/MAX/Value")->Val(), 5);
+
+    client.reset();
+    agent.ResendStatus();
+    EXPECT_EQ(group->FindCounter("Aggregation/SUM/Value")->Val(), 0);
+}
+
+TEST(TValueAggregationAgentTest, RegistersAfterClientReleasedBeforeStatus) {
+    auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    TCommonCountersOwner owner("test", root);
+    TValueAggregationAgent agent("Value", owner);
+    agent.GetClient()->SetValue(5);
+    agent.ResendStatus();
+    EXPECT_EQ(root->FindSubgroup("module_id", "test")->FindCounter("Aggregation/SUM/Value")->Val(), 0);
+}
+
 } // namespace NKikimr::NColumnShard

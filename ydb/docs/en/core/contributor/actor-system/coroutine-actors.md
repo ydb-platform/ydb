@@ -159,6 +159,8 @@ An exception stored by a nested child is rethrown in the parent at co_await.
 `async<T>` is deliberately not a general future or detachable task. Do not use
 UnsafeMove in ordinary application code; it exists for library combinators.
 
+Frame allocation on executor workers goes through a per-worker cache; it does not change any ownership or lifetime rule on this page. See [Coroutine Frame Cache](coroutine-frame-cache.md) for its budget, statistics, and test helpers.
+
 ## Parameters, captures, and frame-owned data
 
 The top-level specialization is selected only for:

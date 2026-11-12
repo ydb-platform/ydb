@@ -21,7 +21,6 @@ PEERDIR(
     ydb/library/grpc/server
     ydb/core/base
     ydb/core/grpc_services
-    ydb/core/kqp/common
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
     ydb/core/persqueue/common
@@ -54,4 +53,5 @@ RECURSE_FOR_TESTS(
     ut/new_schemecache_ut
     ut/describes_ut
     ut/direct_read_restore_ut
+    ut/tablet_restart_session_ut
 )

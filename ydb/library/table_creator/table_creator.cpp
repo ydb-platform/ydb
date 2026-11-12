@@ -521,6 +521,13 @@ private:
                         return false;
                     }
                     break;
+                case NKikimrSchemeOp::TIndexDescription::kHnswIndexDescription:
+                    if (required.GetHnswIndexDescription().SerializeAsString()
+                        != existing.GetHnswIndexDescription().SerializeAsString())
+                    {
+                        return false;
+                    }
+                    break;
                 case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription:
                     if (required.GetFulltextIndexDescription().SerializeAsString()
                         != existing.GetFulltextIndexDescription().SerializeAsString())
@@ -609,6 +616,9 @@ private:
             case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription:
                 *config.MutableVectorIndexKmeansTreeDescription() =
                     index.GetVectorIndexKmeansTreeDescription();
+                break;
+            case NKikimrSchemeOp::TIndexDescription::kHnswIndexDescription:
+                *config.MutableHnswIndexDescription() = index.GetHnswIndexDescription();
                 break;
             case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription:
                 *config.MutableFulltextIndexDescription() = index.GetFulltextIndexDescription();
@@ -815,8 +825,12 @@ NKikimrSchemeOp::TPartitioningPolicy TMultiTableCreator::AutoPartitioningByLoadP
 }
 
 TMultiTableCreator::TMultiTableCreator(std::vector<NActors::IActor*> tableCreators)
-    : TableCreators(std::move(tableCreators))
-{}
+{
+    TableCreators.reserve(tableCreators.size());
+    for (auto* creator : tableCreators) {
+        TableCreators.emplace_back(creator);
+    }
+}
 
 void TMultiTableCreator::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {
     TBase::Registered(sys, owner);
@@ -827,8 +841,8 @@ void TMultiTableCreator::Bootstrap() {
     Become(&TMultiTableCreator::StateFunc);
 
     TablesCreating = TableCreators.size();
-    for (const auto creator : TableCreators) {
-        Register(creator);
+    for (auto& creator : TableCreators) {
+        Register(creator.Release());
     }
 }
 

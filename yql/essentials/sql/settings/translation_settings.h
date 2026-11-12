@@ -125,13 +125,15 @@ struct TTranslationSettings {
     bool WarnOnV0;
     bool TestAntlr4; // TODO(YQL-19017): remove.
     TMaybe<size_t> MaxParseTreeDepth;
+    ui32 GroupByLimit = 64;
+    ui32 GroupByCubeLimit = 5;
     ISqlFeaturePolicy::TPtr V0WarnAsError;
     ISqlFeaturePolicy::TPtr DqDefaultAuto;
     ISqlFeaturePolicy::TPtr BlockDefaultAuto;
     bool AssumeYdbOnClusterWithSlash;
     TString DynamicClusterProvider;
     TString FileAliasPrefix;
-    const NYql::IUdfMeta* UdfMeta = nullptr;
+    const NYql::TUdfMeta* UdfMeta = nullptr;
 
     TVector<ui32> PgParameterTypeOids;
     bool AutoParametrizeEnabled = false;
@@ -151,6 +153,8 @@ struct TTranslationSettings {
     bool ValidateViewStatement = true;
 
     TVector<TString> ExtraSystemColumnPrefixes;
+
+    bool StrictConfigValidation = false;
 };
 
 struct TParsedSettings {

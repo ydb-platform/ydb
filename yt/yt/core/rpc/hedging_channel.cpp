@@ -210,7 +210,7 @@ private:
 
     TDelayedExecutorCookie DeadlineCookie_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     bool Acknowledged_ = false;
     bool Responded_ = false;
     bool PrimaryCanceled_ = false;
@@ -223,7 +223,7 @@ private:
         RequestControls_.push_back(std::move(requestControl));
     }
 
-    void CancelSentRequests(TGuard<NThreading::TSpinLock>&& guard)
+    void CancelSentRequests(TGuard<TSpinLock>&& guard)
     {
         TCompactVector<IClientRequestControlPtr, 2> requestControls;
         std::swap(RequestControls_, requestControls);

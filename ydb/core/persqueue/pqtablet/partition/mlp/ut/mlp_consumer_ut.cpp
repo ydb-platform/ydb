@@ -27,6 +27,8 @@ Y_UNIT_TEST(ReloadPQTablet) {
 
     // Write many messages because small snapshot do not write wal
     WriteMany(setup, "/Root/topic1", 0, 16, 113);
+    ui64 committedOffset = 0;
+    ui64 lockedOffset = 0;
 
     {
         CreateReaderActor(runtime, {
@@ -40,6 +42,8 @@ Y_UNIT_TEST(ReloadPQTablet) {
 
         auto result = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        committedOffset = result->Messages[0].MessageId.Offset;
     }
 
     {
@@ -54,6 +58,9 @@ Y_UNIT_TEST(ReloadPQTablet) {
 
         auto result = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        lockedOffset = result->Messages[0].MessageId.Offset;
+        UNIT_ASSERT_VALUES_UNEQUAL(lockedOffset, committedOffset);
     }
 
     Cerr << ">>>>> BEGIN COMMIT" << Endl;
@@ -63,7 +70,7 @@ Y_UNIT_TEST(ReloadPQTablet) {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
-            .Messages = { TMessageId(0, 0) }
+            .Messages = { TMessageId(0, committedOffset) }
         });
 
         auto result = GetChangeResponse(runtime);
@@ -73,21 +80,32 @@ Y_UNIT_TEST(ReloadPQTablet) {
     Cerr << ">>>>> BEGIN REBOOT " << Endl;
     ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
 
-    for (size_t i = 0; i < 10; ++i) {
+    bool sawLocked = false;
+    for (size_t i = 0; i < 10 && !sawLocked; ++i) {
         Sleep(TDuration::Seconds(1));
 
         auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
-        if (i < 9 && result->Messages.size() != 2) {
+        bool hasLocked = false;
+        bool hasUnprocessed = false;
+        for (const auto& message : result->Messages) {
+            if (message.Offset == committedOffset) {
+                UNIT_ASSERT_VALUES_EQUAL(message.Status, static_cast<ui32>(TStorage::EMessageStatus::Committed));
+            }
+            if (message.Offset == lockedOffset) {
+                hasLocked = true;
+                UNIT_ASSERT_VALUES_EQUAL(message.Status, static_cast<ui32>(TStorage::EMessageStatus::Locked));
+            }
+            if (message.Status == static_cast<ui32>(TStorage::EMessageStatus::Unprocessed)) {
+                hasUnprocessed = true;
+            }
+        }
+        if (!hasLocked) {
             continue;
         }
-
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Offset, 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, static_cast<ui32>(TStorage::EMessageStatus::Locked));
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Offset, 2);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Status, static_cast<ui32>(TStorage::EMessageStatus::Unprocessed));
-
-        break;
+        UNIT_ASSERT(hasUnprocessed);
+        sawLocked = true;
     }
+    UNIT_ASSERT(sawLocked);
 }
 
 Y_UNIT_TEST(AlterConsumer) {
@@ -943,6 +961,93 @@ Y_UNIT_TEST(DelayedMessageNotReadableUntilDeadline) {
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "delayed");
     }
+}
+
+Y_UNIT_TEST(DisabledInflightMutationStopsFetchingButAllowsDraining) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    auto setDisabled = [&](bool disabled) {
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableMLPConsumerInFlightMutateDisabled(disabled);
+        }
+    };
+    setDisabled(false);
+
+    const auto status = CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    const size_t bufferedMessages = TStorage::TStorageSettings{}.MinMessages;
+    WriteMany(setup, "/Root/topic1", 0, /*messageSize=*/64, bufferedMessages);
+
+    // Fill the normal read-ahead window before adding the extra message, so
+    // no fetch already in flight can bring it into the consumer's storage.
+    const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+    size_t inflightMessages = 0;
+    do {
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        inflightMessages = state->Messages.size();
+    } while (inflightMessages < bufferedMessages && TInstant::Now() < deadline);
+    UNIT_ASSERT_VALUES_EQUAL(inflightMessages, bufferedMessages);
+
+    setup->Write("/Root/topic1", "outside-inflight", 0);
+    auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+    UNIT_ASSERT_VALUES_EQUAL(state->Messages.size(), bufferedMessages);
+    for (const auto& message : state->Messages) {
+        UNIT_ASSERT_C(message.Offset < bufferedMessages, message.Offset);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, static_cast<ui32>(TStorage::EMessageStatus::Unprocessed));
+    }
+
+    setDisabled(true);
+
+    auto read = [&](TDuration waitTime = TDuration::Seconds(1)) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = waitTime,
+            .ProcessingTimeout = TDuration::Minutes(5),
+            .MaxNumberOfMessage = 10,
+        });
+        auto response = GetReadResponse(runtime, waitTime + TDuration::Seconds(10));
+        UNIT_ASSERT_C(response, "MLP read timed out");
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+        return response;
+    };
+
+    THashSet<ui64> receivedOffsets;
+    while (receivedOffsets.size() < bufferedMessages) {
+        auto response = read();
+        UNIT_ASSERT_C(!response->Messages.empty(), "Buffered messages must remain readable");
+        TCommitterSettings commit{
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+        };
+        for (const auto& message : response->Messages) {
+            UNIT_ASSERT_VALUES_EQUAL(message.MessageId.PartitionId, 0);
+            UNIT_ASSERT_C(message.MessageId.Offset < bufferedMessages, message.MessageId.Offset);
+            UNIT_ASSERT_C(receivedOffsets.insert(message.MessageId.Offset).second, message.MessageId.Offset);
+            commit.Messages.push_back(message.MessageId);
+        }
+        // Free capacity: the extra message must be blocked by the feature flag,
+        // not by a full inflight window or locks on previously read messages.
+        CreateCommitterActor(runtime, std::move(commit));
+        auto committed = GetChangeResponse(runtime);
+        UNIT_ASSERT(committed);
+        UNIT_ASSERT_VALUES_EQUAL_C(committed->Status, Ydb::StatusIds::SUCCESS, committed->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(committed->Messages.size(), response->Messages.size());
+        for (const auto& message : committed->Messages) {
+            UNIT_ASSERT_C(message.Status == EOperationResult::Success, message.MessageId.Offset);
+        }
+    }
+
+    UNIT_ASSERT(read()->Messages.empty());
+
+    // The same unread message becomes available when fetching is enabled again.
+    setDisabled(false);
+    auto response = read(TDuration::Seconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.front().MessageId.Offset, bufferedMessages);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.front().Data, "outside-inflight");
 }
 
 Y_UNIT_TEST(FetchThrottledAtMinMessages) {

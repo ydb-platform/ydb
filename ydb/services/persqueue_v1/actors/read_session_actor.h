@@ -274,6 +274,7 @@ private:
             HFunc(TEvPQProxy::TEvReadingStarted, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvReadingFinished, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvReadWindowExhausted, Handle); // from partitionActor
+            HFunc(TEvPersQueue::TEvReplicationData, Handle);
 
 
             // Balancer events
@@ -328,6 +329,7 @@ private:
     void Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadWindowExhausted::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx);
 
     // Balancer events
     void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx); // can be sent to itself when reading without a consumer
@@ -432,6 +434,7 @@ private:
 
     bool ReadOnlyLocal;
     bool BatchingSupported = false;
+    bool SupportsReplicationMessages = false;
     TDuration CommitInterval;
 
     TSet<TPartitionInfo> AvailablePartitions;

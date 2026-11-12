@@ -1,6 +1,8 @@
 items:
 - name: Initial deployment
   href: initial-deployment.md
+- name: SSO setup
+  href: sso.md
 - name: Configuring S3 backups
   href: s3-backups.md
 - name: Configuring AI assistant

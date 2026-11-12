@@ -23,6 +23,26 @@ TInfoUnitId ResolveBinding(const TExpression::TBindings& bindings, TStringBuf na
     return it->second;
 }
 
+// A select with ORDER BY builds its LIMIT right on its sort or on the ordered projection that follows the sort.
+bool LimitsOwnSort(const TExprBase& input) {
+    if (input.Maybe<TKqpOpSort>()) {
+        return true;
+    }
+    if (const auto map = input.Maybe<TKqpOpMap>()) {
+        const auto ordered = map.Cast().Ordered();
+        return ordered && ordered.Cast().Value() == "True";
+    }
+    return false;
+}
+
+TOrderedIUs<> RebindProjection(const TOrderedIUs<>& projection, const TSubstitutions& substitutions) {
+    TOrderedIUs<> result;
+    for (const auto id : projection.Items()) {
+        result.Append(Substitute(id, substitutions));
+    }
+    return result;
+}
+
 
 TUnorderedIUs GetVisibleDependencies(IOperator* op) {
     TUnorderedIUs result;
@@ -142,6 +162,19 @@ PlanConverter::TBindingScope PlanConverter::GetBindings(const TExprNode::TPtr& n
     return it->second;
 }
 
+std::optional<TOrderedIUs<>> PlanConverter::GetProjection(const TExprNode::TPtr& node) const {
+    const auto it = Projections.find(TImportKey{node.Get(), CaptureFreeNodes.at(node.Get()) ? 0 : BindingContext});
+    return it == Projections.end() ? std::nullopt : std::optional(it->second);
+}
+
+void PlanConverter::PropagateProjection(const TExprNode::TPtr& input, const TExprNode::TPtr& output,
+    const TSubstitutions& substitutions)
+{
+    if (const auto projection = GetProjection(input)) {
+        Projections[TImportKey{output.Get(), BindingContext}] = RebindProjection(*projection, substitutions);
+    }
+}
+
 std::pair<TIntrusivePtr<IOperator>, PlanConverter::TBindingScope> PlanConverter::ConvertSubquery(
     TExprNode::TPtr node, const TExpression::TBindings& bindings)
 {
@@ -177,12 +210,16 @@ TExpression PlanConverter::ConvertExpression(TExprNode::TPtr lambda, const TExpr
         ESubplanType type;
         TOrderedIUs<> tuple;
         std::optional<TInfoUnitId> resultIU;
+        bool optionalResult = false;
         if (TKqpExprSublink::Match(node.Get())) {
             type = ESubplanType::EXPR;
         } else if (TKqpExistsSublink::Match(node.Get())) {
             type = ESubplanType::EXISTS;
         } else {
             type = ESubplanType::IN_SUBPLAN;
+            // The sublink keeps the type the query gave the IN, see AnnotateSublinkBase.
+            Y_ENSURE(node->GetTypeAnn(), "IN sublink is not type annotated");
+            optionalResult = node->GetTypeAnn()->IsOptionalOrNull();
             const auto& inLambda = node->Child(TKqpInSublink::idx_InLambda);
             Y_ENSURE(inLambda->IsLambda());
             const auto& comparison = inLambda->Child(1);
@@ -208,7 +245,7 @@ TExpression PlanConverter::ConvertExpression(TExprNode::TPtr lambda, const TExpr
             resultIU = ResolveBinding(*subplanBindings, row->GetItems().front()->GetName());
         }
         const auto id = PlanProps.InfoUnitRegistry.AddGenerated("subquery");
-        PlanProps.Subplans.Add(id, std::move(subplan), type, std::move(tuple), resultIU);
+        PlanProps.Subplans.Add(id, std::move(subplan), type, std::move(tuple), resultIU, optionalResult);
         // clang-format off
         auto member = Build<TCoMember>(Ctx, node->Pos())
             .Struct(lambda->Head().HeadPtr())
@@ -313,6 +350,9 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
         for (auto& [name, id] : *bindings) {
             id = *rebindings.Find(id);
         }
+        if (it->second.Projection) {
+            Projections[key] = RebindProjection(*it->second.Projection, rebindings);
+        }
         OutputBindings[key] = std::move(bindings);
         return port;
     }
@@ -326,14 +366,69 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
         auto bindings = std::make_shared<TExpression::TBindings>();
         const auto source = TKqpOpRead(node);
         bindings->reserve(source.Columns().Size());
+        TOrderedIUs<> projection;
         auto id = read->GetColumns().begin();
         for (const auto& column : source.Columns()) {
             // FromExpr allocates fresh consecutive IDs in source-column order.
             const auto name = TInfoUnit(source.Alias().StringValue(), column.StringValue()).GetFullName();
+            projection.Append(*id);
             Y_ENSURE(bindings->emplace(name, *id++).second, "Ambiguous Read binding " << name);
         }
+        Projections[key] = std::move(projection);
         OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(bindings);
         result = std::move(read);
+    } else if (TKqlSequencer::Match(node.Get())) {
+        const auto sequencer = TKqlSequencer(node);
+        auto input = ExprNodeToOperator(sequencer.Input().Ptr());
+        const auto inputBindings = GetBindings(sequencer.Input().Ptr());
+        auto bindings = std::make_shared<TExpression::TBindings>();
+        TOrderedIUs<TString> inputColumns;
+        TOrderedIUs<TString> generatedColumns;
+        THashSet<TString> generatedNames;
+        for (const auto column : sequencer.DefaultConstraintColumns()) {
+            Y_ENSURE(generatedNames.insert(column.StringValue()).second, "Duplicate sequence column");
+        }
+        TOrderedIUs<> projection;
+        for (const auto column : sequencer.Columns()) {
+            const auto name = column.StringValue();
+            const auto generated = generatedNames.contains(name);
+            Y_ENSURE(!generated || !inputBindings->contains(name), "Sequence column already supplied: " << name);
+            const auto id = generated ? PlanProps.InfoUnitRegistry.Add(TInfoUnit("", name)) : ResolveBinding(*inputBindings, name);
+            (generated ? generatedColumns : inputColumns).Append(id, name);
+            Y_ENSURE(bindings->emplace(name, id).second, "Duplicate sequencer output " << name);
+            projection.Append(id);
+        }
+        Y_ENSURE(generatedColumns.Items().size() == generatedNames.size(), "Missing sequencer output column");
+        Projections[key] = std::move(projection);
+        OutputBindings[key] = std::move(bindings);
+        result = MakeIntrusive<TOpSequencer>(std::move(input), node->Pos(), sequencer.Table().Ptr(),
+            std::move(inputColumns), std::move(generatedColumns));
+    } else if (TKqlStreamLookupTable::Match(node.Get())) {
+        const auto lookup = TKqlStreamLookupTable(node);
+        Y_ENSURE(TKqpStreamLookupSettings::Parse(lookup.Settings()).Strategy == EStreamLookupStrategyType::LookupRows);
+        auto input = ExprNodeToOperator(lookup.LookupKeys().Ptr());
+        const auto inputBindings = GetBindings(lookup.LookupKeys().Ptr());
+        TOpTableLookup::TLookupKeys keys;
+        const auto* schema = lookup.LookupKeys().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        for (const auto* field : schema->GetItems()) {
+            keys.Append(ResolveBinding(*inputBindings, field->GetName()), TString(field->GetName()));
+        }
+        TUnorderedIUs columns;
+        TOrderedIUs<> projection;
+        auto bindings = std::make_shared<TExpression::TBindings>();
+        for (const auto column : lookup.Columns()) {
+            const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit("", column.StringValue()));
+            columns.Add(id);
+            projection.Append(id);
+            Y_ENSURE(bindings->emplace(column.StringValue(), id).second);
+        }
+        auto op = MakeIntrusive<TOpTableLookup>(std::move(input), node->Pos(), lookup.Table().Ptr(),
+            std::move(columns), std::move(keys));
+        // Index rows can refer to a nullable main-table primary key.
+        op->AllowNullKeys = true;
+        Projections[key] = std::move(projection);
+        OutputBindings[key] = std::move(bindings);
+        result = std::move(op);
     } else if (NYql::NNodes::TKqpOpMap::Match(node.Get())) {
         result = ConvertTKqpOpMap(node);
     } else if (NYql::NNodes::TKqpInfuseDependents::Match(node.Get())) {
@@ -372,7 +467,7 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
     if (Uses.Value(node.Get(), 0) > 1 || sharedBoundary) {
         auto hub = TReplicate::Create(std::move(result), node->Pos(), PlanProps.InfoUnitRegistry);
         result = hub->AddOutput();
-        Converted.emplace(key, TSharedImport{std::move(hub), GetBindings(node)});
+        Converted.emplace(key, TSharedImport{std::move(hub), GetBindings(node), GetProjection(node)});
     }
     return result;
 }
@@ -407,6 +502,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
     auto input = ExprNodeToOperator(source.Input().Ptr());
     const auto bindings = GetBindings(source.Input().Ptr());
     const bool sourceProjects = GetProject(source);
+    auto projection = sourceProjects ? std::optional<TOrderedIUs<>>(std::in_place) : GetProjection(source.Input().Ptr());
     TVector<std::pair<TString, TMapElement>> definitions;
     for (const auto& item : source.MapElements()) {
         TExpression expression;
@@ -432,6 +528,9 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
     for (auto& [name, element] : definitions) {
         const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit(name));
         elements.Add(id, std::move(element));
+        if (projection) {
+            projection->Append(id);
+        }
         Y_ENSURE(output->emplace(name, id).second, "Duplicate Map output " << name);
     }
     if (sourceProjects) {
@@ -443,6 +542,9 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
                 output->emplace(name, id);
             }
         }
+    }
+    if (projection) {
+        Projections[TImportKey{node.Get(), BindingContext}] = std::move(*projection);
     }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
     return MakeIntrusive<TOpMap>(std::move(input), node->Pos(), std::move(elements));
@@ -483,6 +585,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpInfuseDependents(TExprNode::T
         Y_ENSURE(inserted || it->second == local, "Captured binding shadows an inner field " << name);
     }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
+    PropagateProjection(source.Input().Ptr(), node);
     return MakeIntrusive<TOpAddDependencies>(std::move(input), node->Pos(), std::move(dependencies));
 }
 
@@ -490,6 +593,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node
     auto opFilter = TKqpOpFilter(node);
     auto input = ExprNodeToOperator(opFilter.Input().Ptr());
     const auto bindings = GetBindings(opFilter.Input().Ptr());
+    PropagateProjection(opFilter.Input().Ptr(), node);
     auto expression = ConvertExpression(opFilter.Lambda().Ptr(), *bindings);
     auto filter = MakeIntrusive<TOpFilter>(std::move(input), node->Pos(), expression);
     OutputBindings[TImportKey{node.Get(), BindingContext}] = bindings;
@@ -547,7 +651,9 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
     auto leftNode = source.LeftInput().Ptr();
     auto rightNode = source.RightInput().Ptr();
     auto left = ExprNodeToOperator(leftNode);
-    auto leftBindings = *GetBindings(leftNode);
+    const auto originalLeftBindings = GetBindings(leftNode);
+    const auto leftProjection = GetProjection(leftNode);
+    auto leftBindings = *originalLeftBindings;
     auto right = ExprNodeToOperator(rightNode);
     auto rightBindings = *GetBindings(rightNode);
     const auto fields = [](const TExprNode::TPtr& expr) {
@@ -641,6 +747,14 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
         result = MakeIntrusive<TOpAggregate>(std::move(result), std::move(aggregations), std::move(keys),
             EOpPhase::Undefined, true, node->Pos());
     }
+    if (leftProjection) {
+        TSubstitutions substitutions;
+        for (size_t i = 0; i < outputFields.size(); ++i) {
+            substitutions.Add(ResolveBinding(*originalLeftBindings, leftFields[i]->GetName()),
+                ResolveBinding(*output, outputFields[i]->GetName()));
+        }
+        Projections[TImportKey{node.Get(), BindingContext}] = RebindProjection(*leftProjection, substitutions);
+    }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
     return result;
 }
@@ -655,7 +769,10 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node)
         offset = ConvertExpression(value.Cast().Ptr(), *bindings, /*allowSubqueries=*/false);
     }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = bindings;
-    return MakeIntrusive<TOpLimit>(std::move(input), node->Pos(), TPhysicalOpProps{}, count, std::move(offset), EOpPhase::Undefined);
+    PropagateProjection(source.Input().Ptr(), node);
+    auto limit = MakeIntrusive<TOpLimit>(std::move(input), node->Pos(), TPhysicalOpProps{}, count, std::move(offset), EOpPhase::Undefined);
+    limit->OrderedInput = LimitsOwnSort(source.Input());
+    return limit;
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr node) {
@@ -663,10 +780,14 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr nod
     auto input = ExprNodeToOperator(source.Input().Ptr());
     const auto bindings = GetBindings(source.Input().Ptr());
     auto output = std::make_shared<TExpression::TBindings>();
+    TOrderedIUs<> projection;
     for (const auto& column : node->Child(TKqpOpProject::idx_ProjectList)->Children()) {
         const TString name(column->Content());
-        output->emplace(name, ResolveBinding(*bindings, name));
+        const auto id = ResolveBinding(*bindings, name);
+        output->emplace(name, id);
+        projection.Append(id);
     }
+    Projections[TImportKey{node.Get(), BindingContext}] = std::move(projection);
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
     // A source visibility boundary must not become an optimizer projection.
     return input;
@@ -700,6 +821,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node) 
         input = MakeIntrusive<TOpMap>(std::move(input), node->Pos(), std::move(definitions));
     }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = bindings;
+    PropagateProjection(source.Input().Ptr(), node);
     return MakeIntrusive<TOpSort>(std::move(input), node->Pos(), std::move(keys));
 }
 
@@ -802,15 +924,9 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpWindow(TExprNode::TPtr node
         functions.Add(id, TOpWindowFunc{TString(item.Function()), WindowFuncKindFromString(TString(item.Kind())), std::move(arguments)});
         Y_ENSURE(output->emplace(name, id).second, "Duplicate Window output " << name);
     }
-    const auto sourceFrame = source.Frame();
-    TOpWindowFrame frame;
-    frame.Type = WindowFrameTypeFromString(TString(sourceFrame.FrameType()));
-    frame.BeginKind = WindowFrameBoundFromString(TString(sourceFrame.BeginKind()));
-    frame.BeginValue = FromString<ui64>(TString(sourceFrame.BeginValue()));
-    frame.EndKind = WindowFrameBoundFromString(TString(sourceFrame.EndKind()));
-    frame.EndValue = FromString<ui64>(TString(sourceFrame.EndValue()));
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
-    return MakeIntrusive<TOpWindow>(std::move(input), node->Pos(), std::move(functions), std::move(partitionKeys), std::move(sortKeys), frame);
+    return MakeIntrusive<TOpWindow>(std::move(input), node->Pos(), std::move(functions), std::move(partitionKeys), std::move(sortKeys),
+                                    WindowFrameFromNode(source.Frame()));
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPtr node) {
@@ -820,15 +936,19 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPt
     const auto* schema = source.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto output = std::make_shared<TExpression::TBindings>();
     TMapIUs elements;
+    TSubstitutions substitutions;
     for (const auto* field : schema->GetItems()) {
         const TString oldName(field->GetName());
         // Match the import AST's ReplaceAlias spelling rule exactly.
         const auto dot = oldName.find('.');
         const auto name = source.Alias().StringValue() + "." + oldName.substr(dot == TString::npos ? 0 : dot + 1);
         const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit(name));
-        elements.Add(id, MakeColumnAccess(ResolveBinding(*bindings, oldName), node->Pos(), &Ctx, &PlanProps));
+        const auto inputId = ResolveBinding(*bindings, oldName);
+        elements.Add(id, MakeColumnAccess(inputId, node->Pos(), &Ctx, &PlanProps));
+        substitutions.Add(inputId, id);
         Y_ENSURE(output->emplace(name, id).second, "Ambiguous ReplaceAlias output " << name);
     }
+    PropagateProjection(source.Input().Ptr(), node, substitutions);
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
     return MakeIntrusive<TOpMap>(std::move(input), node->Pos(), std::move(elements));
 }
@@ -836,19 +956,21 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPt
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceColumns(TExprNode::TPtr node) {
     const auto source = TKqpOpReplaceColumns(node);
     auto input = ExprNodeToOperator(source.Input().Ptr());
-    const auto bindings = GetBindings(source.Input().Ptr());
-    const auto fields = source.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems();
+    const auto inputProjection = GetProjection(source.Input().Ptr());
     const auto columns = node->ChildPtr(TKqpOpReplaceColumns::idx_Columns);
-    Y_ENSURE(fields.size() == columns->ChildrenSize());
+    Y_ENSURE(inputProjection, "Missing projection for positional column replacement");
+    Y_ENSURE(inputProjection->Items().size() == columns->ChildrenSize());
     auto output = std::make_shared<TExpression::TBindings>();
+    TOrderedIUs<> projection;
     TMapIUs elements;
-    for (size_t i = 0; i < fields.size(); ++i) {
-        // Positional correspondence belongs to the source schema, not ID order.
+    for (size_t i = 0; i < columns->ChildrenSize(); ++i) {
         const TString name(columns->Child(i)->Content());
         const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit(name));
-        elements.Add(id, MakeColumnAccess(ResolveBinding(*bindings, fields[i]->GetName()), node->Pos(), &Ctx, &PlanProps));
+        elements.Add(id, MakeColumnAccess(inputProjection->Items()[i], node->Pos(), &Ctx, &PlanProps));
+        projection.Append(id);
         Y_ENSURE(output->emplace(name, id).second, "Duplicate ReplaceColumns output " << name);
     }
+    Projections[TImportKey{node.Get(), BindingContext}] = std::move(projection);
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
     return MakeIntrusive<TOpMap>(std::move(input), node->Pos(), std::move(elements));
 }
@@ -864,6 +986,15 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpEmptySource(TExprNode::TPtr
             columns.Add(id);
             Y_ENSURE(bindings->emplace(name, id).second, "Duplicate parameter-table column " << name);
         }
+        if (const auto order = TypeCtx.LookupColumnOrder(node->Head())) {
+            TOrderedIUs<> projection;
+            for (const auto& column : *order) {
+                projection.Append(ResolveBinding(*bindings, column.PhysicalName));
+            }
+            Projections[TImportKey{node.Get(), BindingContext}] = std::move(projection);
+        }
+    } else {
+        Projections[TImportKey{node.Get(), BindingContext}] = {};
     }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(bindings);
     return MakeIntrusive<TOpEmptySource>(node->Pos(), node->ChildrenSize() ? node->HeadPtr() : nullptr, std::move(columns));
@@ -872,21 +1003,12 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpEmptySource(TExprNode::TPtr
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr node) {
     const auto opTableEffect = TKqpOpTableEffect(node);
     auto input = ExprNodeToOperator(opTableEffect.Input().Ptr());
-    
+    const auto bindings = GetBindings(opTableEffect.Input().Ptr());
     PlanProps.WithEffects = true;
 
     EEffectType type = EEffectType::InsertRows;
     TEffectOptions options;
-
     auto effectType = opTableEffect.EffectType().StringValue();
-
-    auto processColumns = [](const TCoAtomList& atomList) {
-        TVector<TString> result;
-        for (auto a : atomList) {
-            result.push_back(a.StringValue());
-        }
-        return result;
-    };
 
     auto processSettings = [](const TCoNameValueTupleList& settingsList) {
         TVector<TExprNode::TPtr> result;
@@ -896,75 +1018,76 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
         return result;
     };
 
-    auto columns = opTableEffect.Columns().Maybe<TCoAtomList>();
     auto onConflict = opTableEffect.OnConflict().Maybe<TCoAtom>();
     auto returningColumns = opTableEffect.ReturningColumns().Maybe<TCoAtomList>();
     auto settings = opTableEffect.Settings().Maybe<TCoNameValueTupleList>();
     auto isBatch = opTableEffect.IsBatch().Maybe<TCoAtom>();
 
-    PlanProps.WithReturning = (bool)returningColumns;
+    PlanProps.WithReturning = returningColumns && !returningColumns.Cast().Empty();
 
     if (effectType == "TKqlInsertRows") {
         type = EEffectType::InsertRows;
 
-        options.Columns = processColumns(columns.Cast());
         options.OnConflict = onConflict.Cast().StringValue();
-        options.ReturningColumns = processColumns(returningColumns.Cast());
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "TKqlInsertRowsIndex") {
         type = EEffectType::InsertRowsIndex;
 
-        options.Columns = processColumns(columns.Cast());
         options.OnConflict = onConflict.Cast().StringValue();
-        options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "TKqlUpdateRows") {
         type = EEffectType::UpdateRows;
-
-        options.Columns = processColumns(columns.Cast());
-        options.ReturningColumns = processColumns(returningColumns.Cast());
     } else if (effectType == "TKqlUpdateRowsIndex") {
         type = EEffectType::UpdateRowsIndex;
 
-        options.Columns = processColumns(columns.Cast());
-        options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
+    } else if (effectType == "KqlUpsertRows" || effectType == "KqlUpsertRowsIndex") {
+        type = effectType == "KqlUpsertRowsIndex" ? EEffectType::UpsertRowsIndex : EEffectType::UpsertRows;
+
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
+        if (settings) {
+            options.Settings = processSettings(settings.Cast());
+        }
     } else if (effectType == "KqlDeleteRows") {
         type = EEffectType::DeleteRows;
 
-        options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "KqlDeleteRowsIndex") {
         type = EEffectType::DeleteRowsIndex;
 
-        options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else {
         Y_ENSURE(false, "Unexpected table effects operation");
     }
 
-    const auto bindings = GetBindings(opTableEffect.Input().Ptr());
-    TOrderedIUs<TString> inputColumns;
     const auto* schema = opTableEffect.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     for (const auto* field : schema->GetItems()) {
-        inputColumns.Append(ResolveBinding(*bindings, field->GetName()), TString(field->GetName()));
+        options.Columns.Append(ResolveBinding(*bindings, field->GetName()), TString(field->GetName()));
+    }
+    if (auto defaultColumns = opTableEffect.DefaultColumns().Maybe<TCoAtomList>()) {
+        for (const auto column : defaultColumns.Cast()) {
+            // The frontend also lists omitted RETURNING fields here. They
+            // are fetched by the returning sink, not supplied default values.
+            if (const auto it = bindings->find(column.StringValue()); it != bindings->end()) {
+                options.DefaultColumns.Add(it->second);
+            }
+        }
     }
     auto output = std::make_shared<TExpression::TBindings>();
-    TOrderedIUs<TString> returning;
-    if (options.ReturningColumns) {
-        for (const auto& column : *options.ReturningColumns) {
-            const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit("", column));
-            returning.Append(id, column);
-            Y_ENSURE(output->emplace(column, id).second, "Duplicate returning column " << column);
+    if (returningColumns) {
+        for (const auto column : returningColumns.Cast()) {
+            const auto name = column.StringValue();
+            const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit("", name));
+            options.ReturningColumns.Append(id, name);
+            Y_ENSURE(output->emplace(name, id).second, "Duplicate returning column " << name);
         }
     }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
-    return MakeIntrusive<TOpTableEffect>(std::move(input), node->Pos(), opTableEffect.Table().Ptr(), type, std::move(options),
-        std::move(inputColumns), std::move(returning));
+    return MakeIntrusive<TOpTableEffect>(std::move(input), node->Pos(), opTableEffect.Table().Ptr(), type, std::move(options));
 }
 
 } // namespace NKikimr::Nkqp

@@ -1,5 +1,6 @@
 ﻿PY3_LIBRARY()
 
+STYLE_PYTHON()
 
 PY_SRCS(
     http_client.py

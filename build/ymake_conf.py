@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 
+from collections import namedtuple
 from functools import total_ordering
 
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
@@ -44,7 +45,7 @@ LINUX_SDK_DEFAULT = "ubuntu-16"
 MACOS_VERSION_MIN = "11.0"
 MACOS_VERSION_MIN_AS_INT = "110000"
 IOS_VERSION_MIN = "13.0"
-WINDOWS_VERSION_MIN = WindowsVersion.Windows07
+WINDOWS_VERSION_MIN = WindowsVersion.Windows08
 
 
 def init_logger(verbose):
@@ -121,8 +122,9 @@ class Platform(object):
         self.is_rv32imc_zicsr = self.arch in ('riscv32_imc_zicsr',)
         self.is_rv32imc_zicsr_zifencei = self.arch in ('riscv32_imc_zicsr_zifencei',)
 
-        self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr or self.is_rv32imc_zicsr_zifencei
-        self.is_riscv64 = self.arch == 'riscv64_aw'
+        self.is_riscv32_esp32p4 = self.arch == 'riscv32_esp32p4'
+        self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr or self.is_rv32imc_zicsr_zifencei or self.is_riscv32_esp32p4
+        self.is_riscv64 = self.arch in ('riscv64', 'riscv64_aw')
         self.is_riscv64_aw = self.arch == 'riscv64_aw'
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
@@ -205,6 +207,7 @@ class Platform(object):
         self.is_freertos = self.os == 'freertos'
         self.is_zephyr = self.os == 'zephyr'
         self.is_zephyr_armv7_cortex_a35 = self.is_zephyr and self.is_armv7 and self.is_cortex_a35
+        self.is_zephyr_riscv64 = self.is_zephyr and self.arch == 'riscv64'
 
         self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto or self.is_freebsd
 
@@ -266,6 +269,7 @@ class Platform(object):
             (self.is_power8le, 'ARCH_POWER8LE'),
             (self.is_power9le, 'ARCH_POWER9LE'),
             (self.is_riscv32, 'ARCH_RISCV32'),
+            (self.is_riscv32_esp32p4, 'ARCH_RISCV32_ESP32P4'),
             (self.is_riscv64, 'ARCH_RISCV64'),
             (self.is_riscv64_aw, 'ARCH_RISCV64_AW'),
             (self.is_xtensa_hifi4, 'ARCH_XTENSA_HIFI4'),
@@ -570,6 +574,8 @@ def get_target_triple(target):
             (target.is_windows and target.is_x86_64, 'x86_64-pc-win32'),
 
             (target.is_zephyr_armv7_cortex_a35, 'arm-none-eabi'),
+            (target.is_zephyr_riscv64, 'riscv64-none-elf'),
+            (target.is_rv32imc_zicsr_zifencei and (target.is_none or target.is_freertos), 'riscv32-esp-elf'),
         ],
     )
 
@@ -870,6 +876,12 @@ class YMake(object):
             print(fin.read())
 
     def print_core_conf(self):
+        # python.conf's when ($BUILD_PYTHON3_BIN) is decided while this import is parsed.
+        # -D in the epilogue is too late: commands already point at the resource python.
+        for key in ("BUILD_PYTHON3_BIN", "BUILD_PYTHON_BIN"):
+            value = opts().presets.get(key)
+            if value:
+                emit(key, value)
         print('@import "${CONF_ROOT}/ymake.core.conf"')
 
     def print_settings(self):
@@ -1348,7 +1360,18 @@ class GnuToolchain(Toolchain):
 
         if target.is_zephyr_armv7_cortex_a35:
             self.c_flags_platform.append('-march=armv8-a -mthumb -mabi=aapcs -mfpu=neon-fp-armv8 -mfloat-abi=hard')
-            self.setup_zephyr_armv7()
+            self.setup_zephyr()
+
+        if target.is_zephyr_riscv64:
+            self.c_flags_platform.append('-march=rv64gc -mcmodel=medany -mabi=lp64d')
+            self.setup_zephyr()
+
+        if target.is_riscv32_esp32p4:
+            self.c_flags_platform.extend([
+                '-march=rv32imafc_zicsr_zifencei_zaamo_zalrsc_xesploop_xespv',
+                '-mabi=ilp32f',
+                '-mtune=esp-base',
+            ])
 
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
@@ -1358,6 +1381,8 @@ class GnuToolchain(Toolchain):
 
         if target.is_rv32imc_zicsr_zifencei:
             self.c_flags_platform.append('-march=rv32imc_zicsr_zifencei')
+            if self.tc.is_clang:
+                self.c_flags_platform.append('-mabi=ilp32')
 
         if target.is_riscv64_aw:
             self.c_flags_platform.append('-march=rv64gcxthead -mcmodel=medany -mabi=lp64d')
@@ -1410,8 +1435,6 @@ class GnuToolchain(Toolchain):
                     if target.is_x86_64:
                         if host.is_linux and not self.tc.is_gcc:
                             self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/lib/x86_64-linux-gnu')
-                        elif host.is_macos:
-                            self.setup_tools(project='build/platform/binutils', var='$BINUTILS_ROOT_RESOURCE_GLOBAL', bin='x86_64-linux-gnu/bin', ldlibs=None)
                     elif target.is_powerpc:
                         self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/x86_64-linux-gnu/powerpc64le-linux-gnu/lib')
                     elif target.is_armv8 or target.is_armv9a:
@@ -1434,8 +1457,8 @@ class GnuToolchain(Toolchain):
     def setup_actions_zephyr_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/actions_zephyr')
 
-    def setup_zephyr_armv7(self):
-        self.platform_projects.insert(0, 'build/internal/platform/zephyr_armv7')
+    def setup_zephyr(self):
+        self.platform_projects.insert(0, 'build/internal/platform/zephyr')
 
     def setup_allwinner_rtos_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/allwinner_rtos')
@@ -1657,7 +1680,7 @@ class GnuCompiler(Compiler):
         if self.target.is_zephyr:
             self.c_defines.append('-D__ZEPHYR__')
 
-        if self.target.is_zephyr_armv7_cortex_a35:
+        if self.target.is_zephyr_armv7_cortex_a35 or self.target.is_zephyr_riscv64:
             self.c_defines.append('-D_LIBUNWIND_IS_BAREMETAL')
 
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:
@@ -1709,7 +1732,7 @@ class GnuCompiler(Compiler):
                 '-Wno-undefined-var-template',
             ]
 
-            if self.target.is_zephyr_armv7_cortex_a35:
+            if self.target.is_zephyr_armv7_cortex_a35 or self.target.is_zephyr_riscv64:
                 self.cxx_warnings.append('-Wno-missing-designated-field-initializers')
 
         elif self.tc.is_gcc and self.host.is_riscv64_aw is None and self.host.is_arm_aml403 is None:
@@ -1813,7 +1836,6 @@ class SwiftCompiler(object):
 class Linker(object):
     BFD = 'bfd'
     LLD = 'lld'
-    GOLD = 'gold'
     MOLD = 'mold'
 
     def __init__(self, tc, build):
@@ -1833,14 +1855,22 @@ class Linker(object):
             # External (e.g. system) toolchain: disable linker selection logic
             return None
 
-        if self.build.target.is_freertos or self.build.target.is_zephyr:
+        if self.tc.is_gcc and (self.build.target.is_freertos or self.build.target.is_zephyr):
             return Linker.BFD
+
+        if (
+            self.tc.is_clang
+            and self.build.target.is_rv32imc_zicsr_zifencei
+            and (self.build.target.is_none or self.build.target.is_freertos)
+        ):
+            # Use LLD shipped with the ESP Clang SDK.
+            return Linker.LLD
 
         if self.build.target.is_android:
             # Android toolchain is NDK, LLD works on all supported platforms
             return Linker.LLD
 
-        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm or self.build.target.is_freebsd:
+        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm or self.build.target.is_freebsd or self.build.target.is_zephyr:
             return Linker.LLD
 
         # There is no linker choice on Windows (link.exe)
@@ -1900,6 +1930,10 @@ class LD(Linker):
                 self.llvm_ar_format = "gnu"
 
         self.ld_flags = []
+        if self.tc.is_clang and target.is_rv32imc_zicsr_zifencei:
+            self.ld_flags.append('--ld-path={}/esp-clang/bin/ld.lld'.format(self.tc.name_marker))
+            if is_positive('NO_CXX_RTTI'):
+                self.ld_flags.append('-fno-rtti')
         if not self.build.is_release and target.is_linux:
             # TAXICOMMON-8548: deal with runtime env issues and enable in release builds too
             self.ld_flags.extend(['-Wl,--compress-debug-sections=zstd'])
@@ -2487,12 +2521,136 @@ class Setting(object):
     no_value = object()
 
 
+CudaSdk = namedtuple('CudaSdk', [
+    'host_tools_json',
+    'target_sdk_json',
+    'required_host_version',
+    'jetson_target_sdk_json',
+])
+CudaSdk.__new__.__defaults__ = (None, None)
+
+
+class CudaToolkit(object):
+    # Host tools are bundles: the runner selects its native executable after
+    # UID calculation. Target SDK selection must not depend on the host CPU.
+    VERSION_ALIASES = {'12.6.3': '12.6'}
+    LINUX = {
+        version: CudaSdk(
+            host_tools_json='cuda_{}.json'.format(version),
+            target_sdk_json='cuda_target_{}.json'.format(version),
+            jetson_target_sdk_json='cuda_target_12.6_jetson.json' if version == '12.6' else None,
+        )
+        for version in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.6.2', '12.8', '12.9', '13.0', '13.2')
+    }
+    # Existing vhub/vhub4 profiles deliberately use 11.8 build tools with
+    # older JetPack target headers/libraries. This is a curated pairing, not
+    # a general promise that arbitrary host/target CUDA versions can be mixed.
+    LEGACY_JETPACK = {
+        '10.2': CudaSdk(
+            host_tools_json='cuda_11.8.json',
+            target_sdk_json='cuda_target_10.2.json',
+            required_host_version='11.8',
+        ),
+        '11.4.19': CudaSdk(
+            host_tools_json='cuda_11.8.json',
+            target_sdk_json='cuda_target_11.4.19.json',
+            required_host_version='11.8',
+        ),
+    }
+    WINDOWS_X86_64 = {
+        '11.4': CudaSdk(host_tools_json='cuda_11.4.json', target_sdk_json=None),
+    }
+
+    @classmethod
+    def with_aliases(cls, sdks):
+        result = dict(sdks)
+        for alias, version in cls.VERSION_ALIASES.items():
+            if version in sdks:
+                result[alias] = sdks[version]
+        return result
+
+    @classmethod
+    def routes(cls, host, target):
+        if host.is_windows_x86_64 and target.is_windows_x86_64:
+            return cls.WINDOWS_X86_64
+        if not (host.is_linux_x86_64 or host.is_linux_armv8 or host.is_linux_armv9a):
+            return {}
+        if target.is_linux_x86_64:
+            return cls.with_aliases(cls.LINUX)
+        if target.is_linux_armv8 or target.is_linux_armv9a:
+            sdks = dict(cls.LINUX)
+            sdks.update(cls.LEGACY_JETPACK)
+            return cls.with_aliases(sdks)
+        return {}
+
+    @classmethod
+    def available(cls, host, target, version, host_version):
+        route = cls.routes(host, target).get(version)
+        return route is not None and (route.required_host_version is None or route.required_host_version == host_version)
+
+    @classmethod
+    def print_selection(cls, host, target):
+        # Keep selection reactive to per-module CUDA_VERSION/JETSON settings.
+        # Use the same table as auto-detection rather than duplicating its
+        # version/architecture checks in platform/cuda/res/ya.make.
+        emit('_CUDA_HOST_RESOURCE_JSON', '')
+        emit('_CUDA_TARGET_RESOURCE_JSON', '')
+        for version, sdk in sorted(cls.routes(host, target).items()):
+            condition = '$CUDA_VERSION == "{}"'.format(version)
+            if sdk.required_host_version:
+                condition += ' && $CUDA_HOST_VERSION == "{}"'.format(sdk.required_host_version)
+            emit_big('''
+                when ({condition}) {{
+                    _CUDA_HOST_RESOURCE_JSON={host_tools_json}
+                    _CUDA_TARGET_RESOURCE_JSON={target_sdk_json}
+                }}
+            '''.format(
+                condition=condition,
+                host_tools_json=sdk.host_tools_json,
+                target_sdk_json=sdk.target_sdk_json or '',
+            ))
+            if sdk.jetson_target_sdk_json and (target.is_linux_armv8 or target.is_linux_armv9a):
+                emit_big('''
+                    when (({condition}) && $JETSON) {{
+                        _CUDA_TARGET_RESOURCE_JSON={target_sdk_json}
+                    }}
+                '''.format(condition=condition, target_sdk_json=sdk.jetson_target_sdk_json))
+        # Overrides use the same host-platform JSON schema as bundled tools.
+        if preset('CUDA_HOST_TOOLS_JSON'):
+            emit_big('''
+                when ($CUDA_HOST_TOOLS_JSON) {{
+                    _CUDA_HOST_RESOURCE_JSON={host_tools_json}
+                }}
+            '''.format(host_tools_json=preset('CUDA_HOST_TOOLS_JSON')))
+
+    @classmethod
+    def print_host_compiler_selection(cls, host, target, host_compiler_version):
+        emit('_CUDA_HOST_COMPILER_RESOURCE_JSON', '')
+        if not cls.routes(host, target):
+            return
+        if target.is_windows:
+            emit_big('''
+                when ($CUDA_HOST_MSVC_VERSION == "14.28.29910") {
+                    _CUDA_HOST_COMPILER_RESOURCE_JSON=msvc_14_28_29910.json
+                }
+            ''')
+        elif host_compiler_version:
+            # JSON resource filenames do not expand nested ymake variables.
+            emit('_CUDA_HOST_COMPILER_RESOURCE_JSON', '${{ARCADIA_ROOT}}/build/platform/clang/clang{}.json'.format(host_compiler_version))
+
+
 class Cuda(object):
     def __init__(self, build):
         """
         :type build: Build
         """
         self.build = build
+
+        if preset('CUDA_AARCH64_HOST_RESOURCE'):
+            raise ConfigureError(
+                'CUDA_AARCH64_HOST_RESOURCE is no longer supported; use CUDA_HOST_TOOLS_JSON '
+                'with a by_platform host-tools bundle instead'
+            )
 
         self.have_cuda = Setting('HAVE_CUDA', auto=self.auto_have_cuda, convert=to_bool)
 
@@ -2550,21 +2708,27 @@ class Cuda(object):
         if self.use_arcadia_cuda.value:
             self.cuda_root.value = '$CUDA_RESOURCE_GLOBAL'
 
-            host, target = self.build.host_target
-
-            if host == target:
-                self.cuda_target_root.value = '$CUDA_RESOURCE_GLOBAL'
-            else:
-                self.cuda_target_root.value = '$CUDA_TARGET_RESOURCE_GLOBAL'
+            # Keep the Linux target SDK path independent of the build host.
+            if not self.cuda_target_root.from_user:
+                if self.build.target.is_linux:
+                    self.cuda_target_root.value = '$CUDA_TARGET_RESOURCE_GLOBAL'
+                else:
+                    self.cuda_target_root.value = '$CUDA_RESOURCE_GLOBAL'
 
             if self.build.target.is_linux_x86_64 and self.build.tc.is_clang:
                 # TODO(somov): Эта настройка должна приезжать сюда автоматически из другого места
                 self.nvcc_flags.append('-I$OS_SDK_ROOT/usr/include/x86_64-linux-gnu')
+        elif not self.cuda_target_root.from_user:
+            # Preserve CUDA_ROOT-only local toolkits now that library paths use CUDA_TARGET_ROOT.
+            self.cuda_target_root.value = '$CUDA_ROOT'
 
         self.cuda_nvcc_flags.calculate_value()
 
     def print_(self):
         self.print_variables()
+        CudaToolkit.print_selection(*self.build.host_target)
+        host_compiler_version = self.cuda_host_compiler_version.value if self.have_cuda.value else None
+        CudaToolkit.print_host_compiler_selection(self.build.host, self.build.target, host_compiler_version)
         self.print_macros()
         print('@import "${CONF_ROOT}/conf/compilers/nvcc.conf"')
 
@@ -2601,12 +2765,10 @@ class Cuda(object):
         emit('NVCC_ENV', '${env:_NVCC_ENV}')
         emit('_NVCC_ENV', 'PATH=$CUDA_ROOT/nvvm/bin:$CUDA_ROOT/bin')
 
-        if self.cuda_version.value.startswith('10.'):
-            emit('NVCC_STD_VER', '17')
-        elif self.cuda_version.value.startswith('11.'):
-            emit('NVCC_STD_VER', '17')
-        else:
-            emit('NVCC_STD_VER', '20')
+        # NVCC 12.1 cannot parse the current libc++ builtins. C++17 also
+        # selects the existing libcxxcuda11 dependency and matching include map.
+        version = tuple(map(int, self.cuda_version.value.split('.')))
+        emit('NVCC_STD_VER', '17' if version < (12, 2) else '20')
 
         emit('CUDAFE', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'cudafe++')))
         emit('FATBINARY', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'fatbinary')))
@@ -2635,22 +2797,7 @@ class Cuda(object):
     # (i.e. is used only in `auto_have_cuda` invocation)
     def have_cuda_in_arcadia(self):
         host, target = self.build.host_target
-
-        if not any((host.is_linux_x86_64, host.is_windows_x86_64)):
-            return False
-
-        if host != target:
-            if not (host.is_linux_x86_64 and (target.is_linux_armv8 or target.is_linux_armv9a)):
-                return False
-            if not self.cuda_version.from_user:
-                return False
-
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.6.2', '12.6.3', '12.8', '12.9', '13.0', '13.2'):
-            return True
-        elif self.cuda_version.value in ('10.2', '11.4.19') and (target.is_linux_armv8 or target.is_linux_armv9a):
-            return True
-        else:
-            raise ConfigureError('CUDA version {} is not supported in Arcadia'.format(self.cuda_version.value))
+        return CudaToolkit.available(host, target, self.cuda_version.value, preset('CUDA_HOST_VERSION'))
 
     def auto_have_cuda(self):
         if is_positive('MUSL'):
@@ -2661,7 +2808,7 @@ class Cuda(object):
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '12.9'
+            return '13.0'
 
         if not self.have_cuda.value:
             return None
@@ -2762,6 +2909,9 @@ class Cuda(object):
         if version >= (12, 9):
             architectures.extend(['sm_100f', 'sm_103', 'sm_103a', 'sm_103f', 'sm_120f'])
 
+        if version >= (13, 0):
+            architectures.extend(['sm_121', 'sm_121a', 'sm_121f'])
+
         return ':'.join(architectures)
 
     def auto_use_arcadia_cuda(self):
@@ -2779,21 +2929,22 @@ class Cuda(object):
         if host.is_windows_x86_64 and target.is_windows_x86_64:
             return self.cuda_windows_host_compiler()
 
-        return select((
-            (host.is_linux_x86_64 and target.is_linux_x86_64, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
-            (host.is_linux_x86_64 and target.is_linux_armv8, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
-            (host.is_linux_x86_64 and target.is_linux_armv9a, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
-        ))
+        # Both host architectures use their native C++ compiler for either target.
+        if any((host.is_linux_x86_64, host.is_linux_armv8, host.is_linux_armv9a)) and any((target.is_linux_x86_64, target.is_linux_armv8, target.is_linux_armv9a)):
+            return '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'
+        return None
 
     def auto_cuda_host_compiler_version(self):
-        if not self.use_arcadia_cuda_host_compiler.value or not self.build.host.is_linux_x86_64:
+        # Apply the existing CUDA/Clang version compatibility rules to ARM64 hosts too.
+        host = self.build.host
+        if not self.use_arcadia_cuda_host_compiler.value or not any((host.is_linux_x86_64, host.is_linux_armv8, host.is_linux_armv9a)):
             return None
 
         if is_positive('CUDA11'):
             return '14'
 
         version = tuple(map(int, self.cuda_version.value.split('.')))
-        return '14' if version < (12, 6) else None
+        return '14' if version < (12, 6) else '20'
 
     def cuda_windows_host_compiler(self):
         vc_version = '14.28.29910'
@@ -2843,7 +2994,7 @@ class CuDNN(object):
         self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
 
     def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.10.2', '9.12.0')
+        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.10.2', '9.12.0', '9.20.0')
 
     def auto_cudnn_version(self):
         return '9.12.0'

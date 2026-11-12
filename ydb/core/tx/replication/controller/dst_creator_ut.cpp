@@ -1,17 +1,46 @@
 #include "dst_creator.h"
 #include "private_events.h"
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/replication/service/service.h>
+#include <ydb/core/tx/replication/ut_helpers/mock_service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/library/testlib/helpers.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
 
+#include <atomic>
+
 namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
+
+    void SetImportState(TEnv<>& env, const TString& path,
+            NKikimrSchemeOp::TTableReplicationConfig::EImportState state,
+            EConsistencyLevel consistency = EConsistencyLevel::Row) {
+        const auto schemeShardId = env.GetSchemeshardId(path);
+        static std::atomic<ui64> nextTxId{100500};
+        const ui64 txId = nextTxId++;
+        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShardId);
+        auto& tx = *request->Record.AddTransaction();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        tx.SetInternal(true);
+        env.GetPathId(path).ToProto(tx.MutableAlterTable()->MutablePathId());
+        auto& config = *tx.MutableAlterTable()->MutableReplicationConfig();
+        FillReplicationConfig(config, EReplicationMode::ReadOnly, consistency);
+        config.SetImportState(state);
+        auto result = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(schemeShardId, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted, result->Get()->Record.GetReason());
+        env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(schemeShardId,
+            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
+    }
 
     void CheckTableReplica(
             const TTestTableDescription& tableDesc,
@@ -69,10 +98,751 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         const auto& replicatedDesc = desc.GetPathDescription().GetTable();
 
         CheckTableReplica(tableDesc, replicatedDesc, mode, consistency);
+        UNIT_ASSERT(!replicatedDesc.GetReplicationConfig().HasImportState());
+    }
+
+    // The destination of a table with a serial column has to get the sequence as well: the column
+    // default references it, and the sequence position is then advanced by replication.
+    Y_UNIT_TEST(CreateTableWithSerialColumn) {
+        TEnv env;
+
+        NKikimrSchemeOp::TIndexedTableCreationConfig config;
+        auto& tableDesc = *config.MutableTableDescription();
+        tableDesc.SetName("Table");
+        {
+            auto* column = tableDesc.AddColumns();
+            column->SetName("id");
+            column->SetType("Int64");
+            column->SetDefaultFromSequence("_serial_column_id");
+        }
+        {
+            auto* column = tableDesc.AddColumns();
+            column->SetName("value");
+            column->SetType("Utf8");
+        }
+        tableDesc.AddKeyColumnNames("id");
+        {
+            auto* sequence = config.AddSequenceDescription();
+            sequence->SetName("_serial_column_id");
+            sequence->SetMinValue(1);
+            sequence->SetDataType("Int64");
+            sequence->MutableSetVal()->SetNextValue(42);
+            sequence->MutableSetVal()->SetNextUsed(true);
+        }
+
+        env.CreateIndexedTable("/Root", config);
+        UNIT_ASSERT(env.GetDescription("/Root/Table").GetPathDescription().HasTable());
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Table_replica",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
+
+        auto desc = env.GetDescription("/Root/Table_replica");
+        const auto& replicatedDesc = desc.GetPathDescription().GetTable();
+
+        const auto* idColumn = FindIfPtr(replicatedDesc.GetColumns(), [](const auto& column) {
+            return column.GetName() == "id";
+        });
+        UNIT_ASSERT(idColumn);
+        UNIT_ASSERT_VALUES_EQUAL(idColumn->GetDefaultFromSequence(), "_serial_column_id");
+
+        UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.SequencesSize(), 1);
+        const auto& sequence = replicatedDesc.GetSequences(0);
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetName(), "_serial_column_id");
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetDataType(), "Int64");
+
+        // The sequence position is only returned by a table describe asked for it, the scheme
+        // description above never has it.
+        env.RunCall([&] {
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.DescribeTable("/Root/Table_replica",
+                NYdb::NTable::TDescribeTableSettings().WithSetVal(true)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            const auto columns = result.GetTableDescription().GetTableColumns();
+            const auto* column = FindIfPtr(columns, [](const auto& column) {
+                return column.Name == "id";
+            });
+            UNIT_ASSERT(column);
+            UNIT_ASSERT(column->SequenceDescription);
+            UNIT_ASSERT(column->SequenceDescription->SetVal);
+            UNIT_ASSERT_VALUES_EQUAL(column->SequenceDescription->SetVal->NextValue, 42);
+            UNIT_ASSERT(column->SequenceDescription->SetVal->NextUsed);
+        });
     }
 
     Y_UNIT_TEST(Basic) {
         Basic("/Root/Replicated");
+    }
+
+    Y_UNIT_TEST(CreateWaitingImportTable) {
+        TEnv env;
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global,
+                false, TReplication::EState::Paused));
+            auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+            UNIT_ASSERT(result->Get()->WaitingImport);
+        }
+        const auto desc = env.GetDescription("/Root/Dst");
+        const auto& config = desc.GetPathDescription().GetTable().GetReplicationConfig();
+        UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
+    }
+
+    Y_UNIT_TEST(RejectIncompleteImport) {
+        for (const auto state : {NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE,
+                NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT,
+                NKikimrSchemeOp::TTableReplicationConfig::IMPORTING}) {
+            TEnv env;
+            auto table = TTestTableDescription{
+                .Name = "Source",
+                .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}},
+                .ReplicationConfig = Nothing(),
+            };
+            env.CreateTable("/Root", *MakeTableDescription(table));
+            table.Name = "Dst";
+            env.CreateTable("/Root", *MakeTableDescription(table));
+            SetImportState(env, "/Root/Dst", state);
+            env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+            auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            UNIT_ASSERT(!result->Get()->IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "expected IMPORTED");
+        }
+    }
+
+    Y_UNIT_TEST(AttachTable) {
+        TEnv env;
+        const auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTable("/Root", *MakeTableDescription(table));
+        auto dst = table;
+        dst.Name = "Dst";
+        env.CreateTable("/Root", *MakeTableDescription(dst));
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+        const auto pathId = env.GetPathId("/Root/Dst");
+
+        auto observer = env.GetRuntime().AddObserver([](IEventHandle::TPtr& ev) {
+            UNIT_ASSERT_C(ev->GetTypeRewrite() != NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType,
+                "Attaching an imported table must not modify its schema");
+        });
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, false));
+
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DstPathId, pathId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable()
+            .GetReplicationConfig().GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        CheckTableReplica(table, env.GetDescription("/Root/Dst").GetPathDescription().GetTable(),
+            EReplicationMode::ReadOnly, EConsistencyLevel::Global);
+    }
+
+    void CreateTableWithVectorIndexes(TEnv<>& env, const TString& path, bool withSyncIndex = false) {
+        using namespace NYdb::NTable;
+        auto builder = TTableBuilder()
+            .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
+            .AddNullableColumn("embedding", NYdb::EPrimitiveType::String)
+            .SetPrimaryKeyColumn("key");
+        for (const auto* name : {"vector_idx", "other_vector_idx"}) {
+            builder.AddVectorKMeansTreeIndex(name, {"embedding"}, {TVectorIndexSettings{
+                TVectorIndexSettings::EMetric::CosineDistance,
+                TVectorIndexSettings::EVectorType::Float,
+                2,
+            }, 2, 1});
+        }
+        if (withSyncIndex) {
+            builder.AddSyncSecondaryIndex("by_embedding", "embedding");
+        }
+        auto created = env.Send<TEvYdbProxy::TEvCreateTableResponse>(env.GetYdbProxy(),
+            new TEvYdbProxy::TEvCreateTableRequest(path, builder.Build(), TCreateTableSettings()));
+        UNIT_ASSERT_C(created->Get()->Result.IsSuccess(), created->Get()->Result.GetIssues().ToString());
+    }
+
+    TActorId StartVectorIndexAttachment(TEnv<>& env) {
+        return env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global,
+            false /* initialScan */));
+    }
+
+    void AssertVectorIndexAttachment(TEnv<>& env, const TPathId& pathId) {
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSuccess, result->Get()->Error);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, pathId);
+
+        const auto desc = env.GetDescription("/Root/Dst");
+        TString error;
+        UNIT_ASSERT_C(CheckReplicationConfig(desc.GetPathDescription().GetTable().GetReplicationConfig(),
+            EReplicationMode::ReadOnly, EConsistencyLevel::Global, error), error);
+    }
+
+    void AttachTableWithVectorIndex(bool withSyncIndex) {
+        TEnv env;
+        // A backup restores the source schema, including its vector indexes.
+        CreateTableWithVectorIndexes(env, "/Root/Source", withSyncIndex);
+        CreateTableWithVectorIndexes(env, "/Root/Dst", withSyncIndex);
+        const auto pathId = env.GetPathId("/Root/Dst");
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+
+        StartVectorIndexAttachment(env);
+        AssertVectorIndexAttachment(env, pathId);
+
+        const auto dst = env.GetDescription("/Root/Dst");
+        const auto& indexes = dst.GetPathDescription().GetTable().GetTableIndexes();
+        UNIT_ASSERT_VALUES_EQUAL(indexes.size(), withSyncIndex ? 1 : 0);
+        if (withSyncIndex) {
+            UNIT_ASSERT_VALUES_EQUAL(indexes.Get(0).GetName(), "by_embedding");
+            UNIT_ASSERT_VALUES_EQUAL(indexes.Get(0).GetType(), NKikimrSchemeOp::EIndexTypeGlobal);
+        }
+        const auto src = env.GetDescription("/Root/Source");
+        UNIT_ASSERT_VALUES_EQUAL(src.GetPathDescription().GetTable().TableIndexesSize(), withSyncIndex ? 3 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(src.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+    }
+
+    Y_UNIT_TEST(AttachTableWithVectorIndex) {
+        AttachTableWithVectorIndex(false);
+    }
+
+    Y_UNIT_TEST(AttachTableWithVectorAndSyncIndexes) {
+        AttachTableWithVectorIndex(true);
+    }
+
+    Y_UNIT_TEST(IncompatibleAttachmentPreservesVectorIndexes) {
+        TEnv env;
+        CreateTableWithVectorIndexes(env, "/Root/Source");
+        CreateTableWithVectorIndexes(env, "/Root/Dst");
+        const auto altered = env.Send<TEvYdbProxy::TEvAlterTableResponse>(env.GetYdbProxy(),
+            new TEvYdbProxy::TEvAlterTableRequest("/Root/Dst", NYdb::NTable::TAlterTableSettings()
+                .AppendAddColumns({"extra", NYdb::TTypeBuilder().BeginOptional()
+                    .Primitive(NYdb::EPrimitiveType::Uint64).EndOptional().Build()})));
+        UNIT_ASSERT_C(altered->Get()->Result.IsSuccess(), altered->Get()->Result.GetIssues().ToString());
+
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+        StartVectorIndexAttachment(env);
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "Columns size mismatch");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 2);
+    }
+
+    Y_UNIT_TEST(RecoverAttachmentAfterVectorIndexDrop) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        CreateTableWithVectorIndexes(env, "/Root/Source");
+        CreateTableWithVectorIndexes(env, "/Root/Dst");
+        const auto pathId = env.GetPathId("/Root/Dst");
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+        const auto creator = StartVectorIndexAttachment(env);
+
+        bool dropCompleted = false;
+        auto observer = env.GetRuntime().AddObserver<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(
+            [&](NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+                if (ev->Recipient == creator) {
+                    dropCompleted = true;
+                    ev.Reset();
+                }
+            });
+        env.GetRuntime().WaitFor("first vector index removal", [&] { return dropCompleted; }, TDuration::Seconds(60));
+        env.SendAsync(creator, new TEvents::TEvPoison());
+        observer.Remove();
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 1);
+
+        StartVectorIndexAttachment(env);
+        AssertVectorIndexAttachment(env, pathId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Source").GetPathDescription().GetTable().TableIndexesSize(), 2);
+    }
+
+    Y_UNIT_TEST(StandbyDropsRestoredVectorIndexes) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        CreateTableWithVectorIndexes(env, "/Root/Source");
+        env.GetRuntime().RegisterService(MakeReplicationServiceId(env.GetRuntime().GetNodeId(0)),
+            env.GetRuntime().Register(CreateReplicationMockService(env.GetSender())));
+
+        bool streamCreated = false;
+        bool placeholderCreated = false;
+        auto streamObserver = env.GetRuntime().AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->GetTypeRewrite() == TEvPrivate::EvCreateStreamResult && ev->HasEvent()) {
+                if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateStreamResult*>(ev->GetBase())) {
+                    UNIT_ASSERT_C(result->IsSuccess(), result->Status.GetIssues().ToString());
+                    streamCreated = true;
+                }
+            }
+            if (ev->GetTypeRewrite() == TEvPrivate::EvCreateDstResult && ev->HasEvent()) {
+                if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateDstResult*>(ev->GetBase())) {
+                    UNIT_ASSERT_C(result->IsSuccess(), result->Error);
+                    placeholderCreated = result->WaitingImport;
+                }
+            }
+        });
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint()).Database(env.GetDatabase()));
+        const auto sessionResult = env.RunCall([&] { return client.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto created = env.RunCall([&] {
+            return session.ExecuteSchemeQuery(TStringBuilder() << R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/Source` AS `/Root/Dst`
+                WITH (INITIAL_SCAN = FALSE, CONSISTENCY_LEVEL = "GLOBAL", TOKEN = "root@builtin",
+                    CONNECTION_STRING = "grpc://)" << env.GetEndpoint() << R"(/?database=/Root");
+            )").GetValueSync();
+        });
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        const auto desc = env.GetDescription("/Root/replication");
+        const auto& replication = desc.GetPathDescription().GetReplicationDescription();
+        UNIT_ASSERT(replication.GetState().HasPaused());
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvHandshake>(env.GetSender());
+        env.SendAsync(replication.GetControllerId(), new TEvService::TEvStatus());
+        // Bootstrap from backup starts after the source stream is ready.
+        env.GetRuntime().WaitFor("source stream creation", [&] { return streamCreated; }, TDuration::Seconds(60));
+        env.GetRuntime().WaitFor("destination placeholder", [&] { return placeholderCreated; }, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetDescription("/Root/Dst").GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+            NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
+        const auto ssId = env.GetSchemeshardId("/Root/Dst");
+        auto drop = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(200600, ssId);
+        auto& tx = *drop->Record.AddTransaction();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+        tx.SetInternal(true);
+        tx.SetWorkingDir("/Root");
+        tx.MutableDrop()->SetName("Dst");
+        const auto dropResult = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(ssId, std::move(drop));
+        UNIT_ASSERT_VALUES_EQUAL_C(dropResult->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted,
+            dropResult->Get()->Record.GetReason());
+        env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(ssId,
+            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(200600));
+        CreateTableWithVectorIndexes(env, "/Root/Dst");
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+        const auto pathId = env.GetPathId("/Root/Dst");
+
+        const auto resumed = env.RunCall([&] {
+            return session.ExecuteSchemeQuery(
+                R"(ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = "STANDBY"))").GetValueSync();
+        });
+        UNIT_ASSERT_C(resumed.IsSuccess(), resumed.GetIssues().ToString());
+        const auto worker = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender(), TDuration::Seconds(60));
+        UNIT_ASSERT_C(worker, env.GetDescription("/Root/replication").DebugString());
+
+        const auto dst = env.GetDescription("/Root/Dst");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/Dst"), pathId);
+        UNIT_ASSERT_VALUES_EQUAL(dst.GetPathDescription().GetTable().TableIndexesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(dst.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Source").GetPathDescription().GetTable().TableIndexesSize(), 2);
+    }
+
+    enum class EAttachmentSchemaChange {
+        None,
+        Source,
+        Destination,
+    };
+
+    void RecoverAttachment(EAttachmentSchemaChange schemaChange) {
+        TEnv env;
+        const auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTable("/Root", *MakeTableDescription(table));
+        auto dst = table;
+        dst.Name = "Dst";
+        env.CreateTable("/Root", *MakeTableDescription(dst));
+
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+
+        auto createDstCreator = [&] {
+            return env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, false));
+        };
+
+        createDstCreator();
+        const auto first = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL_C(first->Get()->Status, NKikimrScheme::StatusSuccess, first->Get()->Error);
+        const auto dstPathId = first->Get()->DstPathId;
+
+        // Retry as if the controller restarted before persisting the first result.
+        if (schemaChange != EAttachmentSchemaChange::None) {
+            const auto path = schemaChange == EAttachmentSchemaChange::Source ? "/Root/Source" : "/Root/Dst";
+            const auto ssId = env.GetSchemeshardId(path);
+            auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(200500, ssId);
+            auto& tx = *request->Record.AddTransaction();
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+            tx.SetInternal(true);
+            env.GetPathId(path).ToProto(tx.MutableAlterTable()->MutablePathId());
+            tx.MutableAlterTable()->AddDropColumns()->SetName("value");
+            auto result = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(ssId, std::move(request));
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted, result->Get()->Record.GetReason());
+            env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(ssId,
+                new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(200500));
+        }
+
+        createDstCreator();
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        const auto desc = env.GetDescription("/Root/Dst");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/Dst"), dstPathId);
+        if (schemaChange == EAttachmentSchemaChange::None) {
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DstPathId, dstPathId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+                NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+            CheckTableReplica(table, desc.GetPathDescription().GetTable(),
+                EReplicationMode::ReadOnly, EConsistencyLevel::Global);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSchemeError);
+            UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "Columns size mismatch");
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+                NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        }
+    }
+
+    Y_UNIT_TEST(RecoverAttachment) {
+        RecoverAttachment(EAttachmentSchemaChange::None);
+    }
+
+    Y_UNIT_TEST(RecoverAttachmentWithSourceSchemaDrift) {
+        RecoverAttachment(EAttachmentSchemaChange::Source);
+    }
+
+    Y_UNIT_TEST(RecoverAttachmentWithDestinationSchemaDrift) {
+        RecoverAttachment(EAttachmentSchemaChange::Destination);
+    }
+
+    Y_UNIT_TEST(MissingAttachmentTable) {
+        TEnv env;
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "/Root/Dst");
+    }
+
+    Y_UNIT_TEST(IncompatibleAttachmentTable) {
+        TEnv env;
+        auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTable("/Root", *MakeTableDescription(table));
+        table.Name = "Dst";
+        table.Columns[0].Type = "Utf8";
+        env.CreateTable("/Root", *MakeTableDescription(table));
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "Column type mismatch");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable()
+            .GetReplicationConfig().GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+    }
+
+    Y_UNIT_TEST_TWIN(AttachIndexTable, ConcurrentRecovery) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        TEnv env(flags);
+        auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Uint32"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTableWithIndex("/Root", *MakeTableDescription(table),
+            "by_value", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
+        table.Name = "Dst";
+        env.CreateTableWithIndex("/Root", *MakeTableDescription(table),
+            "by_value", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
+
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        SetImportState(env, "/Root/Dst/by_value/indexImplTable", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender())->Get()->IsSuccess());
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 2, TReplication::ETargetKind::IndexTable,
+            "/Root/Source/by_value/indexImplTable", "/Root/Dst/by_value/indexImplTable",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
+        const auto desc = env.GetDescription("/Root/Dst/by_value/indexImplTable");
+        TString error;
+        UNIT_ASSERT_C(CheckReplicationConfig(desc.GetPathDescription().GetTable().GetReplicationConfig(),
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, error), error);
+
+        if (ConcurrentRecovery) {
+            const auto pathId = env.GetPathId("/Root/Dst/by_value/indexImplTable");
+            const auto databasePathId = env.GetPathId("/Root");
+            // Concurrent attachment retries must validate the same imported index.
+            for (ui32 i = 0; i < 2; ++i) {
+                env.GetRuntime().Register(CreateDstCreator(
+                    env.GetSender(),
+                    pathId.OwnerId,
+                    env.GetYdbProxy(),
+                    "/Root",
+                    databasePathId,
+                    1,
+                    2,
+                    TReplication::ETargetKind::IndexTable,
+                    "/Root/Source/by_value/indexImplTable",
+                    "/Root/Dst/by_value/indexImplTable",
+                    EReplicationMode::ReadOnly,
+                    EConsistencyLevel::Row,
+                    false));
+            }
+            for (ui32 i = 0; i < 2; ++i) {
+                const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+                UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, pathId);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(AttachmentAlterRejectsDroppedIndexAfterRestart) {
+        TEnv env;
+        auto& runtime = env.GetRuntime();
+        env.CreateTableWithIndex(
+            "/Root",
+            *MakeTableDescription(TTestTableDescription{
+                .Name = "Dst",
+                .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Uint32"}},
+                .ReplicationConfig = Nothing(),
+            }),
+            "by_value",
+            TVector<TString>{"value"},
+            NKikimrSchemeOp::EIndexTypeGlobal);
+        const auto pathId = env.GetPathId("/Root/Dst/by_value/indexImplTable");
+        const auto drop = env.Send<TEvYdbProxy::TEvDropTableResponse>(
+            env.GetYdbProxy(),
+            new TEvYdbProxy::TEvDropTableRequest("/Root/Dst", NYdb::NTable::TDropTableSettings()));
+        UNIT_ASSERT_C(drop->Get()->Result.IsSuccess(), drop->Get()->Result.GetIssues().ToString());
+
+        const auto alterDropped = [&] {
+            const auto allocated = env.Send<TEvTxUserProxy::TEvAllocateTxIdResult>(
+                MakeTxProxyID(),
+                new TEvTxUserProxy::TEvAllocateTxId());
+            auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(
+                allocated->Get()->TxId,
+                pathId.OwnerId);
+            auto& tx = *request->Record.AddTransaction();
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+            tx.SetInternal(true);
+            pathId.ToProto(tx.MutableAlterTable()->MutablePathId());
+            FillReplicationConfig(
+                *tx.MutableAlterTable()->MutableReplicationConfig(),
+                EReplicationMode::ReadOnly,
+                EConsistencyLevel::Row);
+            // A new generation may still be initializing. The pipe waits for
+            // tablet activation before delivering the ALTER.
+            runtime.SendToPipe(
+                pathId.OwnerId,
+                env.GetSender(),
+                request.Release(),
+                0,
+                GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                env.GetSender());
+            const auto status = result->Get()->Record.GetStatus();
+            // A scavenged path is empty; a retained tombstone is deleted.
+            UNIT_ASSERT_C(
+                status == NKikimrScheme::StatusPathDoesNotExist
+                    || status == NKikimrScheme::StatusNameConflict,
+                result->Get()->Record.ShortDebugString());
+        };
+        alterDropped();
+
+        // Tombstone paths remain resolved after restart, while their table and
+        // index metadata may already be gone. Reject them before metadata lookup.
+        const auto lookupEdge = runtime.AllocateEdgeActor();
+        const auto generation = [&] {
+            runtime.Send(new IEventHandle(
+                MakeStateStorageProxyID(),
+                lookupEdge,
+                new TEvStateStorage::TEvLookup(pathId.OwnerId, 0)));
+            const auto info = runtime.GrabEdgeEvent<TEvStateStorage::TEvInfo>(lookupEdge);
+            return info->Get()->Status == NKikimrProto::OK ? info->Get()->CurrentGeneration : 0;
+        };
+        const auto oldGeneration = generation();
+        UNIT_ASSERT_GT(oldGeneration, 0);
+        env.SendAsync(pathId.OwnerId, new TEvents::TEvPoisonPill());
+        for (ui32 attempt = 0; attempt < 100 && generation() <= oldGeneration; ++attempt) {
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_GT(generation(), oldGeneration);
+        InvalidateTabletResolverCache(runtime, pathId.OwnerId);
+        alterDropped();
+    }
+
+    Y_UNIT_TEST(ColumnFamilies) {
+        TEnv env;
+        auto source = MakeTableDescription({
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        });
+        source->MutableColumns(1)->SetFamilyName("archive");
+        auto* family = source->MutablePartitionConfig()->AddColumnFamilies();
+        family->SetName("archive");
+        family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+        env.CreateTable("/Root", *source);
+
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"),
+                1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
+                "/Root/Table", "/Root/Replicated"));
+            const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSuccess, result->Get()->Error);
+        }
+
+        const auto description = env.GetDescription("/Root/Replicated");
+        const auto& table = description.GetPathDescription().GetTable();
+        ui32 archiveId = 0;
+        for (const auto& item : table.GetPartitionConfig().GetColumnFamilies()) {
+            if (item.GetName() == "archive") {
+                archiveId = item.GetId();
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(item.GetColumnCodec()),
+                    static_cast<ui32>(NKikimrSchemeOp::ColumnCodecLZ4));
+            }
+        }
+        UNIT_ASSERT(archiveId);
+        for (const auto& column : table.GetColumns()) {
+            if (column.GetName() == "value") {
+                UNIT_ASSERT_VALUES_EQUAL(column.GetFamily(), archiveId);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(UnnamedNonDefaultDestinationFamily) {
+        TEnv env;
+        const auto table = TTestTableDescription{
+            .Name = "Src",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTable("/Root", *MakeTableDescription(table));
+
+        auto destination = table;
+        destination.Name = "Dst";
+        destination.ReplicationConfig = TTestTableDescription::TReplicationConfig::Default();
+        auto description = MakeTableDescription(destination);
+        description->MutableColumns(1)->SetFamily(1);
+        description->MutablePartitionConfig()->AddColumnFamilies()->SetId(1);
+        env.CreateTable("/Root", *description);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Src"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
+            "/Root/Src", "/Root/Dst"));
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "Unnamed non-default destination column family: id: 1");
+    }
+
+    Y_UNIT_TEST(ImplicitDefaultFamilyFromProfile) {
+        TEnv env;
+
+        NKikimrConfig::TTableProfilesConfig profiles;
+        auto* policy = profiles.AddStoragePolicies();
+        policy->SetName("default");
+        auto* family = policy->AddColumnFamilies();
+        family->MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind("test");
+        family->MutableStorageConfig()->MutableLog()->SetPreferredPoolKind("test");
+        family->MutableStorageConfig()->MutableData()->SetPreferredPoolKind("test");
+        auto* profile = profiles.AddTableProfiles();
+        profile->SetName("default");
+        profile->SetStoragePolicy("default");
+        env.ConfigureTableProfiles(profiles);
+
+        env.CreateTable("/Root", *MakeTableDescription({
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"),
+                1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
+                "/Root/Table", "/Root/Replicated"));
+            const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSuccess, result->Get()->Error);
+        }
     }
 
     Y_UNIT_TEST(WithIntermediateDir) {
@@ -83,8 +853,11 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Basic("/Root/Replicated", EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
 
-    void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType) {
-        TEnv env(TFeatureFlags().SetEnableChangefeedsOnIndexTables(true));
+    void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType, bool enableAsyncIndexReplication = false) {
+        TFeatureFlags featureFlags;
+        featureFlags.SetEnableChangefeedsOnIndexTables(true);
+        featureFlags.SetEnableAsyncIndexReplication(enableAsyncIndexReplication);
+        TEnv env(featureFlags);
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         const auto tableDesc = TTestTableDescription{
@@ -116,9 +889,15 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         CheckTableReplica(tableDesc, replicatedDesc);
 
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync && !enableAsyncIndexReplication) {
+            UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.TableIndexesSize(), 0);
+            return;
+        }
+
         switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.TableIndexesSize(), 1);
             break;
         default:
@@ -126,13 +905,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return;
         }
 
-        env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
-            "/Root", env.GetPathId("/Root"),
-            1 /* rid */, 2 /* tid */, TReplication::ETargetKind::IndexTable,
-            "/Root/Table/" + indexName + "/indexImplTable", replicatedPath + "/" + indexName + "/indexImplTable"
-        ));
-        {
+        if (indexType != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+            env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"),
+                1 /* rid */, 2 /* tid */, TReplication::ETargetKind::IndexTable,
+                "/Root/Table/" + indexName + "/indexImplTable", replicatedPath + "/" + indexName + "/indexImplTable"
+            ));
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
         }
@@ -148,6 +927,9 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             Cerr << desc.DebugString() << Endl;
             const auto& indexTableDesc = desc.GetPathDescription().GetTable();
             UNIT_ASSERT_VALUES_EQUAL(indexTableDesc.KeyColumnNamesSize(), 2);
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                UNIT_ASSERT(!indexTableDesc.HasReplicationConfig());
+            }
         }
     }
 
@@ -160,6 +942,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(WithAsyncIndex) {
+        WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobalAsync, true);
+    }
+
+    Y_UNIT_TEST(WithAsyncIndexDisabled) {
         WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobalAsync);
     }
 
@@ -272,6 +1058,69 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         }
     }
 
+    template <typename T>
+    void ExistingDstFamily(const TString& error, T&& modify) {
+        TEnv env;
+        auto source = MakeTableDescription({
+            .Name = "Src",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        });
+        source->MutableColumns(1)->SetFamilyName("archive");
+        auto* family = source->MutablePartitionConfig()->AddColumnFamilies();
+        family->SetName("archive");
+        family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+        auto* data = family->MutableStorageConfig()->MutableData();
+        data->SetPreferredPoolKind("test");
+        data->SetAllowOtherKinds(false);
+        env.CreateTable("/Root", *source);
+
+        auto destination = *source;
+        destination.SetName("Dst");
+        TTestTableDescription::TReplicationConfig::Default().SerializeTo(*destination.MutableReplicationConfig());
+        modify(destination);
+        env.CreateTable("/Root", destination);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Src"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
+            "/Root/Src", "/Root/Dst"));
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, error);
+    }
+
+    Y_UNIT_TEST(ColumnFamilyCodecMismatch) {
+        ExistingDstFamily("Column family codec mismatch", [](auto& destination) {
+            destination.MutablePartitionConfig()->MutableColumnFamilies(0)->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
+        });
+    }
+
+    Y_UNIT_TEST(ColumnFamilyCacheModeMismatch) {
+        ExistingDstFamily("Column family cache mode mismatch", [](auto& destination) {
+            destination.MutablePartitionConfig()->MutableColumnFamilies(0)->SetColumnCacheMode(
+                NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory);
+        });
+    }
+
+    Y_UNIT_TEST(ColumnFamilyMediaMismatch) {
+        ExistingDstFamily("Column family media mismatch", [](auto& destination) {
+            destination.MutablePartitionConfig()->MutableColumnFamilies(0)
+                ->MutableStorageConfig()->MutableData()->SetAllowOtherKinds(true);
+        });
+    }
+
+    Y_UNIT_TEST(ColumnFamilyAssignmentMismatch) {
+        ExistingDstFamily("Column family mismatch", [](auto& destination) {
+            destination.MutableColumns(1)->ClearFamilyName();
+        });
+    }
+
     Y_UNIT_TEST(ExistingDst) {
         auto nop = [](const TTestTableDescription& desc) {
             return desc;
@@ -379,7 +1228,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Empty replication config", clearConfig, TTestTableDescription{
+        ExistingDst(NKikimrScheme::StatusSchemeError, "replication configuration is missing", clearConfig, TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {

@@ -1,10 +1,4 @@
-LIBRARY()
-
-YQL_ABI_VERSION(
-    2
-    27
-    0
-)
+YQL_LIBRARY()
 
 IF (ARCH_X86_64)
     PEERDIR(
@@ -17,7 +11,7 @@ PEERDIR(
     yql/essentials/minikql/jsonpath/rewrapper/re2
     yql/essentials/minikql/jsonpath/rewrapper
     yql/essentials/minikql/jsonpath/parser
-    yql/essentials/types/binary_json
+    yql/essentials/types/binary_json/dom
     yql/essentials/minikql/dom
     yql/essentials/public/issue
     yql/essentials/public/udf

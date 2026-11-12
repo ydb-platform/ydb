@@ -1,3 +1,4 @@
+#include "appdata_fwd.h"
 #include "path.h"
 
 #include <util/string/builder.h>
@@ -175,6 +176,13 @@ bool IsPathUnderDatabase(TStringBuf database, TStringBuf path) {
 
 } // namespace
 
+TString PrependDomainIfNeeded(TStringBuf domainRoot, TStringBuf databasePath) {
+    if (databasePath.empty() || databasePath.StartsWith('/')) {
+        return TString{databasePath};
+    }
+    return TStringBuilder() << domainRoot << '/' << databasePath;
+}
+
 TString NormalizePath(TStringBuf database, TStringBuf path) {
     if (database == path || IsPathUnderDatabase(database, path)) {
         return TString{path};
@@ -345,4 +353,17 @@ bool TrySplitPathByDb(const TString& path, const TString& database,
     return true;
 }
 
+TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId) {
+    TString databasePath = CanonizePath(database);
+    TString tenantPath = CanonizePath(AppData()->TenantName);
+    if (databasePath.empty() || databasePath == tenantPath) {
+        return tenantPath;
+    }
+
+    if (serverless) {
+        databasePath = TStringBuilder() << pathId.OwnerId << ":" << pathId.LocalPathId << ":" << databasePath;
+    }
+    return databasePath;
 }
+
+} // namespace NKikimr

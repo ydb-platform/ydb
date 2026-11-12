@@ -1189,6 +1189,29 @@ TEST_F(TBindTest, TraceContextPropagation)
         .ThrowOnError();
 }
 
+TEST_F(TBindTest, UniqueAsyncVia)
+{
+    auto future = BIND([] {
+        return OKFuture
+            .AsUnique();
+    })
+        .AsyncVia(GetSyncInvoker())
+        .Run();
+    EXPECT_TRUE(future.BlockingGet().IsOK());
+}
+
+TEST_F(TBindTest, MoveOnlyAsyncVia)
+{
+    auto future = OKFuture.Apply(
+        BIND([] {
+            return MakeFuture(TMoveOnly{})
+                .AsUnique();
+        })
+            .AsyncVia(GetSyncInvoker()))
+        .AsUnique();
+    EXPECT_TRUE(future.BlockingGet().IsOK());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

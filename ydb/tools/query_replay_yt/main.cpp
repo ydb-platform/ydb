@@ -117,6 +117,8 @@ public:
                 return "missing_table_metadata";
             case TQueryReplayEvents::UncategorizedFailure:
                 return "uncategorized_failure";
+            case TQueryReplayEvents::QrInternalError:
+                return "qr_internal_error";
             default:
                 return "unspecified";
         }

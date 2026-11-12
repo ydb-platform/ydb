@@ -14,16 +14,16 @@ import time
 
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import MonitoredAgentActor
+from ydb.tests.stability.nemesis.internal.nemesis.runners.local_kikimr import (
+    active_local_kikimr,
+    start_local_kikimr,
+    stop_local_kikimr,
+)
 
 
 # ---------------------------------------------------------------------------
 # Local helpers
 # ---------------------------------------------------------------------------
-
-
-def _kikimr_slot_id(node):
-    """``None`` = single ``kikimr`` service; else ``kikimr-multi@`` instance id."""
-    return getattr(node, "_KikimrExternalNode__slot_id", None)
 
 
 def _resolve_local_host():
@@ -35,55 +35,6 @@ def _resolve_local_host():
 
 def _is_local_host(host, fqdn, hostname):
     return host in (fqdn, hostname) or host.split(".")[0] == hostname.split(".")[0]
-
-
-def _local_stop_kikimr(node):
-    """``systemctl stop`` for the local kikimr / kikimr-multi@ service."""
-    slot_id = _kikimr_slot_id(node)
-    if slot_id is None:
-        subprocess.run("sudo service kikimr stop", shell=True, check=True)
-    else:
-        subprocess.run(
-            ["sudo", "systemctl", "stop", "kikimr-multi@{}".format(slot_id)],
-            check=True,
-        )
-
-
-def _local_start_kikimr(node):
-    """``systemctl start`` for the local kikimr / kikimr-multi@ service."""
-    slot_id = _kikimr_slot_id(node)
-    if slot_id is None:
-        subprocess.run("sudo service kikimr start", shell=True, check=True)
-        return
-    slot_dir = "/Berkanavt/kikimr_{slot}".format(slot=slot_id)
-    slot_cfg = slot_dir + "/slot_cfg"
-    env_txt = slot_dir + "/env.txt"
-    cfg = """\
-tenant=/Root/db1
-grpc={grpc}
-mbus={mbus}
-ic={ic}
-mon={mon}""".format(
-        mbus=node.mbus_port,
-        grpc=node.grpc_port,
-        mon=node.mon_port,
-        ic=node.ic_port,
-    )
-    subprocess.run(["sudo", "mkdir", "-p", slot_dir], check=True)
-    subprocess.run(["sudo", "touch", env_txt], check=True)
-    p = subprocess.Popen(
-        ["sudo", "tee", slot_cfg],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    _out, _err = p.communicate(cfg.encode("utf-8"))
-    if p.returncode != 0:
-        raise subprocess.CalledProcessError(p.returncode, "sudo tee slot_cfg", None)
-    subprocess.run(
-        ["sudo", "systemctl", "start", "kikimr-multi@{}".format(slot_id)],
-        check=True,
-    )
 
 
 def _resolve_hostname_to_ipv6(hostname):
@@ -103,84 +54,62 @@ def _resolve_hostname_to_ipv6(hostname):
 
 
 class ClusterDataCenterStopNodesNemesis(MonitoredAgentActor):
-    """Stop local kikimr node and slots.
+    """Stop the local kikimr units that are actually active.
 
     The orchestrator's ``DataCenterFanoutPlanner`` dispatches this to every
-    host in the selected datacenter.  Each agent stops its own local services.
+    host in the selected datacenter.  Each agent snapshots active units and
+    starts that same set back.  ``cluster.slots`` is not walked, and extract
+    does not discover a new set.
     """
 
     def __init__(self, duration=60):
         super().__init__(scope='datacenter')
         self._duration = duration
-        self._stopped_nodes = []
-        self._stopped_slots = []
+        # None until inject snapshots systemd.  Extract must not list units again.
+        self._stopped_static = False
+        self._stopped_slots = None
 
     def inject_fault(self, payload=None):
         payload = payload if isinstance(payload, dict) else {}
-        cluster = require_external_cluster()
-        fqdn, hostname = _resolve_local_host()
-
-        # Find local nodes and slots
-        local_nodes = [n for n in cluster.nodes.values() if _is_local_host(n.host, fqdn, hostname)]
-        local_slots = [s for s in cluster.slots.values() if _is_local_host(s.host, fqdn, hostname)]
-
-        if not local_nodes and not local_slots:
-            self._logger.warning("No local nodes/slots found for datacenter stop")
-            return
+        require_external_cluster()
 
         self.start_inject_fault()
-
-        # Stop slots first
-        for slot in local_slots:
-            try:
-                self._logger.info("Stopping local slot ic_port=%d", slot.ic_port)
-                _local_stop_kikimr(slot)
-                self._stopped_slots.append(slot)
-            except Exception as e:
-                self._logger.error("Failed to stop slot ic_port=%d: %s", slot.ic_port, e)
-
-        # Stop nodes
-        for node in local_nodes:
-            try:
-                self._logger.info("Stopping local node node_id=%d", node.node_id)
-                _local_stop_kikimr(node)
-                self._stopped_nodes.append(node)
-            except Exception as e:
-                self._logger.error("Failed to stop node node_id=%d: %s", node.node_id, e)
-
-        self._logger.info("Stopped %d nodes and %d slots locally",
-                          len(self._stopped_nodes), len(self._stopped_slots))
-
+        self._snapshot_and_stop()
         time.sleep(self._duration)
-
-        # Extract (start everything back)
-        self._start_all()
+        self._start_remembered()
         self.on_success_inject_fault()
 
-    def _start_all(self):
-        # Start nodes first
-        for node in self._stopped_nodes:
-            try:
-                self._logger.info("Starting local node node_id=%d", node.node_id)
-                _local_start_kikimr(node)
-            except Exception as e:
-                self._logger.error("Failed to start node node_id=%d: %s", node.node_id, e)
+    def _snapshot_and_stop(self):
+        try:
+            static, slots = active_local_kikimr()
+        except Exception as e:
+            self._logger.error("Failed to list active local kikimr: %s", e)
+            return
+        self._stopped_static = static
+        self._stopped_slots = list(slots)
+        self._logger.info("Stopping active local kikimr static=%s slots=%s", static, slots)
+        try:
+            stop_local_kikimr(static, slots)
+        except Exception as e:
+            self._logger.error("Failed to stop active local kikimr: %s", e)
 
-        # Start slots
-        for slot in self._stopped_slots:
-            try:
-                self._logger.info("Starting local slot ic_port=%d", slot.ic_port)
-                _local_start_kikimr(slot)
-            except Exception as e:
-                self._logger.error("Failed to start slot ic_port=%d: %s", slot.ic_port, e)
-
-        self._stopped_nodes = []
-        self._stopped_slots = []
+    def _start_remembered(self):
+        if self._stopped_slots is None:
+            return
+        static = self._stopped_static
+        slots = list(self._stopped_slots)
+        try:
+            self._logger.info("Starting remembered local kikimr static=%s slots=%s", static, slots)
+            start_local_kikimr(static, slots)
+        except Exception as e:
+            self._logger.error("Failed to start remembered local kikimr: %s", e)
+            return
+        self._stopped_static = False
+        self._stopped_slots = None
 
     def extract_fault(self, payload=None):
         del payload
-        if self._stopped_nodes or self._stopped_slots:
-            self._start_all()
+        self._start_remembered()
         self.on_success_extract_fault()
 
 

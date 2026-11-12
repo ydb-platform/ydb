@@ -57,7 +57,7 @@ void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath
 
 void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath);
 
-void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup = false);
+void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TProposeContext& context, bool isBackup = false);
 void IncAliveChildrenDirect(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup = false);
 void DecAliveChildrenDirect(const TOperationId& opId, TPathElement::TPtr parentPath, TOperationContext& context, bool isBackup = false);
 

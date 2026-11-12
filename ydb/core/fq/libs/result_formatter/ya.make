@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     result_formatter.cpp
@@ -19,8 +19,6 @@ PEERDIR(
     yql/essentials/providers/common/schema/expr
     yql/essentials/providers/common/schema/mkql
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

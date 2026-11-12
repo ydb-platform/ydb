@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     datashard.h
@@ -19,6 +19,7 @@ SRCS(
     datashard_txs.h
     datashard_user_db.h
     datashard_user_table.h
+    cdc_schema_change.h
     defs.h
     execution_unit.h
     execution_unit_ctors.h
@@ -41,6 +42,7 @@ SRCS(
     cdc_stream_scan.cpp
     change_collector_cdc_stream.cpp
     change_record_cdc_serializer.cpp
+    cdc_schema_change.cpp
     change_sender.cpp
     change_sender_async_index.cpp
     change_sender_cdc_stream.cpp
@@ -49,6 +51,7 @@ SRCS(
     datashard__init.cpp
     datashard_active_transaction.cpp
     datashard_change_sending.cpp
+    datashard_database_freeze.cpp
     datashard_outreadset.cpp
     datashard_s3_uploads.cpp
     datashard_snapshots.cpp
@@ -160,6 +163,7 @@ JOIN_SRCS(
     all_datashard_read.cpp
     datashard__read_columns.cpp
     datashard__read_iterator.cpp
+    read_iterator_sampling.cpp
 )
 
 JOIN_SRCS(
@@ -469,6 +473,7 @@ PEERDIR(
     ydb/core/split
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx/datashard/snapshot_retention
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/locks
     ydb/core/tx/sequenceproxy/public
@@ -495,8 +500,6 @@ PEERDIR(
     ydb/core/io_formats/json
 )
 
-YQL_LAST_ABI_VERSION()
-
 IF (OS_WINDOWS)
     CFLAGS(
         -DKIKIMR_DISABLE_S3_OPS
@@ -507,7 +510,15 @@ ELSE()
         export_s3_buffer.cpp
         export_s3_uploader.cpp
         export_ydb_dump.cpp
+        import_data_parser_csv.cpp
+        import_data_parser_parquet.cpp
+        import_parquet_s3_file.cpp
         import_s3.cpp
+        import_s3_engine.cpp
+    )
+    PEERDIR(
+        contrib/libs/apache/arrow
+        ydb/core/formats/arrow
     )
 ENDIF()
 
@@ -515,11 +526,13 @@ END()
 
 RECURSE_FOR_TESTS(
     build_index/ut
+    snapshot_retention
     ut_bloom_filter
     ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange
     ut_compaction
+    ut_database_freeze
     ut_disk_quotas
     ut_direct_restore
     ut_erase_rows
@@ -528,6 +541,7 @@ RECURSE_FOR_TESTS(
     ut_followers
     ut_incremental_backup
     ut_incremental_restore_scan
+    ut_import_s3_engine
     ut_init
     ut_keys
     ut_kqp

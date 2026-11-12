@@ -366,7 +366,7 @@ void VerifyParams(TProposeResponse* result, TParamsDelta* delta, const TPathId p
     result->SetStatus(status, reason);
 }
 
-void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TOperationContext& context, TPath& path, TSubDomainInfo::TPtr& subdomainInfo, TSubDomainInfo::TPtr& alter) {
+void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TProposeContext& context, TPath& path, TSubDomainInfo::TPtr& subdomainInfo, TSubDomainInfo::TPtr& alter) {
     const auto& basenameId = path.Base()->PathId;
 
     context.MemChanges.GrabPath(context.SS, basenameId);
@@ -632,7 +632,7 @@ public:
 
     virtual const char* Name() const override final { return "TAlterExtSubDomainCreateHive"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         const NKikimrSubDomains::TSubDomainSettings& inputSettings = Transaction.GetSubDomain();
 
@@ -712,7 +712,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
@@ -887,7 +887,7 @@ public:
 
     virtual const char* Name() const override final { return "TAlterExtSubDomain"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         const NKikimrSubDomains::TSubDomainSettings& inputSettings = Transaction.GetSubDomain();
 
@@ -1078,7 +1078,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterExtSubDomain");
     }
 

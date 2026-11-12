@@ -11,12 +11,8 @@ from google.protobuf import timestamp_pb2
 from ydb.public.api.client.yc_private.iam import iam_token_service_pb2
 from ydb.public.api.client.yc_private.iam import iam_token_service_pb2_grpc
 
-if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true":
-    from ydb.public.api.client.yc_private.accessservice import access_service_pb2
-    from ydb.public.api.client.yc_private.accessservice import access_service_pb2_grpc
-else:
-    from ydb.public.api.client.yc_private.servicecontrol import access_service_pb2
-    from ydb.public.api.client.yc_private.servicecontrol import access_service_pb2_grpc
+from ydb.public.api.client.yc_private.accessservice import access_service_pb2
+from ydb.public.api.client.yc_private.accessservice import access_service_pb2_grpc
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -34,9 +30,10 @@ def parse_args():
     )
     parser.add_argument("--port", type=int, required=True, help="gRPC port to listen on")
     parser.add_argument("--token", type=str, default=DEFAULT_TOKEN, help="IAM token to return")
-    parser.add_argument("--token-from-env", type=str, help="Use IAM token from environment (preferred for secret passing)")
-    parser.add_argument("--expires-in", type=int, default=DEFAULT_EXPIRES_IN,
-                        help="Token TTL in seconds")
+    parser.add_argument(
+        "--token-from-env", type=str, help="Use IAM token from environment (preferred for secret passing)"
+    )
+    parser.add_argument("--expires-in", type=int, default=DEFAULT_EXPIRES_IN, help="Token TTL in seconds")
     return parser.parse_args()
 
 
@@ -71,7 +68,11 @@ class IamTokenServicer(iam_token_service_pb2_grpc.IamTokenServiceServicer):
         token = self._pick_token()
         logger.debug(
             "IamTokenService.CreateForService called, service_id=%s microservice_id=%s resource_id=%s target_sa=%s token=%s",
-            request.service_id, request.microservice_id, request.resource_id, request.target_service_account_id, token
+            request.service_id,
+            request.microservice_id,
+            request.resource_id,
+            request.target_service_account_id,
+            token,
         )
 
         target_sa = request.target_service_account_id
@@ -129,10 +130,7 @@ class IamTokenServicer(iam_token_service_pb2_grpc.IamTokenServiceServicer):
 
 def make_dummy_subject():
     return access_service_pb2.Subject(
-        user_account=access_service_pb2.Subject.UserAccount(
-            id='bob',
-            federation_id='mock federation'
-        )
+        user_account=access_service_pb2.Subject.UserAccount(id='bob', federation_id='mock federation')
     )
 
 
@@ -143,12 +141,15 @@ class AccessServicer(access_service_pb2_grpc.AccessServiceServicer):
 
     def Authenticate(self, request, context):
         logger.debug("AccessService Authenticate called")
-        return access_service_pb2.AuthenticateResponse(
-            subject=make_dummy_subject()
-        )
+        return access_service_pb2.AuthenticateResponse(subject=make_dummy_subject())
 
     def Authorize(self, request, context):
-        logger.debug("AccessService Authorize called, iam_token=%s, permission=%s, resource_path=%s", request.iam_token, request.permission, repr(request.resource_path))
+        logger.debug(
+            "AccessService Authorize called, iam_token=%s, permission=%s, resource_path=%s",
+            request.iam_token,
+            request.permission,
+            repr(request.resource_path),
+        )
 
         if request.permission != 'iam.serviceAccounts.use':
             context.set_code(grpc.StatusCode.NOT_FOUND)
@@ -185,9 +186,7 @@ class AccessServicer(access_service_pb2_grpc.AccessServiceServicer):
                     context.set_details("Reject bad SA")
                     return access_service_pb2.AuthorizeResponse()
 
-            return access_service_pb2.AuthorizeResponse(
-                subject=make_dummy_subject()
-            )
+            return access_service_pb2.AuthorizeResponse(subject=make_dummy_subject())
 
         context.set_code(grpc.StatusCode.NOT_FOUND)
         context.set_details("Don't know about those resources")

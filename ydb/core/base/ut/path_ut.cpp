@@ -73,12 +73,18 @@ Y_UNIT_TEST_SUITE(Path) {
     }
 
     Y_UNIT_TEST(CanonizedStringIsSame1) {
+        if (!TStringUseCow) {
+            return; // the result is a copy without copy-on-write
+        }
         const TString in = "/Foo/Bar";
         const TString& result = DoCanonizePathFast(in);
         UNIT_ASSERT_VALUES_EQUAL((void*)in.data(), (void*)result.data());
     }
 
     Y_UNIT_TEST(CanonizedStringIsSame2) {
+        if (!TStringUseCow) {
+            return; // the result is a copy without copy-on-write
+        }
         const TString in = "/Foo";
         const TString& result = DoCanonizePathFast(in);
         UNIT_ASSERT_VALUES_EQUAL((void*)in.data(), (void*)result.data());
@@ -204,6 +210,23 @@ Y_UNIT_TEST_SUITE(Path) {
         const TString pathPart = "this string contains whitespaces";
         UNIT_ASSERT_EQUAL(PathPartBrokenAt(pathPart), std::find(pathPart.begin(), pathPart.end(), ' '));
         UNIT_ASSERT_EQUAL(PathPartBrokenAt(pathPart, " "), pathPart.end());
+    }
+
+    Y_UNIT_TEST(PrependDomainIfNeeded) {
+        const TVector<std::pair<TString, TString>> cases = {
+            {"mydb", "/ru/mydb"},
+            {"ru/mydb", "/ru/ru/mydb"},
+            {"ru", "/ru/ru"},
+            {"/ru/mydb", "/ru/mydb"},
+            {"/other/mydb", "/other/mydb"},
+            {"/", "/"},
+            {"", ""},
+        };
+        for (const auto& [path, expected] : cases) {
+            const auto result = NKikimr::PrependDomainIfNeeded("/ru", path);
+            UNIT_ASSERT_VALUES_EQUAL(result, expected);
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::PrependDomainIfNeeded("/ru", result), expected);
+        }
     }
 
     Y_UNIT_TEST(NormalizePath_AlreadyUnderDatabase) {

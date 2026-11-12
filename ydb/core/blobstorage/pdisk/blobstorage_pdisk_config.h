@@ -502,17 +502,20 @@ struct TPDiskConfig : public TThrRefBase {
     }
 
     ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
-        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
-    }
-
-    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui64 expectedSlotSize) {
-        return expectedSlotSize ? 1 : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
+        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
     }
 
     static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {
         ui32 vu = groupSizeInUnits ? groupSizeInUnits : 1;
         ui32 pu = slotSizeInUnits ? slotSizeInUnits : 1;
         return int(vu / pu) + !!(vu % pu);
+    }
+
+    static ui64 GetOwnerQuota(ui64 slotSize, ui32 groupSizeInUnits, ui32 slotSizeInUnits,
+            ui64 expectedSlotSize, std::optional<ui64> userChunkPoolSize = {}) {
+        const ui32 multiplier = expectedSlotSize ? Max(1u, groupSizeInUnits) : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
+        const ui64 limit = expectedSlotSize ? userChunkPoolSize.value_or(Max<ui64>()) : Max<ui64>();
+        return slotSize > limit / multiplier ? limit : slotSize * multiplier;
     }
 };
 

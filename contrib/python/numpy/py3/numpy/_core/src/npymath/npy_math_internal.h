@@ -853,6 +853,14 @@ NPY_INPLACE npy_float npy_logaddexp2f(npy_float x, npy_float y)
     }
 }
 
+
+/* Define a macro for the ARM64 Clang specific condition */
+#if defined(__aarch64__) && defined(__clang__)
+    #define IS_ARM64_CLANG 1
+#else
+    #define IS_ARM64_CLANG 0
+#endif
+
 /*
  * Wrapper function for remainder edge cases
  * Internally calls npy_divmod*
@@ -861,34 +869,48 @@ NPY_INPLACE npy_float
 npy_remainderf(npy_float a, npy_float b)
 {
     npy_float mod;
-    if (NPY_UNLIKELY(!b)) {
+    
+    if (NPY_UNLIKELY(!b) || 
+        NPY_UNLIKELY(IS_ARM64_CLANG && sizeof(npy_float) == sizeof(long double) && (npy_isnan(a) || npy_isnan(b)))) {
         /*
-         * in2 == 0 (and not NaN): normal fmod will give the correct
-         * result (always NaN). `divmod` may set additional FPE for the
-         * division by zero creating an inf.
+         * Handle two cases:
+         * 1. in2 == 0 (and not NaN): normal fmod will give the correct
+         *    result (always NaN). `divmod` may set additional FPE for the
+         *    division by zero creating an inf.
+         * 2. ARM64 with Clang: Special handling to avoid FPE with float128
+         *    TODO: This is a workaround for a known Clang issue on ARM64 where 
+         *    float128 operations trigger incorrect FPE behavior. This can be 
+         *    removed once fixed:
+         *    https://github.com/llvm/llvm-project/issues/59924
          */
-        mod = npy_fmodf(a, b);
+        return npy_fmodf(a, b);
     }
-    else {
-        npy_divmodf(a, b, &mod);
-    }
+    
+    npy_divmodf(a, b, &mod);
     return mod;
 }
 
 NPY_INPLACE npy_float
 npy_floor_dividef(npy_float a, npy_float b) {
     npy_float div, mod;
-    if (NPY_UNLIKELY(!b)) {
+    
+    if (NPY_UNLIKELY(!b) || 
+        NPY_UNLIKELY(IS_ARM64_CLANG && sizeof(npy_float) == sizeof(long double) && (npy_isnan(a) || npy_isnan(b)))) {
         /*
-         * in2 == 0 (and not NaN): normal division will give the correct
-         * result (Inf or NaN). `divmod` may set additional FPE for the modulo
-         * evaluating to NaN.
+         * Handle two cases:
+         * 1. in2 == 0 (and not NaN): normal division will give the correct
+         *    result (Inf or NaN). `divmod` may set additional FPE for the modulo
+         *    evaluating to NaN.
+         * 2. ARM64 with Clang: Special handling to avoid FPE with float128
+         *    TODO: This is a workaround for a known Clang issue on ARM64 where 
+         *    float128 operations trigger incorrect FPE behavior. This can be 
+         *    removed once fixed:
+         *    https://github.com/llvm/llvm-project/issues/59924
          */
-        div = a / b;
+        return a / b;
     }
-    else {
-        div = npy_divmodf(a, b, &mod);
-    }
+    
+    div = npy_divmodf(a, b, &mod);
     return div;
 }
 
@@ -1035,6 +1057,14 @@ NPY_INPLACE npy_double npy_logaddexp2(npy_double x, npy_double y)
     }
 }
 
+
+/* Define a macro for the ARM64 Clang specific condition */
+#if defined(__aarch64__) && defined(__clang__)
+    #define IS_ARM64_CLANG 1
+#else
+    #define IS_ARM64_CLANG 0
+#endif
+
 /*
  * Wrapper function for remainder edge cases
  * Internally calls npy_divmod*
@@ -1043,34 +1073,48 @@ NPY_INPLACE npy_double
 npy_remainder(npy_double a, npy_double b)
 {
     npy_double mod;
-    if (NPY_UNLIKELY(!b)) {
+    
+    if (NPY_UNLIKELY(!b) || 
+        NPY_UNLIKELY(IS_ARM64_CLANG && sizeof(npy_double) == sizeof(long double) && (npy_isnan(a) || npy_isnan(b)))) {
         /*
-         * in2 == 0 (and not NaN): normal fmod will give the correct
-         * result (always NaN). `divmod` may set additional FPE for the
-         * division by zero creating an inf.
+         * Handle two cases:
+         * 1. in2 == 0 (and not NaN): normal fmod will give the correct
+         *    result (always NaN). `divmod` may set additional FPE for the
+         *    division by zero creating an inf.
+         * 2. ARM64 with Clang: Special handling to avoid FPE with float128
+         *    TODO: This is a workaround for a known Clang issue on ARM64 where 
+         *    float128 operations trigger incorrect FPE behavior. This can be 
+         *    removed once fixed:
+         *    https://github.com/llvm/llvm-project/issues/59924
          */
-        mod = npy_fmod(a, b);
+        return npy_fmod(a, b);
     }
-    else {
-        npy_divmod(a, b, &mod);
-    }
+    
+    npy_divmod(a, b, &mod);
     return mod;
 }
 
 NPY_INPLACE npy_double
 npy_floor_divide(npy_double a, npy_double b) {
     npy_double div, mod;
-    if (NPY_UNLIKELY(!b)) {
+    
+    if (NPY_UNLIKELY(!b) || 
+        NPY_UNLIKELY(IS_ARM64_CLANG && sizeof(npy_double) == sizeof(long double) && (npy_isnan(a) || npy_isnan(b)))) {
         /*
-         * in2 == 0 (and not NaN): normal division will give the correct
-         * result (Inf or NaN). `divmod` may set additional FPE for the modulo
-         * evaluating to NaN.
+         * Handle two cases:
+         * 1. in2 == 0 (and not NaN): normal division will give the correct
+         *    result (Inf or NaN). `divmod` may set additional FPE for the modulo
+         *    evaluating to NaN.
+         * 2. ARM64 with Clang: Special handling to avoid FPE with float128
+         *    TODO: This is a workaround for a known Clang issue on ARM64 where 
+         *    float128 operations trigger incorrect FPE behavior. This can be 
+         *    removed once fixed:
+         *    https://github.com/llvm/llvm-project/issues/59924
          */
-        div = a / b;
+        return a / b;
     }
-    else {
-        div = npy_divmod(a, b, &mod);
-    }
+    
+    div = npy_divmod(a, b, &mod);
     return div;
 }
 
@@ -1217,6 +1261,14 @@ NPY_INPLACE npy_longdouble npy_logaddexp2l(npy_longdouble x, npy_longdouble y)
     }
 }
 
+
+/* Define a macro for the ARM64 Clang specific condition */
+#if defined(__aarch64__) && defined(__clang__)
+    #define IS_ARM64_CLANG 1
+#else
+    #define IS_ARM64_CLANG 0
+#endif
+
 /*
  * Wrapper function for remainder edge cases
  * Internally calls npy_divmod*
@@ -1225,34 +1277,48 @@ NPY_INPLACE npy_longdouble
 npy_remainderl(npy_longdouble a, npy_longdouble b)
 {
     npy_longdouble mod;
-    if (NPY_UNLIKELY(!b)) {
+    
+    if (NPY_UNLIKELY(!b) || 
+        NPY_UNLIKELY(IS_ARM64_CLANG && sizeof(npy_longdouble) == sizeof(long double) && (npy_isnan(a) || npy_isnan(b)))) {
         /*
-         * in2 == 0 (and not NaN): normal fmod will give the correct
-         * result (always NaN). `divmod` may set additional FPE for the
-         * division by zero creating an inf.
+         * Handle two cases:
+         * 1. in2 == 0 (and not NaN): normal fmod will give the correct
+         *    result (always NaN). `divmod` may set additional FPE for the
+         *    division by zero creating an inf.
+         * 2. ARM64 with Clang: Special handling to avoid FPE with float128
+         *    TODO: This is a workaround for a known Clang issue on ARM64 where 
+         *    float128 operations trigger incorrect FPE behavior. This can be 
+         *    removed once fixed:
+         *    https://github.com/llvm/llvm-project/issues/59924
          */
-        mod = npy_fmodl(a, b);
+        return npy_fmodl(a, b);
     }
-    else {
-        npy_divmodl(a, b, &mod);
-    }
+    
+    npy_divmodl(a, b, &mod);
     return mod;
 }
 
 NPY_INPLACE npy_longdouble
 npy_floor_dividel(npy_longdouble a, npy_longdouble b) {
     npy_longdouble div, mod;
-    if (NPY_UNLIKELY(!b)) {
+    
+    if (NPY_UNLIKELY(!b) || 
+        NPY_UNLIKELY(IS_ARM64_CLANG && sizeof(npy_longdouble) == sizeof(long double) && (npy_isnan(a) || npy_isnan(b)))) {
         /*
-         * in2 == 0 (and not NaN): normal division will give the correct
-         * result (Inf or NaN). `divmod` may set additional FPE for the modulo
-         * evaluating to NaN.
+         * Handle two cases:
+         * 1. in2 == 0 (and not NaN): normal division will give the correct
+         *    result (Inf or NaN). `divmod` may set additional FPE for the modulo
+         *    evaluating to NaN.
+         * 2. ARM64 with Clang: Special handling to avoid FPE with float128
+         *    TODO: This is a workaround for a known Clang issue on ARM64 where 
+         *    float128 operations trigger incorrect FPE behavior. This can be 
+         *    removed once fixed:
+         *    https://github.com/llvm/llvm-project/issues/59924
          */
-        div = a / b;
+        return a / b;
     }
-    else {
-        div = npy_divmodl(a, b, &mod);
-    }
+    
+    div = npy_divmodl(a, b, &mod);
     return div;
 }
 
@@ -1310,7 +1376,7 @@ npy_divmodl(npy_longdouble a, npy_longdouble b, npy_longdouble *modulus)
 #undef NPY__FP_SFX
 
 
-#line 607
+#line 629
 NPY_INPLACE npy_uint
 npy_gcdu(npy_uint a, npy_uint b)
 {
@@ -1330,7 +1396,7 @@ npy_lcmu(npy_uint a, npy_uint b)
     return gcd == 0 ? 0 : a / gcd * b;
 }
 
-#line 607
+#line 629
 NPY_INPLACE npy_ulong
 npy_gcdul(npy_ulong a, npy_ulong b)
 {
@@ -1350,7 +1416,7 @@ npy_lcmul(npy_ulong a, npy_ulong b)
     return gcd == 0 ? 0 : a / gcd * b;
 }
 
-#line 607
+#line 629
 NPY_INPLACE npy_ulonglong
 npy_gcdull(npy_ulonglong a, npy_ulonglong b)
 {
@@ -1371,42 +1437,42 @@ npy_lcmull(npy_ulonglong a, npy_ulonglong b)
 }
 
 
-#line 633
+#line 655
 NPY_INPLACE npy_int
 npy_gcd(npy_int a, npy_int b)
 {
     return npy_gcdu(a < 0 ? -a : a, b < 0 ? -b : b);
 }
 
-#line 633
+#line 655
 NPY_INPLACE npy_long
 npy_gcdl(npy_long a, npy_long b)
 {
     return npy_gcdul(a < 0 ? -a : a, b < 0 ? -b : b);
 }
 
-#line 633
+#line 655
 NPY_INPLACE npy_longlong
 npy_gcdll(npy_longlong a, npy_longlong b)
 {
     return npy_gcdull(a < 0 ? -a : a, b < 0 ? -b : b);
 }
 
-#line 633
+#line 655
 NPY_INPLACE npy_int
 npy_lcm(npy_int a, npy_int b)
 {
     return npy_lcmu(a < 0 ? -a : a, b < 0 ? -b : b);
 }
 
-#line 633
+#line 655
 NPY_INPLACE npy_long
 npy_lcml(npy_long a, npy_long b)
 {
     return npy_lcmul(a < 0 ? -a : a, b < 0 ? -b : b);
 }
 
-#line 633
+#line 655
 NPY_INPLACE npy_longlong
 npy_lcmll(npy_longlong a, npy_longlong b)
 {
@@ -1417,8 +1483,8 @@ npy_lcmll(npy_longlong a, npy_longlong b)
 /* Unlike LCM and GCD, we need byte and short variants for the shift operators,
  * since the result is dependent on the width of the type
  */
-#line 648
-#line 653
+#line 670
+#line 675
 NPY_INPLACE npy_ubyte
 npy_lshiftuhh(npy_ubyte a, npy_ubyte b)
 {
@@ -1445,7 +1511,7 @@ npy_rshiftuhh(npy_ubyte a, npy_ubyte b)
     }
 }
 
-#line 653
+#line 675
 NPY_INPLACE npy_byte
 npy_lshifthh(npy_byte a, npy_byte b)
 {
@@ -1473,8 +1539,8 @@ npy_rshifthh(npy_byte a, npy_byte b)
 }
 
 
-#line 648
-#line 653
+#line 670
+#line 675
 NPY_INPLACE npy_ushort
 npy_lshiftuh(npy_ushort a, npy_ushort b)
 {
@@ -1501,7 +1567,7 @@ npy_rshiftuh(npy_ushort a, npy_ushort b)
     }
 }
 
-#line 653
+#line 675
 NPY_INPLACE npy_short
 npy_lshifth(npy_short a, npy_short b)
 {
@@ -1529,8 +1595,8 @@ npy_rshifth(npy_short a, npy_short b)
 }
 
 
-#line 648
-#line 653
+#line 670
+#line 675
 NPY_INPLACE npy_uint
 npy_lshiftu(npy_uint a, npy_uint b)
 {
@@ -1557,7 +1623,7 @@ npy_rshiftu(npy_uint a, npy_uint b)
     }
 }
 
-#line 653
+#line 675
 NPY_INPLACE npy_int
 npy_lshift(npy_int a, npy_int b)
 {
@@ -1585,8 +1651,8 @@ npy_rshift(npy_int a, npy_int b)
 }
 
 
-#line 648
-#line 653
+#line 670
+#line 675
 NPY_INPLACE npy_ulong
 npy_lshiftul(npy_ulong a, npy_ulong b)
 {
@@ -1613,7 +1679,7 @@ npy_rshiftul(npy_ulong a, npy_ulong b)
     }
 }
 
-#line 653
+#line 675
 NPY_INPLACE npy_long
 npy_lshiftl(npy_long a, npy_long b)
 {
@@ -1641,8 +1707,8 @@ npy_rshiftl(npy_long a, npy_long b)
 }
 
 
-#line 648
-#line 653
+#line 670
+#line 675
 NPY_INPLACE npy_ulonglong
 npy_lshiftull(npy_ulonglong a, npy_ulonglong b)
 {
@@ -1669,7 +1735,7 @@ npy_rshiftull(npy_ulonglong a, npy_ulonglong b)
     }
 }
 
-#line 653
+#line 675
 NPY_INPLACE npy_longlong
 npy_lshiftll(npy_longlong a, npy_longlong b)
 {
@@ -1699,22 +1765,22 @@ npy_rshiftll(npy_longlong a, npy_longlong b)
 
 
 #define __popcnt32 __popcnt
-#line 688
+#line 710
 #undef TO_BITS_LEN
 #if 0
-#line 693
+#line 715
 #elif NPY_BITSOF_BYTE == 8
     #define TO_BITS_LEN(X) X##8
 
-#line 693
+#line 715
 #elif NPY_BITSOF_BYTE == 16
     #define TO_BITS_LEN(X) X##16
 
-#line 693
+#line 715
 #elif NPY_BITSOF_BYTE == 32
     #define TO_BITS_LEN(X) X##32
 
-#line 693
+#line 715
 #elif NPY_BITSOF_BYTE == 64
     #define TO_BITS_LEN(X) X##64
 
@@ -1751,22 +1817,22 @@ npy_popcountuhh(npy_ubyte a)
 #endif
 }
 
-#line 688
+#line 710
 #undef TO_BITS_LEN
 #if 0
-#line 693
+#line 715
 #elif NPY_BITSOF_SHORT == 8
     #define TO_BITS_LEN(X) X##8
 
-#line 693
+#line 715
 #elif NPY_BITSOF_SHORT == 16
     #define TO_BITS_LEN(X) X##16
 
-#line 693
+#line 715
 #elif NPY_BITSOF_SHORT == 32
     #define TO_BITS_LEN(X) X##32
 
-#line 693
+#line 715
 #elif NPY_BITSOF_SHORT == 64
     #define TO_BITS_LEN(X) X##64
 
@@ -1803,22 +1869,22 @@ npy_popcountuh(npy_ushort a)
 #endif
 }
 
-#line 688
+#line 710
 #undef TO_BITS_LEN
 #if 0
-#line 693
+#line 715
 #elif NPY_BITSOF_INT == 8
     #define TO_BITS_LEN(X) X##8
 
-#line 693
+#line 715
 #elif NPY_BITSOF_INT == 16
     #define TO_BITS_LEN(X) X##16
 
-#line 693
+#line 715
 #elif NPY_BITSOF_INT == 32
     #define TO_BITS_LEN(X) X##32
 
-#line 693
+#line 715
 #elif NPY_BITSOF_INT == 64
     #define TO_BITS_LEN(X) X##64
 
@@ -1855,22 +1921,22 @@ npy_popcountu(npy_uint a)
 #endif
 }
 
-#line 688
+#line 710
 #undef TO_BITS_LEN
 #if 0
-#line 693
+#line 715
 #elif NPY_BITSOF_LONG == 8
     #define TO_BITS_LEN(X) X##8
 
-#line 693
+#line 715
 #elif NPY_BITSOF_LONG == 16
     #define TO_BITS_LEN(X) X##16
 
-#line 693
+#line 715
 #elif NPY_BITSOF_LONG == 32
     #define TO_BITS_LEN(X) X##32
 
-#line 693
+#line 715
 #elif NPY_BITSOF_LONG == 64
     #define TO_BITS_LEN(X) X##64
 
@@ -1907,22 +1973,22 @@ npy_popcountul(npy_ulong a)
 #endif
 }
 
-#line 688
+#line 710
 #undef TO_BITS_LEN
 #if 0
-#line 693
+#line 715
 #elif NPY_BITSOF_LONGLONG == 8
     #define TO_BITS_LEN(X) X##8
 
-#line 693
+#line 715
 #elif NPY_BITSOF_LONGLONG == 16
     #define TO_BITS_LEN(X) X##16
 
-#line 693
+#line 715
 #elif NPY_BITSOF_LONGLONG == 32
     #define TO_BITS_LEN(X) X##32
 
-#line 693
+#line 715
 #elif NPY_BITSOF_LONGLONG == 64
     #define TO_BITS_LEN(X) X##64
 
@@ -1960,7 +2026,7 @@ npy_popcountull(npy_ulonglong a)
 }
 
 
-#line 735
+#line 757
 NPY_INPLACE uint8_t
 npy_popcounthh(npy_byte a)
 {
@@ -1968,7 +2034,7 @@ npy_popcounthh(npy_byte a)
     return npy_popcountuhh(a < 0 ? -a : a);
 }
 
-#line 735
+#line 757
 NPY_INPLACE uint8_t
 npy_popcounth(npy_short a)
 {
@@ -1976,7 +2042,7 @@ npy_popcounth(npy_short a)
     return npy_popcountuh(a < 0 ? -a : a);
 }
 
-#line 735
+#line 757
 NPY_INPLACE uint8_t
 npy_popcount(npy_int a)
 {
@@ -1984,7 +2050,7 @@ npy_popcount(npy_int a)
     return npy_popcountu(a < 0 ? -a : a);
 }
 
-#line 735
+#line 757
 NPY_INPLACE uint8_t
 npy_popcountl(npy_long a)
 {
@@ -1992,7 +2058,7 @@ npy_popcountl(npy_long a)
     return npy_popcountul(a < 0 ? -a : a);
 }
 
-#line 735
+#line 757
 NPY_INPLACE uint8_t
 npy_popcountll(npy_longlong a)
 {

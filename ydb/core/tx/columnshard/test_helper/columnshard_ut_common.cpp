@@ -59,7 +59,7 @@ public:
 
 }   // namespace
 
-void TTester::Setup(TTestActorRuntime& runtime) {
+void TTester::Setup(TTestActorRuntime& runtime, TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
     //    runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
@@ -83,7 +83,8 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetTxAllocatorTabletIds(ids);
 
     app.AddDomain(domain.Release());
-    SetupTabletServices(runtime, &app);
+    const bool mockDisk = !dsProxies.empty();
+    SetupTabletServices(runtime, &app, mockDisk, {}, nullptr, false, std::move(dsProxies));
 
     // No LongTxService actor is created in this basic test runtime, so install a stand-in registry with a
     // live OldestCollectionTime; otherwise TRegistryScanSnapshotGuard sees a frozen Zero freshness and
@@ -313,6 +314,20 @@ TPlanStep ProposeCommit(
     });
 }
 
+std::optional<TPlanStep> TryProposeCommit(
+    TTestBasicRuntime& runtime, TActorId& sender, const ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
+    std::optional<TPlanStep> planStep;
+    const auto result = ProposeCommitCheck(runtime, sender, TTestTxConfig::TxTablet0, txId, writeIds, lockId, [&](auto& res) {
+        if (res.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
+            planStep = TPlanStep(res.GetMinStep());
+        } else {
+            UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        }
+    });
+    Y_UNUSED(result);
+    return planStep;
+}
+
 void ProposeCommitFail(
     TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
     const auto result = ProposeCommitCheck(runtime, sender, shardId, txId, writeIds, lockId, [&](auto& res) {
@@ -467,6 +482,17 @@ TSerializedTableRange MakeTestRange(
     return TSerializedTableRange(TConstArrayRef<TCell>(cellsFrom), inclusiveFrom, TConstArrayRef<TCell>(cellsTo), inclusiveTo);
 }
 
+NArrow::TSimpleRow MakeTestKey(const ui64 value, const std::vector<NArrow::NTest::TTestColumn>& pk) {
+    NArrow::TArrowBatchBuilder batchBuilder;
+    const auto startStatus = batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(pk));
+    UNIT_ASSERT_C(startStatus.ok(), startStatus.ToString());
+    std::vector<TString> mem;
+    std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(pk);
+    std::vector<TCell> cells = MakeTestCells(types, value, mem);
+    batchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));
+    return NArrow::TSimpleRow(batchBuilder.FlushBatch(false), 0);
+}
+
 THashMap<TString, NColumnShard::NTiers::TTierConfig> TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
     if (specials.Tiers.empty()) {
         return {};
@@ -551,6 +577,54 @@ ui64 CountLocalDbTableRows(
     )", rangeSpec.c_str(), fieldsSpec.c_str(), tableName.c_str());
     const auto result = LocalMiniKQL(runtime, tabletId, query);
     return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+void EraseLocalDbTableRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let key %s)
+            (return (AsList
+                (EraseRow '%s key)
+            ))
+        )
+    )", keySpec.c_str(), tableName.c_str());
+    Y_UNUSED(LocalMiniKQL(runtime, tabletId, query));
+}
+
+void UpdateLocalDbTableRow(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec, const TString& valuesSpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let key %s)
+            (let values %s)
+            (return (AsList
+                (UpdateRow '%s key values)
+            ))
+        )
+    )", keySpec.c_str(), valuesSpec.c_str(), tableName.c_str());
+    Y_UNUSED(LocalMiniKQL(runtime, tabletId, query));
+}
+
+std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> ReadSchemaPresetVersions(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('Id (Null) (Void))
+                '('SinceStep (Null) (Void))
+                '('SinceTxId (Null) (Void))
+            ))
+            (let fields '('InfoProto))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'SchemaPresetVersionInfo range fields '()))
+            ))
+        )
+    )");
+    const auto rows = NClient::TValue::Create(result)[0]["List"];
+    std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> versions(rows.Size());
+    for (ui32 i = 0; i < rows.Size(); ++i) {
+        UNIT_ASSERT(versions[i].ParseFromString(TString(rows[i]["InfoProto"])));
+    }
+    return versions;
 }
 
 ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId) {

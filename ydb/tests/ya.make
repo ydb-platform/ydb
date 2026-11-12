@@ -15,4 +15,5 @@ RECURSE(
     stress
     supp
     tools
+    workload_manager
 )

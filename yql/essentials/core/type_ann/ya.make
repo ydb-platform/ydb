@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ENABLE(SKIP_YQL_STYLE_CPP)
 
@@ -17,6 +17,8 @@ SRCS(
     type_ann_types.cpp
     type_ann_wide.cpp
     type_ann_yql.cpp
+    type_ann_yql_aggregation.cpp
+    type_ann_yql_flatten.cpp
     type_ann_match_recognize.cpp
 )
 
@@ -40,7 +42,5 @@ PEERDIR(
     yql/essentials/public/udf_meta
     library/cpp/yson/node
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

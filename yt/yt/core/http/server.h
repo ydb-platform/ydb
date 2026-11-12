@@ -136,8 +136,8 @@ public:
     bool IsEmpty() const override;
 
 private:
-    THashMap<std::string, IHttpHandlerPtr, THash<std::string>, TEqualTo<>> Exact_;
-    THashMap<std::string, IHttpHandlerPtr, THash<std::string>, TEqualTo<>> Subtrees_;
+    THashMap<std::string, IHttpHandlerPtr> Exact_;
+    THashMap<std::string, IHttpHandlerPtr> Subtrees_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

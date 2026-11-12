@@ -8,9 +8,6 @@
  */
 
 #line 1
-/*@targets
- ** $maxopt baseline avx512_skx avx512_spr
- */
 #include "numpy/npy_math.h"
 #include "contrib/python/numpy/py3/numpy/_core/src/common/simd/simd.h"
 #include "loops_utils.h"
@@ -19,8 +16,8 @@
 #include "fast_loop_macros.h"
 
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
-#line 17
-#line 22
+#line 14
+#line 19
 static void
 simd_exp2_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -59,7 +56,7 @@ simd_exp2_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_log2_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -98,7 +95,7 @@ simd_log2_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_log10_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -137,7 +134,7 @@ simd_log10_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_expm1_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -176,7 +173,7 @@ simd_expm1_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_log1p_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -215,7 +212,7 @@ simd_log1p_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_cbrt_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -254,7 +251,7 @@ simd_cbrt_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_tan_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -293,7 +290,7 @@ simd_tan_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_asin_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -332,7 +329,7 @@ simd_asin_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_acos_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -371,7 +368,7 @@ simd_acos_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_atan_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -410,7 +407,7 @@ simd_atan_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_sinh_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -449,7 +446,7 @@ simd_sinh_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_cosh_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -488,7 +485,7 @@ simd_cosh_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_asinh_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -527,7 +524,7 @@ simd_asinh_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_acosh_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -566,7 +563,7 @@ simd_acosh_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_atanh_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
                         npyv_lanetype_f32 *dst, npy_intp sdst, npy_intp len)
@@ -606,8 +603,8 @@ simd_atanh_f32(const npyv_lanetype_f32 *src, npy_intp ssrc,
 }
 
 
-#line 17
-#line 22
+#line 14
+#line 19
 static void
 simd_exp2_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -646,7 +643,7 @@ simd_exp2_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_log2_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -685,7 +682,7 @@ simd_log2_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_log10_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -724,7 +721,7 @@ simd_log10_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_expm1_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -763,7 +760,7 @@ simd_expm1_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_log1p_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -802,7 +799,7 @@ simd_log1p_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_cbrt_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -841,7 +838,7 @@ simd_cbrt_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_tan_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -880,7 +877,7 @@ simd_tan_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_asin_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -919,7 +916,7 @@ simd_asin_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_acos_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -958,7 +955,7 @@ simd_acos_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_atan_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -997,7 +994,7 @@ simd_atan_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_sinh_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -1036,7 +1033,7 @@ simd_sinh_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_cosh_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -1075,7 +1072,7 @@ simd_cosh_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_asinh_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -1114,7 +1111,7 @@ simd_asinh_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_acosh_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -1153,7 +1150,7 @@ simd_acosh_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 22
+#line 19
 static void
 simd_atanh_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                         npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -1194,8 +1191,8 @@ simd_atanh_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
 
 
 
+#line 63
 #line 66
-#line 69
 
 static void
 simd_pow_f32(const npyv_lanetype_f32 *src1, npy_intp ssrc1,
@@ -1227,7 +1224,7 @@ simd_pow_f32(const npyv_lanetype_f32 *src1, npy_intp ssrc1,
     }
 }
 
-#line 69
+#line 66
 
 static void
 simd_atan2_f32(const npyv_lanetype_f32 *src1, npy_intp ssrc1,
@@ -1260,8 +1257,8 @@ simd_atan2_f32(const npyv_lanetype_f32 *src1, npy_intp ssrc1,
 }
 
 
+#line 63
 #line 66
-#line 69
 
 static void
 simd_pow_f64(const npyv_lanetype_f64 *src1, npy_intp ssrc1,
@@ -1293,7 +1290,7 @@ simd_pow_f64(const npyv_lanetype_f64 *src1, npy_intp ssrc1,
     }
 }
 
-#line 69
+#line 66
 
 static void
 simd_atan2_f64(const npyv_lanetype_f64 *src1, npy_intp ssrc1,
@@ -1326,1171 +1323,10 @@ simd_atan2_f64(const npyv_lanetype_f64 *src1, npy_intp ssrc1,
 }
 
 
-
-typedef __m256i npyvh_f16;
-#define npyv_cvt_f16_f32 _mm512_cvtph_ps
-#define npyv_cvt_f32_f16 _mm512_cvtps_ph
-#define npyvh_load_f16(PTR) _mm256_loadu_si256((const __m256i*)(PTR))
-#define npyvh_store_f16(PTR, data) _mm256_storeu_si256((__m256i*)PTR, data)
-NPY_FINLINE npyvh_f16 npyvh_load_till_f16(const npy_half *ptr, npy_uintp nlane, npy_half fill)
-{
-    assert(nlane > 0);
-    const __m256i vfill = _mm256_set1_epi16(fill);
-    const __mmask16 mask = (0x0001 << nlane) - 0x0001;
-    return _mm256_mask_loadu_epi16(vfill, mask, ptr);
-}
-NPY_FINLINE void npyvh_store_till_f16(npy_half *ptr, npy_uintp nlane, npyvh_f16 data)
-{
-    assert(nlane > 0);
-    const __mmask16 mask = (0x0001 << nlane) - 0x0001;
-    _mm256_mask_storeu_epi16(ptr, mask, data);
-}
-
-#line 125
-static void
-avx512_sin_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_sinf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_sinf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_cos_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_cosf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_cosf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_tan_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_tanf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_tanf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_exp_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_expf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_expf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_exp2_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_exp2f16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_exp2f16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_expm1_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_expm1f16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0x3c00);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_expm1f16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_log_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_logf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0x3c00);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_logf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_log2_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_log2f16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0x3c00);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_log2f16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_log10_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_log10f16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0x3c00);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_log10f16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_log1p_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_log1pf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_log1pf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_cbrt_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_cbrtf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_cbrtf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_asin_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_asinf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_asinf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_acos_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_acosf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_acosf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_atan_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_atanf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_atanf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_sinh_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_sinhf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_sinhf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_cosh_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_coshf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_coshf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_tanh_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_tanhf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_tanhf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_asinh_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_asinhf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_asinhf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_acosh_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_acoshf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0x3c00);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_acoshf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
-#line 125
-static void
-avx512_atanh_f16(const npy_half *src, npy_half *dst, npy_intp len)
-{
-    const int num_lanes = npyv_nlanes_f32;
-    npyvh_f16 x, out;
-    npyv_f32 x_ps, out_ps;
-    for (; len > 0; len -= num_lanes, src += num_lanes, dst += num_lanes) {
-        if (len >= num_lanes) {
-            x       = npyvh_load_f16(src);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_atanhf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_f16(dst, out);
-        }
-        else {
-            x       = npyvh_load_till_f16(src, len, 0);
-            x_ps    = npyv_cvt_f16_f32(x);
-            out_ps  = __svml_atanhf16(x_ps);
-            out     = npyv_cvt_f32_f16(out_ps, 0);
-            npyvh_store_till_f16(dst, len, out);
-        }
-    }
-    npyv_cleanup();
-}
-
 #endif
 
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_sin)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_sins32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_sin_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_sinf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_cos)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_coss32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_cos_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_cosf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_tan)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_tans32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_tan_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_tanf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_exp)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_exps32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_exp_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_expf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_exp2)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_exp2s32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_exp2_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_exp2f(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_expm1)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_expm1s32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_expm1_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_expm1f(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_log)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_logs32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_log_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_logf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_log2)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_log2s32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_log2_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_log2f(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_log10)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_log10s32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_log10_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_log10f(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_log1p)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_log1ps32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_log1p_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_log1pf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_cbrt)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_cbrts32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_cbrt_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_cbrtf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arcsin)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_asins32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_asin_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_asinf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arccos)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_acoss32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_acos_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_acosf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arctan)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_atans32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_atan_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_atanf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_sinh)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_sinhs32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_sinh_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_sinhf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_cosh)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_coshs32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_cosh_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_coshf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_tanh)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_tanhs32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_tanh_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_tanhf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arcsinh)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_asinhs32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_asinh_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_asinhf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arccosh)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_acoshs32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_acosh_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_acoshf(in1));
-    }
-}
-
-#line 156
-NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arctanh)
-(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
-{
-#if defined(NPY_HAVE_AVX512_SPR) || defined(NPY_HAVE_AVX512_SKX)
-#if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
-    const npy_half *src = (npy_half*)args[0];
-          npy_half *dst = (npy_half*)args[1];
-
-    const npy_intp len = dimensions[0];
-
-    if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (steps[0] == sizeof(npy_half)) &&
-        (steps[1] == sizeof(npy_half))) {
-#if defined(NPY_HAVE_AVX512_SPR)
-        __svml_atanhs32(src, dst, len);
-        return;
-#endif
-#if defined(NPY_HAVE_AVX512_SKX)
-        avx512_atanh_f16(src, dst, len);
-        return;
-#endif
-    }
-#endif // NPY_SIMD && NPY_CAN_LINK_SVML
-#endif // SPR or SKX
-    UNARY_LOOP {
-        const npy_float in1 = npy_half_to_float(*(npy_half *)ip1);
-        *((npy_half *)op1) = npy_float_to_half(npy_atanhf(in1));
-    }
-}
-
-
-#line 193
-#line 197
+#line 106
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_exp2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2516,7 +1352,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_exp2)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2542,7 +1378,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log2)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log10)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2568,7 +1404,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log10)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_expm1)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2594,7 +1430,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_expm1)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log1p)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2620,7 +1456,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log1p)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_cbrt)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2646,7 +1482,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_cbrt)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_tan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2672,7 +1508,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_tan)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arcsin)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2698,7 +1534,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arcsin)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arccos)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2724,7 +1560,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arccos)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2750,7 +1586,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctan)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_sinh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2776,7 +1612,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_sinh)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_cosh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2802,7 +1638,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_cosh)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arcsinh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2828,7 +1664,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arcsinh)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arccosh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2854,7 +1690,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arccosh)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctanh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2881,8 +1717,8 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctanh)
 }
 
 
-#line 193
-#line 197
+#line 106
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_exp2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2908,7 +1744,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_exp2)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2934,7 +1770,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log2)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log10)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2960,7 +1796,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log10)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_expm1)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -2986,7 +1822,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_expm1)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log1p)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3012,7 +1848,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log1p)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_cbrt)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3038,7 +1874,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_cbrt)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_tan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3064,7 +1900,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_tan)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arcsin)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3090,7 +1926,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arcsin)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arccos)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3116,7 +1952,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arccos)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3142,7 +1978,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctan)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_sinh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3168,7 +2004,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_sinh)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_cosh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3194,7 +2030,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_cosh)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arcsinh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3220,7 +2056,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arcsinh)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arccosh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3246,7 +2082,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arccosh)
     }
 }
 
-#line 197
+#line 110
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctanh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3274,8 +2110,8 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctanh)
 
 
 
-#line 231
-#line 235
+#line 144
+#line 148
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_power)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3283,11 +2119,30 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_power)
     if (stride_zero) {
         BINARY_DEFS
         const npy_double in2 = *(npy_double *)ip2;
-        if (in2 == 2.0) {
-            BINARY_LOOP_SLIDING {
-                const npy_double in1 = *(npy_double *)ip1;
+        int fastop_found = 1;
+        BINARY_LOOP_SLIDING {
+            const npy_double in1 = *(npy_double *)ip1;
+            if (in2 == -1.0) {
+                *(npy_double *)op1 = 1.0 / in1;
+            }
+            else if (in2 == 0.0) {
+                *(npy_double *)op1 = 1.0;
+            }
+            else if (in2 == 0.5) {
+                *(npy_double *)op1 = sqrt(in1);
+            }
+            else if (in2 == 1.0) {
+                *(npy_double *)op1 = in1;
+            }
+            else if (in2 == 2.0) {
                 *(npy_double *)op1 = in1 * in1;
             }
+            else {
+                fastop_found = 0;
+                break;
+            }
+        }
+        if (fastop_found) {
             return;
         }
     }
@@ -3320,7 +2175,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_power)
 }
 
 
-#line 283
+#line 215
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctan2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3354,8 +2209,8 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctan2)
 
 
 
-#line 231
-#line 235
+#line 144
+#line 148
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_power)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3363,11 +2218,30 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_power)
     if (stride_zero) {
         BINARY_DEFS
         const npy_float in2 = *(npy_float *)ip2;
-        if (in2 == 2.0) {
-            BINARY_LOOP_SLIDING {
-                const npy_float in1 = *(npy_float *)ip1;
+        int fastop_found = 1;
+        BINARY_LOOP_SLIDING {
+            const npy_float in1 = *(npy_float *)ip1;
+            if (in2 == -1.0) {
+                *(npy_float *)op1 = 1.0 / in1;
+            }
+            else if (in2 == 0.0) {
+                *(npy_float *)op1 = 1.0;
+            }
+            else if (in2 == 0.5) {
+                *(npy_float *)op1 = sqrtf(in1);
+            }
+            else if (in2 == 1.0) {
+                *(npy_float *)op1 = in1;
+            }
+            else if (in2 == 2.0) {
                 *(npy_float *)op1 = in1 * in1;
             }
+            else {
+                fastop_found = 0;
+                break;
+            }
+        }
+        if (fastop_found) {
             return;
         }
     }
@@ -3400,7 +2274,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_power)
 }
 
 
-#line 283
+#line 215
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctan2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {

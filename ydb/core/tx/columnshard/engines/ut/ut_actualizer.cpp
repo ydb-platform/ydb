@@ -58,7 +58,7 @@ public:
     TTestEnv()
         : Controller(std::make_shared<TController>())
     {
-        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
+        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->GetOrInsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
         Actualizer.emplace(TestPathId, VersionedIndex, Storages);
     }
 
@@ -98,6 +98,18 @@ public:
         Actualizer->Refresh(MakeTestTiering(), TAddExternalContext(TestStart - insertedAgo, Portions));
     }
 
+    void QueueTieredPortion(const TString& storageId, const TDuration dataAge) {
+        const TInstant maxPk = TestStart - dataAge;
+        auto tiered = NTest::MakeTestCompactedPortion(
+            TestPathId, TestPortionId, maxPk.Seconds(), maxPk.Seconds(), 10, TSnapshot(1, 1), std::nullopt, storageId);
+        tiered->AddRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
+        Portions.emplace(TestPortionId, std::move(tiered));
+    }
+
+    void RefreshTiering(const std::optional<TTiering>& tiering) {
+        Actualizer->Refresh(tiering, TAddExternalContext(TestStart, Portions));
+    }
+
     THashMap<TRWAddress, std::vector<TTaskConstructor>> ExtractTasks() {
         auto context = MakeProcessContext();
         TInternalTasksContext internalContext;
@@ -120,8 +132,8 @@ private:
 
 public:
     TSchemeTestEnv() {
-        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
-        VersionedIndex.AddIndex(TSnapshot(2, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 2, true)));
+        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->GetOrInsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
+        VersionedIndex.AddIndex(TSnapshot(2, 1), Cache->GetOrInsertIndexInfo(MakeTestIndexInfo(Cache, 2, true)));
         Actualizer.emplace(TestPathId, VersionedIndex);
     }
 
@@ -174,6 +186,78 @@ Y_UNIT_TEST_SUITE(TTieringProcessContextTests) {
 // ends up under are computed at different instants and need not match. That is why the caller's per-queue check
 // cannot stand in for the check above.
 Y_UNIT_TEST_SUITE(TTieringActualizerTests) {
+    Y_UNIT_TEST(PrefixChangesDoNotMoveExistingPortions) {
+        using NColumnShard::NTiers::TExternalStorageId;
+        const std::vector<std::optional<TString>> prefixes = { std::nullopt, TString(), TString("old/data"), TString("new/data") };
+        for (auto&& oldPrefix : prefixes) {
+            for (auto&& newPrefix : prefixes) {
+                TTestEnv env;
+                env.QueueTieredPortion(TExternalStorageId(Tier1, oldPrefix).ToString(), TDuration::Minutes(90));
+                TTiering tiering;
+                UNIT_ASSERT(tiering.Add(std::make_shared<TTierInfo>(TExternalStorageId(Tier1, newPrefix), Tier1EvictAfter, "pk", 1)));
+                env.RefreshTiering(tiering);
+                UNIT_ASSERT(env.ExtractTasks().empty());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NewEvictionsUseNewPrefix) {
+        using NColumnShard::NTiers::TExternalStorageId;
+        TTestEnv env;
+        env.QueuePortion(TDuration::Zero(), TDuration::Minutes(90));
+        const TString newTier = TExternalStorageId(Tier1, TString("new/data")).ToString();
+        TTiering tiering;
+        UNIT_ASSERT(tiering.Add(std::make_shared<TTierInfo>(TExternalStorageId::FromString(newTier), Tier1EvictAfter, "pk", 1)));
+        env.RefreshTiering(tiering);
+        const auto tasks = env.ExtractTasks();
+        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tasks.begin()->first, env.MakeAddress(newTier));
+    }
+
+    Y_UNIT_TEST(PrefixChangePreservesLaterTransitions) {
+        using NColumnShard::NTiers::TExternalStorageId;
+        const TString oldTier = TExternalStorageId(Tier1, TString("old/data")).ToString();
+        for (const bool deleteTier : { false, true }) {
+            TTestEnv env;
+            env.QueueTieredPortion(oldTier, TDuration::Hours(3));
+            TTiering tiering;
+            UNIT_ASSERT(tiering.Add(std::make_shared<TTierInfo>(TExternalStorageId(Tier1, TString("new/data")), Tier1EvictAfter, "pk", 1)));
+            UNIT_ASSERT(
+                tiering.Add(deleteTier ? TTierInfo::MakeTtl(Tier2EvictAfter, "pk", 1)
+                                       : std::make_shared<TTierInfo>(TExternalStorageId(Tier2, TString("cold")), Tier2EvictAfter, "pk", 1)));
+            env.RefreshTiering(tiering);
+            const auto tasks = env.ExtractTasks();
+            UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+            const TString target = deleteTier ? TTierInfo::GetTtlTierName() : TExternalStorageId(Tier2, TString("cold")).ToString();
+            UNIT_ASSERT_VALUES_EQUAL(tasks.begin()->first, TRWAddress({ oldTier }, { target }));
+        }
+    }
+
+    Y_UNIT_TEST(DistinctPrefixesOfSameStorageRemainSeparateStages) {
+        using NColumnShard::NTiers::TExternalStorageId;
+        TTestEnv env;
+        const TExternalStorageId warm(Tier1, TString("warm"));
+        const TExternalStorageId cold(Tier1, TString("cold"));
+        env.QueueTieredPortion(warm.ToString(), TDuration::Hours(3));
+        TTiering tiering;
+        UNIT_ASSERT(tiering.Add(std::make_shared<TTierInfo>(warm, Tier1EvictAfter, "pk", 1)));
+        UNIT_ASSERT(tiering.Add(std::make_shared<TTierInfo>(cold, Tier2EvictAfter, "pk", 1)));
+        env.RefreshTiering(tiering);
+        const auto tasks = env.ExtractTasks();
+        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tasks.begin()->first, TRWAddress({ warm.ToString() }, { cold.ToString() }));
+    }
+
+    Y_UNIT_TEST(ResetTieringReturnsOldPrefixDataToDefaultStorage) {
+        TTestEnv env;
+        const TString oldTier = NColumnShard::NTiers::TExternalStorageId(Tier1, TString("old/data")).ToString();
+        env.QueueTieredPortion(oldTier, TDuration::Hours(3));
+        env.RefreshTiering(std::nullopt);
+        const auto tasks = env.ExtractTasks();
+        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tasks.begin()->first, TRWAddress({ oldTier }, { IStoragesManager::DefaultStorageId }));
+    }
+
     Y_UNIT_TEST(TargetTierIsRecomputedOnTaskBuild) {
         TTestEnv env;
         // at T-2h the data (T-2h30m) is 30 minutes old: due for no tier at all, tier1 being merely its next hop in

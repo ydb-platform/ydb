@@ -162,6 +162,7 @@ namespace NKikimr {
         typedef ::NKikimr::TLevelIndexActor<TKey, TMemRec> TThis;
         typedef ::NKikimr::NHullComp::TTask<TKey, TMemRec> TCompactionTask;
         typedef ::NKikimr::NHullComp::TSelectorActor<TKey, TMemRec> TSelectorActor;
+        typedef ::NKikimr::NHullComp::TSelectorActorCoro<TKey, TMemRec> TSelectorActorCoro;
         typedef ::NKikimr::NHullComp::TSelected<TKey, TMemRec> TSelected;
 
         typedef ::NKikimr::TLevelSlice<TKey, TMemRec> TLevelSlice;
@@ -416,7 +417,7 @@ namespace NKikimr {
             // A planned compaction writes exclusive chunks only.
             if constexpr (!std::is_same_v<TKey, TKeyLogoBlob>) {
                 if (Config->HeapAllocatorMaxSstInBytes > 0 &&
-                        AppData()->FeatureFlags.GetEnableVDiskHeapAllocator() && !InPlannedMode() && !Planned.Leased) {
+                        Config->UseHeapAllocator && !InPlannedMode() && !Planned.Leased) {
                     params.StripeSstBytes = Config->HeapAllocatorMaxSstInBytes;
                 }
             }
@@ -443,9 +444,15 @@ namespace NKikimr {
                 params.EmergencyMode = oos.GetLocalColor() >= static_cast<ESpaceColor>(
                     ui64(Config->HullCompEmergencyEnableAtColor));
             }
-            auto selector = std::make_unique<TSelectorActor>(HullDs->HullCtx, params, std::move(levelSnap),
-                std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask), AllowGarbageCollection);
-            auto aid = RunInBatchPool(ctx, selector.release());
+            IActor* selector;
+            if (AppData()->FeatureFlags.GetEnableCoroutineCompactionSelector()) {
+                selector = new TSelectorActorCoro(HullDs->HullCtx, params, std::move(levelSnap),
+                    std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask), AllowGarbageCollection);
+            } else {
+                selector = new TSelectorActor(HullDs->HullCtx, params, std::move(levelSnap),
+                    std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask), AllowGarbageCollection);
+            }
+            auto aid = RunInBatchPool(ctx, selector);
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             return true;
         }
@@ -646,7 +653,7 @@ namespace NKikimr {
 
                             Y_VERIFY_S(wId, HullDs->HullCtx->VCtx->VDiskLogPrefix);
                             YDB_LOG_DEBUG_CTX(ctx, "Got PreCompactResult for ActDeleteSsts,",
-                                {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                                {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
                                 {"wId", wId});
                             AccountSelectedStrategy();
                             ApplyCompactionResult(ctx, {}, {}, wId);

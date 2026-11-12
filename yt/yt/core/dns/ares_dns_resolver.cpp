@@ -19,9 +19,8 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
-#include <library/cpp/yt/threading/notification_handle.h>
-
 #include <library/cpp/yt/system/handle_eintr.h>
+#include <library/cpp/yt/system/notification_handle.h>
 
 #include <ares.h>
 
@@ -206,7 +205,7 @@ private:
 #ifdef YT_DNS_RESOLVER_USE_EPOLL
     int EpollFD_ = -1;
 #endif
-    NThreading::TNotificationHandle WakeupHandle_;
+    TNotificationHandle WakeupHandle_;
 
     ares_channel Channel_;
     ares_options Options_;

@@ -226,7 +226,7 @@ private:
         }
 
     private:
-        const TIntrusivePtr<NThreading::TEventCount> EventCount_ = New<NThreading::TEventCount>();
+        const TIntrusivePtr<TEventCount> EventCount_ = New<TEventCount>();
 
         std::atomic<bool> NotificationScheduled_ = false;
 

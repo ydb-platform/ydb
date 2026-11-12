@@ -57,7 +57,9 @@ public:
         const TStringBuf& table,
         std::optional<ui64> tabletId = {},
         const TStringBuf& where = {},
-        const TStringBuf& declares = {}) const;
+        const TStringBuf& declares = {},
+        double sampleRate = 1.0,
+        ui64 samplingSeed = 0) const;
 
     size_t ColumnCount() const {
         return Columns.size();

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_result_provider.cpp
@@ -16,7 +16,5 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/result/expr_nodes
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 
 #include "kqp_query_stats.h"
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -30,10 +31,6 @@
 #include <memory>
 
 namespace NKikimr {
-
-namespace NWorkloadManager {
-class IQueryClassifier;
-} // namespace NWorkloadManager
 
 namespace NKqp {
 
@@ -80,6 +77,7 @@ public:
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
         , StartTime(TInstant::Now())
+        , RuntimeStats(startedAt, ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
         , UserTraceId((ev->Get()->GetUserCtx() != nullptr && ev->Get()->GetUserCtx()->GetUserTraceId()) ? ev->Get()->GetUserCtx()->GetUserTraceId().Clone() : NWilson::TTraceId())
@@ -139,8 +137,12 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
-        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType());
-        QueryClassifier = RequestEv->GetWmQueryClassifier();
+        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType())
+            || (RequestEv->IsInternalCall()
+                && RequestEv->GetRequestType() == NRequestTypes::ChecksumTable
+                && (QueryType == NKikimrKqp::QUERY_TYPE_SQL_DML
+                    || QueryType == NKikimrKqp::QUERY_TYPE_PREPARED_DML
+                    || QueryType == NKikimrKqp::QUERY_TYPE_AST_DML));
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
             YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
@@ -155,6 +157,7 @@ public:
     // this counter may be used as a cookie by a session actor to reject events
     // with cookie less than current QueryId.
     ui64 QueryId = 0;
+    TMaybe<TRowVersion> ExternalMvccVersion;
     ui64 QuerySpanId = 0;
     TString Database;
     TMaybe<TString> ApplicationName;
@@ -163,7 +166,6 @@ public:
     TActorId Sender;
     ui64 ProxyRequestId = 0;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
-    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TString QueryTextForLogging;
@@ -188,6 +190,7 @@ public:
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
+    TCurrentQueryStatsPublisher RuntimeStats;
     TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -526,6 +529,12 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
+        AFL_ENSURE(UserRequestContext);
+        if (UserRequestContext->IsStreamingQuery) {
+            // Streaming queries are long-running: held-open read locks would be
+            // broken by any concurrent write and abort the query.
+            return false;
+        }
         if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&
@@ -677,7 +686,10 @@ public:
     }
 
     bool GetCollectAffectedRows() const {
-        return RequestEv->GetCollectAffectedRows();
+        // Ignore the flag when stats are not collected at all: shards would
+        // pay the extra precharge/RowExists overhead for a discarded result.
+        return RequestEv->GetCollectAffectedRows()
+            && GetStatsMode() != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     }
 
     bool ReportStats() const {

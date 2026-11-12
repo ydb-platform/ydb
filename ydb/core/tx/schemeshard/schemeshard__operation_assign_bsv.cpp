@@ -15,7 +15,7 @@ class TAssignBlockStoreVolume: public TSubOperationBase {
     public:
     using TSubOperationBase::TSubOperationBase;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetAssignBlockStoreVolume().GetName();
         const TString mountToken = Transaction.GetAssignBlockStoreVolume().GetNewMountToken();
@@ -85,7 +85,7 @@ class TAssignBlockStoreVolume: public TSubOperationBase {
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAssignBlockStoreVolume");
     }
 

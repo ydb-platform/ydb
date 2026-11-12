@@ -48,7 +48,9 @@ C_ABI_VERSION = '0x02000000'
 # 0x00000011 - 1.25.x
 # 0x00000012 - 2.0.x
 # 0x00000013 - 2.1.x
-C_API_VERSION = '0x00000013'
+# 0x00000013 - 2.2.x
+# 0x00000014 - 2.3.x
+C_API_VERSION = '0x00000014'
 
 # Check whether we have a mismatch between the set C API VERSION and the
 # actual C API VERSION. Will raise a MismatchCAPIError if so.
@@ -97,6 +99,10 @@ if use_svml
   endif
 endif
 
+if host_machine.cpu_family() == 'loongarch64'
+  add_project_arguments(['-DHWY_COMPILE_ONLY_SCALAR'], language: ['cpp'])
+endif
+
 use_highway = not get_option('disable-highway')
 if use_highway and not fs.exists('src/highway/README.md')
   error('Missing the `highway` git submodule! Run `git submodule update --init` to fix this.')
@@ -120,6 +126,21 @@ endif
 use_intel_sort = not get_option('disable-intel-sort') and cpu_family in ['x86', 'x86_64']
 if use_intel_sort and not fs.exists('src/npysort/x86-simd-sort/README.md')
   error('Missing the `x86-simd-sort` git submodule! Run `git submodule update --init` to fix this.')
+endif
+
+# openMP related settings:
+if get_option('disable-threading') and get_option('enable-openmp')
+  error('Build options `disable-threading` and `enable-openmp` are conflicting. Please set at most one to true.')
+endif
+
+use_openmp = get_option('enable-openmp') and not get_option('disable-threading')
+
+# Setup openmp flags for x86-simd-sort:
+omp = []
+omp_dep = []
+if use_intel_sort and use_openmp
+  omp = dependency('openmp', required : true)
+  omp_dep = declare_dependency(dependencies: omp, compile_args: ['-DXSS_USE_OPENMP'])
 endif
 
 if not fs.exists('src/common/pythoncapi-compat')
@@ -337,14 +358,26 @@ endif
 optional_function_attributes = [
   ['optimize("unroll-loops")', 'OPTIMIZE_UNROLL_LOOPS'],
   ['optimize("O3")', 'OPTIMIZE_OPT_3'],
-  ['optimize("O2")', 'OPTIMIZE_OPT_2'],
-  ['optimize("nonnull (1)")', 'NONNULL'],
+  ['nonnull(1)', 'NONNULL'],
 ]
-#foreach attr: optional_function_attributes
-#  if cc.has_function_attribute(attr[0])
-#    cdata.set10('HAVE_ATTRIBUTE_' + attr[1], true)
-#  endif
-#endforeach
+if get_option('disable-optimization') == false
+  foreach attr: optional_function_attributes
+    test_code = '''
+      __attribute__((@0@)) void test_function(void *ptr) {
+        (void*)ptr;
+        return;
+      }
+      int main(void) {
+        int dummy = 0;
+        test_function(&dummy);
+        return 0;
+      }
+    '''.format(attr[0])
+    if cc.compiles(test_code, name: '__attribute__((' + attr[0] + '))', args: ['-Werror', '-Wattributes'])
+      cdata.set10('HAVE_ATTRIBUTE_' + attr[1], true)
+    endif
+  endforeach
+endif
 
 # Max possible optimization flags. We pass this flags to all our dispatch-able
 # (multi_targets) sources.
@@ -679,6 +712,16 @@ c_args_common = [
   cflags_large_file_support,
 ]
 
+# CPP exceptions are handled in the unique_hash code and therefore the `-fexceptions`
+# flag.
+unique_hash_cpp_args = c_args_common
+if cc.get_argument_syntax() != 'msvc'
+  unique_hash_cpp_args += [
+    '-fexceptions',
+    '-fno-rtti',  # no runtime type information
+  ]
+endif
+
 # Same as NPY_CXX_FLAGS (TODO: extend for what ccompiler_opt adds)
 cpp_args_common = c_args_common + [
 ]
@@ -822,7 +865,9 @@ foreach gen_mtargets : [
   [
     'x86_simd_qsort_16bit.dispatch.h',
     'src/npysort/x86_simd_qsort_16bit.dispatch.cpp',
-    use_intel_sort ? [AVX512_SPR, AVX512_ICL] : []
+    # Do not enable AVX-512 on MSVC 32-bit (x86): it’s buggy there;
+    # Ref: NumPy issue numpy/numpy#29808
+    use_intel_sort and not (cc.get_id() == 'msvc' and cpu_family == 'x86') ? [AVX512_SPR, AVX512_ICL] : []
   ],
   [
     'highway_qsort.dispatch.h',
@@ -839,12 +884,15 @@ foreach gen_mtargets : [
     ] : []
   ],
 ]
+
+
+
   mtargets = mod_features.multi_targets(
     gen_mtargets[0], multiarray_gen_headers + gen_mtargets[1],
     dispatch: gen_mtargets[2],
     # baseline: CPU_BASELINE, it doesn't provide baseline fallback
     prefix: 'NPY_',
-    dependencies: [py_dep, np_core_dep],
+    dependencies: [py_dep, np_core_dep, omp_dep],
     c_args: c_args_common + max_opt,
     cpp_args: cpp_args_common + max_opt,
     include_directories: [
@@ -880,6 +928,7 @@ foreach gen_mtargets : [
       ASIMD, NEON,
       VSX3, VSX2,
       VXE, VX,
+      LSX,
     ]
   ],
   [
@@ -890,6 +939,7 @@ foreach gen_mtargets : [
       NEON,
       VSX4, VSX2,
       VX,
+      LSX,
     ]
   ],
   [
@@ -900,6 +950,7 @@ foreach gen_mtargets : [
       VSX3, VSX2,
       NEON,
       VXE, VX,
+      LSX,
     ]
   ],
   [
@@ -911,22 +962,25 @@ foreach gen_mtargets : [
   ],
   [
     'loops_hyperbolic.dispatch.h',
-    src_file.process('src/umath/loops_hyperbolic.dispatch.c.src'),
+    src_file.process('src/umath/loops_hyperbolic.dispatch.cpp.src'),
     [
       AVX512_SKX, [AVX2, FMA3],
       VSX4, VSX2,
       NEON_VFPV4,
-      VXE, VX
+      VXE,
+      LSX,
     ]
   ],
   [
     'loops_logical.dispatch.h',
-    src_file.process('src/umath/loops_logical.dispatch.c.src'),
+    'src/umath/loops_logical.dispatch.cpp',
     [
       ASIMD, NEON,
       AVX512_SKX, AVX2, SSE2,
       VSX2,
       VX,
+      LSX,
+      RVV,
     ]
   ],
   [
@@ -937,6 +991,7 @@ foreach gen_mtargets : [
       AVX512_SKX, AVX2, SSE2,
       VSX2,
       VXE, VX,
+      LSX,
     ]
   ],
   [
@@ -954,6 +1009,7 @@ foreach gen_mtargets : [
       VSX4, VSX3, VSX2,
       NEON_VFPV4,
       VXE2, VXE,
+      LSX,
     ]
   ],
   [
@@ -968,7 +1024,8 @@ foreach gen_mtargets : [
       ASIMD, NEON,
       AVX512_SKX, AVX2, SSE2,
       VSX2,
-      VXE, VX
+      VXE, VX,
+      LSX,
     ]
   ],
   [
@@ -978,7 +1035,8 @@ foreach gen_mtargets : [
       SSE41, SSE2,
       VSX2,
       ASIMD, NEON,
-      VXE, VX
+      VXE, VX,
+      LSX,
     ]
   ],
   [
@@ -988,6 +1046,7 @@ foreach gen_mtargets : [
       SSE41, SSE2,
       VSX2,
       ASIMD, NEON,
+      LSX,
     ]
   ],
   [
@@ -998,6 +1057,7 @@ foreach gen_mtargets : [
       ASIMD, NEON,
       VSX3, VSX2,
       VXE, VX,
+      LSX,
     ]
   ],
   [
@@ -1008,7 +1068,13 @@ foreach gen_mtargets : [
       NEON,
       VSX2,
       VX,
+      LSX,
     ]
+  ],
+  [
+    'loops_half.dispatch.h',
+    src_file.process('src/umath/loops_half.dispatch.c.src'),
+    [AVX512_SPR, AVX512_SKX]
   ],
 ]
   mtargets = mod_features.multi_targets(
@@ -1039,13 +1105,13 @@ endforeach
 # ------------------------------
 src_multiarray_umath_common = [
   'src/common/array_assign.c',
+  'src/common/blas_utils.c',
   'src/common/gil_utils.c',
   'src/common/mem_overlap.c',
   'src/common/npy_argparse.c',
   'src/common/npy_hashtable.cpp',
   'src/common/npy_import.c',
   'src/common/npy_longdouble.c',
-  'src/common/ucsnarrow.c',
   'src/common/ufunc_override.c',
   'src/common/numpyos.c',
   'src/common/npy_cpu_features.c',
@@ -1116,7 +1182,7 @@ src_multiarray = multiarray_gen_headers + [
   'src/multiarray/scalarapi.c',
   'src/multiarray/shape.c',
   'src/multiarray/strfuncs.c',
-  'src/multiarray/stringdtype/casts.c',
+  'src/multiarray/stringdtype/casts.cpp',
   'src/multiarray/stringdtype/dtype.c',
   'src/multiarray/stringdtype/utf8_utils.c',
   'src/multiarray/stringdtype/static_string.c',
@@ -1203,6 +1269,21 @@ if use_svml
   endforeach
 endif
 
+unique_hash_so = static_library(
+  'unique_hash',
+  ['src/multiarray/unique.cpp'],
+  c_args: c_args_common,
+  cpp_args: unique_hash_cpp_args,
+  include_directories: [
+    'include',
+    'src/common',
+  ],
+  dependencies: [
+    py_dep,
+    np_core_dep,
+  ],
+)
+
 py.extension_module('_multiarray_umath',
   [
     config_h,
@@ -1226,8 +1307,12 @@ py.extension_module('_multiarray_umath',
     'src/umath',
     'src/highway'
   ],
-  dependencies: [blas_dep],
-  link_with: [npymath_lib, multiarray_umath_mtargets.static_lib('_multiarray_umath_mtargets')] + highway_lib,
+  dependencies: [blas_dep, omp],
+  link_with: [
+    npymath_lib,
+    unique_hash_so,
+    multiarray_umath_mtargets.static_lib('_multiarray_umath_mtargets')
+  ] + highway_lib,
   install: true,
   subdir: 'numpy/_core',
 )

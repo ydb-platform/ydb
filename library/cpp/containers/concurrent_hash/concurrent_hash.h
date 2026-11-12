@@ -79,12 +79,14 @@ public:
             return (it != Map.end());
         }
 
-        const V* TryGetUnsafe(const K& key) const {
+        template <typename TKey>
+        const V* TryGetUnsafe(const TKey& key) const {
             typename TActualMap::const_iterator it = Map.find(key);
             return it == Map.end() ? nullptr : &it->second;
         }
 
-        V* TryGetUnsafe(const K& key) {
+        template <typename TKey>
+        V* TryGetUnsafe(const TKey& key) {
             typename TActualMap::iterator it = Map.find(key);
             return it == Map.end() ? nullptr : &it->second;
         }

@@ -1,4 +1,5 @@
 #include "aio.h"
+#include "aio_completion.h"
 #include "buffers.h"
 
 //#include <ydb/core/blobstorage/base/wilson_events.h>
@@ -206,7 +207,8 @@ public:
 
             events[i].Operation = op;
 
-            events[i].Result = RetErrnoToContextError(ioEvents[i].res, "ioEvents[].res");
+            events[i].Result = RetErrnoToContextError(
+                NDetail::CheckIoCompletion(ioEvents[i].res, op->GetSize()), "ioEvents[].res");
 
             events[i].Operation->ExecCallback(&events[i]);
 
@@ -534,7 +536,8 @@ public:
         for (auto i = 0u; i < numEvents; ++i) {
             auto *op = reinterpret_cast<TAsyncIoOperationLiburing*>(io_uring_cqe_get_data(&cqes[i]));
             events[i].Operation = op;
-            events[i].Result = RetErrnoToContextError(cqes[i].res, "cqes[]->res");
+            events[i].Result = RetErrnoToContextError(
+                NDetail::CheckIoCompletion(cqes[i].res, op->GetSize()), "cqes[]->res");
             events[i].Operation->ExecCallback(&events[i]);
         }
 

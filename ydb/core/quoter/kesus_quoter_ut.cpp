@@ -68,8 +68,19 @@ Y_UNIT_TEST_SUITE(QuoterWithKesusTest) {
 
     Y_UNIT_TEST(FailsToGetBigQuota) {
         TKesusQuoterTestSetup setup;
-        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, TKesusQuoterTestSetup::DEFAULT_KESUS_RESOURCE); // stabilization
-        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, TKesusQuoterTestSetup::DEFAULT_KESUS_RESOURCE, 40, TDuration::MilliSeconds(500), TEvQuota::TEvClearance::EResult::Deadline); // default rate is 10
+        const auto& path = TKesusQuoterTestSetup::DEFAULT_KESUS_PATH;
+        const auto& resource = TKesusQuoterTestSetup::DEFAULT_KESUS_RESOURCE;
+        setup.GetQuota(path, resource); // stabilization
+
+        // The local pacing rate includes both sustained quota and the available
+        // burst, which grows while this request waits. At the default 10 units/s,
+        // 40 units can be granted near the 500 ms deadline. Use a larger request
+        // to keep expiration well separated from quota fulfillment.
+        setup.GetQuota(path, resource, 1'000, TDuration::MilliSeconds(500), TEvQuota::TEvClearance::EResult::Deadline);
+
+        // Expiration must remove the oversized request without consuming quota
+        // or blocking the next request.
+        setup.GetQuota(path, resource, 1, TDuration::Seconds(3));
     }
 
     Y_UNIT_TEST(DualChannelPreventsStarvationAfterBurstConsumption) {
@@ -350,6 +361,68 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
             });
 
         setup.WaitEvent<NKesus::TEvKesus::TEvSubscribeOnResources>();
+    }
+
+    Y_UNIT_TEST(RebindsCountersWhenResourceRecreatedDuringDisconnection) {
+        TKesusProxyTestSetup setup;
+        auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
+        EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+                UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
+                NKikimrKesus::TEvSubscribeOnResourcesResult ans;
+                FillResult(ans.AddResults(), 42);
+                pipe->SendSubscribeOnResourceResult(ans, cookie);
+            });
+
+        auto session = setup.ProxyRequest("res");
+        UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
+
+        auto quoterCounters = setup.GetRuntime().GetAppData().Counters
+            ->GetSubgroup("counters", "quoter_service")
+            ->GetSubgroup("quoter", "/Path/KesusName");
+        auto oldResourceCounters = quoterCounters->FindSubgroup("resource", "res");
+        UNIT_ASSERT(oldResourceCounters);
+        UNIT_ASSERT(oldResourceCounters->FindCounter("QueueSize"));
+
+        // Disconnected
+        setup.SendDestroyed(pipe);
+
+        // Colocated Kesus deletes and recreates the resource: the shared subgroup is replaced.
+        quoterCounters->RemoveSubgroup("resource", "res");
+        auto newResourceCounters = quoterCounters->GetSubgroup("resource", "res");
+        UNIT_ASSERT(newResourceCounters.Get() != oldResourceCounters.Get());
+
+        // second pipe
+        auto* pipe2 = setup.GetPipeFactory().ExpectTabletPipeConnection();
+        EXPECT_CALL(*pipe2, OnSubscribeOnResources(_, _))
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+                UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
+                NKikimrKesus::TEvSubscribeOnResourcesResult ans;
+                FillResult(ans.AddResults(), 43); // Resource was recreated with a new id.
+                pipe2->SendSubscribeOnResourceResult(ans, cookie);
+            });
+        EXPECT_CALL(*pipe2, OnUpdateConsumptionState(_, _)).Times(AnyNumber());
+
+        bool broken = false;
+        for (size_t i = 0; i < 3 && !broken; ++i) {
+            auto update = setup.GetProxyUpdate();
+            for (const auto& res : update->Get()->Resources) {
+                if (res.ResourceId == 42 && res.ResourceState == TEvQuota::EUpdateState::Broken) {
+                    broken = true;
+                }
+            }
+        }
+        UNIT_ASSERT(broken);
+
+        // Counters are rebound to the live subgroup.
+        UNIT_ASSERT(!oldResourceCounters->FindCounter("QueueSize"));
+        UNIT_ASSERT(newResourceCounters->FindCounter("QueueSize"));
+
+        setup.SendProxyStats({TEvQuota::TProxyStat(43, 1, 0, {}, 3, 5.0, 0, 0)});
+        setup.WaitEvent<TEvQuota::TEvProxyStats>();
+        UNIT_ASSERT_VALUES_EQUAL(newResourceCounters->GetCounter("QueueSize")->Val(), 3);
     }
 
     Y_UNIT_TEST(ProxyRequestDuringDisconnection) {

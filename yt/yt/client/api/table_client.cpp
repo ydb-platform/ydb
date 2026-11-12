@@ -13,6 +13,23 @@ using namespace NTabletClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TAlterTableOptions::ValidateForTwoPhaseAlter() const
+{
+    if (Schema ||
+        SchemaId ||
+        ConstrainedSchema ||
+        Constraints ||
+        UpstreamReplicaId ||
+        SchemaModification ||
+        ReplicationProgress ||
+        ClipTimestamp)
+    {
+        THROW_ERROR_EXCEPTION("Only \"dynamic\" can be specified for two-phase table alter");
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TTableBackupManifest::Register(TRegistrar registrar)
 {
     registrar.Parameter("source_path", &TThis::SourcePath);

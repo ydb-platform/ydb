@@ -1,10 +1,8 @@
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/services/workload_manager/ut/common/query_classifier_ut_common.h>
 
-#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
-#include <ydb/library/yql/providers/pq/common/yql_names.h>
-
 #include <google/protobuf/any.pb.h>
-
 
 namespace NKikimr::NWorkloadManager {
 
@@ -22,18 +20,15 @@ TClassifierConfigsView MakeDefaultClassifierView() {
 
 TResourcePoolMapPtr MakeDefaultPoolSnap() {
     return MakeResourcePoolMap({
-        {_JoinPath(TEST_DB, SHARED_READING_POOL), MakePoolEntry(10)},
-        {_JoinPath(TEST_DB, USER_POOL), MakePoolEntry(10)},
-        {_JoinPath(TEST_DB, "pool_from_classifier"), MakePoolEntry(10)},
-        {_JoinPath(TEST_DB, "default"), MakePoolEntry(10)},
+        { _JoinPath(TEST_DB, SHARED_READING_POOL), MakePoolEntry(10) },
+        { _JoinPath(TEST_DB, USER_POOL), MakePoolEntry(10) },
+        { _JoinPath(TEST_DB, "pool_from_classifier"), MakePoolEntry(10) },
+        { _JoinPath(TEST_DB, "default"), MakePoolEntry(10) },
     });
 }
 
-std::shared_ptr<IQueryClassifier> MakeClassifier(
-    const TString& resourcePoolForSharedReading,
-    const TString& explicitPoolId = {},
-    std::optional<TClassifierConfigsView> classifierView = std::nullopt,
-    TResourcePoolMapPtr poolSnap = nullptr,
+std::shared_ptr<IQueryClassifier> MakeClassifier(const TString& resourcePoolForSharedReading, const TString& explicitPoolId = {},
+    std::optional<TClassifierConfigsView> classifierView = std::nullopt, TResourcePoolMapPtr poolSnap = nullptr,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr)
 {
     TClassifyContext ctx{
@@ -41,12 +36,8 @@ std::shared_ptr<IQueryClassifier> MakeClassifier(
         .AppName = "",
         .UserToken = userToken,
     };
-    return CreateQueryClassifier(
-        poolSnap ? poolSnap : MakeDefaultPoolSnap(),
-        classifierView ? *classifierView : MakeDefaultClassifierView(),
-        TEST_DB,
-        std::move(ctx),
-        resourcePoolForSharedReading.empty() ? std::optional<TString>() : resourcePoolForSharedReading);
+    return CreateQueryClassifier(poolSnap ? poolSnap : MakeDefaultPoolSnap(), classifierView ? *classifierView : MakeDefaultClassifierView(),
+        TEST_DB, std::move(ctx), resourcePoolForSharedReading.empty() ? std::optional<TString>() : resourcePoolForSharedReading);
 }
 
 NKqp::TUserRequestContext MakeStreamingUserContext() {
@@ -67,7 +58,7 @@ NKqp::TPreparedQueryHolder MakePreparedQueryWithSharedReading(bool sharedReading
     pqSource.SetTopicPath("/Root/topic");
     pqSource.SetSharedReading(sharedReading);
     auto* externalSource = source->MutableExternalSource();
-    externalSource->SetType(TString{NYql::PqSource});
+    externalSource->SetType(TString{ NYql::PqSource });
     externalSource->MutableSettings()->PackFrom(pqSource);
 
     return NKqp::TPreparedQueryHolder(proto.release(), nullptr, /*noFillTables=*/true);
@@ -80,30 +71,25 @@ TString GetPostPoolId(const IQueryClassifier::TPostCompileClassifyResult& result
 }
 
 const IQueryClassifier::TReject& GetPostReject(const IQueryClassifier::TPostCompileClassifyResult& result) {
-    UNIT_ASSERT_C(std::holds_alternative<IQueryClassifier::TReject>(result),
-        TStringBuilder() << "Expected TReject, got variant index: " << result.index());
+    UNIT_ASSERT_C(std::holds_alternative<IQueryClassifier::TReject>(result), TStringBuilder()
+                                                                                 << "Expected TReject, got variant index: " << result.index());
     return std::get<IQueryClassifier::TReject>(result);
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
-
     Y_UNIT_TEST(PreCompileDefersWhenConfigSet) {
         auto classifier = MakeClassifier(SHARED_READING_POOL, USER_POOL);
         auto result = classifier->PreCompileClassify(MakeStreamingUserContext());
         UNIT_ASSERT_C(std::holds_alternative<IQueryClassifier::TPendingCompilation>(result),
             TStringBuilder() << "Expected TPendingCompilation, got variant index: " << result.index());
-        UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<int>(classifier->GetState()),
-            static_cast<int>(IQueryClassifier::EState::WaitCompile));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(classifier->GetState()), static_cast<int>(IQueryClassifier::EState::WaitCompile));
     }
 
     Y_UNIT_TEST(PreCompileIgnoresConfigForNonStreaming) {
         auto classifier = MakeClassifier(SHARED_READING_POOL, USER_POOL);
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetPoolId(classifier->PreCompileClassify(NKqp::TUserRequestContext{})),
-            USER_POOL);
+        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(classifier->PreCompileClassify(NKqp::TUserRequestContext{})), USER_POOL);
     }
 
     Y_UNIT_TEST(ForcesPoolWhenSharedReading) {
@@ -112,9 +98,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
         (void)classifier->PreCompileClassify(userCtx);
 
         auto prepared = MakePreparedQueryWithSharedReading(true);
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetPostPoolId(classifier->PostCompileClassify(prepared, userCtx)),
-            SHARED_READING_POOL);
+        UNIT_ASSERT_VALUES_EQUAL(GetPostPoolId(classifier->PostCompileClassify(prepared, userCtx)), SHARED_READING_POOL);
     }
 
     Y_UNIT_TEST(ForcesPoolWhenExplicitPoolMatchesConfig) {
@@ -123,9 +107,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
         (void)classifier->PreCompileClassify(userCtx);
 
         auto prepared = MakePreparedQueryWithSharedReading(true);
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetPostPoolId(classifier->PostCompileClassify(prepared, userCtx)),
-            SHARED_READING_POOL);
+        UNIT_ASSERT_VALUES_EQUAL(GetPostPoolId(classifier->PostCompileClassify(prepared, userCtx)), SHARED_READING_POOL);
     }
 
     Y_UNIT_TEST(RejectsWhenExplicitPoolConflictsWithSharedReading) {
@@ -142,15 +124,12 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
     }
 
     Y_UNIT_TEST(ForcesPoolWithEmptyClassifierView) {
-        auto classifier = MakeClassifier(
-            SHARED_READING_POOL, /*explicitPoolId=*/{}, TClassifierConfigsView{});
+        auto classifier = MakeClassifier(SHARED_READING_POOL, /*explicitPoolId=*/{}, TClassifierConfigsView{});
         auto userCtx = MakeStreamingUserContext();
         (void)classifier->PreCompileClassify(userCtx);
 
         auto prepared = MakePreparedQueryWithSharedReading(true);
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetPostPoolId(classifier->PostCompileClassify(prepared, userCtx)),
-            SHARED_READING_POOL);
+        UNIT_ASSERT_VALUES_EQUAL(GetPostPoolId(classifier->PostCompileClassify(prepared, userCtx)), SHARED_READING_POOL);
     }
 
     Y_UNIT_TEST(FallsBackToUserPoolWithoutSharedReading) {
@@ -159,9 +138,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
         (void)classifier->PreCompileClassify(userCtx);
 
         auto prepared = MakePreparedQueryWithSharedReading(false);
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetPostPoolId(classifier->PostCompileClassify(prepared, userCtx)),
-            USER_POOL);
+        UNIT_ASSERT_VALUES_EQUAL(GetPostPoolId(classifier->PostCompileClassify(prepared, userCtx)), USER_POOL);
     }
 
     Y_UNIT_TEST(FallsBackToClassifierWithoutSharedReadingAndWithoutUserPool) {
@@ -170,9 +147,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
         (void)classifier->PreCompileClassify(userCtx);
 
         auto prepared = MakePreparedQueryWithSharedReading(false);
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetPostPoolId(classifier->PostCompileClassify(prepared, userCtx)),
-            "pool_from_classifier");
+        UNIT_ASSERT_VALUES_EQUAL(GetPostPoolId(classifier->PostCompileClassify(prepared, userCtx)), "pool_from_classifier");
     }
 
     Y_UNIT_TEST(RejectsWhenSharedReadingPoolMissing) {
@@ -194,20 +169,18 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
         securityObject.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "alice");
 
         auto poolSnap = MakeResourcePoolMap({
-            {_JoinPath(TEST_DB, SHARED_READING_POOL), TResourcePoolEntry{
-                .Config = MakePoolEntry(10).Config,
-                .SecurityObject = securityObject,
-            }},
-            {_JoinPath(TEST_DB, USER_POOL), MakePoolEntry(10)},
-            {_JoinPath(TEST_DB, "default"), MakePoolEntry(10)},
+            { _JoinPath(TEST_DB, SHARED_READING_POOL), TResourcePoolEntry{
+                                                           .Config = MakePoolEntry(10).Config,
+                                                           .SecurityObject = securityObject,
+                                                       } },
+            { _JoinPath(TEST_DB, USER_POOL), MakePoolEntry(10) },
+            { _JoinPath(TEST_DB, "default"), MakePoolEntry(10) },
         });
 
-        auto token = MakeIntrusive<NACLib::TUserToken>(
-            NACLib::TSID("alice"), TVector<NACLib::TSID>{});
+        auto token = MakeIntrusive<NACLib::TUserToken>(NACLib::TSID("alice"), TVector<NACLib::TSID>{});
         token->SaveSerializationInfo();
 
-        auto classifier = MakeClassifier(
-            SHARED_READING_POOL, /*explicitPoolId=*/{}, /*classifierView=*/std::nullopt, poolSnap, token);
+        auto classifier = MakeClassifier(SHARED_READING_POOL, /*explicitPoolId=*/{}, /*classifierView=*/std::nullopt, poolSnap, token);
         auto userCtx = MakeStreamingUserContext();
         (void)classifier->PreCompileClassify(userCtx);
 
@@ -223,20 +196,18 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
         auto securityObject = NACLib::TSecurityObject(/*owner=*/"owner", /*isContainer=*/false);
 
         auto poolSnap = MakeResourcePoolMap({
-            {_JoinPath(TEST_DB, SHARED_READING_POOL), TResourcePoolEntry{
-                .Config = MakePoolEntry(10).Config,
-                .SecurityObject = securityObject,
-            }},
-            {_JoinPath(TEST_DB, USER_POOL), MakePoolEntry(10)},
-            {_JoinPath(TEST_DB, "default"), MakePoolEntry(10)},
+            { _JoinPath(TEST_DB, SHARED_READING_POOL), TResourcePoolEntry{
+                                                           .Config = MakePoolEntry(10).Config,
+                                                           .SecurityObject = securityObject,
+                                                       } },
+            { _JoinPath(TEST_DB, USER_POOL), MakePoolEntry(10) },
+            { _JoinPath(TEST_DB, "default"), MakePoolEntry(10) },
         });
 
-        auto token = MakeIntrusive<NACLib::TUserToken>(
-            NACLib::TSID("alice"), TVector<NACLib::TSID>{});
+        auto token = MakeIntrusive<NACLib::TUserToken>(NACLib::TSID("alice"), TVector<NACLib::TSID>{});
         token->SaveSerializationInfo();
 
-        auto classifier = MakeClassifier(
-            SHARED_READING_POOL, /*explicitPoolId=*/{}, /*classifierView=*/std::nullopt, poolSnap, token);
+        auto classifier = MakeClassifier(SHARED_READING_POOL, /*explicitPoolId=*/{}, /*classifierView=*/std::nullopt, poolSnap, token);
         auto userCtx = MakeStreamingUserContext();
         (void)classifier->PreCompileClassify(userCtx);
 
@@ -253,12 +224,11 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
         // their configured pool, so the resolver retains the pool id (SkipAdmission)
         // instead of bypassing.
         auto poolSnap = MakeResourcePoolMap({
-            {_JoinPath(TEST_DB, SHARED_READING_POOL), MakePoolEntry(/*concurrentQueryLimit=*/-1)},
-            {_JoinPath(TEST_DB, USER_POOL), MakePoolEntry(10)},
-            {_JoinPath(TEST_DB, "default"), MakePoolEntry(10)},
+            { _JoinPath(TEST_DB, SHARED_READING_POOL), MakePoolEntry(/*concurrentQueryLimit=*/-1) },
+            { _JoinPath(TEST_DB, USER_POOL), MakePoolEntry(10) },
+            { _JoinPath(TEST_DB, "default"), MakePoolEntry(10) },
         });
-        auto classifier = MakeClassifier(
-            SHARED_READING_POOL, /*explicitPoolId=*/{}, /*classifierView=*/std::nullopt, poolSnap);
+        auto classifier = MakeClassifier(SHARED_READING_POOL, /*explicitPoolId=*/{}, /*classifierView=*/std::nullopt, poolSnap);
         auto userCtx = MakeStreamingUserContext();
         (void)classifier->PreCompileClassify(userCtx);
 
@@ -273,11 +243,8 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
 
     Y_UNIT_TEST(NoConfigKeepsExplicitPoolInPreCompile) {
         auto classifier = MakeClassifier(/*resourcePoolForSharedReading=*/"", USER_POOL);
-        UNIT_ASSERT_VALUES_EQUAL(
-            GetPoolId(classifier->PreCompileClassify(MakeStreamingUserContext())),
-            USER_POOL);
+        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(classifier->PreCompileClassify(MakeStreamingUserContext())), USER_POOL);
     }
-
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

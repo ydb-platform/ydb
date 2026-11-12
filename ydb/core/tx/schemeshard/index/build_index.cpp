@@ -140,6 +140,10 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
                 *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
                     std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
                 break;
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+                *serializableRepresentation.MutableHnswIndexDescription() =
+                    std::get<NKikimrSchemeOp::THnswIndexDescription>(info.SpecializedIndexDescription);
+                break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -196,6 +200,10 @@ void TSchemeShard::PersistBuildIndexSpecializedDescription(NIceDb::TNiceDb& db, 
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
                 std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            *serializableRepresentation.MutableHnswIndexDescription() =
+                std::get<NKikimrSchemeOp::THnswIndexDescription>(info.SpecializedIndexDescription);
             break;
         default:
             break;
@@ -486,6 +494,13 @@ void TSchemeShard::PersistBuildIndexClustersToSample(NIceDb::TNiceDb& db, TIndex
     for (ui32 i = clusters.size(); i < info.KMeans.K; i++) {
         db.Table<Schema::KMeansTreeClusters>().Key(info.Id, i).Delete();
     }
+}
+
+void TSchemeShard::PersistBuildIndexClusterSize(NIceDb::TNiceDb& db, const TIndexBuildInfo& info, ui32 i) {
+    auto& sizes = info.Clusters->GetClusterSizes();
+    db.Table<Schema::KMeansTreeClusters>().Key(info.Id, i).Update(
+        NIceDb::TUpdate<Schema::KMeansTreeClusters::OldSize>(sizes[i])
+    );
 }
 
 void TSchemeShard::PersistBuildIndexClustersUpdate(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {

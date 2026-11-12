@@ -1,3 +1,4 @@
+/* ignore runonopt plan diff */
 pragma config.flags('OptimizerFlags', 'KeepWorld', 'CheckMissingWorld');
 
 use plato;

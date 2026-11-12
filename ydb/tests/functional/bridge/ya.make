@@ -2,28 +2,42 @@ PY3TEST()
 
 TEST_SRCS(
     common.py
+    state_storage_selfheal.py
     test_bridge.py
+    test_skipper.py
+    test_skipper_membership.py
+    test_conversion.py
     test_discovery.py
+    test_pile_ops.py
+    test_rollback.py
+    test_three_piles.py
+    test_mixed_storage.py
+    test_sdk_cleanup.py
+    test_sdk_reconnect.py
+    test_state_storage_selfheal.py
+    test_state_storage_selfheal_piles.py
+    test_state_storage_selfheal_root_restart.py
+    test_viewer_pile_nodes.py
 )
 
-SPLIT_FACTOR(10)
+SPLIT_FACTOR(24)
 
-REQUIREMENTS(ram:32 cpu:32)
+# Selfheal cases run 36 YDB processes; do not co-schedule bridge clusters.
+REQUIREMENTS(ram:64 cpu:all)
 SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
 ELSE()
-    TIMEOUT(100)
+    TIMEOUT(600)
 ENDIF()
 
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(IAM_TOKEN="")
 DEPENDS(
-    ydb/apps/ydbd
-    ydb/apps/ydb
+    ydb/apps/bridge_skipper
 )
 
 PEERDIR(
@@ -35,3 +49,7 @@ FORK_SUBTESTS()
 FORK_TEST_FILES()
 
 END()
+
+RECURSE_FOR_TESTS(
+    chaos
+)

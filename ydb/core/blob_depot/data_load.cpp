@@ -195,6 +195,8 @@ namespace NKikimr::NBlobDepot {
         for (auto& [key, record] : RecordsPerChannelGroup) {
             record.CollectIfPossible(this);
         }
+
+        Self->ProcessMoveDataQueue();
     }
 
     bool TData::EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, bool *progress) {
@@ -267,6 +269,7 @@ namespace NKikimr::NBlobDepot {
 
             case ELoadTrashResult::Complete:
                 TrashLoadState = ETrashLoadState::Complete;
+                Self->ProcessMoveDataQueue();
                 break;
         }
 

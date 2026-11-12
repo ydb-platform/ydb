@@ -162,4 +162,4 @@ config:
 
 ## Verifying the result {#verify-result}
 
-You can verify that the changes have been applied in the `CMS` section of the cluster's Embedded UI (available on port 8765): go to the `Tablets` tab and check the replicas of the metadata subsystem tablets to confirm that the configuration has been picked up.
+You can verify that the changes have been applied in the `CMS` section of the cluster [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md) (available on port 8765): go to the `Tablets` tab and check the replicas of the metadata subsystem tablets to confirm that the configuration has been picked up.

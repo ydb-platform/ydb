@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/library/actors/core
@@ -10,17 +10,10 @@ PEERDIR(
     ydb/library/yql/providers/dq/api/protos
 )
 
-YQL_LAST_ABI_VERSION()
-
-SET(
-    SOURCE
+SRCS(
     events.cpp
     worker_info.cpp
     counters.cpp
-)
-
-SRCS(
-    ${SOURCE}
 )
 
 END()

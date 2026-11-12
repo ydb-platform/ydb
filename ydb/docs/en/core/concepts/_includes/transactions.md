@@ -1,118 +1,146 @@
-# {{ ydb-short-name }} Transactions and Queries
+# Transactions and queries to {{ ydb-short-name }}
 
 This section describes the specifics of YQL implementation for {{ ydb-short-name }} transactions.
 
-## Query Language {#query-language}
+## Query language {#query-language}
 
-The main tool for creating, modifying, and managing data in {{ ydb-short-name }} is a declarative query language called YQL. YQL is an SQL dialect that can be considered a database interaction standard. {{ ydb-short-name }} also supports a set of special RPCs useful in managing a tree schema or a cluster, for instance.
+The main tool for creating, modifying, and managing data in {{ ydb-short-name }} is the declarative query language YQL. YQL is a SQL dialect that can be considered a standard for communicating with databases. In addition, {{ ydb-short-name }} supports a set of special RPCs, for example, for working with a tree schema or for managing a cluster.
 
-## Transaction Modes {#modes}
+## Transaction modes {#modes}
 
-By default, {{ ydb-short-name }} transactions are executed in *Serializable* mode. It provides the strictest [isolation level](https://en.wikipedia.org/wiki/Isolation_(database_systems)#Serializable) for custom transactions. This mode guarantees that the result of successful parallel transactions is equivalent to their serial execution, and there are no [read anomalies](https://en.wikipedia.org/wiki/Isolation_(database_systems)#Read_phenomena) for successful transactions.
+{{ ydb-short-name }} supports several transaction execution modes. By default, transactions are executed in *Serializable* mode, which provides the strictest [isolation level](https://en.wikipedia.org/wiki/Isolation_(database_systems)#Serializable) for user transactions. The transaction execution mode is set in the settings when it is created. Examples for {{ ydb-short-name }} SDK see in [{#T}](../../recipes/ydb-sdk/tx-control.md). In [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) the transaction mode can also be selected in the settings.
 
-If consistency or freshness requirement for data read by a transaction can be relaxed, a user can take advantage of execution modes with lower guarantees:
+Supported **read-write modes**: *Serializable* (default) and *Snapshot Read-Write*; **read-only modes**: *Snapshot Read-Only* and *Stale Read-Only*. The *Online Read-Only* mode is left for compatibility with old code (**legacy**); in new scenarios, use *Snapshot Read-Only* instead.
 
-* *Snapshot Read-Only*: All the read operations within a transaction access the database snapshot. All the data reads are consistent. The snapshot is taken when the transaction begins, meaning the transaction sees all changes committed before it began.
-* *Stale Read-Only*: Read operations within a transaction may return results that are slightly out-of-date (lagging by fractions of a second). Each individual read returns consistent data, but no consistency between different reads is guaranteed.
-* *Online Read-Only*: Each read operation in the transaction is reading the data that is most recent at execution time. The consistency of retrieved data depends on the *allow_inconsistent_reads* setting:
-  * *false* (consistent reads): Each individual read operation returns consistent data, but no consistency is guaranteed between reads. Reading the same table range twice may return different results.
-  * *true* (inconsistent reads): Even the data fetched by a particular read operation may contain inconsistent results.
+### Serializable {#serializable}
+
+**Essence.** Serializable execution of user transactions (Serializable [isolation level](https://en.wikipedia.org/wiki/Isolation_(database_systems)#Serializable)).
+
+**Features.** The [Optimistic Concurrency Control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) mechanism is used. Optimistic locks are placed on rows read during the transaction. When the transaction completes, it is checked that the locks have not been invalidated. The optimistic nature of locks results in an important property for the user — in case of a conflict, the transaction that completes first wins. Competing transactions will fail with an error `Transaction locks invalidated`.
+
+**Guarantees.**
+
+* The result of successfully executed parallel transactions is equivalent to some serial order of their execution;
+* For successful transactions, there are no [read anomalies](https://en.wikipedia.org/wiki/Isolation_(database_systems)#Read_phenomena);
+* A transaction sees all changes that were committed before its first read (the time the snapshot was taken), plus its own changes made earlier in the same transaction (read-your-own-writes);
+* Linearizability **by key** is guaranteed: if transaction T1, affecting a certain key, completed before transaction T2, affecting **the same key**, began, then in the execution order T1 will be before T2. For transactions working with different keys, such an order is not guaranteed — the observed order of their commit may differ from the real order of their completion in time.
+
+### Snapshot Read-Write {#snapshot-read-write}
+
+**Essence.** It is [Snapshot Isolation](https://en.wikipedia.org/wiki/Snapshot_isolation) (analogous to Repeatable Read in PostgreSQL).
+Reads are performed from a consistent data snapshot committed before the first read. A transaction will successfully commit only if, from the moment the data snapshot was taken until the transaction commit, the rows it modified were not modified by other transactions.
+
+**Features.** The [Optimistic Concurrency Control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) mechanism is used. Unlike Serializable, transactions do not take locks on read rows — this allows them to commit successfully even if the data they read was modified by other transactions. Locks are taken on modified rows: with parallel transactions changing the same keys, only the transaction that completes first will succeed. Competing transactions will be rejected with a write-write conflict at the commit stage with an error `Transaction locks invalidated`.
+
+**Guarantees.**
+
+* All reads in a transaction see the same data state on the snapshot obtained before the first read, plus its own changes made earlier in the same transaction (read-your-own-writes);
+* If there is a write-write conflict, the transaction will not be able to commit;
+* The [write skew](https://en.wikipedia.org/wiki/Snapshot_isolation) anomaly may be observed.
+
+### Snapshot Read-Only {#snapshot-read-only}
+
+**Essence.** The transaction works with a consistent database snapshot committed before the first read. The guarantees for data reads are the same as Snapshot Read-Write. Writes are prohibited in this mode, which makes it more efficient than Snapshot Read-Write when only data reading is needed.
+
+**Features.** Provides maximum data freshness at the start of the transaction, but may have higher response latency due to the need to form a snapshot.
+
+**Guarantees.** All reads in a transaction see the same data state on the snapshot; commits after the snapshot is taken are not visible.
+
+### Stale Read-Only {#stale-read-only}
+
+**Essence.** Reads are performed on [tablet (shard) replicas](../glossary.md#tablet-follower) with possible lag behind the [tablet (shard) leader](../glossary.md#tablet-leader) (usually fractions of a second). The mode is well suited for key-based read scenarios when minimal latency is needed. The user reads committed but possibly stale data.
+
+**Features.** Low latency and high throughput due to reading from replicas. The read replica is usually selected in the same availability zone, but the exact location is not guaranteed.
+
+**Guarantees.** Data consistency at the key level within **one** `SELECT` expression; between **different** `SELECT` expressions in the same transaction, consistency is **not** guaranteed.
+
+**Limitations.** There is no single snapshot for the entire transaction; there may be a delay relative to the data on the leader (the data may not be the freshest). Using replicas for reads is possible only if all read rows are in one shard. If the read spans multiple shards, the read will be performed from leaders with a snapshot taken similarly to Snapshot Read-Only. Reading from [column-oriented tables](../datamodel/table.md#column-oriented-tables) in this mode is not supported (see the warning below). Interactive transactions are not supported. For additional limitations and nuances on query types, see the SDK documentation for the selected language.
+
+### Online Read-Only {#online-read-only}
+
+A deprecated (**legacy**) mode retained for compatibility. For new applications, when reading without writing, use *Snapshot Read-Only*. Details and examples of calling in the SDK can still be found in [{#T}](../../recipes/ydb-sdk/tx-control.md#online-read-only).
 
 {% note warning "Limitation for Online Read-Only and Stale Read-Only" %}
 
-Reading from [column-oriented tables](../datamodel/table.md#column-oriented-tables) is not supported in these modes. Attempts fail with the following error:
+These modes do not support reading from column-oriented tables. An attempt to read will cause an error of the following form:
+
 
 ```text
-Read from column tables is not supported in Online Read-Only or Stale Read-Only
-transaction modes. Use Serializable or Snapshot Read-Only mode instead.
+Read from column tables is not supported in Online Read-Only or
+Stale Read-Only transaction modes. Use Serializable or
+Snapshot Read-Only mode instead.
 ```
 
-For transactions that read column-oriented tables, use:
+For transactions that read from column-oriented tables, use:
 
-* Serializable — the default mode.
-* Snapshot Read-Only — provides a read from a consistent snapshot.
+* Serializable — the default mode;
+* Snapshot Read-Only — a mode for reading from a consistent snapshot.
 
 {% endnote %}
 
-### Implicit Transactions {#implicit}
+### Implicit transactions {#implicit}
 
-Implicit transaction logic applies when a single YQL script is sent to the server without an explicitly selected [transaction mode](#modes). Typical entry points:
+The logic of implicit transactions is applied when sending a single YQL script to the server without explicitly selecting a [transaction mode](#modes). Typical entry points:
 
-* [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) — the **Query** tab on the database page ([query form](../../reference/ydb-ui/ydb-monitoring.md#tenant_scheme)), when run without selecting an explicit transaction mode in the settings.
-* [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — a one-off script via [`ydb sql`](../../reference/ydb-cli/sql.md).
-* Applications using the [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — [ImplicitTx](../../recipes/ydb-sdk/tx-control.md#implicittx) mode.
+* [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) — the **Query** tab on the database page ([query execution form](../../reference/ydb-ui/ydb-monitoring.md#tenant_scheme)), when run without selecting a transaction mode in the settings.
+* [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — one-off script submission via the [`ydb sql`](../../reference/ydb-cli/sql.md) command.
+* Applications on [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — mode [ImplicitTx](../../recipes/ydb-sdk/tx-control.md#implicittx).
 
-If no [transaction mode](../transactions.md#modes) is specified, {{ ydb-short-name }} automatically manages its behavior. This mode is called an **implicit transaction**.
+If a [transaction mode](../transactions.md#modes) is not set for a query, {{ ydb-short-name }} automatically manages its behavior. This mode is called an **implicit transaction**.
 
-In this mode, based on the query, {{ ydb-short-name }} decides whether to execute it outside a transaction or wrap it in a transaction with *Serializable* mode. Implicit transactions are a universal way to execute queries, as they support statements of any kind with a certain behavior described below.
+In this mode, {{ ydb-short-name }} determines based on the query whether to execute it outside a transaction or wrap it in a transaction with *Serializable* mode. The implicit transaction mode is universal for query execution, as it supports statements of any kind with the specific behavior described below.
 
-#### Behavior for Different Types of Statements
+#### Behavior for different types of statements
 
-- **[Data Definition Language](https://en.wikipedia.org/wiki/Data_definition_language) (DDL) Statements**
+- **[Data Definition Language](https://en.wikipedia.org/wiki/Data_definition_language) (DDL) statements**
   DDL statements (such as [`CREATE TABLE`](../../yql/reference/syntax/create_table/index.md), [`DROP TABLE`](../../yql/reference/syntax/drop_table.md), etc.) are executed outside a transaction. A query can consist only of DDL statements. If an error occurs, changes made by previous statements in the query are not rolled back.
 
-- **[Data Manipulation Language](https://en.wikipedia.org/wiki/Data_manipulation_language) (DML) Statements**
-  DML statements (such as [`SELECT`](../../yql/reference/syntax/select/index.md), [`UPSERT`](../../yql/reference/syntax/upsert_into.md), [`UPDATE`](../../yql/reference/syntax/update.md), etc.) are wrapped in a transaction with *Serializable* mode. A query can consist only of DML statements. On success, changes are committed. If an error occurs, all changes are rolled back.
+- **[Data Manipulation Language](https://en.wikipedia.org/wiki/Data_manipulation_language) (DML) statements**
+  DML statements (such as [`UPSERT`](../../yql/reference/syntax/upsert_into.md), [`SELECT`](../../yql/reference/syntax/select/index.md), [`UPDATE`](../../yql/reference/syntax/update.md), etc.) are wrapped in a transaction with *Serializable* mode. A query can consist only of DML statements. On successful execution, changes are committed, and if an error occurs, they are rolled back.
 
-- **Batch Modification Statements**
-  Batch modification statements (such as [`BATCH UPDATE`](../../yql/reference/syntax/batch-update.md) and [`BATCH DELETE`](../../yql/reference/syntax/batch-delete.md)) are executed outside a transaction. A query can contain only one batch modification statement. If an error occurs, the statement's changes are not rolled back.
+- **Batch modification statements**
+  Batch modification statements (such as [`BATCH UPDATE`](../../yql/reference/syntax/batch-update.md) and [`BATCH DELETE FROM`](../../yql/reference/syntax/batch-delete.md)) are executed outside a transaction. A query can consist only of one batch modification statement. If an error occurs, the statement's changes are not rolled back.
 
-#### Summary Table
+#### Summary table
 
-| Statement Type | Implicit Transaction Handling                     | Multistatement Support | Rollback on Error     |
-|----------------|---------------------------------------------------|------------------------|-----------------------|
-| DDL            | Outside a transaction                             | Yes (DDL-only)         | No                    |
-| DML            | Auto transaction (Serializable)                   | Yes (DML-only)         | Yes                   |
-| Batch Modification Statements | Outside a transaction              | No                     | No                    |
+| Statement type | Implicit transaction handling                      | Support for multiple statements | Rollback on error      |
+|----------------|---------------------------------------------------|---------------------------------|-----------------------|
+| DDL            | Outside a transaction                             | Yes (DDL only)                  | No                    |
+| DML            | Automatic transaction (Serializable)              | Yes (DML only)                  | Yes                   |
+| Batch modification statements | Outside a transaction             | No                              | No                    |
 
-To set a transaction mode explicitly, use the corresponding options at each entry point:
+To explicitly set a transaction mode, use the appropriate settings at each entry point:
 
-* [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) — choose a transaction mode in the execution settings on the **Query** tab.
-* [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — for [`table query execute`](../../reference/ydb-cli/table-query-execute.md) with `data` queries, set the [`--tx-mode`](../../reference/ydb-cli/table-query-execute.md#options) parameter (default: `serializable-rw`, which corresponds to *Serializable*).
+* [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) — select a transaction mode in the execution settings on the **Query** tab.
+* [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — for the subcommand [`table query execute`](../../reference/ydb-cli/table-query-execute.md) for queries of type `data` set the parameter [`--tx-mode`](../../reference/ydb-cli/table-query-execute.md#options) (default `serializable-rw`, which corresponds to *Serializable* mode).
 * [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — see [setting the mode in the {{ ydb-short-name }} SDK](../../recipes/ydb-sdk/tx-control.md).
 
-## YQL Language {#language-yql}
+## YQL language {#language-yql}
 
-Statements implemented in YQL can be divided into two classes: [Data Definition Language (DDL)](https://en.wikipedia.org/wiki/Data_definition_language) and [Data Manipulation Language (DML)](https://en.wikipedia.org/wiki/Data_manipulation_language).
+Implemented YQL constructs can be divided into two classes: [data definition language (DDL)](https://en.wikipedia.org/wiki/Data_definition_language) and [data manipulation language (DML)](https://en.wikipedia.org/wiki/Data_manipulation_language).
 
 For more information about supported YQL constructs, see the [YQL documentation](../../yql/reference/index.md).
 
-Listed below are the features and limitations of YQL support in {{ ydb-short-name }}, which might not be obvious at first glance and are worth noting:
+Below are the features and limitations of YQL support in {{ ydb-short-name }} that are worth paying attention to:
 
-* Multi-statement transactions (transactions made up of a sequence of YQL statements) are supported. Transactions may interact with client software, or in other words, client interactions with the database might look as follows:
+* Multistatement transactions are allowed, that is, transactions consisting of a sequence of YQL expressions. During transaction execution, interaction with the client program is allowed; in other words, client interaction with the database may look like this: `begin a transaction and execute SELECT; analyze the SELECT results on the client; ...; execute UPDATE and commit the transaction`. Each of the queries within a transaction can also contain multiple YQL expressions. It is worth noting that if the transaction body is fully formed before accessing the database, the transaction can be processed more efficiently;
+* In {{ ydb-short-name }} it is not supported to mix DDL and DML queries in one transaction. The traditional concept of an [ACID](https://en.wikipedia.org/wiki/ACID) transaction applies specifically to DML queries, that is, queries that change data. DDL queries must be idempotent, that is, repeatable in case of an error. If you need to perform an action with a schema, each action will be transactional, but a set of actions will not;
+* Any errors invalidate the entire transaction as a whole, not an individual query, so after a transaction completes with an error reporting a [temporary failure](../../reference/ydb-sdk/error_handling.md), the transaction must be retried from the very beginning;
+* Reads in a transaction see all data changes that were made earlier in the same transaction;
+* All changes made within a transaction accumulate in the memory of the database server. They are not visible to other transactions until the current one completes successfully and are applied atomically at commit. The described scheme imposes a limitation: the volume of changes within a single transaction must fit in RAM. **Implementation detail:** if a transaction reads data from a table that it previously modified, the accumulated changes are written to shards prematurely — this affects efficiency (see the recommendation below). Prematurely written data is not visible to other transactions and is rolled back when the transaction is canceled;
+* For transaction efficiency, avoid reading from tables previously modified in the same transaction (read-after-write), as this leads to premature data writes to shards. For each table, perform all reads before modifications.
 
-  ```text
-  BEGIN; make a SELECT; analyze the SELECT results on the client side;
-  ...; make an UPDATE; COMMIT
-  ```
+For more information about YQL support in {{ ydb-short-name }} see the [YQL documentation](../../yql/reference/index.md).
 
-  We should note that if the transaction body is fully formed before accessing the database, it will be processed more efficiently.
+## Distributed transactions {#distributed-tx}
 
-* {{ ydb-short-name }} does not support transactions that combine DDL and DML queries. The conventional [ACID](https://en.wikipedia.org/wiki/ACID) notion of a transaction is applicable specifically to DML queries, that is, queries that change data. DDL queries must be idempotent, meaning repeatable if an error occurs. If you need to manipulate a schema, each manipulation is transactional, while a set of manipulations is not.
-* YQL implementation used in {{ ydb-short-name }} employs the [Optimistic Concurrency Control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) mechanism. If an entity is affected during a transaction, optimistic blocking is applied. When the transaction is complete, the mechanism verifies that the locks have not been invalidated. For the user, locking optimism means that when transactions are competing with one another, the one that finishes first wins. Competing transactions fail with the `Transaction locks invalidated` error.
-* All changes made during the transaction accumulate in the database server memory and are applied when the transaction completes. If the locks are not invalidated, all the changes accumulated are committed atomically; if at least one lock is invalidated, none of the changes are committed. The above model involves certain restrictions: changes made by a single transaction must fit inside the available memory.
+A [table](../datamodel/table.md) in {{ ydb-short-name }} can be sharded by ranges of primary key values. Different table shards can be served by different servers of the distributed database (including those located in different locations), and can also move independently between servers for rebalancing or maintaining shard operability during server or network equipment failures.
 
-For efficient execution, a transaction should be formed so that the first part of the transaction only reads data, while the second part of the transaction only changes data. The query structure then looks as follows:
+A [topic](../datamodel/topic.md) in {{ ydb-short-name }} can be sharded into multiple partitions. Different topic partitions, like table shards, can be served by different servers of the distributed database.
 
-```yql
-       SELECT ...;
-       ....
-       SELECT ...;
-       UPDATE/REPLACE/DELETE ...;
-       COMMIT;
-```
+In {{ ydb-short-name }} distributed transactions are supported. Distributed transactions are transactions that affect more than one shard of one or more tables and topics. They require more resources and take longer. While point reads and writes can be performed in up to 10 ms at the 99th percentile, distributed transactions typically take from 20 to 500 ms.
 
-For more information about YQL support in {{ ydb-short-name }}, see the [YQL documentation](../../yql/reference/index.md).
-
-## Distributed Transactions {#distributed-tx}
-
-A database [table](../datamodel/table.md) in {{ ydb-short-name }} can be sharded by the range of the primary key values. Different table shards can be served by different distributed database servers (including ones in different locations). They can also move independently between servers to enable rebalancing or ensure shard operability if servers or network equipment goes offline.
-
-A [topic](../datamodel/topic.md) in {{ ydb-short-name }} can be sharded into several partitions. Different topic partitions, similar to table shards, can be served by different distributed database servers.
-
-{{ ydb-short-name }} supports distributed transactions. Distributed transactions are transactions that affect more than one shard of one or more tables and topics. They require more resources and take more time. While point reads and writes may take up to 10 ms in the 99th percentile, distributed transactions typically take from 20 to 500 ms.
-
-## Transactions with Topics and Tables {#topic-table-transactions}
+## Transactions involving topics and tables {#topic-table-transactions}
 
 {% note warning %}
 
@@ -120,10 +148,10 @@ A [topic](../datamodel/topic.md) in {{ ydb-short-name }} can be sharded into sev
 
 {% endnote %}
 
-{{ ydb-short-name }} supports transactions involving [row-oriented tables](../glossary.md#row-oriented-table) and/or [topics](../glossary.md#topic). This makes it possible to transactionally transfer data from tables to topics and vice versa, as well as between topics. This ensures that data is neither lost nor duplicated in case of a network outage or other issues. This enables the implementation of the transactional outbox pattern within {{ ydb-short-name }}.
+{{ ydb-short-name }} supports transactions involving [row-oriented tables](../glossary.md#row-oriented-table) and/or topics. Thus, you can transactionally move data from tables to topics and in the reverse direction, as well as between topics, so that data is not lost or duplicated even in unforeseen circumstances.
 
-For more information about transactions with tables and topics in {{ ydb-short-name }}, see [{#T}](../datamodel/topic.md#topic-transactions) and [{#T}](../../reference/ydb-sdk/topic.md).
+For more information about transactional operations when working with topics, see [{#T}](../datamodel/topic.md#topic-transactions) and [{#T}](../../reference/ydb-sdk/topic.md).
 
-## Transactions with Column and Row Tables {#mixed-transactions}
+## Transactions involving row-oriented and column-oriented tables {#mixed-transactions}
 
-{% include [limitation](../../_includes/limitation-column-row-in-read-only-tx.md) %}
+{% include [limitation](../../yql/reference/_includes/limitation-column-row-in-read-only-tx.md) %}

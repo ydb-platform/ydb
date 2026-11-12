@@ -2,10 +2,11 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/snapshot.h>
 #include <ydb/services/workload_manager/query_classifier.h>
-#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
-#include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -13,20 +14,14 @@
 #include <utility>
 #include <vector>
 
-
 namespace NKikimr::NWorkloadManager {
 
 inline constexpr char TEST_DB[] = "/Root/testdb";
 
-inline TResourcePoolClassifierConfig MakeClassifierConfig(
-    const TString& database, const TString& name, i64 rank,
-    const TString& resourcePool,
-    std::optional<TString> memberName = std::nullopt,
-    std::optional<TString> hasAppName = std::nullopt,
-    std::optional<TString> hasFullScan = std::nullopt,
-    std::optional<TString> hasPath = std::nullopt,
-    std::optional<bool> hasStream = std::nullopt,
-    std::optional<NResourcePool::EClassifierAction> action = std::nullopt)
+inline TResourcePoolClassifierConfig MakeClassifierConfig(const TString& database, const TString& name, i64 rank, const TString& resourcePool,
+    std::optional<TString> memberName = std::nullopt, std::optional<TString> hasAppName = std::nullopt,
+    std::optional<TString> hasFullScan = std::nullopt, std::optional<TString> hasPath = std::nullopt,
+    std::optional<bool> hasStream = std::nullopt, std::optional<NResourcePool::EClassifierAction> action = std::nullopt)
 {
     NResourcePool::TClassifierSettings settings;
     settings.Rank = rank;
@@ -42,7 +37,6 @@ inline TResourcePoolClassifierConfig MakeClassifierConfig(
     settings.HasStream = hasStream;
     settings.Action = action;
 
-
     TResourcePoolClassifierConfig config;
     config.SetDatabase(database);
     config.SetName(name);
@@ -51,8 +45,7 @@ inline TResourcePoolClassifierConfig MakeClassifierConfig(
     return config;
 }
 
-inline std::shared_ptr<TResourcePoolClassifierSnapshot> MakeClassifierSnapshot(
-    std::vector<TResourcePoolClassifierConfig> configs)
+inline std::shared_ptr<TResourcePoolClassifierSnapshot> MakeClassifierSnapshot(std::vector<TResourcePoolClassifierConfig> configs)
 {
     auto snapshot = std::make_shared<TResourcePoolClassifierSnapshot>(TInstant::Now());
     for (auto& cfg : configs) {
@@ -61,8 +54,7 @@ inline std::shared_ptr<TResourcePoolClassifierSnapshot> MakeClassifierSnapshot(
     return snapshot;
 }
 
-inline std::shared_ptr<TResourcePoolMap> MakeResourcePoolMap(
-    std::vector<std::pair<TString, TResourcePoolEntry>> entries)
+inline std::shared_ptr<TResourcePoolMap> MakeResourcePoolMap(std::vector<std::pair<TString, TResourcePoolEntry>> entries)
 {
     auto pools = std::make_shared<TResourcePoolMap>();
     for (auto& [key, entry] : entries) {
@@ -74,7 +66,7 @@ inline std::shared_ptr<TResourcePoolMap> MakeResourcePoolMap(
 inline TResourcePoolEntry MakePoolEntry(i32 concurrentQueryLimit = -1) {
     NResourcePool::TPoolSettings settings;
     settings.ConcurrentQueryLimit = concurrentQueryLimit;
-    return {.Config = settings};
+    return { .Config = settings };
 }
 
 template <typename... TArgs>
@@ -113,38 +105,35 @@ struct TClassifyTestCase {
         std::optional<bool> HasStream;
         std::optional<NResourcePool::EClassifierAction> Action;
     };
+
     std::vector<TExtraClassifier> ExtraClassifiers;
 
     std::shared_ptr<NWorkloadManager::IQueryClassifier> BuildClassifier() const {
         std::vector<TResourcePoolClassifierConfig> configs;
-        configs.push_back(MakeClassifierConfig(
-            TEST_DB, "c_main", Rank, ResourcePool,
-            ClassifierMemberName, ClassifierHasAppName, ClassifierHasFullScan, ClassifierHasPath, ClassifierHasStream, ClassifierAction));
+        configs.push_back(MakeClassifierConfig(TEST_DB, "c_main", Rank, ResourcePool, ClassifierMemberName, ClassifierHasAppName,
+            ClassifierHasFullScan, ClassifierHasPath, ClassifierHasStream, ClassifierAction));
 
         for (const auto& extra : ExtraClassifiers) {
-            configs.push_back(MakeClassifierConfig(
-                TEST_DB, extra.Name, extra.Rank, extra.ResourcePool,
-                extra.MemberName, extra.HasAppName, extra.HasFullScan, extra.HasPath, extra.HasStream, extra.Action));
+            configs.push_back(MakeClassifierConfig(TEST_DB, extra.Name, extra.Rank, extra.ResourcePool, extra.MemberName, extra.HasAppName,
+                extra.HasFullScan, extra.HasPath, extra.HasStream, extra.Action));
         }
 
         auto classifierSnap = MakeClassifierSnapshot(std::move(configs));
 
         std::vector<std::pair<TString, TResourcePoolEntry>> poolEntries = {
-            {_JoinPath(TEST_DB, ResourcePool), MakePoolEntry(10)},
-            {_JoinPath(TEST_DB, "default"), MakePoolEntry(10)},
+            { _JoinPath(TEST_DB, ResourcePool), MakePoolEntry(10) },
+            { _JoinPath(TEST_DB, "default"), MakePoolEntry(10) },
         };
         for (const auto& extra : ExtraClassifiers) {
-            poolEntries.push_back({_JoinPath(TEST_DB, extra.ResourcePool), MakePoolEntry(10)});
+            poolEntries.push_back({ _JoinPath(TEST_DB, extra.ResourcePool), MakePoolEntry(10) });
         }
         for (const auto& [name, limit] : ExtraPools) {
-            poolEntries.push_back({_JoinPath(TEST_DB, name), MakePoolEntry(limit)});
+            poolEntries.push_back({ _JoinPath(TEST_DB, name), MakePoolEntry(limit) });
         }
         auto poolSnap = MakeResourcePoolMap(std::move(poolEntries));
 
-        auto token = ContextMemberName.empty()
-            ? nullptr
-            : MakeIntrusive<NACLib::TUserToken>(
-                NACLib::TSID(ContextMemberName), TVector<NACLib::TSID>{});
+        auto token =
+            ContextMemberName.empty() ? nullptr : MakeIntrusive<NACLib::TUserToken>(NACLib::TSID(ContextMemberName), TVector<NACLib::TSID>{});
 
         TClassifyContext ctx{
             .PoolId = ExplicitPoolId,
@@ -156,9 +145,7 @@ struct TClassifyTestCase {
             ResourcePoolForSharedReading.empty() ? std::optional<TString>() : ResourcePoolForSharedReading);
     }
 
-    NWorkloadManager::IQueryClassifier::TPreCompileClassifyResult RunPreClassify(
-        bool isStreamingQuery = false) const
-    {
+    NWorkloadManager::IQueryClassifier::TPreCompileClassifyResult RunPreClassify(bool isStreamingQuery = false) const {
         auto classifier = BuildClassifier();
         NKqp::TUserRequestContext userRequestContext;
         userRequestContext.IsStreamingQuery = isStreamingQuery;
@@ -170,9 +157,7 @@ struct TClassifyTestCase {
     /// TKqpPhyQuery holding one table op on `queryTablePath` that either performs
     /// a full scan (`isFullScan=true`) or a bounded read.
     ///
-    NWorkloadManager::IQueryClassifier::TPostCompileClassifyResult RunPostClassify(
-        const TString& queryTablePath, bool isFullScan) const
-    {
+    NWorkloadManager::IQueryClassifier::TPostCompileClassifyResult RunPostClassify(const TString& queryTablePath, bool isFullScan) const {
         auto classifier = BuildClassifier();
         NKqp::TUserRequestContext userRequestContext;
         (void)classifier->PreCompileClassify(userRequestContext);
@@ -201,8 +186,7 @@ struct TClassifyTestCase {
     /// for wiring verification; the matcher UT covers the full walk surface.
     ///
     NWorkloadManager::IQueryClassifier::TPostCompileClassifyResult RunPostClassifyForPath(
-        const TString& queryTablePath, bool isStreamingQuery = false) const
-    {
+        const TString& queryTablePath, bool isStreamingQuery = false) const {
         auto classifier = BuildClassifier();
         NKqp::TUserRequestContext userRequestContext;
         userRequestContext.IsStreamingQuery = isStreamingQuery;
@@ -217,9 +201,7 @@ struct TClassifyTestCase {
         return classifier->PostCompileClassify(holder, userRequestContext);
     }
 
-    NWorkloadManager::IQueryClassifier::TPostCompileClassifyResult RunPostClassifyForStream(
-        bool isStreamingQuery) const
-    {
+    NWorkloadManager::IQueryClassifier::TPostCompileClassifyResult RunPostClassifyForStream(bool isStreamingQuery) const {
         auto classifier = BuildClassifier();
         NKqp::TUserRequestContext userRequestContext;
         userRequestContext.IsStreamingQuery = isStreamingQuery;
@@ -233,9 +215,8 @@ struct TClassifyTestCase {
 
 inline TString GetPoolId(const NWorkloadManager::IQueryClassifier::TPreCompileClassifyResult& result) {
     UNIT_ASSERT_C(std::holds_alternative<NWorkloadManager::IQueryClassifier::TResolvedPoolId>(result),
-        TStringBuilder() << "Expected TResolvedPoolId, got variant with index: " << result.index()
-    );
+        TStringBuilder() << "Expected TResolvedPoolId, got variant with index: " << result.index());
     return std::get<NWorkloadManager::IQueryClassifier::TResolvedPoolId>(result).PoolId;
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

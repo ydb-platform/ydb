@@ -50,6 +50,8 @@ namespace NActors {
 
         virtual ~TExecutorThread();
 
+        void Prepare();
+
         template <ESendingType SendingType = ESendingType::Common>
         TActorId RegisterActor(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>(),
                                TActorId parentId = TActorId());

@@ -18,6 +18,7 @@ namespace NKikimr::NBsController {
             std::optional<TConfigState> State;
             bool Success = true;
             bool RollbackSuccess = false;
+            bool GroupLayoutPolicyChanged = false;
             TString Error;
 
         public:
@@ -112,6 +113,20 @@ namespace NKikimr::NBsController {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings: {
                         const auto& settings = cmd.GetUpdateSettings();
                         using T = Schema::State;
+
+                        // validate database space thresholds before applying anything
+                        auto databaseSpaceBlockColor = Self->DatabaseSpace.GetBlockColor();
+                        auto databaseSpaceUnblockColor = Self->DatabaseSpace.GetUnblockColor();
+                        for (auto value : settings.GetDatabaseSpaceBlockColor()) {
+                            databaseSpaceBlockColor = static_cast<T::DatabaseSpaceBlockColor::Type>(value);
+                        }
+                        for (auto value : settings.GetDatabaseSpaceUnblockColor()) {
+                            databaseSpaceUnblockColor = static_cast<T::DatabaseSpaceUnblockColor::Type>(value);
+                        }
+                        if (!TDatabaseSpaceTracker::IsValidThresholds(databaseSpaceBlockColor, databaseSpaceUnblockColor)) {
+                            throw TExError() << "DatabaseSpaceUnblockColor must not be worse than DatabaseSpaceBlockColor";
+                        }
+
                         for (ui32 value : settings.GetDefaultMaxSlots()) {
                             Self->DefaultMaxSlots = value;
                             db.Table<T>().Key(true).Update<T::DefaultMaxSlots>(Self->DefaultMaxSlots);
@@ -155,6 +170,12 @@ namespace NKikimr::NBsController {
                             Self->PDiskSpaceColorBorder = static_cast<T::PDiskSpaceColorBorder::Type>(value);
                             db.Table<T>().Key(true).Update<T::PDiskSpaceColorBorder>(Self->PDiskSpaceColorBorder);
                         }
+                        if (settings.DatabaseSpaceBlockColorSize() || settings.DatabaseSpaceUnblockColorSize()) {
+                            db.Table<T>().Key(true).Update<T::DatabaseSpaceBlockColor, T::DatabaseSpaceUnblockColor>(
+                                databaseSpaceBlockColor, databaseSpaceUnblockColor);
+                            Self->DatabaseSpace.SetThresholds(databaseSpaceBlockColor, databaseSpaceUnblockColor);
+                            Self->CommitDatabaseSpaceChanges(db);
+                        }
                         for (bool value : settings.GetEnableGroupLayoutSanitizer()) {
                             Self->GroupLayoutSanitizerEnabled = value;
                             db.Table<T>().Key(true).Update<T::GroupLayoutSanitizer>(Self->GroupLayoutSanitizerEnabled);
@@ -163,6 +184,7 @@ namespace NKikimr::NBsController {
                             Self->Send(Self->SelfHealId, ev.release());
                         }
                         for (bool value : settings.GetAllowMultipleRealmsOccupation()) {
+                            GroupLayoutPolicyChanged |= Self->AllowMultipleRealmsOccupation != value;
                             Self->AllowMultipleRealmsOccupation = value;
                             db.Table<T>().Key(true).Update<T::AllowMultipleRealmsOccupation>(Self->AllowMultipleRealmsOccupation);
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
@@ -182,6 +204,15 @@ namespace NKikimr::NBsController {
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
                             ev->TryToRelocateBrokenDisksLocallyFirst = Self->TryToRelocateBrokenDisksLocallyFirst;
                             Self->Send(Self->SelfHealId, ev.release());
+                        }
+                        for (ui64 value : settings.GetBridgeSyncTotalRateBytesPerSecond()) {
+                            Self->BridgeSyncTotalRate = value;
+                            db.Table<T>().Key(true).Update<T::BridgeSyncTotalRate>(Self->BridgeSyncTotalRate);
+                            Self->BridgeSyncNodeRatesDirty = true;
+                        }
+                        for (ui32 value : settings.GetBridgeSyncMaxSyncers()) {
+                            Self->BridgeSyncMaxSyncers = value;
+                            db.Table<T>().Key(true).Update<T::BridgeSyncMaxSyncers>(Self->BridgeSyncMaxSyncers);
                         }
                         return;
                     }
@@ -308,6 +339,7 @@ namespace NKikimr::NBsController {
                     .SuppressDegradedGroupsChecking = Cmd.GetIgnoreDegradedGroupsChecks(),
                     .SuppressDisintegratedGroupsChecking = Cmd.GetIgnoreDisintegratedGroupsChecks(),
                     .AllowDegradedWithSinglePhantomsOnly = SelfHeal,
+                    .TreatPhantomsOnlyVDisksAsWorking = Cmd.GetTreatPhantomsOnlyVDisksAsWorking(),
                 };
                 Success = Success && Self->ValidateConfigUpdates(*State, validationParameters, &Error, Response);
 
@@ -424,6 +456,10 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(DeleteDDiskPool)
                     HANDLE_COMMAND(MoveDDisk)
                     HANDLE_COMMAND(DeleteSpecificGroups)
+                    HANDLE_COMMAND(UpdateStoragePoolSettings)
+                    HANDLE_COMMAND(DefineDataCenterStates)
+                    HANDLE_COMMAND(DefineGroupState)
+                    HANDLE_COMMAND(ChangeStoragePoolBridgeMode)
 
                     default: break;
                 }
@@ -436,6 +472,9 @@ namespace NKikimr::NBsController {
             }
 
             void Complete(const TActorContext&) override {
+                if (GroupLayoutPolicyChanged) {
+                    Self->UpdateGroupLayoutStatus();
+                }
                 if (auto state = std::exchange(State, std::nullopt)) {
                     ui64 configTxSeqNo = state->ApplyConfigUpdates();
                     YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Transaction complete",

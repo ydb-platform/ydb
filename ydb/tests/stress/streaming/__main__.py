@@ -8,9 +8,8 @@ logger = logging.getLogger("logger")
 if __name__ == '__main__':
 
     logging.basicConfig(
-        format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
-        datefmt='%H:%M:%S',
-        level=logging.INFO)
+        format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s', datefmt='%H:%M:%S', level=logging.INFO
+    )
 
     text = """\033[92mStreaming workload\x1b[0m"""
     parser = argparse.ArgumentParser(description=text, formatter_class=argparse.RawDescriptionHelpFormatter)

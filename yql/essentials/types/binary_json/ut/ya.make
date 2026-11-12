@@ -21,7 +21,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    yql/essentials/types/binary_json
+    yql/essentials/types/binary_json/dom
     yql/essentials/minikql/dom
     yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/public/udf/service/exception_policy

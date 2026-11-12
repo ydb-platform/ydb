@@ -74,7 +74,7 @@ Possible impact on user transactions:
 
 {% note info %}
 
-The data write speed is chosen to minimize the impact of the write process on user transactions. To control the speed, configure limits for the corresponding queue of the [resource broker](../../reference/configuration/resource_broker_config.md#resource-broker-config).
+The data write speed is chosen to minimize the impact of the write process on user transactions. To control the speed, configure limits for the corresponding queue of the [resource broker](../../reference/configuration/resource_broker_config.md).
 
 {% endnote %}
 

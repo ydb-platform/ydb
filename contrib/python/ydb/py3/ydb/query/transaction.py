@@ -9,7 +9,10 @@ from typing import (
     Iterable,
     Optional,
     TYPE_CHECKING,
+    TypeVar,
     Union,
+    Callable,
+    cast,
     overload,
 )
 
@@ -32,6 +35,7 @@ if TYPE_CHECKING:
     from ..aio.driver import Driver as AsyncDriver
 
 logger = logging.getLogger(__name__)
+CallableT = TypeVar("CallableT", bound=Callable[..., Any])
 
 
 class QueryTxStateEnum(enum.Enum):
@@ -77,7 +81,7 @@ class QueryTxStateHelper(abc.ABC):
         return len(cls._VALID_TRANSITIONS[state]) == 0
 
 
-def reset_tx_id_handler(func):
+def reset_tx_id_handler(func: CallableT) -> CallableT:
     @functools.wraps(func)
     def decorator(rpc_state, response_pb, session: "BaseQuerySession", tx_state: "QueryTxState", *args, **kwargs):
         try:
@@ -87,7 +91,7 @@ def reset_tx_id_handler(func):
             tx_state.tx_id = None
             raise
 
-    return decorator
+    return cast(CallableT, decorator)
 
 
 class QueryTxState:

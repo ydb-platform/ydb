@@ -1,8 +1,8 @@
 #pragma once
 
-#include <library/cpp/json/json_reader.h>
-
 #include <ydb/library/yql/providers/solomon/common/util.h>
+
+#include <library/cpp/json/json_reader.h>
 
 #include <map>
 #include <vector>
@@ -32,6 +32,7 @@ public:
 struct TGetLabelsResult {
     std::vector<TString> Labels;
 };
+
 using TGetLabelsResponse = TSolomonClientResponse<TGetLabelsResult>;
 
 struct TListMetricsResult {
@@ -39,22 +40,26 @@ struct TListMetricsResult {
     ui64 PagesCount;
     ui64 TotalCount;
 };
+
 using TListMetricsResponse = TSolomonClientResponse<TListMetricsResult>;
 
 struct TListMetricsLabelsResult {
     std::vector<TLabelValues> Labels;
     ui64 TotalCount;
 };
+
 using TListMetricsLabelsResponse = TSolomonClientResponse<TListMetricsLabelsResult>;
 
 struct TGetPointsCountResult {
     ui64 PointsCount;
 };
+
 using TGetPointsCountResponse = TSolomonClientResponse<TGetPointsCountResult>;
 
 struct TGetDataResult {
     std::vector<TTimeseries> Timeseries;
 };
+
 using TGetDataResponse = TSolomonClientResponse<TGetDataResult>;
 
-} // namespace NYql::NSo
+}   // namespace NYql::NSo

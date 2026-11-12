@@ -1240,6 +1240,13 @@ ui64 TPipeline::OutdatedCleanupStep() const
     return LastPlannedTx.Step;
 }
 
+ui64 TPipeline::AllowedSchemaStep() const {
+    // Database freeze may advance the write edge beyond the mediator step for
+    // its final resolved record. Every planned write after thaw must respect
+    // the same floor as immediate writes, including after a reboot.
+    return Max(LastPlannedTx.Step + 1, Self->SnapshotManager.GetImmediateWriteEdge().Step + 1);
+}
+
 ui64 TPipeline::AllowedDataStep() const
 {
     ui64 latestStep = 0;
@@ -1249,7 +1256,7 @@ ui64 TPipeline::AllowedDataStep() const
     }
 
     return Max(
-        LastPlannedTx.Step + 1,
+        AllowedSchemaStep(),
         latestStep ? latestStep + 1 : TAppData::TimeProvider->Now().MilliSeconds());
 }
 
@@ -1770,6 +1777,10 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
             break;
         case NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE:
+            if (writeTx->HasUnsafeTruncate()) {
+                badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Unsupported volatile unsafe truncate");
+                return writeOp;
+            }
             writeOp->SetVolatilePrepareFlag();
             break;
         case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
@@ -1816,6 +1827,55 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
             << "WriteSeqNum must be set on all operations or none, got "
             << opsWithWriteSeqNum << " of " << rec.OperationsSize());
         return writeOp;
+    }
+
+    if (!writeTx->GetPreserveLockTxIds().empty() && !writeTx->HasUnsafeTruncate()) {
+        badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+            "PreserveLockTxIds requires an unsafe truncate operation");
+        return writeOp;
+    }
+
+    if (writeTx->HasUnsafeTruncate()) {
+        // NTable::TDatabase::TruncateTable asserts both !Truncated and !DataModified for the
+        // table, so mixing an unsafe truncate with anything else touching the same table would abort
+        // the tablet rather than fail the request. Keep unsafe truncates in their own write transaction.
+
+        // Committing locks is such a modification even though it carries no operation of its own:
+        // KqpCommitLocks runs before the operations and applies the uncommitted rows of every
+        // committed lock, which marks the table modified. A rollback goes through the same path.
+        if (rec.HasLocks()) {
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                "Unsafe truncate cannot commit or rollback locks in the same write transaction");
+            return writeOp;
+        }
+
+        // An unsafe truncate is applied unconditionally and cannot be rolled back, so it must never
+        // pretend to be an uncommitted write. A lock id would also demote the operation from
+        // GlobalWriter to GlobalReader in the dependency tracker and take away its conflicts.
+        if (rec.GetLockTxId()) {
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                "Unsafe truncate cannot be performed as an uncommitted write");
+            return writeOp;
+        }
+
+        THashSet<ui64> unsafeTruncatedTables;
+        for (const auto& operation : writeTx->GetOperations()) {
+            if (operation.GetOperationType() != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE) {
+                badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                    "Unsafe truncate cannot be mixed with other operations in the same write transaction");
+                return writeOp;
+            }
+            if (!unsafeTruncatedTables.insert(operation.GetTableId().PathId.LocalPathId).second) {
+                badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                    "Duplicate unsafe truncate of the same table in one write transaction");
+                return writeOp;
+            }
+        }
+
+        // An unsafe truncate registers no key ranges, so the dependency tracker has nothing to intersect.
+        // GlobalWriter makes it conflict with everything on the shard in both directions, which
+        // serialises competing transactions behind it instead of rejecting them.
+        writeOp->SetGlobalWriterFlag();
     }
 
     // Make config checks for immediate op.
@@ -2622,4 +2682,3 @@ void TPipeline::ProvideGlobalTxId(const TOperation::TPtr& op, ui64 globalTxId) {
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

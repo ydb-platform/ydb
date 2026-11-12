@@ -3,6 +3,7 @@ option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
@@ -200,6 +201,13 @@ message TQueryRequest {
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
     optional bool IsWarmupCompilation = 41;
     optional bool CollectAffectedRows = 43;
+    // Local actor API only: the sender must be on the session owner's node and
+    // send directly to its KQP proxy. WM notifications are not serialized or
+    // relayed by proxies across nodes; this flag is ignored for forwarded
+    // requests. Notifications retain the request cookie.
+    optional bool ReportWmStateChanges = 44;
+    // Raw internal x-ydb-mvcc-version metadata; validated by the session actor.
+    optional string MvccVersion = 45;
 }
 
 message TVectorIndexKmeansTreeDescription {
@@ -245,6 +253,38 @@ message TKqpTableMetadataProto {
     optional uint64 RecordsCount = 13;
     optional uint64 DataSize = 14;
     optional bool StatsLoaded = 15;
+}
+
+message TKqpAlterTableRequest {
+    optional string path = 1;
+    repeated TKqpColumnMetadataProto add_columns = 2;
+    repeated string drop_columns = 3;
+    repeated TKqpColumnMetadataProto alter_columns = 4;
+    oneof ttl_action {
+        Ydb.Table.TtlSettings set_ttl_settings = 5;
+        google.protobuf.Empty drop_ttl_settings = 6;
+    }
+    repeated Ydb.Table.TableIndex add_indexes = 7;
+    repeated string drop_indexes = 8;
+    optional Ydb.Table.StorageSettings alter_storage_settings = 9;
+    repeated Ydb.Table.ColumnFamily add_column_families = 10;
+    repeated Ydb.Table.ColumnFamily alter_column_families = 11;
+    map<string, string> alter_attributes = 12;
+    optional string set_compaction_policy = 13;
+    optional Ydb.Table.PartitioningSettings alter_partitioning_settings = 14;
+    optional Ydb.FeatureFlag.Status set_key_bloom_filter = 15;
+    optional Ydb.Table.ReadReplicasSettings set_read_replicas_settings = 16;
+    repeated Ydb.Table.Changefeed add_changefeeds = 17;
+    repeated string drop_changefeeds = 18;
+    repeated Ydb.Table.RenameIndexItem rename_indexes = 19;
+    optional Ydb.Table.CompactItem compact = 20;
+    oneof metrics_settings_action {
+        Ydb.Table.MetricsSettings set_metrics_settings = 21;
+        google.protobuf.Empty drop_metrics_settings = 22;
+    }
+    repeated Ydb.Table.SetNotNullItem set_not_null = 23;
+    repeated Ydb.Table.TableMultiColumnStatistics add_statistics = 24;
+    repeated string drop_statistics = 25;
 }
 
 message TRlPath {
@@ -306,6 +346,18 @@ message TQueryResponseExtraInfo {
     optional TQueryResponsePgInfo PgInfo = 1;
 }
 
+enum EWmState {
+    // The query is not managed by the workload manager (no resource pool),
+    // or the state is unknown/unset.
+    WM_STATE_NONE = 0;
+
+    // The query is in the workload manager queue, waiting for available resources.
+    WM_STATE_QUEUED = 1;
+
+    // The query has exited the workload manager queue and is now executing.
+    WM_STATE_EXECUTING = 2;
+}
+
 message TQueryResponse {
     optional bytes SessionId = 1;
     reserved 2; // (deprecated) QueryErrors
@@ -325,6 +377,8 @@ message TQueryResponse {
     optional TQueryResponseExtraInfo ExtraInfo = 16;
     optional string EffectivePoolId = 17;
     optional Ydb.VirtualTimestamp CommitTimestamp = 18;
+    optional EWmState WmState = 19;
+    optional string WmClassifiedBy = 20;
 }
 
 message TEvQueryResponse {
@@ -346,6 +400,9 @@ message TEvQueryResponse {
 
 message TCloseSessionRequest {
     optional bytes SessionId = 1;
+    optional bool Administrative = 2 [default = false];
+    optional string TerminationReason = 3;
+    optional string InitiatorSid = 4;
 }
 
 message TEvCloseSessionRequest {
@@ -375,6 +432,24 @@ message TEvCloseSessionResponse {
     optional TCloseSessionResponse Response = 3;
 }
 
+// Internal KILL SESSION request. The authorization decision is made by the
+// scheme executer for Database before forwarding to the owning KQP proxy.
+message TEvKillSessionRequest {
+    optional bytes SessionId = 1;
+    optional string Database = 2;
+    optional string UserToken = 3;
+    optional bool CanKillAnySession = 4 [default = false];
+    optional bytes SourceSessionId = 5;
+    optional uint64 DeadlineUs = 6;
+    optional string TraceId = 7;
+}
+
+message TEvKillSessionResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional bytes SessionId = 3;
+}
+
 message TCompileCacheQueryInfo {
     // optional uint32 NodeId = 1;
     optional string QueryId = 2;
@@ -396,6 +471,7 @@ message TCompileCacheQueryInfo {
     optional string Syntax = 14;
 }
 
+// Proxy-side session snapshot exported by .sys/query_sessions.
 message TSessionInfo {
     optional string SessionId = 1;
     /// optional ui32 NodeId = 2;
@@ -420,6 +496,12 @@ message TSessionInfo {
     optional string TraceId = 21;
     // Description of how the query was classified into WmPoolId
     optional string WmClassifiedBy = 22;
+    // Elapsed query execution time from QueryStartAt.
+    optional uint64 DurationUs = 23;
+    // Latest query-wide resource values; absent until the first report.
+    optional uint64 CpuTimeUs = 24;
+    optional uint64 ComputeMemoryBytes = 25;
+    optional uint64 ReadIngressBytesRate = 26;
 }
 
 message TEvListSessionsRequest {
@@ -908,6 +990,11 @@ enum EInputRowFormat {
     INPUT_ROW_FORMAT_STRUCT_OF_ROWS = 1;
 }
 
+// Unsafe truncate resolves the table and its synchronous indexes at execution time.
+message TKqpTableTruncateSettings {
+    optional string TablePath = 1;
+}
+
 message TKqpTableSinkSettings {
     enum EType {
         MODE_REPLACE = 0;
@@ -1007,6 +1094,13 @@ message TKqpFullTextSourceSettings {
             optional bytes Value = 2;
         }
         repeated TPrefixColumn PrefixColumns = 4;
+
+        message TPatternQuery {
+            optional bytes Pattern = 1;
+            optional bytes Escape = 2;
+            optional NKqpProto.TKqpFullTextSource.TKqpQuerySettings.TPatternQuery.EMatchMode Mode = 3;
+        }
+        repeated TPatternQuery PatternQueries = 5;
     }
 
     message TIndexTable {
@@ -1045,6 +1139,13 @@ message TKqpFullTextSourceSettings {
     optional string Mode = 16;
 
     optional NKqpProto.EKqpFullTextIndexType IndexType = 17;
+
+    // Transaction context for table reads
+    optional uint64 LockTxId = 20;
+    optional uint32 LockNodeId = 21;
+    optional NKikimrDataEvents.ELockMode LockMode = 22;
+    optional uint64 QuerySpanId = 23;
+    optional bool MainTableCovered = 24;
 };
 
 message TKqpSysViewSourceSettings {
@@ -1196,16 +1297,14 @@ message TStreamingQueryState {
     optional string CheckpointId = 11;
 
     // Inflight streaming query operation info
-    optional string OperationName = 4;
     optional string OperationActorId = 5;
-    optional google.protobuf.Timestamp OperationStartedAt = 6;
+    optional uint64 OperationOwnerGeneration = 13;
 
     // Streaming query properties stored in schemeshard
     optional TSchemeInfo SchemeInfo = 7;
-    optional string QueryText = 8;
-    optional bool Run = 9;
-    optional string ResourcePool = 10;
     optional uint64 QueryTextRevision = 12;
+
+    reserved 4, 6, 8, 9, 10;
 }
 
 // Cross-node lookup of QuerySpanId -> QueryText for TLI logging.

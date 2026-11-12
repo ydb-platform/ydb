@@ -672,7 +672,12 @@ TOperationAttributes ParseOperationAttributes(const NApi::TOperation& operation)
             buildTime = TInstant::ParseIso8601(buildTimeNode->AsString());
         }
         TJobStatistics jobStatistics;
-        if (auto jobStatisticsNode = progressMap.FindPtr("job_statistics")) {
+        // The controller may publish empty v2 after a statistics merge failure.
+        if (auto jobStatisticsNode = progressMap.FindPtr("job_statistics_v2");
+            jobStatisticsNode && !jobStatisticsNode->AsMap().empty())
+        {
+            jobStatistics = TJobStatistics(*jobStatisticsNode);
+        } else if (auto jobStatisticsNode = progressMap.FindPtr("job_statistics")) {
             jobStatistics = TJobStatistics(*jobStatisticsNode);
         }
         TJobCounters jobCounters;
@@ -1053,6 +1058,20 @@ std::unique_ptr<IAbortableInputStream> TRpcRawClient::ReadFile(
     auto traceContextGuard = CreateTraceContext("RpcRawClient.ReadFile");
 
     auto future = Clients_.Heavy->CreateFileReader(path.Path_, SerializeOptionsForReadFile(transactionId, options));
+    auto reader = WaitAndProcess(future);
+    auto stream = CreateAbortableInputStreamAdapter(CreateCopyingAdapter(reader));
+    return std::make_unique<TSyncRpcInputStream>(std::move(stream));
+}
+
+std::unique_ptr<IAbortableInputStream> TRpcRawClient::ReadFilePartition(
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options)
+{
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.ReadFilePartition");
+
+    auto apiCookie = NYTree::ConvertTo<NApi::TFilePartitionCookiePtr>(NYson::TYsonString(cookie));
+
+    auto future = Clients_.Heavy->CreateFilePartitionReader(apiCookie, SerializeOptionsForReadFilePartition(options));
     auto reader = WaitAndProcess(future);
     auto stream = CreateAbortableInputStreamAdapter(CreateCopyingAdapter(reader));
     return std::make_unique<TSyncRpcInputStream>(std::move(stream));
@@ -1934,6 +1953,31 @@ TMultiTablePartitions TRpcRawClient::GetTablePartitions(
         }
 
         result.Partitions.emplace_back(std::move(partition));
+    }
+    return result;
+}
+
+TFilePartitions TRpcRawClient::GetFilePartitions(
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options)
+{
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetFilePartitions");
+
+    auto future = Clients_.Light->PartitionFile(
+        path,
+        SerializeFileReadRanges(ranges),
+        SerializeOptionsForGetFilePartitions(transactionId, options));
+    auto filePartitions = WaitAndProcess(future);
+
+    TFilePartitions result;
+    result.Partitions.reserve(filePartitions.Partitions.size());
+    for (const auto& entry : filePartitions.Partitions) {
+        result.Partitions.push_back(TFilePartition{
+            .Cookie = NYson::ConvertToYsonString(entry.Cookie).ToString(),
+            .Length = entry.Length,
+        });
     }
     return result;
 }

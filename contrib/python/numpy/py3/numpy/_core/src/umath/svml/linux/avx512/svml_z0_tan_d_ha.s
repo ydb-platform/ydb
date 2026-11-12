@@ -30,6 +30,7 @@
  */
 
 
+	.file   "svml_z0_tan_d_ha.s"
 	.text
 .L_2__routine_start___svml_tan8_ha_z0_0:
 

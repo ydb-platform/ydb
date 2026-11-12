@@ -42,17 +42,50 @@ public:
             return true;
         }
 
-        if (target->GetDstState() != TReplication::EDstState::Creating && target->GetDstState() != TReplication::EDstState::Alter) {
+        // Ignore results from a creator replaced by ALTER/DONE/DROP.
+        if (!target->IsExpectedDstCreator(Ev->Sender)) {
+            YDB_LOG_DEBUG_CTX(ctx, "Ignore obsolete destination creator",
+                {"rid", rid},
+                {"tid", tid},
+                {"sender", Ev->Sender});
+            Replication.Reset();
+            return true;
+        }
+
+        const auto dstState = target->GetDstState();
+        const bool expectsResult = dstState == TReplication::EDstState::Creating
+            || dstState == TReplication::EDstState::Alter;
+        if (!expectsResult) {
             YDB_LOG_WARN_CTX(ctx, "Dst state mismatch",
                 {"rid", rid},
                 {"tid", tid},
-                {"state", target->GetDstState()});
+                {"state", dstState});
             return true;
         }
 
         if (Ev->Get()->IsSuccess()) {
+            const bool wasAltering = dstState == TReplication::EDstState::Alter;
             target->SetDstPathId(Ev->Get()->DstPathId);
-            target->SetDstState(TReplication::EDstState::Ready);
+            if (Replication->GetDesiredState() == TReplication::EState::Done) {
+                target->SetDstState(TReplication::EDstState::Alter);
+            } else if (Ev->Get()->WaitingImport) {
+                if (Replication->GetDesiredState() == TReplication::EState::Paused) {
+                    target->SetDstState(TReplication::EDstState::WaitingImport);
+                } else {
+                    // STANDBY may arrive before placeholder creation completes.
+                    target->SetDstPathId({});
+                    target->SetDstState(TReplication::EDstState::Alter);
+                }
+            } else {
+                // Other attachments can keep the replication Ready while PAUSE
+                // is pending. Do not let this newly attached target start workers.
+                target->SetDstState(Replication->GetDesiredState() == TReplication::EState::Paused
+                    ? TReplication::EDstState::Paused
+                    : TReplication::EDstState::Ready);
+                if (wasAltering && Replication->CheckAlterDone()) {
+                    Replication->SetState(Replication->GetDesiredState());
+                }
+            }
 
             YDB_LOG_NOTICE_CTX(ctx, "Target dst created",
                 {"rid", rid},
@@ -64,8 +97,7 @@ public:
                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
                 << ", " << Ev->Get()->Error);
 
-            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
-                << ": " << target->GetIssue());
+            Self->SetReplicationError(*Replication, *target);
 
             YDB_LOG_ERROR_CTX(ctx, "Create dst error",
                 {"rid", rid},

@@ -96,6 +96,12 @@ IGraphTransformer::TStatus ValidateYqlSublinkInCollectionItemsNullable(
     const TTypeAnnotationNode* lookupType,
     const TTypeAnnotationNode* collectionItemType);
 
+TExprNode::TPtr RebuildLambdaYqlWin(
+    const TExprNode::TPtr& node,
+    const TExprNode::TPtr& row,
+    const TExprNode* windows,
+    TExprContext& ctx);
+
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
@@ -109,6 +115,9 @@ IGraphTransformer::TStatus YqlAggWinWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
 IGraphTransformer::TStatus YqlWinWrapper(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+
+IGraphTransformer::TStatus YqlFlattenWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
 } // namespace NYql::NTypeAnnImpl

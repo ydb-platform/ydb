@@ -1,9 +1,9 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/path.h>
-
 #include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/services/workload_manager/service/service.h>
+
 #include <ydb/services/workload_manager/common/events.h>
+#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
@@ -14,7 +14,8 @@ namespace {
 using namespace NActors;
 using namespace NWorkloadManager;
 
-void CheckPoolDescription(TIntrusivePtr<IYdbSetup> ydb, ui64 expectedQueueSize, ui64 expectedInFlight, TDuration leaseDuration = FUTURE_WAIT_TIMEOUT) {
+void CheckPoolDescription(
+    TIntrusivePtr<IYdbSetup> ydb, ui64 expectedQueueSize, ui64 expectedInFlight, TDuration leaseDuration = FUTURE_WAIT_TIMEOUT) {
     const auto& description = ydb->GetPoolDescription(leaseDuration);
     UNIT_ASSERT_VALUES_EQUAL(description.DelayedRequests, expectedQueueSize);
     UNIT_ASSERT_VALUES_EQUAL(description.RunningRequests, expectedInFlight);
@@ -25,7 +26,8 @@ void DelayRequest(TIntrusivePtr<IYdbSetup> ydb, const TString& sessionId, TDurat
     auto runtime = ydb->GetRuntime();
     const auto& edgeActor = runtime->AllocateEdgeActor();
 
-    runtime->Register(CreateDelayRequestActor(edgeActor, CanonizePath(settings.DomainName_), settings.PoolId_, sessionId, TInstant::Now(), std::nullopt, leaseDuration, runtime->GetAppData().Counters));
+    runtime->Register(CreateDelayRequestActor(edgeActor, CanonizePath(settings.DomainName_), settings.PoolId_, sessionId, TInstant::Now(),
+        std::nullopt, leaseDuration, runtime->GetAppData().Counters));
     auto response = runtime->GrabEdgeEvent<TEvPrivate::TEvDelayRequestResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
     UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->SessionId, sessionId);
@@ -36,22 +38,20 @@ void StartRequest(TIntrusivePtr<IYdbSetup> ydb, const TString& sessionId, TDurat
     auto runtime = ydb->GetRuntime();
     const auto& edgeActor = runtime->AllocateEdgeActor();
 
-    runtime->Register(CreateStartRequestActor(edgeActor, CanonizePath(settings.DomainName_), settings.PoolId_, sessionId, leaseDuration, runtime->GetAppData().Counters));
+    runtime->Register(CreateStartRequestActor(
+        edgeActor, CanonizePath(settings.DomainName_), settings.PoolId_, sessionId, leaseDuration, runtime->GetAppData().Counters));
     auto response = runtime->GrabEdgeEvent<TEvPrivate::TEvStartRequestResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
     UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->SessionId, sessionId);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->NodeId, runtime->GetNodeId());
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
     Y_UNIT_TEST(TestCreateWorkloadServiceTables) {
         constexpr ui32 nodesCount = 5;
-        auto ydb = TYdbSetupSettings()
-            .NodeCount(nodesCount)
-            .ConcurrentQueryLimit(nodesCount)
-            .Create();
+        auto ydb = TYdbSetupSettings().NodeCount(nodesCount).ConcurrentQueryLimit(nodesCount).Create();
 
         std::vector<TQueryRunnerResultAsync> asyncResults;
         asyncResults.reserve(nodesCount);
@@ -64,33 +64,29 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
         }
 
         // Check that tables in .metadata/workload_manager created
-        auto listResult = ydb->GetSchemeClient().ListDirectory(
-            CanonizePath({ydb->GetSettings().DomainName_, ".metadata/workload_manager"})
-        ).GetValue(FUTURE_WAIT_TIMEOUT);
+        auto listResult = ydb->GetSchemeClient()
+                              .ListDirectory(CanonizePath({ ydb->GetSettings().DomainName_, ".metadata/workload_manager" }))
+                              .GetValue(FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 3);
     }
 
     Y_UNIT_TEST(TestTablesIsNotCreatingForUnlimitedPool) {
-        auto ydb = TYdbSetupSettings()
-            .ConcurrentQueryLimit(-1)
-            .Create();
+        auto ydb = TYdbSetupSettings().ConcurrentQueryLimit(-1).Create();
 
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
 
         // Check that there is no .metadata folder
-        auto listResult = ydb->GetSchemeClient().ListDirectory(
-            CanonizePath({ydb->GetSettings().DomainName_, ".metadata", "workload_manager"})
-        ).GetValue(FUTURE_WAIT_TIMEOUT);
+        auto listResult = ydb->GetSchemeClient()
+                              .ListDirectory(CanonizePath({ ydb->GetSettings().DomainName_, ".metadata", "workload_manager" }))
+                              .GetValue(FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[0].Name, "pools");
     }
 
     Y_UNIT_TEST(TestPoolStateFetcherActor) {
-        auto ydb = TYdbSetupSettings()
-            .ConcurrentQueryLimit(1)
-            .Create();
+        auto ydb = TYdbSetupSettings().ConcurrentQueryLimit(1).Create();
 
         // Create tables
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
@@ -106,15 +102,13 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
     }
 
     Y_UNIT_TEST(TestCleanupOnServiceRestart) {
-        auto ydb = TYdbSetupSettings()
-            .ConcurrentQueryLimit(1)
-            .Create();
+        auto ydb = TYdbSetupSettings().ConcurrentQueryLimit(1).Create();
 
         // Create tables
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
 
         StartRequest(ydb, "test_session", 2 * FUTURE_WAIT_TIMEOUT);
-        DelayRequest(ydb, "test_session",  2 * FUTURE_WAIT_TIMEOUT);
+        DelayRequest(ydb, "test_session", 2 * FUTURE_WAIT_TIMEOUT);
         CheckPoolDescription(ydb, 1, 1);
 
         // Restart workload service
@@ -123,21 +117,18 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
         runtime->Register(CreateService(NWorkloadManager::GetWorkloadManagerCounters(runtime->GetAppData().Counters)));
 
         // Check that tables will be cleanuped
-        ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 0});
+        ydb->WaitPoolState({ .DelayedRequests = 0, .RunningRequests = 0 });
     }
 
     Y_UNIT_TEST(TestLeaseExpiration) {
-        auto ydb = TYdbSetupSettings()
-            .ConcurrentQueryLimit(1)
-            .QueryCancelAfter(TDuration::Zero())
-            .Create();
+        auto ydb = TYdbSetupSettings().ConcurrentQueryLimit(1).QueryCancelAfter(TDuration::Zero()).Create();
 
         // Create tables
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
         ydb->WaitQueryExecution(hangingRequest);
 
         auto delayedRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false));
-        ydb->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 1});
+        ydb->WaitPoolState({ .DelayedRequests = 1, .RunningRequests = 1 });
 
         ydb->StopWorkloadService();
         ydb->WaitPoolHandlersCount(0);
@@ -152,9 +143,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
     }
 
     Y_UNIT_TEST(TestLeaseUpdates) {
-        auto ydb = TYdbSetupSettings()
-            .ConcurrentQueryLimit(1)
-            .Create();
+        auto ydb = TYdbSetupSettings().ConcurrentQueryLimit(1).Create();
 
         // Create tables
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
@@ -163,7 +152,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
 
         const TDuration leaseDuration = TDuration::Seconds(10);
         StartRequest(ydb, "test_session", leaseDuration);
-        DelayRequest(ydb, "test_session",  leaseDuration);
+        DelayRequest(ydb, "test_session", leaseDuration);
         CheckPoolDescription(ydb, 1, 1, leaseDuration);
 
         // Wait lease duration time and check state
@@ -175,4 +164,4 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

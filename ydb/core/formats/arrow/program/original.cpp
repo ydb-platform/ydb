@@ -9,20 +9,7 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
     THashSet<uint32_t> uniqueEntityIds;
     std::vector<std::shared_ptr<IFetchLogic>> logic;
     for (auto&& [_, i] : DataAddresses) {
-        auto acc = context.GetResources().GetAccessorOptional(i.GetColumnId());
-        THashSet<TString> subColumnsToFetch;
-        for (auto&& sc : i.GetSubColumnNames(true)) {
-            if (!acc || !acc->HasSubColumnData(sc)) {
-                if (!sc && acc) {
-                    context.MutableResources().Remove(i.GetColumnId());
-                }
-                subColumnsToFetch.emplace(sc);
-            }
-        }
-        if (subColumnsToFetch.empty()) {
-            continue;
-        }
-        auto conclusion = source.StartFetchData(context, i.SelectSubColumns(subColumnsToFetch));
+        auto conclusion = source.StartFetchData(context, i);
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {
@@ -53,9 +40,6 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
         }
     }
     for (auto&& [_, i] : HeaderContext) {
-        if (context.GetResources().GetAccessorOptional(i.GetColumnId())) {
-            continue;
-        }
         auto conclusion = source.StartFetchHeader(context, i);
         if (conclusion.IsFail()) {
             return conclusion;
@@ -78,9 +62,9 @@ TConclusion<TExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     const auto acc = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
     for (auto&& sc : DataAddress.GetSubColumnNames(true)) {
-        if (!acc || !acc->HasSubColumnData(sc)) {
+        if (!acc || !acc->HasSubColumnData(sc.GetValue())) {
             auto& source = context.GetDataSource();
-            auto conclusion = source.AssembleAccessor(context, GetOutputColumnIdOnce(), sc);
+            auto conclusion = source.AssembleAccessor(context, GetOutputColumnIdOnce(), sc.GetValue());
             if (conclusion.IsFail()) {
                 return conclusion;
             }

@@ -26,9 +26,9 @@
 
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/atomic_object.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/misc/tls.h>
 
@@ -171,7 +171,7 @@ private:
 
     struct TBandBucket
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock);
+        YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, Lock);
         std::atomic<size_t> CurrentSessionIndex = 0;
         std::vector<TSessionPtr> Sessions;
         bool Terminated = false;
@@ -180,7 +180,7 @@ private:
     TEnumIndexedArray<EMultiplexingBand, TBandBucket> Buckets_;
 
     std::atomic<bool> TerminationFlag_ = false;
-    NThreading::TAtomicObject<TError> TerminationError_;
+    TAtomicObject<TError> TerminationError_;
 
     TSessionPtr GetOrCreateSession(const TSendOptions& options)
     {
@@ -720,7 +720,7 @@ private:
             }
 
         private:
-            YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+            YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
         };
 
         static constexpr size_t BucketCount = 64;
@@ -728,7 +728,7 @@ private:
         std::array<TBucket, BucketCount> RequestBuckets_;
 
         std::atomic<bool> TerminationFlag_ = false;
-        NThreading::TAtomicObject<TError> TerminationError_;
+        TAtomicObject<TError> TerminationError_;
 
 
         TFuture<void> GetBusReadyFuture()

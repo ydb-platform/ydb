@@ -25,6 +25,11 @@ void TQueryBuilder::SetSource(std::string source, std::string alias, int syntax,
     SourceIsQuery_ = subquerySource;
 }
 
+void TQueryBuilder::SetSourceHint(TTableHint hint)
+{
+    SourceHint_ = std::move(hint);
+}
+
 int TQueryBuilder::AddSelectExpression(std::string expression)
 {
     SelectEntries_.push_back(TEntryWithAlias{
@@ -176,7 +181,13 @@ std::string TQueryBuilder::Build()
         } else {
             wrapper->AppendFormat("FROM %v AS %v", WrapTableName(*Source_), *SourceAlias_);
         }
+        if (SourceHint_ && *SourceHint_ != TTableHint()) {
+            wrapper->AppendFormat("WITH HINT %v", *SourceHint_);
+        }
     } else {
+        if (SourceHint_) {
+            THROW_ERROR_EXCEPTION("Hint cannot be specified for a subquery source");
+        }
         if (!SourceAlias_) {
             wrapper->AppendFormat("FROM (%v)", *Source_);
         } else {

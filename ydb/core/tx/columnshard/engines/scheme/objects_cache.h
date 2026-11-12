@@ -86,7 +86,8 @@ public:
         return it->second;
     }
 
-    TSchemasCache::TEntryGuard UpsertIndexInfo(TIndexInfo&& indexInfo);
+    TSchemasCache::TEntryGuard GetOrInsertIndexInfo(TIndexInfo&& indexInfo);
+    std::optional<TSchemasCache::TEntryGuard> FindIndexInfo(const ui64 presetId, const ui64 version);
 };
 
 class TSchemaCachesManager {

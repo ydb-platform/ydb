@@ -47,6 +47,9 @@ constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
 constexpr TStringBuf KqpFullTextSourceName = "KqpFullTextSource";
 constexpr TStringBuf KqpSysViewSourceName = "KqpSysViewSource";
 constexpr TStringBuf KqpTableSinkName = "KqpTableSink";
+constexpr TStringBuf KqpTableTruncateSinkName = "KqpTableTruncateSink";
+
+NNodes::TMaybeNode<NNodes::TKqpTableTruncateSettings> GetTableTruncateSettings(const NNodes::TKqpPhysicalTx& tx);
 
 enum class EStreamLookupStrategyType {
     Unspecified,
@@ -173,22 +176,36 @@ public:
     static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
     static constexpr TStringBuf ReverseSettingName = "Reverse";
     static constexpr TStringBuf SortedSettingName = "Sorted";
+    static constexpr TStringBuf RequireSortedReadSettingName = "RequireSortedRead";
     static constexpr TStringBuf SequentialSettingName = "Sequential";
     static constexpr TStringBuf ForcePrimaryName = "ForcePrimary";
     static constexpr TStringBuf GroupByFieldNames = "GroupByFieldNames";
     static constexpr TStringBuf TabletIdName = "TabletId";
     static constexpr TStringBuf PointPrefixLenSettingName = "PointPrefixLen";
     static constexpr TStringBuf IndexSelectionDebugInfoSettingName = "IndexSelectionDebugInfo";
+    static constexpr TStringBuf SamplingRateSettingName = "SamplingRate";
+    static constexpr TStringBuf SamplingSeedSettingName = "SamplingSeed";
+    static constexpr TStringBuf SamplingMemtableStrideSettingName = "SamplingMemtableStride";
     static constexpr TStringBuf VectorTopKColumnSettingName = "VectorTopKColumn";
     static constexpr TStringBuf VectorTopKMetricSettingName = "VectorTopKMetric";
     static constexpr TStringBuf VectorTopKTargetSettingName = "VectorTopKTarget";
     static constexpr TStringBuf VectorTopKLimitSettingName = "VectorTopKLimit";
 
+    struct TSampling {
+        double Rate = 1.0;
+        ui64 Seed = 0;
+        ui32 MemtableStride = 64;
+
+        bool operator == (const TSampling&) const = default;
+    };
+
+    TMaybe<TSampling> Sampling;
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
     TMaybe<ui64> SequentialInFlight;
     TMaybe<ui64> TabletId;
     bool ForcePrimary = false;
+    bool RequireSortedRead = false;
     ui64 PointPrefixLen = 0;
     THashMap<TString, TString> IndexSelectionInfo;
 

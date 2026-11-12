@@ -85,8 +85,7 @@ bool TKeyValueState::RemoveCollectedTrash(ISimpleDb &db) {
         for (ui32 maxItemsToStore = 200'000; trash && maxItemsToStore; trash.pop_back(), --maxItemsToStore) {
             const TLogoBlobID& id = trash.back();
             THelpers::DbEraseTrash(id, db);
-            ui32 num = trashBin.erase(id);
-            Y_ABORT_UNLESS(num == 1);
+            EraseTrash(trashBin, id);
             TotalTrashSize -= id.BlobSize();
             CountTrashDeleted(id);
             ++collected;
@@ -196,6 +195,8 @@ void TKeyValueState::ResetVacuumGeneration(const TActorContext &ctx, ui64 genera
         Trash.insert(trash.begin(), trash.end());
     }
     TrashForVacuum.clear();
+    // every bin is merged into Trash, so its size is the exact node count
+    StateBytes.TrashBytes = Trash.size() * TrashNodeBytes;
     for (const auto& [requestedGeneration, recipients] : VacuumGenerationToSender) {
         for (const auto& recipient : recipients) {
             ctx.Send(recipient, TEvKeyValue::TEvVacuumResponse::MakeAborted(requestedGeneration, "Vacuum generation was reset", generation, TabletId));
@@ -204,6 +205,7 @@ void TKeyValueState::ResetVacuumGeneration(const TActorContext &ctx, ui64 genera
     VacuumGenerationToSender.clear();
     CompletedVacuumGeneration = generation;
     CompletedVacuumTrashGeneration = generation;
+    PublishStateBytesCounters();
 
     VacuumResetGeneration += 1;
 }
@@ -299,16 +301,6 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
     // ensure that barrier advances in correct direction
     Y_ABORT_UNLESS(collectGenStep >= storedGenStep);
 
-    // create list of blobs that must have Keep flag
-    TVector<TLogoBlobID> keep;
-    for (const auto &kv : RefCounts) {
-        const TLogoBlobID &id = kv.first;
-        const THelpers::TGenerationStep genStep = THelpers::GenerationStep(id);
-        if (storedGenStep < genStep && genStep <= collectGenStep) {
-            keep.push_back(id);
-        }
-    }
-
     // create list of blobs that must have to DoNotKeep flag set; these blobs must have Keep flag written and reside in
     // Trash now
     TVector<TLogoBlobID> doNotKeep;
@@ -325,6 +317,10 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
                 TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode));
             continue;
         }
+        if (ReadBlobRefCounts.contains(id)) {
+            ++it;
+            continue;
+        }
         if (genStep <= storedGenStep) {
             doNotKeep.push_back(id);
         }
@@ -335,7 +331,32 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
     doNotKeep.shrink_to_fit();
     trashGoingToCollect.shrink_to_fit();
 
-    Y_ABORT_UNLESS(trashGoingToCollect);
+    if (trashGoingToCollect.empty()) {
+        // All eligible trash is held by readers. OnRequestComplete will retry GC.
+        // No command was sent, so the stored barrier must remain unchanged.
+        CollectOperation.Reset();
+        return;
+    }
+
+    // create list of blobs that must have Keep flag
+    TVector<TLogoBlobID> keep;
+    for (const auto &kv : RefCounts) {
+        const TLogoBlobID &id = kv.first;
+        const THelpers::TGenerationStep genStep = THelpers::GenerationStep(id);
+        if (storedGenStep < genStep && genStep <= collectGenStep) {
+            keep.push_back(id);
+        }
+    }
+
+    // A reader may still own a blob whose last index reference was removed.
+    // Protect it if this operation advances the barrier past the blob.
+    for (const auto& [id, count] : ReadBlobRefCounts) {
+        Y_ABORT_UNLESS(count);
+        const auto genStep = THelpers::GenerationStep(id);
+        if (!RefCounts.contains(id) && storedGenStep < genStep && genStep <= collectGenStep) {
+            keep.push_back(id);
+        }
+    }
 
     YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "StartCollectingIfPossible Flags",
         {"keyValue", TabletId},

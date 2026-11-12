@@ -1,212 +1,261 @@
 {
-    "test.test[BlockFrom]": [
+    "test.test[BlockFrom-Peephole]": [
         {
-            "uri": "file://test.test_BlockFrom_/results.txt"
+            "checksum": "4a89ca6e997bdddc05b0b9f73a773b08",
+            "size": 4028,
+            "uri": "https://{canondata_backend}/1942671/c65bbcbc05f69886e50df9a2db475e6161e1e269/resource.tar.gz#test.test_BlockFrom-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockGet]": [
+    "test.test[BlockFrom-Results]": [
         {
-            "uri": "file://test.test_BlockGet_/results.txt"
+            "uri": "file://test.test_BlockFrom-Results_/results.txt"
         }
     ],
-    "test.test[BlockSplitMake]": [
+    "test.test[BlockGet-Peephole]": [
         {
-            "uri": "file://test.test_BlockSplitMake_/results.txt"
+            "checksum": "4a54608b4b29cf6c723b4448cc5fcc18",
+            "size": 5182,
+            "uri": "https://{canondata_backend}/1871182/bfb9758b7156af30c4183cd9420150dc4a4b7c68/resource.tar.gz#test.test_BlockGet-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockStartOf]": [
+    "test.test[BlockGet-Results]": [
         {
-            "uri": "file://test.test_BlockStartOf_/results.txt"
+            "uri": "file://test.test_BlockGet-Results_/results.txt"
         }
     ],
-    "test.test[BlockTmGet]": [
+    "test.test[BlockSplitMake-Peephole]": [
         {
-            "uri": "file://test.test_BlockTmGet_/results.txt"
+            "checksum": "9ace432a4161392f807a69dfc890ae97",
+            "size": 4187,
+            "uri": "https://{canondata_backend}/1871182/bfb9758b7156af30c4183cd9420150dc4a4b7c68/resource.tar.gz#test.test_BlockSplitMake-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockTo]": [
+    "test.test[BlockSplitMake-Results]": [
         {
-            "uri": "file://test.test_BlockTo_/results.txt"
+            "uri": "file://test.test_BlockSplitMake-Results_/results.txt"
         }
     ],
-    "test.test[DateTimeInvalidSpecifierFail]": [
+    "test.test[BlockStartOf-Peephole]": [
         {
-            "uri": "file://test.test_DateTimeInvalidSpecifierFail_/extracted"
+            "checksum": "0d6e1eb4b28ce3ac03948caedc75a661",
+            "size": 4262,
+            "uri": "https://{canondata_backend}/1871182/e2f88fede4c48e367798c8205af7fd8e572c4e30/resource.tar.gz#test.test_BlockStartOf-Peephole_/opt.yql"
         }
     ],
-    "test.test[EndOf]": [
+    "test.test[BlockStartOf-Results]": [
         {
-            "uri": "file://test.test_EndOf_/results.txt"
+            "uri": "file://test.test_BlockStartOf-Results_/results.txt"
         }
     ],
-    "test.test[Error]": [
+    "test.test[BlockTmGet-Peephole]": [
         {
-            "uri": "file://test.test_Error_/extracted"
+            "checksum": "7f611d5b48e1a0819ce6c7dbcdb84516",
+            "size": 5508,
+            "uri": "https://{canondata_backend}/1871182/e2f88fede4c48e367798c8205af7fd8e572c4e30/resource.tar.gz#test.test_BlockTmGet-Peephole_/opt.yql"
         }
     ],
-    "test.test[FormatMicroseconds]": [
+    "test.test[BlockTmGet-Results]": [
         {
-            "uri": "file://test.test_FormatMicroseconds_/results.txt"
+            "uri": "file://test.test_BlockTmGet-Results_/results.txt"
         }
     ],
-    "test.test[FormatWriteOffsetWithColonFail]": [
+    "test.test[BlockTo-Peephole]": [
         {
-            "uri": "file://test.test_FormatWriteOffsetWithColonFail_/extracted"
+            "checksum": "8d3208cf962fdac7620a6edd5a3e156a",
+            "size": 6924,
+            "uri": "https://{canondata_backend}/1871182/b4a4fb1976852514f2bb4ee53bb0de4fd9aba8d2/resource.tar.gz#test.test_BlockTo-Peephole_/opt.yql"
         }
     ],
-    "test.test[FormatWriteOffsetWithColon]": [
+    "test.test[BlockTo-Results]": [
         {
-            "uri": "file://test.test_FormatWriteOffsetWithColon_/results.txt"
+            "uri": "file://test.test_BlockTo-Results_/results.txt"
         }
     ],
-    "test.test[Format]": [
+    "test.test[DateTimeInvalidSpecifierFail-Results]": [
         {
-            "uri": "file://test.test_Format_/results.txt"
+            "uri": "file://test.test_DateTimeInvalidSpecifierFail-Results_/extracted"
         }
     ],
-    "test.test[FromSeconds_2025.02]": [
+    "test.test[EndOf-Results]": [
         {
-            "uri": "file://test.test_FromSeconds_2025.02_/extracted"
+            "uri": "file://test.test_EndOf-Results_/results.txt"
         }
     ],
-    "test.test[FromSeconds_2025.03]": [
+    "test.test[Error-Results]": [
         {
-            "uri": "file://test.test_FromSeconds_2025.03_/results.txt"
+            "uri": "file://test.test_Error-Results_/extracted"
         }
     ],
-    "test.test[From]": [
+    "test.test[Format-Results]": [
         {
-            "uri": "file://test.test_From_/results.txt"
+            "uri": "file://test.test_Format-Results_/results.txt"
         }
     ],
-    "test.test[Get]": [
+    "test.test[FormatMicroseconds-Results]": [
         {
-            "uri": "file://test.test_Get_/results.txt"
+            "uri": "file://test.test_FormatMicroseconds-Results_/results.txt"
         }
     ],
-    "test.test[IgnoreCaseFuncs]": [
+    "test.test[FormatWriteOffsetWithColon-Results]": [
         {
-            "uri": "file://test.test_IgnoreCaseFuncs_/results.txt"
+            "uri": "file://test.test_FormatWriteOffsetWithColon-Results_/results.txt"
         }
     ],
-    "test.test[ImplicitSplit]": [
+    "test.test[FormatWriteOffsetWithColonFail-Results]": [
         {
-            "uri": "file://test.test_ImplicitSplit_/results.txt"
+            "uri": "file://test.test_FormatWriteOffsetWithColonFail-Results_/extracted"
         }
     ],
-    "test.test[Init64]": [
+    "test.test[From-Results]": [
         {
-            "uri": "file://test.test_Init64_/results.txt"
+            "uri": "file://test.test_From-Results_/results.txt"
         }
     ],
-    "test.test[Init]": [
+    "test.test[FromSeconds_2025.02-Results]": [
         {
-            "uri": "file://test.test_Init_/results.txt"
+            "uri": "file://test.test_FromSeconds_2025.02-Results_/extracted"
         }
     ],
-    "test.test[MakeWriteOffsetWithColonAvailableSince_202501]": [
+    "test.test[FromSeconds_2025.03-Results]": [
         {
-            "uri": "file://test.test_MakeWriteOffsetWithColonAvailableSince_202501_/results.txt"
+            "uri": "file://test.test_FromSeconds_2025.03-Results_/results.txt"
         }
     ],
-    "test.test[MultirowBlockTo]": [
+    "test.test[Get-Results]": [
         {
-            "uri": "file://test.test_MultirowBlockTo_/results.txt"
+            "uri": "file://test.test_Get-Results_/results.txt"
         }
     ],
-    "test.test[ParseIso8601]": [
+    "test.test[IgnoreCaseFuncs-Results]": [
         {
-            "uri": "file://test.test_ParseIso8601_/results.txt"
+            "uri": "file://test.test_IgnoreCaseFuncs-Results_/results.txt"
         }
     ],
-    "test.test[ParseLim]": [
+    "test.test[ImplicitSplit-Results]": [
         {
-            "uri": "file://test.test_ParseLim_/results.txt"
+            "uri": "file://test.test_ImplicitSplit-Results_/results.txt"
         }
     ],
-    "test.test[ParseTzNameVsTzOffset]": [
+    "test.test[Init-Results]": [
         {
-            "uri": "file://test.test_ParseTzNameVsTzOffset_/extracted"
+            "uri": "file://test.test_Init-Results_/results.txt"
         }
     ],
-    "test.test[ParseTzOffsetVsTzName]": [
+    "test.test[Init64-Results]": [
         {
-            "uri": "file://test.test_ParseTzOffsetVsTzName_/extracted"
+            "uri": "file://test.test_Init64-Results_/results.txt"
         }
     ],
-    "test.test[ParseTzOffset]": [
+    "test.test[MakeWriteOffsetWithColonAvailableSince_202501-Results]": [
         {
-            "uri": "file://test.test_ParseTzOffset_/results.txt"
+            "uri": "file://test.test_MakeWriteOffsetWithColonAvailableSince_202501-Results_/results.txt"
         }
     ],
-    "test.test[Parse]": [
+    "test.test[MultirowBlockTo-Peephole]": [
         {
-            "uri": "file://test.test_Parse_/results.txt"
+            "checksum": "75011589e21d8f56b783052464bb3792",
+            "size": 1995,
+            "uri": "https://{canondata_backend}/1689644/04b7c9e5915e57611e0e6e79bef1aca83aae6ea0/resource.tar.gz#test.test_MultirowBlockTo-Peephole_/opt.yql"
         }
     ],
-    "test.test[Repr]": [
+    "test.test[MultirowBlockTo-Results]": [
         {
-            "uri": "file://test.test_Repr_/results.txt"
+            "uri": "file://test.test_MultirowBlockTo-Results_/results.txt"
         }
     ],
-    "test.test[Shift]": [
+    "test.test[Parse-Results]": [
         {
-            "uri": "file://test.test_Shift_/results.txt"
+            "uri": "file://test.test_Parse-Results_/results.txt"
         }
     ],
-    "test.test[SplitMake1969]": [
+    "test.test[ParseIso8601-Results]": [
         {
-            "uri": "file://test.test_SplitMake1969_/results.txt"
+            "uri": "file://test.test_ParseIso8601-Results_/results.txt"
         }
     ],
-    "test.test[SplitMake]": [
+    "test.test[ParseLim-Results]": [
         {
-            "uri": "file://test.test_SplitMake_/results.txt"
+            "uri": "file://test.test_ParseLim-Results_/results.txt"
         }
     ],
-    "test.test[StartOf1969]": [
+    "test.test[ParseTzNameVsTzOffset-Results]": [
         {
-            "uri": "file://test.test_StartOf1969_/results.txt"
+            "uri": "file://test.test_ParseTzNameVsTzOffset-Results_/extracted"
         }
     ],
-    "test.test[StartOf]": [
+    "test.test[ParseTzOffset-Results]": [
         {
-            "uri": "file://test.test_StartOf_/results.txt"
+            "uri": "file://test.test_ParseTzOffset-Results_/results.txt"
         }
     ],
-    "test.test[ToSeconds_2025.02]": [
+    "test.test[ParseTzOffsetVsTzName-Results]": [
         {
-            "uri": "file://test.test_ToSeconds_2025.02_/results.txt"
+            "uri": "file://test.test_ParseTzOffsetVsTzName-Results_/extracted"
         }
     ],
-    "test.test[ToSeconds_2025.03]": [
+    "test.test[Repr-Results]": [
         {
-            "uri": "file://test.test_ToSeconds_2025.03_/results.txt"
+            "uri": "file://test.test_Repr-Results_/results.txt"
         }
     ],
-    "test.test[To]": [
+    "test.test[Shift-Results]": [
         {
-            "uri": "file://test.test_To_/results.txt"
+            "uri": "file://test.test_Shift-Results_/results.txt"
         }
     ],
-    "test.test[TzToDate]": [
+    "test.test[SplitMake-Results]": [
         {
-            "uri": "file://test.test_TzToDate_/results.txt"
+            "uri": "file://test.test_SplitMake-Results_/results.txt"
         }
     ],
-    "test.test[UpdateTz]": [
+    "test.test[SplitMake1969-Results]": [
         {
-            "uri": "file://test.test_UpdateTz_/results.txt"
+            "uri": "file://test.test_SplitMake1969-Results_/results.txt"
         }
     ],
-    "test.test[Update]": [
+    "test.test[StartOf-Results]": [
         {
-            "uri": "file://test.test_Update_/results.txt"
+            "uri": "file://test.test_StartOf-Results_/results.txt"
         }
     ],
-    "test.test[yql-14977]": [
+    "test.test[StartOf1969-Results]": [
         {
-            "uri": "file://test.test_yql-14977_/results.txt"
+            "uri": "file://test.test_StartOf1969-Results_/results.txt"
+        }
+    ],
+    "test.test[To-Results]": [
+        {
+            "uri": "file://test.test_To-Results_/results.txt"
+        }
+    ],
+    "test.test[ToSeconds_2025.02-Results]": [
+        {
+            "uri": "file://test.test_ToSeconds_2025.02-Results_/results.txt"
+        }
+    ],
+    "test.test[ToSeconds_2025.03-Results]": [
+        {
+            "uri": "file://test.test_ToSeconds_2025.03-Results_/results.txt"
+        }
+    ],
+    "test.test[TzToDate-Results]": [
+        {
+            "uri": "file://test.test_TzToDate-Results_/results.txt"
+        }
+    ],
+    "test.test[Update-Results]": [
+        {
+            "uri": "file://test.test_Update-Results_/results.txt"
+        }
+    ],
+    "test.test[UpdateTz-Results]": [
+        {
+            "uri": "file://test.test_UpdateTz-Results_/results.txt"
+        }
+    ],
+    "test.test[yql-14977-Results]": [
+        {
+            "uri": "file://test.test_yql-14977-Results_/results.txt"
         }
     ]
 }

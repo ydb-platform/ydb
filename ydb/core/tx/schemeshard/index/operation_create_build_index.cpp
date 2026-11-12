@@ -61,6 +61,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     const bool isRebuild = op.GetIsRebuild() && !isOnlineRebuild;
 
     switch (GetIndexType(indexDesc)) {
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                "HNSW index implementation is not available yet")};
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             // no feature flag, everything is fine
@@ -100,7 +103,19 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     auto counts = GetIndexObjectCounts(indexDesc);
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
+    if (!table.IsResolved() || !table->IsTable()) {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Index parent must be a table")};
+    }
+
     auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
+    const bool forReplication = op.GetForReplication();
+    if (forReplication && (!tx.GetInternal() || !table.IsAsyncReplicaTable()
+        || GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobal || op.GetIsRebuild()))
+    {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
+            "Replication index creation requires an internal SYNC index on a replica")};
+    }
+
     auto domainInfo = table.DomainInfo();
 
     if (counts.SequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
@@ -249,14 +264,29 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             *implTableDesc.MutableDetailedMetricsSettings()->MutableConfigured() = tableInfo->GetDetailedMetricsSettings();
         }
 
-        if (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique ||
-            context.SS->EnableOnlineAddUniqueIndex) {
+        if (!forReplication && (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique ||
+            context.SS->EnableOnlineAddUniqueIndex))
+        {
             implTableDesc.MutablePartitionConfig()->SetShadowData(true);
         }
 
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
         *outTx.MutableCreateTable() = std::move(implTableDesc);
         outTx.SetInternal(tx.GetInternal());
+
+        // Synchronous index tables are independent replication targets, including
+        // indexes populated by the builder during bootstrap import.
+        if (forReplication || (tableInfo->IsImportingReplica()
+            && (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobal
+                || GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalUnique)))
+        {
+            *outTx.MutableCreateTable()->MutableReplicationConfig() = tableInfo->ReplicationConfig();
+        }
+
+        if (forReplication) {
+            outTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+            return CreateNewTable(NextPartId(opId, result), outTx, localSequences);
+        }
 
         return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx, localSequences);
     };
@@ -274,8 +304,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             const auto uniqueKeySize = indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique
                 ? indexDesc.GetKeyColumnNames().size() : 0;
             auto implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc, uniqueKeySize);
-            // TODO if keep erase markers also speedup compaction or something else we can enable it for other impl tables too
-            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            // Replica indexes receive scan rows through CDC without shadow data,
+            // so they do not need the temporary tombstone-retention build policy.
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(!forReplication);
             result.push_back(createImplTable(std::move(implTableDesc)));
             break;
         }
@@ -349,7 +380,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
             if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
                 const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-                result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc, indexDesc.GetFulltextIndexDescription())));
+                result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
                 result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc, prefixColumns)));
             }
             break;
@@ -382,7 +413,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType, prefixColumns);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
-            result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc, indexDesc.GetFulltextIndexDescription())));
+            result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
             result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));
             result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc, prefixColumns)));
             break;

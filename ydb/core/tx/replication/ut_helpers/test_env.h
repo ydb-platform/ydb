@@ -3,6 +3,7 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/protos/console_base.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -10,10 +11,49 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/async.h>
 
 namespace NKikimr::NReplication::NTestHelpers {
 
 class TFeatureFlags: public TTestFeatureFlagsHolder<TFeatureFlags> {
+};
+
+enum class ERuntimeMode {
+    RealThreads,
+    Simulated,
+};
+
+// Fail the first server-side CreateSession RPC while exercising the real SDK
+// GetSession path. Install before using a fresh proxy so its pool is empty.
+class TSessionCreationFault {
+public:
+    TSessionCreationFault(TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode status)
+        : Observer(runtime.AddObserver<NGRpcService::TEvProxyRuntimeEvent>(
+            [this, status](NGRpcService::TEvProxyRuntimeEvent::TPtr& ev) {
+                const auto method = ev->Get()->GetRpcMethodName();
+                if (method.EndsWith("/CreateSession")) {
+                    ++SessionRequests;
+                    if (SessionRequests == 1) {
+                        auto* request = dynamic_cast<NGRpcService::IRequestCtx*>(ev->Get());
+                        UNIT_ASSERT(request);
+                        request->RaiseIssue(NYql::TIssue("injected GetSession failure"));
+                        request->ReplyWithYdbStatus(status);
+                        ev.Reset();
+                    }
+                } else if (method.EndsWith("/CreateTable") || method.EndsWith("/DropTable") || method.EndsWith("/AlterTable")
+                    || method.EndsWith("/CopyTable") || method.EndsWith("/CopyTables") || method.EndsWith("/RenameTables")
+                    || method.EndsWith("/DescribeTable"))
+                {
+                    ++TableRequests;
+                }
+            }))
+    {}
+
+    ui64 SessionRequests = 0;
+    ui64 TableRequests = 0;
+
+private:
+    TTestActorRuntime::TEventObserverHolder Observer;
 };
 
 template <bool UseDatabase = true>
@@ -31,8 +71,10 @@ class TEnv {
         auto grpcPort = PortManager.GetPort();
 
         Server.EnableGRpc(grpcPort);
-        Server.SetupDefaultProfiles();
-        Client.InitRootScheme(DomainName);
+        RunCall([&] {
+            Server.SetupDefaultProfiles();
+            Client.InitRootScheme(DomainName);
+        });
 
         Endpoint = "localhost:" + ToString(grpcPort);
         Database = "/" + ToString(DomainName);
@@ -40,14 +82,19 @@ class TEnv {
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(Endpoint)
             .SetDatabase(Database);
-        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+
+        // Synchronous endpoint discovery needs the simulated runtime to dispatch RPCs.
+        RunCall([&] {
+            Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+        });
 
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
             Endpoint, UseDatabase ? Database : "", false /* ssl */, "" /* cert */, std::forward<Args>(args)...));
         Sender = Server.GetRuntime()->AllocateEdgeActor();
     }
 
-    void Login(const TString& database, const TString& user, const TString& password) {
+public:
+    Ydb::StatusIds::StatusCode LoginStatus(const TString& database, const TString& user, const TString& password) {
         Ydb::Auth::LoginRequest request;
         request.set_user(user);
         request.set_password(password);
@@ -55,22 +102,46 @@ class TEnv {
         using TEvLoginRequest = NGRpcService::TGRpcRequestWrapperNoAuth<
             NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
 
-        auto result = NRpcService::DoLocalRpc<TEvLoginRequest>(
-            std::move(request), database, {}, Server.GetRuntime()->GetActorSystem(0)
-        ).ExtractValueSync();
+        auto result = RunCall([&] {
+            return NRpcService::DoLocalRpc<TEvLoginRequest>(
+                std::move(request), database, {}, Server.GetRuntime()->GetActorSystem(0)
+            ).ExtractValueSync();
+        });
 
         const auto& operation = result.operation();
-        UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), Ydb::StatusIds::SUCCESS, operation.issues(0).message());
+        if (operation.status() == Ydb::StatusIds::SUCCESS) {
+            Ydb::Auth::LoginResult loginResult;
+            operation.result().UnpackTo(&loginResult);
+            UNIT_ASSERT(!loginResult.token().empty());
+        }
+        return operation.status();
+    }
 
-        Ydb::Auth::LoginResult loginResult;
-        operation.result().UnpackTo(&loginResult);
-        UNIT_ASSERT(!loginResult.token().empty());
+private:
+    void Login(const TString& database, const TString& user, const TString& password) {
+        UNIT_ASSERT_VALUES_EQUAL(LoginStatus(database, user, password), Ydb::StatusIds::SUCCESS);
     }
 
 public:
-    TEnv(bool init = true)
+    template <typename TFunc>
+    auto RunCall(TFunc&& func) {
+        if (GetRuntime().IsRealThreads()) {
+            return func();
+        }
+
+        TAdaptiveThreadPool threadPool;
+        threadPool.Start();
+        auto future = NThreading::Async(std::forward<TFunc>(func), threadPool);
+        // External calls progress in wall time, independently of simulated timers.
+        // Rely on the test runner's wall-clock timeout to catch hangs.
+        return GetRuntime().WaitFuture(std::move(future));
+    }
+
+    TEnv(bool init = true, ERuntimeMode runtimeMode = ERuntimeMode::RealThreads, ui32 nodeCount = 1)
         : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
             .SetDomainName(DomainName)
+            .SetNodeCount(nodeCount)
+            .SetUseRealThreads(runtimeMode == ERuntimeMode::RealThreads)
         )
         , Server(Settings)
         , Client(Settings)
@@ -102,7 +173,11 @@ public:
     }
 
     explicit TEnv(const TString& user, const TString& password)
-        : TEnv(false)
+        : TEnv(user, password, ERuntimeMode::RealThreads)
+    {}
+
+    TEnv(const TString& user, const TString& password, ERuntimeMode runtimeMode)
+        : TEnv(false, runtimeMode)
     {
         NKikimrReplication::TStaticCredentials staticCreds;
         staticCreds.SetUser(user);
@@ -112,10 +187,10 @@ public:
         const auto db = "/" + ToString(DomainName);
         // create user & set owner
         {
-            auto st = Client.CreateUser(db, user, password);
+            auto st = RunCall([&] { return Client.CreateUser(db, user, password); });
             UNIT_ASSERT_VALUES_EQUAL(st, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
 
-            Client.ModifyOwner("/", DomainName, user);
+            RunCall([&] { return Client.ModifyOwner("/", DomainName, user); });
         }
         // init security state
         {
@@ -123,7 +198,7 @@ public:
         }
         // update security state
         {
-            auto resp = Client.Ls(db);
+            auto resp = RunCall([&] { return Client.Ls(db); });
 
             const auto& desc = resp->Record;
             UNIT_ASSERT(desc.HasPathDescription());
@@ -136,6 +211,32 @@ public:
         }
     }
 
+    ~TEnv() {
+        RunCall([&] {
+            Server.ShutdownGRpc();
+        });
+    }
+
+    void RotatePassword(const TString& user, const TString& newPassword, const TString& oldPassword) {
+        const auto db = "/" + ToString(DomainName);
+        auto status = RunCall([&] {
+            return Client.ModifyUser(db, {.User = user, .Password = newPassword});
+        });
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+
+        auto resp = RunCall([&] { return Client.Ls(db); });
+        const auto& desc = resp->Record;
+        UNIT_ASSERT(desc.HasPathDescription());
+        UNIT_ASSERT(desc.GetPathDescription().HasDomainDescription());
+        UNIT_ASSERT(desc.GetPathDescription().GetDomainDescription().HasSecurityState());
+        const auto& secState = desc.GetPathDescription().GetDomainDescription().GetSecurityState();
+        Server.GetRuntime()->Send(new IEventHandle(MakeTicketParserID(), Sender,
+            new TEvTicketParser::TEvUpdateLoginSecurityState(secState)));
+
+        UNIT_ASSERT_VALUES_EQUAL(LoginStatus(db, user, newPassword), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(LoginStatus(db, user, oldPassword), Ydb::StatusIds::UNAUTHORIZED);
+    }
+
     template <typename... Args>
     auto ModifyOwner(Args&&... args) {
         return Client.ModifyOwner(std::forward<Args>(args)...);
@@ -143,7 +244,7 @@ public:
 
     template <typename... Args>
     auto Describe(Args&&... args) {
-        return Client.Ls(std::forward<Args>(args)...);
+        return RunCall([&] { return Client.Ls(std::forward<Args>(args)...); });
     }
 
     auto GetDescription(const TString& path) {
@@ -166,7 +267,24 @@ public:
 
     template <typename... Args>
     auto CreateTable(Args&&... args) {
-        return Client.CreateTable(std::forward<Args>(args)...);
+        return RunCall([&] { return Client.CreateTable(std::forward<Args>(args)...); });
+    }
+
+    void ConfigureTableProfiles(const NKikimrConfig::TTableProfilesConfig& profiles) {
+        TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request(new NMsgBusProxy::TBusConsoleRequest());
+        auto& item = *request->Record.MutableConfigureRequest()->AddActions()->MutableAddConfigItem()->MutableConfigItem();
+        item.SetKind((ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem);
+        item.MutableConfig()->MutableTableProfilesConfig()->CopyFrom(profiles);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        UNIT_ASSERT_VALUES_EQUAL(Client.SyncCall(request, reply), NBus::MESSAGE_OK);
+        const auto& response = dynamic_cast<NMsgBusProxy::TBusConsoleResponse*>(reply.Get())->Record;
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+    }
+
+    template <typename... Args>
+    auto CreateIndexedTable(Args&&... args) {
+        return RunCall([&] { return Client.CreateIndexedTable(std::forward<Args>(args)...); });
     }
 
     template <typename... Args>

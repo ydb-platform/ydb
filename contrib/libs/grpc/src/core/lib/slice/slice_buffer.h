@@ -51,6 +51,9 @@ namespace grpc_core {
 class SliceBuffer {
  public:
   explicit SliceBuffer() { grpc_slice_buffer_init(&slice_buffer_); }
+  explicit SliceBuffer(Slice slice) : SliceBuffer() {
+    Append(std::move(slice));
+  }
   SliceBuffer(const SliceBuffer& other) = delete;
   SliceBuffer(SliceBuffer&& other) noexcept {
     grpc_slice_buffer_init(&slice_buffer_);

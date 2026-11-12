@@ -1,6 +1,7 @@
 #include "dynamic_nameserver_impl.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/mon/mon.h>
@@ -418,13 +419,8 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, bool onlyAliveDynamic
             ?  std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>()
             : nullptr;
         if (newPileMap) {
-            newPileMap->resize(bridge.PilesSize());
-        }
-        THashMap<TString, size_t> pileNameMap;
-        if (bridgeModeEnabled) {
-            for (size_t i = 0; i < bridge.PilesSize(); ++i) {
-                pileNameMap.emplace(bridge.GetPiles(i).GetName(), i);
-            }
+            // until we get bridge info from storage config, piles are resolved against local bridge config
+            newPileMap->resize(BridgeInfo ? BridgeInfo->Piles.size() : bridge.PilesSize());
         }
 
         for (const auto &pr : StaticConfig->StaticNodeTable) {
@@ -458,9 +454,13 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, bool onlyAliveDynamic
                 newExpire = std::min(newExpire, pr.second.EffectiveExpire(EnableLongLease));
                 if (newPileMap) {
                     TNodeLocation location(pr.second.Location);
-                    const auto& bridgePileName = location.GetBridgePileName();
-                    if (bridgePileName && pileNameMap.contains(*bridgePileName)) {
-                        newPileMap->at(pileNameMap[*bridgePileName]).push_back(pr.first);
+                    // pile name may be omitted for the implicit pile
+                    if (BridgeInfo) {
+                        if (const auto *pile = BridgeInfo->ResolvePile(location.GetBridgePileName())) {
+                            newPileMap->at(pile->BridgePileId.GetPileIndex()).push_back(pr.first);
+                        }
+                    } else if (const auto index = NBridge::ResolvePileIndex(bridge, location.GetBridgePileName())) {
+                        newPileMap->at(*index).push_back(pr.first);
                     }
                 }
             }

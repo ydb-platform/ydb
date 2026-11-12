@@ -10,6 +10,7 @@
 #include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/proc.h>
 
+#include <yt/yt/core/net/local_address.h>
 #include <yt/yt/core/net/socket.h>
 #include <yt/yt/core/net/dialer.h>
 
@@ -26,7 +27,6 @@
 
 #include <util/system/error.h>
 #include <util/system/guard.h>
-#include <util/system/hostname.h>
 
 #ifdef __linux__
 #include <netinet/tcp.h>
@@ -418,7 +418,7 @@ TConnectionId TConnection::GetId() const
     return Id_;
 }
 
-void TConnection::Open(TGuard<NThreading::TSpinLock>& guard)
+void TConnection::Open(TGuard<TSpinLock>& guard)
 {
     State_ = EState::Open;
 
@@ -457,13 +457,7 @@ void TConnection::ResolveAddress()
         }
 
         NetworkName_ = LocalNetworkName;
-        try {
-            EndpointHostName_ = FQDNHostName();
-        } catch (const std::exception& ex) {
-            YT_TLOG_ERROR("Failed to resolve local host name")
-                .With(ex);
-            EndpointHostName_ = "localhost";
-        }
+        EndpointHostName_ = NNet::GetLocalHostName();
 
         // NB(gritukan): Unix domain socket path cannot be longer than 108 symbols, so let's try to shorten it.
         OnAddressResolved(
@@ -951,7 +945,10 @@ void TConnection::OnEvent(EPollControl control)
     YT_TLOG_TRACE("Event processing started");
 
     // Update execution pool if needed.
-    if (auto multiplexingBand = MultiplexingBand_.load(); multiplexingBand != ActualMultiplexingBand_) {
+    if (auto multiplexingBand = MultiplexingBand_.load();
+        multiplexingBand != ActualMultiplexingBand_ ||
+        NeedResetInvoker_.exchange(false))
+    {
         Poller_->SetExecutionPool(this, FormatEnum(multiplexingBand));
         ActualMultiplexingBand_ = multiplexingBand;
     }
@@ -1020,6 +1017,11 @@ void TConnection::OnShutdown()
         .With(error);
 
     Terminated_.Fire(error);
+}
+
+void TConnection::ResetInvoker()
+{
+    NeedResetInvoker_ = true;
 }
 
 void TConnection::OnSocketRead()

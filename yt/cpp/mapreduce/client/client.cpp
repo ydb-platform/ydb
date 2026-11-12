@@ -32,6 +32,7 @@
 #include <yt/cpp/mapreduce/interface/fluent.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 #include <yt/cpp/mapreduce/interface/skiff_row.h>
+#include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/io/yamr_table_reader.h>
 #include <yt/cpp/mapreduce/io/yamr_table_writer.h>
@@ -369,6 +370,18 @@ TMultiTablePartitions TClientBase::GetTablePartitions(
         });
 }
 
+TFilePartitions TClientBase::GetFilePartitions(
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options)
+{
+    return RequestWithRetry<TFilePartitions>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &ranges, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetFilePartitions(TransactionId_, path, ranges, options);
+        });
+}
+
 void TClient::CheckClusterLiveness(const TCheckClusterLivenessOptions& options)
 {
     CheckShutdown();
@@ -432,6 +445,13 @@ IFileReaderPtr TClientBase::CreateFileReader(
         Context_,
         TransactionId_,
         options);
+}
+
+IFileReaderPtr TClientBase::CreateFilePartitionReader(
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options)
+{
+    return NDetail::CreateFilePartitionReader(RawClient_, ClientRetryPolicy_, cookie, options);
 }
 
 IFileWriterPtr TClientBase::CreateFileWriter(
@@ -1854,13 +1874,23 @@ TClientContext CreateClientContext(
         context.HttpClient = NHttpClient::CreateDefaultHttpClient();
     }
 
-    context.Token = context.Config->Token;
-    if (options.Token_) {
-        context.Token = options.Token_;
-    } else if (options.TokenPath_) {
-        context.Token = TConfig::LoadTokenFromFile(options.TokenPath_);
-    } else if (options.ServiceTicketAuth_) {
+    if (!options.UserTicket_.empty()) {
+        if (!options.ServiceTicketAuth_ || !options.ServiceTicketAuth_->Ptr) {
+            ythrow TApiUsageError()
+                << "When UserTicket is specified, ServiceTicketAuth must also be provided "
+                << "to supply the accompanying service ticket.";
+        }
+        context.UserTicket = options.UserTicket_;
         context.ServiceTicketAuth = options.ServiceTicketAuth_;
+    } else {
+        context.Token = context.Config->Token;
+        if (options.Token_) {
+            context.Token = options.Token_;
+        } else if (options.TokenPath_) {
+            context.Token = TConfig::LoadTokenFromFile(options.TokenPath_);
+        } else if (options.ServiceTicketAuth_) {
+            context.ServiceTicketAuth = options.ServiceTicketAuth_;
+        }
     }
 
     context.ImpersonationUser = options.ImpersonationUser_;

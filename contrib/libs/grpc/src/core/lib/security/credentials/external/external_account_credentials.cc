@@ -26,6 +26,7 @@
 
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
+#include "y_absl/strings/escaping.h"
 #include "y_absl/strings/match.h"
 #include "y_absl/strings/numbers.h"
 #include "y_absl/strings/str_cat.h"
@@ -53,7 +54,6 @@
 #include "src/core/lib/security/credentials/external/file_external_account_credentials.h"
 #include "src/core/lib/security/credentials/external/url_external_account_credentials.h"
 #include "src/core/lib/security/util/json_util.h"
-#include "src/core/lib/slice/b64.h"
 #include "src/core/lib/uri/uri_parser.h"
 
 #define EXTERNAL_ACCOUNT_CREDENTIALS_GRANT_TYPE \
@@ -271,6 +271,20 @@ TString ExternalAccountCredentials::debug_string() {
                          grpc_oauth2_token_fetcher_credentials::debug_string());
 }
 
+TString ExternalAccountCredentials::MetricsHeaderValue() {
+  return y_absl::StrFormat(
+      "gl-cpp/unknown auth/%s google-byoid-sdk source/%s sa-impersonation/%v "
+      "config-lifetime/%v",
+      grpc_version_string(), CredentialSourceType(),
+      !options_.service_account_impersonation_url.empty(),
+      options_.service_account_impersonation.token_lifetime_seconds !=
+          IMPERSONATED_CRED_DEFAULT_LIFETIME_IN_SECONDS);
+}
+
+y_absl::string_view ExternalAccountCredentials::CredentialSourceType() {
+  return "unknown";
+}
+
 // The token fetching flow:
 // 1. Retrieve subject token - Subclass's RetrieveSubjectToken() gets called
 // and the subject token is received in OnRetrieveSubjectTokenInternal().
@@ -317,27 +331,21 @@ void ExternalAccountCredentials::ExchangeToken(
   }
   grpc_http_request request;
   memset(&request, 0, sizeof(grpc_http_request));
-  grpc_http_header* headers = nullptr;
-  if (!options_.client_id.empty() && !options_.client_secret.empty()) {
-    request.hdr_count = 2;
-    headers = static_cast<grpc_http_header*>(
-        gpr_malloc(sizeof(grpc_http_header) * request.hdr_count));
-    headers[0].key = gpr_strdup("Content-Type");
-    headers[0].value = gpr_strdup("application/x-www-form-urlencoded");
+  const bool add_authorization_header =
+      !options_.client_id.empty() && !options_.client_secret.empty();
+  request.hdr_count = add_authorization_header ? 3 : 2;
+  auto* headers = static_cast<grpc_http_header*>(
+      gpr_malloc(sizeof(grpc_http_header) * request.hdr_count));
+  headers[0].key = gpr_strdup("Content-Type");
+  headers[0].value = gpr_strdup("application/x-www-form-urlencoded");
+  headers[1].key = gpr_strdup("x-goog-api-client");
+  headers[1].value = gpr_strdup(MetricsHeaderValue().c_str());
+  if (add_authorization_header) {
     TString raw_cred =
         y_absl::StrFormat("%s:%s", options_.client_id, options_.client_secret);
-    char* encoded_cred =
-        grpc_base64_encode(raw_cred.c_str(), raw_cred.length(), 0, 0);
-    TString str = y_absl::StrFormat("Basic %s", TString(encoded_cred));
-    headers[1].key = gpr_strdup("Authorization");
-    headers[1].value = gpr_strdup(str.c_str());
-    gpr_free(encoded_cred);
-  } else {
-    request.hdr_count = 1;
-    headers = static_cast<grpc_http_header*>(
-        gpr_malloc(sizeof(grpc_http_header) * request.hdr_count));
-    headers[0].key = gpr_strdup("Content-Type");
-    headers[0].value = gpr_strdup("application/x-www-form-urlencoded");
+    TString str = y_absl::StrFormat("Basic %s", y_absl::Base64Escape(raw_cred));
+    headers[2].key = gpr_strdup("Authorization");
+    headers[2].value = gpr_strdup(str.c_str());
   }
   request.hdrs = headers;
   std::vector<TString> body_parts;

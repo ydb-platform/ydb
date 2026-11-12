@@ -1,28 +1,26 @@
-#include "yql_solomon_provider_impl.h"
 #include "yql_solomon_dq_integration.h"
+#include "yql_solomon_provider_impl.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 
+#include <util/string/cast.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
-
 #include <yql/essentials/utils/log/log.h>
-
-#include <util/string/cast.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
-class TSolomonDataSource : public TDataProviderBase {
+class TSolomonDataSource: public TDataProviderBase {
 public:
     TSolomonDataSource(TSolomonState::TPtr state)
         : State_(state)
-        , ConfigurationTransformer_(NCommon::CreateProviderConfigurationTransformer(
-            State_->Configuration, *State_->Types, TString{SolomonProviderName}))
+        , ConfigurationTransformer_(
+              NCommon::CreateProviderConfigurationTransformer(State_->Configuration, *State_->Types, TString{ SolomonProviderName }))
         , IODiscoveryTransformer_(CreateSolomonIODiscoveryTransformer(State_))
         , LoadMetaDataTransformer_(CreateSolomonLoadTableMetadataTransformer(State_))
         , TypeAnnotationTransformer_(CreateSolomonDataSourceTypeAnnotationTransformer(State_))
@@ -75,7 +73,8 @@ public:
         auto authMethod = properties.Value("authMethod", "");
         TString structuredToken = "";
         if (authMethod == "SERVICE_ACCOUNT") {
-            structuredToken = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignatureReference", ""), properties.Value("serviceAccountIdSignature", ""));
+            structuredToken = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""),
+                properties.Value("serviceAccountIdSignatureReference", ""), properties.Value("serviceAccountIdSignature", ""));
         } else if (authMethod == "IAM") {
             const TString& serviceAccountId = properties.Value("iamServiceAccountId", "");
             const TString& resourceId = properties.Value("iamResourceId", "");
@@ -125,8 +124,7 @@ public:
             if (node.Child(0)->Content() == SolomonProviderName) {
                 auto clusterName = node.Child(1)->Content();
                 if (clusterName != NCommon::ALL_CLUSTERS && !State_->Gateway->HasCluster(clusterName)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() <<
-                        "Unknown cluster name: " << clusterName));
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unknown cluster name: " << clusterName));
                     return false;
                 }
                 cluster = clusterName;
@@ -204,4 +202,4 @@ TIntrusivePtr<IDataProvider> CreateSolomonDataSource(TSolomonState::TPtr state) 
     return new TSolomonDataSource(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

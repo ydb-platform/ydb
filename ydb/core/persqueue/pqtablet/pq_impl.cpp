@@ -352,6 +352,10 @@ struct TPersQueue::TReplyToActor {
     TEventBasePtr Event;
 };
 
+bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
+    return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
+}
+
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
 {
     ReplyPersQueueError(
@@ -1497,7 +1501,7 @@ void TPersQueue::HandleDeleteSessionRequest(
 
 void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                             const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
-                                            const TActorId& pipeClient, const TActorId&
+                                            const TActorId& pipeClient, const TActorId& sender
 ) {
     PQ_ENSURE(req.HasCmdCreateSession());
     const auto& cmd = req.GetCmdCreateSession();
@@ -1521,6 +1525,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
                 responseCookie, cmd.GetClientId(), 0, cmd.GetSessionId(), cmd.GetPartitionSessionId(), cmd.GetGeneration(), cmd.GetStep(),
                 pipeClient, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION, 0, false
         );
+        event->ReadSessionActor = sender;
 
         if (isDirectRead) {
             auto pipeIter = PipesInfo.find(pipeClient);
@@ -1632,7 +1637,8 @@ void TPersQueue::FillBatchInfo(
 }
 
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
-                                    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
+                                    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
+                                    bool fromMirrorer)
 {
     auto& pqConfig = AppData(ctx)->PQConfig;
 
@@ -1644,7 +1650,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
 
     TVector<TEvPQ::TEvWrite::TMsg> msgs;
 
-    bool mirroredPartition = MirroringEnabled(Config);
+    const bool clientWriteAllowed = ReplicationEnabled(Config)
+        && AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled() && !fromMirrorer;
+    const bool isPlainMirroring = MirroringEnabled(Config) && !clientWriteAllowed;
 
     if (!req.GetIsDirectWrite()) {
         if (!req.HasMessageNo()) {
@@ -1653,7 +1661,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             return;
         }
 
-        if (!mirroredPartition && !req.HasOwnerCookie()) {
+        if (!isPlainMirroring && !req.HasOwnerCookie()) {
             ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
                        "OwnerCookie must be set for writes");
             return;
@@ -1712,6 +1720,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "empty SourceId";
         } else if (cmd.GetPartitionKey().size() > 256) {
             errorStr = "too long partition key";
+        } else if (cmd.GetExplicitHash().size() > Max<ui8>()) {
+            errorStr = "too long explicit hash";
         } else if (cmd.GetSeqNo() < 0) {
             errorStr = "SeqNo must be >= 0";
         } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
@@ -1730,7 +1740,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "TotalSize is incorrect";
         } else if (cmd.HasSourceId() && !cmd.GetSourceId().empty() && NPQ::NSourceIdEncoding::Decode(cmd.GetSourceId()).length() > MAX_SOURCE_ID_LENGTH) {
             errorStr = "Too big SourceId";
-        } else if (mirroredPartition && !cmd.GetDisableDeduplication()) {
+        } else if (isPlainMirroring && !cmd.GetDisableDeduplication()) {
             errorStr = "Write to mirrored topic is forbiden";
         } else if (cmd.HasHeartbeat() && cmd.GetHeartbeat().GetData().size() > MAX_HEARTBEAT_SIZE) {
             errorStr = "Too big Heartbeat";
@@ -1933,6 +1943,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             initialSeqNo,
             TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked
         );
+    event->FromMirrorer = fromMirrorer;
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -1998,6 +2009,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::T
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
     THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
             req.GetCmdGetOwnership().GetForce(), req.GetCmdGetOwnership().GetRegisterIfNotExists());
+    event->WriteSessionQuotaWaitTime = TDuration::MilliSeconds(Max<i64>(0, req.GetCmdGetOwnership().GetQuotaWaitTimeMs()));
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -2005,7 +2017,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::T
 void TPersQueue::HandleReadRequest(
         const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
         const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
-        const TActorId& pipeClient, const TActorId&
+        const TActorId& pipeClient, const TActorId& sender
 ) {
     PQ_ENSURE(req.HasCmdRead());
 
@@ -2078,6 +2090,7 @@ void TPersQueue::HandleReadRequest(
                                        clientDC,
                                        cmd.GetExternalOperation(),
                                        pipeClient);
+        event->ReadSessionActor = sender;
 
         ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }
@@ -2655,6 +2668,14 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
+    if (IsTopicMutateDisabled(ctx)
+        && (req.CmdWriteSize() > 0 || req.HasCmdSetClientOffset()))
+    {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+                   "Topic mutations are temporarily disabled");
+        return;
+    }
+
     if (req.HasWriteId()) {
         HandleEventForSupportivePartition(responseCookie, ev, ev->Sender, ctx);
         return;
@@ -2672,7 +2693,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     } else if (req.HasCmdGetClientOffset()) {
         HandleGetClientOffsetRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.CmdWriteSize()) {
-        HandleWriteRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
+        HandleWriteRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, ev->Get()->FromMirrorer);
     } else if (req.HasCmdUpdateWriteTimestamp()) {
         HandleUpdateWriteTimestampRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdRead()) {
@@ -3087,17 +3108,17 @@ void TPersQueue::BeginDeleteTransaction(const TActorContext& ctx,
     CheckTxState(ctx, tx);
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
 {
     if (!InitCompleted) {
         AddPendingEvent(ev.Release());
         return;
     }
 
-    NKikimrPQ::TEvCancelTransactionProposal& event = ev->Get()->Record;
+    NKikimrTxDataShard::TEvCancelTransactionProposal& event = ev->Get()->Record;
     PQ_ENSURE(event.HasTxId());
 
-    LOG_W("Handle TEvPersQueue::TEvCancelTransactionProposal for TxId",
+    LOG_W("Handle TEvDataShard::TEvCancelTransactionProposal for TxId",
         {"txId", event.GetTxId()});
 
     if (auto tx = GetTransaction(ctx, event.GetTxId()); tx) {
@@ -3129,6 +3150,22 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
     switch (event.GetTxBodyCase()) {
     case NKikimrPQ::TEvProposeTransaction::kData:
+        if (IsTopicMutateDisabled(ctx)
+            && !Txs.contains(event.GetTxId())
+            && !AnyOf(EvProposeTransactionQueue, [&](const auto& pending) {
+                return pending->GetRecord().GetTxId() == event.GetTxId();
+            }))
+        {
+            // Retries of accepted proposals must continue the transaction protocol.
+            const TString reason = "Topic mutations are temporarily disabled";
+            ev->Get()->ExecuteSpan.EndError(reason);
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                       event.GetTxId(),
+                                       NKikimrPQ::TError::ERROR,
+                                       reason,
+                                       ctx);
+            return;
+        }
         HandleDataTransaction(ev->Release(), ctx);
         break;
     case NKikimrPQ::TEvProposeTransaction::kConfig:
@@ -3911,7 +3948,7 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
     const ui64 step = event.GetStep();
     // последняя транзакция шага, которая есть в Txs. шаг без таких транзакций PlanStep не двигает:
     // MinStep новых пропоузов равен max(PlanStep + 1, часы timecast), и шаг из будущего навсегда
-    // поднял бы этот пол
+    // поднял бы эту нижнюю границу
     TMaybe<ui64> lastKnownTxId;
 
     TVector<ui64> txIds;
@@ -5900,7 +5937,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle);
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-        HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
+        HFuncTraced(TEvDataShard::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);

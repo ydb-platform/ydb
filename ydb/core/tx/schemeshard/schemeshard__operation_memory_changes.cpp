@@ -20,6 +20,12 @@ void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& opId) 
     GrabNew(opId, ss->TxInFlight, TxStates);
 }
 
+void TMemoryChanges::GrabReplicationSourceCleanup(TSchemeShard* ss, const TOperationId& opId) {
+    const auto* txState = ss->FindTx(opId);
+    Y_ABORT_UNLESS(txState);
+    ReplicationSourceCleanups.emplace(opId, txState->ReplicationSourceCleanup);
+}
+
 void TMemoryChanges::GrabNewPath(TSchemeShard* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->PathsById, Paths);
 }
@@ -43,7 +49,11 @@ void TMemoryChanges::GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId)
 
 void TMemoryChanges::GrabColumnTable(TSchemeShard* ss, const TPathId& pathId) {
     Y_ABORT_UNLESS(ss->ColumnTables.contains(pathId));
-    ColumnTables.emplace(pathId, std::make_shared<TColumnTableInfo>(*ss->ColumnTables.GetVerified(pathId)));
+    ColumnTables.emplace(pathId, ss->ColumnTables.GetVerified(pathId)->Clone());
+}
+
+void TMemoryChanges::GrabOlapStore(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TOlapStoreInfo>(pathId, ss->OlapStores, OlapStores);
 }
 
 void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) {
@@ -91,8 +101,7 @@ void TMemoryChanges::GrabCdcStream(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TCdcStreamInfo>(pathId, ss->CdcStreams, CdcStreams);
 }
 
-void TMemoryChanges::GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId) {
-    Y_ABORT_UNLESS(!ss->TablesWithSnapshots.contains(pathId));
+void TMemoryChanges::GrabNewTableSnapshot(TSchemeShard*, const TPathId& pathId, TTxId snapshotTxId) {
     TablesWithSnapshots.emplace(pathId, snapshotTxId);
 }
 
@@ -259,16 +268,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     while (TablesWithSnapshots) {
         const auto& [id, snapshotTxId] = TablesWithSnapshots.top();
-
-        ss->TablesWithSnapshots.erase(id);
-        auto it = ss->SnapshotTables.find(snapshotTxId);
-        if (it != ss->SnapshotTables.end()) {
-            it->second.erase(id);
-            if (it->second.empty()) {
-                ss->SnapshotTables.erase(it);
-            }
-        }
-
+        ss->RemoveTableSnapshot(id, snapshotTxId);
         TablesWithSnapshots.pop();
     }
 
@@ -298,6 +298,12 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         ColumnTables.pop();
     }
 
+    while (OlapStores) {
+        const auto& [id, elem] = OlapStores.top();
+        ss->OlapStores.RestoreMembershipWithoutRefcount(id, elem);
+        OlapStores.pop();
+    }
+
     while (Shards) {
         const auto& [id, elem] = Shards.top();
         if (elem) {
@@ -319,6 +325,14 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         }
     }
     SubDomains.clear();
+
+    while (ReplicationSourceCleanups) {
+        const auto& [id, policy] = ReplicationSourceCleanups.top();
+        auto* txState = ss->FindTx(id);
+        Y_ABORT_UNLESS(txState);
+        txState->ReplicationSourceCleanup = policy;
+        ReplicationSourceCleanups.pop();
+    }
 
     while (TxStates) {
         const auto& [id, elem] = TxStates.top();

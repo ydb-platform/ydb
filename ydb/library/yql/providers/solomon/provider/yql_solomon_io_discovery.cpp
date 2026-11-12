@@ -1,12 +1,12 @@
 #include "yql_solomon_provider_impl.h"
 
-#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/scheme/yql_solomon_scheme.h>
 
 #include <util/string/split.h>
 #include <util/string/strip.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NYql {
 
@@ -17,17 +17,18 @@ std::array<TExprNode::TPtr, 2U> ExtractSchema(TExprNode::TListType& settings) {
     for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
         if (const auto item = *it; item->Head().IsAtom("userschema")) {
             settings.erase(it);
-            return {item->ChildPtr(1), item->ChildrenSize() > 2 ? item->TailPtr() : TExprNode::TPtr()};
+            return { item->ChildPtr(1), item->ChildrenSize() > 2 ? item->TailPtr() : TExprNode::TPtr() };
         }
     }
 
     return {};
 }
 
-TMaybe<TString> ExtractUserLabels(TPositionHandle pos, TExprContext& ctx, TExprNode::TListType& settings, TVector<TCoAtom>& names, TVector<TCoAtom>& aliases) {
+TMaybe<TString> ExtractUserLabels(
+    TPositionHandle pos, TExprContext& ctx, TExprNode::TListType& settings, TVector<TCoAtom>& names, TVector<TCoAtom>& aliases) {
     names.clear();
     aliases.clear();
-    
+
     for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
         if (const auto item = *it; item->Head().IsAtom("labels")) {
             TVector<TString> stringNames;
@@ -65,7 +66,7 @@ bool HasSetting(TExprNode::TListType& settings, const TString& name) {
 }
 
 const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& userLabels, TExprContext& ctx, TVector<TCoAtom>& systemColumns) {
-    auto allSystemColumns = {SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE, SOLOMON_SCHEME_TS, SOLOMON_SCHEME_TYPE};
+    auto allSystemColumns = { SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE, SOLOMON_SCHEME_TS, SOLOMON_SCHEME_TYPE };
     TVector<const TItemExprType*> columnTypes;
     columnTypes.reserve(systemColumns.size() + userLabels.size());
     const TTypeAnnotationNode* stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
@@ -104,9 +105,9 @@ const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& 
     return ctx.MakeType<TStructExprType>(columnTypes);
 }
 
-}
+}   // namespace
 
-class TSolomonIODiscoveryTransformer : public TSyncTransformerBase {
+class TSolomonIODiscoveryTransformer: public TSyncTransformerBase {
 public:
     TSolomonIODiscoveryTransformer(TSolomonState::TPtr state)
         : State_(state)
@@ -120,7 +121,7 @@ public:
             return TStatus::Ok;
         }
 
-        auto status = OptimizeExpr(input, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+        auto status = OptimizeExpr(input, output, [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (auto maybeRead = TMaybeNode<TSoRead>(node)) {
                 auto read = maybeRead.Cast();
                 if (read.DataSource().Category().Value() != SolomonProviderName) {
@@ -140,8 +141,8 @@ public:
                 }
 
                 const auto& keyArg = maybeKey.Cast().Ref().Head();
-                if (!keyArg.IsList() || keyArg.ChildrenSize() != 2U
-                    || !keyArg.Head().IsAtom("table") || !keyArg.Tail().IsCallable(TCoString::CallableName())) {
+                if (!keyArg.IsList() || keyArg.ChildrenSize() != 2U || !keyArg.Head().IsAtom("table") ||
+                    !keyArg.Tail().IsCallable(TCoString::CallableName())) {
                     ctx.AddError(TIssue(ctx.GetPosition(keyArg.Pos()), TStringBuilder() << "Expected single table name"));
                     return {};
                 }
@@ -149,7 +150,8 @@ public:
                 const auto project = TString(keyArg.Tail().Head().Content());
                 auto cluster = read.DataSource().Cluster().StringValue();
                 if (!this->State_->Configuration->_EnableReading.Get().GetOrElse(false)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Reading is disabled for monitoring cluster " << cluster));
+                    ctx.AddError(
+                        TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Reading is disabled for monitoring cluster " << cluster));
                     return {};
                 }
 
@@ -163,23 +165,16 @@ public:
                     return {};
                 }
 
-                auto newSettingsBuilder = Build<TCoNameValueTupleList>(ctx, settings->Pos())
-                                        .Add(settingsList);
+                auto newSettingsBuilder = Build<TCoNameValueTupleList>(ctx, settings->Pos()).Add(settingsList);
 
                 if (!HasSetting(settingsList, "program") && !HasSetting(settingsList, "selectors")) {
-                    newSettingsBuilder.Add<TCoNameValueTuple>()
-                        .Name<TCoAtom>().Build("selectors")
-                        .Value<TCoAtom>().Build("{}")
-                        .Build();
+                    newSettingsBuilder.Add<TCoNameValueTuple>().Name<TCoAtom>().Build("selectors") .Value<TCoAtom>().Build("{}") .Build();
                 }
 
                 auto newSettings = newSettingsBuilder.Done();
 
-                auto soObject = Build<TSoObject>(ctx, read.Pos())
-                                  .Project<TCoAtom>().Build(project)
-                                  .Settings(newSettings)
-                                .Done();
-                
+                auto soObject = Build<TSoObject>(ctx, read.Pos()).Project<TCoAtom>().Build(project) .Settings(newSettings).Done();
+
                 TVector<TCoAtom> systemColumns;
                 auto* scheme = BuildScheme(settings->Pos(), userLabelAliases, ctx, systemColumns);
                 if (!scheme) {
@@ -187,18 +182,13 @@ public:
                 }
 
                 auto rowTypeNode = ExpandType(read.Pos(), *scheme, ctx);
-                auto systemColumnsNode = Build<TCoAtomList>(ctx, read.Pos())
-                                            .Add(systemColumns)
-                                        .Done();
+                auto systemColumnsNode = Build<TCoAtomList>(ctx, read.Pos()).Add(systemColumns).Done();
 
-                auto labelNamesNode = Build<TCoAtomList>(ctx, read.Pos())
-                                            .Add(userLabels)
-                                        .Done();
-                
-                auto labelNameAliasesNode = Build<TCoAtomList>(ctx, read.Pos())
-                                            .Add(userLabelAliases)
-                                        .Done();
+                auto labelNamesNode = Build<TCoAtomList>(ctx, read.Pos()).Add(userLabels).Done();
 
+                auto labelNameAliasesNode = Build<TCoAtomList>(ctx, read.Pos()).Add(userLabelAliases).Done();
+
+                // clang-format off
                 return userSchema.back()
                     ? Build<TSoReadObject>(ctx, read.Pos())
                         .World(read.World())
@@ -223,10 +213,12 @@ public:
                         .TotalMetricsCount().Build()
                         .RowType(rowTypeNode)
                       .Done().Ptr();
+                // clang-format on
             }
 
             return node;
-        }, ctx, TOptimizeExprSettings {nullptr});
+        }, ctx,
+            TOptimizeExprSettings{ nullptr });
 
         return status;
     }
@@ -242,4 +234,4 @@ THolder<IGraphTransformer> CreateSolomonIODiscoveryTransformer(TSolomonState::TP
     return THolder(new TSolomonIODiscoveryTransformer(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

@@ -486,9 +486,6 @@
     "name": "yt.QueryCacheChunkLimit"
   },
   {
-    "name": "yt.QueryCacheCombineChunksReplace"
-  },
-  {
     "name": "yt.QueryCacheIgnoreTableRevision"
   },
   {
@@ -1228,6 +1225,9 @@
   },
   {
     "name": "RegexUseRe2"
+  },
+  {
+    "name": "RelativePathPrefix"
   },
   {
     "name": "RespectWarnPolicyForUnusedSqlHints"

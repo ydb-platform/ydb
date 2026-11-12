@@ -90,7 +90,7 @@ RECURSE_FOR_TESTS(
     ut_view
 )
 
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     defs.h
@@ -113,6 +113,8 @@ SRCS(
     schemeshard__list_users.cpp
     schemeshard__local_index_migration.cpp
     schemeshard__local_index_migration.h
+    schemeshard__pipe_messages.cpp
+    schemeshard__pipe_messages.h
     schemeshard__login.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
@@ -236,6 +238,7 @@ SRCS(
     schemeshard__root_shred_manager.cpp
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
+    schemeshard__storage_space.cpp
     schemeshard__sync_update_tenants.cpp
     schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
@@ -414,12 +417,11 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump/util
     yql/essentials/minikql
     yql/essentials/providers/common/proto
+    yql/essentials/public/udf
     ydb/services/bg_tasks
     ydb/core/tx/columnshard/bg_tasks/manager
     ydb/core/tx/tiering/tier
 )
-
-YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     SRCS(

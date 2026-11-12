@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
@@ -134,8 +135,10 @@ protected:
     }
 
     TMaybeNode<TExprBase> PushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
-        DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
+        auto output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
+        if (output) {
+            DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 
@@ -189,7 +192,7 @@ protected:
                 defaultLatePolicy,
                 KqpCtx.Config->FeatureFlags.GetEnableHoppingWindowStartCheck()
             );
-        } else if (KqpCtx.Config->FeatureFlags.GetEnableStreamingAggregation() && KqpCtx.Config->EnableStreamingAggregation.Get().GetOrElse(false)) {
+        } else if (KqpCtx.Config->FeatureFlags.GetEnableStreamingAggregation() && aggregate.Ref().GetConstraint<TStreamingConstraintNode>()) {
             output = RewriteAsStreamingAggregation(aggregate, ctx, getParents);
         } else {
             if (node.Ref().GetConstraint<TStreamingConstraintNode>() && Config->OptValidateStreamingConstraints.Get().GetOrElse(true)) {
@@ -215,9 +218,7 @@ protected:
             if (!IsSingleConsumerConnection(maybeInputConnection.Cast(), *getParents())) {
                 return aggregate;
             }
-        } else if (!IsDqCompletePureExpr(aggregateInput, /* isPrecomputePure */ false)
-            || !IsPureIsolatedLambda(aggregateInput.Ref())
-            || !IsKqpPureExpr(aggregateInput, /* checkDqSources */ true, /* checkIndexReads */ true)) {
+        } else if (!IsKqpCompletePureExpr(aggregateInput)) {
             return aggregate;
         }
 
@@ -333,6 +334,7 @@ protected:
             return {};
         }
         auto ranges = maybeRanges.Cast();
+        YQL_ENSURE(!TKqpReadTableSettings::Parse(ranges).Sampling, "Sampling is not supported for lookups");
         if (!ranges.Ranges().Maybe<TCoVoid>()) {
             ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Right-side predicate pushdown blocks mandatory streamlookup rewrite"));
             return {};
@@ -382,7 +384,12 @@ protected:
             KqpCtx.GetOptimizerHints(),
             enableShuffleElimination,
             &KqpCtx.ShufflingOrderingsByJoinLabels,
-            &KqpCtx.CBOStats
+            &KqpCtx.CBOStats,
+            [trace = KqpCtx.GetCompileTrace()](const std::function<void()>& search) {
+                // Exponential in the number of joins at worst, so it is a phase.
+                TCompileTraceScope scope(trace, TCompileTraceLevels::Phase, "Search join order");
+                search();
+            }
         );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -427,7 +434,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteFlatMapOverFullTextMatch(TExprBase node, TExprContext& ctx) {
-        auto output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx);
+        auto output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx, TypesCtx);
         if (!output.IsValid()) {
             return {};
         }

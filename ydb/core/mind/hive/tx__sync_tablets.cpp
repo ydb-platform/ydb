@@ -25,7 +25,7 @@ public:
         if (local->IsFollower()) {
             if (remote.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                 if (local->AsFollower().Id == remote.GetFollowerId()
-                        && (local->IsStopped() || local->IsAliveOnLocal(Local))) {
+                        && (local->IsStopped() || local->IsPresentOnLocal(Local))) {
                     return true;
                 }
             }
@@ -73,7 +73,7 @@ public:
                     {"tabletId", tabletId});
             }
             if (tablet->GetLeader().IsBootingSuppressed()) {
-                tablet->InitiateStop(SideEffects);
+                tablet->InitiateStop(SideEffects, EHiveEventReason::BootingSuppressed);
                 // persist zeroed NodeId so it survives a hive restart
                 if (tablet->IsLeader()) {
                     db.Table<Schema::Tablet>().Key(tablet->GetLeader().Id)
@@ -96,15 +96,30 @@ public:
                 tablet->SendStopTablet(Local, SideEffects);
             }
         };
+        const auto rejectUnexpectedTablet = [&](const TTabletInfo& tablet, const NKikimrLocal::TEvSyncTablets_TTabletInfo& reported) {
+            if (!Self->BridgeInfo || tablet.IsPresentOnLocal(Local) || tablet.GetNodeFilter().IsAllowedPile(node.BridgePileId)) {
+                return false;
+            }
+            const auto tabletId = tablet.GetFullTabletId();
+            SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId, reported.GetGeneration()));
+            tabletsToRestart.erase(tabletId);
+            if (tablet.IsStopped()) {
+                tabletsToBoot.insert(tabletId);
+            }
+            return true;
+        };
         for (const NKikimrLocal::TEvSyncTablets_TTabletInfo& ti : SyncTablets.GetInbootTablets()) {
             auto tabletId = std::pair<TTabletId, TFollowerId>(ti.GetTabletId(), ti.GetFollowerId());
             TTabletInfo* tablet = Self->FindTablet(tabletId);
             if (tablet) {
+                if (rejectUnexpectedTablet(*tablet, ti)) {
+                    continue;
+                }
                 if (IsSameTablet(tablet, ti)) {
                     if (tablet->IsLeader()) {
                         tablet->GetLeader().KnownGeneration = ti.GetGeneration();
                     }
-                    tablet->BecomeStarting(node.Id);
+                    tablet->BecomeStarting(node.Id, EHiveEventReason::SyncTablets);
                     foundTablet(tablet, "starting");
                     continue;
                 }
@@ -122,11 +137,14 @@ public:
             auto tabletId = std::pair<TTabletId, TFollowerId>(ti.GetTabletId(), ti.GetFollowerId());
             TTabletInfo* tablet = Self->FindTablet(tabletId);
             if (tablet) {
+                if (rejectUnexpectedTablet(*tablet, ti)) {
+                    continue;
+                }
                 if (IsSameTablet(tablet, ti)) {
                     if (tablet->IsLeader()) {
                         tablet->GetLeader().KnownGeneration = ti.GetGeneration();
                     }
-                    if (tablet->BecomeRunning(node.Id)) {
+                    if (tablet->BecomeRunning(node.Id, EHiveEventReason::SyncTablets)) {
                         if (tablet->IsLeader()) {
                             db.Table<Schema::Tablet>().Key(tablet->GetLeader().Id).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet->NodeId),
                                                                                           NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(tablet->GetLeader().KnownGeneration));

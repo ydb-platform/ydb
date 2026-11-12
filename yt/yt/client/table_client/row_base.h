@@ -165,6 +165,21 @@ inline bool IsStringLikeType(ESimpleLogicalValueType type)
     }
 }
 
+constexpr bool IsTzType(ESimpleLogicalValueType type)
+{
+    switch (type) {
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            return true;
+        default:
+            return false;
+    }
+}
+
 inline int GetIntegralTypeBitWidth(ESimpleLogicalValueType type)
 {
     switch (type) {

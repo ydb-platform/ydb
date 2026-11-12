@@ -1,13 +1,14 @@
 #include "utils.h"
 
-#include <contrib/libs/fmt/include/fmt/format.h>
-#include <library/cpp/json/yson/json2yson.h>
-
-#include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
+#include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/metering/bill_record.h>
 #include <ydb/core/metering/metering.h>
+
 #include <ydb/public/lib/fq/scope.h>
+
+#include <contrib/libs/fmt/include/fmt/format.h>
+#include <library/cpp/json/yson/json2yson.h>
 
 namespace NFq {
 
@@ -29,7 +30,8 @@ NYql::TIssues ValidateWriteResultData(const TString& resultId, const Ydb::Result
 
     const auto hardLimit = TInstant::Now() + ttl;
     if (deadline > hardLimit) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "deadline " + deadline.ToString() + " must be less than " + hardLimit.ToString()));
+        issues.AddIssue(
+            MakeErrorIssue(TIssuesIds::BAD_REQUEST, "deadline " + deadline.ToString() + " must be less than " + hardLimit.ToString()));
     }
 
     return issues;
@@ -49,7 +51,8 @@ NYql::TIssues ValidateGetTask(const TString& owner, const TString& hostName)
     return issues;
 }
 
-NYql::TIssues ValidatePingTask(const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TDuration& ttl)
+NYql::TIssues ValidatePingTask(
+    const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TDuration& ttl)
 {
     NYql::TIssues issues;
     if (!scope) {
@@ -66,17 +69,14 @@ NYql::TIssues ValidatePingTask(const TString& scope, const TString& queryId, con
 
     const auto hardLimit = TInstant::Now() + ttl;
     if (deadline > hardLimit) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "deadline " + deadline.ToString() + " must be less than " + hardLimit.ToString()));
+        issues.AddIssue(
+            MakeErrorIssue(TIssuesIds::BAD_REQUEST, "deadline " + deadline.ToString() + " must be less than " + hardLimit.ToString()));
     }
 
     return issues;
 }
 
-NYql::TIssues ValidateNodesHealthCheck(
-    const TString& tenant,
-    const TString& instanceId,
-    const TString& hostName
-    )
+NYql::TIssues ValidateNodesHealthCheck(const TString& tenant, const TString& instanceId, const TString& hostName)
 {
     NYql::TIssues issues;
     if (!tenant) {
@@ -94,7 +94,8 @@ NYql::TIssues ValidateNodesHealthCheck(
     return issues;
 }
 
-NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, const TString& scope, const TString& tenant, const TString& owner)
+NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(
+    const TString& queryId, const TString& scope, const TString& tenant, const TString& owner)
 {
     NYql::TIssues issues;
     if (!queryId) {
@@ -125,8 +126,8 @@ void ExcludeFromBilling(const NJson::TJsonValue& jsonTree, const TString& source
     }
 }
 
-std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable, const TString& jobId, const TString& scope, const TString& sourceId) {
-
+std::vector<TString> GetMeteringRecords(
+    const TString& statistics, bool billable, const TString& jobId, const TString& scope, const TString& sourceId) {
     std::vector<TString> result;
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
@@ -153,27 +154,25 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
         }
     }
 
-    auto ingressMBytes = (ingress + 1_MB - 1) >> 20; // round up to 1 MB boundary
+    auto ingressMBytes = (ingress + 1_MB - 1) >> 20;   // round up to 1 MB boundary
     if (ingressMBytes < 10) {
         ingressMBytes = 10;
     }
 
     auto now = Now();
     result.emplace_back(NKikimr::TBillRecord()
-        .Id(jobId + "_i")
-        .Schema("yq.ingress.v1")
-        .FolderId(TScope(scope).ParseFolder())
-        .SourceWt(now)
-        .SourceId(sourceId)
-        .Usage(NKikimr::TBillRecord::TUsage()
-            .Type(NKikimr::TBillRecord::TUsage::EType::Delta)
-            .Unit(NKikimr::TBillRecord::TUsage::EUnit::MByte)
-            .Quantity(ingressMBytes)
-            .Start(now)
-            .Finish(now)
-        )
-        .ToString()
-    );
+                            .Id(jobId + "_i")
+                            .Schema("yq.ingress.v1")
+                            .FolderId(TScope(scope).ParseFolder())
+                            .SourceWt(now)
+                            .SourceId(sourceId)
+                            .Usage(NKikimr::TBillRecord::TUsage()
+                                       .Type(NKikimr::TBillRecord::TUsage::EType::Delta)
+                                       .Unit(NKikimr::TBillRecord::TUsage::EUnit::MByte)
+                                       .Quantity(ingressMBytes)
+                                       .Start(now)
+                                       .Finish(now))
+                            .ToString());
 
     return result;
 }
@@ -218,16 +217,16 @@ void AggregateNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, co
     if (count) {
         writer.OnKeyedItem(key);
         writer.OnBeginMap();
-            writer.OnKeyedItem("sum");
-            writer.OnInt64Scalar(sum);
-            writer.OnKeyedItem("count");
-            writer.OnInt64Scalar(count);
-            writer.OnKeyedItem("avg");
-            writer.OnInt64Scalar(sum / count);
-            writer.OnKeyedItem("min");
-            writer.OnInt64Scalar(min);
-            writer.OnKeyedItem("max");
-            writer.OnInt64Scalar(max);
+        writer.OnKeyedItem("sum");
+        writer.OnInt64Scalar(sum);
+        writer.OnKeyedItem("count");
+        writer.OnInt64Scalar(count);
+        writer.OnKeyedItem("avg");
+        writer.OnInt64Scalar(sum / count);
+        writer.OnKeyedItem("min");
+        writer.OnInt64Scalar(min);
+        writer.OnKeyedItem("max");
+        writer.OnInt64Scalar(max);
         writer.OnEndMap();
     }
 }
@@ -259,7 +258,7 @@ void AggregateStatisticsBySources(const NJson::TJsonValue& root, THashMap<TStrin
                 continue;
             }
             if (auto valuePtr = partStats.GetValueByPath(ingressPath)) {
-                TString valueKey{partKey, matchedPrefix.size(), partKey.size() - matchedPrefix.size()};
+                TString valueKey{ partKey, matchedPrefix.size(), partKey.size() - matchedPrefix.size() };
                 aggregatedStats[valueKey] += valuePtr->GetIntegerSafe();
                 break;
             }
@@ -267,13 +266,9 @@ void AggregateStatisticsBySources(const NJson::TJsonValue& root, THashMap<TStrin
     }
 }
 
-constexpr std::initializer_list<std::pair<std::string_view, std::string_view>> FieldToPath = {
-        std::pair("IngressBytes"sv, "IngressBytes.sum"sv),
-        {"EgressBytes", "EgressBytes.sum"},
-        {"InputBytes", "InputBytes.sum"},
-        {"OutputBytes", "OutputBytes.sum"},
-        {"CpuTimeUs", "CpuTimeUs.sum"},
-        {"ExecutionTimeUs", "ExecutionTimeUs.sum"}};
+constexpr std::initializer_list<std::pair<std::string_view, std::string_view>> FieldToPath = { std::pair("IngressBytes"sv, "IngressBytes.sum"sv),
+    { "EgressBytes", "EgressBytes.sum" }, { "InputBytes", "InputBytes.sum" }, { "OutputBytes", "OutputBytes.sum" },
+    { "CpuTimeUs", "CpuTimeUs.sum" }, { "ExecutionTimeUs", "ExecutionTimeUs.sum" } };
 
 void CollectTotalStatistics(const NJson::TJsonValue& stats, THashMap<TString, i64>& aggregatedStatistics) {
     for (const auto& [rootKey, graph] : stats.GetMap()) {
@@ -281,9 +276,9 @@ void CollectTotalStatistics(const NJson::TJsonValue& stats, THashMap<TString, i6
         for (auto [field, path] : FieldToPath) {
             if (auto jsonField = graph.GetValueByPath(fmt::format("{}{}", (isV1 ? "TaskRunner.Stage=Total." : ""), path))) {
                 if (jsonField->IsInteger()) {
-                    aggregatedStatistics[TString{field}] += jsonField->GetInteger();
+                    aggregatedStatistics[TString{ field }] += jsonField->GetInteger();
                 } else {
-                    aggregatedStatistics[TString{field}] += ParseDuration(jsonField->GetStringSafe()).MicroSeconds();
+                    aggregatedStatistics[TString{ field }] += ParseDuration(jsonField->GetStringSafe()).MicroSeconds();
                 }
             }
         }
@@ -295,11 +290,10 @@ void CollectDetalizationStatistics(const NJson::TJsonValue& stats, THashMap<TStr
         AggregateStatisticsBySources(graph, aggregatedStatistics);
     }
 }
-}
+}   // namespace
 
 void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest,
-                              const THashMap<TString, i64>& aggregatedStats,
-                              TDuration executionTime) {
+    const THashMap<TString, i64>& aggregatedStats, TDuration executionTime) {
     for (const auto& [field, stat] : aggregatedStats) {
         auto& newStat = *dest.Add();
         newStat.set_name(field);
@@ -310,7 +304,8 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
     execTime.set_value(executionTime.MicroSeconds());
 }
 
-void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr, TDuration executionTime) {
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest,
+    std::string_view statsStr, TDuration executionTime) {
     NJson::TJsonValue statsJson;
     if (!NJson::ReadJsonFastTree(statsStr, &statsJson)) {
         return;
@@ -327,7 +322,8 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
     PackStatisticsToProtobuf(dest, aggregatedStatistics, executionTime);
 }
 
-TStatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {
+TStatsValuesList ExtractStatisticsFromProtobuf(
+    const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {
     TStatsValuesList statPairs;
     statPairs.reserve(statsProto.size());
     for (const auto& stat : statsProto) {
@@ -350,13 +346,15 @@ TStringBuilder& operator<<(TStringBuilder& builder, const TStatistics& statistic
     return builder;
 }
 
-void AddTransientIssues(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* protoIssues, NYql::TIssues&& issues) {
-    for (const auto& issue: *protoIssues) {
+void AddTransientIssues(::google::protobuf::RepeatedPtrField<::Ydb::Issue::IssueMessage>* protoIssues, NYql::TIssues&& issues) {
+    for (const auto& issue : *protoIssues) {
         issues.AddIssue(NYql::IssueFromMessage(issue));
     }
     NYql::TIssues newIssues;
-    std::for_each_n(issues.begin(), std::min(static_cast<unsigned long long>(issues.Size()), 20ULL), [&](auto& issue){ newIssues.AddIssue(issue); });
+    std::for_each_n(issues.begin(), std::min(static_cast<unsigned long long>(issues.Size()), 20ULL), [&](auto& issue) {
+        newIssues.AddIssue(issue);
+    });
     NYql::IssuesToMessage(newIssues, protoIssues);
 }
 
-};
+};   // namespace NFq

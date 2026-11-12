@@ -8,6 +8,7 @@
 #include "schema.h"
 #include "session_info.h"
 #include "sys_params.h"
+#include "worker_lag_expiry_queue.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
@@ -25,6 +26,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
+#include <util/stream/fwd.h>
 
 #include <optional>
 
@@ -53,6 +55,10 @@ public:
 private:
     using Schema = TControllerSchema;
 
+    // TODO(ilnaz): configurable
+    static constexpr ui64 MaxOpenTxIds = 5;
+    static constexpr ui64 MinAllocatedTxIds = 3;
+
     enum class ESchemaBarrierPhase: ui8 {
         Collecting = 1,
         Altering = 2,
@@ -67,6 +73,7 @@ private:
         NKikimrReplication::TSchemaChange Schema;
         THashSet<TWorkerId> ExpectedWorkers;
         THashSet<TWorkerId> ReportedWorkers;
+        THashSet<TWorkerId> IndexMetadataWorkers;
         THashSet<TWorkerId> AppliedWorkers;
         THashSet<TWorkerId> CompletedWorkers;
         THashMap<TWorkerId, ui64> WorkerOffsets;
@@ -111,6 +118,9 @@ private:
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override;
     void OnActivateExecutor(const TActorContext& ctx) override;
     void DefaultSignalTabletActive(const TActorContext& ctx) override;
+    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
+    bool RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 page) const;
+    TStringBuf GetMonitoringBootStatus(const TWorkerId& id) const;
 
     // state functions
     STFUNC(StateInit);
@@ -141,6 +151,8 @@ private:
     void Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProcessQueues::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRestoreSession::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvBootPersistedWorkers::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResumeDeferredAlter::TPtr& ev, const TActorContext& ctx);
@@ -149,6 +161,8 @@ private:
     void Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCancelCreateStream::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCancelDropStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx);
@@ -157,7 +171,9 @@ private:
     void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvIndexBuildProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvSourceOffsetReport::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
@@ -169,7 +185,12 @@ private:
     void ProcessBootQueue(const TActorContext& ctx);
     void ProcessStopQueue(const TActorContext& ctx);
     bool IsValidWorker(const TWorkerId& id) const;
-    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
+    bool HasWorkerSession(const TWorkerId& id, ui32 nodeId) const;
+    bool TracksSourceOffsets(const TWorkerId& id) const;
+    void SetReplicationError(TReplication& replication, const TReplication::ITarget& target) const;
+    void DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb&);
+    void StopWorkersForMismatch(ui64 replicationId, const TActorContext& ctx);
+    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
     void ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id);
     void SendSchemaChangeResult(const TWorkerId& id, const NKikimrReplication::TSchemaChange& schema,
@@ -178,15 +199,26 @@ private:
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     TReplication::ITarget* FindTarget(const TWorkerId& id) const;
+    bool IsHeartbeatParticipant(const TWorkerId& id) const;
+    size_t CountHeartbeatParticipants() const;
+    void AllocateTxIds(const TActorContext& ctx);
+    TVector<TString> GetCommitTablePaths(const TRowVersion& version) const;
+    bool CanCommitIndexBuilds(const TRowVersion& version) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void UpdateLagCounters();
+    void InvalidateLag(const TWorkerId& id);
+    void ScheduleLagExpiry(const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvExpireWorkerLag::TPtr& ev, const TActorContext& ctx);
     void UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats);
     void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
     void ProcessDropStreamQueue(const TActorContext& ctx);
+    void RemoveTarget(NIceDb::TNiceDb& db, TReplication& replication, ui64 targetId);
 
     // local transactions
     class TTxInitSchema;
     class TTxInit;
+    class TTxMonitoring;
     class TTxCreateReplication;
     class TTxAlterReplication;
     class TTxDropReplication;
@@ -202,8 +234,11 @@ private:
     class TTxResolveSecretResult;
     class TTxResolveResourceIdResult;
     class TTxWorkerError;
+    class TTxSourceOffsetReport;
     class TTxAssignTxId;
     class TTxHeartbeat;
+    class TTxIndexBuild;
+    class TTxIndexReady;
     class TTxCommitChanges;
     class TTxRunWorker;
     class TTxRemoveWorker;
@@ -232,9 +267,12 @@ private:
     void RunTxResolveDatabaseResult(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveResourceIdResult(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx);
-    void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx);
+    void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch = false, TMaybe<ui64> sourceCommittedOffset = Nothing());
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
+    void RunTxIndexBuild(const TActorContext& ctx);
+    void RunTxIndexReadyTxId(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx);
+    void RunTxIndexReadyResult(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx);
     void RunTxRunWorker(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
     void RunTxRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     void RunTxCompleteWorkerSet(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
@@ -248,10 +286,17 @@ private:
     void StartSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
     void StopSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key);
     bool HasActiveSchemaBarrier(ui64 replicationId) const;
+    bool HasPendingAlter(ui64 replicationId) const;
     bool HasFreshHeartbeatQuorum(const TSchemaBarrier& barrier) const;
     bool HasPendingTargetFlushTxId(const TSchemaBarrier& barrier) const;
     bool BlocksGlobalCommit(const TSchemaBarrier& barrier) const;
     void AdvanceVerifyingSchemaBarriers(NIceDb::TNiceDb& db);
+
+    void StartIndexReady(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    static bool IsCancelledIndexBuild(const NKikimrReplication::TIndexBuildState& build);
+    static bool IsJoinedIndexBuild(const NKikimrReplication::TIndexBuildState& build, const TRowVersion& version);
+    static void SaveIndexBuild(NIceDb::TNiceDb& db, const std::pair<ui64, ui64>& key,
+        const NKikimrReplication::TIndexBuildState& build);
 
     // other
     template <typename T>
@@ -266,6 +311,8 @@ private:
             Y_VERIFY_S(res.second, "Duplication replication: " << pathId);
         }
 
+        replication->SetLagChangedCallback([this] { UpdateLagCounters(); });
+        UpdateLagCounters();
         return replication;
     }
 
@@ -289,6 +336,16 @@ private:
     TNodesManager NodesManager;
     THashMap<ui32, TSessionInfo> Sessions;
     THashMap<TWorkerId, TWorkerInfo> Workers;
+    struct TProcessedSourceOffset {
+        ui64 NextOffset = 0;
+        TMaybe<ui64> PersistedNextOffset;
+    };
+    THashMap<TWorkerId, TProcessedSourceOffset> ProcessedSourceOffsets;
+    THashSet<ui64> ReplicationsWithSourceOffsetMismatch;
+    TWorkerLagExpiryQueue LagExpiryQueue;
+    bool LagExpiryScheduled = false;
+    THashSet<TWorkerId> StoppingWorkers;
+    static constexpr TDuration WorkerLagTimeout = TDuration::Seconds(60);
     THashSet<std::pair<ui64, ui64>> CompleteWorkerSets;
     TMap<std::pair<ui64, ui64>, TSchemaBarrier> SchemaBarriers;
     THashMap<std::pair<ui64, ui64>, TActorId> SchemaChangeDstAlterers;
@@ -299,6 +356,8 @@ private:
 
     bool ProcessQueuesScheduled = false;
     static constexpr ui32 ProcessBatchLimit = 100;
+    static constexpr TDuration RestoreSessionInterval = TDuration::Seconds(1);
+    static constexpr TDuration BootPersistedWorkersDelay = TDuration::Seconds(10);
 
     // create stream limiter
     TDeque<TActorId> RequestedCreateStream;
@@ -310,6 +369,15 @@ private:
     TActorId TxAllocatorClient;
     TDeque<ui64> AllocatedTxIds; // got from tx allocator
     bool AllocateTxIdInFlight = false;
+    TMap<std::pair<ui64, ui64>, NKikimrReplication::TIndexBuildState> IndexBuilds;
+    THashMap<TWorkerId, NKikimrReplication::TIndexBuildProgress> IndexBuildProgress;
+    TDeque<TEvService::TEvIndexBuildProgress::TPtr> PendingIndexBuildProgress;
+    TDeque<TEvService::TEvGetTxId::TPtr> PendingIndexTxIds;
+    THashMap<ui64, std::pair<ui64, ui64>> IndexCommits;
+    THashSet<ui64> CompletedIndexCommits;
+    THashMap<std::pair<ui64, ui64>, TActorId> IndexReadyActors;
+    bool IndexBuildTxInFlight = false;
+    TMap<ui64, TRowVersion> CommittedVersions; // Completed global frontier per replication.
     TMap<TRowVersion, ui64> AssignedTxIds; // tx ids assigned to version
     TMap<TRowVersion, THashSet<ui32>> PendingTxId;
     bool AssignTxIdInFlight = false;

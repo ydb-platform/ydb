@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     purecalc_filter.cpp
@@ -22,7 +22,5 @@ PEERDIR(
     yql/essentials/providers/common/schema/parser
     yql/essentials/public/udf
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -23,6 +23,18 @@ for those layers.
 | [device_io_sample.h](device_io_sample.h) | Timing sample exchanged with device estimation |
 | [ya.make](ya.make) | Platform selection; io_uring implementation is built on Linux |
 
+## Legacy backend completion
+
+The libaio and legacy liburing backends in `aio_linux.cpp` report `Ok` only
+when a nonnegative completion byte count equals the requested size; a mismatch
+reports `IOError`. Negative results retain their existing errno mapping. A
+zero-byte result remains valid for the zero-length read used as a PDisk barrier.
+
+The non-Linux MTP backend continues positive short writes at the next unwritten
+byte, without skipping gaps. A failed write or zero progress reports `IOError`
+instead of `Ok`. Its existing read salvage behavior is unchanged. These rules
+do not change the separate `TUringRouter` contract below.
+
 ## TUringRouter ownership and setup
 
 `TUringRouter` owns the duplicated file handle passed to its constructor, its
@@ -62,8 +74,8 @@ Setup runs on one thread before concurrent submission:
 
 1. Probe availability when choosing the backend. Ring creation first tries
    the modern single-issuer/deferred-task-run flags and then a plain ring.
-2. Construct the router and record any `RegisterFile`, `RegisterBuffers` and
-   `SetSampleSink` requests.
+2. Construct the router and record any `RegisterFile`, `RegisterBuffers`,
+   `SetSampleSink` and `SetIoCompletionSink` requests.
 3. Call `Start()` once. The dedicated I/O thread enables the ring and performs
    registrations; `Start()` waits for that work before opening admission.
 4. Check registration success and error accessors before using fixed I/O.
@@ -111,6 +123,12 @@ continues positive short I/O internally. A zero-byte result with data remaining
 becomes `-EIO`; if shutdown prevents an internal continuation, the operation
 completes with `-ECANCELED`. Keep all backing buffers alive until the terminal
 callback.
+
+The optional I/O-completion sink runs once for every positive data CQE, before
+the operation's terminal callback. Each positive short-I/O leg therefore calls
+the sink, while zero-progress and failed CQEs do not. PDisk uses this hook to
+observe successful DDisk/PersistentBuffer physical I/O without capturing actor
+or PDisk lifetime.
 
 `PrepareScatterGather`/`AddIov` support up to 64 segments on Linux, with 16
 stored inline. Fixed-buffer operations use one registered segment. A recycled
@@ -181,9 +199,17 @@ must preserve sender/cookie, payload ownership and final completion on both path
 
 ## Tests
 
-The library target is `ydb/library/pdisk_io`; its Linux unit-test target is
+The library target is `ydb/library/pdisk_io`; its unit-test target is
 `ydb/library/pdisk_io/ut`. Follow repository/personal build rules for invocation.
-[uring_router_ut.cpp](ut/uring_router_ut.cpp) uses temporary files and covers:
+[aio_completion_ut.cpp](ut/aio_completion_ut.cpp) covers completion byte counts
+and scripted partial-write/error sequences on all platforms. Native tests cover
+libaio short and EOF reads on Linux, and delivery of a closed-handle write error
+to the callback on non-Linux platforms. The Linux factory selects libaio; these
+native tests do not exercise the legacy liburing backend. A macOS run does not
+validate either native Linux path.
+
+The Linux-only [uring_router_ut.cpp](ut/uring_router_ut.cpp) uses temporary files
+and covers:
 
 - Queue overload, multiple producers, wake-after-idle and normal I/O errors.
 - Fixed buffers, scatter/gather, retry cursor behavior and timing samples.

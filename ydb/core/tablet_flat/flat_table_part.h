@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "flat_part_scheme.h"
+#include "flat_part_slots.h"
 #include "flat_page_btree_index.h"
 #include "flat_page_flat_index.h"
 #include "flat_page_data.h"
@@ -13,9 +14,28 @@
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
 
+#include <type_traits>
+#include <variant>
+
 namespace NKikimr {
 namespace NTable {
     struct IPages;
+
+    /// Resolves the root TPageLocation from btree meta through page collections.
+    /// For v2 roots (byte-offset), returns the inline location directly.
+    /// For v1 roots (page-index), resolves through the appropriate page collection.
+    /// When LevelCount==0 the root IS a data page (use groupPages);
+    /// when LevelCount>0 the root is a btree index page (use indexPages).
+    inline NPage::TPageLocation GetBTreeRootLocation(
+        const NPage::TBtreeIndexMeta& meta,
+        const NPageCollection::IPageCollection* indexPages,
+        const NPageCollection::IPageCollection* groupPages)
+    {
+        if (meta.HasRootV2()) return meta.RootV2;
+        return (meta.LevelCount() == 0 ? *groupPages : *indexPages).GetLocation(meta.RootV1PageId());
+    }
+
+    using TPageRef = NPage::TPageRef;
 
     /**
      * Cold parts are parts that don't have any metadata loaded into memory,
@@ -83,6 +103,18 @@ namespace NTable {
                     return FlatGroups[groupId.Index];
                 }
             }
+
+            /// Resolves the root TPageLocation from the btree meta through the part's page collections.
+            /// When LevelCount==0 the root IS a data page of the group,
+            /// when LevelCount>0 the root is a btree index page of the group.
+            using TMetaRef = NPage::TBtreeIndexMeta;
+            using TPages = NPageCollection::IPageCollection;
+            NPage::TPageLocation GetRootLocation(const TPart* part, TGroupId groupId) const {
+                const auto& meta = GetBTree(groupId);
+                return ::NKikimr::NTable::GetBTreeRootLocation(meta,
+                    part->GetIndexPageCollection(groupId),
+                    part->GetDataPageCollection(groupId));
+            }
         };
 
         struct TParams {
@@ -98,6 +130,7 @@ namespace NTable {
             TRowVersion MaxRowVersion;
             TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
             TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats;
+            TPartLayout Layout = { };
         };
 
         struct TStat {
@@ -123,6 +156,7 @@ namespace NTable {
             , Stat(stat)
             , GroupsCount(Max(IndexPages.FlatGroups.size(), IndexPages.BTreeGroups.size()))
             , HistoricGroupsCount(Max(IndexPages.FlatHistoric.size(), IndexPages.BTreeHistoric.size()))
+            , Slots(GroupsCount, params.Layout)
             , IndexesRawSize(params.IndexesRawSize)
             , MinRowVersion(params.MinRowVersion)
             , MaxRowVersion(params.MaxRowVersion)
@@ -166,11 +200,87 @@ namespace NTable {
 
         virtual ui64 DataSize() const noexcept = 0;
         virtual ui64 BackingSize() const noexcept = 0;
-        virtual ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
         virtual ui64 GetPageSize(ELargeObj lob, ui64 ref) const = 0;
-        virtual NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
-        virtual ui8 GetGroupChannel(NPage::TGroupId groupId) const = 0;
         virtual ui8 GetPageChannel(ELargeObj lob, ui64 ref) const = 0;
+
+        /**
+         * Page collections of the part addressed by slot, see TPartSlots
+         */
+        virtual const NPageCollection::IPageCollection* GetPageCollection(ui32 slot) const = 0;
+        virtual ui64 GetSlotPageSize(ui32 slot, NPage::TPageId pageId) const = 0;
+        virtual NPage::EPage GetSlotPageType(ui32 slot, NPage::TPageId pageId) const = 0;
+        virtual ui8 GetSlotChannel(ui32 slot) const = 0;
+
+        ui32 DescriptorSlot() const noexcept
+        {
+            return Slots.DescriptorSlot();
+        }
+
+        ui32 DataSlot(NPage::TGroupId groupId) const noexcept
+        {
+            return Slots.DataSlot(groupId);
+        }
+
+        ui32 IndexSlot(NPage::TGroupId groupId) const noexcept
+        {
+            return Slots.IndexSlot(groupId);
+        }
+
+        ui32 OuterSlot() const noexcept
+        {
+            return Slots.OuterSlot();
+        }
+
+        /**
+         * Data pages of the column group
+         */
+        ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const
+        {
+            return GetSlotPageSize(DataSlot(groupId), pageId);
+        }
+
+        NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const
+        {
+            return GetSlotPageType(DataSlot(groupId), pageId);
+        }
+
+        NPage::TPageLocation GetPageLocation(NPage::TPageId pageId, NPage::TGroupId groupId) const
+        {
+            return GetDataPageCollection(groupId)->GetLocation(pageId);
+        }
+
+        const NPageCollection::IPageCollection* GetDataPageCollection(NPage::TGroupId groupId) const
+        {
+            return GetPageCollection(DataSlot(groupId));
+        }
+
+        ui8 GetDataChannel(NPage::TGroupId groupId) const
+        {
+            return GetSlotChannel(DataSlot(groupId));
+        }
+
+        /**
+         * Index pages (flat or b-tree) of the column group
+         */
+        NPage::EPage GetIndexPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const
+        {
+            return GetSlotPageType(IndexSlot(groupId), pageId);
+        }
+
+        NPage::TPageLocation GetIndexPageLocation(NPage::TPageId pageId, NPage::TGroupId groupId) const
+        {
+            return GetIndexPageCollection(groupId)->GetLocation(pageId);
+        }
+
+        const NPageCollection::IPageCollection* GetIndexPageCollection(NPage::TGroupId groupId) const
+        {
+            return GetPageCollection(IndexSlot(groupId));
+        }
+
+        ui8 GetIndexChannel(NPage::TGroupId groupId) const
+        {
+            return GetSlotChannel(IndexSlot(groupId));
+        }
 
     protected:
         // Helper for CloneWithEpoch
@@ -187,6 +297,7 @@ namespace NTable {
             , Stat(src.Stat)
             , GroupsCount(src.GroupsCount)
             , HistoricGroupsCount(src.HistoricGroupsCount)
+            , Slots(src.Slots)
             , IndexesRawSize(src.IndexesRawSize)
             , MinRowVersion(src.MinRowVersion)
             , MaxRowVersion(src.MaxRowVersion)
@@ -206,6 +317,7 @@ namespace NTable {
         const TStat Stat;
         const size_t GroupsCount;
         const size_t HistoricGroupsCount;
+        const TPartSlots Slots;
         const size_t IndexesRawSize;
         const TRowVersion MinRowVersion;
         const TRowVersion MaxRowVersion;
@@ -237,6 +349,30 @@ namespace NTable {
         const TEpoch Epoch;
         const TIntrusiveConstPtr<NPage::TTxStatusPage> TxStatusPage;
     };
+
+    /// Resolve a TPageRef of a data page to a concrete TPageLocation through the part's page collections.
+    inline NPage::TPageLocation ResolvePageLocation(const TPart* part, const TPageRef& ref, NPage::TGroupId groupId) {
+        return std::visit([&](const auto& val) -> NPage::TPageLocation {
+            using T = std::decay_t<decltype(val)>;
+            if constexpr (std::is_same_v<T, NPage::TPageId>) {
+                return part->GetPageLocation(val, groupId);
+            } else {
+                return val;
+            }
+        }, ref);
+    }
+
+    /// Resolve a TPageRef of an index page to a concrete TPageLocation through the part's page collections.
+    inline NPage::TPageLocation ResolveIndexPageLocation(const TPart* part, const TPageRef& ref, NPage::TGroupId groupId) {
+        return std::visit([&](const auto& val) -> NPage::TPageLocation {
+            using T = std::decay_t<decltype(val)>;
+            if constexpr (std::is_same_v<T, NPage::TPageId>) {
+                return part->GetIndexPageLocation(val, groupId);
+            } else {
+                return val;
+            }
+        }, ref);
+    }
 
 }
 }

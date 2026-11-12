@@ -1,13 +1,13 @@
 #pragma once
 
-#include <library/cpp/cache/cache.h>
-#include <library/cpp/threading/future/future.h>
-#include <util/thread/pool.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 
 #include <contrib/libs/re2/re2/re2.h>
+#include <library/cpp/cache/cache.h>
+#include <library/cpp/threading/future/future.h>
+#include <util/thread/pool.h>
 
 #include <memory>
 #include <variant>
@@ -15,7 +15,7 @@
 
 namespace NYql {
 
-template<typename T>
+template <typename T>
 class TIterator {
 public:
     virtual T Next() = 0;
@@ -27,7 +27,10 @@ public:
 
 namespace NS3Lister {
 
-enum class ES3PatternVariant { FilePattern, PathPattern };
+enum class ES3PatternVariant {
+    FilePattern,
+    PathPattern
+};
 
 enum class ES3PatternType {
     /**
@@ -45,17 +48,17 @@ enum class ES3PatternType {
 
 class TSharedListingContext {
 public:
-    TSharedListingContext(
-        size_t callbackThreadCount, size_t callbackPerThreadQueueSize, size_t regexpCacheSize)
+    TSharedListingContext(size_t callbackThreadCount, size_t callbackPerThreadQueueSize, size_t regexpCacheSize)
         : ThreadPoolEnabled(callbackThreadCount != 0)
         , RegexpCacheEnabled(regexpCacheSize != 0)
-        , RegexpCache(regexpCacheSize) {
+        , RegexpCache(regexpCacheSize)
+    {
         if (ThreadPoolEnabled) {
             CallbackProcessingPool.Start(callbackThreadCount, callbackPerThreadQueueSize);
         }
     }
 
-    template<typename F>
+    template <typename F>
     void SubmitCallbackProcessing(F&& f) {
         if (ThreadPoolEnabled && CallbackProcessingPool.AddFunc(std::forward<F>(f))) {
             return;
@@ -73,7 +76,7 @@ public:
         } else {
             auto re = std::make_shared<RE2>(re2::StringPiece(regexp), RE2::Options());
             Y_ENSURE(re->ok());
-            auto wLock = TWriteGuard{RWLock};
+            auto wLock = TWriteGuard{ RWLock };
             RegexpCache.Insert(regexp, re);
             return re;
         }
@@ -87,7 +90,7 @@ public:
 
 private:
     std::shared_ptr<RE2> GetRegexp(const TString& regexp) {
-        auto lock = TReadGuard{RWLock};
+        auto lock = TReadGuard{ RWLock };
         if (auto it = RegexpCache.Find(regexp); it != RegexpCache.End()) {
             return *it;
         } else {
@@ -119,18 +122,18 @@ struct TDirectoryListEntry {
 
 class TListEntries {
 public:
-    [[nodiscard]] size_t Size() const { return Objects.size() + Directories.size(); }
-    [[nodiscard]] bool Empty() const { return Objects.empty() && Directories.empty(); }
+    [[nodiscard]] size_t Size() const {
+        return Objects.size() + Directories.size();
+    }
+
+    [[nodiscard]] bool Empty() const {
+        return Objects.empty() && Directories.empty();
+    }
 
     TListEntries& operator+=(TListEntries&& other) {
-        Objects.insert(
-            Objects.end(),
-            std::make_move_iterator(other.Objects.begin()),
-            std::make_move_iterator(other.Objects.end()));
+        Objects.insert(Objects.end(), std::make_move_iterator(other.Objects.begin()), std::make_move_iterator(other.Objects.end()));
         Directories.insert(
-            Directories.end(),
-            std::make_move_iterator(other.Directories.begin()),
-            std::make_move_iterator(other.Directories.end()));
+            Directories.end(), std::make_move_iterator(other.Directories.begin()), std::make_move_iterator(other.Directories.end()));
         ListedObjectSize += other.ListedObjectSize;
         return *this;
     }
@@ -138,18 +141,20 @@ public:
 public:
     std::vector<TObjectListEntry> Objects;
     std::vector<TDirectoryListEntry> Directories;
-    ui64 ListedObjectSize = 0; // total size of all found object, maybe incomplete, intended for use with CBO
+    ui64 ListedObjectSize = 0;   // total size of all found object, maybe incomplete, intended for use with CBO
 };
 
 enum class EListError {
     GENERAL,
     LIMIT_EXCEEDED
 };
+
 struct TListError {
     EListError Type;
     TIssues Issues;
     ui64 ListedObjectSize = 0;
 };
+
 using TListResult = std::variant<TListEntries, TListError>;
 
 struct TListingRequest {
@@ -162,41 +167,28 @@ struct TListingRequest {
 
 IOutputStream& operator<<(IOutputStream& stream, const TListingRequest& request);
 
-class IS3Lister : public TIterator<NThreading::TFuture<TListResult>> {
+class IS3Lister: public TIterator<NThreading::TFuture<TListResult>> {
 public:
     using TPtr = std::shared_ptr<IS3Lister>;
 };
 
-IS3Lister::TPtr MakeS3Lister(
-    const IHTTPGateway::TPtr& httpGateway,
-    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
-    const TListingRequest& listingRequest,
-    const TMaybe<TString>& delimiter,
-    bool allowLocalFiles,
-    NActors::TActorSystem* actorSystem,
-    TSharedListingContextPtr sharedCtx = nullptr,
-    IHttpRequestContext::TPtr requestContext = nullptr);
+IS3Lister::TPtr MakeS3Lister(const IHTTPGateway::TPtr& httpGateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
+    const TListingRequest& listingRequest, const TMaybe<TString>& delimiter, bool allowLocalFiles, NActors::TActorSystem* actorSystem,
+    TSharedListingContextPtr sharedCtx = nullptr, IHttpRequestContext::TPtr requestContext = nullptr);
 
 class IS3ListerFactory {
 public:
     using TPtr = std::shared_ptr<IS3ListerFactory>;
 
-    virtual NThreading::TFuture<NS3Lister::IS3Lister::TPtr> Make(
-        const IHTTPGateway::TPtr& httpGateway,
-        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
-        const NS3Lister::TListingRequest& listingRequest,
-        const TMaybe<TString>& delimiter,
+    virtual NThreading::TFuture<NS3Lister::IS3Lister::TPtr> Make(const IHTTPGateway::TPtr& httpGateway,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy, const NS3Lister::TListingRequest& listingRequest, const TMaybe<TString>& delimiter,
         bool allowLocalFiles) = 0;
 
     virtual ~IS3ListerFactory() = default;
 };
 
-IS3ListerFactory::TPtr MakeS3ListerFactory(
-    size_t maxParallelOps,
-    size_t callbackThreadCount,
-    size_t callbackPerThreadQueueSize,
-    size_t regexpCacheSize,
-    NActors::TActorSystem* actorSystem);
+IS3ListerFactory::TPtr MakeS3ListerFactory(size_t maxParallelOps, size_t callbackThreadCount, size_t callbackPerThreadQueueSize,
+    size_t regexpCacheSize, NActors::TActorSystem* actorSystem);
 
-} // namespace NS3Lister
-} // namespace NYql
+}   // namespace NS3Lister
+}   // namespace NYql

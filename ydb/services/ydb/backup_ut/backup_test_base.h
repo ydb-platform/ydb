@@ -14,6 +14,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/is_in.h>
 #include <util/generic/maybe.h>
+#include <util/system/env.h>
 #include <util/system/sanitizers.h>
 
 #define YDB_SDK_CLIENT(type, funcName)                               \
@@ -27,6 +28,15 @@
         return *Y_CAT(funcName, Instance);                           \
     }                                                                \
     /**/
+
+inline void ConfigureBackupTestLogging(NKikimr::TTestActorRuntime& runtime) {
+    if (GetEnv("YDB_TEST_BACKUP_VERBOSE") == "1") {
+        for (auto service : {NKikimrServices::TX_PROXY, NKikimrServices::EXPORT,
+                             NKikimrServices::IMPORT, NKikimrServices::FLAT_TX_SCHEMESHARD}) {
+            runtime.SetLogPriority(service, NLog::EPriority::PRI_TRACE);
+        }
+    }
+}
 
 class TBackupTestBaseFixture : public NUnitTest::TBaseFixture {
 public:
@@ -54,6 +64,8 @@ protected:
     YDB_SDK_CLIENT(NYdb::NTable::TTableClient, YdbTableClient);
     YDB_SDK_CLIENT(NYdb::NScheme::TSchemeClient, YdbSchemeClient);
     YDB_SDK_CLIENT(NYdb::NOperation::TOperationClient, YdbOperationClient);
+
+    TString Table0Path = "/Root/RecursiveFolderProcessing/Table0";
 
     TString DebugListDir(const TString& path) { // Debug listing for specified dir
         auto res = YdbSchemeClient().ListDirectory(path).GetValueSync();
@@ -112,10 +124,7 @@ protected:
             Server_.ConstructInPlace(AppConfig());
 
             auto& runtime = *Server_->GetRuntime();
-            runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_TRACE);
+            ConfigureBackupTestLogging(runtime);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
             runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
@@ -196,7 +205,7 @@ private:
         const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
 
         auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
-            CREATE TABLE `/Root/RecursiveFolderProcessing/Table0` (
+            CREATE TABLE `{table0_path}` (
                 key Uint32 NOT NULL,
                 value String,
                 PRIMARY KEY (key)
@@ -222,7 +231,7 @@ private:
                 STORE = {store}
                 {partition_count}
             );
-        )sql", "store"_a = isOlap ? "COLUMN" : "ROW",
+        )sql", "table0_path"_a = Table0Path.c_str(), "store"_a = isOlap ? "COLUMN" : "ROW",
         "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 

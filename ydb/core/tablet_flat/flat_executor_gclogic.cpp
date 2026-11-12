@@ -438,6 +438,9 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
 ui64 TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
     if (GcWaitFor > 0)
         return 0;
+    // A retry is already scheduled; proceeding would cancel the backoff.
+    if (PendingRetry)
+        return 0;
     ui64 droppedMarks = 0;
 
     MinUncollectedTime = uncommittedTime;
@@ -585,6 +588,7 @@ TDuration TExecutorGCLogic::TChannelInfo::TryScheduleGcRequestRetries() {
 
 void TExecutorGCLogic::TChannelInfo::RetryGcRequests(const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
     if (PendingRetry) {
+        PendingRetry = false;
         SendCollectGarbage(MinUncollectedTime, tabletStorageInfo, channel, generation, ctx);
     }
 }

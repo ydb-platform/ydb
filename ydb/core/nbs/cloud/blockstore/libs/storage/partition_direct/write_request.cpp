@@ -126,6 +126,7 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
         Bundle->GetVChunkRange(),
         IndirectWriteReplyTimeout,
         Bundle->GetSgList(),
+        TBlockChecksums(),
         Bundle->GetSpan().GetTraceId(),
         [self = shared_from_this()]   //
         (const TDBGWriteBlocksToManyPBuffersResponse& response)
@@ -289,6 +290,7 @@ void TWriteRequestExecutor::SendDirectWriteRequest(THostIndex host)
         Bundle->GetPBufferKey(),
         Bundle->GetVChunkRange(),
         Bundle->GetSgList(),
+        TBlockChecksums(),
         span ? span->GetTraceId() : NWilson::TTraceId());
 
     future.Subscribe(
@@ -319,7 +321,12 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
 
     FailedWrites.Set(host);
     auto ender = TEndSpanWithError(std::move(span), response.Error);
+    MaybeSendReplacementDirectWrite(response.Error);
+}
 
+void TWriteRequestExecutor::MaybeSendReplacementDirectWrite(
+    const NProto::TError& error)
+{
     if (IsReplied) {
         return;
     }
@@ -331,8 +338,8 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
             "%s It is impossible to reach a quorum. %s %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
-            FormatError(response.Error).Quote().c_str());
-        Reply(response.Error);
+            FormatError(error).Quote().c_str());
+        Reply(error);
         return;
     }
 
@@ -350,7 +357,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
             "%s All hand-offs attempts are over. %s %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
-            FormatError(response.Error).Quote().c_str());
+            FormatError(error).Quote().c_str());
         return;
     }
 

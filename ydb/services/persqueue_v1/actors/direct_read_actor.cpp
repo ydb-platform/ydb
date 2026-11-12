@@ -6,6 +6,7 @@
 
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
@@ -220,12 +221,15 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
     LOG_D("Got init",
         {"request", ev->Get()->Request.DebugString()});
 
+    const auto& init = ev->Get()->Request.init_request();
+    for (const auto& topic : init.topics_read_settings()) {
+        Request->CountResourcePath(topic.path());
+    }
+
     if (Initing) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "got second init request");
     }
     Initing = true;
-
-    const auto& init = ev->Get()->Request.init_request();
 
     if (!init.topics_read_settings_size()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "no topics in init request");
@@ -299,7 +303,8 @@ void TDirectReadSessionActor::SetupCounters() {
     }
 
     auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
-    subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", ClientPath);
+    subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup(
+        "ConsumerPath", ReadWithoutConsumer ? ClientPath : NPQ::MetricsConsumerName(ClientId));
     const TString name = "sensor";
 
     Errors = subGroup->GetExpiringNamedCounter(name, "Errors", true);

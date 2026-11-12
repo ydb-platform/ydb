@@ -89,7 +89,9 @@ void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, c
     if (!owner.GetBackgroundSessionsManager()->IsSessionComplete(ExportTask->GetClassName(), ::ToString(pathId.GetRawValue()))) {
         return;
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "backup_session_complete_finish_async_propose")("tx_id", GetTxId());
+    YDB_LOG_INFO("",
+        {"event", "backup_session_complete_finish_async_propose"},
+        {"txId", GetTxId()});
     owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()), ctx);
 }
 

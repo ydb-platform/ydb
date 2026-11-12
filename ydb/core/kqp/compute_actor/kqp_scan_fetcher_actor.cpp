@@ -28,14 +28,16 @@ constexpr TDuration PING_PERIOD = TDuration::Seconds(30);
 
 TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TComputeRuntimeSettings& settings,
     std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
-    const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& database,
+    const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& databasePath,
+    const std::optional<NScheduler::NHdrf::TFullPoolId>& schedulerPool,
     const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
     const TCPULimits& cpuLimits, const bool useBatchPool)
     : Meta(meta)
     , ScanDataMeta(Meta)
     , RuntimeSettings(settings)
-    , Database(database)
+    , DatabasePath(databasePath)
+    , SchedulerPool(schedulerPool)
     , TxId(txId)
     , LockTxId(lockTxId)
     , LockNodeId(lockNodeId)
@@ -567,6 +569,11 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
         ev->Record.SetReverse(Meta.GetReverse());
     }
     ev->Record.SetItemsLimit(Meta.GetItemsLimit());
+    if (Meta.GetRequireSortedRead()) {
+        YQL_ENSURE(Meta.HasOptionalSorting() && Meta.GetOptionalSorting() != (ui32)ERequestSorting::NONE);
+        YQL_ENSURE(Meta.ReadsSize() == 1 && ComputeActorIds.size() == 1);
+        ev->Record.SetCSScanPolicy("PLAIN");
+    }
 
     if (Meta.GroupByColumnNamesSize()) {
         ev->Record.MutableComputeShardingPolicy()->SetShardsCount(ComputeActorIds.size());
@@ -586,6 +593,11 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     if (const auto cpuGroupThreadsLimit = CPULimits.GetCPUGroupThreadsLimitOptional()) {
         ev->Record.SetCpuGroupThreadsLimit(*cpuGroupThreadsLimit);
         ev->Record.SetCpuGroupName(CPULimits.GetCPUGroupName());
+    }
+
+    if (SchedulerPool) {
+        ev->Record.SetDatabaseId(SchedulerPool->DatabaseId);
+        ev->Record.SetPoolId(SchedulerPool->PoolId);
     }
 
     if (UseBatchPool) {
@@ -779,7 +791,7 @@ void TKqpScanFetcherActor::ResolveShard(TShardState& state) {
         {"resolveAttempt", state.ResolveAttempt});
 
     auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
-    request->DatabaseName = Database;
+    request->DatabaseName = DatabasePath;
     request->ResultSet.emplace_back(std::move(keyDesc));
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request), 0, 0, ScanSpan.GetTraceId());
 }

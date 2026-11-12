@@ -16,7 +16,7 @@ class TAlterUserAttrs: public TSubOperationBase {
 public:
     using TSubOperationBase::TSubOperationBase;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& userAttrsPatch = Transaction.GetAlterUserAttributes();
@@ -48,8 +48,15 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderOperation()
-                .IsCommonSensePath(); //forbid alter user attrs at impl index tables and indexes
+                .NotUnderOperation();
+
+            if (checks) {
+                if (path.Base()->IsCdcStream()) {
+                    checks.IsInsideCdcStreamPath();
+                } else {
+                    checks.IsCommonSensePath(); // forbid implementation tables and topics
+                }
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -58,6 +65,17 @@ public:
         }
 
         TString errStr;
+
+        if (path.Base()->IsLikeDirectory()) {
+            for (const auto& attr : userAttrsPatch.GetUserAttributes()) {
+                if (attr.GetKey() == ATTR_OMIT_BACKUP && attr.HasValue()) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                        << "UserAttributes: attribute '" << ATTR_OMIT_BACKUP
+                        << "' is not supported on directory-like objects");
+                    return result;
+                }
+            }
+        }
 
         TUserAttributes::TPtr alterData = path.Base()->UserAttrs->CreateNextVersion();
         if (!alterData->ApplyPatch(EUserAttributesOp::AlterUserAttrs, userAttrsPatch, errStr) ||
@@ -89,7 +107,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterUserAttrs");
     }
 

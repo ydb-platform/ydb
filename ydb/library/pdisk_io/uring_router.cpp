@@ -828,6 +828,10 @@ ui32 TUringRouter::ReapCompletions() {
                 SampleSink(sample);
             }
 
+            if (IoCompletionSink && result > 0) {
+                IoCompletionSink();
+            }
+
             if (result > 0) {
                 op->AdvanceIov(result);
                 if (op->GetOperationBytes() != 0) {

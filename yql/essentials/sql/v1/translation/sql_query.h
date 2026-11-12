@@ -23,6 +23,10 @@ public:
 
     bool Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber);
 
+    bool HasSqlStatements() const {
+        return HasSqlStatements_;
+    }
+
 private:
     bool DeclareStatement(const TRule_declare_stmt& stmt);
     bool ExportStatement(const TRule_export_stmt& stmt);
@@ -71,6 +75,7 @@ private:
 
     const bool TopLevel_;
     const bool AllowTopLevelPragmas_;
+    bool HasSqlStatements_ = false;
 };
 
 bool IsYqlSelectCompatiblePragma(TStringBuf prefix, TStringBuf pragma);

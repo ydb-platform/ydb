@@ -111,6 +111,9 @@ def _convert_legacy_storage_state(data):
         pdisk.id.pdisk_id = source.PDiskId
         _, pdisk.slot_size_in_units = common.get_pdisk_inferred_settings(source)
         pdisk.enforced_dynamic_slot_size = source.PDiskMetrics.EnforcedDynamicSlotSize
+        pdisk.expected_slot_size = source.ExpectedSlotSize
+        if source.PDiskMetrics.HasField('UserChunkPoolSize'):
+            pdisk.user_chunk_pool_size = source.PDiskMetrics.UserChunkPoolSize
 
     return result
 
@@ -268,9 +271,11 @@ def do(args):
 
         pdisk = pdisk_map.get((vdisk.slot_id.node_id, vdisk.slot_id.pdisk_id))
         vdisk_slot_size = 0
-        if pdisk is not None and pdisk.enforced_dynamic_slot_size > 0:
-            weight = common.get_vslot_owner_weight(group.size_in_units, pdisk.slot_size_in_units)
-            vdisk_slot_size = pdisk.enforced_dynamic_slot_size * weight
+        if pdisk is not None:
+            vdisk_slot_size = common.get_vslot_quota(
+                group.size_in_units, pdisk.slot_size_in_units, pdisk.enforced_dynamic_slot_size,
+                pdisk.expected_slot_size,
+                pdisk.user_chunk_pool_size if pdisk.HasField('user_chunk_pool_size') else None)
             group_stat['Limit'] += vdisk_slot_size
 
         # Aggregate capacity metrics - use max values
@@ -285,8 +290,9 @@ def do(args):
             #
             # Formula matches blobstorage_pdisk_keeper.h GetVDiskRawUsage()
             #   VDiskRawUsage = 100.0 * (used / hardLimit)
-            # Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(), EnforcedDynamicSlotSize is calculated as:
+            # For slot-weight-based quotas, TPDisk::WhiteboardReport() uses:
             #   EnforcedDynamicSlotSize = min(HardLimit / Weight) across all owners
+            # Fixed quotas instead scale by group units and are capped by the user chunk pool.
             #
             vdisk_raw_usage = vdisk.allocated_size / vdisk_slot_size
             group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'] or 0, vdisk_raw_usage)

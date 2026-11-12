@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ADDINCL(
     contrib/libs/poco/Foundation/include
@@ -6,8 +6,6 @@ ADDINCL(
     ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
     ydb/library/yql/udfs/common/clickhouse/client/src
 )
-
-YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     ydb/core/base

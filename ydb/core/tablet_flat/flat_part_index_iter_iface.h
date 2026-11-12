@@ -18,7 +18,7 @@ namespace NKikimr::NTable {
         virtual bool IsValid() const = 0;
 
         virtual TRowId GetEndRowId() const = 0;
-        virtual TPageId GetPageId() const = 0;
+        virtual TPageLocation GetLocation() const = 0;
         virtual TRowId GetRowId() const = 0;
         virtual TRowId GetNextRowId() const = 0;
 

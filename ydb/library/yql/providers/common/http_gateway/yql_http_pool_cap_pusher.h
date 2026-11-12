@@ -18,10 +18,6 @@ using TPoolSharesProvider = std::function<THashMap<NDq::TWorkScope, double>()>;
 // IHTTPGateway::UpdatePoolCaps. The `default` pool receives the leftover
 // capacity, floored at MaxHandlers * minDefaultFraction.
 NActors::IActor* CreateHttpPoolCapPusher(
-    TPoolSharesProvider provider,
-    IHTTPGateway::TWeakPtr gateway,
-    TDuration period,
-    size_t maxHandlers,
-    double minDefaultFraction);
+    TPoolSharesProvider provider, IHTTPGateway::TWeakPtr gateway, TDuration period, size_t maxHandlers, double minDefaultFraction);
 
-} // namespace NYql
+}   // namespace NYql

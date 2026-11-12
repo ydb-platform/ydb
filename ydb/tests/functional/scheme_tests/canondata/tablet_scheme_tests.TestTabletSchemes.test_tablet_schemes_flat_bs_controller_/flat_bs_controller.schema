@@ -7,11 +7,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 29,
-                "ColumnName": "EnableConfigV2",
-                "ColumnType": "Bool"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -140,13 +135,47 @@
                 "ColumnId": 28,
                 "ColumnName": "ExpectedStorageYamlConfigVersion",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 29,
+                "ColumnName": "EnableConfigV2",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 30,
+                "ColumnName": "DatabaseSpaceBlockColor",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 31,
+                "ColumnName": "DatabaseSpaceUnblockColor",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 32,
+                "ColumnName": "DataCenterStates",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 33,
+                "ColumnName": "BridgeSyncTotalRate",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 34,
+                "ColumnName": "BridgeSyncMaxSyncers",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "AppliedPileOverrides",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    29,
                     1,
                     2,
                     4,
@@ -172,7 +201,14 @@
                     24,
                     26,
                     27,
-                    28
+                    28,
+                    29,
+                    30,
+                    31,
+                    32,
+                    33,
+                    34,
+                    35
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -504,6 +540,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 18,
+                "ColumnName": "FailRealmStates",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 106,
                 "ColumnName": "BlobDepotConfig",
                 "ColumnType": "String"
@@ -563,6 +604,7 @@
                     15,
                     16,
                     17,
+                    18,
                     106,
                     109,
                     110,
@@ -737,6 +779,16 @@
                 "ColumnId": 28,
                 "ColumnName": "DDisk",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 29,
+                "ColumnName": "VDiskHeapAllocatorNumLeadingDisks",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 30,
+                "ColumnName": "PersistentBufferAllocationMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -770,7 +822,9 @@
                     25,
                     26,
                     27,
-                    28
+                    28,
+                    29,
+                    30
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1851,6 +1905,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "EstimatedBytesToCopy",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "TargetGroupId",
                 "ColumnType": "Uint32"
@@ -1885,6 +1944,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
@@ -2143,6 +2203,103 @@
                     3,
                     4,
                     5
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 135,
+        "TableName": "DatabaseSpaceExhaustedPool",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "BoxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "StoragePoolId",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 136,
+        "TableName": "BoxStoragePoolPDiskFilterV2",
+        "TableKey": [
+            1,
+            2,
+            3
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "BoxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "StoragePoolId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Filter",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,

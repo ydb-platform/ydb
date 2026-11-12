@@ -5,10 +5,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 class TestKqprunRecipe(object):
     def test_query_execution(self):
-        with ydb.Driver(
-            endpoint=os.getenv("KQPRUN_ENDPOINT"),
-            database="/Root"
-        ) as driver:
+        with ydb.Driver(endpoint=os.getenv("KQPRUN_ENDPOINT"), database="/Root") as driver:
             driver.wait(timeout=5, fail_fast=True)
 
             with ydb.QuerySessionPool(driver) as pool:

@@ -7,6 +7,8 @@
 
 #include <ydb/library/accessor/positive_integer.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NConveyorComposite {
 
 class TProcessCategory: public TNonCopyable {
@@ -17,6 +19,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TCategorySignals>, Counters);
     THashMap<TString, std::shared_ptr<TProcessScope>> Scopes;
     THashMap<ui64, std::shared_ptr<TProcess>> Processes;
+    THashMap<TSchedulerQueryIdentity, THashSet<ui64>> ProcessesByIdentity;
     std::map<TDuration, std::deque<std::shared_ptr<TProcess>>> WeightedProcesses;
 
     [[nodiscard]] bool RemoveWeightedProcess(const std::shared_ptr<TProcess>& process);
@@ -26,16 +29,8 @@ public:
         return WaitingTasksCount->Val();
     }
 
-    TProcessCategory(const NConfig::TCategory& config, TCounters& counters)
-        : Category(config.GetCategory()) {
-        Counters = counters.GetCategorySignals(Category);
-        RegisterProcess(0, RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)));
-        Counters->WaitingQueueSizeLimit->Set(config.GetQueueSizeLimit());
-    }
-
-    ~TProcessCategory() {
-        UnregisterProcess(0);
-    }
+    TProcessCategory(const NConfig::TCategory& config, TCounters& counters);
+    ~TProcessCategory();
 
     void RegisterTask(const ui64 internalProcessId, std::shared_ptr<ITask>&& task) {
         auto it = Processes.find(internalProcessId);
@@ -51,29 +46,24 @@ public:
 
     void PutTaskResult(TWorkerTaskResult&& result, THashSet<TString>& scopeIds);
 
-    void RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope) {
-        scope->IncProcesses();
-        AFL_VERIFY(Processes.emplace(internalProcessId, std::make_shared<TProcess>(internalProcessId, std::move(scope), WaitingTasksCount)).second);
-    }
-
-    void UnregisterProcess(const ui64 processId) {
-        auto it = Processes.find(processId);
-        AFL_VERIFY(it != Processes.end());
-        Y_UNUSED(RemoveWeightedProcess(it->second));
-        if (it->second->GetScope()->DecProcesses()) {
-            AFL_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));
-        }
-        Processes.erase(it);
-    }
+    void RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope,
+        const TSchedulerQueryIdentity& schedulerQueryIdentity);
+    TSchedulerQueryIdentity UnregisterProcess(ui64 processId);
+    ui64 MoveProcessesToService(const TSchedulerQueryIdentity& identity);
 
     ESpecialTaskCategory GetCategory() const {
         return Category;
     }
 
     bool HasTasks() const;
+    bool HasTasks(const TSchedulerQueryIdentity& identity) const;
+    bool HasProcesses(const TSchedulerQueryIdentity& identity) const;
+    std::optional<TDuration> GetMinProcessUsage(const TSchedulerQueryIdentity& identity, ui64 workerIdx = 0,
+        const std::vector<NConfig::THeavyLimit>& heavyLimits = {}) const;
     void ApplyConfig(const NConfig::TCategory& config);
-    std::optional<TWorkerTask> ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds,
-        const ui64 workerIdx, const std::vector<NConfig::THeavyLimit>& heavyLimits);
+    std::optional<TWorkerTask> ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters,
+        THashSet<TString>& scopeIds, const TSchedulerQueryIdentity& identity,
+        ui64 workerIdx, const std::vector<NConfig::THeavyLimit>& heavyLimits);
     TProcessScope& MutableProcessScope(const TString& scopeName);
     TProcessScope* MutableProcessScopeOptional(const TString& scopeName);
     std::shared_ptr<TProcessScope> GetProcessScopePtrVerified(const TString& scopeName) const;

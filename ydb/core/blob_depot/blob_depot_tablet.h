@@ -6,6 +6,7 @@
 #include "schema.h"
 #include "mon_main.h"
 
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
@@ -354,13 +355,16 @@ namespace NKikimr::NBlobDepot {
                 ScanningIndex,
                 CopyingBlob,
                 UpdatingIndex,
+                PreparingTrashCheck,
                 CheckingTrash,
                 Vacuum,
             };
 
             EPhase Phase = EPhase::Idle;
-            TSet<ui32> Groups;
+            THashSet<ui32> Groups;
             TActorId RequestSender;
+
+            static constexpr ui32 MaxMoveDataKeysPerTx = 10'000;
 
             std::optional<TString> Key;
             ui32 ValueChainIndex = 0;
@@ -377,22 +381,40 @@ namespace NKikimr::NBlobDepot {
             TSet<TBlobSeqId> ProtectedBlobSeqIds;
             bool ApplyingIndexUpdate = false;
 
+            ui64 RecordsScanned = 0;
+
+            enum class ETrashStatus {
+                WaitingForGC,
+                Finished,
+            };
+            std::unordered_set<std::tuple<ui8, ui32>> ChannelGroups;
+
             bool IsInProgress() const {
                 return Phase != EPhase::Idle;
             }
+
+            bool IsBlobMovingInProgress() const {
+                return Phase == EPhase::ScanningIndex ||
+                    Phase == EPhase::CopyingBlob ||
+                    Phase == EPhase::UpdatingIndex;
+            }
         };
 
+        ui64 MoveDataOperationId = 0;
         TMoveDataState MoveData;
         TDeque<TEvTablet::TEvMoveData::TPtr> MoveDataRequestsQueue;
         TActorId CopyBlobActorId;
 
         void Handle(TEvTablet::TEvMoveData::TPtr ev);
         void Handle(TEvMoveDataBlobCopied::TPtr ev);
-        bool ValidateMoveDataGroups(const TSet<ui32>& moveDataGroups, const TActorId& sender) const;
+
+        bool ValidateMoveDataGroups(const THashSet<ui32>& moveDataGroups, const TActorId& sender) const;
         bool NeedMoveBlob(const NKikimrBlobDepot::TBlobLocator& locator) const;
-        void StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& sender);
+        void StartMoveData(THashSet<ui32>&& moveDataGroups, const TActorId& sender);
         void ContinueMoveData();
-        void StartMoveDataBlobCopy();
+        TMoveDataState::ETrashStatus GetTrashStatus();
+        void CheckTrash();
+        bool StartMoveDataBlobCopy();
         void ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId);
         void RestartMoveDataScan();
         void ProcessMoveDataQueue();

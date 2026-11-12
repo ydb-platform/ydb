@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     defs.h
@@ -32,6 +32,7 @@ RECURSE(
     backpressure
     base
     bridge
+    contracts
     crypto
     ddisk
     dsproxy
@@ -42,6 +43,8 @@ RECURSE(
     other
     pdisk
     storagepoolmon
+    subsystem
+    syncer
     testing
     vdisk
 )

@@ -1541,6 +1541,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/.sys/hive_tablets"];["metadata@system"]];
                 [["/Root/.sys/nodes"];["metadata@system"]];
                 [["/Root/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/.sys/query_metrics_one_hour"];["metadata@system"]];
                 [["/Root/.sys/query_metrics_one_minute"];["metadata@system"]];
                 [["/Root/.sys/query_sessions"];["metadata@system"]];
                 [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
@@ -1590,6 +1591,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/Tenant1/.sys/compile_cache_queries"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/nodes"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/query_metrics_one_hour"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/query_metrics_one_minute"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/query_sessions"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/resource_pool_classifiers"];["metadata@system"]];
@@ -1638,6 +1640,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/Tenant2/.sys/compile_cache_queries"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/nodes"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/query_metrics_one_hour"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/query_metrics_one_minute"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/query_sessions"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/resource_pool_classifiers"];["metadata@system"]];
@@ -1900,6 +1903,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/.sys/hive_tablets"];["metadata@system"]];
                 [["/Root/.sys/nodes"];["metadata@system"]];
                 [["/Root/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/.sys/query_metrics_one_hour"];["metadata@system"]];
                 [["/Root/.sys/query_metrics_one_minute"];["metadata@system"]];
                 [["/Root/.sys/query_sessions"];["metadata@system"]];
                 [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
@@ -2168,6 +2172,70 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
+    }
+
+    Y_UNIT_TEST(AuthOwners_DropSubtreeDuringScan) {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+
+        NKqp::TKikimrSettings settings;
+        settings.SetUseRealThreads(false)
+            .SetWithSampleTables(false);
+
+        NKqp::TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto& testClient = kikimr.GetTestClient();
+
+        const TString parent = "/Root/AuthScan";
+        const auto missingPath = SplitPath(parent + "/A");
+
+        kikimr.RunCall([&] {
+            testClient.TestMkDir(parent, "A/Child");
+            testClient.TestMkDir(parent, "ZSurvivor");
+            return true;
+        });
+
+        // Simulate a child disappearing after the scan has listed its parent.
+        bool missingChildInjected = false;
+        auto navigateObserver = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
+            auto& request = *ev->Get()->Request;
+            for (auto& entry : request.ResultSet) {
+                if (entry.Path == missingPath && entry.Operation == TNavigate::OpList) {
+                    UNIT_ASSERT(!missingChildInjected);
+                    UNIT_ASSERT_VALUES_EQUAL(entry.Status, TNavigate::EStatus::Ok);
+                    entry.Status = TNavigate::EStatus::PathErrorUnknown;
+                    ++request.ErrorCount;
+                    missingChildInjected = true;
+                }
+            }
+        });
+
+        auto client = kikimr.GetTableClient();
+        auto it = runtime.WaitFuture(client.StreamExecuteScanQuery(R"(
+            SELECT Path FROM `/Root/.sys/auth_owners`
+            WHERE Path >= '/Root/AuthScan' AND Path < '/Root/AuthScan0'
+        )"));
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        TVector<TString> paths;
+        while (true) {
+            auto part = runtime.WaitFuture(it.ReadNext());
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            if (part.HasResultSet()) {
+                TResultSetParser parser(part.GetResultSet());
+                while (parser.TryNextRow()) {
+                    paths.emplace_back(parser.ColumnParser("Path").GetOptionalUtf8().value());
+                }
+            }
+        }
+
+        UNIT_ASSERT(missingChildInjected);
+        UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(paths[0], parent);
+        UNIT_ASSERT_VALUES_EQUAL(paths[1], parent + "/ZSurvivor");
     }
 
     Y_UNIT_TEST(AuthPermissions) {
@@ -2557,6 +2625,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/.sys/hive_tablets"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/nodes"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/query_metrics_one_hour"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/query_metrics_one_minute"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];
@@ -2609,6 +2678,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/Tenant1/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/nodes"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/query_metrics_one_hour"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/query_metrics_one_minute"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];

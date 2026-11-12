@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -17,6 +17,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base
     ydb/core/cms/console
+    ydb/core/kqp/runtime
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/columnshard/counters
@@ -36,6 +37,7 @@ SRCS(
     ut_config.cpp
     ut_config_subscription.cpp
     ut_runtime_update.cpp
+    ut_scheduler.cpp
     ut_simple.cpp
 )
 

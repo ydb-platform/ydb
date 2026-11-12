@@ -104,6 +104,26 @@ public:
     }
 };
 
+class TGranuleOptimizerLoading: public ITxReader {
+private:
+    using TBase = ITxReader;
+    TGranuleMeta* Self = nullptr;
+
+    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
+        return true;
+    }
+
+    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override;
+
+public:
+    TGranuleOptimizerLoading(const TString& name, TGranuleMeta* self)
+        : TBase(name)
+        , Self(self)
+    {
+        AFL_VERIFY(Self);
+    }
+};
+
 class IGranuleTxReader: public ITxReader {
 private:
     using TBase = ITxReader;

@@ -19,6 +19,7 @@
 #include <util/generic/strbuf.h>
 
 #include <memory>
+#include <optional>
 
 namespace NKikimrConfig {
 class TAppConfig;
@@ -28,15 +29,36 @@ namespace NKikimr {
 // Only used below as a pointer in a factory-function declaration; forward
 // declaration avoids pulling ydb/core/base/blobstorage.h into this header.
 class TTabletStorageInfo;
+namespace NPathAliasing {
+class TPathNormalizer;
+}
 }
 
 namespace NKikimr::NConsole {
 
 // Tenant UserAttribute that enables the usage of database YAML config selectors.
+//
+// Changing this attribute requires cluster administration permissions.
+// This permission is checked when accepting new or changed database configs.
+// Disabling or removing the attribute does not invalidate the accepted config;
+// it remains active until explicitly replaced or cleared.
+//
 // Values: (according to TryFromString<bool>() function logic - IsTrue()/IsFalse())
 //  - "true", "yes", "on", "1"            - enabled
 //  - "false", "no", "off", "0", (absent) - disabled
 constexpr TStringBuf TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS = "allow_database_config_selectors";
+
+// Tenant UserAttribute that enables all config types in database YAML configs.
+//
+// Changing this attribute requires cluster administration permissions.
+// This permission is checked when accepting new or changed database configs.
+// Disabling or removing the attribute does not invalidate the accepted config;
+// it remains active until explicitly replaced or cleared.
+//
+// Values: (according to TryFromString<bool>() function logic - IsTrue()/IsFalse())
+//  - "true", "yes", "on", "1"            - enabled
+//  - "false", "no", "off", "0", (absent) - disabled
+constexpr TStringBuf TENANT_ATTR_ALLOW_ALL_TYPES_IN_DATABASE_CONFIG = "allow_all_types_in_database_config";
 
 namespace TEvConsole {
     enum EEv {
@@ -198,6 +220,14 @@ namespace TEvConsole {
 
     struct TEvSetYamlConfigRequest : public TEventShortDebugPB<TEvSetYamlConfigRequest, NKikimrConsole::TSetYamlConfigRequest, EvSetYamlConfigRequest> {
         using TResponse = TEvSetYamlConfigResponse;
+
+        struct TConsoleCommitContext {
+            TActorId Sender;
+            TActorId PipeServer;
+            ui32 YamlVersion;
+        };
+
+        std::optional<TConsoleCommitContext> ConsoleCommitContext;
     };
 
     struct TEvReplaceYamlConfigResponse : public TEventShortDebugPB<TEvReplaceYamlConfigResponse, NKikimrConsole::TReplaceYamlConfigResponse, EvReplaceYamlConfigResponse> {};
@@ -331,6 +361,8 @@ namespace TEvConsole {
         // produced by the configs dispatcher via an injected OpaqueConfigParser.
         // .second != nullptr - config either not empty and present or not added into map
         THashMap<ui32, std::shared_ptr<const ::google::protobuf::Message>> OpaqueConfigs;
+        // Node-local: absent means no update, engaged-null disables aliases.
+        std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> PathNormalizer;
     };
 
     struct TEvConfigNotificationResponse : public TEventShortDebugPB<TEvConfigNotificationResponse, NKikimrConsole::TConfigNotificationResponse, EvConfigNotificationResponse> {

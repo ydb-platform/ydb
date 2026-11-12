@@ -1,8 +1,10 @@
 #pragma once
 
 #include <array>
+#include <optional>
 
 #include "kqp_tasks_graph.h"
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -379,7 +381,7 @@ struct TStorageTableStats {
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
     ui64 AffectedPartitions = 0;
-    ui64 AffectedRows = 0;
+    std::optional<ui64> AffectedRows;
 };
 
 struct TQueryTableStats {
@@ -414,6 +416,15 @@ struct TAggExecStat {
 
 struct TQueryExecutionStats {
 private:
+    struct TCurrentTaskStats {
+        ui64 MemoryBytes = 0;
+        ui64 ReadIngressBytes = 0;
+    };
+    std::vector<TCurrentTaskStats> CurrentTaskStats;
+    ui64 CurrentMemoryBytes = 0;
+    ui64 CurrentReadIngressBytes = 0;
+    ui64 CurrentStatsSequenceNo = 0;
+    bool CollectCurrentQueryStats = false;
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
     std::unordered_map<ui32, bool> UseLlvmByStageId;
     THashMap<ui32, TNodeExecutionStats> NodeStats;
@@ -462,12 +473,13 @@ public:
     bool CollectStatsByLongTasks = false;
 
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
-        NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs)
+        NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs, bool collectCurrentQueryStats = false)
         : StatsMode(statsMode)
         , TasksGraph(tasksGraph)
         , Result(result)
         , DeadlockTimeoutUs(deadlockTimeoutMs * 1000)
     {
+        CollectCurrentQueryStats = collectCurrentQueryStats;
         HistorySampleCount = 32;
     }
 
@@ -515,6 +527,8 @@ public:
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();
     void ExportAggExecStats(TAggExecStat* metrics);
+    TCurrentQueryResources GetCurrentQueryResources() const;
+    TCurrentExecStatsReport TakeCurrentStats(bool finished = false);
 };
 
 struct TTableStat {
@@ -562,11 +576,12 @@ struct TBatchOperationTableStats {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
+    std::optional<ui64> AffectedRows;
 };
 
 struct TBatchOperationExecutionStats {
 public:
-    explicit TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
+    TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, bool collectAffectedRows);
 
     void TakeExecStats(NYql::NDqProto::TDqExecutionStats&& stats);
 
@@ -574,6 +589,7 @@ public:
 
 public:
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
+    const bool CollectAffectedRows;
 
     // Local stats
     TInstant StartTs = TInstant::Max();

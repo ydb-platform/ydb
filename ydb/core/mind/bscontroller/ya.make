@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     blob_checker.cpp
@@ -10,6 +10,9 @@ SRCS(
     bsc_audit.h
     bsc_audit.cpp
     bridge.cpp
+    bridge_sync_counters.h
+    bridge_storage.cpp
+    bridge_storage.h
     cleanup_stale_storage_entries.cpp
     cluster_balancing.cpp
     cmds_box.cpp
@@ -27,6 +30,8 @@ SRCS(
     config.h
     console_interaction.h
     console_interaction.cpp
+    database_space.cpp
+    database_space.h
     ddisk.cpp
     ddisk_info.cpp
     defs.h
@@ -42,6 +47,9 @@ SRCS(
     group_mapper.cpp
     group_mapper.h
     group_metrics_exchange.cpp
+    group_state.cpp
+    group_state_actor.cpp
+    group_state.h
     impl.h
     indir.h
     init_scheme.cpp
@@ -53,6 +61,7 @@ SRCS(
     mood.h
     mv_object_map.h
     node_report.cpp
+    pile_overrides.cpp
     propose_group_key.cpp
     register_node.cpp
     request_controller_info.cpp

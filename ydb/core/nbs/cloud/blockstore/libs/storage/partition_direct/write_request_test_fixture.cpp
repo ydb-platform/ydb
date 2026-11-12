@@ -41,9 +41,10 @@ void TWriteRequestTestFixture::Init()
          TPBufferKey pBufferKey,
          TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
+         const TBlockChecksums& checksums,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(hostIndex, pBufferKey, traceId, guardedSglist);
+        Y_UNUSED(hostIndex, pBufferKey, traceId, guardedSglist, checksums);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
@@ -64,6 +65,7 @@ void TWriteRequestTestFixture::Init()
             TBlockRange16 range,
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
+            const TBlockChecksums& checksums,
             const NWilson::TTraceId& traceId,
             IDirectBlockGroup::TWriteBlocksToManyPBuffersCallback callback)
     {
@@ -75,6 +77,7 @@ void TWriteRequestTestFixture::Init()
             range,
             replyTimeout,
             guardedSglist,
+            checksums,
             traceId);
 
         // Store the callback so tests can invoke it later to simulate a
@@ -146,10 +149,16 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
             TBlockRange16 range,
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
+            const TBlockChecksums& checksums,
             const NWilson::TTraceId& traceId,
             IDirectBlockGroup::TWriteBlocksToManyPBuffersCallback callback)
     {
-        Y_UNUSED(coordinatorHostIndex, replyTimeout, guardedSglist, traceId);
+        Y_UNUSED(
+            coordinatorHostIndex,
+            replyTimeout,
+            guardedSglist,
+            checksums,
+            traceId);
 
         UNIT_ASSERT_VALUES_EQUAL(UserPBufferKey.Print(), pBufferKey.Print());
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);

@@ -1,4 +1,5 @@
 #include "ydb_metrics_aggregator.h"
+#include "ydb_metrics_mapper.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/testlib/basics/appdata.h>
@@ -18,58 +19,71 @@ namespace {
      * @param[in] runtime The test runtime
      * @param[in] sourceGroupName The name of the counter group for the new counters
      * @param[in] offset The offset for the counter values
+     * @param[in] scope The scope for metric names (Aggregate or Partition)
+     * @param[in] includeLeaderOnly When false, skip LeaderOnly metrics (for follower sources)
      *
      * @return The counters group created for these public counters
      */
     NMonitoring::TDynamicCounterPtr PopulateDataShardPublicCounters(
         TTestBasicRuntime& runtime,
         const TString& sourceGroupName,
-        ui32 offset) {
+        ui32 offset,
+        EYdbMetricNameScope scope = EYdbMetricNameScope::Aggregate,
+        bool includeLeaderOnly = true) {
         auto sourceCountersGroup = runtime.GetAppData(0).Counters->GetSubgroup(
             "counters",
             sourceGroupName);
 
-        // Simple counters
-        const auto setSimpleCounterValue = [&](const char* name, ui64 value) {
+        // Simple counters: row_count (LeaderOnly), size_bytes (LeaderOnly)
+        const auto setSimpleCounterValue = [&](const char* protoName, ui64 value, bool isLeaderOnly) {
+            if (!includeLeaderOnly && isLeaderOnly) {
+                return;
+            }
+            const TString name = MakeYdbMetricName(protoName, scope);
             sourceCountersGroup->GetNamedCounter(
                                    "name",
-                                   name,
+                                   name.c_str(),
                                    false /* derivative */
                                    )
                 ->Set(offset * 1000 + value);
         };
 
-        setSimpleCounterValue("table.datashard.row_count", 1);
-        setSimpleCounterValue("table.datashard.size_bytes", 2);
+        setSimpleCounterValue("table.datashard.row_count", 1, true);
+        setSimpleCounterValue("table.datashard.size_bytes", 2, true);
 
         // Cumulative counters
-        const auto setCumulativeCounterValue = [&](const char* name, ui64 value) {
+        const auto setCumulativeCounterValue = [&](const char* protoName, ui64 value, bool isLeaderOnly) {
+            if (!includeLeaderOnly && isLeaderOnly) {
+                return;
+            }
+            const TString name = MakeYdbMetricName(protoName, scope);
             sourceCountersGroup->GetNamedCounter(
                                    "name",
-                                   name,
+                                   name.c_str(),
                                    true /* derivative */
                                    )
                 ->Set(offset * 1000 + value);
         };
 
-        setCumulativeCounterValue("table.datashard.write.rows", 3);
-        setCumulativeCounterValue("table.datashard.write.bytes", 4);
-        setCumulativeCounterValue("table.datashard.read.rows", 5);
-        setCumulativeCounterValue("table.datashard.read.bytes", 6);
-        setCumulativeCounterValue("table.datashard.erase.rows", 7);
-        setCumulativeCounterValue("table.datashard.erase.bytes", 8);
-        setCumulativeCounterValue("table.datashard.bulk_upsert.rows", 9);
-        setCumulativeCounterValue("table.datashard.bulk_upsert.bytes", 10);
-        setCumulativeCounterValue("table.datashard.scan.rows", 11);
-        setCumulativeCounterValue("table.datashard.scan.bytes", 12);
-        setCumulativeCounterValue("table.datashard.cache_hit.bytes", 13);
-        setCumulativeCounterValue("table.datashard.cache_miss.bytes", 14);
-        setCumulativeCounterValue("table.datashard.consumed_cpu_us", 15);
+        setCumulativeCounterValue("table.datashard.write.rows", 3, true);
+        setCumulativeCounterValue("table.datashard.write.bytes", 4, true);
+        setCumulativeCounterValue("table.datashard.read.rows", 5, false);
+        setCumulativeCounterValue("table.datashard.read.bytes", 6, false);
+        setCumulativeCounterValue("table.datashard.erase.rows", 7, true);
+        setCumulativeCounterValue("table.datashard.erase.bytes", 8, true);
+        setCumulativeCounterValue("table.datashard.bulk_upsert.rows", 9, true);
+        setCumulativeCounterValue("table.datashard.bulk_upsert.bytes", 10, true);
+        setCumulativeCounterValue("table.datashard.scan.rows", 11, false);
+        setCumulativeCounterValue("table.datashard.scan.bytes", 12, false);
+        setCumulativeCounterValue("table.datashard.cache_hit.bytes", 13, false);
+        setCumulativeCounterValue("table.datashard.cache_miss.bytes", 14, false);
+        setCumulativeCounterValue("table.datashard.consumed_cpu_us", 15, false);
 
         // Percentile counters
+        const TString histogramName = MakeYdbMetricName("table.datashard.used_core_percents", scope);
         const auto cpuHistogram = sourceCountersGroup->GetNamedHistogram(
             "name",
-            "table.datashard.used_core_percents",
+            histogramName.c_str(),
             NMonitoring::ExplicitHistogram({
                 0,
                 10,
@@ -1055,4 +1069,110 @@ Y_UNIT_TEST_SUITE(TYdbMetricsAggregatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(reads->Val(), 4010);
         UNIT_ASSERT_VALUES_EQUAL(rows->Val(), 0);
     }
+
+    /**
+     * Verify that the aggregator correctly looks up counters when the source uses Partition scope.
+     */
+    Y_UNIT_TEST(PartitionSourceRollsUpToAggregateTarget) {
+        TTestBasicRuntime runtime(1);
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        // Create source counters with Partition-scope names
+        auto sourceCountersGroup = PopulateDataShardPublicCounters(
+            runtime,
+            "source-partition",
+            1,
+            EYdbMetricNameScope::Partition);
+
+        // Create target counters group (targets always use Aggregate names)
+        auto targetCountersGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        // Create the aggregator
+        auto aggregator = CreateYdbMetricsAggregatorByTabletType(
+            TTabletTypes::DataShard,
+            targetCountersGroup);
+
+        // Add the Partition-scope source
+        aggregator->AddSourceCountersGroup(
+            "source-partition",
+            sourceCountersGroup,
+            /*isFollowerSource=*/false,
+            EYdbMetricNameScope::Partition);
+
+        aggregator->RecalculateAllTargetCounters();
+
+        // Verify that target counters are created under Aggregate names with correct values
+        auto rowCountCounter = GetPublicCounter(targetCountersGroup, "table.datashard.row_count");
+        UNIT_ASSERT_VALUES_EQUAL(rowCountCounter->Val(), 1001);
+
+        auto writeRowsCounter = GetPublicCounter(targetCountersGroup, "table.datashard.write.rows");
+        UNIT_ASSERT_VALUES_EQUAL(writeRowsCounter->Val(), 1003);
+
+        auto readRowsCounter = GetPublicCounter(targetCountersGroup, "table.datashard.read.rows");
+        UNIT_ASSERT_VALUES_EQUAL(readRowsCounter->Val(), 1005);
+
+        // Verify that NO Partition-named counters exist in the target
+        UNIT_ASSERT(!targetCountersGroup->FindNamedCounter("name", "table.datashard.partition.row_count"));
+        UNIT_ASSERT(!targetCountersGroup->FindNamedCounter("name", "table.datashard.partition.read.rows"));
+    }
+
+    /**
+     * Verify that the aggregator correctly handles leader and follower Partition-scope sources.
+     */
+    Y_UNIT_TEST(FollowerPartitionSourceSkipsLeaderOnlyMetrics) {
+        TTestBasicRuntime runtime(1);
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        // Create leader source with all Partition-scope counters
+        auto leaderSource = PopulateDataShardPublicCounters(
+            runtime,
+            "leader-partition",
+            1,
+            EYdbMetricNameScope::Partition,
+            /*includeLeaderOnly=*/true);
+
+        // Create follower source with only non-LeaderOnly Partition-scope counters
+        auto followerSource = PopulateDataShardPublicCounters(
+            runtime,
+            "follower-partition",
+            2,
+            EYdbMetricNameScope::Partition,
+            /*includeLeaderOnly=*/false);
+
+        // Create target counters group
+        auto targetCountersGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        // Create the aggregator
+        auto aggregator = CreateYdbMetricsAggregatorByTabletType(
+            TTabletTypes::DataShard,
+            targetCountersGroup);
+
+        // Add the leader Partition-scope source
+        aggregator->AddSourceCountersGroup(
+            "leader",
+            leaderSource,
+            /*isFollowerSource=*/false,
+            EYdbMetricNameScope::Partition);
+
+        // Add the follower Partition-scope source
+        aggregator->AddSourceCountersGroup(
+            "follower",
+            followerSource,
+            /*isFollowerSource=*/true,
+            EYdbMetricNameScope::Partition);
+
+        aggregator->RecalculateAllTargetCounters();
+
+        // Verify LeaderOnly metrics come from leader only (offset 1)
+        auto rowCountCounter = GetPublicCounter(targetCountersGroup, "table.datashard.row_count");
+        UNIT_ASSERT_VALUES_EQUAL(rowCountCounter->Val(), 1001);
+
+        auto writeRowsCounter = GetPublicCounter(targetCountersGroup, "table.datashard.write.rows");
+        UNIT_ASSERT_VALUES_EQUAL(writeRowsCounter->Val(), 1003);
+
+        // Verify non-LeaderOnly metrics aggregate from both (offset 1 and 2)
+        auto readRowsCounter = GetPublicCounter(targetCountersGroup, "table.datashard.read.rows");
+        UNIT_ASSERT_VALUES_EQUAL(readRowsCounter->Val(), 1005 + 2005);
+    }
+
 } // Y_UNIT_TEST_SUITE(TYdbMetricsAggregatorTest)

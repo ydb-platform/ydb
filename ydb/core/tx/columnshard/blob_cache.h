@@ -6,7 +6,6 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/logoblob.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
-#include <ydb/core/tx/ctor_logger.h>
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -23,8 +22,6 @@ namespace NKikimr::NBlobCache {
 
 using NOlap::TBlobRange;
 using NOlap::TUnifiedBlobId;
-
-using TLogThis = TCtorLogger<NKikimrServices::BLOB_CACHE>;
 
 struct TReadBlobRangeOptions {
     bool CacheAfterRead;

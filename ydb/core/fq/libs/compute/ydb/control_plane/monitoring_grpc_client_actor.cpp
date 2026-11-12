@@ -1,18 +1,16 @@
 #include "ydb_grpc_helpers.h"
 
-#include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
-
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/library/ycloud/api/events.h>
-#include <ydb/library/grpc/actor_client/grpc_service_client.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/ycloud/api/events.h>
+#include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -34,16 +32,19 @@ struct TEvPrivate {
 
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-    struct TEvSelfCheckRequest : NCloud::TEvGrpcProtoRequest<TEvSelfCheckRequest, EvSelfCheckRequest, Ydb::Monitoring::SelfCheckRequest> {};
-    struct TEvSelfCheckResponse : NCloud::TEvGrpcProtoResponse<TEvSelfCheckResponse, EvSelfCheckResponse, Ydb::Monitoring::SelfCheckResponse> {};
+    struct TEvSelfCheckRequest: NCloud::TEvGrpcProtoRequest<TEvSelfCheckRequest, EvSelfCheckRequest, Ydb::Monitoring::SelfCheckRequest> {};
+
+    struct TEvSelfCheckResponse: NCloud::TEvGrpcProtoResponse<TEvSelfCheckResponse, EvSelfCheckResponse, Ydb::Monitoring::SelfCheckResponse> {};
 };
 
-}
+}   // namespace
 
-class TMonitoringGrpcServiceActor : public NActors::TActor<TMonitoringGrpcServiceActor>, NGrpcActorClient::TGrpcServiceClient<Ydb::Monitoring::V1::MonitoringService> {
+class TMonitoringGrpcServiceActor: public NActors::TActor<TMonitoringGrpcServiceActor>,
+                                   NGrpcActorClient::TGrpcServiceClient<Ydb::Monitoring::V1::MonitoringService> {
 public:
     using TBase = NActors::TActor<TMonitoringGrpcServiceActor>;
-    struct TSelfCheckGrpcRequest : TGrpcRequest {
+
+    struct TSelfCheckGrpcRequest: TGrpcRequest {
         static constexpr auto Request = &Ydb::Monitoring::V1::MonitoringService::Stub::AsyncSelfCheck;
         using TRequestEventType = TEvPrivate::TEvSelfCheckRequest;
         using TResponseEventType = TEvPrivate::TEvSelfCheckResponse;
@@ -54,7 +55,8 @@ public:
         , TGrpcServiceClient(settings)
         , Settings(settings)
         , CredentialsProvider(credentialsProvider)
-    {}
+    {
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvYdbCompute::TEvCpuLoadRequest, Handle);
@@ -65,7 +67,8 @@ public:
         auto forwardRequest = std::make_unique<TEvPrivate::TEvSelfCheckRequest>();
         forwardRequest->Request.set_return_verbose_status(true);
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
-        TEvPrivate::TEvSelfCheckRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvSelfCheckRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
+        TEvPrivate::TEvSelfCheckRequest::TPtr forwardEvent =
+            (NActors::TEventHandle<TEvPrivate::TEvSelfCheckRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         MakeCall<TSelfCheckGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;
     }
@@ -136,8 +139,9 @@ private:
     int64_t Cookie = 0;
 };
 
-std::unique_ptr<NActors::IActor> CreateMonitoringGrpcClientActor(const NGrpcActorClient::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
+std::unique_ptr<NActors::IActor> CreateMonitoringGrpcClientActor(
+    const NGrpcActorClient::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
     return std::make_unique<TMonitoringGrpcServiceActor>(settings, credentialsProvider);
 }
 
-}
+}   // namespace NFq

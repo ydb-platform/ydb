@@ -361,6 +361,9 @@ protected:
                        "Mismatch"
                            << " Uploader: " << Uploader.ToString()
                            << " ev->Sender: " << ev->Sender.ToString());
+            // The uploader has replied and is about to die, so a new one may be
+            // registered for the next batch.
+            Uploader = {};
         } else {
             Y_ENSURE(Driver == nullptr);
             return;
@@ -417,6 +420,17 @@ protected:
     }
 
     void Upload(bool isRetry = false) {
+        if (Uploader) {
+            // Only one upload may be in flight: WriteBuf is not cleared until the
+            // current uploader replies, and a late reply from a superseded uploader
+            // would trip the sender check in Handle().
+            YDB_LOG_DEBUG("Upload already in flight, skipping",
+                {"uploaderActorId", Uploader},
+                {"isRetry", isRetry},
+                {"debug", Debug()});
+            return;
+        }
+
         if (isRetry) {
             ++RetryCount;
         } else {
@@ -909,7 +923,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         if (request.GetTabletId() != TabletID()) {
             badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
         }
-        if (!IsStateActive()) {
+        if (!IsStateActive() || IsUserTableWriteBlocked()) {
             badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
         }
         if (!GetUserTables().contains(tableId.PathId.LocalPathId)) {
@@ -985,4 +999,3 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

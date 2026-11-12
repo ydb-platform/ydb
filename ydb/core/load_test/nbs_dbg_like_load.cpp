@@ -555,6 +555,13 @@ private:
         const ui64 cookie = ev->Cookie;
         auto* entry = Inflight.Find(cookie);
         if (!entry) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetStatus() != NBSIO_OK) {
+                LOG_E("HandleWriteResult unknown cookie Tag# " << Tag
+                    << " Cookie# " << cookie
+                    << " Status# " << ENbsIoResultStatus_Name(record.GetStatus())
+                    << " Reason# " << record.GetReason());
+            }
             return;
         }
         // Guard against cross-type replies. Should be unreachable with
@@ -622,8 +629,10 @@ private:
             }
         } else {
             const auto& record = ev->Get()->Record;
-            LOG_D("HandleWriteResult error Tag# " << Tag
+            LOG_E("HandleWriteResult error Tag# " << Tag
                 << " Cookie# " << cookie
+                << " Addr# " << e.Address
+                << " Size# " << e.SizeBytes
                 << " LatencyUs# " << latencyUs
                 << " Status# " << ENbsIoResultStatus_Name(record.GetStatus())
                 << " Reason# " << record.GetReason());
@@ -651,6 +660,13 @@ private:
         const ui64 cookie = ev->Cookie;
         auto* entry = Inflight.Find(cookie);
         if (!entry) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetStatus() != NBSIO_OK) {
+                LOG_E("HandleReadResult unknown cookie Tag# " << Tag
+                    << " Cookie# " << cookie
+                    << " Status# " << ENbsIoResultStatus_Name(record.GetStatus())
+                    << " Reason# " << record.GetReason());
+            }
             return;
         }
         // Guard against cross-type replies. Should be unreachable with
@@ -712,8 +728,10 @@ private:
             }
         } else {
             const auto& record = ev->Get()->Record;
-            LOG_D("HandleReadResult error Tag# " << Tag
+            LOG_E("HandleReadResult error Tag# " << Tag
                 << " Cookie# " << cookie
+                << " Addr# " << e.Address
+                << " Size# " << e.SizeBytes
                 << " LatencyUs# " << latencyUs
                 << " PayloadCount# " << ev->Get()->GetPayloadCount()
                 << " Status# " << ENbsIoResultStatus_Name(record.GetStatus())
@@ -1153,21 +1171,16 @@ private:
             cfg->Record = config.GetTabletConfig();
             cfg->Record.SetNumDirectBlockGroupsToUse(effectiveDbgCount);
             cfg->Record.SetIoSizeBytes(ioSizeBytes);
-            if (Cmd.GetRequireReady()) {
-                cfg->Record.SetConfigurationId(Tag);
-            }
+            cfg->Record.SetConfigurationId(Max<ui64>(1, Tag));
             NTabletPipe::SendData(SelfId(), ProxyPipeClient, cfg.release());
         }
 
         PendingResolved = {effectiveDbgCount, vChunkSizeBytes, targetNumVChunks, ioSizeBytes};
         PendingNumWorkers = numWorkers;
-        if (!Cmd.GetRequireReady()) {
-            SpawnWorkers();
-        }
     }
 
     void HandleConfigured(TEvLoad::TEvConfigureTabletResult::TPtr& ev) {
-        if (ev->Get()->Record.GetConfigurationId() != Tag) {
+        if (!ConfigurationSent || ev->Get()->Record.GetConfigurationId() != Max<ui64>(1, Tag)) {
             return;
         }
         ConfigurationSent = false;

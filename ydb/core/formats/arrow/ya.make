@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
@@ -13,8 +13,6 @@ PEERDIR(
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
 )
-
-YQL_LAST_ABI_VERSION()
 
 SRCS(
     arrow_batch_builder.cpp

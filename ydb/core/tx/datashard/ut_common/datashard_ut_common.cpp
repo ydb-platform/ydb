@@ -1523,7 +1523,8 @@ void ApplyChanges(
         const TTableId& tableId,
         const TString& sourceId,
         const TVector<TChange>& changes,
-        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus expected)
+        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus expected,
+        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EReason expectedReason)
 {
     auto &runtime = *server->GetRuntime();
 
@@ -1535,10 +1536,15 @@ void ApplyChanges(
         p->SetWriteTxId(change.WriteTxId);
         TCell keyCell = TCell::Make(change.Key);
         p->SetKey(TSerializedCellVec::Serialize({ &keyCell, 1 }));
-        auto* u = p->MutableUpsert();
-        u->AddTags(2);
-        TCell valueCell = TCell::Make(change.Value);
-        u->SetData(TSerializedCellVec::Serialize({ &valueCell, 1 }));
+        if (change.Operation == TChange::EOperation::Erase) {
+            p->MutableErase();
+        } else {
+            auto* u = change.Operation == TChange::EOperation::Reset
+                ? p->MutableReset() : p->MutableUpsert();
+            u->AddTags(2);
+            TCell valueCell = TCell::Make(change.Value);
+            u->SetData(TSerializedCellVec::Serialize({ &valueCell, 1 }));
+        }
     }
 
     auto sender = runtime.AllocateEdgeActor();
@@ -1548,7 +1554,11 @@ void ApplyChanges(
     auto status = ev->Get()->Record.GetStatus();
     UNIT_ASSERT_C(status == expected,
         "Unexpected status " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(status)
-        << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected));
+        << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected)
+        << ": " << ev->Get()->Record.ShortDebugString());
+    if (expectedReason != NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE) {
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Get()->Record.GetReason()), static_cast<ui32>(expectedReason));
+    }
 }
 
 TRowVersion CommitWrites(
@@ -1780,7 +1790,11 @@ ui64 AsyncAlterColumnFamily(
     if (family.Id) fam->SetId(*family.Id);
     if (family.ColumnCodec) fam->SetColumnCodec(*family.ColumnCodec);
     if (family.ColumnCacheMode) fam->SetColumnCacheMode(*family.ColumnCacheMode);
-    if (family.DataPoolKind) fam->MutableStorageConfig()->MutableData()->SetPreferredPoolKind(family.DataPoolKind);
+    if (family.DataPoolKind) {
+        auto* data = fam->MutableStorageConfig()->MutableData();
+        data->SetPreferredPoolKind(family.DataPoolKind);
+        data->SetAllowOtherKinds(family.AllowOtherDataPoolKinds);
+    }
     if (family.ResetDataPoolKind) fam->MutableStorageConfig()->MutableData();
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
@@ -1928,6 +1942,9 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetSchemaChanges(streamDesc.SchemaChanges);
     desc.MutableStreamDescription()->SetUserSIDs(streamDesc.UserSIDs);
     desc.MutableStreamDescription()->SetTraceIds(streamDesc.TraceIds);
+    if (streamDesc.TopicPartitions) {
+        desc.SetTopicPartitions(streamDesc.TopicPartitions);
+    }
     if (streamDesc.ResolvedTimestamps) {
         desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(streamDesc.ResolvedTimestamps->MilliSeconds());
     }
@@ -2720,8 +2737,10 @@ namespace {
                     break
 
             switch (parser.GetPrimitiveType()) {
+            PRINT_PRIMITIVE(Uint16);
             PRINT_PRIMITIVE(Uint32);
             PRINT_PRIMITIVE(Uint64);
+            PRINT_PRIMITIVE(Int16);
             PRINT_PRIMITIVE(Int32);
             PRINT_PRIMITIVE(Int64);
             PRINT_PRIMITIVE(Date);

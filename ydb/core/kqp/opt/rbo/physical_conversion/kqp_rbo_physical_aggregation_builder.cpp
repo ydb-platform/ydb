@@ -195,10 +195,11 @@ TExprNode::TPtr TPhysicalAggregationBuilder::GetDataTypeForSumAggregation(const 
         return GetDecimalDataType(type);
     }
 
-    TString typeName = TString(type->Cast<TDataExprType>()->GetName());
-    if (typeName.StartsWith("Int")) {
+    const auto* dataType = type->Cast<TDataExprType>();
+    TString typeName = TString(dataType->GetName());
+    if (NYql::IsDataTypeSigned(dataType->GetSlot())) {
         typeName = "Int64";
-    } else if (typeName.StartsWith("Uint")) {
+    } else if (NYql::IsDataTypeUnsigned(dataType->GetSlot())) {
         typeName = "Uint64";
     }
 
@@ -211,14 +212,27 @@ TExprNode::TPtr TPhysicalAggregationBuilder::GetDataTypeForSumAggregation(const 
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalAggregationBuilder::BuildSumAggregationInitialState(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* itemType) {
+TExprNode::TPtr TPhysicalAggregationBuilder::CastToSumType(TExprNode::TPtr value, const TTypeAnnotationNode* itemType) const {
     // clang-format off
-    return Ctx.Builder(Pos)
+    auto result = Ctx.Builder(Pos)
         .Callable("SafeCast")
-            .Add(0, lambdaArg)
+            .Add(0, value)
             .Add(1, GetDataTypeForSumAggregation(itemType))
         .Seal().Build();
     // clang-format on
+
+    // AggrAdd of intervals may overflow, so the sum is optional even for a non optional input,
+    // and AggrAdd requires both operands to have the same type.
+    const TTypeAnnotationNode* sumType = nullptr;
+    Y_ENSURE(NYql::GetSumResultType(Pos, *itemType, sumType, Ctx), "Unsupported type for sum aggregation function");
+    if (sumType->IsOptionalOrNull() && !itemType->IsOptionalOrNull()) {
+        result = Ctx.NewCallable(Pos, "Just", {std::move(result)});
+    }
+    return result;
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildSumAggregationInitialState(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* itemType) {
+    return CastToSumType(std::move(lambdaArg), itemType);
 }
 
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildCountAggregationUpdateStateForOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField) {
@@ -657,10 +671,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildSumAggregationUpdateState(TExp
     return Ctx.Builder(Pos)
         .Callable("AggrAdd")
             .Add(0, lambdaArgState)
-            .Callable(1, "SafeCast")
-                .Add(0, lambdaArgField)
-                .Add(1, GetDataTypeForSumAggregation(itemType))
-            .Seal()
+            .Add(1, CastToSumType(lambdaArgField, itemType))
         .Seal().Build();
     // clang-format on
 }
@@ -1472,7 +1483,7 @@ THashMap<TString, const TTypeAnnotationNode*> TPhysicalAggregationBuilder::GetIn
     return colTypeMap;
 }
 
-TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) {
+NPhysicalConvertionUtils::TStageBody TPhysicalAggregationBuilder::BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input, std::optional<i64> memLimit) {
     Y_ENSURE(Aggregate.IsDistinctAll() || !Aggregate.GetKeyColumns().Items().empty()
         || !Aggregate.GetAggregationTraits().Keys().Empty(),
         "Scalar aggregation without aggregation traits is not supported");
@@ -1493,16 +1504,11 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
     // Here we want to create a internal physical aggregation traits.
     BuildPhysicalAggregationTraits(inputColumns, keyFields, inputFields, phyAggregationTraitsList, renameMap);
 
-    // clang-format off
-    input = Ctx.Builder(Pos)
-        .Callable("ToFlow")
-            .Add(0, input)
-        .Seal()
-    .Build();
-    // clang-format on
+    // The combiner works on a wide flow, so take the body wide directly: narrowing here only
+    // to re-expand would emit a ToFlow/ExpandMap pair for peephole to fold back out again.
+    auto wideInput = input.AsWide(inputColumns, Ctx, Names);
 
     // clang-format off
-    auto wideInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputColumns, Ctx, Names);
     if (UseBlocks) {
         wideInput = Build<TCoToFlow>(Ctx, Pos)
             .Input<TCoWideToBlocks>()
@@ -1535,22 +1541,59 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
         .Done().Ptr();
     }
 
+    // Scalar aggregation over a possibly empty input needs the struct-based Condense machinery
+    // to emit its default row, so that case keeps the narrow path. Everything else - grouped
+    // aggregation in any phase, and scalar aggregation in the intermediate phase - can hand the
+    // combiner's wide output straight to the next operator.
+    const bool needsCondense = IsScalarAggregation() && aggregationPhase != EOpPhase::Intermediate;
+    if (!needsCondense) {
+        // The combiner layout is the one BuildNarrowMapForPhysicalAggregationOutput names.
+        TVector<TString> outputFields;
+        if (!isDistinct) {
+            outputFields = keyFields;
+        }
+        for (const auto& aggTraits : phyAggregationTraitsList) {
+            outputFields.push_back(aggTraits.StateFieldName);
+        }
+        Y_ENSURE(outputFields.size() == Aggregate.GetOutputIUs().Size());
+
+        const auto liveOutputs = NPhysicalConvertionUtils::BuildNameSet(
+            NPhysicalConvertionUtils::GetLiveOutputIUs(Aggregate), Names);
+
+        TVector<TString> allColumns;
+        TVector<TString> keptColumns;
+        allColumns.reserve(outputFields.size());
+        for (const auto& field : outputFields) {
+            auto name = field;
+            if (const auto it = renameMap.find(name); it != renameMap.end()) {
+                name = it->second;
+            }
+            if (liveOutputs.contains(name)) {
+                keptColumns.push_back(name);
+            }
+            allColumns.push_back(std::move(name));
+        }
+
+        YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical aggregation] " << KqpExprToPrettyString(TExprBase(wideCombiner), Ctx);
+        // With PruneUnusedOutputs the combiner already emits only the live columns.
+        if (PruneUnusedOutputs) {
+            return NPhysicalConvertionUtils::TStageBody::Wide(wideCombiner, std::move(keptColumns));
+        }
+        return NPhysicalConvertionUtils::BuildLiveWideBody(wideCombiner, allColumns, liveOutputs, Ctx);
+    }
+
     auto physicalAggregation =
         BuildNarrowMapForPhysicalAggregationOutput(wideCombiner, keyFields, phyAggregationTraitsList, renameMap, isDistinct, aggregationPhase);
-
-    // For scalar aggregation result we need to wrap it with Condense.
-    if (IsScalarAggregation() && aggregationPhase != EOpPhase::Intermediate) {
-        physicalAggregation =
-            BuildCondenseForAggregationOutputWithEmptyKeys(physicalAggregation, phyAggregationTraitsList, renameMap, aggregationPhase);
-    }
+    physicalAggregation =
+        BuildCondenseForAggregationOutputWithEmptyKeys(physicalAggregation, phyAggregationTraitsList, renameMap, aggregationPhase);
 
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical aggregation] " << KqpExprToPrettyString(TExprBase(physicalAggregation), Ctx);
     // clang-format off
-    return Ctx.Builder(Pos)
+    return NPhysicalConvertionUtils::TStageBody::Narrow(Ctx.Builder(Pos)
         .Callable("FromFlow")
             .Add(0, physicalAggregation)
         .Seal()
-    .Build();
+    .Build());
     // clang-format on
 }
 

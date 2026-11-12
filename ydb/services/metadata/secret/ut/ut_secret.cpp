@@ -2,41 +2,42 @@
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
-#include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/av_bootstrapped.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/manager/table_record.h>
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
-#include <ydb/services/metadata/secret/manager.h>
 #include <ydb/services/metadata/secret/fetcher.h>
+#include <ydb/services/metadata/secret/manager.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
 
-#include <ydb/library/actors/core/av_bootstrapped.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <util/system/hostname.h>
 
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(Secret) {
-
     class TJsonChecker {
     private:
         YDB_ACCESSOR_DEF(TString, Path);
         YDB_ACCESSOR_DEF(TString, Expectation);
+
     public:
         TJsonChecker(const TString& path, const TString& expectation)
             : Path(path)
-            , Expectation(expectation) {
-
+            , Expectation(expectation)
+        {
         }
+
         bool Check(const NJson::TJsonValue& jsonInfo) const {
             auto* jsonPathValue = jsonInfo.GetValueByPath(Path);
             if (!jsonPathValue) {
@@ -48,7 +49,7 @@ Y_UNIT_TEST_SUITE(Secret) {
         TString GetDebugString() const {
             TStringBuilder sb;
             sb << "path=" << Path << ";"
-                << "expectation=" << Expectation << ";";
+               << "expectation=" << Expectation << ";";
             return sb;
         }
     };
@@ -75,16 +76,12 @@ Y_UNIT_TEST_SUITE(Secret) {
             Checkers.clear();
         }
 
-        STATEFN(StateInit) {
-            switch (ev->GetTypeRewrite()) {
+        STRICT_STFUNC(StateInit,
                 hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-                default:
-                    Y_ABORT_UNLESS(false);
-            }
-        }
+        );
 
         void CheckRuntime(TTestActorRuntime& runtime) {
-            const auto pred = [this](TAutoPtr<IEventHandle>& event)->TTestActorRuntimeBase::EEventAction {
+            const auto pred = [this](TAutoPtr<IEventHandle>& event) -> TTestActorRuntimeBase::EEventAction {
                 if (event->HasBuffer() && !event->HasEvent()) {
                 } else if (!event->HasEvent()) {
                 } else {
@@ -98,7 +95,7 @@ Y_UNIT_TEST_SUITE(Secret) {
 
             runtime.SetObserverFunc(pred);
 
-            for (const TInstant start = Now(); !IsFound() && Now() - start < TDuration::Seconds(10); ) {
+            for (const TInstant start = Now(); !IsFound() && Now() - start < TDuration::Seconds(10);) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
@@ -156,6 +153,7 @@ Y_UNIT_TEST_SUITE(Secret) {
         ui32 msgbPort = pm.GetPort();
 
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;
@@ -251,6 +249,7 @@ Y_UNIT_TEST_SUITE(Secret) {
         ui32 msgbPort = pm.GetPort();
 
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
 
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBuiltinDomain(true);
@@ -320,6 +319,7 @@ Y_UNIT_TEST_SUITE(Secret) {
         ui32 msgbPort = pm.GetPort();
 
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;
@@ -359,4 +359,4 @@ Y_UNIT_TEST_SUITE(Secret) {
         DeactivatedImpl(true);
     }
 }
-}
+}   // namespace NKikimr

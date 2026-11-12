@@ -1,26 +1,25 @@
-#include "mutation_actor.h"
-#include <ydb/public/lib/udf/manifest/manifest.h>
-#include <ydb/services/udf_store/wasm/compile.h>
-
 #include "common.h"
 #include "events.h"
+#include "mutation_actor.h"
 #include "table_query.h"
-
-#include <ydb/services/udf_store/blob_chunks.h>
-#include <ydb/services/udf_store/metadata_subscription/storage_paths.h>
-#include <ydb/services/metadata/request/common.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/public/lib/udf/manifest/manifest.h>
+#include <ydb/services/metadata/request/common.h>
+#include <ydb/services/udf_store/blob_chunks.h>
+#include <ydb/services/udf_store/metadata_subscription/storage_paths.h>
+#include <ydb/services/udf_store/wasm/compile.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
-
 #include <util/generic/guid.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
 namespace NKikimr::NUdfApi {
 
@@ -51,8 +50,7 @@ public:
         Become(&TUploadModuleActor::StateMain);
 
         if (!IsWasmUdfEnabled()) {
-            ReplyError(Ydb::StatusIds::PRECONDITION_FAILED,
-                "UDF store with WASM support is not enabled on this cluster");
+            ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, "UDF store with WASM support is not enabled on this cluster");
             return;
         }
 
@@ -103,8 +101,7 @@ private:
             expected.to_lower();
             if (expected != Md5_) {
                 status = Ydb::StatusIds::PRECONDITION_FAILED;
-                error = TStringBuilder()
-                    << "expected_md5 " << Params_.expected_md5() << " does not match the uploaded body md5 " << Md5_;
+                error = TStringBuilder() << "expected_md5 " << Params_.expected_md5() << " does not match the uploaded body md5 " << Md5_;
                 return false;
             }
         }
@@ -130,23 +127,23 @@ private:
 
     void Handle(NMetadata::NRequest::TEvRequestFailed::TPtr& ev) {
         if (Step_ == EStep::CleanupChunks) {
-            ALS_WARN(NKikimrServices::GRPC_SERVER)
-                << "UdfService: best-effort chunk cleanup of '" << Name_ << "' uid=" << CleanupUid_
-                << " skipped: " << ev->Get()->GetErrorMessage();
+            YDB_LOG_WARN("UdfService: best-effort chunk cleanup",
+                {"name", Name_},
+                {"uid", CleanupUid_},
+                {"skipped", ev->Get()->GetErrorMessage()});
             Finish();
             return;
         }
         // Everything written so far hangs off a uid the modules row does not
         // point at, so it is unreachable garbage rather than a broken module.
-        FailAndCleanup(ev->Get()->GetStatus(), TStringBuilder() << "UDF store write failed at step " << static_cast<int>(Step_) << ": " << ev->Get()->GetErrorMessage(),
-                       Uid_);
+        FailAndCleanup(ev->Get()->GetStatus(),
+            TStringBuilder() << "UDF store write failed at step " << static_cast<int>(Step_) << ": " << ev->Get()->GetErrorMessage(), Uid_);
     }
 
     void HandleFlipResult(const Ydb::Table::ExecuteDataQueryResponse& response) {
         NQuery::TModulePreState preState;
         if (!NQuery::ParseModulePreStateResponse(response, preState)) {
-            FailAndCleanup(Ydb::StatusIds::INTERNAL_ERROR,
-                "UDF store did not report the state of the module row", Uid_);
+            FailAndCleanup(Ydb::StatusIds::INTERNAL_ERROR, "UDF store did not report the state of the module row", Uid_);
             return;
         }
         if (!preState.Applied) {
@@ -166,10 +163,7 @@ private:
     //! Names the precondition the flip transaction found broken. Every branch
     //! mirrors one conjunct of the query predicate, read off the same pre-state
     //! the predicate was evaluated on.
-    void ExplainRejectedWrite(
-        const NQuery::TModulePreState& preState,
-        Ydb::StatusIds::StatusCode& status,
-        TString& error) const {
+    void ExplainRejectedWrite(const NQuery::TModulePreState& preState, Ydb::StatusIds::StatusCode& status, TString& error) const {
         const auto writeMode = WriteMode();
         if (preState.Existed && writeMode == Ydb::Udf::CREATE_ONLY) {
             status = Ydb::StatusIds::ALREADY_EXISTS;
@@ -184,25 +178,20 @@ private:
         if (!Params_.expected_uid().empty()) {
             if (!preState.Existed) {
                 status = Ydb::StatusIds::ABORTED;
-                error = TStringBuilder()
-                    << "expected_uid " << Params_.expected_uid()
-                    << " given, but module '" << Name_ << "' does not exist";
+                error = TStringBuilder() << "expected_uid " << Params_.expected_uid() << " given, but module '" << Name_ << "' does not exist";
                 return;
             }
             if (preState.Uid != Params_.expected_uid()) {
                 status = Ydb::StatusIds::ABORTED;
-                error = TStringBuilder()
-                    << "module '" << Name_ << "' has uid " << preState.Uid
-                    << ", which is not the expected " << Params_.expected_uid();
+                error = TStringBuilder() << "module '" << Name_ << "' has uid " << preState.Uid << ", which is not the expected "
+                                         << Params_.expected_uid();
                 return;
             }
         }
         if (preState.Existed && (!preState.TypeKnown || preState.Type != Type_)) {
             status = Ydb::StatusIds::PRECONDITION_FAILED;
-            error = TStringBuilder()
-                << "module '" << Name_ << "' already exists as " << preState.TypeName
-                << " and cannot be replaced by " << NUdfStore::TUdfModule::TypeToString(Type_)
-                << "; delete it first";
+            error = TStringBuilder() << "module '" << Name_ << "' already exists as " << preState.TypeName << " and cannot be replaced by "
+                                     << NUdfStore::TUdfModule::TypeToString(Type_) << "; delete it first";
             return;
         }
         status = Ydb::StatusIds::INTERNAL_ERROR;
@@ -210,24 +199,15 @@ private:
     }
 
     Ydb::Udf::WriteMode WriteMode() const {
-        return Params_.write_mode() == Ydb::Udf::WRITE_MODE_UNSPECIFIED
-            ? Ydb::Udf::CREATE_OR_REPLACE
-            : Params_.write_mode();
+        return Params_.write_mode() == Ydb::Udf::WRITE_MODE_UNSPECIFIED ? Ydb::Udf::CREATE_OR_REPLACE : Params_.write_mode();
     }
 
     void WriteNextChunk() {
         if (NextChunkIndex_ < Chunks_.size()) {
             Step_ = EStep::UpsertChunk;
-            ExecuteYqlAsSystem(
-                SelfId(),
-                NQuery::BuildUpsertSourceChunkQuery(NUdfStore::GetModuleChunksTablePath()),
-                false,
+            ExecuteYqlAsSystem(SelfId(), NQuery::BuildUpsertSourceChunkQuery(NUdfStore::GetModuleChunksTablePath()), false,
                 [this](Ydb::Table::ExecuteDataQueryRequest& request) {
-                    NQuery::SetUpsertSourceChunkParams(
-                        request,
-                        Uid_,
-                        NextChunkIndex_,
-                        Chunks_[NextChunkIndex_]);
+                    NQuery::SetUpsertSourceChunkParams(request, Uid_, NextChunkIndex_, Chunks_[NextChunkIndex_]);
                 });
             return;
         }
@@ -236,10 +216,7 @@ private:
         // visible, and nothing must find it before all of its chunks are in.
         Step_ = EStep::FlipModule;
         const bool withManifest = true;
-        ExecuteYqlAsSystem(
-            SelfId(),
-            NQuery::BuildFlipModuleQuery(NUdfStore::GetModulesTablePath(), withManifest),
-            false,
+        ExecuteYqlAsSystem(SelfId(), NQuery::BuildFlipModuleQuery(NUdfStore::GetModulesTablePath(), withManifest), false,
             [this](Ydb::Table::ExecuteDataQueryRequest& request) {
                 NQuery::TModuleRow row;
                 row.Name = Name_;
@@ -256,12 +233,7 @@ private:
                 conditions.RequirePresent = WriteMode() == Ydb::Udf::REPLACE_ONLY;
                 conditions.ExpectedUid = TString(Params_.expected_uid());
 
-                NQuery::SetFlipModuleParams(
-                    request,
-                    row,
-                    conditions,
-                    Params_.version() != 0,
-                    withManifest);
+                NQuery::SetFlipModuleParams(request, row, conditions, Params_.version() != 0, withManifest);
             });
     }
 
@@ -276,10 +248,7 @@ private:
         }
         Step_ = EStep::CleanupChunks;
         CleanupUid_ = uid;
-        ExecuteYqlAsSystem(
-            SelfId(),
-            NQuery::BuildDeleteSourceChunksQuery(NUdfStore::GetModuleChunksTablePath()),
-            false,
+        ExecuteYqlAsSystem(SelfId(), NQuery::BuildDeleteSourceChunksQuery(NUdfStore::GetModuleChunksTablePath()), false,
             [this](Ydb::Table::ExecuteDataQueryRequest& request) {
                 NQuery::SetDeleteSourceChunksParams(request, CleanupUid_);
             });
@@ -307,16 +276,20 @@ private:
         result.set_size(Body_.size());
         result.set_replaced_existing(ReplacedExisting_);
 
-        ALS_INFO(NKikimrServices::GRPC_SERVER)
-            << "UdfService: uploaded module name=" << Name_ << " uid=" << Uid_
-            << " size=" << Body_.size() << " chunks=" << Chunks_.size();
+        YDB_LOG_INFO("UdfService: uploaded module",
+            {"name", Name_},
+            {"uid", Uid_},
+            {"size", Body_.size()},
+            {"chunks", Chunks_.size()});
 
         Send(ReplyTo_, new TEvUploadModuleResult(std::move(result)));
         PassAway();
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& error) {
-        ALS_WARN(NKikimrServices::GRPC_SERVER) << "UdfService: upload of '" << Name_ << "' failed: " << error;
+        YDB_LOG_WARN("UdfService: upload with error",
+            {"name", Name_},
+            {"error", error});
         Send(ReplyTo_, new TEvUploadModuleResult(status, error));
         PassAway();
     }
@@ -350,10 +323,7 @@ class TDeleteModuleActor: public TActorBootstrapped<TDeleteModuleActor> {
     };
 
 public:
-    TDeleteModuleActor(
-        const TActorId& replyTo,
-        const Ydb::Udf::DeleteModuleRequest& request,
-        const TString& databaseName)
+    TDeleteModuleActor(const TActorId& replyTo, const Ydb::Udf::DeleteModuleRequest& request, const TString& databaseName)
         : ReplyTo_(replyTo)
         , Request_(request)
         , DatabaseName_(databaseName)
@@ -371,8 +341,7 @@ public:
         }
 
         if (!IsWasmUdfEnabled()) {
-            ReplyError(Ydb::StatusIds::PRECONDITION_FAILED,
-                "UDF store with WASM support is not enabled on this cluster");
+            ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, "UDF store with WASM support is not enabled on this cluster");
             return;
         }
 
@@ -394,18 +363,9 @@ public:
         // other leaves a window in which the module is still listed with a body
         // already gone, which is worse than either end state.
         Step_ = EStep::DeleteModule;
-        ExecuteYqlAsSystem(
-            SelfId(),
-            NQuery::BuildDeleteModuleQuery(
-                NUdfStore::GetModulesTablePath(),
-                NUdfStore::GetModuleChunksTablePath()),
-            false,
-            [this](Ydb::Table::ExecuteDataQueryRequest& request) {
-                NQuery::SetDeleteModuleParams(
-                    request,
-                    Name_,
-                    TString(Request_.expected_uid()),
-                    RequiredType_);
+        ExecuteYqlAsSystem(SelfId(), NQuery::BuildDeleteModuleQuery(NUdfStore::GetModulesTablePath(), NUdfStore::GetModuleChunksTablePath()),
+            false, [this](Ydb::Table::ExecuteDataQueryRequest& request) {
+                NQuery::SetDeleteModuleParams(request, Name_, TString(Request_.expected_uid()), RequiredType_);
             });
     }
 
@@ -425,8 +385,7 @@ private:
             case EStep::DeleteModule: {
                 NQuery::TModulePreState preState;
                 if (!NQuery::ParseModulePreStateResponse(ev->Get()->GetResult(), preState)) {
-                    ReplyError(Ydb::StatusIds::INTERNAL_ERROR,
-                        "UDF store did not report the state of the module row");
+                    ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "UDF store did not report the state of the module row");
                     return;
                 }
                 if (!preState.Applied) {
@@ -456,10 +415,7 @@ private:
 
     //! Names the condition the delete transaction found broken, read off the
     //! pre-state it evaluated the condition on.
-    void ExplainRejectedDelete(
-        const NQuery::TModulePreState& preState,
-        Ydb::StatusIds::StatusCode& status,
-        TString& error) const {
+    void ExplainRejectedDelete(const NQuery::TModulePreState& preState, Ydb::StatusIds::StatusCode& status, TString& error) const {
         if (!preState.Existed) {
             status = Ydb::StatusIds::NOT_FOUND;
             error = TStringBuilder() << "module '" << Name_ << "' does not exist";
@@ -467,23 +423,18 @@ private:
         }
         if (!Request_.expected_uid().empty() && preState.Uid != Request_.expected_uid()) {
             status = Ydb::StatusIds::ABORTED;
-            error = TStringBuilder()
-                << "module '" << Name_ << "' has uid " << preState.Uid
-                << ", which is not the expected " << Request_.expected_uid();
+            error = TStringBuilder() << "module '" << Name_ << "' has uid " << preState.Uid << ", which is not the expected "
+                                     << Request_.expected_uid();
             return;
         }
         if (!preState.TypeKnown || preState.Type == EUdfType::NATIVE_UNSAFE) {
             status = Ydb::StatusIds::PRECONDITION_FAILED;
-            error = TStringBuilder()
-                << "module '" << Name_ << "' is " << preState.TypeName
-                << ", which this API does not manage";
+            error = TStringBuilder() << "module '" << Name_ << "' is " << preState.TypeName << ", which this API does not manage";
             return;
         }
         if (RequiredType_ && preState.Type != *RequiredType_) {
             status = Ydb::StatusIds::PRECONDITION_FAILED;
-            error = TStringBuilder()
-                << "module '" << Name_ << "' is " << preState.TypeName
-                << ", which does not match the requested kind";
+            error = TStringBuilder() << "module '" << Name_ << "' is " << preState.TypeName << ", which does not match the requested kind";
             return;
         }
         status = Ydb::StatusIds::INTERNAL_ERROR;
@@ -492,15 +443,16 @@ private:
 
     void Handle(NMetadata::NRequest::TEvRequestFailed::TPtr& ev) {
         if (Step_ == EStep::DeleteArtifacts) {
-            ALS_WARN(NKikimrServices::GRPC_SERVER)
-                << "UdfService: best-effort artifact cleanup of '" << Name_ << "' skipped "
-                << ArtifactQueries_[NextArtifactQueryIndex_].TablePath << ": " << ev->Get()->GetErrorMessage();
+            YDB_LOG_WARN("UdfService: best-effort artifact cleanup",
+                {"name", Name_},
+                {"tblePath", ArtifactQueries_[NextArtifactQueryIndex_].TablePath},
+                {"errorMessage", ev->Get()->GetErrorMessage()});
             ++NextArtifactQueryIndex_;
             DeleteNextArtifacts();
             return;
         }
-        ReplyError(ev->Get()->GetStatus(), TStringBuilder()
-                                               << "UDF store delete failed at step " << static_cast<int>(Step_) << ": " << ev->Get()->GetErrorMessage());
+        ReplyError(ev->Get()->GetStatus(),
+            TStringBuilder() << "UDF store delete failed at step " << static_cast<int>(Step_) << ": " << ev->Get()->GetErrorMessage());
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -509,16 +461,16 @@ private:
         }
         TVector<TString> cpuSpecs;
         if (!ParseArtifactDirListing(*ev->Get()->Request, cpuSpecs)) {
-            ALS_WARN(NKikimrServices::GRPC_SERVER)
-                << "UdfService: artifacts directory of '" << Name_ << "' not listed, leaving artifacts behind";
+            YDB_LOG_WARN("UdfService: artifacts directory of not listed, leaving artifacts behind",
+                {"name", Name_});
             ReplySuccess();
             return;
         }
         for (const auto& cpuSpec : cpuSpecs) {
             // Chunks first: the reverse order would leave chunks nobody can
             // find if this actor dies in between.
-            ArtifactQueries_.push_back({NUdfStore::GetArtifactChunksTablePath(cpuSpec)});
-            ArtifactQueries_.push_back({NUdfStore::GetArtifactTablePath(cpuSpec)});
+            ArtifactQueries_.push_back({ NUdfStore::GetArtifactChunksTablePath(cpuSpec) });
+            ArtifactQueries_.push_back({ NUdfStore::GetArtifactTablePath(cpuSpec) });
         }
         DeleteNextArtifacts();
     }
@@ -531,23 +483,23 @@ private:
         Step_ = EStep::DeleteArtifacts;
         const TString& tablePath = ArtifactQueries_[NextArtifactQueryIndex_].TablePath;
         ExecuteYqlAsSystem(
-            SelfId(),
-            NQuery::BuildDeleteArtifactsByIdQuery(tablePath),
-            false,
-            [this](Ydb::Table::ExecuteDataQueryRequest& request) {
+            SelfId(), NQuery::BuildDeleteArtifactsByIdQuery(tablePath), false, [this](Ydb::Table::ExecuteDataQueryRequest& request) {
                 NQuery::SetDeleteArtifactsByIdParams(request, Name_, ArtifactKind_);
             });
     }
 
     void ReplySuccess() {
-        ALS_INFO(NKikimrServices::GRPC_SERVER)
-            << "UdfService: deleted module name=" << Name_ << " uid=" << Uid_;
+        YDB_LOG_INFO("UdfService: deleted module",
+            {"name", Name_},
+            {"uid", Uid_});
         Send(ReplyTo_, new TEvDeleteModuleResult(Ydb::Udf::DeleteModuleResult()));
         PassAway();
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& error) {
-        ALS_WARN(NKikimrServices::GRPC_SERVER) << "UdfService: delete of '" << Name_ << "' failed: " << error;
+        YDB_LOG_WARN("UdfService: delete of",
+            {"name", Name_},
+            {"failed", error});
         Send(ReplyTo_, new TEvDeleteModuleResult(status, error));
         PassAway();
     }
@@ -570,22 +522,16 @@ private:
     size_t NextArtifactQueryIndex_ = 0;
 };
 
-} // namespace
+}   // namespace
 
-IActor* CreateUploadModuleActor(
-    const TActorId& replyTo,
-    const Ydb::Udf::UploadModuleParams& params,
-    TString body)
+IActor* CreateUploadModuleActor(const TActorId& replyTo, const Ydb::Udf::UploadModuleParams& params, TString body)
 {
     return new TUploadModuleActor(replyTo, params, std::move(body));
 }
 
-IActor* CreateDeleteModuleActor(
-    const TActorId& replyTo,
-    const Ydb::Udf::DeleteModuleRequest& request,
-    const TString& databaseName)
+IActor* CreateDeleteModuleActor(const TActorId& replyTo, const Ydb::Udf::DeleteModuleRequest& request, const TString& databaseName)
 {
     return new TDeleteModuleActor(replyTo, request, databaseName);
 }
 
-} // namespace NKikimr::NUdfApi
+}   // namespace NKikimr::NUdfApi

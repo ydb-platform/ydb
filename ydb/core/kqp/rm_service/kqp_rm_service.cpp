@@ -619,11 +619,30 @@ public:
 
         with_lock (Lock) {
             result.ExecutionUnits = ExecutionUnitsResource.load();
-            result.Memory = TotalMemoryResource->Available();
+            result.Memory = HasQueryMemoryState.load() ? GetQueryMemoryAvailable() : TotalMemoryResource->Available();
             result.ExternalMemory = ArenaExternalMemory.load();
         }
 
         return result;
+    }
+
+    // The memory of the queries in the compute scheduler, see TEvQueryMemoryState. Returns true when it's changed.
+    bool SetQueryMemoryState(ui64 limit, ui64 usage) {
+        // all three are exchanged unconditionally - no short circuit
+        const bool firstState = !HasQueryMemoryState.exchange(true);
+        const bool limitChanged = PushedQueryMemoryLimit.exchange(limit) != limit;
+        const bool usageChanged = PushedQueryMemoryUsage.exchange(usage) != usage;
+        return firstState || limitChanged || usageChanged;
+    }
+
+    ui64 GetQueryMemoryLimit() const {
+        return PushedQueryMemoryLimit.load();
+    }
+
+    ui64 GetQueryMemoryAvailable() const {
+        const ui64 limit = PushedQueryMemoryLimit.load();
+        const ui64 usage = PushedQueryMemoryUsage.load();
+        return limit > usage ? limit - usage : 0;
     }
 
     std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() override {
@@ -679,7 +698,7 @@ public:
         MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
         PreferLocalDatacenterExecution.store(config.GetPreferLocalDatacenterExecution());
         MaxNonParallelDataQueryTasksLimit.store(config.GetMaxNonParallelDataQueryTasksLimit());
-        EnableMemoryArena.store(config.GetEnableMemoryArena());
+        EnableMemoryArena.store(config.GetEnableMemoryArena() && !QueryMemoryScheduled.load());
         ExecutionUnitMemory.store(config.GetExecutionUnitMemory());
         // the thresholds are compared and summed as signed values, and a max below the min would make the arena
         // oscillate between growing and shrinking
@@ -1003,6 +1022,10 @@ public:
     TActorId SelfId;
 
     std::atomic<ui64> QueryMemoryLimit;
+    // Pushed by the compute scheduler, see TEvQueryMemoryState
+    std::atomic<bool> HasQueryMemoryState = false;
+    std::atomic<ui64> PushedQueryMemoryLimit = 0;
+    std::atomic<ui64> PushedQueryMemoryUsage = 0;
     std::atomic<ui64> MkqlHeavyProgramMemoryLimit;
     std::atomic<ui64> MkqlLightProgramMemoryLimit;
     std::atomic<ui64> ChannelBufferSize;
@@ -1053,6 +1076,9 @@ public:
     };
     TMemoryArena Arena;
     std::atomic<bool> EnableMemoryArena = true;
+    // FeatureFlags.EnableComputeSchedulerMemory (with EnableResourcePoolsScheduler) as of the start: the memory of the
+    // queries and of their execution units is in the compute scheduler, so the arena has nothing to back and is disabled
+    std::atomic<bool> QueryMemoryScheduled = false;
     std::atomic<ui64> ExecutionUnitMemory = 0;
     std::atomic<ui64> MemoryArenaMinFreeSize = 0;
     std::atomic<ui64> MemoryArenaMaxFreeSize = 0;
@@ -1125,6 +1151,13 @@ public:
         YDB_LOG_DEBUG("Start KqpResourceManagerActor at with ResourceBroker",
             {"selfId", SelfId()},
             {"resourceBrokerId", ResourceBrokerId});
+
+        // The same decision as the compute scheduler makes on its start (see TComputeScheduler::IsMemoryEnabled)
+        const auto& featureFlags = AppData()->FeatureFlags;
+        if (featureFlags.GetEnableResourcePoolsScheduler() && featureFlags.GetEnableComputeSchedulerMemory()) {
+            ResourceManager->QueryMemoryScheduled.store(true);
+            ResourceManager->EnableMemoryArena.store(false);
+        }
 
         // Subscribe for tenant changes
         Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe);
@@ -1199,6 +1232,7 @@ private:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvKqp::TEvKqpProxyPublishRequest, HandleWork);
             hFunc(TEvResourceBroker::TEvConfigResponse, HandleWork);
+            hFunc(TEvQueryMemoryState, HandleWork);
             hFunc(TEvResourceBroker::TEvResourceBrokerResponse, HandleWork);
             hFunc(TEvTenantPool::TEvTenantPoolStatus, HandleWork);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleWork);
@@ -1255,6 +1289,12 @@ private:
             ResourceManager->SetTotalMemoryLimit(queueConfig.GetLimit().GetMemory());
             YDB_LOG_INFO("Total node memory for scan bytes",
                 {"queries", queueConfig.GetLimit().GetMemory()});
+        }
+    }
+
+    void HandleWork(TEvQueryMemoryState::TPtr& ev) {
+        if (ResourceManager->SetQueryMemoryState(ev->Get()->Limit, ev->Get()->Usage)) {
+            ResourceManager->FireResourcesPublishing();
         }
     }
 
@@ -1390,6 +1430,10 @@ private:
                         << (ResourceManager->EnableMemoryArena.load() ? "" : ", disabled")
                         << Endl;
                     str << "ExecutionUnits resource: " << ResourceManager->ExecutionUnitsResource.load() << Endl;
+                    if (ResourceManager->HasQueryMemoryState.load()) {
+                        str << "Query memory (compute scheduler): available " << ResourceManager->GetQueryMemoryAvailable()
+                            << " of " << ResourceManager->GetQueryMemoryLimit() << Endl;
+                    }
                 }
                 str << "Last resource broker task id: " << ResourceManager->LastResourceBrokerTaskId.load() << Endl;
                 if (WbState.LastPublishTime) {
@@ -1544,14 +1588,24 @@ private:
             pool->SetAvailable(0);
         } else {
             with_lock (ResourceManager->Lock) {
+                // The memory of the queries: of the compute scheduler, once it pushes its state, otherwise of the
+                // resource manager itself
+                const bool fromScheduler = ResourceManager->HasQueryMemoryState.load();
+                const ui64 memoryLimit = fromScheduler
+                    ? ResourceManager->GetQueryMemoryLimit()
+                    : ResourceManager->TotalMemoryResource->GetLimit();
+                const ui64 memoryAvailable = fromScheduler
+                    ? ResourceManager->GetQueryMemoryAvailable()
+                    : ResourceManager->TotalMemoryResource->Available();
+
                 payload.SetAvailableComputeActors(ResourceManager->ExecutionUnitsResource.load()); // legacy
-                payload.SetTotalMemory(ResourceManager->TotalMemoryResource->GetLimit()); // legacy
-                payload.SetUsedMemory(ResourceManager->TotalMemoryResource->GetLimit() - ResourceManager->TotalMemoryResource->Available()); // legacy
+                payload.SetTotalMemory(memoryLimit); // legacy
+                payload.SetUsedMemory(memoryLimit - memoryAvailable); // legacy
 
                 payload.SetExecutionUnits(ResourceManager->ExecutionUnitsResource.load());
                 auto* pool = payload.MutableMemory()->Add();
                 pool->SetPool(1); // legacy ScanQuery pool id
-                pool->SetAvailable(ResourceManager->TotalMemoryResource->Available());
+                pool->SetAvailable(memoryAvailable);
             }
         }
 

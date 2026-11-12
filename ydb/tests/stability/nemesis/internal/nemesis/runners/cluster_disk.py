@@ -99,36 +99,11 @@ def _local_cleanup_disks() -> None:
 
 
 def _local_start_kikimr(node: Any) -> None:
-    """Same semantics as :meth:`KikimrExternalNode.start`, without SSH."""
+    """Start one local kikimr unit without rewriting ``slot_cfg``."""
     slot_id = _kikimr_slot_id(node)
     if slot_id is None:
         subprocess.run("sudo service kikimr start", shell=True, check=True)
         return
-    slot_dir = "/Berkanavt/kikimr_{slot}".format(slot=slot_id)
-    slot_cfg = slot_dir + "/slot_cfg"
-    env_txt = slot_dir + "/env.txt"
-    cfg = """\
-tenant=/Root/db1
-grpc={grpc}
-mbus={mbus}
-ic={ic}
-mon={mon}""".format(
-        mbus=node.mbus_port,
-        grpc=node.grpc_port,
-        mon=node.mon_port,
-        ic=node.ic_port,
-    )
-    subprocess.run(["sudo", "mkdir", "-p", slot_dir], check=True)
-    subprocess.run(["sudo", "touch", env_txt], check=True)
-    p = subprocess.Popen(
-        ["sudo", "tee", slot_cfg],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    _out, _err = p.communicate(cfg.encode("utf-8"))
-    if p.returncode != 0:
-        raise subprocess.CalledProcessError(p.returncode, "sudo tee slot_cfg", None)
     subprocess.run(
         ["sudo", "systemctl", "start", "kikimr-multi@{}".format(slot_id)],
         check=True,

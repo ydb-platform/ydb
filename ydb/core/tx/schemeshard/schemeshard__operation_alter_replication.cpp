@@ -315,6 +315,11 @@ private:
     }
 
     bool ValidateAlterConfig(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const NKikimrReplication::TReplicationConfig& newConf) {
+        if (newConf.HasAvailabilityPeriod()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Availability period can only be set when creating replication");
+            return false;
+        }
+
         switch (desc.GetState().GetStateCase()) {
         using TState = NKikimrReplication::TReplicationState;
         case TState::kStandBy:
@@ -358,7 +363,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetAlterReplication();
         const auto& name = op.GetName();
@@ -549,7 +554,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterReplication");
     }
 

@@ -20,7 +20,8 @@ struct TPath {
         , Size(size)
         , IsDirectory(isDirectory)
         , PathIndex(pathIndex)
-    {}
+    {
+    }
 };
 
 using TPathList = std::vector<TPath>;
@@ -30,4 +31,4 @@ void ReadPathsList(const THashMap<TString, TString>& taskParams, const TVector<T
 void PackPathsList(const TPathList& paths, TString& packed, bool& isTextEncoded);
 void UnpackPathsList(TStringBuf packed, bool isTextEncoded, TPathList& paths);
 
-} // namespace NYql::NS3Details
+}   // namespace NYql::NS3Details

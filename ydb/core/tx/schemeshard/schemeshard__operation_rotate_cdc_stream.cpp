@@ -116,7 +116,7 @@ private:
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetRotateCdcStream();
         const auto& oldStreamName = op.GetOldStreamName();
@@ -291,6 +291,33 @@ public:
             return result;
         }
 
+        switch (newStreamDesc.GetCompression()) {
+        case NKikimrSchemeOp::ECdcStreamCompressionNone:
+            if (newStreamDesc.HasCompressionLevel()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "COMPRESSION_LEVEL requires ZSTD compression");
+                return result;
+            }
+            break;
+        case NKikimrSchemeOp::ECdcStreamCompressionZstd:
+            if (newStreamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatProto) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "ZSTD compression is supported only for JSON changefeed formats");
+                return result;
+            }
+            if (newStreamDesc.HasCompressionLevel()
+                    && (newStreamDesc.GetCompressionLevel() < 1 || newStreamDesc.GetCompressionLevel() > 22)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "ZSTD compression level must be in range [1, 22]");
+                return result;
+            }
+            break;
+        default:
+            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                << "Invalid compression codec: " << static_cast<ui32>(newStreamDesc.GetCompression()));
+            return result;
+        }
+
         if (!newStreamDesc.GetAwsRegion().empty()) {
             switch (newStreamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
@@ -409,7 +436,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
@@ -516,7 +543,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetRotateCdcStream();
         const auto& tableName = op.GetTableName();
@@ -622,7 +649,7 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        if (!context.SS->CanCreateSnapshot(tablePath.Base()->PathId, OperationId.GetTxId(), status, errStr)) {
+        if (!context.SS->CanCreateSingleSnapshot(tablePath.Base()->PathId, OperationId.GetTxId(), status, errStr)) {
             result->SetError(status, errStr);
             return result;
         }
@@ -665,7 +692,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 

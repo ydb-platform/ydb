@@ -42,6 +42,12 @@ struct TEvPrivate {
         EvAllowCreateStream,
         EvRequestDropStream,
         EvAllowDropStream,
+        EvRestoreSession,
+        EvBootPersistedWorkers,
+        EvUpdateYdbProxy,
+        EvCancelCreateStream,
+        EvCancelDropStream,
+        EvExpireWorkerLag,
 
         EvEnd,
     };
@@ -114,6 +120,7 @@ struct TEvPrivate {
 
     struct TEvCreateStreamResult: public TGenericYdbProxyResult<TEvCreateStreamResult, EvCreateStreamResult> {
         using TBase::TBase;
+        bool SchemaChanges = false;
     };
 
     struct TEvDropStreamResult: public TGenericYdbProxyResult<TEvDropStreamResult, EvDropStreamResult> {
@@ -152,10 +159,19 @@ struct TEvPrivate {
 
     struct TEvCreateDstResult: public TGenericSchemeResult<TEvCreateDstResult, EvCreateDstResult> {
         const TPathId DstPathId;
+        const bool WaitingImport = false;
 
-        explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId);
+        explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId, bool waitingImport);
         explicit TEvCreateDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error);
         TString ToString() const override;
+    };
+
+    struct TEvUpdateYdbProxy: public TEventLocal<TEvUpdateYdbProxy, EvUpdateYdbProxy> {
+        const TActorId YdbProxy;
+
+        explicit TEvUpdateYdbProxy(const TActorId& ydbProxy)
+            : YdbProxy(ydbProxy)
+        {}
     };
 
     struct TEvDropDstResult: public TGenericSchemeResult<TEvDropDstResult, EvDropDstResult> {
@@ -189,6 +205,8 @@ struct TEvPrivate {
         explicit TEvUpdateTenantNodes(const TString& tenant);
         TString ToString() const override;
     };
+
+    struct TEvExpireWorkerLag: public TEventLocal<TEvExpireWorkerLag, EvExpireWorkerLag> {};
 
     struct TEvProcessQueues: public TEventLocal<TEvProcessQueues, EvProcessQueues> {
     };
@@ -232,6 +250,7 @@ struct TEvPrivate {
         : public TGenericSchemeResult<TEvSchemaChangeDstAlterResult, EvSchemaChangeDstAlterResult>
     {
         const ui64 DstAlterTxId;
+        bool RequiresTargetFlush = false;
 
         explicit TEvSchemaChangeDstAlterResult(ui64 rid, ui64 tid, ui64 dstAlterTxId,
             NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
@@ -301,6 +320,24 @@ struct TEvPrivate {
     };
 
     struct TEvAllowDropStream: public TEventLocal<TEvAllowDropStream, EvAllowDropStream> {
+    };
+
+    struct TEvCancelCreateStream: public TEventLocal<TEvCancelCreateStream, EvCancelCreateStream> {
+    };
+
+    struct TEvCancelDropStream: public TEventLocal<TEvCancelDropStream, EvCancelDropStream> {
+    };
+
+    struct TEvBootPersistedWorkers: public TEventLocal<TEvBootPersistedWorkers, EvBootPersistedWorkers> {
+    };
+
+    struct TEvRestoreSession: public TEventLocal<TEvRestoreSession, EvRestoreSession> {
+        const ui32 NodeId;
+
+        explicit TEvRestoreSession(ui32 nodeId)
+            : NodeId(nodeId)
+        {
+        }
     };
 
 }; // TEvPrivate

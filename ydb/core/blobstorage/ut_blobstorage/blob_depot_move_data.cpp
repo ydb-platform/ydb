@@ -151,6 +151,13 @@ struct TMoveDataTest {
         runtime.DestroyActor(sender);
     }
 
+    void SetMaxLoadedTrashRecords(ui64 limit) {
+        for (const ui32 node : Env.Runtime->GetNodes()) {
+            TControlBoard::SetValue(limit,
+                Env.Runtime->GetNode(node)->AppData->Icb->BlobDepotControls.MaxLoadedTrashRecords);
+        }
+    }
+
     void SendMoveData(const TVector<ui32>& groups) {
         auto& runtime = *Env.Runtime;
         runtime.SendToPipe(BlobDepotTabletId, Edge, new TEvTablet::TEvMoveData(groups), 0,
@@ -293,6 +300,206 @@ Y_UNIT_TEST_SUITE(BlobDepotMoveData) {
         test.Env.Runtime->Send(std::move(eventBlobCopied), nodeId);
 
         test.WaitMoveData();
+    }
+
+    // the agent checks the blob it has cached the mapping for, while the value has been moved to another blob since;
+    // the old blob is reported missing, and the agent resolves the key again to check the moved blob, rather than
+    // reporting NODATA
+    Y_UNIT_TEST(CheckIntegrityAfterMove) {
+        TMoveDataTest test;
+        auto& env = test.Env;
+        auto& blob = test.AddBlob(1);
+        test.Put(blob);
+
+        std::set<TLogoBlobID> checked; // physical blobs checked by the agent
+        bool oldBlobsMissing = false;
+        ui32 numMissing = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCheckIntegrity) {
+                const TLogoBlobID& id = ev->Get<TEvBlobStorage::TEvCheckIntegrity>()->Id;
+                if (id != blob.Id && !oldBlobsMissing) {
+                    checked.insert(id);
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvCheckIntegrityResult && oldBlobsMissing) {
+                auto *msg = ev->Get<TEvBlobStorage::TEvCheckIntegrityResult>();
+                if (checked.contains(msg->Id)) {
+                    msg->Status = NKikimrProto::NODATA;
+                    ++numMissing;
+                }
+            }
+            return true;
+        };
+
+        auto check = [&] {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, test.VirtualGroup, new TEvBlobStorage::TEvCheckIntegrity(blob.Id, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCheckIntegrityResult>(edge);
+            Cerr << "*** " << res->Get()->ToString() << Endl;
+            return res->Get()->Status;
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(check(), NKikimrProto::OK); // the agent caches the mapping
+        UNIT_ASSERT(!checked.empty());
+
+        test.ReassignAllChannels();
+        test.RestartTablet();
+        test.MoveData();
+
+        oldBlobsMissing = true;
+        UNIT_ASSERT_VALUES_EQUAL(check(), NKikimrProto::OK);
+        UNIT_ASSERT(numMissing); // the stale mapping was used indeed
+        env.Runtime->FilterFunction = {};
+    }
+
+    Y_UNIT_TEST(TrashNotEmptyDuringCheckTrash) {
+        TMoveDataTest test;
+
+        auto& blob = test.AddBlob(1);
+        test.Put(blob);
+
+        test.ReassignAllChannels();
+        test.RestartTablet();
+        test.Env.Sim(TDuration::Seconds(5));
+
+        constexpr ui32 firstDataChannel = 2;
+        bool blobCopied = false;
+        ui32 continuesAfterCopy = 0;
+        bool holdGC = true;
+        bool responded = false;
+        std::vector<std::unique_ptr<IEventHandle>> heldGC;
+
+        test.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) -> bool {
+            switch (event->GetTypeRewrite()) {
+                case NBlobDepot::TBlobDepot::TEvMoveDataBlobCopied::EventType:
+                    blobCopied = true;
+                    break;
+
+                case NBlobDepot::TBlobDepot::TEvMoveDataContinue::EventType:
+                    if (blobCopied) {
+                        ++continuesAfterCopy;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvCollectGarbage:
+                    if (holdGC && blobCopied) {
+                        auto *msg = event->Get<TEvBlobStorage::TEvCollectGarbage>();
+                        if (msg->TabletId == test.BlobDepotTabletId && msg->Channel >= firstDataChannel) {
+                            heldGC.push_back(std::move(event));
+                            return false;
+                        }
+                    }
+                    break;
+
+                case TEvTablet::EvMoveDataResponse:
+                    responded = true;
+                    break;
+            }
+            return true;
+        };
+
+        test.SendMoveData();
+
+        // the first continue after copy switches to index update, the second one comes from the final scan
+        // and switches to the trash check phase
+        test.Env.Runtime->Sim([&] {
+            return continuesAfterCopy >= 2 && !heldGC.empty();
+        });
+
+        test.Env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_C(!responded, "move data finished while trash of moved groups was not collected");
+
+        holdGC = false;
+        for (auto& event : heldGC) {
+            const ui32 nodeId = event->Sender.NodeId();
+            test.Env.Runtime->Send(std::move(event), nodeId);
+        }
+        heldGC.clear();
+
+        test.WaitMoveData();
+        test.Get(blob);
+    }
+
+    Y_UNIT_TEST(MoveDataBeforeIndexAndTrashLoaded) {
+        TMoveDataTest test;
+
+        constexpr ui32 firstDataChannel = 2;
+        bool holdGC = false;
+        bool responded = false;
+        std::vector<std::unique_ptr<IEventHandle>> heldGC;
+
+        test.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) -> bool {
+            switch (event->GetTypeRewrite()) {
+                case TEvBlobStorage::EvCollectGarbage:
+                    if (holdGC) {
+                        auto *msg = event->Get<TEvBlobStorage::TEvCollectGarbage>();
+                        if (msg->TabletId == test.BlobDepotTabletId && msg->Channel >= firstDataChannel) {
+                            heldGC.push_back(std::move(event));
+                            return false;
+                        }
+                    }
+                    break;
+
+                case TEvTablet::EvMoveDataResponse:
+                    responded = true;
+                    break;
+            }
+            return true;
+        };
+
+        for (ui32 cookie = 1; cookie <= 4; ++cookie) {
+            test.Put(test.AddBlob(cookie, 1, cookie));
+        }
+        auto& keptBlob = test.AddBlob(10, 1, 10);
+        test.Put(keptBlob);
+
+        // keep trash records of collected blobs in the BlobDepot database
+        holdGC = true;
+        test.Collect(test.Blobs[3]);
+        test.Env.Runtime->Sim([&] {
+            return !heldGC.empty();
+        });
+
+        test.ReassignAllChannels();
+
+        // with this limit trash loading stops after the first record and can't continue while GC is held
+        test.SetMaxLoadedTrashRecords(1);
+        heldGC.clear();
+        test.RestartTablet();
+
+        // no simulation between restart and the request: it may arrive before the index is loaded
+        test.SendMoveData();
+
+        test.Env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_C(!responded, "move data finished while trash was not fully loaded");
+        UNIT_ASSERT(!heldGC.empty());
+
+        test.SetMaxLoadedTrashRecords(1'000'000);
+        holdGC = false;
+        for (auto& event : heldGC) {
+            const ui32 nodeId = event->Sender.NodeId();
+            test.Env.Runtime->Send(std::move(event), nodeId);
+        }
+        heldGC.clear();
+
+        test.WaitMoveData();
+        test.Get(keptBlob);
+    }
+
+    Y_UNIT_TEST(MoveDataCanceledByYellowStop) {
+        TMoveDataTest test;
+        auto& blob = test.AddBlob(1);
+        test.Put(blob);
+
+        test.ReassignAllChannels();
+        test.RestartTablet();
+
+        test.Env.SetPDiskStatusFlags(1, 1000, NKikimrBlobStorage::TPDiskSpaceColor::YELLOW);
+
+        test.SendMoveData();
+        test.WaitMoveData(NKikimrTabletBase::TEvMoveDataResponse::NotEnoughSpace);
     }
 
     Y_UNIT_TEST(MoveDataGroupIdMismatch) {

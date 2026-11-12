@@ -51,11 +51,10 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const NCommon::TDataSo
             YDB_LOG_DEBUG("",
                 {"event", "has_result"},
                 {"sourceIdx", source.GetSourceIdx()},
-                {"#_dup_source_idx", source.GetSourceIdx()},
                 {"table", resultChunk->GetTable()->num_rows()},
                 {"isFinished", isFinished});
-            auto cursor = Collection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount(),
-                Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
+            const ui32 readyRecords = isFinished ? source.GetRecordsCount() : resultChunk->GetStartIndex() + resultChunk->GetRecordsCount();
+            auto cursor = Collection->BuildCursor(source, readyRecords, Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
             reader.OnIntervalResult(
                 std::make_unique<TPartialReadResult>(source.GetResourceGuards(), source.MutableAs<IDataSource>()->GetGroupGuard(),
                     resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress, source.GetSourceId()));

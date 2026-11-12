@@ -327,6 +327,9 @@ void THttpRawClient::PingTransaction(const TTransactionId& transactionId)
     if (const auto& serviceTicketAuth = Context_.ServiceTicketAuth) {
         const auto serviceTicket = serviceTicketAuth->Ptr->IssueServiceTicket();
         headers->Add("X-Ya-Service-Ticket", serviceTicket);
+        if (!Context_.UserTicket.empty()) {
+            headers->Add("X-Ya-User-Ticket", Context_.UserTicket);
+        }
     } else if (const auto& token = Context_.Token; !token.empty()) {
         headers->Add("Authorization", "OAuth " + token);
     }
@@ -655,6 +658,22 @@ std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadFile(
     header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
     header.MergeParameters(NRawClient::SerializeParamsForReadFile(transactionId, options));
     header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
+}
+
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadFilePartition(
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "api/v4/read_file_partition", /*isApi*/ false);
+    header.SetOutputFormat(TMaybe<TFormat>()); // Binary format
+    header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+    header.MergeParameters(NRawClient::SerializeParamsForReadFilePartition(cookie, options));
 
     TRequestConfig config;
     config.IsHeavy = true;
@@ -1230,6 +1249,23 @@ TMultiTablePartitions THttpRawClient::GetTablePartitions(
     config.IsHeavy = true;
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
     TMultiTablePartitions result;
+    Deserialize(result, NodeFromYsonString(responseInfo->GetResponse()));
+    return result;
+}
+
+TFilePartitions THttpRawClient::GetFilePartitions(
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "partition_file");
+    header.MergeParameters(NRawClient::SerializeParamsForGetFilePartitions(transactionId, path, ranges, options));
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    TFilePartitions result;
     Deserialize(result, NodeFromYsonString(responseInfo->GetResponse()));
     return result;
 }

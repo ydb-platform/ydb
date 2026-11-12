@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(150)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -23,6 +23,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/types/binary_json
     ydb/core/testlib
     ydb/core/kqp
     ydb/core/kqp/ut/common

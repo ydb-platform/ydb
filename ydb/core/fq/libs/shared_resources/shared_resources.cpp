@@ -1,11 +1,11 @@
 #include "shared_resources.h"
 
 #include <ydb/core/fq/libs/events/events.h>
+
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/db_pool/protos/config.pb.h>
 #include <ydb/library/logger/actor.h>
 #include <ydb/library/services/services.pb.h>
-
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/discovery_mutator/discovery_mutator.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/solomon_stats/pull_client.h>
@@ -26,14 +26,13 @@ namespace NFq {
 namespace {
 
 struct TActorSystemPtrMixin {
-    NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
+    NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr =
+        std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
 };
 
-struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedResources {
-    explicit TYqSharedResourcesImpl(
-        const NFq::NConfig::TConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const ::NMonitoring::TDynamicCounterPtr& counters)
+struct TYqSharedResourcesImpl: public TActorSystemPtrMixin, public TYqSharedResources {
+    explicit TYqSharedResourcesImpl(const NFq::NConfig::TConfig& config,
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, const ::NMonitoring::TDynamicCounterPtr& counters)
         : TYqSharedResources(CreateDriver(config.GetCommon().GetYdbDriverConfig()))
     {
         CreateDbPoolHolder(PrepareDbPoolConfig(config), credentialsProviderFactory, counters);
@@ -67,7 +66,8 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
     NYdb::TDriver CreateDriver(const NFq::NConfig::TYdbDriverConfig& config) {
         NYdb::TDriver driver(GetYdbDriverConfig(config));
         if (config.GetMonitoringPort()) {
-            NSolomonStatExtension::TSolomonStatPullExtension::TParams params(TString{}, config.GetMonitoringPort(), "yq", "ydb_driver", TString{});
+            NSolomonStatExtension::TSolomonStatPullExtension::TParams params(
+                TString{}, config.GetMonitoringPort(), "yq", "ydb_driver", TString{});
             driver.AddExtension<NSolomonStatExtension::TSolomonStatPullExtension>(params);
         }
         return driver;
@@ -84,22 +84,19 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
         if (config.GetGrpcMemoryQuota()) {
             cfg.SetGrpcMemoryQuota(config.GetGrpcMemoryQuota());
         }
-        cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async); // We are in actor system!
+        cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);   // We are in actor system!
         cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         return cfg;
     }
 
-    void CreateDbPoolHolder(
-        const NDbPool::TConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    void CreateDbPoolHolder(const NDbPool::TConfig& config, const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters) {
         DbPoolHolder = MakeIntrusive<NDbPool::TDbPoolHolder>(config, CoreYdbDriver, credentialsProviderFactory, counters);
     }
 
     void AddUnderlayDiscoveryMutator() {
-
         auto mutator = [](Ydb::Discovery::ListEndpointsResult* proto, NYdb::TStatus status, const NYdb::IDiscoveryMutatorApi::TAuxInfo& aux) {
-            TStringBuf underlayPrefix{"u-"};
+            TStringBuf underlayPrefix{ "u-" };
             if (!aux.DiscoveryEndpoint.starts_with(underlayPrefix) || !proto) {
                 return status;
             }
@@ -118,12 +115,10 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
     }
 };
 
-} // namespace
+}   // namespace
 
-TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
-        const NFq::NConfig::TConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const ::NMonitoring::TDynamicCounterPtr& counters) {
+TYqSharedResources::TPtr CreateYqSharedResourcesImpl(const NFq::NConfig::TConfig& config,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, const ::NMonitoring::TDynamicCounterPtr& counters) {
     return MakeIntrusive<TYqSharedResourcesImpl>(config, credentialsProviderFactory, counters);
 }
 
@@ -137,4 +132,4 @@ TYqSharedResources::TPtr TYqSharedResources::Cast(const IYqSharedResources::TPtr
     return CheckedCast<TYqSharedResources*>(ptr.Get());
 }
 
-} // namespace NFq
+}   // namespace NFq

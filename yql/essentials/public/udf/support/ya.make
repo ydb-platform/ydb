@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     udf_support.cpp
@@ -9,7 +9,5 @@ PEERDIR(
 )
 
 PROVIDES(YqlUdfSdkSupport)
-
-YQL_LAST_ABI_VERSION()
 
 END()

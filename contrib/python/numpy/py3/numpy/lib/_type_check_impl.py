@@ -8,12 +8,12 @@ __all__ = ['iscomplexobj', 'isrealobj', 'imag', 'iscomplex',
            'typename', 'mintypecode',
            'common_type']
 
-from .._utils import set_module
 import numpy._core.numeric as _nx
-from numpy._core.numeric import asarray, asanyarray, isnan, zeros
-from numpy._core import overrides, getlimits
-from ._ufunclike_impl import isneginf, isposinf
+from numpy._core import getlimits, overrides
+from numpy._core.numeric import asanyarray, asarray, isnan, zeros
+from numpy._utils import set_module
 
+from ._ufunclike_impl import isneginf, isposinf
 
 array_function_dispatch = functools.partial(
     overrides.array_function_dispatch, module='numpy')
@@ -69,7 +69,7 @@ def mintypecode(typechars, typeset='GDFgdf', default='d'):
     """
     typecodes = ((isinstance(t, str) and t) or asarray(t).dtype.char
                  for t in typechars)
-    intersection = set(t for t in typecodes if t in typeset)
+    intersection = {t for t in typecodes if t in typeset}
     if not intersection:
         return default
     if 'F' in intersection and 'd' in intersection:

@@ -3,8 +3,10 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
+
 #include <yql/essentials/providers/common/structured_token/yql_structured_token.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
@@ -12,8 +14,7 @@ namespace NFq {
 
 namespace {
 
-std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateKikimrIamAuthCredentialsProviderFactory(
-    const NYql::TStructuredTokenParser& parser)
+std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateKikimrIamAuthCredentialsProviderFactory(const NYql::TStructuredTokenParser& parser)
 {
     NKikimr::TAppData* appData = NKikimr::AppData();
     Y_ENSURE(appData, "AppData is not available");
@@ -45,16 +46,14 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateKikimrIamAuthCredential
     return NYdb::CreateIamServiceCredentialsProviderFactory(iamParams);
 }
 
-class TKikimrStructuredTokenCredentialsFactoryOverFactory : public NYql::IStructuredTokenCredentialsFactory {
+class TKikimrStructuredTokenCredentialsFactoryOverFactory: public NYql::IStructuredTokenCredentialsFactory {
 public:
-    explicit TKikimrStructuredTokenCredentialsFactoryOverFactory(
-        NYql::IStructuredTokenCredentialsFactory::TPtr factory)
+    explicit TKikimrStructuredTokenCredentialsFactoryOverFactory(NYql::IStructuredTokenCredentialsFactory::TPtr factory)
         : InnerFactory_(std::move(factory))
-    {}
-
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(
-        const TString& structuredTokenJson, bool addBearerToToken) override
     {
+    }
+
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& structuredTokenJson, bool addBearerToToken) override {
         if (NYql::IsStructuredTokenJson(structuredTokenJson)) {
             NYql::TStructuredTokenParser parser = NYql::CreateStructuredTokenParser(structuredTokenJson);
             if (parser.HasIamAuth()) {
@@ -68,7 +67,7 @@ private:
     const NYql::IStructuredTokenCredentialsFactory::TPtr InnerFactory_;
 };
 
-} // namespace
+}   // namespace
 
 NYql::IStructuredTokenCredentialsFactory::TPtr CreateKikimrStructuredTokenCredentialsFactoryOverFactory(
     NYql::IStructuredTokenCredentialsFactory::TPtr factory)
@@ -79,11 +78,9 @@ NYql::IStructuredTokenCredentialsFactory::TPtr CreateKikimrStructuredTokenCreden
 NYql::IStructuredTokenCredentialsFactory::TPtr CreateKikimrStructuredTokenCredentialsFactory(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr saFactory)
 {
-    return NYql::CreateStructuredTokenCredentialsFactory(
-        std::move(saFactory),
-        [](const NYql::TStructuredTokenParser& parser) {
-            return CreateKikimrIamAuthCredentialsProviderFactory(parser);
-        });
+    return NYql::CreateStructuredTokenCredentialsFactory(std::move(saFactory), [](const NYql::TStructuredTokenParser& parser) {
+        return CreateKikimrIamAuthCredentialsProviderFactory(parser);
+    });
 }
 
-} // namespace NFq
+}   // namespace NFq

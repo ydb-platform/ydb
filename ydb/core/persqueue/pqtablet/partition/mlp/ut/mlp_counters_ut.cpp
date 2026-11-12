@@ -30,6 +30,10 @@ void SimpleCountersImpl(const bool keepMessagesOrder) {
         WriteMany(setup, "/Root/topic1", 0, 16, 59);
         WriteMany(setup, "/Root/topic1", 1, 16, 61);
     }
+    ui32 commitPartition = 0;
+    ui64 commitOffset = 0;
+    ui32 unlockPartition = 0;
+    ui64 unlockOffset = 0;
     {
         Cerr << ">>>>> read from first partition" << Endl;
         CreateReaderActor(runtime, {
@@ -43,7 +47,16 @@ void SimpleCountersImpl(const bool keepMessagesOrder) {
         auto result = GetReadResponse(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
+        // Commit a locked message that is not the partition prefix, so it stays inflight.
+        // STD does not return offsets in ascending order.
+        auto commitMessage = result->Messages[0].MessageId;
+        for (const auto& message : result->Messages) {
+            if (message.MessageId.Offset > commitMessage.Offset) {
+                commitMessage = message.MessageId;
+            }
+        }
+        commitPartition = commitMessage.PartitionId;
+        commitOffset = commitMessage.Offset;
     }
     {
         Cerr << ">>>>> read from second partition" << Endl;
@@ -58,7 +71,8 @@ void SimpleCountersImpl(const bool keepMessagesOrder) {
         auto result = GetReadResponse(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
+        unlockPartition = result->Messages[0].MessageId.PartitionId;
+        unlockOffset = result->Messages[0].MessageId.Offset;
     }
     {
         Cerr << ">>>>> commit message" << Endl;
@@ -66,7 +80,7 @@ void SimpleCountersImpl(const bool keepMessagesOrder) {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
-            .Messages = { TMessageId(0, 1) }
+            .Messages = { TMessageId(commitPartition, commitOffset) }
         });
         auto result = GetChangeResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
@@ -77,7 +91,7 @@ void SimpleCountersImpl(const bool keepMessagesOrder) {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
-            .Messages = { TMessageId(1, 0) }
+            .Messages = { TMessageId(unlockPartition, unlockOffset) }
         });
         auto result = GetChangeResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);

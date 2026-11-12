@@ -7,6 +7,7 @@
 
 #include <library/cpp/yt/string/format.h>
 
+#include <library/cpp/yt/system/local_host.h>
 #include <library/cpp/yt/system/process_id.h>
 #include <library/cpp/yt/system/thread_id.h>
 #include <library/cpp/yt/system/thread_name.h>
@@ -17,16 +18,16 @@ namespace NYT {
 
 YT_DEFINE_THREAD_LOCAL(bool, ErrorSanitizerEnabled, false);
 YT_DEFINE_THREAD_LOCAL(TInstant, ErrorSanitizerDatetimeOverride);
-YT_DEFINE_THREAD_LOCAL(TSharedRef, ErrorSanitizerLocalHostNameOverride);
+YT_DEFINE_THREAD_LOCAL(TStringBuf, ErrorSanitizerLocalHostNameOverride);
 
-TErrorSanitizerGuard::TErrorSanitizerGuard(TInstant datetimeOverride, TSharedRef localHostNameOverride)
+TErrorSanitizerGuard::TErrorSanitizerGuard(TInstant datetimeOverride, TStringBuf localHostNameOverride)
     : SavedEnabled_(ErrorSanitizerEnabled())
     , SavedDatetimeOverride_(ErrorSanitizerDatetimeOverride())
     , SavedLocalHostNameOverride_(ErrorSanitizerLocalHostNameOverride())
 {
     ErrorSanitizerEnabled() = true;
     ErrorSanitizerDatetimeOverride() = datetimeOverride;
-    ErrorSanitizerLocalHostNameOverride() = std::move(localHostNameOverride);
+    ErrorSanitizerLocalHostNameOverride() = localHostNameOverride;
 }
 
 TErrorSanitizerGuard::~TErrorSanitizerGuard()
@@ -35,7 +36,7 @@ TErrorSanitizerGuard::~TErrorSanitizerGuard()
 
     ErrorSanitizerEnabled() = SavedEnabled_;
     ErrorSanitizerDatetimeOverride() = SavedDatetimeOverride_;
-    ErrorSanitizerLocalHostNameOverride() = std::move(SavedLocalHostNameOverride_);
+    ErrorSanitizerLocalHostNameOverride() = SavedLocalHostNameOverride_;
 }
 
 bool IsErrorSanitizerEnabled() noexcept
@@ -60,12 +61,12 @@ void TOriginAttributes::Capture()
 {
     if (ErrorSanitizerEnabled()) {
         Datetime = ErrorSanitizerDatetimeOverride();
-        HostHolder = ErrorSanitizerLocalHostNameOverride();
-        Host = HostHolder.empty() ? TStringBuf() : TStringBuf(HostHolder.Begin(), HostHolder.End());
+        Host = ErrorSanitizerLocalHostNameOverride();
         return;
     }
 
     Datetime = TInstant::Now();
+    Host = GetLocalHostNameRaw();
     Pid = GetProcessId();
     Tid = GetSystemThreadId();
     ThreadName = GetCurrentThreadName();
@@ -141,8 +142,9 @@ TOriginAttributes ExtractFromDictionaryDefault(TErrorAttributes* attributes)
     }
 
     static const std::string HostKey("host");
-    result.HostHolder = TSharedRef::FromString(attributes->GetAndRemove(HostKey, std::string()));
-    result.Host = result.HostHolder.empty() ? TStringBuf() : TStringBuf(result.HostHolder.Begin(), result.HostHolder.End());
+    if (auto host = attributes->FindAndRemove<std::string>(HostKey)) {
+        result.Host = InternHostName(*host);
+    }
 
     static const std::string DatetimeKey("datetime");
     result.Datetime = attributes->GetAndRemove(DatetimeKey, TInstant());
@@ -151,7 +153,7 @@ TOriginAttributes ExtractFromDictionaryDefault(TErrorAttributes* attributes)
     result.Pid = attributes->GetAndRemove(PidKey, TProcessId{});
 
     static const std::string TidKey("tid");
-    result.Tid = attributes->GetAndRemove(TidKey, NThreading::InvalidThreadId);
+    result.Tid = attributes->GetAndRemove(TidKey, InvalidThreadId);
 
     static const std::string ThreadNameKey("thread");
     result.ThreadName = {attributes->GetAndRemove(ThreadNameKey, std::string())};

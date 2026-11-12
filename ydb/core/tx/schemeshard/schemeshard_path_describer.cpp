@@ -224,6 +224,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                 case NKikimrSchemeOp::EIndexTypeGlobalJson:
@@ -451,6 +452,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
     Self->DescribeTable(tableInfo, typeRegistry, returnConfig, entry);
     entry->SetName(pathEl->Name);
+    entry->SetPartitionCount(tableInfo.GetPartitions().size());
 
     if (returnBoundaries) {
         // split boundaries (split keys without shard's tablet-ids)
@@ -1023,8 +1025,13 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
         entry->MutableDatabaseQuotas()->CopyFrom(*databaseQuotas);
     }
 
-    if (subDomainInfo->GetDiskQuotaExceeded()) {
+    // exhausted storage blocks user writes through the same flag as the exceeded disk quota
+    if (subDomainInfo->GetDiskQuotaExceeded() || subDomainInfo->GetStorageSpaceExhausted()) {
         entry->MutableDomainState()->SetDiskQuotaExceeded(true);
+    }
+
+    if (subDomainInfo->GetStorageSpaceExhausted()) {
+        entry->MutableDomainState()->SetStorageSpaceExhausted(true);
     }
 
     if (subDomainInfo->GetSmallBlobsQuotaExceeded()) {
@@ -1252,6 +1259,9 @@ void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr p
     auto& entry = *Result->Record.MutablePathDescription()->MutableStreamingQueryDescription();
     entry.SetName(pathEl->Name);
     *entry.MutableProperties() = streamingQueryInfo->Properties;
+    if (streamingQueryInfo->OperationOwnerActorId) {
+        ActorIdToProto(streamingQueryInfo->OperationOwnerActorId, entry.MutableOperationOwnerActorId());
+    }
 }
 
 void TPathDescriber::DescribeTestShardSet(TPathId pathId, TPathElement::TPtr pathEl) {
@@ -1648,6 +1658,9 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *entry.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            *entry.MutableHnswIndexDescription() = std::get<NKikimrSchemeOp::THnswIndexDescription>(indexInfo->SpecializedIndexDescription);
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:

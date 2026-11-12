@@ -7,7 +7,9 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/providers/abstract
     ydb/library/yql/providers/pq/gateway/abstract
+    ydb/library/yql/providers/pq/gateway/clients/message_stream
 )
 
 END()

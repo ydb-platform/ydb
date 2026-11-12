@@ -1,5 +1,7 @@
 PY3_PROGRAM(recipe)
 
+STYLE_PYTHON()
+
 PY_SRCS(
     __main__.py  
 )

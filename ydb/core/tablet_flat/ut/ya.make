@@ -25,6 +25,7 @@ SRCS(
     flat_test_db.h
     flat_test_db.cpp
     flat_test_db_helpers.h
+    shared_cache_btree_walk_ut.cpp
     shared_cache_s3fifo_ut.cpp
     shared_cache_tiered_ut.cpp
     shared_handle_ut.cpp
@@ -34,10 +35,12 @@ SRCS(
     ut_iterator.cpp
     ut_key_blocks.cpp
     ut_memtable.cpp
+    ut_memtable_memory.cpp
     ut_sausage.cpp
     ut_stat.cpp
     ut_comp_gen.cpp
     ut_compaction.cpp
+    ut_compaction_outputs.cpp
     ut_compaction_fulltext.cpp
     ut_compaction_multi.cpp
     ut_direct_part.cpp
@@ -46,6 +49,7 @@ SRCS(
     ut_decimal.cpp    
     ut_charge.cpp
     ut_part.cpp
+    ut_part_layout.cpp
     ut_part_multi.cpp
     ut_proto.cpp
     ut_pages.cpp
@@ -60,8 +64,10 @@ SRCS(
     ut_shared_sausagecache_actor.cpp
     ut_slice.cpp
     ut_slice_loader.cpp
+    ut_tier_predicate.cpp
     ut_vacuum.cpp
     ut_versions.cpp
+    ut_scan_delta.cpp
     ut_backup.cpp
 )
 
@@ -71,6 +77,7 @@ RESOURCE(
 )
 
 PEERDIR(
+    yql/essentials/types/binary_json
     library/cpp/resource
     ydb/core/scheme
     ydb/core/tablet_flat/test/libs/exec

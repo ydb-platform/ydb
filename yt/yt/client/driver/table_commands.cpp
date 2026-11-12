@@ -947,13 +947,6 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<bool>(
-        "merge_versioned_rows",
-        [] (TThis* command) -> auto& {
-            return command->Options.MergeVersionedRows;
-        })
-        .Optional(/*init*/ false);
-
     registrar.ParameterWithUniversalAccessor<std::optional<EExecutionBackend>>(
         "execution_backend",
         [] (TThis* command) -> auto& {
@@ -1961,6 +1954,7 @@ void TGetTabletInfosCommand::DoExecute(ICommandContextPtr context)
                         .Item().BeginMap()
                             .Item("total_row_count").Value(tablet.TotalRowCount)
                             .Item("trimmed_row_count").Value(tablet.TrimmedRowCount)
+                            .OptionalItem("flushed_row_count", tablet.FlushedRowCount)
                             .Item("delayed_lockless_row_count").Value(tablet.DelayedLocklessRowCount)
                             .Item("barrier_timestamp").Value(tablet.BarrierTimestamp)
                             .Item("last_write_timestamp").Value(tablet.LastWriteTimestamp)

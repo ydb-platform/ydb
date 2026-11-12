@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
@@ -21,13 +22,52 @@ void TTxScan::SendError(const TString& problem, const TString& details, const TA
     SendScanError(Self->TabletID(), Ev->Sender, request.GetGeneration(), request.GetTablePath(), problem, details, ctx);
 }
 
-TSnapshot TTxScan::GetSnapshot(const NColumnShard::TSchemeShardLocalPathId& ssPathId) const {
-    const auto& request = Ev->Get()->Record;
+namespace {
+
+const TVersionedPresetSchemas& GetPresetSchemas(NColumnShard::TColumnShard& shard) {
+    static TVersionedPresetSchemas defaultSchemas(
+        0, shard.GetStoragesManager(), shard.GetTablesManager().GetSchemaObjectsCache().GetObjectPtrVerified());
+    return shard.GetIndexOptional() ? shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas() : defaultSchemas;
+}
+
+TSnapshot GetSnapshot(const NColumnShard::TColumnShard& shard, const NKikimrTxDataShard::TEvKqpScan& request,
+    const NColumnShard::TSchemeShardLocalPathId& ssPathId) {
     TSnapshot snapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
     if (snapshot.IsZero()) {
-        snapshot = Self->GetLastTxSnapshot();
+        snapshot = shard.GetLastTxSnapshot();
     }
-    return Self->TablesManager.ResolveReadSnapshot(ssPathId, snapshot);
+    return shard.GetTablesManager().ResolveReadSnapshot(ssPathId, snapshot);
+}
+
+TConclusion<std::shared_ptr<TPKRangesFilter>> MakeRanges(
+    NColumnShard::TColumnShard& shard, const NKikimrTxDataShard::TEvKqpScan& request, const ITableMetadataAccessor& tableMetadataAccessor) {
+    if (!request.RangesSize()) {
+        return std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty());
+    }
+    const TVersionedPresetSchemas& schemas = GetPresetSchemas(shard);
+    auto filterConclusion = TPKRangesFilter::BuildFromProto(
+        request, tableMetadataAccessor.GetPrimaryKeyInfo(schemas), tableMetadataAccessor.GetPrimaryKeyScheme(schemas));
+    if (filterConclusion.IsFail()) {
+        return TConclusionStatus::Fail(filterConclusion.GetErrorMessage());
+    }
+    return std::make_shared<TPKRangesFilter>(filterConclusion.DetachResult());
+}
+
+}   // namespace
+
+TConclusion<TScanTarget> BuildScanTarget(NColumnShard::TColumnShard& shard, const NKikimrTxDataShard::TEvKqpScan& request) {
+    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
+    const TSnapshot snapshot = GetSnapshot(shard, request, ssPathId);
+    auto accessor =
+        shard.GetTablesManager().BuildTableMetadataAccessor(request.GetTablePath() ? request.GetTablePath() : "undefined", ssPathId, snapshot);
+    if (accessor.IsFail()) {
+        return TConclusionStatus::Fail("cannot build table metadata accessor for request: " + accessor.GetErrorMessage());
+    }
+    auto ranges = MakeRanges(shard, request, *accessor.GetResult());
+    if (ranges.IsFail()) {
+        return TConclusionStatus::Fail("cannot build ranges filter: " + ranges.GetErrorMessage());
+    }
+    return TScanTarget{ snapshot, accessor.DetachResult(), ranges.DetachResult() };
 }
 
 ERequestSorting TTxScan::GetRequestSorting() const {
@@ -64,10 +104,16 @@ NConveyorComposite::TCPULimitsConfig TTxScan::GetCpuLimits() const {
     return cpuLimits;
 }
 
-const TVersionedPresetSchemas& TTxScan::GetPresetSchemas() const {
-    static TVersionedPresetSchemas defaultSchemas(
-        0, Self->GetStoragesManager(), Self->GetTablesManager().GetSchemaObjectsCache().GetObjectPtrVerified());
-    return Self->GetIndexOptional() ? Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas() : defaultSchemas;
+std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> TTxScan::GetSchedulerPool() const {
+    const auto& request = Ev->Get()->Record;
+    if (!request.HasDatabaseId() || request.GetDatabaseId().empty() || !request.HasPoolId() || request.GetPoolId().empty() ||
+        !request.HasTxId()) {
+        return std::nullopt;
+    }
+    return NKqp::NScheduler::NHdrf::TFullPoolId{
+        .DatabaseId = request.GetDatabaseId(),
+        .PoolId = request.GetPoolId(),
+    };
 }
 
 TReadDescription TTxScan::MakeReadDescription(const TSnapshot& snapshot, const ERequestSorting requestSorting,
@@ -88,12 +134,6 @@ TReadDescription TTxScan::MakeReadDescription(const TSnapshot& snapshot, const E
     read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
     read.StatsMode = request.GetStatsMode();
     return read;
-}
-
-TConclusion<std::shared_ptr<ITableMetadataAccessor>> TTxScan::MakeTableAccessor(
-    const NColumnShard::TSchemeShardLocalPathId& ssPathId, const TSnapshot& snapshot) const {
-    const auto& request = Ev->Get()->Record;
-    return Self->TablesManager.BuildTableMetadataAccessor(request.GetTablePath() ? request.GetTablePath() : "undefined", ssPathId, snapshot);
 }
 
 // The order the scan being resumed used. Read straight off the request: the field sits at the top of
@@ -142,24 +182,7 @@ TConclusionStatus TTxScan::InitScanCursor(TReadDescription& read, const IScanner
 }
 
 TConclusionStatus TTxScan::InitProgram(TReadDescription& read, const IScannerConstructor& scannerConstructor) const {
-    return scannerConstructor.ParseProgram(TProgramParsingContext(GetPresetSchemas()), Ev->Get()->Record, read);
-}
-
-TConclusionStatus TTxScan::InitPKRangesFilter(TReadDescription& read) const {
-    const auto& request = Ev->Get()->Record;
-    if (!request.RangesSize()) {
-        return TConclusionStatus::Success();
-    }
-    // TODO: deduplicate
-    const TVersionedPresetSchemas& schemas = GetPresetSchemas();
-    auto ydbKey = read.GetTableMetadataAccessor()->GetPrimaryKeyInfo(schemas);
-    auto arrowKey = read.GetTableMetadataAccessor()->GetPrimaryKeyScheme(schemas);
-    auto filterConclusion = NOlap::TPKRangesFilter::BuildFromProto(request, ydbKey, arrowKey);
-    if (filterConclusion.IsFail()) {
-        return TConclusionStatus::Fail(filterConclusion.GetErrorMessage());
-    }
-    read.PKRangesFilter = std::make_shared<NOlap::TPKRangesFilter>(filterConclusion.DetachResult());
-    return TConclusionStatus::Success();
+    return scannerConstructor.ParseProgram(TProgramParsingContext(GetPresetSchemas(*Self)), Ev->Get()->Record, read);
 }
 
 std::unique_ptr<TTxScan::TDiagnosticsEvent> TTxScan::MakeDiagnosticsEvent(const TReadDescription& read) const {
@@ -208,12 +231,12 @@ void TTxScan::StartScanActor(const TReadMetadataBase::TConstPtr& readMetadataRan
         ctx.Send(Self->ScanDiagnosticsActorId, std::move(diagnostics));
     }
     const ui32 scanPoolId = request.GetUseBatchPool() ? AppDataVerified().BatchPoolId : Max<ui32>();
-    auto scanActorId =
-        ctx.Register(new TColumnShardScan(Self->SelfId(), Ev->Sender, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
-                         Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy,
-                         request.GetScanId(), request.GetTxId(), request.GetGeneration(), requestCookie, Self->TabletID(),
-                         TDuration::MilliSeconds(request.GetTimeoutMs()), readMetadataRange, request.GetDataFormat(),
-                         Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId), TMailboxType::HTSwap, scanPoolId);
+    auto scanActorId = ctx.Register(
+        new TColumnShardScan(Self->SelfId(), Ev->Sender, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
+            Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy,
+            request.GetScanId(), request.GetTxId(), request.GetGeneration(), requestCookie, Self->TabletID(),
+            TDuration::MilliSeconds(request.GetTimeoutMs()), readMetadataRange, request.GetDataFormat(), Self->Counters.GetScanCounters(),
+            cpuLimits, std::move(orbit), rawPathId, GetSchedulerPool()), TMailboxType::HTSwap, scanPoolId);
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     YDB_LOG_DEBUG("",
@@ -230,8 +253,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     const auto& request = Ev->Get()->Record;
     auto orbit = std::make_shared<NLWTrace::TOrbit>();
-    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
-    const TSnapshot snapshot = GetSnapshot(ssPathId);
+    const TSnapshot snapshot = Target.Snapshot;
     const ERequestSorting requestSorting = GetRequestSorting();
     const TScannerConstructorContext context(snapshot, request.HasItemsLimit() ? request.GetItemsLimit() : 0);
     const NConveyorComposite::TCPULimitsConfig cpuLimits = GetCpuLimits();
@@ -247,14 +269,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
         {"tablet", Self->TabletID()},
         {"timeout", TDuration::MilliSeconds(request.GetTimeoutMs())},
         {"cpuLimits", cpuLimits.DebugString()});
-    LOG_S_DEBUG("TTxScan prepare txId: " << request.GetTxId() << " scanId: " << request.GetScanId() << " at tablet " << Self->TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TTxScan prepare at tablet",
+        {"txId", request.GetTxId()},
+        {"scanId", request.GetScanId()},
+        {"tabletId", Self->TabletID()});
 
-    auto accessorConclusion = MakeTableAccessor(ssPathId, snapshot);
-    if (accessorConclusion.IsFail()) {
-        return SendError("cannot build table metadata accessor for request: " + accessorConclusion.GetErrorMessage(),
-            AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
-    }
-    const std::shared_ptr<ITableMetadataAccessor> tableMetadataAccessor = accessorConclusion.DetachResult();
+    const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor = Target.TableMetadataAccessor;
     // A table may insist on a reader of its own, so the scanner comes first: its class shapes the read.
     auto constructorConclusion = MakeScannerConstructor(context, tableMetadataAccessor->GetOverridenScanType(GetReaderName()));
     if (constructorConclusion.IsFail()) {
@@ -263,6 +283,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const std::unique_ptr<IScannerConstructor> scannerConstructor = constructorConclusion.DetachResult();
 
     TReadDescription read = MakeReadDescription(snapshot, requestSorting, orbit, scannerConstructor->GetReaderClass(), tableMetadataAccessor);
+    read.PKRangesFilter = Target.PKRangesFilter;
     const ui64 rawPathId = OnScanStartedForPath(read, *orbit);
 
     if (auto status = InitScanCursor(read, *scannerConstructor); status.IsFail()) {
@@ -270,9 +291,6 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
     if (auto status = InitProgram(read, *scannerConstructor); status.IsFail()) {
         return SendError("cannot parse program", status.GetErrorMessage(), ctx);
-    }
-    if (auto status = InitPKRangesFilter(read); status.IsFail()) {
-        return SendError("cannot build ranges filter", status.GetErrorMessage(), ctx);
     }
 
     auto metadataConclusion = MakeReadMetadata(Self, Self->Counters.GetScanCounters(), *scannerConstructor, read);

@@ -1,9 +1,10 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     generated_column.cpp
     read_attributes_utils.cpp
     rewrite_io_utils.cpp
+    sql_path_aliases.cpp
     yql_kikimr_constraints.cpp
     yql_kikimr_datasink.cpp
     yql_kikimr_datasource.cpp
@@ -34,9 +35,11 @@ PEERDIR(
     ydb/core/kqp/opt/cbo
     ydb/core/local_indexes/bloom
     ydb/core/kqp/query_data
+    ydb/core/kqp/tracing
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
+    ydb/core/util
     ydb/library/aclib
     ydb/library/aclib/protos
     ydb/library/ydb_issue/proto
@@ -80,8 +83,6 @@ PEERDIR(
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 SRCDIR(yql/essentials/core/expr_nodes_gen)
 

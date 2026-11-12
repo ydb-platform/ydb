@@ -8,6 +8,8 @@
 #include <util/string/printf.h>
 #include <util/system/rusage.h>
 
+#include <memory>
+
 namespace NGreedyDict {
     void TDictBuilder::RebuildCounts(ui32 maxcand, bool final) {
         if (!Current) {
@@ -54,7 +56,7 @@ namespace NGreedyDict {
     }
 
     ui32 TDictBuilder::BuildNextGeneration(ui32 maxent, ui32 maxlen) {
-        TAutoPtr<TEntrySet> newset = new TEntrySet;
+        std::unique_ptr<TEntrySet> newset = std::make_unique<TEntrySet>();
         newset->InitWithAlpha();
         maxent -= newset->size();
 
@@ -108,7 +110,7 @@ namespace NGreedyDict {
             deletions = set.size() - (newset->size() - additions);
         }
 
-        Current = newset;
+        Current = std::move(newset);
         Current->BuildHierarchy();
         return deletions + additions;
     }

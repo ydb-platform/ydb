@@ -2346,6 +2346,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         THashMap<TPathId, TShardIdx> kesusShards; // pathId -> shardIdx
         THashMap<TPathId, TShardIdx> replicationControllers;
         THashMap<TPathId, TShardIdx> blobDepotShards;
+        THashMap<TPathId, TShardIdx> cdcAggregators;
         THashMap<TPathId, TVector<TShardIdx>> olapColumnShards;
         {
             TShardsRows shards;
@@ -2403,6 +2404,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         break;
                     case ETabletType::BlobDepot:
                         blobDepotShards.emplace(shard.PathId, idx);
+                        break;
+                    case ETabletType::CdcAggregator:
+                        cdcAggregators.emplace(shard.PathId, idx);
                         break;
                     default:
                         break;
@@ -3528,7 +3532,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithAwsRegion(rowset.GetValue<Schema::CdcStream::AwsRegion>())
                     .WithState(rowset.GetValue<Schema::CdcStream::State>())
                     .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStream::UserSIDs>(false))
-                    .WithTraceIds(rowset.GetValueOrDefault<Schema::CdcStream::TraceIds>(false));
+                    .WithTraceIds(rowset.GetValueOrDefault<Schema::CdcStream::TraceIds>(false))
+                    .WithHeartbeatMode(rowset.GetValueOrDefault<Schema::CdcStream::HeartbeatMode>(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect));
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -3539,6 +3544,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 Y_ABORT_UNLESS(!Self->CdcStreams.contains(pathId));
                 const auto& stream = Self->CdcStreams.Set(pathId, new TCdcStreamInfo(alterVersion, std::move(settings)));
+
+                if (cdcAggregators.contains(pathId)) {
+                    stream->AggregatorShardIdx = cdcAggregators.at(pathId);
+                }
 
                 if (stream->State == NKikimrSchemeOp::ECdcStreamStateScan) {
                     Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
@@ -3575,7 +3584,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithAwsRegion(rowset.GetValue<Schema::CdcStreamAlterData::AwsRegion>())
                     .WithState(rowset.GetValue<Schema::CdcStreamAlterData::State>())
                     .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::UserSIDs>(false))
-                    .WithTraceIds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::TraceIds>(false));
+                    .WithTraceIds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::TraceIds>(false))
+                    .WithHeartbeatMode(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::HeartbeatMode>(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect));
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -3593,6 +3603,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(stream->AlterData == nullptr);
                 Y_ABORT_UNLESS(stream->AlterVersion < alterVersion);
                 stream->AlterData = new TCdcStreamInfo(alterVersion, std::move(settings));
+
+                if (cdcAggregators.contains(pathId)) {
+                    stream->AlterData->AggregatorShardIdx = cdcAggregators.at(pathId);
+                }
 
                 Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
                     << ", cdc stream pathId: " << pathId
@@ -4927,6 +4941,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 break;
             case ETabletType::TestShard:
                 Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
+                break;
+            case ETabletType::CdcAggregator:
+                Self->TabletCounters->Simple()[COUNTER_CDC_AGGREGATOR_COUNT].Add(1);
                 break;
             default:
                 YDB_LOG_WARN_CTX(ctx, "Don't know how to interpret tablet type",

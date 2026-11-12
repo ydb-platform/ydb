@@ -902,13 +902,13 @@ struct TEvPQ {
     };
 
     struct TEvEmitHeartbeat : TEventLocal<TEvEmitHeartbeat, EvEmitHeartbeat> {
-        TEvEmitHeartbeat(ui64 cookie, THeartbeat&& heartbeat)
+        TEvEmitHeartbeat(ui64 cookie, NPQ::THeartbeat&& heartbeat)
             : Cookie(cookie)
             , Heartbeat(std::move(heartbeat))
         {}
 
         const ui64 Cookie;
-        THeartbeat Heartbeat;
+        NPQ::THeartbeat Heartbeat;
     };
 
     struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> {

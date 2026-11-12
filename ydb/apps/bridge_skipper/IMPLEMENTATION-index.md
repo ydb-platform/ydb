@@ -68,17 +68,33 @@ callbacks never access an actor object.
 
 ## Observation and policy invariants
 
-1. **Inventory.** Endpoints come from configuration, keyed by pile; there is
-   no discovery. Each endpoint must address exactly one node, because identity
-   is verified only from its own SelfCheck reply. A reply without a pile keeps
-   the earlier identity and last pile-named observation until its original TTL;
-   a mismatch excludes the endpoint's evidence until a
-   matching reply. Views are cluster-wide and count from every endpoint. Configured piles absent from the view are ignored;
-   view piles without endpoints stay visible.
-   This verifies pile attribution, not remote cluster identity. All endpoints
-   must be independently verified as nodes of the intended cluster; the
-   configured `cluster_id` only labels the local state directory. Unknown
-   endpoints' views can influence the high-water mark before SelfCheck returns.
+1. **Inventory.** Configured single-node endpoints bootstrap discovery. Every
+   five seconds one verified current endpoint supplies ConfigService/FetchConfig
+   (raw MainConfig and optional StorageConfig) and database-scoped Discovery/ListEndpoints.
+   Learned health addresses are limited to `health_endpoints_per_pile` per pile;
+   one additional client may probe and retain a working Config/Discovery port.
+   The complete advertisement cache and total endpoint count stay capped at
+   16,384; their views, health and routing require their own
+   SelfCheck to verify both the advertised node ID and pile. Seed views retain
+   their original behavior before pile verification. GetClusterState determines
+   membership and lifecycle; a Discovery omission never changes a pile state or
+   discards fresh evidence. Learned endpoints in inactive, disconnected or absent
+   piles retire after outstanding calls settle. The initial verification budget
+   covers RPC deadlines and the full per-pile sampling rotation. Afterwards
+   client retention allows that rotation plus the RPC renewal deadline; it does
+   not extend the evidence/routing TTL. Expired addresses can be replaced.
+   Configured seeds stay as dormant bootstrap probes, hidden from the
+   published endpoint list while their pile is absent/inactive/disconnected; a
+   reused address can be verified for a new pile after its old calls settle.
+   A reply without a pile keeps earlier identity and cached evidence at its
+   original TTL; a named mismatch excludes the endpoint until a matching reply.
+   Discovery uses the seed TLS scheme and driver credentials; certificate-name
+   overrides are skipped. Plaintext discovery also admits published IPv4/IPv6
+   aliases. Pending learned health addresses reserve their advertised node ID;
+   the extra inventory port can belong to that same node without taking a health
+   slot. Cached advertisements allow probes to continue when the last inventory
+   source disappears. Discovery is best effort and does not persist learned locators: restart requires a reachable configured seed. Neither matching pile
+   names nor the configured local `cluster_id` prove remote cluster identity.
 2. **View.** Plain `GetClusterState` polls run every state poll. The highest
    fresh generation among all endpoints is selected; same-generation
    pile-state disagreement is
@@ -86,8 +102,8 @@ callbacks never access an actor object.
    `STALE_HISTORY`. A numeric maximum is not a quorum read or proof against
    divergent histories.
 3. **Sampling.** Each round rotates SelfCheck and connectivity independently
-   through each configured pile's endpoints, up to `health_endpoints_per_pile`
-   each, skipping piles absent from the last selected view; mismatched
+   through each observed pile's endpoints, up to `health_endpoints_per_pile`
+   each, skipping absent, inactive and disconnected piles; mismatched
    endpoints get separate SelfCheck recovery probes. A new generation starts a
    round at once. A SelfCheck or connectivity slot that is busy at the round
    boundary is sampled as soon as the call settles, within the per-pile budget.
@@ -130,8 +146,13 @@ callbacks never access an actor object.
    one outside report exists, every outside report shows the pile in config
    quorum without node quorum, and no inside report shows its node quorum;
    fallback Failed only for the BSC-host pile (PROMOTED, else PRIMARY), with no
-   fresh BSC reply anywhere, no self quorum, and every current outside
-   fallback reply reporting a decisive RED static part without truncation;
+   fresh BSC reply anywhere and every current outside fallback reply reporting
+   a decisive RED static part without truncation. Own node quorum vetoes this
+   generic rule. It does not veto a separate storage proof when every outside
+   reply names a RED static group whose complete unique reason graph consists
+   only of RED VDisks caused by same-node, same-pile PDisk `DeviceIoError`.
+   Mixed transport/replication reasons, missing IDs and ambiguous IDs do not
+   establish this proof;
    Replicating when every BSC reply has a RED or replication-only part and one
    is replication-only; Healthy after the warm-up; otherwise Unknown, which an
    incomplete part also gives. SUSPENDED gets only the Lost rule;
@@ -165,10 +186,18 @@ callbacks never access an actor object.
    elsewhere); any other change restarts it. Every Down pile must confirm
    before acting. Fallback failure is confined to one observed generation:
    its confirmation restarts even on a no-op bump and when switching to or
-   from the BSC/Lost failure source. Only fallback requests sent at or after
+   from the BSC/Lost failure source, or between generic fallback and the
+   storage proof. Only fallback requests sent at or after
    the generation observation and, after a role change, observation plus
    `bsc_warmup_seconds` can establish this failure. Cached earlier sends cannot
    seed it or supply conflicting evidence for that new epoch.
+   A qualifying fallback failure takes precedence over connectivity loss, so
+   retained settled reports cannot hide advancing fallback confirmation evidence.
+   Defaults are 1-second state/health rounds, 8-second evidence TTL and a
+   2-second confirmation span, targeting a committed steady-state failover
+   within 20 seconds when evidence and a surviving quorum permit it. The target
+   is not a timeout that overrides blockers or BSC warm-up; explicit timing
+   overrides can increase latency.
 9. **Clock.** Windows, schedules and evidence send times use the monotonic
    clock, read when a request is launched; a wall-clock step changes nothing.
    The HTTP layer reads the wall clock once per response for `now`. Event UTC is

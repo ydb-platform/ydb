@@ -25,7 +25,8 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-SPLIT_FACTOR(20)
+FORK_SUBTESTS()
+SPLIT_FACTOR(30)
 
 DEPENDS(
 )
@@ -35,9 +36,6 @@ PEERDIR(
     ydb/tests/library/clients
     contrib/python/PyHamcrest
 )
-
-FORK_SUBTESTS()
-FORK_TEST_FILES()
 
 END()
 

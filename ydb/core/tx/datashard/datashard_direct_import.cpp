@@ -52,6 +52,9 @@ namespace NDataShard {
 using namespace NTabletFlatExecutor;
 
 bool TDataShard::IsActiveDirectImport(ui64 txId, ui64 tableId, const TActorId& sender) {
+    if (IsUserTableWriteBlocked()) {
+        return false;
+    }
     auto op = Pipeline.FindOp(txId);
     if (!op || !op->IsSchemeTx() || !op->IsWaitingForAsyncJob()) {
         return false;
@@ -159,6 +162,7 @@ TDataShard::TTxS3DirectWriteFinish::TTxS3DirectWriteFinish(TDataShard* ds, TEvDa
     : TBase(ds)
     , Ev(std::move(ev))
 {
+    ++Self->DatabaseFreezeLocalWrites;
 }
 
 bool TDataShard::TTxS3DirectWriteFinish::Execute(TTransactionContext& txc, const TActorContext&) {
@@ -218,6 +222,7 @@ bool TDataShard::TTxS3DirectWriteFinish::Execute(TTransactionContext& txc, const
 }
 
 void TDataShard::TTxS3DirectWriteFinish::Complete(const TActorContext& ctx) {
+    --Self->DatabaseFreezeLocalWrites;
     auto* msg = Ev->Get();
     ctx.Send(Ev->Sender, new TEvDataShard::TEvS3DirectWriteFinishResult(msg->TxId, Success, Error), 0, Ev->Cookie);
 

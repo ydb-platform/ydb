@@ -1,66 +1,43 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
 import pytest
 
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-
-from ydb.tests.tools.datastreams_helpers.control_plane import list_read_rules
-
-import ydb.public.api.protos.draft.fq_pb2 as fq
-
-YDS_CONNECTION = "yds"
-
-
-def start_yds_query(kikimr, client, sql, with_checkpoints) -> str:
-    query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-    client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-    if with_checkpoints:
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
-    else:
-        kikimr.control_plane.wait_worker_count(1, "DQ_MESSAGE_STREAM_READ_ACTOR", 1)
-    return query_id
-
-
-def stop_yds_query(client, query_id):
-    client.abort_query(query_id)
-    client.wait_query(query_id)
 
 
 class TestPqReadWrite(TestYdsBase):
-    @yq_v1
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     @pytest.mark.parametrize("with_checkpoints", [True, False], ids=["with_checkpoints", "without_checkpoints"])
-    def test_pq_read_write(self, kikimr, client, with_checkpoints):
-        client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
-        self.init_topics(Rf"pq_test_pq_read_write_{with_checkpoints}")
+    def test_pq_read_write(self, ydb_topics, with_checkpoints):
+        io = ydb_topics(f"pq_test_pq_read_write_{with_checkpoints}")
+        consumer = io.name + "_input_consumer"
+        io.kikimr.external_ydb_client.query(f'ALTER TOPIC `{io.input_topic}` ADD CONSUMER `{consumer}`;')
         sql = Rf'''
-            PRAGMA dq.MaxTasksPerStage="2";
-            PRAGMA dq.DisableCheckpoints="{not with_checkpoints}";
+            PRAGMA ydb.MaxTasksPerStage="2";
+            PRAGMA ydb.DisableCheckpoints="{not with_checkpoints}";
+            PRAGMA pq.Consumer="{consumer}";
 
-            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT STREAM
+            INSERT INTO {io.output}
+            SELECT
                 Yson::SerializeText(Yson::From(TableRow()))
             FROM (
-                SELECT STREAM
+                SELECT
                     k,
                     Sum(v) as sum
                 FROM (
-                    SELECT STREAM
+                    SELECT
                         Yson::LookupUint64(ys, "time") as t,
                         Yson::LookupInt64(ys, "key") as k,
                         Yson::LookupInt64(ys, "val") as v
                     FROM (
-                        SELECT STREAM
+                        SELECT
                             Yson::Parse(Data) AS ys
-                        FROM {YDS_CONNECTION}.`{self.input_topic}`))
+                        FROM {io.input}))
                 GROUP BY
                     k,
                     HOP(DateTime::FromMilliseconds(CAST(Unwrap(t) as Uint32)), "PT0.005S", "PT0.01S", "PT0.01S"));'''
 
-        query_id = start_yds_query(kikimr, client, sql, with_checkpoints)
+        query = io.start(sql, with_checkpoints=with_checkpoints)
 
         # 100  105   110   115   120   125   130   135   140   (ms)
         #  [ Bucket1  )<--Delay1-->
@@ -82,7 +59,7 @@ class TestPqReadWrite(TestYdsBase):
             '{"time" = 141; "key" = 1; "val" = 10;}',  # Group 1  Close all buckets
         ]
 
-        self.write_stream(data)
+        io.write(data)
 
         expected = [
             '{"k" = 1; "sum" = 14}',  # Group 1  Bucket 1
@@ -95,51 +72,29 @@ class TestPqReadWrite(TestYdsBase):
             '{"k" = 1; "sum" = 4}',  # Group 1  Bucket 5
         ]
 
-        assert self.read_stream(len(expected)) == expected
+        assert io.read(len(expected)) == expected
 
-        read_rules = list_read_rules(self.input_topic)
-        assert len(read_rules) == 1, read_rules
+        io.stop(query)
+        io.wait_read_session_closed(io.input_topic, consumer)
 
-        stop_yds_query(client, query_id)
-
-        # Assert that all read rules were removed after query stops
-        read_rules = list_read_rules(self.input_topic)
-        assert len(read_rules) == 0, read_rules
-
-    @yq_v1
-    @pytest.mark.parametrize("with_checkpoints", [True, False], ids=["with_checkpoints", "without_checkpoints"])
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_pq_read_schema_metadata(self, kikimr, client, with_checkpoints):
-        client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
-        self.init_topics(Rf"pq_read_schema_meta_{with_checkpoints}")
-        sql = Rf'''
-                PRAGMA dq.MaxTasksPerStage="2";
-                PRAGMA dq.DisableCheckpoints="{not with_checkpoints}";
-
-                INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-                SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
-                FROM (
-                    SELECT field1, field2, __ydb_offset as field3
-                    FROM {YDS_CONNECTION}.`{self.input_topic}`
-                    WITH (
-                        format=json_each_row,
-                        SCHEMA (
-                            field1 String,
-                            field2 Int32
-                        )
-                    )
-                )'''
-
-        query_id = start_yds_query(kikimr, client, sql, with_checkpoints)
-
-        data1 = [
-            '{"field1": "value1", "field2": 105}',
-            '{"field1": "value2", "field2": 106}',
-        ]
-        self.write_stream(data1)
-
+    @pytest.mark.parametrize('with_checkpoints', [True, False], ids=['with_checkpoints', 'without_checkpoints'])
+    def test_pq_read_schema_metadata(self, ydb_topics, with_checkpoints):
+        io = ydb_topics(f'pq_read_schema_meta_{with_checkpoints}')
+        query = io.start(
+            f"""
+            PRAGMA ydb.MaxTasksPerStage = '2';
+            PRAGMA ydb.DisableCheckpoints = '{not with_checkpoints}';
+            INSERT INTO {io.output}
+            SELECT Unwrap(Yson::SerializeJson(Yson::From(TableRow())))
+            FROM (
+                SELECT field1, field2, __ydb_offset AS field3
+                FROM {io.input}
+                WITH (FORMAT=json_each_row, SCHEMA=(field1 String, field2 Int32))
+            );
+        """,
+            with_checkpoints=with_checkpoints,
+        )
+        io.write(['{"field1": "value1", "field2": 105}', '{"field1": "value2", "field2": 106}'])
         expected = ['{"field1":"value1","field2":105,"field3":0}', '{"field1":"value2","field2":106,"field3":1}']
-
-        assert self.read_stream(len(expected)) == expected
-
-        stop_yds_query(client, query_id)
+        assert io.read(len(expected)) == expected
+        io.stop(query)

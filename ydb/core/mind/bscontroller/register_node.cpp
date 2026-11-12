@@ -300,7 +300,7 @@ public:
         Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead, /*comprehensive=*/ true);
         Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
 
-        Self->ReadGroups(groupIDsToRead, false, Response.get(), nodeId);
+        Self->ReadGroups(groupIDsToRead, true, Response.get(), nodeId);
         Y_ABORT_UNLESS(groupIDsToRead.empty());
 
         Self->ReadGroups(groupsToDiscard, true, Response.get(), nodeId);

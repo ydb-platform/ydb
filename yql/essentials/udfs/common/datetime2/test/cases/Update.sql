@@ -1,4 +1,7 @@
-/* syntax version 1 */
+$rows = [
+    <|ftztimestamp: Just(TzTimestamp("2001-12-01T21:20:19.345678,GMT"))|>,
+];
+
 $check = ($arg) -> {
     return <|
         upyear:   CAST(DateTime::MakeTzTimestamp(DateTime::Update($arg, 2005)) AS String),
@@ -23,13 +26,11 @@ $check = ($arg) -> {
 };
 
 $typeDispatcher = ($row) -> {
-    $tm = $row.tm;
+    $tm = $row.ftztimestamp;
     return <|
         explicit: $check(DateTime::Split($tm)),
         implicit: $check($tm),
     |>;
 };
 
-$input = SELECT CAST(ftztimestamp AS TzTimestamp) as tm FROM Input;
-
-PROCESS $input USING $typeDispatcher(TableRow());
+PROCESS AS_TABLE($rows) USING $typeDispatcher(TableRow());

@@ -1,6 +1,5 @@
 UNITTEST()
 
-FORK_SUBTESTS()
 SRCS(
     main.cpp
 )

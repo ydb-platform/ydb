@@ -1,5 +1,6 @@
 #include "s3_backup_test_base.h"
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/wrappers/ut_helpers/fs_mock.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
@@ -849,6 +850,105 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
         auto changeFeed2Describe = YdbSchemeClient().DescribePath("/Root/Restored/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable/TestChangeFeed2").GetValueSync();
         UNIT_ASSERT_C(changeFeed2Describe.IsSuccess(), changeFeed2Describe.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_QUAD(IndexesWithOmittedChangefeeds, ExportChangefeeds, Encrypted) {
+        auto& flags = Server().GetRuntime()->GetAppData().FeatureFlags;
+        flags.SetEnableChangefeedsExport(ExportChangefeeds);
+        flags.SetEnableChangefeedsImport(true);
+        flags.SetEnableIndexMaterialization(true);
+
+        const auto created = YdbQueryClient().ExecuteQuery(R"(
+            CREATE TABLE `/Root/FilteredFeeds/Table` (
+                Key Uint32 NOT NULL,
+                Value Utf8,
+                Value2 Utf8,
+                PRIMARY KEY (Key),
+                INDEX by_value GLOBAL ON (Value),
+                INDEX by_value2 GLOBAL ON (Value2)
+            );
+        )", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto inserted = YdbQueryClient().ExecuteQuery(
+            "UPSERT INTO `/Root/FilteredFeeds/Table` (Key, Value, Value2) VALUES (1, 'value', 'value2');",
+            NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+        auto session = YdbTableClient().CreateSession().GetValueSync().GetSession();
+        for (const TString name : {"application", "omitted", "replication"}) {
+            auto feed = NYdb::NTable::TChangefeedDescription(name, NYdb::NTable::EChangefeedMode::Updates, NYdb::NTable::EChangefeedFormat::Json);
+            if (name == "omitted") {
+                feed.AddAttribute("__omit_backup", "true");
+            } else if (name == "replication") {
+                feed.AddAttribute("__async_replication", "{}");
+            }
+            const auto result = session.AlterTable("/Root/FilteredFeeds/Table",
+                NYdb::NTable::TAlterTableSettings().AppendAddChangefeeds(feed)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto exportSettings = MakeExportSettings("/Root/FilteredFeeds", "Filtered");
+        // Encrypted index-data export has a pre-existing SchemaMapping/IV bug.
+        // Check encrypted metadata separately; materialized restore is tested
+        // without encryption until that independent issue is fixed.
+        exportSettings.IncludeIndexData(!Encrypted);
+        if (Encrypted) {
+            exportSettings.SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+        }
+        WaitOpSuccess(YdbExportClient().ExportToS3(exportSettings).GetValueSync());
+
+        const auto& data = GetS3Data();
+        const TString tablePrefix = Encrypted ? "/test_bucket/Filtered/001/" : "/test_bucket/Filtered/Table/";
+        TString metadata;
+        if (Encrypted) {
+            const auto& content = data.at(tablePrefix + "metadata.json.enc");
+            const auto decrypted = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                NBackup::TEncryptionKey("Cool random key!"), TBuffer(content.data(), content.size()));
+            metadata = TString(decrypted.first.Data(), decrypted.first.Size());
+        } else {
+            metadata = data.at(tablePrefix + "metadata.json");
+        }
+        const auto descriptionMetadata = NBackup::TMetadata::Deserialize(metadata);
+        const auto& indexes = descriptionMetadata.GetIndexes();
+        UNIT_ASSERT(indexes);
+        UNIT_ASSERT_VALUES_EQUAL(indexes->size(), 2);
+        for (ui32 index = 0; index < indexes->size(); ++index) {
+            const auto& item = indexes->at(index);
+            if (Encrypted) {
+                // All three source feeds reserve slots even though two are omitted.
+                UNIT_ASSERT_VALUES_EQUAL(item.ExportPrefix, Sprintf("%03u", 1 + (ExportChangefeeds ? 3 : 0) + index));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(item.ExportPrefix, item.ImplTablePrefix);
+                UNIT_ASSERT(data.contains(tablePrefix + item.ExportPrefix + "/scheme.pb"));
+                UNIT_ASSERT(data.contains(tablePrefix + item.ExportPrefix + "/data_00.csv"));
+            }
+        }
+        const auto& exportedFeeds = descriptionMetadata.GetChangefeeds();
+        UNIT_ASSERT_VALUES_EQUAL(exportedFeeds ? exportedFeeds->size() : 0, ExportChangefeeds ? 1 : 0);
+        if (ExportChangefeeds) {
+            UNIT_ASSERT_VALUES_EQUAL(exportedFeeds->front().Name, "application");
+        }
+
+        auto importSettings = MakeImportSettings("Filtered", "/Root/Restored");
+        if (Encrypted) {
+            importSettings.SymmetricKey("Cool random key!");
+        } else {
+            importSettings.IndexPopulationMode(NImport::EIndexPopulationMode::Import);
+        }
+        WaitOpSuccess(YdbImportClient().ImportFromS3(importSettings).GetValueSync());
+        const auto description = session.DescribeTable("/Root/Restored/Table").GetValueSync();
+        UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+        const auto& feeds = description.GetTableDescription().GetChangefeedDescriptions();
+        UNIT_ASSERT_VALUES_EQUAL(feeds.size(), ExportChangefeeds ? 1 : 0);
+        if (ExportChangefeeds) {
+            UNIT_ASSERT_VALUES_EQUAL(feeds.front().GetName(), "application");
+        }
+        for (const TString index : {"by_value", "by_value2"}) {
+            const auto result = YdbQueryClient().ExecuteQuery(
+                TStringBuilder() << "SELECT Key FROM `/Root/Restored/Table` VIEW " << index << " WHERE Key = 1;",
+                NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+        }
     }
 
     Y_UNIT_TEST(TopicEncryption) {

@@ -149,7 +149,7 @@ public:
         const auto& streamDesc = op.GetStreamDescription();
         const auto& streamName = streamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
-        const bool aggregatedHeartbeats = AppData()->FeatureFlags.GetEnableCdcAggregator()
+        const bool shouldAggregateHeartbeats = AppData()->FeatureFlags.GetEnableCdcAggregator()
             && streamDesc.GetResolvedTimestampsIntervalMs();
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "",
@@ -209,7 +209,7 @@ public:
                     .DirChildrenLimit();
             }
 
-            if (checks && aggregatedHeartbeats) {
+            if (checks && shouldAggregateHeartbeats) {
                 checks.ShardsLimit(1);
             }
 
@@ -381,7 +381,7 @@ public:
         }
 
         TChannelsBindings channelsBindings;
-        if (aggregatedHeartbeats && !context.SS->ResolveTabletChannels(0, streamPath.GetPathIdForDomain(), channelsBindings)) {
+        if (shouldAggregateHeartbeats && !context.SS->ResolveTabletChannels(0, streamPath.GetPathIdForDomain(), channelsBindings)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,
                 "Unable to construct channel binding for CDC aggregator with the storage pool");
             return result;
@@ -422,7 +422,7 @@ public:
         streamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         streamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        if (aggregatedHeartbeats) {
+        if (shouldAggregateHeartbeats) {
             const auto shardIdx = context.SS->RegisterShardInfo(
                 TShardInfo::CdcAggregatorInfo(OperationId.GetTxId(), pathId)
                     .WithBindedChannels(channelsBindings));

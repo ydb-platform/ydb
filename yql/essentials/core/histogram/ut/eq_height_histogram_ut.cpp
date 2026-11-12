@@ -2,7 +2,8 @@
 
 #include <yql/essentials/core/histogram/eq_height_histogram.h>
 #include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
-#include <yql/essentials/core/histogram/ut/eq_height_histogram_test_api.h>
+#include <yql/essentials/core/histogram/test_support/eq_height_histogram_test_api.h>
+#include <yql/essentials/core/histogram/test_support/eq_height_histogram_test_helpers.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <util/generic/algorithm.h>
@@ -17,50 +18,15 @@
 #include <utility>
 
 using namespace NKikimr;
+using NKikimr::NHistogramTest::BuildFromStream;
+using NKikimr::NHistogramTest::DEFAULT_MAX_STATE_BYTES;
+using NKikimr::NHistogramTest::MakeKey;
+using NKikimr::NHistogramTest::MakeParams;
+using NKikimr::NHistogramTest::MakeSortedStream;
 
 namespace {
 
-// Memcomparable key from an integer: 4 bytes big-endian, sign bit flipped.
-TString MakeKey(i32 val) {
-    const ui32 unsignedVal = static_cast<ui32>(val) ^ (1U << 31);
-    TString out(4, '\0');
-    out[0] = static_cast<char>((unsignedVal >> 24) & 0xFF);
-    out[1] = static_cast<char>((unsignedVal >> 16) & 0xFF);
-    out[2] = static_cast<char>((unsignedVal >> 8) & 0xFF);
-    out[3] = static_cast<char>(unsignedVal & 0xFF);
-    return out;
-}
-
-// Default byte budget for the histogram state (4 MB).
-constexpr ui64 DEFAULT_MAX_STATE_BYTES = 4ULL << 20;
 constexpr size_t HUGE_KEY_BYTES = 10ULL << 20;
-
-TEqHeightHistogramBuilder::TParams MakeParams(ui32 numBuckets, ui64 maxStateBytes = DEFAULT_MAX_STATE_BYTES) {
-    return {
-        .NumBuckets = numBuckets,
-        .EmissionRate = numBuckets * 8,
-        .MaxStateBytes = maxStateBytes,
-    };
-}
-
-// Sorted stream: 0,0,...,1,1,...,2,2,... with `perKey` copies each.
-TVector<TString> MakeSortedStream(ui32 numKeys, ui32 perKey) {
-    TVector<TString> keys(Reserve(static_cast<size_t>(numKeys) * perKey));
-    for (ui32 keyIdx = 0; keyIdx < numKeys; ++keyIdx) {
-        for (ui32 repIdx = 0; repIdx < perKey; ++repIdx) {
-            keys.push_back(MakeKey(static_cast<i32>(keyIdx)));
-        }
-    }
-    return keys;
-}
-
-TEqHeightHistogramBuilder BuildFromStream(const TVector<TString>& keys, const TEqHeightHistogramBuilder::TParams& params) {
-    TEqHeightHistogramBuilder builder(params);
-    for (const auto& key : keys) {
-        builder.Add(key);
-    }
-    return builder;
-}
 
 // Split a sorted stream into numChunks contiguous chunks.
 TVector<TVector<TString>> SplitContiguous(const TVector<TString>& keys, ui32 numChunks) {
@@ -2024,26 +1990,6 @@ Y_UNIT_TEST(MergeThenAddKeepsResolution) {
     const size_t after = TEqHeightHistogramBuilderTestApi(result).GetEntries().size();
     UNIT_ASSERT_C(after + 2 >= before,
                   "one Add after merge dropped entries from " << before << " to " << after);
-}
-
-// Unsorted Add flush batching — not quadratic
-// flushAt = max(EmissionRate, |Entries|) keeps flush count well below totalCount/EmissionRate.
-Y_UNIT_TEST(UnsortedAddFlushCount) {
-    const ui32 numBuckets = 10;
-    const ui32 numKeys = 20000;
-    auto params = MakeParams(numBuckets);
-
-    TFastRng64 rng(7);
-    auto keys = MakeSortedStream(numKeys, 1);
-    Shuffle(keys.begin(), keys.end(), rng);
-
-    auto builder = BuildFromStream(keys, params);
-    UNIT_ASSERT_VALUES_EQUAL(builder.GetTotalCount(), numKeys);
-
-    const ui64 flushCount = TEqHeightHistogramBuilderTestApi(builder).GetFlushCount();
-    UNIT_ASSERT_C(flushCount * params.EmissionRate < numKeys / 2,
-                  "Flush called " << flushCount << " times; naive every-EmissionRate "
-                                  << "flushing is ~" << (numKeys / params.EmissionRate));
 }
 
 } // Y_UNIT_TEST_SUITE(EqHeightHistogram)

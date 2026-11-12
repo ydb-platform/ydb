@@ -6,7 +6,6 @@ import time
 from copy import deepcopy
 
 from ydb.tests.library.common.types import Erasure
-import ydb.tests.library.common.cms as cms
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
@@ -84,17 +83,21 @@ class KiKiMRDistConfSelfHealTest(object):
             use_self_management=True,
             extra_grpc_services=['config'],
             additional_log_configs=log_configs,
-            cms_config=cls.cms_config,
+            cms_config=deepcopy(cls.cms_config),
             n_to_select=cls.n_to_select,
             state_storage_rings=cls.state_storage_rings)
 
         if cls.self_management_extra_options:
             cls.configurator.yaml_config["self_management_config"].update(cls.self_management_extra_options)
 
+        # SetConfigRequest replaces the entire CMS config. Setting only the ratio
+        # limits after startup would discard the Sentinel settings above.
+        cms_config = cls.configurator.yaml_config.setdefault("cms_config", {})
+        for limits in ("cluster_limits", "tenant_limits"):
+            cms_config.setdefault(limits, {})["disabled_nodes_ratio_limit"] = 100
+
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
-
-        cms.request_increase_ratio_limit(cls.cluster.client)
 
     @classmethod
     def teardown_class(cls):
@@ -102,7 +105,9 @@ class KiKiMRDistConfSelfHealTest(object):
 
     def do_request(self, json_req):
         url = f'http://localhost:{self.cluster.nodes[1].mon_port}/actors/nodewarden?page=distconf'
-        return requests.post(url, headers={'content-type': 'application/json'}, json=json_req).json()
+        response = requests.post(url, headers={'content-type': 'application/json'}, json=json_req, timeout=10)
+        response.raise_for_status()
+        return response.json()
 
     def do_request_config(self, recommended=False):
         resp = self.do_request({"GetStateStorageConfig": {"Recommended": recommended}})
@@ -248,7 +253,8 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
     rgOffset = 1
     cms_config = {"sentinel_config": {
         "state_storage_self_heal_config": {
-            "enable": True,
+            # Sentinel supplies observations; this test starts both heals itself.
+            "enable": False,
             "node_good_state_limit": 3,
             "node_pretty_good_state_limit": 2,
             "node_bad_state_limit": 3,
@@ -261,43 +267,57 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
         "retry_update_config": 1_000_000,
     }}
 
+    def wait_for_config(self, config_name, predicate, timeout=60):
+        deadline = time.monotonic() + timeout
+        while True:
+            config = self.do_request_config()[f"{config_name}Config"]
+            if predicate(config):
+                return config
+            assert_that(time.monotonic() < deadline, config)
+            time.sleep(0.2)
+
     def do_test(self, configName):
+        # Restarting a heal with two readable groups needs real node observations
+        # to choose the source group that will remain readable.
+        # Sentinel may have scheduled its first update with the default 60-second
+        # interval before the startup YAML subscription was applied.
+        deadline = time.monotonic() + 120
+        while True:
+            response = self.do_request({"GetStateStorageConfig": {"NodesState": True}})
+            states = response["StateStorageConfig"].get("NodesState", [])
+            if (len(states) == self.nodes_count and all(state["State"] == 0 for state in states)):
+                break
+            assert_that(time.monotonic() < deadline, response)
+            time.sleep(0.2)
+
         self.do_bad_config(configName)
 
         logger.info("Start SelfHeal")
-        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 3, "ForceHeal": True}}))
-        time.sleep(4)
-        rg = self.do_request_config()[f"{configName}Config"]["RingGroups"]
-        assert_eq(len(rg), 2)
-        assert_that("WriteOnly" not in rg[0])
-        assert_that("WriteOnly" not in rg[1])
+        response = self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 10, "ForceHeal": True}})
+        assert_eq(response.get("Status", "OK"), "OK")
 
-        deadline = time.monotonic() + 30
-        while True:
-            response = self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}})
-            logger.info(response)
-            error = response.get("ErrorReason", "")
-            if not error:
-                break
-            assert_eq(error, "Node states are not ready for choosing a readable State Storage group")
-            assert_that(time.monotonic() < deadline, response)
-            time.sleep(1)
+        def both_groups_readable(config):
+            groups = config.get("RingGroups", [])
+            return len(groups) == 2 and all(not group.get("WriteOnly", False) for group in groups)
 
-        deadline = time.monotonic() + 30
-        config = self.do_request_config()[f"{configName}Config"]
-        while "RingGroups" in config and len(config["RingGroups"]) != 3 and time.monotonic() < deadline:
-            time.sleep(1)
-            config = self.do_request_config()[f"{configName}Config"]
-        if "RingGroups" in config:
-            assert_eq(len(config["RingGroups"]), 3)
-        else:
-            # With short test-only Sentinel intervals the third group may already be promoted.
-            assert_that("Ring" in config, config)
-        time.sleep(10)
+        config = self.wait_for_config(configName, both_groups_readable)
+        previous_offsets = {group.get("RingGroupActorIdOffset", 0) for group in config["RingGroups"]}
 
-        rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+        response = self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}})
+        assert_eq(response.get("Status", "OK"), "OK")
+
+        def second_heal_finished(config):
+            groups = config.get("RingGroups", [config.get("Ring", {})])
+            # The restarted protocol retires the surplus readable group before
+            # adding a new target: it must never create three concurrent groups.
+            assert_that(1 <= len(groups) <= 2, config)
+            assert_that(any(not group.get("WriteOnly", False) for group in groups), config)
+            return "Ring" in config
+
+        rg = self.wait_for_config(configName, second_heal_finished)["Ring"]
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
+        assert_that(rg.get("RingGroupActorIdOffset", 0) not in previous_offsets, rg)
 
 
 class TestKiKiMRDistConfSelfHealAllowedNodes(KiKiMRDistConfSelfHealTest):

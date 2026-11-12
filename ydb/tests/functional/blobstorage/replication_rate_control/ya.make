@@ -14,6 +14,4 @@ PEERDIR(
     ydb/tests/library/clients
 )
 
-FORK_SUBTESTS()
-
 END()

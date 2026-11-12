@@ -3,6 +3,7 @@
 #include "type_ann_list.h"
 #include "type_ann_pg.h"
 #include "type_ann_yql.h"
+#include "type_ann_yql_flatten.h"
 
 #include <yql/essentials/core/yql_expr_csee.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -1684,69 +1685,6 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
     return status == IGraphTransformer::TStatus::Ok && resolvedRoot != root ? IGraphTransformer::TStatus::Repeat : status;
 }
 
-IGraphTransformer::TStatus RebuildSubLinks(
-    const TExprNode::TPtr& root,
-    TExprNode::TPtr& newRoot,
-    const TNodeSet& sublinks,
-    const TInputs& inputs,
-    const TExprNode::TPtr& rowType,
-    TExtContext& ctx)
-{
-    TExprNode::TListType inputTypesItems;
-    for (const auto& x : inputs) {
-        // clang-format off
-        inputTypesItems.push_back(ctx.Expr.Builder(root->Pos())
-            .List()
-                .Atom(0, x.Alias)
-                .Add(1, ExpandType(root->Pos(), *x.Type, ctx.Expr))
-            .Seal()
-            .Build());
-        // clang-format on
-    }
-
-    auto inputTypes = ctx.Expr.NewList(root->Pos(), std::move(inputTypesItems));
-
-    return OptimizeExpr(root, newRoot, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
-        if (!node->IsCallable({"PgSubLink", "YqlSubLink"})) {
-            return node;
-        }
-
-        if (!sublinks.contains(node.Get())) {
-            return node;
-        }
-
-        auto children = node->ChildrenList();
-        if (children[1]->IsCallable("Void")) {
-            children[1] = inputTypes;
-        } else {
-            if (!node->Child(3)->IsCallable("Void")) {
-                if (!children[2]->IsCallable("Void")) {
-                    return node;
-                }
-
-                // rebuild lambda for row test
-                auto argNode = ctx.Expr.NewArgument(node->Pos(), "row");
-                auto valueNode = ctx.Expr.NewArgument(node->Pos(), "value");
-                auto arguments = ctx.Expr.NewArguments(node->Pos(), { argNode, valueNode });
-                TExprNode::TPtr newLambdaRoot;
-                auto status = RebuildLambdaColumns(node->Child(3)->TailPtr(), argNode, newLambdaRoot, inputs, /*expandedColumns=*/nullptr, ctx);
-                auto oldValueNode = node->Child(3)->Head().Child(0);
-                newLambdaRoot = ctx.Expr.ReplaceNode(std::move(newLambdaRoot), *oldValueNode, valueNode);
-                if (status == IGraphTransformer::TStatus::Error) {
-                    return nullptr;
-                }
-
-                children[2] = rowType;
-                children[3] = ctx.Expr.NewLambda(node->Pos(), std::move(arguments), std::move(newLambdaRoot));
-            } else {
-                return node;
-            }
-        }
-
-        return ctx.Expr.NewCallable(node->Pos(), node->Content(), std::move(children));
-    }, ctx.Expr, TOptimizeExprSettings(nullptr));
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 bool ValidateInputTypes(TExprNode& node, TExprContext& ctx) {
@@ -1987,6 +1925,29 @@ bool ValidateGroups(
     return true;
 }
 
+bool ScanColumnsAndSubLinks(
+    const TExprNode::TPtr& root,
+    TInputs& inputs,
+    TInputs& subLinkInputs,
+    const THashSet<TString>& aliases,
+    const TNodeSet& sublinks,
+    bool& hasColumnRef,
+    THashSet<TString>& refs,
+    THashMap<TString, THashSet<TString>>& qualifiedRefs,
+    bool& rebuildSubLinks,
+    bool& rebuildTestExprs,
+    TExtContext& ctx,
+    bool scanColumnsOnly,
+    TUsingColumns usedInUsing = {})
+{
+    if (!ScanColumns(root, inputs, aliases, /*hasStar=*/nullptr, hasColumnRef,
+        refs, &qualifiedRefs, ctx, scanColumnsOnly, /*hasEmitPgStar=*/false, usedInUsing)) {
+        return false;
+    }
+    return ScanColumnsForSublinks(rebuildSubLinks, rebuildTestExprs, sublinks,
+        subLinkInputs, aliases, hasColumnRef, refs, &qualifiedRefs, ctx, scanColumnsOnly);
+}
+
 bool ValidateSort(
     TInputs& inputs,
     TInputs& subLinkInputs,
@@ -2022,16 +1983,13 @@ bool ValidateSort(
         bool hasColumnRef = false;
         THashSet<TString> refs;
         THashMap<TString, THashSet<TString>> qualifiedRefs;
-        if (!ScanColumns(oneSort->Child(1)->TailPtr(), inputs, possibleAliases, /*hasStar=*/nullptr, hasColumnRef,
-            refs, &qualifiedRefs, ctx, scanColumnsOnly, /*hasEmitPgStar=*/false, usedInUsing)) {
-            return false;
-        }
-
         bool needRebuildSubLinks;
         bool needRebuildTestExprs;
-        if (!ScanColumnsForSublinks(needRebuildSubLinks, needRebuildTestExprs, sublinks, subLinkInputs, possibleAliases,
-            hasColumnRef, refs, &qualifiedRefs, ctx, scanColumnsOnly)) {
-            return IGraphTransformer::TStatus::Error;
+        if (!ScanColumnsAndSubLinks(oneSort->Child(1)->TailPtr(),
+            inputs, subLinkInputs, possibleAliases, sublinks,
+            hasColumnRef, refs, qualifiedRefs, needRebuildSubLinks, needRebuildTestExprs,
+            ctx, scanColumnsOnly, usedInUsing)) {
+            return false;
         }
 
         if (scanColumnsOnly) {
@@ -2660,6 +2618,111 @@ bool EnsureSqlSelectWarnings(TExprNode& option, TExprContext& ctx) {
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
+
+bool ScanSqlLambdaColumns(
+    const TExprNode::TPtr& lambda, TInputs& inputs, const THashSet<TString>& aliases,
+    TNodeSet& sublinks, bool& isUniversal, bool& rebuildSublinks, TExtContext& ctx)
+{
+    ScanSublinks(lambda->TailPtr(), sublinks, isUniversal);
+    if (isUniversal) {
+        return true;
+    }
+    bool hasColumnRef = false;
+    THashSet<TString> refs;
+    THashMap<TString, THashSet<TString>> qualifiedRefs;
+    bool rebuildTests = false;
+    if (!ScanColumnsAndSubLinks(lambda->TailPtr(),
+        inputs, inputs, aliases, sublinks,
+        hasColumnRef, refs, qualifiedRefs, rebuildSublinks, rebuildTests,
+        ctx, /*scanColumnsOnly=*/false)) {
+        return false;
+    }
+    rebuildSublinks = rebuildSublinks || rebuildTests;
+    return true;
+}
+
+IGraphTransformer::TStatus RebuildSubLinks(
+    const TExprNode::TPtr& root,
+    TExprNode::TPtr& newRoot,
+    const TNodeSet& sublinks,
+    const TInputs& inputs,
+    const TExprNode::TPtr& rowType,
+    TExtContext& ctx)
+{
+    TExprNode::TListType inputTypesItems;
+    for (const auto& x : inputs) {
+        // clang-format off
+        inputTypesItems.push_back(ctx.Expr.Builder(root->Pos())
+            .List()
+                .Atom(0, x.Alias)
+                .Add(1, ExpandType(root->Pos(), *x.Type, ctx.Expr))
+            .Seal()
+            .Build());
+        // clang-format on
+    }
+
+    auto inputTypes = ctx.Expr.NewList(root->Pos(), std::move(inputTypesItems));
+
+    return OptimizeExpr(root, newRoot, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+        if (!node->IsCallable({"PgSubLink", "YqlSubLink"})) {
+            return node;
+        }
+
+        if (!sublinks.contains(node.Get())) {
+            return node;
+        }
+
+        auto children = node->ChildrenList();
+        if (children[1]->IsCallable("Void")) {
+            children[1] = inputTypes;
+        } else {
+            if (!node->Child(3)->IsCallable("Void")) {
+                if (!children[2]->IsCallable("Void")) {
+                    return node;
+                }
+
+                // rebuild lambda for row test
+                auto argNode = ctx.Expr.NewArgument(node->Pos(), "row");
+                auto valueNode = ctx.Expr.NewArgument(node->Pos(), "value");
+                auto arguments = ctx.Expr.NewArguments(node->Pos(), { argNode, valueNode });
+                TExprNode::TPtr newLambdaRoot;
+                auto status = RebuildLambdaColumns(node->Child(3)->TailPtr(), argNode, newLambdaRoot, inputs, /*expandedColumns=*/nullptr, ctx);
+                auto oldValueNode = node->Child(3)->Head().Child(0);
+                newLambdaRoot = ctx.Expr.ReplaceNode(std::move(newLambdaRoot), *oldValueNode, valueNode);
+                if (status == IGraphTransformer::TStatus::Error) {
+                    return nullptr;
+                }
+
+                children[2] = rowType;
+                children[3] = ctx.Expr.NewLambda(node->Pos(), std::move(arguments), std::move(newLambdaRoot));
+            } else {
+                return node;
+            }
+        }
+
+        return ctx.Expr.NewCallable(node->Pos(), node->Content(), std::move(children));
+    }, ctx.Expr, TOptimizeExprSettings(nullptr));
+}
+
+TExprNode::TPtr BuildSqlColumnRefMember(
+    const TExprNode::TPtr& node, const TExprNode::TPtr& argument,
+    const TInputs& inputs, const THashSet<TString>& aliases, TExprContext& ctx)
+{
+    const auto match = ResolveSqlColumnRef(*node, inputs, aliases, /*scanColumnsOnly=*/false);
+    if (match.Status == ESqlColumnRefStatus::Found) {
+        // clang-format off
+        return ctx.Builder(node->Pos())
+            .Callable("Member")
+                .Add(0, argument)
+                .Atom(1, match.Input->Type->GetItems()[*match.Position]->GetName())
+            .Seal()
+            .Build();
+        // clang-format on
+    }
+    auto issue = TIssue(ctx.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status));
+    const auto* error = ctx.MakeType<TErrorExprType>(std::move(issue));
+    return ctx.NewCallable(node->Pos(), "Error", {ExpandType(node->Pos(), *error, ctx)});
+}
 
 bool IsPlainMemberOverArg(const TExprNode& expr, TStringBuf& memberName) {
     if (expr.IsCallable("Member") && expr.Head().IsArgument()) {
@@ -4050,6 +4113,11 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                         else {
                             inputs.push_back(TInput{ .Alias=alias, .Type=inputStructType, .Order=columnOrder, .Priority=TInput::Current, .UsedExternalColumns={}, .CaseSensitive=caseSensitive });
                         }
+                        if (isYql) {
+                            if (auto status = AnnotateYqlFromFlatten(input, output, *option, *p, inputs.back(), ctx)) {
+                                return *status;
+                            }
+                        }
                     }
                 }
                 else if (optionName == "where" || optionName == "having") {
@@ -4093,15 +4161,12 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                         bool hasColumnRef = false;
                         THashSet<TString> refs;
                         THashMap<TString, THashSet<TString>> qualifiedRefs;
-                        if (!ScanColumns(newLambda->TailPtr(), joinInputs, possibleAliases, /*hasStar=*/nullptr, hasColumnRef,
-                            refs, &qualifiedRefs, ctx, scanColumnsOnly, /*hasEmitPgStar=*/false, ansiJoins ? repeatedColumnsInUsing : TUsingColumns{})) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
                         bool needRebuildSubLinks;
                         bool needRebuildTestExprs;
-                        if (!ScanColumnsForSublinks(needRebuildSubLinks, needRebuildTestExprs, sublinks, joinInputs, possibleAliases, hasColumnRef,
-                            refs, &qualifiedRefs, ctx, scanColumnsOnly)) {
+                        if (!ScanColumnsAndSubLinks(newLambda->TailPtr(),
+                            joinInputs, joinInputs, possibleAliases, sublinks,
+                            hasColumnRef, refs, qualifiedRefs, needRebuildSubLinks, needRebuildTestExprs,
+                            ctx, scanColumnsOnly, ansiJoins ? repeatedColumnsInUsing : TUsingColumns{})) {
                             return IGraphTransformer::TStatus::Error;
                         }
 

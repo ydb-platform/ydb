@@ -11,10 +11,10 @@
 
 namespace NKikimr::NColumnShard {
 class TTabletCountersHandle;
-}
+class TTablesManager;
+}   // namespace NKikimr::NColumnShard
 
 namespace NKikimr::NOlap {
-class IColumnEngine;
 class ITableMetadataAccessor;
 class TPKRangesFilter;
 }   // namespace NKikimr::NOlap
@@ -37,21 +37,24 @@ private:
     };
 
     const std::shared_ptr<const NColumnShard::TTabletCountersHandle> TabletCounters;
+    const NColumnShard::TTablesManager& TablesManager;
     TMultiMap<TSnapshot, TAutoPtr<NActors::IEventHandle>> WaitingForSnapshot;
     std::vector<TWaitingForLoadedPortions> WaitingForLoadedPortions;
 
-    static bool ArePortionsLoaded(const IColumnEngine* engine, const TScanTarget& target);
+    bool ArePortionsLoaded(const TScanTarget& target) const;
     void UpdateCounters() const;
 
 public:
-    explicit TScanGate(const std::shared_ptr<const NColumnShard::TTabletCountersHandle>& tabletCounters)
+    TScanGate(
+        const std::shared_ptr<const NColumnShard::TTabletCountersHandle>& tabletCounters, const NColumnShard::TTablesManager& tablesManager)
         : TabletCounters(tabletCounters)
+        , TablesManager(tablesManager)
     {
     }
 
     // false: the gate holds ev
     template <class TEventPtr>
-    bool PassSnapshot(TEventPtr& ev, const TSnapshot& readVersion, const TSnapshot& maxReadVersion) {
+    bool PassReadableSnapshot(TEventPtr& ev, const TSnapshot& readVersion, const TSnapshot& maxReadVersion) {
         if (readVersion <= maxReadVersion) {
             return true;
         }
@@ -62,8 +65,8 @@ public:
 
     // false: the gate holds ev
     template <class TEventPtr>
-    bool PassLoadedPortions(TEventPtr& ev, const IColumnEngine* engine, const TScanTarget& target) {
-        if (ArePortionsLoaded(engine, target)) {
+    bool PassLoadedPortions(TEventPtr& ev, const TScanTarget& target) {
+        if (ArePortionsLoaded(target)) {
             return true;
         }
         WaitingForLoadedPortions.push_back({ ev.Release(), target });
@@ -72,8 +75,8 @@ public:
     }
 
     // returns the plan step the first held scan still waits for
-    std::optional<ui64> ReleaseReadable(const TSnapshot& maxReadVersion);
-    void ReleaseLoadedPortions(const IColumnEngine& engine);
+    std::optional<ui64> ReleaseReadableSnapshot(const TSnapshot& maxReadVersion);
+    void ReleaseLoadedPortions();
     ui64 GetMemoryUsage() const;
 };
 

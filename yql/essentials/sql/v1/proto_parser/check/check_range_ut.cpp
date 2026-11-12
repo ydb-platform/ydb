@@ -18,8 +18,8 @@ void CheckQuery(const TString& query, bool ansiLexer = false) {
     NSQLTranslation::TParsedTokenList tokens;
 
     TParsers parsers;
-    parsers.Antlr4 = MakeAntlr4ParserFactory(false, false, Nothing());
-    parsers.Antlr4Ansi = MakeAntlr4AnsiParserFactory(false, false, Nothing());
+    parsers.Antlr4 = MakeAntlr4ParserFactory(/*isAmbiguityError=*/false, /*isAmbiguityDebugging=*/false, Nothing());
+    parsers.Antlr4Ansi = MakeAntlr4AnsiParserFactory(/*isAmbiguityError=*/false, /*isAmbiguityDebugging=*/false, Nothing());
     const auto* tree = SqlAST(parsers, query, "", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, ansiLexer, &arena);
     UNIT_ASSERT_C(tree, issues.ToString());
 
@@ -63,7 +63,7 @@ Y_UNIT_TEST(AnsiRoot) {
 }
 
 Y_UNIT_TEST(AnsiLexer) {
-    CheckQuery("SELECT 1", true);
+    CheckQuery("SELECT 1", /*ansiLexer=*/true);
 }
 } // Y_UNIT_TEST_SUITE(ProtoParserCheckRangeTests)
 

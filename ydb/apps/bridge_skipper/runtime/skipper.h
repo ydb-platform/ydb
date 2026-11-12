@@ -22,7 +22,7 @@ struct TEndpointSnapshot {
     TString Uri;
     TString Pile;
     EEndpointIdentity Identity = EEndpointIdentity::Unknown;
-    // The configured pile is absent from the last selected view.
+    // The pile is absent, inactive or disconnected in the last selected view.
     bool Ignored = false;
     // The newest valid view this endpoint returned.
     std::optional<TClusterView> View;

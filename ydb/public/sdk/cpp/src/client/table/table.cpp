@@ -150,9 +150,18 @@ std::optional<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression
             return EColumnFamilyCompression::None;
         case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
             return EColumnFamilyCompression::LZ4;
+        case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
+            return EColumnFamilyCompression::ZSTD;
         default:
             return { };
     }
+}
+
+std::optional<std::int32_t> TColumnFamilyDescription::GetCompressionLevel() const {
+    if (GetProto().has_compression_level()) {
+        return GetProto().compression_level();
+    }
+    return { };
 }
 
 std::optional<EColumnFamilyCacheMode> TColumnFamilyDescription::GetCacheMode() const {
@@ -381,16 +390,37 @@ class TTableDescription::TImpl {
             std::optional<TSequenceDescription> sequenceDescription;
             switch (col.default_value_case()) {
                 case Ydb::Table::ColumnMeta::kFromSequence: {
-                    if (col.from_sequence().name() == "_serial_column_" + col.name()) {
-                        TSequenceDescription currentSequenceDescription;
-                        if (col.from_sequence().has_set_val()) {
-                            TSequenceDescription::TSetVal setVal;
-                            setVal.NextUsed = col.from_sequence().set_val().next_used();
-                            setVal.NextValue = col.from_sequence().set_val().next_value();
-                            currentSequenceDescription.SetVal = std::move(setVal);
-                        }
-                        sequenceDescription = std::move(currentSequenceDescription);
+                    const auto& fromSequence = col.from_sequence();
+                    TSequenceDescription currentSequenceDescription;
+                    currentSequenceDescription.Name = fromSequence.name();
+                    if (fromSequence.has_set_val()) {
+                        TSequenceDescription::TSetVal setVal;
+                        setVal.NextUsed = fromSequence.set_val().next_used();
+                        setVal.NextValue = fromSequence.set_val().next_value();
+                        currentSequenceDescription.SetVal = std::move(setVal);
                     }
+                    if (fromSequence.has_min_value()) {
+                        currentSequenceDescription.MinValue = fromSequence.min_value();
+                    }
+                    if (fromSequence.has_max_value()) {
+                        currentSequenceDescription.MaxValue = fromSequence.max_value();
+                    }
+                    if (fromSequence.has_start_value()) {
+                        currentSequenceDescription.StartValue = fromSequence.start_value();
+                    }
+                    if (fromSequence.has_cache()) {
+                        currentSequenceDescription.Cache = fromSequence.cache();
+                    }
+                    if (fromSequence.has_increment()) {
+                        currentSequenceDescription.Increment = fromSequence.increment();
+                    }
+                    if (fromSequence.has_cycle()) {
+                        currentSequenceDescription.Cycle = fromSequence.cycle();
+                    }
+                    if (fromSequence.has_data_type()) {
+                        currentSequenceDescription.DataType = TType(fromSequence.data_type());
+                    }
+                    sequenceDescription = std::move(currentSequenceDescription);
                     break;
                 }
                 default: break;
@@ -1073,13 +1103,35 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
             protoColumn.set_not_null(column.NotNull.value());
         }
         if (column.SequenceDescription.has_value()) {
+            const auto& sequence = *column.SequenceDescription;
             auto* fromSequence = protoColumn.mutable_from_sequence();
-            if (column.SequenceDescription->SetVal.has_value()) {
-                auto* setVal = fromSequence->mutable_set_val();
-                setVal->set_next_value(column.SequenceDescription->SetVal->NextValue);
-                setVal->set_next_used(column.SequenceDescription->SetVal->NextUsed);
+            fromSequence->set_name(sequence.Name.empty() ? "_serial_column_" + column.Name : sequence.Name);
+            if (sequence.MinValue) {
+                fromSequence->set_min_value(*sequence.MinValue);
             }
-            fromSequence->set_name("_serial_column_" + column.Name);
+            if (sequence.MaxValue) {
+                fromSequence->set_max_value(*sequence.MaxValue);
+            }
+            if (sequence.StartValue) {
+                fromSequence->set_start_value(*sequence.StartValue);
+            }
+            if (sequence.Cache) {
+                fromSequence->set_cache(*sequence.Cache);
+            }
+            if (sequence.Increment) {
+                fromSequence->set_increment(*sequence.Increment);
+            }
+            if (sequence.Cycle) {
+                fromSequence->set_cycle(*sequence.Cycle);
+            }
+            if (sequence.DataType) {
+                fromSequence->mutable_data_type()->CopyFrom(sequence.DataType->GetProto());
+            }
+            if (sequence.SetVal.has_value()) {
+                auto* setVal = fromSequence->mutable_set_val();
+                setVal->set_next_value(sequence.SetVal->NextValue);
+                setVal->set_next_used(sequence.SetVal->NextUsed);
+            }
         }
     }
 
@@ -1266,7 +1318,15 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
         case EColumnFamilyCompression::LZ4:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
             break;
+        case EColumnFamilyCompression::ZSTD:
+            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+            break;
     }
+    return *this;
+}
+
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompressionLevel(std::int32_t level) {
+    Impl_->Proto.set_compression_level(level);
     return *this;
 }
 

@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/library/ncloud/impl)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

@@ -8,6 +8,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/table_index.h>
@@ -869,6 +870,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         auto nextStep = [this]() {
             if (++IndexDownloadedChangefeed >= ChangefeedsPrefixes.size()) {
+                DropOmittedChangefeeds();
                 Reply();
             } else {
                 Become(&TThis::StateDownloadChangefeeds);
@@ -886,6 +888,28 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     template <typename T>
     static void Resize(::google::protobuf::RepeatedPtrField<T>* repeatedField, ui64 size) {
         while (size--) repeatedField->Add();
+    }
+
+    // Backups made before export learned to skip them may still carry the
+    // changefeed that async replication installed on the source table.
+    void DropOmittedChangefeeds() {
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& changefeeds = *ImportInfo->Items.at(ItemIdx).Changefeeds.MutableChangefeeds();
+
+        for (int i = 0; i < changefeeds.size();) {
+            if (!::NKikimr::NBackup::IsChangefeedOmittedFromBackup(changefeeds.Get(i).GetChangefeed())) {
+                ++i;
+                continue;
+            }
+
+            YDB_LOG_INFO("Skip changefeed omitted from export",
+                {"self", SelfId()},
+                {"importId", ImportInfo->Id},
+                {"itemIdx", ItemIdx},
+                {"changefeed", changefeeds.Get(i).GetChangefeed().name()},
+            );
+            changefeeds.DeleteSubrange(i, 1);
+        }
     }
 
     void HandleChangefeeds(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {

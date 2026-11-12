@@ -64,6 +64,9 @@ NYql::NNodes::TExprBase KqpRemoveRedundantSortOverReadTable(
     const TKqpOptimizeContext& kqpCtx
 );
 
+NYql::NNodes::TExprBase KqpReadOlapWithMerge(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
 NYql::NNodes::TExprBase KqpRemoveRedundantSortOverReadTableFSM(
     NYql::NNodes::TExprBase node,
     NYql::TExprContext& ctx,

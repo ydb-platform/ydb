@@ -2,7 +2,7 @@
 #include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
-#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/library/testlib/helpers.h>
@@ -262,8 +262,8 @@ void TestSyncerQuotaDelay(bool cancel) {
         }
         return true;
     };
-    syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
-        std::make_shared<NBridge::TSyncerDataStats>(), quoter), 1);
+    syncer = env.Runtime->Register(NGroupSyncer::CreateSyncerActor(info, source->GroupID, target->GroupID,
+        std::make_shared<NGroupSyncer::TSyncerDataStats>(), quoter), 1);
     WaitUntil(env, [&] { return targetChecked; }, "target index query before throttled read");
     env.Sim(TDuration::Minutes(6));
     UNIT_ASSERT(!completion);
@@ -566,8 +566,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
             }
             return true;
         };
-        syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
-            std::make_shared<NBridge::TSyncerDataStats>(), quoter), 1);
+        syncer = env.Runtime->Register(NGroupSyncer::CreateSyncerActor(info, source->GroupID, target->GroupID,
+            std::make_shared<NGroupSyncer::TSyncerDataStats>(), quoter), 1);
 
         // the first read goes at once and the second one waits for the time it has been charged; others hold no quota yet
         WaitUntil(env, [&] { return !reads.empty(); }, "first read", TDuration::Seconds(1), 60);
@@ -623,8 +623,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
                 !ev->Get<TEvBlobStorage::TEvGet>()->IsIndexOnly;
             return true;
         };
-        syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
-            std::make_shared<NBridge::TSyncerDataStats>(), quoter), 1);
+        syncer = env.Runtime->Register(NGroupSyncer::CreateSyncerActor(info, source->GroupID, target->GroupID,
+            std::make_shared<NGroupSyncer::TSyncerDataStats>(), quoter), 1);
         WaitUntil(env, [&] { return numReads != 0; }, "first read", TDuration::Seconds(1), 60);
         const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         env.Runtime->Send(new IEventHandle(syncer, edge, new TEvents::TEvPoison), 1);
@@ -705,8 +705,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
             }
             return true;
         };
-        syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
-            std::make_shared<NBridge::TSyncerDataStats>(), quoter), 1);
+        syncer = env.Runtime->Register(NGroupSyncer::CreateSyncerActor(info, source->GroupID, target->GroupID,
+            std::make_shared<NGroupSyncer::TSyncerDataStats>(), quoter), 1);
         WaitUntil(env, [&] { return bool(completion); }, "sync completion", TDuration::MilliSeconds(100), 3000);
         env.Runtime->FilterFunction = {};
         UNIT_ASSERT(!completion->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->ErrorReason);
@@ -1472,8 +1472,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
             }
             return true;
         };
-        syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source, target,
-            std::make_shared<NBridge::TSyncerDataStats>(), nullptr), 1);
+        syncer = env.Runtime->Register(NGroupSyncer::CreateSyncerActor(info, source, target,
+            std::make_shared<NGroupSyncer::TSyncerDataStats>(), nullptr), 1);
         WaitUntil(env, [&] { return bool(completion); }, "invalid assignment completion");
         env.Runtime->FilterFunction = {};
         const auto& error = completion->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->ErrorReason;

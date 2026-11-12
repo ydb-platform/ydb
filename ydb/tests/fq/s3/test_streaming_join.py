@@ -1,97 +1,30 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-import boto3
-import logging
-import os
-import pytest
-
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-import ydb.public.api.protos.ydb_value_pb2 as ydb_value
-import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
+from ydb.tests.fq.s3.s3_helpers import create_bucket_and_put_object
+from ydb.tests.fq.streaming_common.common import StreamingTestBase
 
 
-class TestStreamingJoin(TestYdsBase):
-    @yq_v1
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+class TestTopicS3Join(StreamingTestBase):
     def test_grace_join(self, kikimr, s3, client, unique_prefix):
-        self.init_topics("pq_test_grace_join")
-
-        # S3
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        bucket = resource.Bucket("test_grace_join")
-        bucket.create(ACL='public-read')
-
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        fruits = R'''Time,Fruit,Price
-                    0,Banana,3
-                    1,Apple,2
-                    2,Pear,15'''
-        s3_client.put_object(Body=fruits, Bucket='test_grace_join', Key='fruits.csv', ContentType='text/plain')
-
-        kikimr.control_plane.wait_bootstrap(1)
-
-        storage_connection_name = unique_prefix + "test_grace_join"
-        client.create_storage_connection(storage_connection_name, "test_grace_join")
-
-        connection_response = client.create_yds_connection(
-            "myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT")
-        )
-        keyColumn = ydb_value.Column(name="Data", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.STRING))
-        client.create_yds_binding(
-            name="my_binding_in",
-            stream=self.input_topic,
-            format="raw",
-            connection_id=connection_response.result.connection_id,
-            columns=[keyColumn],
-        )
-        client.create_yds_binding(
-            name="my_binding_out",
-            stream=self.output_topic,
-            format="raw",
-            connection_id=connection_response.result.connection_id,
-            columns=[keyColumn],
-        )
-
-        sql = fR'''
-            pragma dq.HashJoinMode="grace";
-
-            $stream = SELECT `Data` FROM bindings.`my_binding_in`;
-
-            $s3 = SELECT *,
-            FROM `{storage_connection_name}`.`fruits.csv`
-            WITH (format=csv_with_names, SCHEMA (
-                Time UInt64 NOT NULL,
-                Fruit String NOT NULL,
-                Price Int NOT NULL
-            ));
-
-            $my_join = SELECT * FROM $stream AS a LEFT JOIN $s3 AS b ON a.Data = b.Fruit;
-
-            INSERT INTO bindings.`my_binding_out`
-            SELECT Data AS data FROM $my_join WHERE Data LIKE '%ahaha%'
-            '''
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
-
-        data = ['{{"event_class": "{}", "time": "{}"}}'.format("ahaha", "2024-01-03T00:00:00Z")]
-        self.write_stream(data, self.input_topic)
-
-        read_data = self.read_stream(1)
-        logging.info("Data was read: {}".format(read_data))
-
-        # This condition will be failed after the fix grace join for streaming queries
-        assert len(read_data) == 0
-
-        client.abort_query(query_id)
-
-        client.wait_query(query_id)
+        create_bucket_and_put_object(s3.s3_url, 'grace-join', 'fruits.csv', 'Fruit,Price\nBanana,3\nApple,2\nPear,15')
+        source = client.create_external_data_source(unique_prefix + 'source', 'grace-join').name
+        topic, endpoint = self.get_input_name(kikimr, unique_prefix + 'grace_join', True, lambda name: name)
+        sql = f'''
+            PRAGMA ydb.HashJoinMode='grace';
+            SELECT input_rows.Data AS Fruit, dictionary.Price AS Price
+            FROM {topic} WITH (STREAMING='TRUE', FORMAT=raw, SCHEMA=(Data String NOT NULL)) AS input_rows
+            LEFT JOIN (
+                SELECT Fruit, Price FROM `{client.path(source)}`.`fruits.csv`
+                WITH (FORMAT=csv_with_names, SCHEMA=(Fruit String NOT NULL, Price Int32 NOT NULL))
+            ) AS dictionary ON input_rows.Data = dictionary.Fruit
+            LIMIT 1;
+        '''
+        try:
+            future = client.start_topic_query(
+                sql, kikimr.get_database_name() + '/' + self.input_topic, self.consumer_name
+            )
+            self.write_stream(['Banana'], endpoint=endpoint)
+            result = future.result(timeout=70)[0]
+            assert len(result.rows) == 1
+            assert result.rows[0]['Fruit'] == b'Banana'
+            assert result.rows[0]['Price'] == 3
+        finally:
+            kikimr.ydb_client.query(f'DROP TOPIC {topic};')

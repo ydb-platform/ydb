@@ -35,6 +35,8 @@ struct TControllerSchema: NIceDb::Schema {
         struct CommittedTxId: Column<12, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
         struct SourceOffsetMismatch: Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+        // A consistent DONE that waits for the global commit loop to drain before detaching.
+        struct ConsistentDone: Column<40, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -50,7 +52,8 @@ struct TControllerSchema: NIceDb::Schema {
             DeferredAlter,
             CommittedStep,
             CommittedTxId,
-            SourceOffsetMismatch
+            SourceOffsetMismatch,
+            ConsistentDone
         >;
     };
 

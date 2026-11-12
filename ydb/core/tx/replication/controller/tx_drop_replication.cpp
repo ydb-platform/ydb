@@ -80,6 +80,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         Self->DeferredAlters.erase(Replication->GetId());
+        Self->ConsistentDoneReplications.erase(Replication->GetId());
         for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
             if (it->first.first != Replication->GetId()) {
                 ++it;

@@ -287,6 +287,7 @@ private:
     void StopSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key);
     bool HasActiveSchemaBarrier(ui64 replicationId) const;
     bool HasPendingAlter(ui64 replicationId) const;
+    bool ConsistentDoneBlocked(ui64 replicationId) const;
     bool HasFreshHeartbeatQuorum(const TSchemaBarrier& barrier) const;
     bool HasPendingTargetFlushTxId(const TSchemaBarrier& barrier) const;
     bool BlocksGlobalCommit(const TSchemaBarrier& barrier) const;
@@ -342,6 +343,7 @@ private:
     };
     THashMap<TWorkerId, TProcessedSourceOffset> ProcessedSourceOffsets;
     THashSet<ui64> ReplicationsWithSourceOffsetMismatch;
+    THashSet<ui64> ConsistentDoneReplications; // DONE deferred until the global commit loop drains
     TWorkerLagExpiryQueue LagExpiryQueue;
     bool LagExpiryScheduled = false;
     THashSet<TWorkerId> StoppingWorkers;

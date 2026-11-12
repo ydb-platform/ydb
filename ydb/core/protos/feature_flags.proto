@@ -486,4 +486,7 @@ message TFeatureFlags {
     // Requires EnableSnapshotsLocking to publish the registry consumed by DataShard.
     optional bool EnableDataShardSnapshotLocking = 387 [default = false];
     optional bool EnableRowTableZstdCompression = 388 [default = false];
+    // A DONE with FAILOVER_MODE_CONSISTENT on a GLOBAL replication keeps the workers until every
+    // assigned write transaction is committed, instead of stopping them at once.
+    optional bool EnableConsistentReplicationDone = 389 [default = false];
 }

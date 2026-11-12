@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -252,11 +254,16 @@ public:
         bool alter = HasRelevantTransferConfigChanges(oldConfig, newConfig);
 
         auto desiredState = Replication->GetDesiredState();
+        bool consistentDone = false;
         if (record.HasSwitchState() && !Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId())) {
             switch (record.GetSwitchState().GetStateCase()) {
                 case NKikimrReplication::TReplicationState::kDone:
                     desiredState = TReplication::EState::Done;
                     alter = true;
+                    consistentDone = AppData()->FeatureFlags.GetEnableConsistentReplicationDone()
+                        && record.GetSwitchState().GetDone().GetFailoverMode()
+                            == NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_CONSISTENT
+                        && Replication->GetConfig().GetConsistencySettings().HasGlobal();
                     break;
                 case NKikimrReplication::TReplicationState::kPaused:
                     desiredState = TReplication::EState::Paused;
@@ -328,6 +335,12 @@ public:
             NIceDb::TUpdate<Schema::Replications::Issue>(issue)
         );
 
+        if (consistentDone && !Self->ConsistentDoneReplications.contains(Replication->GetId())) {
+            Self->ConsistentDoneReplications.insert(Replication->GetId());
+            db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+                NIceDb::TUpdate<Schema::Replications::ConsistentDone>(true));
+        }
+
         if (!alter) {
             if (!Self->DeferredAlters.contains(Replication->GetId())) {
                 Replication->ResetCredentials(ctx);
@@ -339,12 +352,18 @@ public:
         Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
 
         const bool recoverReady = ResetFailedSchemaBarriers && desiredState == TReplication::EState::Ready;
-        if (!recoverReady && Self->HasPendingAlter(Replication->GetId())) {
+        const bool drainingForDone = Self->ConsistentDoneBlocked(Replication->GetId());
+        if (!recoverReady && (Self->HasPendingAlter(Replication->GetId()) || drainingForDone)) {
             Self->DeferredAlters.insert(Replication->GetId());
             db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
                 NIceDb::TUpdate<Schema::Replications::DeferredAlter>(true));
-            YDB_LOG_NOTICE_CTX(ctx, "Defer replication alter until schema barriers complete",
-                {"rid", Replication->GetId()});
+            if (drainingForDone) {
+                YDB_LOG_NOTICE_CTX(ctx, "Defer consistent DONE until assigned global transactions are committed",
+                    {"rid", Replication->GetId()});
+            } else {
+                YDB_LOG_NOTICE_CTX(ctx, "Defer replication alter until schema barriers complete",
+                    {"rid", Replication->GetId()});
+            }
             if (BarrierWorkersToRestart.empty()) {
                 Replication.Reset();
             }
@@ -461,7 +480,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto replicationId = Event->Get()->ReplicationId;
-        if (!Self->DeferredAlters.contains(replicationId) || Self->HasPendingAlter(replicationId)) {
+        if (!Self->DeferredAlters.contains(replicationId) || Self->HasPendingAlter(replicationId)
+            || Self->ConsistentDoneBlocked(replicationId))
+        {
             return true;
         }
 

@@ -656,6 +656,16 @@ protected:
             return;
         }
 
+        // A late or duplicate successful result arrives after the saved poller
+        // event was consumed and the connection was authenticated; the mTLS
+        // continuation must not run again (YDBBUGS-940). Ignore it without
+        // touching the connection state.
+        if (Context->SaslMechanism == "MTLS" && MtlsAuthStage == AUTH_SUCCESSFUL) {
+            YDB_LOG_WARN("Ignoring duplicate mTLS authentication result",
+                {LogPrefix()});
+            return;
+        }
+
         Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement || NKikimr::AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
         Context->Token.UserToken = event->UserToken;
         Context->Token.Ticket = event->Ticket;

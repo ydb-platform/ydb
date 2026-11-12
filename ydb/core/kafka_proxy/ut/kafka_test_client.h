@@ -62,6 +62,10 @@ class TKafkaTestClient {
 
         void SetSocketTimeout(ui32 seconds);
 
+        SOCKET GetRawSocket() const {
+            return (SOCKET)Socket;
+        }
+
         template <std::derived_from<TApiMessage> T>
         void WriteToSocket(TRequestHeaderData& header, T& request) {
             Write(*So, &header, &request);

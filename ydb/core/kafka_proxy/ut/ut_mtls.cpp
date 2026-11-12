@@ -14,6 +14,9 @@
 #include <util/stream/file.h>
 #include <util/system/tempfile.h>
 
+#include <errno.h>
+#include <sys/socket.h>
+
 #include <atomic>
 #include <memory>
 #include <optional>
@@ -79,7 +82,8 @@ Y_UNIT_TEST_SUITE(KafkaMtls) {
     // YDBBUGS-940: TKafkaConnection::StateConnected SIGSEGV.
     // The mTLS success continuation consumes the single-slot PollerEventSaved cache.
     // A duplicate (late/retried) successful TEvAuthResult then replays a null TAutoPtr
-    // and used to crash the node. The connection must close gracefully instead.
+    // and used to crash the node. The duplicate must be ignored and the connection
+    // stay alive.
     //
     // The client deliberately sends no Kafka requests on the mTLS connection: the
     // request-processing path of the mTLS flow is racy and out of scope here. The test
@@ -164,15 +168,22 @@ Y_UNIT_TEST_SUITE(KafkaMtls) {
             connectionId, NActors::TActorId(),
             new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, clientResponse)));
 
+        // The duplicate result must be ignored and the connection stay open.
+        // The server sends TLS 1.3 session tickets to the client during the
+        // mTLS handshake; they stay unread in the socket, so drain the
+        // pending bytes first and then check for EOF: an open connection
+        // surfaces as EAGAIN, a close as EOF (or ECONNRESET).
+        Sleep(TDuration::MilliSeconds(500));
         bool closed = false;
-        for (size_t attempt = 0; attempt < 50 && !closed; ++attempt) {
-            try {
-                Sleep(TDuration::MilliSeconds(100));
-                client->ApiVersions(true);
-            } catch (...) {
-                closed = true;
+        for (;;) {
+            char buf[4096];
+            const ssize_t drained = recv(client->GetRawSocket(), buf, sizeof(buf), MSG_DONTWAIT);
+            if (drained > 0) {
+                continue;
             }
+            closed = drained == 0 || errno == ECONNRESET;
+            break;
         }
-        UNIT_ASSERT_C(closed, "connection should be closed after a duplicate mTLS auth result");
+        UNIT_ASSERT_C(!closed, "connection should stay open after a duplicate mTLS auth result");
     }
 }

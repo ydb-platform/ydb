@@ -17,7 +17,6 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <yql/essentials/core/yql_module_helpers.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
@@ -25,6 +24,8 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+
+#include <library/cpp/resource/resource.h>
 
 #include <util/generic/is_in.h>
 #include <util/generic/scope.h>
@@ -66,10 +67,19 @@ bool IsShowCreate(const TExprNode& read) {
 TExprNode::TPtr BuildChecksum(const TExprNode::TPtr& input, TStringBuf algorithm, const TExprNode::TPtr& prefixes,
                              TTypeAnnotationContext& types, TExprContext& ctx) {
     const auto pos = input->Pos();
-    auto factory = ImportDeeplyCopied(ctx.GetPosition(pos), "/lib/ydb/digest.sql", "$DigestFactory", ctx, types);
-    if (!factory) {
+    const TString library = "/lib/ydb/digest.sql";
+    auto modules = types.Modules->CreateMutableChild();
+    if (!modules->AddFromMemory(library, NResource::Find(library), ctx, /*syntaxVersion=*/1, /*packageVersion=*/0)
+        || !modules->Link(ctx)) {
         return nullptr;
     }
+
+    const auto* exports = modules->GetModule(library);
+    YQL_ENSURE(exports);
+    const auto* symbol = exports->Symbols().FindPtr("$DigestFactory");
+    YQL_ENSURE(symbol);
+    TNodeOnNodeOwnedMap clones;
+    auto factory = ctx.DeepCopy(**symbol, exports->ExprCtx(), clones, /*internStrings=*/true, /*copyTypes=*/false);
 
     auto row = ctx.NewArgument(pos, "row");
     auto value = ctx.NewCallable(pos, "RemoveSystemMembers", {row});

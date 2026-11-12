@@ -1,9 +1,5 @@
 #include "digest_test_common.h"
 
-#include <ydb/core/kqp/common/kqp_module_resolver.h>
-
-#include <yql/essentials/core/services/mounts/yql_mounts.h>
-
 #include <util/digest/city.h>
 #include <util/string/hex.h>
 
@@ -104,22 +100,6 @@ TDataQueryResult QueryChecksum(TSession& session, TStringBuf table,
 } // namespace
 
 Y_UNIT_TEST_SUITE(Digest) {
-    Y_UNIT_TEST(FactoryModuleIsScopedToKqp) {
-        NYql::TExprContext yqlContext;
-        NYql::IModuleResolver::TPtr yqlResolver;
-        UNIT_ASSERT_C(NYql::GetYqlDefaultModuleResolver(yqlContext, yqlResolver),
-                      yqlContext.IssueManager.GetIssues().ToString());
-        UNIT_ASSERT(!yqlResolver->GetModule("/lib/ydb/digest.sql"));
-
-        NYql::TExprContext kqpContext;
-        NYql::IModuleResolver::TPtr kqpResolver;
-        UNIT_ASSERT_C(GetKqpDefaultModuleResolver(kqpContext, kqpResolver),
-                      kqpContext.IssueManager.GetIssues().ToString());
-        const auto* module = kqpResolver->GetModule("/lib/ydb/digest.sql");
-        UNIT_ASSERT(module);
-        UNIT_ASSERT(module->Symbols().contains("$DigestFactory"));
-    }
-
     Y_UNIT_TEST(AlgorithmsPartitionsAndRanges) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();

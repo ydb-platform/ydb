@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 

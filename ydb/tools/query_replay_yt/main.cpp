@@ -1,7 +1,5 @@
 #include "query_replay.h"
 
-#include <ydb/core/kqp/common/kqp_module_resolver.h>
-
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -171,7 +169,7 @@ public:
         ActorSystem->Register(NKikimr::NKqp::CreateKqpResourceManagerActor({}, nullptr));
         ModuleResolverState = MakeIntrusive<NKikimr::NKqp::TModuleResolverState>();
         HttpGateway = NYql::IHTTPGateway::Make();
-        Y_ABORT_UNLESS(NKikimr::NKqp::GetKqpDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
+        Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
     }
 
     THolder<TQueryReplayEvents::TEvCompileResponse> RunReplay(NJson::TJsonValue&& json) {

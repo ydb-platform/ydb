@@ -131,7 +131,6 @@ public:
         }
         AFL_VERIFY(false);
     }
-
 };
 
 }   // namespace NKikimr::NOlap

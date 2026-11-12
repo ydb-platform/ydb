@@ -19,6 +19,30 @@
 
 namespace NKikimr {
 
+namespace {
+
+Ydb::Table::ColumnMeta NullDefaultColumn(const TString& typeText, bool notNull, bool optionalLiteral) {
+    Ydb::Type type;
+    UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(typeText, &type));
+    Ydb::Table::ColumnMeta column;
+    column.set_name("value");
+    column.set_not_null(notNull);
+    if (!notNull && !type.has_pg_type()) {
+        *column.mutable_type()->mutable_optional_type()->mutable_item() = type;
+    } else {
+        *column.mutable_type() = type;
+    }
+    if (optionalLiteral && !type.has_pg_type()) {
+        *column.mutable_from_literal()->mutable_type()->mutable_optional_type()->mutable_item() = type;
+    } else {
+        *column.mutable_from_literal()->mutable_type() = type;
+    }
+    column.mutable_from_literal()->mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+    return column;
+}
+
+}
+
 Y_UNIT_TEST_SUITE(ConvertTableDescription) {
     NKikimrSchemeOp::TModifyScheme BuildInternalAlter(const NKikimrKqp::TKqpAlterTableRequest& request) {
         NKikimrSchemeOp::TModifyScheme result;
@@ -174,6 +198,115 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         UNIT_ASSERT(!FillColumnDescription(result, columns, status, error));
         UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(error, "Not consistent column type and not_null option");
+    }
+
+    Y_UNIT_TEST(PublicNullDefaultsCreateAndAddColumns) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.FeatureFlags.SetEnableNotNullColumns(true);
+        for (const TString type : {"type_id: INT32", "type_id: STRING",
+            "decimal_type { precision: 22 scale: 9 }", "pg_type { type_name: 'pgtext' oid: 25 }"})
+        {
+            for (const bool notNull : {false, true}) {
+                for (const bool optionalLiteral : {false, true}) {
+                    google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta> columns;
+                    *columns.Add() = NullDefaultColumn(type, notNull, optionalLiteral);
+                    columns.Mutable(0)->set_family("family");
+                    NKikimrSchemeOp::TTableDescription result;
+                    auto status = Ydb::StatusIds::SUCCESS;
+                    TString error;
+                    UNIT_ASSERT_C(FillColumnDescription(result, columns, status, error), error);
+                    UNIT_ASSERT_VALUES_EQUAL(result.ColumnsSize(), 1);
+                    const auto& column = result.GetColumns(0);
+                    UNIT_ASSERT_C(!column.HasDefaultFromLiteral(), column.DebugString());
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetNotNull(), notNull);
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetFamilyName(), "family");
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetName(), "value");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PublicNullDefaultsAlterColumns) {
+        TActorSystemStub actorSystem;
+        for (const bool optionalLiteral : {false, true}) {
+            Ydb::Table::AlterTableRequest request;
+            request.set_path("/Root/Table");
+            auto& column = *request.add_alter_columns();
+            column = NullDefaultColumn("type_id: INT32", false, optionalLiteral);
+            column.clear_type();
+            column.clear_not_null();
+            NKikimrSchemeOp::TModifyScheme result;
+            auto status = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT_C(BuildAlterTableModifyScheme(&request, &result, TTableProfiles{}, TPathId{}, status, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetAlterTable().ColumnsSize(), 1);
+            const auto& altered = result.GetAlterTable().GetColumns(0);
+            UNIT_ASSERT_C(altered.HasEmptyDefault(), altered.DebugString());
+            UNIT_ASSERT(!altered.HasDefaultFromLiteral());
+            UNIT_ASSERT(!altered.HasNotNull());
+            UNIT_ASSERT(!altered.HasType());
+        }
+    }
+
+    Y_UNIT_TEST(PublicNonNullLiteralDefaultsPreserved) {
+        TActorSystemStub actorSystem;
+        google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta> columns;
+        auto& zero = *columns.Add();
+        zero = NullDefaultColumn("type_id: INT32", false, false);
+        zero.set_name("zero");
+        zero.mutable_from_literal()->mutable_value()->set_int32_value(0);
+        auto& empty = *columns.Add();
+        empty = NullDefaultColumn("type_id: STRING", false, true);
+        empty.set_name("empty");
+        empty.mutable_from_literal()->mutable_value()->set_bytes_value("");
+        NKikimrSchemeOp::TTableDescription result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT_C(FillColumnDescription(result, columns, status, error), error);
+        UNIT_ASSERT(result.GetColumns(0).HasDefaultFromLiteral());
+        UNIT_ASSERT(result.GetColumns(0).GetDefaultFromLiteral().value().has_int32_value());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetColumns(0).GetDefaultFromLiteral().value().int32_value(), 0);
+        UNIT_ASSERT(result.GetColumns(1).HasDefaultFromLiteral());
+        UNIT_ASSERT(result.GetColumns(1).GetDefaultFromLiteral().value().has_bytes_value());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetColumns(1).GetDefaultFromLiteral().value().bytes_value(), "");
+    }
+
+    Y_UNIT_TEST(PublicNullDefaultsColumnTableCreateAndAdd) {
+        TActorSystemStub actorSystem;
+        for (const bool notNull : {false, true}) {
+            google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta> columns;
+            *columns.Add() = NullDefaultColumn("type_id: INT32", notNull, true);
+            NKikimrSchemeOp::TColumnTableDescription created;
+            auto status = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT_C(FillColumnDescription(created, columns, status, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(created.GetSchema().GetColumns(0).GetNotNull(), notNull);
+            NKikimrSchemeOp::TAlterColumnTable altered;
+            UNIT_ASSERT_C(FillColumnDescription(altered, columns, status, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(altered.GetAlterSchema().AddColumnsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(altered.GetAlterSchema().GetAddColumns(0).GetNotNull(), notNull);
+        }
+    }
+
+    Y_UNIT_TEST(PublicColumnTablesRejectDefaultChanges) {
+        TActorSystemStub actorSystem;
+        for (const bool drop : {false, true}) {
+            Ydb::Table::AlterTableRequest request;
+            request.set_path("/Root/Table");
+            auto& column = *request.add_alter_columns();
+            column = NullDefaultColumn("type_id: INT32", false, true);
+            column.clear_type();
+            column.clear_not_null();
+            if (drop) {
+                column.set_empty_default(NProtoBuf::NULL_VALUE);
+            }
+            NKikimrSchemeOp::TModifyScheme result;
+            auto status = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT(!BuildAlterColumnTableModifyScheme(&request, &result, {}, status, error));
+            UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(error, "Default values are not supported in column tables");
+        }
     }
 
     Y_UNIT_TEST(ColumnTablesRejectSetNotNull) {

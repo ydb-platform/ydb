@@ -27,49 +27,6 @@ class UniqueKeyLoader(yaml.SafeLoader):
         return mapping
 
 
-class ConfigDirective:
-    """A tagged configuration value interpreted by YDB."""
-
-    def __init__(self, tag, value):
-        self.tag = tag
-        self.value = value
-
-
-class ConfigDumper(yaml.SafeDumper):
-    pass
-
-
-def construct_directive(loader, node):
-    if isinstance(node, yaml.MappingNode):
-        value = loader.construct_mapping(node, deep=True)
-    elif isinstance(node, yaml.SequenceNode):
-        value = loader.construct_sequence(node, deep=True)
-    else:
-        value = loader.construct_scalar(node)
-    return ConfigDirective(node.tag, value)
-
-
-def represent_directive(dumper, directive):
-    value = directive.value
-    if isinstance(value, dict):
-        return dumper.represent_mapping(directive.tag, value)
-    if isinstance(value, list):
-        return dumper.represent_sequence(directive.tag, value)
-    return dumper.represent_scalar(directive.tag, value)
-
-
-for tag in ('!inherit', '!append', '!remove'):
-    UniqueKeyLoader.add_constructor(tag, construct_directive)
-
-
-def construct_keyed_inherit(loader, suffix, node):
-    return construct_directive(loader, node)
-
-
-UniqueKeyLoader.add_multi_constructor('!inherit:', construct_keyed_inherit)
-ConfigDumper.add_representer(ConfigDirective, represent_directive)
-
-
 def safe_load_no_duplicates(content: str) -> dict:
     return yaml.load(content, Loader=UniqueKeyLoader)
 # -----------------------------------------------------
@@ -93,8 +50,9 @@ class ClusterDetails(ClusterDetailsProvider):
     SLOTS_PORTS_START = 31000
     PORTS_SHIFT = 10
 
-    def __init__(self, cluster_description_path, walle_provider=None, validator=None):
+    def __init__(self, cluster_description_path, walle_provider=None, validator=None, *, loader=safe_load_no_duplicates):
         self.__template = None
+        self._loader = loader
         self.__details = None
         self.__databases = None
         self.__dynamic_slots = None
@@ -111,7 +69,7 @@ class ClusterDetails(ClusterDetailsProvider):
     def template(self):
         if self.__template is None:
             with open(self._cluster_description_file, 'r') as file:
-                self.__template = safe_load_no_duplicates(file.read())
+                self.__template = self._loader(file.read())
 
         # for V2 configs, we need to use the config field
         if 'config' in self.__template:

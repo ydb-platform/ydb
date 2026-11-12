@@ -6,6 +6,7 @@ from unittest import TestCase, mock
 import yaml
 
 from ydb.tools.ydbd_slice import cluster_description
+from ydb.tools.ydbd_slice import config_yaml
 from ydb.tools.ydbd_slice import handlers
 from ydb.tools.ydbd_slice import nodes
 from ydb.tools.ydbd_slice import process_profiles
@@ -259,6 +260,34 @@ class SlotIndexProfileTest(TestCase):
 
 
 class YamlConfiguratorEmitTest(TestCase):
+    def test_main_config_preserves_safe_loader_merge_and_duplicate_semantics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = os.path.join(tmp, 'src-config.yaml')
+            databases_path = os.path.join(tmp, 'databases.yaml')
+            with open(config_path, 'w') as f:
+                f.write("""\
+defaults: &defaults {static_erasure: none}
+<<: *defaults
+hosts: [{host: h.search.yandex.net}]
+feature_flags: !inherit
+  <<: &flags {enable_external_data_sources: false}
+  enable_external_data_sources: true
+duplicate: old
+duplicate: new
+""")
+            with open(databases_path, 'w') as f:
+                f.write('domains: []\n')
+
+            configurator = yaml_configurator.YamlConfigurator(databases_path, tmp, config_path)
+            self.assertEqual(configurator.static_dict['static_erasure'], 'none')
+            self.assertEqual(configurator.cluster_description.template['duplicate'], 'new')
+            self.assertEqual(
+                configurator.static_dict['feature_flags'].value,
+                {'enable_external_data_sources': True},
+            )
+            with self.assertRaisesRegex(ValueError, 'Invalid yaml config'):
+                configurator.static = 'feature_flags: !unknown {}'
+
     def test_v2_config_preserves_directives(self):
         source = """\
 metadata: {kind: MainConfig, cluster: test, version: 0}
@@ -291,7 +320,7 @@ selector_config:
                     rendered = f.read()
                 if not strip:
                     self.assertEqual(rendered, source + '\n')
-                parsed = cluster_description.safe_load_no_duplicates(rendered)
+                parsed = config_yaml.load(rendered)
                 self.assertNotIn('process_profiles', parsed)
                 config = parsed['selector_config'][0]['config']
                 self.assertEqual(config['feature_flags'].tag, '!inherit')
@@ -335,6 +364,9 @@ selector_config:
             with open(databases_path, 'w') as f:
                 yaml.safe_dump({'domains': [{'domain_name': 'Root', 'dynamic_slots': 1}]}, f)
 
+            with open(config_path, 'a') as f:
+                f.write('feature_flags: !inherit {enable_external_data_sources: true}\n')
+
             configurator = yaml_configurator.YamlConfigurator(
                 databases_path, out_dir, config_path
             )
@@ -342,15 +374,19 @@ selector_config:
             configurator.create_static_cfg()
 
             with open(os.path.join(out_dir, 'config.yaml')) as f:
-                base = yaml.safe_load(f)
+                base = config_yaml.load(f)
             self.assertNotIn('process_profiles', base)
             self.assertNotIn('dynamic_profiles', base['hosts'][0])
 
             profile_path = os.path.join(out_dir, 'config.p_dyn-a.yaml')
             self.assertTrue(os.path.isfile(profile_path))
             with open(profile_path) as f:
-                profile = yaml.safe_load(f)
+                profile = config_yaml.load(f)
             self.assertEqual(profile['actor_system_config']['executor'][0]['threads'], 4)
+            for emitted in (base, profile):
+                directive = emitted['feature_flags']
+                self.assertEqual(directive.tag, '!inherit')
+                self.assertEqual(directive.value, {'enable_external_data_sources': True})
 
     def test_v2_config_rejects_process_profiles(self):
         with tempfile.TemporaryDirectory() as tmp:

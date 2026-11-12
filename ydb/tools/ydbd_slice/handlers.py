@@ -151,7 +151,7 @@ class Slice:
             self.nodes.execute_async(cmd, nodes=hosts)
 
     def _clear_locations(self):
-        self.nodes.execute_async("sudo rm -f {}/{{location,bridge-pile}}".format(self.slice_tenants_path))
+        self.nodes.execute_async("sudo rm -f {0}/location {0}/bridge-pile".format(self.slice_tenants_path))
 
     def slice_format(self):
         self.slice_stop()

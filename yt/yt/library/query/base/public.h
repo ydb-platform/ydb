@@ -94,6 +94,8 @@ struct TQueryStatistics;
 
 struct TQueryOptions;
 
+struct TParsedSource;
+
 DECLARE_REFCOUNTED_STRUCT(IAggregateFunctionDescriptor)
 
 DECLARE_REFCOUNTED_STRUCT(ICallingConvention)

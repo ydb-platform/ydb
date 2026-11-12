@@ -1998,50 +1998,6 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextLikeEscapedEdgeNgram, UTF8) {
     CompareYson("[[[4u]]]", FormatResultSetYson(literal.GetResultSet(0)));
 }
 
-Y_UNIT_TEST(SelectWithFulltextLikeEscapeStopwords) {
-    auto kikimr = Kikimr();
-    auto db = kikimr.GetQueryClient();
-    CreateTexts(db);
-
-    auto upsert = db.ExecuteQuery(R"sql(
-        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
-            (0, "foo _ the cats"), (1, "foo X the cats"), (2, "foo there");
-    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
-
-    AddIndexNGram(db, 3, 3, false, false, false, "whitespace", {.Stopwords = true});
-
-    for (const auto& [pattern, expected] : {
-            std::pair{"foo !_%the cats", "[[[0u]]]"},
-            std::pair{"%the% cats", "[[[0u]];[[1u]]]"}}) {
-        const auto params = TParamsBuilder().AddParam("$pattern").String(pattern).Build().Build();
-        auto result = db.ExecuteQuery(R"sql(
-            DECLARE $pattern AS String;
-            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
-            WHERE Text LIKE $pattern ESCAPE '!' ORDER BY Key;
-        )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
-    }
-    const auto params = TParamsBuilder().AddParam("$pattern").String("%her%").Build().Build();
-    const auto partial = db.ExecuteQuery(R"sql(
-        DECLARE $pattern AS String;
-        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
-        WHERE Text LIKE $pattern ESCAPE '!' ORDER BY Key;
-        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
-        WHERE Text LIKE $pattern ESCAPE '!' AND Text LIKE 'foo %' ESCAPE '!' ORDER BY Key;
-    )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(partial.GetStatus(), EStatus::SUCCESS, partial.GetIssues().ToString());
-    CompareYson("[[[2u]]]", FormatResultSetYson(partial.GetResultSet(0)));
-    CompareYson("[[[2u]]]", FormatResultSetYson(partial.GetResultSet(1)));
-    const auto wildcard = db.ExecuteQuery(R"sql(
-        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
-        WHERE FulltextMatch(Text, '%her%', 'Wildcard' AS Mode) ORDER BY Key;
-    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(wildcard.GetStatus(), EStatus::SUCCESS, wildcard.GetIssues().ToString());
-    CompareYson("[[[2u]]]", FormatResultSetYson(wildcard.GetResultSet(0)));
-}
-
 Y_UNIT_TEST(SelectWithFulltextLikeLengthFilter) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();

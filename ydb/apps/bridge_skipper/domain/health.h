@@ -27,6 +27,10 @@ struct TSelfCheckClassification {
     // of RED VDisks caused by explicit, same-node PDisk DeviceIoError reports.
     // Generic transport failures, replication and incomplete graphs do not count.
     std::set<TString> StorageFailures;
+    // Explicit local service-stall claims with a complete, attributable reason graph.
+    std::set<TString> IoStallFailures;
+    // Request-correlated live sampling coverage reported by the server.
+    std::set<TString> IoHealthCoveredPiles;
     // RED group issues without a pile location.
     ui64 UnnamedRed = 0;
     // "<TYPE> <STATUS> pile=<name>: <message>" for PILE_*, BRIDGE_PILE and

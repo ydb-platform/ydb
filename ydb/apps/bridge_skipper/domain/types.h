@@ -84,7 +84,8 @@ enum class EPileVerdict { Healthy, Failed, Lost, Replicating, Unknown };
 
 // Failure sources have separate confirmation windows. Storage is the narrow
 // fallback proof based on reported PDisk DeviceIoError, independent of quorum.
-enum class EFailureEvidence { Ordinary, Fallback, Storage };
+// IoStall is a live local I/O service proof, with additional candidate coverage.
+enum class EFailureEvidence { Ordinary, Fallback, Storage, IoStall };
 
 struct TPileVerdict {
     EPileVerdict Verdict = EPileVerdict::Unknown;
@@ -96,6 +97,9 @@ struct TPileVerdict {
     TMonotonic NewestEvidenceSentAt;
     // A complete fresh fallback reply from this pile; not proof of disk health.
     bool OwnFallback = false;
+    // A current own reply covers every referenced static device with a live I/O sample.
+    // This is coverage, not proof that an idle device can accept writes.
+    bool OwnIoHealth = false;
     EFailureEvidence FailureEvidence = EFailureEvidence::Ordinary;
 };
 

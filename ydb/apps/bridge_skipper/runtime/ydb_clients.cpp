@@ -130,7 +130,7 @@ public:
             return;
         }
         const auto settings = NYdb::NMonitoring::TSelfCheckSettings()
-            .ReturnVerboseStatus(false).NoMerge(true).NoCache(true)
+            .ReturnVerboseStatus(false).NoMerge(true).NoCache(true).IncludeStorageIoHealth(true)
             .OperationTimeout(Timing.SelfCheckOperationTimeout).ClientTimeout(Timing.SelfCheckClientTimeout);
         Launch(std::move(base), std::move(completed), [client, settings] {
             return client->Monitoring.SelfCheck(settings);

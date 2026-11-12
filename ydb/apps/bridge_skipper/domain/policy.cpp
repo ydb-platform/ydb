@@ -224,10 +224,14 @@ TDecision Decide(
     Y_ENSURE(primary);
     // Without BSC, require a current own fallback observation as well as self
     // quorum and no attributed RED/GREY part. This is not proof of disk health.
+    const bool needsIoHealth = std::any_of(down.begin(), down.end(), [&](const auto& pile) {
+        return PileVerdict(health, pile).FailureEvidence == EFailureEvidence::IoStall;
+    });
     const auto eligible = [&](const TString& pile) {
         const auto& verdict = PileVerdict(health, pile);
-        return verdict.Verdict == EPileVerdict::Healthy
-            || (!health.BscAvailable && verdict.SelfQuorum && verdict.OwnFallback && !verdict.FallbackRed);
+        return (!needsIoHealth || (verdict.OwnIoHealth && !verdict.FallbackRed))
+            && (verdict.Verdict == EPileVerdict::Healthy
+                || (!health.BscAvailable && verdict.SelfQuorum && verdict.OwnFallback && !verdict.FallbackRed));
     };
 
     std::optional<TString> survivor;

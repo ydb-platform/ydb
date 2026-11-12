@@ -152,7 +152,13 @@ callbacks never access an actor object.
    reply names a RED static group whose complete unique reason graph consists
    only of RED VDisks caused by same-node, same-pile PDisk `DeviceIoError`.
    Mixed transport/replication reasons, missing IDs and ambiguous IDs do not
-   establish this proof;
+   establish this proof. Opt-in live I/O observations add a separate proof:
+   pending initialized Normal PDisk work without retirement for at least 10 s,
+   an exact storage-group marker and a complete same-node/same-pile RED physical reason
+   graph. Missing, truncated and mixed transport/replication reasons do not
+   qualify. Every current BSC reply must agree; without BSC the same outside
+   fallback/BSC-host scope applies, independently of own node quorum. An
+   unrelated group marker never changes an ordinary failure proof;
    Replicating when every BSC reply has a RED or replication-only part and one
    is replication-only; Healthy after the warm-up; otherwise Unknown, which an
    incomplete part also gives. SUSPENDED gets only the Lost rule;
@@ -193,6 +199,9 @@ callbacks never access an actor object.
    seed it or supply conflicting evidence for that new epoch.
    A qualifying fallback failure takes precedence over connectivity loss, so
    retained settled reports cannot hide advancing fallback confirmation evidence.
+   The live I/O proof uses its own confirmation source and the same generation
+   and role warm-up boundaries in both BSC and fallback modes; changing its
+   source or generation restarts confirmation.
    Defaults are 1-second state/health rounds, 8-second evidence TTL and a
    2-second confirmation span, targeting a committed steady-state failover
    within 20 seconds when evidence and a surviving quorum permit it. The target
@@ -225,6 +234,10 @@ callbacks never access an actor object.
     incomplete. With fresh BSC-mode replies a candidate's fallback
     RED is not a veto; a stale clean BSC reply within the TTL can
     therefore qualify a pile whose own fallback reply shows its groups RED.
+    The live I/O failover path adds a stricter replacement guard: an own fresh
+    non-truncated reply must cover all referenced static devices, and any
+    current fallback RED/GREY part vetoes the candidate even with clean BSC
+    evidence. Coverage includes stalled devices and does not prove idle writes.
 11. **Overlay.** One update disconnects every Down pile; if the primary is
     down, it also assigns the survivor PRIMARY and resets any other PROMOTED
     pile to SYNCHRONIZED. The mutation endpoint must be a VERIFIED current

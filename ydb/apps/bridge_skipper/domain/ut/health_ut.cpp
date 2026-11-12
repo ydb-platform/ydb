@@ -82,6 +82,27 @@ struct TScenario {
     }
 };
 
+
+Ydb::Monitoring::SelfCheckResult IoStallFixture(bool fallback) {
+    auto raw = Fixture("real_fallback_primary_pdisk_error");
+    for (auto& issue : *raw.mutable_issue_log()) {
+        if (!fallback && issue.type() == "STORAGE" && issue.message() == "System tablet BSC didn't provide information") {
+            issue.set_type("NOTE");
+            issue.clear_message();
+        }
+        if (issue.type() == "PDISK" && issue.message() == "PDisk state is DeviceIoError") {
+            issue.set_message("PDisk I/O service is stalled");
+        }
+        if (issue.type() == "VDISK" && issue.status() == Ydb::Monitoring::StatusFlag::RED) {
+            issue.set_message("VDisk I/O service is stalled");
+        }
+    }
+    raw.add_storage_io_stalled_groups("1");
+    raw.add_storage_io_health_covered_piles("a");
+    raw.add_storage_io_health_covered_piles("b");
+    return raw;
+}
+
 void AssertVerdict(const THealthEvaluation& evaluation, const TString& pile, EPileVerdict expected) {
     UNIT_ASSERT(evaluation.Piles.contains(pile));
     UNIT_ASSERT(evaluation.Piles.at(pile).Verdict == expected);
@@ -91,6 +112,242 @@ void AssertVerdict(const THealthEvaluation& evaluation, const TString& pile, EPi
 } // namespace
 
 Y_UNIT_TEST_SUITE(BridgeSkipperHealth) {
+
+    Y_UNIT_TEST(IoStallRequiresExplicitMarkerAndCompletePhysicalReasons) {
+        for (bool fallback : {false, true}) {
+            const auto valid = ClassifySelfCheck(IoStallFixture(fallback));
+            UNIT_ASSERT(valid.IoStallFailures == std::set<TString>{"a"});
+            UNIT_ASSERT(valid.IoHealthCoveredPiles == (std::set<TString>{"a", "b"}));
+            UNIT_ASSERT(valid.Parts.at("a") == (fallback ? EPart::FallbackRed : EPart::RedPart));
+            for (unsigned invalid = 0; invalid < 11; ++invalid) {
+                auto raw = IoStallFixture(fallback);
+                switch (invalid) {
+                    case 0: raw.clear_storage_io_stalled_groups(); break;
+                    case 1: raw.mutable_issue_log(5)->clear_reason(); break;
+                    case 2: raw.mutable_issue_log(5)->set_reason(0, "missing-pdisk"); break;
+                    case 3: {
+                        auto duplicate = raw.issue_log(8);
+                        *raw.add_issue_log() = duplicate;
+                        break;
+                    }
+                    case 4:
+                        raw.mutable_issue_log(8)->mutable_location()->mutable_storage()->mutable_node()->set_id(2);
+                        break;
+                    case 5:
+                        raw.mutable_issue_log(8)->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()
+                            ->mutable_pile()->set_name("b");
+                        break;
+                    case 6: raw.mutable_issue_log(8)->set_status(Ydb::Monitoring::StatusFlag::GREY); break;
+                    case 7:
+                        raw.mutable_issue_log(5)->set_status(Ydb::Monitoring::StatusFlag::BLUE);
+                        raw.mutable_issue_log(5)->set_message("Replication in progress");
+                        break;
+                    case 8: raw.mutable_issue_log(4)->clear_reason(); break;
+                    case 9: raw.mutable_issue_log(8)->set_message("PDisk is not available"); break;
+                    case 10: {
+                        auto* truncated = raw.add_issue_log();
+                        truncated->set_id("truncated");
+                        truncated->set_type("HEALTHCHECK_STATUS");
+                        truncated->set_status(Ydb::Monitoring::StatusFlag::RED);
+                        break;
+                    }
+                }
+                const auto classified = ClassifySelfCheck(raw);
+                UNIT_ASSERT_C(classified.IoStallFailures.empty(), invalid);
+                UNIT_ASSERT_C(classified.Parts.at("a") == EPart::Incomplete, invalid);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(IoStallProofOverridesBscGreenAndLivePrimaryQuorum) {
+        for (bool fallback : {false, true}) {
+            TScenario s;
+            s.Replies.SelfChecks.clear();
+            s.AddSelfCheck("a", ClassifySelfCheck(IoStallFixture(fallback)));
+            s.AddSelfCheck("b", ClassifySelfCheck(IoStallFixture(fallback)));
+            s.AddConnectivity("a", true, true);
+            s.AddConnectivity("b", true, true);
+            const auto health = s.Evaluate();
+            AssertVerdict(health, "a", EPileVerdict::Failed);
+            UNIT_ASSERT(health.Piles.at("a").FailureEvidence == EFailureEvidence::IoStall);
+            UNIT_ASSERT(health.Piles.at("a").SelfQuorum);
+            UNIT_ASSERT(health.Piles.at("b").OwnIoHealth);
+            // A current conflicting reply must not count as agreement.
+            s.Replies.SelfChecks.back().Classification.Parts.erase("a");
+            s.Replies.SelfChecks.back().Classification.IoStallFailures.clear();
+            AssertVerdict(s.Evaluate(), "a", EPileVerdict::Unknown);
+        }
+    }
+
+    Y_UNIT_TEST(IoStallProofRespectsGenerationRoleWarmupAndFreshness) {
+        TScenario s;
+        s.Replies.SelfChecks.clear();
+        s.AddSelfCheck("b", ClassifySelfCheck(IoStallFixture(false)));
+        s.AddConnectivity("b", true, true);
+        AssertVerdict(s.Evaluate(), "a", EPileVerdict::Failed);
+        ++s.Cluster.Generation;
+        s.Now = TMonotonic::Seconds(101);
+        for (auto& reply : s.Replies.Connectivity) {
+            reply.Report.Generation = s.Cluster.Generation;
+            reply.Report.SentAt = s.Now;
+        }
+        AssertVerdict(s.Evaluate(), "a", EPileVerdict::Unknown);
+        s.Refresh(102);
+        AssertVerdict(s.Evaluate(), "a", EPileVerdict::Failed);
+        s.Params.BscWarmup = TDuration::Seconds(20);
+        s.Cluster.Piles = {{"a", EPileState::Synchronized}, {"b", EPileState::Primary}};
+        s.Refresh(103);
+        AssertVerdict(s.Evaluate(), "a", EPileVerdict::Unknown);
+        s.Refresh(123);
+        AssertVerdict(s.Evaluate(), "a", EPileVerdict::Failed);
+        s.Now += s.Params.EvidenceTtl + TDuration::Seconds(1);
+        AssertVerdict(s.Evaluate(), "a", EPileVerdict::Unknown);
+        UNIT_ASSERT(!s.Evaluate().Piles.at("b").OwnIoHealth);
+    }
+
+    Y_UNIT_TEST(IoStallFailoverRequiresCandidateOwnFreshCoverage) {
+        for (bool fallback : {false, true}) {
+            TScenario s;
+            s.Replies.SelfChecks.clear();
+            s.AddSelfCheck("a", ClassifySelfCheck(IoStallFixture(fallback)));
+            s.AddSelfCheck("b", ClassifySelfCheck(IoStallFixture(fallback)));
+            s.AddConnectivity("a", true, true);
+            s.AddConnectivity("b", true, true);
+            TConfirmations confirmations;
+            TViewSelection selection;
+            selection.View = s.Cluster;
+            for (const ui64 now : {100u, 102u}) {
+                s.Refresh(now);
+                const auto health = s.Evaluate();
+                confirmations.Update(s.Cluster, health.Piles, s.Now);
+            }
+            auto health = s.Evaluate();
+            const auto ready = Decide(selection, health, confirmations, {}, s.Replies.Endpoints, TDuration::Seconds(2));
+            UNIT_ASSERT(ready.Kind == EDecisionKind::Ready);
+            // An outside reporter's coverage is not this candidate's own observation.
+            s.Replies.SelfChecks.back().Classification.IoHealthCoveredPiles.erase("b");
+            health = s.Evaluate();
+            UNIT_ASSERT(!health.Piles.at("b").OwnIoHealth);
+            const auto blocked = Decide(selection, health, confirmations, {}, s.Replies.Endpoints, TDuration::Seconds(2));
+            UNIT_ASSERT(blocked.Blocker == EBlockerReason::NoCandidate);
+            UNIT_ASSERT(!blocked.Plan);
+            s.Replies.SelfChecks.back().Classification.IoHealthCoveredPiles.insert("b");
+            s.Refresh(133);
+            health = s.Evaluate();
+            confirmations.Update(s.Cluster, health.Piles, s.Now);
+            UNIT_ASSERT(health.Piles.at("b").OwnIoHealth);
+        }
+    }
+
+    Y_UNIT_TEST(IoStallCandidateOwnFallbackVetoesOlderCleanBsc) {
+        TScenario s;
+        s.Replies.SelfChecks.clear();
+        s.AddSelfCheck("a", ClassifySelfCheck(IoStallFixture(false)));
+        auto candidate = IoStallFixture(true);
+        for (auto& issue : *candidate.mutable_issue_log()) {
+            auto* group = issue.mutable_location()->mutable_storage()->mutable_pool()->mutable_group();
+            if (group->has_pile() && group->pile().name() == "a") {
+                group->mutable_pile()->set_name("b");
+            }
+        }
+        candidate.mutable_issue_log(4)->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->set_id(0, "2");
+        candidate.set_storage_io_stalled_groups(0, "2");
+        s.AddSelfCheck("b", ClassifySelfCheck(candidate));
+        s.AddConnectivity("a", true, true);
+        s.AddConnectivity("b", true, true);
+        TConfirmations confirmations;
+        for (const ui64 now : {100u, 102u}) {
+            s.Refresh(now);
+            confirmations.Update(s.Cluster, s.Evaluate().Piles, s.Now);
+        }
+        const auto health = s.Evaluate();
+        UNIT_ASSERT(health.Piles.at("a").FailureEvidence == EFailureEvidence::IoStall);
+        UNIT_ASSERT(health.Piles.at("b").Verdict == EPileVerdict::Healthy);
+        UNIT_ASSERT(health.Piles.at("b").OwnIoHealth);
+        UNIT_ASSERT(health.Piles.at("b").FallbackRed);
+        TViewSelection selection;
+        selection.View = s.Cluster;
+        const auto decision = Decide(selection, health, confirmations, {}, s.Replies.Endpoints, TDuration::Seconds(2));
+        UNIT_ASSERT(decision.Blocker == EBlockerReason::NoCandidate);
+        UNIT_ASSERT(!decision.Plan);
+    }
+
+    Y_UNIT_TEST(IoStallMarkerDoesNotHideIndependentTerminalStorageFailure) {
+        for (bool fallback : {false, true}) {
+            auto raw = Fixture("real_fallback_primary_pdisk_error");
+            if (!fallback) {
+                for (auto& issue : *raw.mutable_issue_log()) {
+                    if (issue.type() == "STORAGE" && issue.message() == "System tablet BSC didn't provide information") {
+                        issue.set_type("NOTE");
+                    }
+                }
+                // Normal BSC mode can report an independent dynamic bridge part.
+                raw.mutable_issue_log(4)->set_type("BRIDGE_GROUP");
+            }
+            auto stalledGroup = raw.issue_log(4);
+            stalledGroup.set_id("other-group");
+            stalledGroup.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->set_id(0, "2");
+            stalledGroup.set_type("STORAGE_GROUP");
+            stalledGroup.set_status(Ydb::Monitoring::StatusFlag::ORANGE);
+            stalledGroup.clear_reason();
+            stalledGroup.add_reason("other-vdisk");
+            auto stalledVDisk = raw.issue_log(5);
+            stalledVDisk.set_id("other-vdisk");
+            stalledVDisk.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->set_id(0, "2-1-0-0-0");
+            stalledVDisk.set_message("VDisk I/O service is stalled");
+            stalledVDisk.clear_reason();
+            stalledVDisk.add_reason("other-pdisk");
+            auto stalledPDisk = raw.issue_log(8);
+            stalledPDisk.set_id("other-pdisk");
+            stalledPDisk.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk(0)->set_id("1-99");
+            stalledPDisk.set_message("PDisk I/O service is stalled");
+            *raw.add_issue_log() = stalledGroup;
+            *raw.add_issue_log() = stalledVDisk;
+            *raw.add_issue_log() = stalledPDisk;
+            raw.add_storage_io_stalled_groups("2");
+            const auto classified = ClassifySelfCheck(raw);
+            UNIT_ASSERT(classified.IoStallFailures.empty());
+            UNIT_ASSERT(classified.Parts.at("a") == (fallback ? EPart::FallbackRed : EPart::RedPart));
+            UNIT_ASSERT_VALUES_EQUAL(classified.StorageFailures.contains("a"), fallback);
+        }
+    }
+
+    Y_UNIT_TEST(IoStallMarkerDoesNotHideIndependentOrdinaryBscFailure) {
+        for (const TString& message : {"PDisk state is Missing", "PDisk state is Timeout", "PDisk state is NodeDisconnected"}) {
+            auto raw = IoStallFixture(false);
+            // The marked static group retains redundancy. The independent
+            // dynamic group has a legacy BSC failure with no I/O-stall cause.
+            raw.mutable_issue_log(4)->set_status(Ydb::Monitoring::StatusFlag::ORANGE);
+            auto group = raw.issue_log(4);
+            group.set_id("ordinary-group");
+            group.set_type("BRIDGE_GROUP");
+            group.set_status(Ydb::Monitoring::StatusFlag::RED);
+            group.mutable_location()->mutable_storage()->mutable_pool()->set_name("dynamic");
+            group.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->set_id(0, "2181038080");
+            group.clear_reason();
+            group.add_reason("ordinary-vdisk");
+            auto vdisk = raw.issue_log(5);
+            vdisk.set_id("ordinary-vdisk");
+            vdisk.set_message("VDisk is not available");
+            vdisk.mutable_location()->mutable_storage()->mutable_node()->set_id(3);
+            vdisk.mutable_location()->mutable_storage()->mutable_pool()->set_name("dynamic");
+            vdisk.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->set_id(0, "2181038080-1-0-0-0");
+            vdisk.clear_reason();
+            vdisk.add_reason("ordinary-pdisk");
+            auto pdisk = raw.issue_log(8);
+            pdisk.set_id("ordinary-pdisk");
+            pdisk.set_message(message);
+            pdisk.mutable_location()->mutable_storage()->mutable_node()->set_id(3);
+            pdisk.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk(0)->set_id("3-99");
+            *raw.add_issue_log() = group;
+            *raw.add_issue_log() = vdisk;
+            *raw.add_issue_log() = pdisk;
+            const auto classified = ClassifySelfCheck(raw);
+            UNIT_ASSERT(classified.IoStallFailures.empty());
+            UNIT_ASSERT_C(classified.Parts.at("a") == EPart::RedPart, message);
+        }
+    }
+
     Y_UNIT_TEST(FallbackEvidenceRedRequiresDecisiveVDiskReasons) {
         for (unsigned mode = 0; mode != 5; ++mode) {
             auto raw = Fixture("fallback_red");

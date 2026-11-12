@@ -279,7 +279,6 @@ a RED static group whose complete unique reason graph contains only RED
 VDisks caused by an explicitly reported same-node, same-pile PDisk
 `DeviceIoError`. A hardware error mixed with transport loss or replication
 does not suffice. GREY, missing and truncated data remain insufficient.
-An I/O hang without an explicit device error remains unproven.
 After a role change this evidence
 starts only after BSC warm-up, then spans `confirm_seconds` within one
 generation. Switching between the generic fallback rule and the storage proof
@@ -317,6 +316,51 @@ Its return does not finish BSC conversion; wait for
 storage pools and their groups non-bridged. Static storage groups are still
 converted to bridge mode; prepare that topology explicitly. Skipper
 does not call Add, Remove or Convert, and exposes no synthetic prebridge view.
+
+## Live storage I/O service evidence
+
+Skipper opts into `include_storage_io_health` on SelfCheck. This requests fresh
+local PDisk actor observations for devices referenced by participating static
+storage and bypasses the metadata cache. The server verifies device identity;
+the observation does not depend on the PDisk worker publishing a new report.
+
+An initialized, Normal PDisk reports a service stall when it has admitted
+backend work pending and no operation has retired for at least 10 seconds.
+New admissions do not reset that period; a retirement or drain does. Restart,
+invalid counters and clock rollback discard accumulated age. This describes
+current service unavailability, not permanent hardware failure. The existing
+60-second terminal hang detector and its `DeviceIoError` transition are unchanged.
+The 10-second service observation does not change the PDisk's state to an error.
+
+While this condition holds, new PDisk metadata reads return a temporary error
+promptly. Configuration collection can then finish its existing survivor-quorum
+and recovery checks without waiting for the unavailable worker. An error does
+not report an empty disk. Already queued operations and metadata writes retain
+their existing processing path.
+
+SelfCheck reports `PDisk I/O service is stalled` and `VDisk I/O service is stalled`
+issues; group redundancy thresholds still apply. Skipper requires a complete,
+attributable RED group reason graph proving the local service stall, with no
+mixed transport or replication reasons, and its usual generation, freshness and
+confirmation guards. A timed-out query, missing observation or GREY no-data
+issue does not establish this proof. `storage_io_stalled_groups` names the
+affected storage-group IDs before issue merging or filtering. A marker alone
+is not a group-failure verdict; it never changes the classification of another
+group in the same pile.
+
+For failover based on this service-stall proof, the replacement must additionally
+have its own fresh reply covering every referenced static device, alongside
+the existing candidate guards. A current fallback RED or GREY group part on
+that candidate vetoes this path even when another BSC reply is clean. `storage_io_health_covered_piles` means all those
+devices supplied current identity-validated Ready/Normal samples; it can include
+a stalled device. Coverage does not prove that an idle device can complete a
+write. Missing or partial candidate coverage blocks this failover path.
+
+Sampling covers work admitted through PDisk's backend service. DDisk I/O that
+bypasses PDisk through the shared I/O router is outside these counters.
+Retirements of other operations can mask a directional read/write or individual
+queue hang. Qualify those failure modes separately; this signal is not a probe
+of every storage request path.
 
 ## Pending mutations and state overrides
 

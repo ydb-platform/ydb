@@ -111,24 +111,28 @@ EPart ClassifyFallbackPart(const TIssue& group, const TIssuesById& issues) {
     return failed ? EPart::FallbackRed : EPart::Incomplete;
 }
 
-// The group is already RED; every contributing reason must prove device I/O
-// failure. One device error mixed with transport loss or replication need not
-// cross the group's erasure threshold and cannot override a live node quorum.
-bool HasStorageFailure(const TIssue& group, const TIssuesById& issues) {
+// The server has already applied the group's erasure threshold. A local
+// service failure can override node quorum only through its complete physical
+// reason graph, never by mixing one device failure with transport/replication.
+enum class EStorageFailure { Incomplete, DeviceError, IoStall };
+
+EStorageFailure ClassifyStorageFailure(const TIssue& group, const TIssuesById& issues, bool allowBridgeGroups) {
     const auto find = [&](const TString& id) -> const TIssue* {
         const auto it = issues.find(id);
         return it == issues.end() ? nullptr : it->second;
     };
-    if (group.type() != "STORAGE_GROUP" || group.reason().empty() || find(group.id()) != &group) {
-        return false;
+    if ((group.type() != "STORAGE_GROUP" && (!allowBridgeGroups || group.type() != "BRIDGE_GROUP"))
+        || group.reason().empty() || find(group.id()) != &group)
+    {
+        return EStorageFailure::Incomplete;
     }
     const auto& pile = group.location().storage().pool().group().pile().name();
     const auto samePile = [&](const TIssue& issue) {
         const auto& location = issue.location().storage().pool().group();
         return location.has_pile() && location.pile().name() == pile;
     };
-    for (const auto& id : group.reason()) {
-        const auto* disk = find(id);
+    bool stalled = false;
+    const auto inspectVDisk = [&](const TIssue* disk) {
         if (!disk || disk->type() != "VDISK" || disk->status() != TStatus::RED
             || disk->reason().empty() || !samePile(*disk) || !disk->location().storage().node().id())
         {
@@ -137,19 +141,70 @@ bool HasStorageFailure(const TIssue& group, const TIssuesById& issues) {
         for (const auto& reason : disk->reason()) {
             const auto* pdisk = find(reason);
             if (!pdisk || pdisk->type() != "PDISK" || pdisk->status() != TStatus::RED
-                || pdisk->message() != "PDisk state is DeviceIoError" || !pdisk->reason().empty()
-                || !samePile(*pdisk)
+                || !pdisk->reason().empty() || !samePile(*pdisk)
                 || pdisk->location().storage().node().id() != disk->location().storage().node().id())
             {
+                return false;
+            }
+            const bool ioStall = pdisk->message() == "PDisk I/O service is stalled";
+            if (pdisk->message() != "PDisk state is DeviceIoError" && !ioStall) {
                 return false;
             }
             const auto& devices = pdisk->location().storage().pool().group().vdisk().pdisk();
             if (devices.size() != 1 || devices.Get(0).id().empty()) {
                 return false;
             }
+            stalled |= ioStall;
+        }
+        return true;
+    };
+    for (const auto& id : group.reason()) {
+        const auto* child = find(id);
+        if (allowBridgeGroups && group.type() == "STORAGE_GROUP" && child && child->type() == "BRIDGE_GROUP") {
+            // Normal-mode logical groups can reference one level of physical
+            // groups. Do not follow an arbitrary issue graph.
+            if (child->status() != TStatus::RED || child->reason().empty() || !samePile(*child)) {
+                return EStorageFailure::Incomplete;
+            }
+            for (const auto& disk : child->reason()) {
+                if (!inspectVDisk(find(disk))) {
+                    return EStorageFailure::Incomplete;
+                }
+            }
+        } else if (!inspectVDisk(child)) {
+            return EStorageFailure::Incomplete;
         }
     }
-    return true;
+    return stalled ? EStorageFailure::IoStall : EStorageFailure::DeviceError;
+}
+
+bool HasIoStallReason(const TIssue& group, const TIssuesById& issues, const std::set<TString>& ioIssues) {
+    const auto find = [&](const TString& id) -> const TIssue* {
+        const auto it = issues.find(id);
+        return it == issues.end() ? nullptr : it->second;
+    };
+    const auto inspectVDisk = [&](const TIssue& disk) {
+        return std::any_of(disk.reason().begin(), disk.reason().end(),
+            [&](const auto& id) { return ioIssues.contains(id); });
+    };
+    for (const auto& id : group.reason()) {
+        if (ioIssues.contains(id)) {
+            return true;
+        }
+        const auto* child = find(id);
+        if (child && child->type() == "VDISK" && inspectVDisk(*child)) {
+            return true;
+        }
+        if (child && child->type() == "BRIDGE_GROUP") {
+            for (const auto& diskId : child->reason()) {
+                const auto* disk = find(diskId);
+                if (ioIssues.contains(diskId) || (disk && disk->type() == "VDISK" && inspectVDisk(*disk))) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 int Rank(EPart part) {
@@ -206,10 +261,19 @@ TSelfCheckClassification ClassifySelfCheck(const Ydb::Monitoring::SelfCheckResul
     TSelfCheckClassification classification;
     classification.SelfCheckResult = TString(Ydb::Monitoring::SelfCheck::Result_Name(result.self_check_result()));
     TIssuesById issues;
+    std::set<TString> ioIssues;
+    const std::set<TString> ioGroups(result.storage_io_stalled_groups().begin(), result.storage_io_stalled_groups().end());
+    classification.IoHealthCoveredPiles.insert(result.storage_io_health_covered_piles().begin(),
+        result.storage_io_health_covered_piles().end());
     for (const auto& issue : result.issue_log()) {
         const auto [it, inserted] = issues.emplace(issue.id(), &issue);
         if (!inserted) {
             it->second = nullptr;
+        }
+        if ((issue.type() == "PDISK" && issue.message() == "PDisk I/O service is stalled")
+            || (issue.type() == "VDISK" && issue.message() == "VDisk I/O service is stalled"))
+        {
+            ioIssues.insert(issue.id());
         }
         if (IsFallbackMarker(issue)) {
             classification.Mode = ESelfCheckMode::Fallback;
@@ -237,12 +301,27 @@ TSelfCheckClassification ClassifySelfCheck(const Ydb::Monitoring::SelfCheckResul
             ++classification.UnnamedRed;
             continue;
         }
-        const auto part = classification.Mode == ESelfCheckMode::Fallback
-            ? ClassifyFallbackPart(issue, issues)
-            : ClassifyBscPart(issue, issues);
+        const bool ioMarked = !ioGroups.empty() && std::any_of(group.id().begin(), group.id().end(),
+            [&](const auto& id) { return ioGroups.contains(id); });
+        const bool ioRelated = ioMarked || (!ioIssues.empty() && HasIoStallReason(issue, issues, ioIssues));
+        const auto physicalFailure = ioRelated || classification.Mode == ESelfCheckMode::Fallback
+            ? ClassifyStorageFailure(issue, issues, classification.Mode == ESelfCheckMode::Bsc)
+            : EStorageFailure::Incomplete;
+        const bool ioProven = ioMarked && !classification.Truncated
+            && physicalFailure == EStorageFailure::IoStall;
+        // New local-I/O evidence must never fall through to the less structured
+        // legacy BSC rule when its marker/reason chain was lost or truncated.
+        const auto part = ioRelated
+            ? (ioProven ? (classification.Mode == ESelfCheckMode::Fallback ? EPart::FallbackRed : EPart::RedPart)
+                        : EPart::Incomplete)
+            : (classification.Mode == ESelfCheckMode::Fallback
+                ? ClassifyFallbackPart(issue, issues) : ClassifyBscPart(issue, issues));
         AddPart(classification, group.pile().name(), part);
+        if (ioProven) {
+            classification.IoStallFailures.insert(group.pile().name());
+        }
         if (classification.Mode == ESelfCheckMode::Fallback && !classification.Truncated && part == EPart::FallbackRed
-            && HasStorageFailure(issue, issues))
+            && physicalFailure == EStorageFailure::DeviceError)
         {
             classification.StorageFailures.insert(group.pile().name());
         }
@@ -330,6 +409,7 @@ THealthEvaluation EvaluatePiles(
 
     std::vector<const TSelfCheckReply*> bsc;
     std::vector<const TSelfCheckReply*> fallback;
+    std::set<TString> ownIoHealth;
     for (const auto& reply : replies.SelfChecks) {
         const auto* endpoint = FindEndpoint(replies, reply.Endpoint);
         // Identity comes from the latest reply's pile (IsEndpointValid). A
@@ -340,6 +420,11 @@ THealthEvaluation EvaluatePiles(
             continue;
         }
         (reply.Classification.Mode == ESelfCheckMode::Bsc ? bsc : fallback).push_back(&reply);
+        if (reply.ResponderPile == endpoint->Pile && reply.SentAt >= fallbackFrom
+            && !reply.Classification.Truncated && reply.Classification.IoHealthCoveredPiles.contains(endpoint->Pile))
+        {
+            ownIoHealth.insert(endpoint->Pile);
+        }
         evaluation.ValidUntil = std::min(evaluation.ValidUntil, reply.SentAt + params.EvidenceTtl);
     }
     // A fresh fallback reply from the BSC host says BSC is unavailable now.
@@ -403,9 +488,12 @@ THealthEvaluation EvaluatePiles(
             continue;
         }
         auto& verdict = evaluation.Piles[pile];
+        verdict.OwnIoHealth = ownIoHealth.contains(pile);
         bool outsideFallback = false;
         bool allFallbackRed = true;
         bool allStorageFailed = true;
+        bool allFallbackIoStalled = true;
+        bool anyFallbackIoStalled = false;
         TMonotonic newestFallback;
         for (const auto* reply : fallback) {
             const auto& responder = FindEndpoint(replies, reply->Endpoint)->Pile;
@@ -417,8 +505,14 @@ THealthEvaluation EvaluatePiles(
                 allFallbackRed &= reply->ResponderPile == responder && !reply->Classification.Truncated
                     && Part(*reply, pile) == EPart::FallbackRed;
                 allStorageFailed &= reply->Classification.StorageFailures.contains(pile);
+                const bool ioStalled = reply->Classification.IoStallFailures.contains(pile);
+                anyFallbackIoStalled |= ioStalled;
+                allFallbackIoStalled &= ioStalled;
                 newestFallback = std::max(newestFallback, reply->SentAt);
             }
+        }
+        if (anyFallbackIoStalled && !allFallbackIoStalled) {
+            allFallbackRed = false;
         }
         bool outside = false;
         bool outsideLost = true;
@@ -436,17 +530,31 @@ THealthEvaluation EvaluatePiles(
         }
 
         bool allRed = !bsc.empty();
+        bool allBscIoStalled = !bsc.empty();
+        bool anyBscIoStalled = false;
         bool allRedOrReplicating = !bsc.empty();
         bool anyReplicating = false;
         bool clean = !bsc.empty() && !hostFallback && participation.value_or(false);
         TMonotonic newestBsc;
         for (const auto* reply : bsc) {
-            const auto part = Part(*reply, pile);
+            auto part = Part(*reply, pile);
+            const bool ioStalled = reply->Classification.IoStallFailures.contains(pile);
+            anyBscIoStalled |= ioStalled;
+            const bool currentIoStall = ioStalled && reply->SentAt >= fallbackFrom
+                && reply->ResponderPile == FindEndpoint(replies, reply->Endpoint)->Pile
+                && !reply->Classification.Truncated;
+            allBscIoStalled &= currentIoStall;
+            if (ioStalled && !currentIoStall) {
+                part = EPart::Incomplete;
+            }
             allRed &= part == EPart::RedPart;
             allRedOrReplicating &= part == EPart::RedPart || part == EPart::ReplicatingPart;
             anyReplicating |= part == EPart::ReplicatingPart;
             clean &= !part && !reply->Classification.Truncated;
             newestBsc = std::max(newestBsc, reply->SentAt);
+        }
+        if (anyBscIoStalled && !allBscIoStalled) {
+            allRed = false;
         }
         // Cached replies from the previous BSC placement can still establish a
         // negative verdict, but cannot seed or advance the new clean window.
@@ -470,19 +578,25 @@ THealthEvaluation EvaluatePiles(
         } else if (participating && allRed) {
             verdict.Verdict = EPileVerdict::Failed;
             verdict.NewestEvidenceSentAt = newestBsc;
-            verdict.Reasons.push_back("Every BSC-mode reply reports a RED group part");
+            verdict.FailureEvidence = allBscIoStalled ? EFailureEvidence::IoStall : EFailureEvidence::Ordinary;
+            verdict.Reasons.push_back(allBscIoStalled
+                ? "Every current BSC-mode reply proves a RED group caused by a stalled PDisk I/O service"
+                : "Every BSC-mode reply reports a RED group part");
         } else if (bscHost && pile == *bscHost && bsc.empty() && outsideFallback && allFallbackRed
-            && (!verdict.SelfQuorum || allStorageFailed))
+            && (!verdict.SelfQuorum || allStorageFailed || allFallbackIoStalled))
         {
             // A retained settled report can keep Lost evidence frozen while
             // newer reports are binding. Prefer the independently qualified
             // fallback failure so fresh samples can advance its confirmation.
             verdict.Verdict = EPileVerdict::Failed;
-            verdict.FailureEvidence = allStorageFailed ? EFailureEvidence::Storage : EFailureEvidence::Fallback;
+            verdict.FailureEvidence = allFallbackIoStalled ? EFailureEvidence::IoStall
+                : allStorageFailed ? EFailureEvidence::Storage : EFailureEvidence::Fallback;
             verdict.NewestEvidenceSentAt = newestFallback;
-            verdict.Reasons.push_back(allStorageFailed
-                ? "Every current outside fallback reply proves a RED static group caused by PDisk DeviceIoError"
-                : "Every current outside fallback reply reports a decisive RED static group part");
+            verdict.Reasons.push_back(allFallbackIoStalled
+                ? "Every current outside fallback reply proves a RED static group caused by a stalled PDisk I/O service"
+                : allStorageFailed
+                    ? "Every current outside fallback reply proves a RED static group caused by PDisk DeviceIoError"
+                    : "Every current outside fallback reply reports a decisive RED static group part");
         } else if (outside && outsideLost && !verdict.SelfQuorum) {
             verdict.Verdict = EPileVerdict::Lost;
             verdict.NewestEvidenceSentAt = newestLost;

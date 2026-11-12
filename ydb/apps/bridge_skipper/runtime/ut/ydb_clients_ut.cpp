@@ -809,6 +809,7 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         UNIT_ASSERT(!healthCapture.SelfCheck.return_verbose_status());
         UNIT_ASSERT(!healthCapture.SelfCheck.merge_records());
         UNIT_ASSERT(healthCapture.SelfCheck.do_not_cache());
+        UNIT_ASSERT(healthCapture.SelfCheck.include_storage_io_health());
         UNIT_ASSERT(healthCapture.SelfCheck.minimum_status() == Ydb::Monitoring::StatusFlag::UNSPECIFIED);
         UNIT_ASSERT_VALUES_EQUAL(healthCapture.SelfCheck.maximum_level(), 0);
         UNIT_ASSERT_VALUES_EQUAL(healthCapture.SelfCheck.operation_params().operation_timeout().seconds(), 11);

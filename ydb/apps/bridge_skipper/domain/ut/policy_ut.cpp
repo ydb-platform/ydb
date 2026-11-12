@@ -464,8 +464,8 @@ Y_UNIT_TEST_SUITE(BridgeSkipperPolicy) {
     }
 
     Y_UNIT_TEST(ChangingFailureEvidenceRestartsConfirmationInBothDirections) {
-        for (const auto from : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage}) {
-            for (const auto to : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage}) {
+        for (const auto from : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage, EFailureEvidence::IoStall}) {
+            for (const auto to : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage, EFailureEvidence::IoStall}) {
                 if (from == to) {
                     continue;
                 }
@@ -492,7 +492,7 @@ Y_UNIT_TEST_SUITE(BridgeSkipperPolicy) {
     }
 
     Y_UNIT_TEST(FallbackProofKindsCannotCarryConfirmationAcrossGenerationOrRoleChanges) {
-        for (const auto kind : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage}) {
+        for (const auto kind : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage, EFailureEvidence::IoStall}) {
             TConfirmations confirmations;
             std::map<TString, TPileVerdict> verdicts = {{"a", Verdict(EPileVerdict::Failed, 100)}};
             verdicts.at("a").FailureEvidence = kind;

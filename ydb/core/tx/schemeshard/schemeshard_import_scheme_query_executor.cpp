@@ -1,4 +1,5 @@
 #include "schemeshard_import_scheme_query_executor.h"
+#include "eds_import/restore.h"
 
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
@@ -116,6 +117,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
     }
 
     void Finish(Ydb::StatusIds::StatusCode status, std::variant<TString, NKikimrSchemeOp::TModifyScheme> result) {
+        RebindImportedEdsInitialToken(status, result, SchemeQuery, Database);
         YDB_LOG_INFO("TSchemeQueryExecutor Reply",
             {"self", SelfId()},
             {"status", status},

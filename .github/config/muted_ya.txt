@@ -31,7 +31,6 @@ ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
 ydb/core/tx/columnshard/export/actor/ut TExportActorLifecycle.RetriesExportAfterS3ThrottlingMidUpload
 ydb/core/tx/replication/controller/ut_schema_change BootstrapImport.SourceWithIndex+Materialized+DirectImport
 ydb/core/tx/replication/controller/ut_schema_change BootstrapImport.SourceWithIndex+Materialized-DirectImport
-ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.PublicForceEscalatesPendingDrop-Cascade
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk

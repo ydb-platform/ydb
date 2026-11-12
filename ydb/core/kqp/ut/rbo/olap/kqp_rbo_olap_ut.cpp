@@ -2609,8 +2609,10 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
 
         auto client = kikimr.GetTableClient();
 
-        // AVG(Int32) casts its input to Double with a YQL kernel in the read program.
-        CheckAggregatePushdown(client, "SELECT AVG(level) FROM `/Root/olapStore/olapTable`", false);
+        // Without scalar apply the read program cannot cast the input of AVG(Int32) to Double. As in the old
+        // optimizer, column shards sum the stored type and compute converts the sum.
+        CheckAggregatePushdown(client, "SELECT AVG(level) FROM `/Root/olapStore/olapTable`", true);
+        CheckAggregatePushdown(client, "SELECT AVG(level), SUM(level), COUNT(*) FROM `/Root/olapStore/olapTable`", true);
         CheckAggregatePushdown(client, "SELECT COUNT(*), SUM(level), MIN(level) FROM `/Root/olapStore/olapTable`", true);
     }
 

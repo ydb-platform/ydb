@@ -110,6 +110,7 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
             }
             auto olapAggregate = MatchOlapAggregate(aggregate, ctx);
             Y_ENSURE(olapAggregate, "An aggregate pushed to column shards no longer matches its read");
+            olapAggregate->CastAverageInput = config.GetEnableOlapScalarApply();
             olapAggregateInputs.insert(olapAggregate->Read);
             if (olapAggregate->Map) {
                 olapAggregateInputs.insert(olapAggregate->Map);

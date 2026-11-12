@@ -608,7 +608,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         for (const auto& [id, itemIdx] : KesusParentsToRetry) {
             ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvImportRetryKesusParent(id, itemIdx));
         }
-        // The helper may mutate Kesus immediately. Start only after its phase and
+        // The helper may mutate Kesus immediately. Start only after its destination and
         // immutable input have been committed to SchemeShard's database.
         for (const auto& [id, itemIdx] : KesusRestorersToStart) {
             const auto it = Self->Imports.find(id);
@@ -617,7 +617,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
             }
             auto& importInfo = *it->second;
             auto& item = importInfo.Items.at(itemIdx);
-            if (item.State != EState::RestoreKesus || item.KesusRestorer) {
+            if (item.State != EState::CreateSchemeObject || item.KesusRestorer) {
                 continue;
             }
             const ui32 retries = std::visit([](const auto& settings) {
@@ -649,7 +649,8 @@ private:
             return CancelAndPersist(db, importInfo, itemIdx, "Missing persisted coordination node contents", "invalid Kesus import state");
         }
         item.WaitTxId = InvalidTxId;
-        item.State = EState::RestoreKesus;
+        // No scheme transaction allocation is pending while the helper restores contents.
+        item.SubState = ESubState::Proposed;
         Self->PersistImportItemState(db, *importInfo, itemIdx);
         if (!item.KesusRestorer) {
             KesusRestorersToStart.emplace_back(importInfo->Id, itemIdx);
@@ -702,7 +703,7 @@ private:
         }
         auto importInfo = it->second;
         auto& item = importInfo->Items.at(message.ItemIdx);
-        if (item.State != EState::RestoreKesus || item.KesusRestorer != KesusResult->Sender) {
+        if (item.State != EState::CreateSchemeObject || item.KesusRestorer != KesusResult->Sender) {
             return;
         }
         Self->RunningImportKesusRestorers.erase(std::exchange(item.KesusRestorer, {}));
@@ -1494,8 +1495,15 @@ private:
                     }
                     break;
 
-                case EState::DropPlaceholder:
                 case EState::CreateSchemeObject:
+                    if (item.Kesus && item.WaitTxId == InvalidTxId && item.DstPathId) {
+                        // Creation has completed. Reconcile contents using the saved
+                        // identity, even if the previous helper's reply was lost.
+                        StartKesusRestore(db, importInfo, itemIdx);
+                        break;
+                    }
+                    [[fallthrough]];
+                case EState::DropPlaceholder:
                 case EState::CreateKesusParent:
                 case EState::Transferring:
                 case EState::BuildIndexes:
@@ -1514,10 +1522,6 @@ private:
                     } else {
                         SubscribeTx(*importInfo, itemIdx);
                     }
-                    break;
-
-                case EState::RestoreKesus:
-                    StartKesusRestore(db, importInfo, itemIdx);
                     break;
 
                 default:

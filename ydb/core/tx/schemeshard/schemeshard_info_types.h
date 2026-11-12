@@ -3978,7 +3978,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         DownloadExportMetadata = 7,
         DropPlaceholder = 8,
         FinalizeImport = 9,
-        RestoreKesus = 10,
         CreateKesusParent = 11,
         Done = 240,
         Cancellation = 250,

@@ -11098,9 +11098,16 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         const ui64 id = t.StartImport(t.MakeImport());
         t.Runtime.WaitFor("resources restored before completion persisted", [&] { return !replies.empty(); });
         UNIT_ASSERT(replies.front()->Get()->Success);
+        UNIT_ASSERT_VALUES_EQUAL(TestGetImport(t.Runtime, id, "/MyRoot").GetResponse().GetEntry().GetProgress(),
+            Ydb::Import::ImportProgress::PROGRESS_PREPARING);
+        ui32 proposals = 0;
+        auto observer = t.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            proposals += IsKesusCreation(ev);
+        });
         replies.Stop();
         t.RebootSchemeShard();
         t.Finish(id);
+        UNIT_ASSERT_VALUES_EQUAL(proposals, 0);
         t.AssertContents(resources);
         replies.Unblock();
         TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
@@ -11187,7 +11194,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         const ui64 id = t.StartImport(t.MakeImport());
         t.Runtime.WaitFor("create result blocked", [&] { return !replies.empty(); });
         t.Env.TestWaitNotification(t.Runtime, createTxId);
-        // A synchronous success must still enter RestoreKesus, rather than finish the item.
+        // A synchronous creation success must still restore contents before finishing the item.
         replies.front()->Get()->Record.SetStatus(NKikimrScheme::StatusSuccess);
         replies.Stop().Unblock();
         t.Finish(id);

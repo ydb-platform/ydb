@@ -38,8 +38,6 @@ namespace {
             auto itemState = item.State;
             if (itemState == TImportInfo::EState::CreateKesusParent) {
                 itemState = TImportInfo::EState::CreateSchemeObject;
-            } else if (itemState == TImportInfo::EState::RestoreKesus) {
-                itemState = TImportInfo::EState::Transferring;
             }
             if (state == TImportInfo::EState::Invalid) {
                 state = itemState;

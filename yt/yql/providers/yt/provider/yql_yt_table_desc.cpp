@@ -158,32 +158,31 @@ TExprNode::TPtr BuildIgnoreTypeV3Remapper(const TStructExprType* rowType, TExprC
 }
 
 TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion,
-    const TString& viewId, const TQContext& qContext,
-    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager,
-    IRandomProvider& randomProvider, bool enableViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags)
+    const TString& viewId, TExprContext& ctx, TTypeAnnotationContext& types, bool enableViewIsolation, const NSQLTranslation::TSqlFlags& sqlFlags)
 {
     NSQLTranslation::TTranslationSettings settings;
     settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+    settings.ProjectSettings = types.ProjectSettings;
     settings.Flags = sqlFlags;
     settings.DefaultCluster = cluster.empty() ? "view" : cluster;
     settings.ClusterMapping[settings.DefaultCluster] = cluster.empty() ? "data" : provider;
     settings.SyntaxVersion = syntaxVersion;
     settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-    if (qContext.CanRead() && enableViewIsolation) {
-        auto res = qContext.GetReader()->Get({YtView_Component, viewId}).GetValueSync();
+    if (types.QContext.CanRead() && enableViewIsolation) {
+        auto res = types.QContext.GetReader()->Get({YtView_Component, viewId}).GetValueSync();
         if (!res) {
             ythrow yexception() << "Missing replay data";
         }
 
         settings.FileAliasPrefix = res->Value;
     } else {
-        settings.FileAliasPrefix = "view_" + randomProvider.GenUuid4().AsGuidString() + "/";
+        settings.FileAliasPrefix = "view_" + types.RandomProvider->GenUuid4().AsGuidString() + "/";
         if (!enableViewIsolation) {
             settings.FileAliasPrefix.clear(); // disable FileAliasPrefix while preserving number of randomProvider calls
         }
 
-        if (enableViewIsolation && qContext.CanWrite()) {
-            qContext.GetWriter()->Put({YtView_Component, viewId}, settings.FileAliasPrefix).GetValueSync();
+        if (enableViewIsolation && types.QContext.CanWrite()) {
+            types.QContext.GetWriter()->Put({YtView_Component, viewId}, settings.FileAliasPrefix).GetValueSync();
         }
     }
 
@@ -206,13 +205,13 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
         return {};
     }
 
-    TString oldAliasPrefix = moduleResolver->GetFileAliasPrefix();
-    moduleResolver->SetFileAliasPrefix(TString{settings.FileAliasPrefix});
+    TString oldAliasPrefix = types.Modules->GetFileAliasPrefix();
+    types.Modules->SetFileAliasPrefix(TString{settings.FileAliasPrefix});
     Y_DEFER {
-        moduleResolver->SetFileAliasPrefix(std::move(oldAliasPrefix));
+        types.Modules->SetFileAliasPrefix(std::move(oldAliasPrefix));
     };
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*sqlRes.Root, exprRoot, ctx, moduleResolver, urlListerManager, false, Max<ui32>(), syntaxVersion)) {
+    if (!CompileExpr(*sqlRes.Root, exprRoot, ctx, types.Modules.get(), types.UrlListerManager.Get(), false, Max<ui32>(), syntaxVersion)) {
         return {};
     }
 
@@ -283,7 +282,7 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
                 return node;
             }
 
-            if (udfResolver->ContainsModule(TString(moduleName))) {
+            if (types.UdfResolver->ContainsModule(TString(moduleName))) {
                 return node;
             }
 
@@ -305,13 +304,13 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
 
 
 bool TYtViewDescription::Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion,
-    const TString& viewId, const TQContext& qContext, TExprContext& ctx,
-    IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, bool enableViewIsolation,
-    IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags)
+    const TString& viewId, TExprContext& ctx,
+    TTypeAnnotationContext& types, bool enableViewIsolation,
+    const NSQLTranslation::TSqlFlags& sqlFlags)
 {
     Sql = sql;
-    CompiledSql = CompileViewSql(provider, cluster, sql, syntaxVersion, viewId, qContext,
-        ctx, moduleResolver, urlListerManager, randomProvider, enableViewIsolation, udfResolver, sqlFlags);
+    CompiledSql = CompileViewSql(provider, cluster, sql, syntaxVersion, viewId,
+        ctx, types, enableViewIsolation, sqlFlags);
     return bool(CompiledSql);
 }
 
@@ -321,10 +320,9 @@ void TYtViewDescription::CleanupCompiledSQL()
 }
 
 bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& cluster, const TString& table,
-    const TStructExprType* type, const TString& viewSql, ui16 syntaxVersion, const TQContext& qContext,
-    const THashMap<TString, TString>& metaAttrs,
-    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, bool enableViewIsolation,
-    IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags)
+    const TStructExprType* type, const TString& viewSql, ui16 syntaxVersion, const THashMap<TString, TString>& metaAttrs,
+    TExprContext& ctx, TTypeAnnotationContext& types, bool enableViewIsolation,
+    const NSQLTranslation::TSqlFlags& sqlFlags)
 {
     // (1) row type
     RawRowType = type;
@@ -403,14 +401,14 @@ bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& clust
     }
 
     // (3) views
-    if (!FillViews(provider, cluster, table, metaAttrs, qContext, ctx, moduleResolver, urlListerManager, randomProvider, enableViewIsolation, udfResolver, sqlFlags)) {
+    if (!FillViews(provider, cluster, table, metaAttrs, ctx, types, enableViewIsolation, sqlFlags)) {
         return false;
     }
 
     if (viewSql) {
         if (!View) {
             auto viewId = cluster + "/" + table;
-            if (!View.ConstructInPlace().Fill(provider, cluster, viewSql, syntaxVersion, viewId, qContext, ctx, moduleResolver, urlListerManager, randomProvider, enableViewIsolation, udfResolver, sqlFlags)) {
+            if (!View.ConstructInPlace().Fill(provider, cluster, viewSql, syntaxVersion, viewId, ctx, types, enableViewIsolation, sqlFlags)) {
                 ctx.AddError(TIssue(TPosition(),
                     TStringBuilder() << "Can't load sql view, table: " << cluster << '.' << table));
                 return false;
@@ -422,8 +420,7 @@ bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& clust
 }
 
 bool TYtTableDescriptionBase::FillViews(const TString& provider, const TString& cluster, const TString& table,
-    const THashMap<TString, TString>& metaAttrs, const TQContext& qContext, TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager,
-    IRandomProvider& randomProvider, bool allowViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags)
+    const THashMap<TString, TString>& metaAttrs, TExprContext& ctx, TTypeAnnotationContext& types, bool allowViewIsolation, const NSQLTranslation::TSqlFlags& sqlFlags)
 {
     for (auto& view: Views) {
         TYtViewDescription& viewDesc = view.second;
@@ -451,7 +448,7 @@ bool TYtTableDescriptionBase::FillViews(const TString& provider, const TString& 
             }
 
             auto viewId = cluster + "/" + table + "/" + view.first;
-            if (!viewDesc.Fill(provider, cluster, viewSql, syntaxVersion, viewId, qContext, ctx, moduleResolver, urlListerManager, randomProvider, allowViewIsolation, udfResolver, sqlFlags)) {
+            if (!viewDesc.Fill(provider, cluster, viewSql, syntaxVersion, viewId, ctx, types, allowViewIsolation, sqlFlags)) {
                 ctx.AddError(TIssue(TPosition(),
                     TStringBuilder() << "Can't load sql view " << viewSql.Quote()
                     << ", table: " << cluster << '.' << table

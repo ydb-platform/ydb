@@ -1,6 +1,8 @@
 #pragma once
 
 #include "yql_setting.h"
+#include <yql/essentials/core/project_settings/yql_project_settings.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 
 #include <yql/essentials/providers/common/config/yql_config_qplayer.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -657,11 +659,18 @@ protected:
     const TString ProviderName_;
     bool StrictConfigValidation_ = false;
 
-private:
     TString PrepareSettingName(const TString& name) const {
         return NormalizeSettingNames_ ? NormalizeName(name) : name;
     }
 
+    TMaybe<TString> PrepareProjectSettingName(TString name) const {
+        if (NormalizeSettingNames_ && NormalizeName(TPosition(), name)) {
+            return Nothing();
+        }
+        return name;
+    }
+
+private:
     const bool NormalizeSettingNames_;
 };
 
@@ -718,6 +727,63 @@ public:
 
     bool IsRuntime(const TString& name) const final {
         return TDispatcher<TSettings>::IsRuntime(name);
+    }
+
+    bool AcceptsProjectSetting(const TProjectSettings::TPragma& pragma) const {
+        if (NSQLTranslation::IsTranslatorLevelPragma(pragma.Name)) {
+            return false;
+        }
+        const TString prefix(TStringBuf(pragma.Name).Before('.'));
+        const auto name = this->PrepareProjectSettingName(TString(TStringBuf(pragma.Name).After('.')));
+        return (prefix == this->ProviderName_ || this->IsValidCluster(prefix)) && name && !name->StartsWith('_') && this->Handlers_.contains(*name);
+    }
+
+    void ApplyProjectSettings(const TProjectSettings& settings) {
+        for (const auto& pragma : settings.Pragmas) {
+            if (NSQLTranslation::IsTranslatorLevelPragma(pragma.Name)) {
+                continue;
+            }
+            const TString prefix(TStringBuf(pragma.Name).Before('.'));
+            if (prefix == this->ProviderName_) {
+                ApplyProjectSetting(ALL_CLUSTERS, pragma);
+            } else if (this->IsValidCluster(prefix)) {
+                ApplyProjectSetting(prefix, pragma);
+            }
+        }
+    }
+
+    void ApplyProjectSetting(const TString& cluster, const TProjectSettings::TPragma& pragma) {
+        const TString name(TStringBuf(pragma.Name).After('.'));
+        const auto normalizedName = this->PrepareProjectSettingName(name);
+        if (!normalizedName) {
+            return;
+        }
+        const auto handlerIt = this->Handlers_.find(*normalizedName);
+        if (handlerIt == this->Handlers_.end()) {
+            return;
+        }
+        if (name.StartsWith('_')) {
+            if (this->StrictConfigValidation_) {
+                throw TErrorException(EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR)
+                    << "Unknown or disallowed project setting " << pragma.Name.Quote();
+            }
+            return;
+        }
+        if (pragma.Value.size() > 1) {
+            if (this->StrictConfigValidation_) {
+                throw TErrorException(EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR)
+                    << "Too many values for project setting: " << pragma.Name << "; expected at most one value";
+            }
+            return;
+        }
+        const auto errorCallback = [this](const TString& message, bool isError) {
+            if (isError && this->StrictConfigValidation_) {
+                throw TErrorException(EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR) << message;
+            }
+            return true;
+        };
+        const TMaybe<TString> value = pragma.Value.empty() ? TString{} : pragma.Value.front();
+        Dispatch(cluster, name, value, EStage::CONFIG, errorCallback);
     }
 
     void FreezeDefaults() {

@@ -7,6 +7,8 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/sql/settings
+    yql/essentials/core/project_settings
     yql/essentials/core/credentials
     yql/essentials/core/qplayer/storage/interface
     yql/essentials/core/sql_types

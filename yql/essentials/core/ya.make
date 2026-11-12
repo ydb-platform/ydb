@@ -85,6 +85,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/core/project_settings
     library/cpp/enumbitset
     library/cpp/random_provider
     library/cpp/threading/future
@@ -128,6 +129,7 @@ GENERATE_ENUM_SERIALIZATION(yql_cost_function.h)
 END()
 
 RECURSE(
+    project_settings
     cbo
     credentials
     dq_expr_nodes

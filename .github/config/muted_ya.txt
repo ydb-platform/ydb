@@ -59,6 +59,7 @@ ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-4-1_to_prestable-27-1-1-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-4-1_to_prestable-27-1-1-strict]
 ydb/tests/compatibility/indexes test_unique_index.py.TestUniqueIndex.test_unique_index[rolling_stable-26-4-1_to_prestable-27-1-1]
+ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_current_proxy_returns_overloaded[mixed_current_and_intermediate-limit_enabled]
 ydb/tests/compatibility/topics py3test.[test_topic.py */*] chunk
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/topics test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-4-1_to_prestable-27-1-1]

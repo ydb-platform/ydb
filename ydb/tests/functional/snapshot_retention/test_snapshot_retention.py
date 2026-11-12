@@ -85,7 +85,7 @@ class RetentionClusterTest(unittest.TestCase):
         self.assertEqual(owner, self.cluster.nodes[1].node_id)
         return snapshot
 
-    def _past(self, snapshot, generation=1, path=None, extra_advance=None):
+    def _past(self, snapshot, generation=1, path=None, extra_advance=None, refresh_bound=False):
         def advance():
             # Index maintenance skips equal rows. Commit real changes, then
             # restore the deterministic current generation before observing it.
@@ -98,6 +98,7 @@ class RetentionClusterTest(unittest.TestCase):
             snapshot,
             path or self.workload.target_path,
             advance=advance,
+            refresh_bound=refresh_bound,
         )
 
     def _compact(self):
@@ -141,14 +142,28 @@ class TestSnapshotRetention(RetentionClusterTest):
         for snapshot in snapshots:
             self._past(snapshot, generation=3)
             snapshot.assert_matches()
-        self.assertGreater(self.monitor.remote_snapshot_count(self.cluster.nodes[2].node_id), 0)
+        registry_nodes = [self.cluster.nodes[2].node_id]
+        # No SQL is in flight while polling: only these three held
+        # transactions contribute promoted snapshots from the pinned owner.
+        self.monitor.wait_registry_count(3, node_ids=registry_nodes)
 
         # Releasing one point must not release the other transactions' points.
         snapshots[1].close("rollback")
-        snapshots[0].assert_matches()
-        snapshots[2].assert_matches()
+        self.monitor.wait_registry_count(2, node_ids=registry_nodes)
+        # The previous bounds have already been crossed. Capture a new write
+        # edge after release propagation and require cleanup on both tables.
+        self._past(snapshots[0], generation=3, refresh_bound=True)
+        self._past(snapshots[0], generation=3, path=self.workload.index_path)
+        self._compact()
+        for snapshot in (snapshots[0], snapshots[2]):
+            snapshot.assert_matches()
+            snapshot.assert_matches(kind="index")
         snapshots[0].close("commit")
-        self._past(snapshots[2], generation=3)
+        self.monitor.wait_registry_count(1, node_ids=registry_nodes)
+        self._past(snapshots[2], generation=3, refresh_bound=True)
+        self._past(snapshots[2], generation=3, path=self.workload.index_path)
+        self._compact()
+        snapshots[2].assert_matches()
         snapshots[2].assert_matches(kind="index")
         snapshots[2].close("session")
         self.monitor.wait_registry_empty()
@@ -222,7 +237,8 @@ class TestSnapshotRetention(RetentionClusterTest):
         self.workload.execute_scheme(f"ALTER TABLE `{copy_path}` COMPACT;")
         source_snapshot.assert_matches()
         self.assertEqual(copy_snapshot.read(table_path=copy_path), expected_rows(1))
-        self.assertTrue(all(row[2] == "changed" for row in self.workload.read_current(table_path=copy_path)))
+        expected_copy = [(key, generation, "changed") for key, generation, _ in expected_rows(1)]
+        self.assertEqual(self.workload.read_current(table_path=copy_path), expected_copy)
         self.workload.assert_current(2)
 
 
@@ -233,10 +249,12 @@ class DisabledRetentionChecks:
         self._past(snapshot)
         self._compact()
         try:
+            # ExecuteDataQuery uses KQP read iterators: an unreadable snapshot
+            # produces PRECONDITION_FAILED in DataShard, wrapped as ABORTED by
+            # KQP. ReadTable and ReadColumns use different error mappings.
             with self.assertRaises((ydb.Aborted, ydb.PreconditionFailed)) as error:
                 snapshot.read()
-            # Accept the SDK status wrapping this failure, but not an unrelated
-            # timeout, session loss or network error as the expected rejection.
+            # Require the snapshot diagnostic to reject unrelated query errors.
             self.assertIn("snapshot", str(error.exception).lower())
         finally:
             snapshot.close("session")

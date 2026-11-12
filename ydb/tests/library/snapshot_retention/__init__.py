@@ -25,6 +25,10 @@ COMPLETE_EDGE_STEP_KEY = 26
 IMMEDIATE_WRITE_EDGE_STEP_KEY = 39
 
 
+class _MonitoringNotReady(Exception):
+    """A monitoring endpoint has not published the required data yet."""
+
+
 class _DbRows(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -79,22 +83,29 @@ class SnapshotRetentionMonitor:
             sensor["value"] for sensor in response.json().get("sensors", [])
             if sensor.get("labels", {}).get("sensor") == "RemoteSnapshotsInRegistry"
         ]
-        assert counters, f"RemoteSnapshotsInRegistry is missing on node {node_id}"
+        if not counters:
+            raise _MonitoringNotReady(f"RemoteSnapshotsInRegistry is missing on node {node_id}")
         return sum(int(value) for value in counters)
 
     def wait_registry_empty(self, node_ids=None, timeout=60):
+        self.wait_registry_count(0, node_ids=node_ids, timeout=timeout)
+
+    def wait_registry_count(self, expected_count, node_ids=None, timeout=60):
+        """Wait for the exact remote snapshot count on every selected node."""
+        if expected_count < 0:
+            raise ValueError("Expected snapshot count must be nonnegative")
         if node_ids is None:
             nodes = list(self.cluster.nodes.values()) + list(self.cluster.slots.values())
             node_ids = [node.node_id for node in nodes]
         counts = {}
 
-        def empty():
+        def matched():
             nonlocal counts
             counts = {node_id: self.remote_snapshot_count(node_id) for node_id in node_ids}
-            return all(count == 0 for count in counts.values())
+            return all(count == expected_count for count in counts.values())
 
         try:
-            self._wait("released snapshots to leave the registries", empty, timeout)
+            self._wait(f"remote snapshot count {expected_count} on nodes {node_ids}", matched, timeout)
         except AssertionError as error:
             raise AssertionError(f"{error}; last snapshot counts: {counts}") from error
 
@@ -152,11 +163,13 @@ class SnapshotRetentionMonitor:
         assert header in parser.rows, (
             f"Unexpected Sys schema for tablet {tablet_id}: {parser.rows}"
         )
-        rows = [row for row in parser.rows if len(row) == 3 and row[0] == str(key)]
-        if not rows and default is not None:
-            return default
-        assert len(rows) == 1 and rows[0][2].isdigit(), (
-            f"Missing Sys key {key} on tablet {tablet_id}: {parser.rows}"
+        rows = [row for row in parser.rows if row and row[0] == str(key)]
+        if not rows:
+            if default is not None:
+                return default
+            raise _MonitoringNotReady(f"Missing Sys key {key} on tablet {tablet_id}: {parser.rows}")
+        assert len(rows) == 1 and len(rows[0]) == 3 and rows[0][2].isdigit(), (
+            f"Invalid Sys key {key} on tablet {tablet_id}: {parser.rows}"
         )
         return int(rows[0][2])
 
@@ -177,21 +190,27 @@ class SnapshotRetentionMonitor:
                 result = predicate()
                 if result:
                     return result
-            except (requests.RequestException, ydb.Error) as error:
+            except (requests.RequestException, ydb.Error, _MonitoringNotReady) as error:
                 # Tablet movement can temporarily make independent monitoring
-                # reads unavailable. Never retry the transaction being checked.
+                # reads unavailable or incomplete. Never retry the transaction
+                # being checked, or hide malformed monitoring data.
                 last_error = error
             time.sleep(0.25)
         raise AssertionError(f"Timed out waiting for {description}; last error: {last_error}")
 
-    def wait_past_snapshot(self, held, path, advance=None, timeout=90):
+    def wait_past_snapshot(self, held, path, advance=None, timeout=90, refresh_bound=False):
         """Prove that every target shard advanced past the held snapshot.
 
         First observe an acknowledged newer generation at anchor, then capture
         its persisted MVCC edge. That write follows the held repeatable read,
         so its version bounds the held snapshot from above. Coordinator steps
         can be ahead of wall time; the client's timestamp is not a safe bound.
+
+        Refresh the bound after observing a release to require another
+        acknowledged write and cleanup beyond its version.
         """
+        if refresh_bound:
+            self._snapshot_bounds.pop(held.tx_id, None)
         if held.tx_id not in self._snapshot_bounds:
             anchor = held.workload.anchor_path
 
@@ -247,8 +266,15 @@ class SnapshotRetentionMonitor:
             result = self._json("/cms/api/datashard/json/getinfo", {"tabletid": tablet_id})
             if result.get("Status", {}).get("Code") != "SUCCESS":
                 return None
-            info = result.get("TabletInfo", {})
-            return info if info.get("IsActive") and int(info["Generation"]) > generation else None
+            info = result.get("TabletInfo") or {}
+            if not info.get("IsActive"):
+                return None
+            try:
+                current_generation = int(info.get("Generation"))
+            except (TypeError, ValueError):
+                # An incomplete restart response is not proof of a new generation.
+                return None
+            return info if current_generation > generation else None
 
         return self._wait(f"tablet {tablet_id} restart after generation {generation}", restarted, timeout)
 
@@ -269,22 +295,36 @@ class SnapshotRetentionMonitor:
         return int(leaders[0].get("NodeID", 0))
 
     def move_tablet(self, tablet_id, node_id, timeout=90):
-        response = requests.post(
-            self.base_url + "/tablets/app",
-            params={
-                "TabletID": DEFAULT_HIVE_ID,
-                "page": "MoveTablet",
-                "tablet": tablet_id,
-                "node": node_id,
-            },
-            timeout=60,
-        )
-        response.raise_for_status()
-        result = response.json()
-        assert result.get("status"), result
+        if self.tablet_node(tablet_id) != node_id:
+            # Acknowledge the command without holding the HTTP request open
+            # until restart completes. Submit it once, then poll read-only state.
+            response = requests.post(
+                self.base_url + "/tablets/app",
+                params={
+                    "TabletID": DEFAULT_HIVE_ID,
+                    "page": "MoveTablet",
+                    "tablet": tablet_id,
+                    "node": node_id,
+                    "wait": "0",
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            result = response.json()
+            assert result == {}, result
+
+        def moved():
+            if self.tablet_node(tablet_id) != node_id:
+                return False
+            result = self._json("/cms/api/datashard/json/getinfo", {"tabletid": tablet_id})
+            return (
+                result.get("Status", {}).get("Code") == "SUCCESS"
+                and (result.get("TabletInfo") or {}).get("IsActive")
+            )
+
         self._wait(
             f"tablet {tablet_id} move to node {node_id}",
-            lambda: self.tablet_node(tablet_id) == node_id,
+            moved,
             timeout,
         )
 

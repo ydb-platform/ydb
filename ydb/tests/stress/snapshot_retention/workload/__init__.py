@@ -38,7 +38,7 @@ def _path(path):
 
 
 def _settings():
-    return ydb.BaseRequestSettings().with_timeout(30).with_operation_timeout(25)
+    return ydb.BaseRequestSettings().with_timeout(50).with_operation_timeout(45)
 
 
 def _scheme_settings():

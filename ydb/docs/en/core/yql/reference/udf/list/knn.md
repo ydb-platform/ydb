@@ -102,37 +102,11 @@ The serialized length is `ceil(N / 2) + 2` bytes for `N` coordinates. For exampl
 
 The `ToBinaryStringBit` function maps coordinates that are greater than `0` to `1`. All other coordinates are mapped to `0`.
 
-#### FP8 formats {#fp8-formats}
+`ToBinaryStringFloat8E4M3` and `ToBinaryStringFloat8E5M2` convert `List<Float>` to E4M3FN (maximum finite magnitude 448) and E5M2 (57344), respectively, without scaling. Both round to the nearest representable value, with ties to even, saturate overflow and infinities to the maximum finite value with the same sign, and convert NaN inputs to a canonical NaN. Calculations use `Float`. For vector indexes, use `vector_type="float8_e4m3"` or `vector_type="float8_e5m2"`.
 
-FP8 stores each floating-point coordinate in one byte. `ToBinaryStringFloat8E4M3` and `ToBinaryStringFloat8E5M2` convert `List<Float>` to the following formats without applying a scale factor:
+`ToBinaryStringInt4` and `ToBinaryStringUint4` convert `List<Int8>` and `List<Uint8>` to packed 4-bit vectors, clamping coordinates to [-8, 7] and [0, 15], respectively, without scaling. Distance and similarity functions return `NULL` for malformed packed data. For vector indexes, use `vector_type="int4"` or `vector_type="uint4"`.
 
-| Vector type | Encoding | Exponent bits | Mantissa bits | Maximum finite magnitude |
-| --- | --- | --- | --- | --- |
-| `Float8E4M3` | E4M3FN | 4 | 3 | 448 |
-| `Float8E5M2` | E5M2 | 5 | 2 | 57344 |
-
-E4M3FN provides more precision, while E5M2 provides a wider range. These formats use different encodings from the FNUZ variants. Both support signed zero, subnormal values, and NaN. E4M3FN has no infinity encoding; E5M2 can represent infinity.
-
-Both conversion functions round to the nearest representable value, with ties to even. Overflow and infinities are saturated to the maximum finite value with the same sign. NaN inputs are converted to a canonical NaN encoding. `FloatFromBinaryString` decodes either format to `List<Float>` containing the quantized coordinates; it does not restore the original precision.
-
-Use `vector_type="float8_e4m3"` or `vector_type="float8_e5m2"` for vector indexes storing these formats. Serialize query vectors using the same format as the stored vectors. All distance and similarity functions support both formats and perform arithmetic in `Float`.
-
-Compared with `Float`, FP8 reduces coordinate storage by four times, excluding serialization metadata. Measure search accuracy/recall on your data before choosing a format.
-
-#### Packed 4-bit integer formats {#int4-formats}
-
-`Int4` and `Uint4` store integer coordinates in four bits each, packing two coordinates per byte. These are vector serialization formats; the conversion functions use the existing YQL integer types as input:
-
-| Vector format | Conversion function | Input type | Coordinate range |
-| --- | --- | --- | --- |
-| `Int4` | `ToBinaryStringInt4` | `List<Int8>` | -8 to 7 |
-| `Uint4` | `ToBinaryStringUint4` | `List<Uint8>` | 0 to 15 |
-
-Use `Int4` for signed coordinates and `Uint4` for nonnegative coordinates. Both functions clamp values outside the target range to the nearest boundary. They do not apply scaling. For floating-point embeddings, choose scaling and rounding, convert the coordinates to `List<Int8>` or `List<Uint8>`, and then serialize them. `FloatFromBinaryString` decodes either format to `List<Float>` containing the stored integer values.
-
-Use `vector_type="int4"` or `vector_type="uint4"` for vector indexes storing these formats. Serialize query vectors using the same format as the stored vectors. All distance and similarity functions support both formats. They return `NULL` for malformed packed inputs, including a missing padding-count byte, a padding count other than `0` or `1`, or nonzero unused high bits.
-
-Compared with `Int8` or `Uint8`, these formats halve coordinate storage, excluding serialization metadata. Compared with `Float`, coordinate storage is reduced by eight times. Measure search accuracy/recall after quantization before choosing a format.
+`FloatFromBinaryString` decodes these formats to `List<Float>` containing the quantized coordinates. Serialize query vectors using the same format as the stored vectors.
 
 ### Distance and similarity functions {#functions-distance}
 
@@ -331,18 +305,12 @@ The following examples show quantization in YQL.
 
 #### Float -> FP8 {#approximate-vector-search-scalar-quantization-fp8}
 
-Use the FP8 conversion functions to quantize floating-point coordinates directly. This example rounds `1.0625` to `1.0` in E4M3FN and decodes the vector back to `Float`:
-
 ```yql
 $vector = Knn::ToBinaryStringFloat8E4M3([1.0625f, 2.0f]);
 SELECT Knn::FloatFromBinaryString($vector); -- [1.0, 2.0]
 ```
 
-To use E5M2, replace `ToBinaryStringFloat8E4M3` with `ToBinaryStringFloat8E5M2`. When storing the serialized vector in a `String` column, call `Untag($vector, "Float8E4M3Vector")` or `Untag($vector, "Float8E5M2Vector")`, respectively.
-
 #### Int8/Uint8 -> Int4/Uint4 {#approximate-vector-search-scalar-quantization-int4}
-
-Serialize integer coordinates with the 4-bit conversion functions. The [numeric literal suffixes](../../syntax/lexer.md#literal-numbers) `t` and `ut` specify `Int8` and `Uint8`, respectively. These examples show clamping and decoding:
 
 ```yql
 $signed = Knn::ToBinaryStringInt4([-128t, -9t, 8t, 127t]);
@@ -350,8 +318,6 @@ $unsigned = Knn::ToBinaryStringUint4([0ut, 15ut, 16ut, 255ut]);
 SELECT Knn::FloatFromBinaryString($signed); -- [-8.0, -8.0, 7.0, 7.0]
 SELECT Knn::FloatFromBinaryString($unsigned); -- [0.0, 15.0, 15.0, 15.0]
 ```
-
-When storing the serialized vectors in `String` columns, call `Untag($signed, "Int4Vector")` or `Untag($unsigned, "Uint4Vector")`, respectively.
 
 #### Float -> Int8 {#approximate-vector-search-scalar-quantization-map}
 

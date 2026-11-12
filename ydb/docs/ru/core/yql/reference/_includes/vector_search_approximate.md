@@ -2,7 +2,7 @@
 
 [Скалярное квантование](../udf/list/knn.md#approximate-vector-search-scalar-quantization) — это метод уменьшения точности координат с сохранением размерности векторов.
 
-{{ ydb-short-name }} поддерживает векторный поиск по векторам типов `Float`, [Float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format), [BFloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format), [Float8E4M3 и Float8E5M2](../udf/list/knn.md#fp8-formats), `Int8`, `Uint8`, [Int4 и Uint4](../udf/list/knn.md#int4-formats), `Bit`. Следовательно, возможно применение скалярного квантования для преобразования данных из `Float` в любой из этих типов.
+{{ ydb-short-name }} поддерживает векторный поиск по векторам типов `Float`, [Float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format), [BFloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format), [Float8E4M3 и Float8E5M2](../udf/list/knn.md#functions-convert-details), `Int8`, `Uint8`, [Int4 и Uint4](../udf/list/knn.md#functions-convert-details), `Bit`. Следовательно, возможно применение скалярного квантования для преобразования данных из `Float` в любой из этих типов.
 
 Скалярное квантование сокращает время, необходимое для чтения и записи данных, за счёт уменьшения числа байт. Например, при квантовании из `Float` в `Bit` объём координат сокращается в 32 раза без учёта служебных данных сериализации.
 

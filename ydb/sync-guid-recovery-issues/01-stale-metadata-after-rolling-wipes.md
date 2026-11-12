@@ -1,6 +1,6 @@
 # VDisk returns Good after rolling peer wipes but misses committed Block metadata
 
-**Status:** reproduced on `mr006` in an eight-VDisk `Erasure4Plus2Block` group. This is a metadata correctness issue. **Umbrella:** [[EPIC] Make VDisk recovery safe across rolling wipes](%5BEPIC%5D.md).
+**Status:** reproduced on `mr006` in an eight-VDisk `Erasure4Plus2Block` group; also reproduced in the reduced P model for normal nine-VDisk `ErasureMirror3dc`. This is a metadata correctness issue. **Umbrella:** [[EPIC] Make VDisk recovery safe across rolling wipes](%5BEPIC%5D.md).
 
 ## Reproduction provenance
 
@@ -10,6 +10,23 @@
 - **Evidence:** [captured final console log](evidence/mr006-c28196d089f.log) and [shared test details](%5BEPIC%5D.md#reproduced-revision-and-test-evidence). UTC log timestamps `2026-11-11T21:29:21–22Z` correspond to the reproduction date above.
 
 ## Description
+
+### Mirror-3-dc model evidence
+
+On **2026-11-12**, `tcMirror3dcStaleMetadata` reproduced `Good`, followed by
+successful `DisksSynced` results from all eight peers, with local Hull Block
+generation 0 instead of committed 42. The model uses three realms of three
+VDisk fail domains, `NORMAL`, all realms `INCLUDED`, and the topology's actual
+group quorum; its first GUID quorum is `{0,1,2,3,4}`.
+The tested working tree is based on Git SHA
+`a68bd12f36af20329023baf319990155fa1ebf10` (commit date
+2026-11-12T20:12:20+03:00), with uncommitted model changes identified by
+[source hashes and results](../sync_guid_recovery_p/Evidence/results.json).
+See the [trace excerpt](../sync_guid_recovery_p/Evidence/tcMirror3dcStaleMetadata.excerpt.txt)
+and [direct checker commands](../sync_guid_recovery_p/README.md).
+This is a P reproduction, not an end-to-end mirror-3-dc C++ test.
+
+### Metadata-history gap
 
 A VDisk with preserved but outdated local state can return from an outage, receive `EDecision::Good`, report `Replicated`, and still lack a `Block` committed while it was unavailable. Sequentially wiping and recovering the other VDisks removes the original incremental synchronization history. The replacement peers retain the metadata in Hull, but `TEvVSyncResult(RESTART)` lets the returning VDisk resume after that history without reading it.
 

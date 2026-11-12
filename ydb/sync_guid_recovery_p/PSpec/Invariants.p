@@ -3,10 +3,10 @@ spec NeverReinitializeExistingVDisk observes eSeed, eGuidRecoveryStarted, eLocal
   var initializedBefore: map[int, bool];
   var identity: map[int, int];
   start state Watching {
-    on eSeed do (established: bool) {
+    on eSeed do (config: (Established: bool, Topology: ETopology)) {
       var i: int;
-      if (established) {
-        while (i < 8) { initialized += (i); identity[i] = i + 1; i = i + 1; }
+      if (config.Established) {
+        while (i < DiskCount(config.Topology)) { initialized += (i); identity[i] = i + 1; i = i + 1; }
       }
     }
     on eGuidRecoveryStarted do (req: (Owner: int, Local: TLocalGuidInfo)) {
@@ -52,12 +52,14 @@ spec PreservedIdentityRemainsRecoverable observes eGuidRecoveryStarted, eSurveyV
   }
 }
 
-spec MetadataIsCompleteWhenSynced observes eBlockCommitted, eRoundStarted, eSyncPeerDone, eRoundFinished {
+spec MetadataIsCompleteWhenSynced observes eSeed, eBlockCommitted, eRoundStarted, eSyncPeerDone, eRoundFinished {
+  var topology: ETopology;
   var committed: int;
   var expected: int;
   var owner: int;
   var completed: set[int];
   start state Watching {
+    on eSeed do (config: (Established: bool, Topology: ETopology)) { topology = config.Topology; }
     on eBlockCommitted do (generation: int) { committed = generation; }
     on eRoundStarted do (disk: int) {
       owner = disk;
@@ -70,7 +72,7 @@ spec MetadataIsCompleteWhenSynced observes eBlockCommitted, eRoundStarted, eSync
       completed += (result.Peer);
     }
     on eRoundFinished do (result: (Owner: int, HullBlock: int, Peers: int)) {
-      assert result.Owner == owner && sizeof(completed) == result.Peers && result.Peers >= 6;
+      assert result.Owner == owner && sizeof(completed) == result.Peers && HasGroupQuorum(topology, completed);
       assert result.HullBlock >= expected,
         format("All {0} peers synced, but Hull Block generation {1} misses committed {2}",
           result.Peers, result.HullBlock, expected);

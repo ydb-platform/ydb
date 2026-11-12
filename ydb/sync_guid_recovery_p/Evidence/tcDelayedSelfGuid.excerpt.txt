@@ -13,8 +13,21 @@ Selected lines from the PChecker trace; not a full trace.
 <AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 6.
 <AnnounceLog> 'TVDiskGuidRecoveryActor(53)' announced event 'eGuidVerdict' with payload <Owner:7, Decision:2, >.
 <AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 7.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eGuidRecoveryStarted' with payload <Owner:0, Local:<State:3, Guid:1, DbBirthLsn:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:1, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:2, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:3, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:5, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:4, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:6, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
 <AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eGuidVerdict' with payload <Owner:0, Decision:3, >.
-<ErrorLog> Assertion Failed: PSpec/Invariants.p:48:9 Intact local Final rejected after an Empty first reply quorum
+<ErrorLog> Assertion Failed: sync_guid_recovery_p/PSpec/Invariants.p:48:9 Intact local Final rejected after an Empty first reply quorum
 <StrategyLog> Found bug using 'random' strategy.
 <StrategyLog> Checking statistics:
 <StrategyLog> Found 1 bug.

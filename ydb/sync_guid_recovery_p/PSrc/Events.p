@@ -1,5 +1,4 @@
-// Deliberately separate from the nine-VDisk mirror-3-dc put model.
-// This subproject models the reproduced 4+2 topology: eight fail domains, Q=6.
+enum ETopology { Block4Plus2, Mirror3dc }
 enum ELocalGuidState { LocalEmpty, Selected, Lost, LocalFinal }
 enum ESyncGuidState { RemoteEmpty, InProgress, RemoteFinal }
 enum EDecision { FirstRun, Good, LostData, Inconsistency }
@@ -39,7 +38,7 @@ event eSurvey: (Source: machine, Owner: int);
 event eGuidEnvelope: TGuidEnvelope;
 event TEvVDiskGuidObtained: TGuidReply;
 event ePublishGuid: (Source: machine, Owner: int, Info: TSyncGuidInfo);
-event TEvVDiskGuidWritten: int;
+event TEvVDiskGuidWritten: set[int];
 event TEvSyncerCommit: (Source: machine, Owner: int, Local: TLocalGuidInfo);
 event TEvSyncerCommitDone;
 event TEvVDiskGuidRecovered: TGuidRecovered;
@@ -49,10 +48,10 @@ event eFullSyncRequest: TVSyncRequest;
 event eImportMetadata: (Job: machine, Owner: int, Peer: int, Block: int, SyncState: TSyncState);
 event TEvLocalSyncDataResult;
 event TEvSyncerJobDone: (Owner: int, Peer: int, SyncState: TSyncState, Status: ESyncStatus);
-event eConfigureDelay: EScenario;
+event eConfigureDelay: (Scenario: EScenario, Topology: ETopology);
 
 // Observations only. The implementation never reads the monitors' history.
-event eSeed: bool;
+event eSeed: (Established: bool, Topology: ETopology);
 event eScenarioStarted;
 event eScenarioFinished;
 event eGuidRecoveryStarted: (Owner: int, Local: TLocalGuidInfo);

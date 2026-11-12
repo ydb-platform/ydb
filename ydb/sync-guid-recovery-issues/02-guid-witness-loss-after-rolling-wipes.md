@@ -1,6 +1,6 @@
 # SyncGuidRecovery rejects intact local state after rolling wipes erase peer GUID witnesses
 
-**Status:** reproduced on `mr006` in an eight-VDisk `Erasure4Plus2Block` group. This is an availability failure whose outcome depends on GUID reply order. **Umbrella:** [[EPIC] Make VDisk recovery safe across rolling wipes](%5BEPIC%5D.md).
+**Status:** reproduced on `mr006` in an eight-VDisk `Erasure4Plus2Block` group; also reproduced in the reduced P model for normal nine-VDisk `ErasureMirror3dc`. This is an availability failure whose outcome depends on GUID reply order. **Umbrella:** [[EPIC] Make VDisk recovery safe across rolling wipes](%5BEPIC%5D.md).
 
 ## Reproduction provenance
 
@@ -10,6 +10,23 @@
 - **Evidence:** [captured final console log](evidence/mr006-c28196d089f.log) and [shared test details](%5BEPIC%5D.md#reproduced-revision-and-test-evidence). UTC log timestamps `2026-11-11T21:29:21–22Z` correspond to the reproduction date above.
 
 ## Description
+
+### Mirror-3-dc model evidence
+
+On **2026-11-12**, `tcMirror3dcDelayedSelfGuid` reproduced `Inconsistency`
+despite preserved local `Final`. After rolling wipes of peers 1–8, five erased
+witnesses from `{3,4,5,6,7}` form the first group quorum: realm counts `(0,3,2)`.
+Actual replies from the other VDisks, including the self-witness, are delayed.
+The topology stays `NORMAL`, all realms `INCLUDED`.
+The tested working tree is based on Git SHA
+`a68bd12f36af20329023baf319990155fa1ebf10` (commit date
+2026-11-12T20:12:20+03:00), with uncommitted model changes identified by
+[source hashes and results](../sync_guid_recovery_p/Evidence/results.json).
+See the [trace excerpt](../sync_guid_recovery_p/Evidence/tcMirror3dcDelayedSelfGuid.excerpt.txt)
+and [direct checker commands](../sync_guid_recovery_p/README.md).
+This is a P reproduction, not an end-to-end mirror-3-dc C++ test.
+
+### Witness erosion
 
 While VDisk `A` is unavailable, sequentially wiping its peers removes their stored `TSyncGuidInfo` records for `A`. Recovery does not reconstruct these witnesses, and only `A` can republish its own GUID through its normal propagators.
 

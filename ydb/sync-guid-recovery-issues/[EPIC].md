@@ -6,7 +6,7 @@
 
 When one VDisk is temporarily unavailable, sequential wipes of its peers can erase both incremental synchronization history and peer copies of its eternal GUID. On return, the VDisk can either become operational while missing committed metadata or reject its intact local state as inconsistent. If it also lost its local state, the same witness erosion can cause an existing slot to be classified as `FirstRun`.
 
-Two failures have been reproduced; the conditional `FirstRun` scenario is established from code and still needs its own regression. Preserving GUID witnesses and restoring metadata freshness are separate requirements: fixing either one alone does not resolve this epic.
+Two failures have been reproduced in C++ for 4+2. All three, including false `FirstRun`, are reproduced in the reduced P model for both 4+2 and normal mirror-3-dc. Preserving GUID witnesses and restoring metadata freshness are separate requirements: fixing either one alone does not resolve this epic.
 
 ## Goal
 
@@ -18,17 +18,26 @@ Make recovery across rolling wipes preserve VDisk identity and recover the metad
 | --- | --- | --- |
 | [01 — Missing metadata after `Good`](01-stale-metadata-after-rolling-wipes.md) | A returning VDisk reports `Good` and `Replicated` but lacks a successfully committed `Block`. | Reproduced on `mr006`; a recovered peer still returns the blocked generation. |
 | [02 — Intact VDisk rejected after witness loss](02-guid-witness-loss-after-rolling-wipes.md) | An all-`Empty` first survey quorum produces `Inconsistency` despite local `Final` state. | Reproduced on `mr006` using finite delays of actual GUID replies. |
-| [03 — Existing VDisk mistaken for `FirstRun`](03-false-first-run-after-witness-loss.md) | If the unavailable VDisk also has local `Empty` state, erased witnesses can make an existing slot appear new. | Decision path verified in code; no dedicated end-to-end test was run. |
+| [03 — Existing VDisk mistaken for `FirstRun`](03-false-first-run-after-witness-loss.md) | If the unavailable VDisk also has local `Empty` state, erased witnesses can make an existing slot appear new. | Reproduced in P for 4+2 and normal mirror-3-dc; no dedicated end-to-end C++ test was run. |
 
 Tickets 02 and 03 share the witness-erasure root cause and may be implemented together; ticket 01 requires a separate metadata-history guarantee.
+
+The [P model](../sync_guid_recovery_p/README.md) uses the actual mirror-3-dc
+group predicate: `(3,2,0)` replies form a quorum, `(2,2,2)` do not. On 2026-11-12,
+all six negative cases failed their intended monitors and all eight controls
+completed 50 schedules without bugs. Tested working-tree base Git SHA:
+`a68bd12f36af20329023baf319990155fa1ebf10`, committed
+2026-11-12T20:12:20+03:00; uncommitted model changes are identified by
+[source hashes](../sync_guid_recovery_p/Evidence/results.json).
 
 ## Work to complete
 
 - [ ] Prevent synchronization cursors from advancing past historical metadata that has not been applied locally when a peer's incarnation changes.
 - [ ] Preserve or reconstruct durable eternal-GUID witnesses across peer wipe recovery, while retaining detection of genuinely conflicting `Final` GUIDs.
-- [ ] Validate the conditional `FirstRun` scenario with the smallest focused regression and resolve the wrong classification if confirmed.
+- [ ] Validate the conditional `FirstRun` scenario with a focused end-to-end C++ regression and resolve the wrong classification confirmed in P.
 - [ ] Define which successful synchronization evidence backs recovery/readiness decisions. Cover both startup and live actors returning from a partition.
-- [ ] Reconcile the 4+2 behavior with the existing mirror-3-dc recovery proposals and their compatibility/fallback rules.
+- [x] Reproduce the same three protocol failures in a reduced normal mirror-3-dc model.
+- [ ] Reconcile those results with the existing mirror-3-dc recovery proposals and their compatibility/fallback rules.
 - [ ] Determine whether already-advanced cursors require an explicit full-synchronization procedure to repair existing metadata gaps.
 
 ## Acceptance criteria
@@ -72,6 +81,13 @@ The parallelism above is for `mr006`. It is not a laptop build command.
 Both cases first verify a successful `TEvBlock` and, after all peer wipes, a direct `TEvVGetBlockResult(OK, Generation=42)` from a recovered peer. Each wipe is followed by a new `TEvSyncGuidRecoveryDone(OK)` and `WaitForVDiskRepl`; this avoids treating the pre-wipe actor's `Replicated` status as recovery completion.
 
 ## Interpretation limits
+
+The P reproductions cover static normal mirror-3-dc; realm exclusion/recovery
+transitions are not modeled. No mirror-3-dc C++ test was run. The faulty GUID and
+`RESTART` paths are shared across erasures, but reachability depends on the
+failure budget and group topology. Other redundant erasures are exposed by the
+same code paths; they have not been tested here. `ErasureNone` does not support
+this unavailable-member plus rolling-wipe recovery sequence.
 
 The executed configuration is `Erasure4Plus2Block` with eight VDisks. The tests preserve the unavailable VDisk's local state and wipe the other seven VDisks one at a time. At most the unavailable VDisk and the currently wiped peer are unavailable during this sequence. The fixture's `Wipe` helper explicitly bypasses BSC degraded-group policy checks, so this is a storage-protocol scenario rather than a claim that every normal administration workflow permits the operation.
 

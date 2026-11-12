@@ -292,8 +292,8 @@ private:
         }
 
         for (YAML::const_iterator it = d.begin(); it != d.end(); ++it) {
-            const auto& key = it->first;
-            const auto& value = it->second;
+            const auto key = it->first;
+            const auto value = it->second;
             if (!key || !value) {
                 continue;
             }

@@ -1,3 +1,4 @@
+* Fixed a crash when searching documentation in interactive AI mode.
 * `export s3`, `export nfs` and `export yt` now honor `__omit_backup = "true"`; `tools dump` honors it for tables and changefeeds. S3 export/import now skip async replication changefeeds.
 * Async replication descriptions and SQL dumps now include the availability period.
 

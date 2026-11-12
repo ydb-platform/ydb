@@ -170,6 +170,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         replication_config=replication_config,
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
+        dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0, num_groups=2)],
     )
 
     if enable_fq_connector:

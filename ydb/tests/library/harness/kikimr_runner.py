@@ -1038,7 +1038,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if erasure is None:
             erasure = self.__configurator.static_erasure
         if num_groups is None:
-            num_groups = 2
+            # Cold A/B / CI default: one BS group is enough for most suites.
+            num_groups = 1
         request = bs.TConfigRequest()
         cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = 1

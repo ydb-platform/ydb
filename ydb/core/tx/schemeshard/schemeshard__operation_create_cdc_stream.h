@@ -55,7 +55,7 @@ void PlanCdcAggregatorCreation(
     const TOperationId& opId,
     const TPath& streamPath,
     const TChannelsBindings& channelsBindings,
-    TOperationContext& context);
+    TProposeContext& context);
 
 class TConfigureParts: public TSubOperationState {
 public:

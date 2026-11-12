@@ -1037,7 +1037,7 @@ void PlanCdcAggregatorCreation(
         const TOperationId& opId,
         const TPath& streamPath,
         const TChannelsBindings& channelsBindings,
-        TOperationContext& context)
+        TProposeContext& context)
 {
     auto* txState = context.SS->FindTx(opId);
     Y_ABORT_UNLESS(txState);

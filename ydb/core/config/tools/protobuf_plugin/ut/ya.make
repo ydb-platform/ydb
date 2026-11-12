@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/config/tools/protobuf_plugin)
 
-FORK_SUBTESTS()
-
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ENDIF()

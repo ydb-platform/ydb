@@ -49,15 +49,15 @@ SELECT
         END
     ) AS `>120 days`
 FROM
-    `/Root/test/ds/store_sales`
+    `store_sales`
 ,
-    `/Root/test/ds/store_returns`
+    `store_returns`
 ,
-    `/Root/test/ds/store`
+    `store`
 ,
-    `/Root/test/ds/date_dim` AS d1
+    `date_dim` AS d1
 ,
-    `/Root/test/ds/date_dim` AS d2
+    `date_dim` AS d2
 WHERE
     d2.d_year == 2000
     AND d2.d_moy == 9

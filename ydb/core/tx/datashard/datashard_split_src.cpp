@@ -119,14 +119,18 @@ public:
 };
 
 void TDataShard::CheckSplitCanStart(const TActorContext& ctx) {
-    if (State == TShardState::SplitSrcWaitForNoTxInFlight) {
-        ui64 txInFly = TxInFly() + VolatileTxManager.GetTxInFlight();
-        ui64 immediateTxInFly = ImmediateInFly();
-        SetCounter(COUNTER_SPLIT_SRC_WAIT_TX_IN_FLY, txInFly);
-        SetCounter(COUNTER_SPLIT_SRC_WAIT_IMMEDIATE_TX_IN_FLY, immediateTxInFly);
-        if (txInFly == 0 && immediateTxInFly == 0 && !Pipeline.HasWaitingSchemeOps()) {
-            Execute(CreateTxStartSplit(), ctx);
-        }
+    const bool waitingForTransactions = State == TShardState::SplitSrcWaitForNoTxInFlight;
+    const bool restartingSnapshot = State == TShardState::SplitSrcMakeSnapshot && !SplitSnapshotStarted;
+    if (!waitingForTransactions && !restartingSnapshot) {
+        return;
+    }
+
+    const ui64 txInFly = TxInFly() + VolatileTxManager.GetTxInFlight();
+    const ui64 immediateTxInFly = ImmediateInFly();
+    SetCounter(COUNTER_SPLIT_SRC_WAIT_TX_IN_FLY, txInFly);
+    SetCounter(COUNTER_SPLIT_SRC_WAIT_IMMEDIATE_TX_IN_FLY, immediateTxInFly);
+    if (txInFly == 0 && immediateTxInFly == 0 && !Pipeline.HasWaitingSchemeOps()) {
+        Execute(CreateTxStartSplit(), ctx);
     }
 }
 
@@ -152,6 +156,29 @@ public:
         }
 
         Y_ENSURE(Self->TxInFly() == 0, "Currently split operation shouldn't start while there are in-flight transactions");
+
+        bool hasCdcStreams = false;
+        for (const auto& [_, table] : Self->GetUserTables()) {
+            hasCdcStreams |= !table->CdcStreams.empty();
+        }
+        if (hasCdcStreams) {
+            // The source may keep publishing persisted CDC records after the
+            // snapshot is captured. A later source timecast update must not
+            // expose a write that the destination can still read past.
+            // Drain the future-write window before capturing the snapshot and
+            // transfer a persistent read floor, not just the write edge.
+            if (Self->MediatorStateWaiting) {
+                return true;
+            }
+            const ui64 writeStep = Self->GetSnapshotManager().GetImmediateWriteEdge().Step;
+            if (writeStep > Self->GetMaxObservedStep()) {
+                Self->WaitPlanStep(writeStep);
+                // The shared timecast entry may have advanced while subscribing.
+                if (writeStep > Self->GetMaxObservedStep()) {
+                    return true;
+                }
+            }
+        }
 
         Self->SplitStarted = true;
 
@@ -304,6 +331,15 @@ public:
             }
         }
 
+        if (hasCdcStreams) {
+            // All page-faulting work is finished. Persist the floor in the same
+            // transaction that captures it, so a retry cannot lose the update.
+            // Preserve visibility of the transferred writes without closing the
+            // whole observed step to subsequent immediate writes.
+            Self->GetSnapshotManager().PromoteCompleteEdge(
+                Self->GetSnapshotManager().GetImmediateWriteEdge().Step, txc);
+        }
+
         TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext;
         snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot),
                                                 Self->GetSnapshotManager().GetCompleteEdge(),
@@ -445,6 +481,8 @@ public:
                     tableSnapshot->SetTableId(localTableId);
                     TString compressedBody = NBlockCodecs::Codec("lz4fast")->Encode(snapBody);
                     tableSnapshot->SetSnapshotData(compressedBody);
+                    TSnapshotManager::SerializeRemovedRowVersions(txc.DB.GetRemovedRowVersions(localTableId),
+                        *tableSnapshot->MutableRemovedRowVersions());
                 }
             }
 
@@ -455,8 +493,11 @@ public:
                     snapshot->SetMinWriteVersionTxId(minVersion.TxId);
                 }
 
-                snapshot->SetMvccLowWatermarkStep(SnapContext->LowWatermark.Step);
-                snapshot->SetMvccLowWatermarkTxId(SnapContext->LowWatermark.TxId);
+                // Cleanup can advance while the snapshot is being flushed.
+                // Transfer its current watermark together with current removals.
+                const auto lowWatermark = Max(SnapContext->LowWatermark, Self->GetSnapshotManager().GetLowWatermark());
+                snapshot->SetMvccLowWatermarkStep(lowWatermark.Step);
+                snapshot->SetMvccLowWatermarkTxId(lowWatermark.TxId);
                 snapshot->SetMvccCompleteEdgeStep(SnapContext->CompleteEdge.Step);
                 snapshot->SetMvccCompleteEdgeTxId(SnapContext->CompleteEdge.TxId);
                 snapshot->SetMvccIncompleteEdgeStep(SnapContext->IncompleteEdge.Step);

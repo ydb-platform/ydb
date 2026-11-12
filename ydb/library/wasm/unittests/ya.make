@@ -40,3 +40,5 @@ SIZE(MEDIUM)
 RESOURCE(clock_fixture/clock.wasm /clock.wasm)
 
 END()
+
+RECURSE(clock_fixture)

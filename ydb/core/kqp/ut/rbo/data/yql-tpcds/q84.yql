@@ -7,17 +7,17 @@ SELECT
     c_customer_id AS customer_id,
     Coalesce(c_last_name, '') || ', ' || Coalesce(c_first_name, '') AS customername
 FROM
-    `/Root/test/ds/customer`
+    `customer`
 ,
-    `/Root/test/ds/customer_address`
+    `customer_address`
 ,
-    `/Root/test/ds/customer_demographics`
+    `customer_demographics`
 ,
-    `/Root/test/ds/household_demographics`
+    `household_demographics`
 ,
-    `/Root/test/ds/income_band`
+    `income_band`
 ,
-    `/Root/test/ds/store_returns`
+    `store_returns`
 WHERE
     ca_city == 'Hopewell'
     AND c_current_addr_sk == ca_address_sk

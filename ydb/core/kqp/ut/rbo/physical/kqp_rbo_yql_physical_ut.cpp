@@ -2212,7 +2212,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
         CreateTablesFromPath(tableSession, "data/", "schema/tpch.sql", /*useColumnStore*/ true);
 
-        TString query = GetFullPath("data/yql-tpch/q", "5.yql");
+        TString query = ReadBenchmarkQuery(EBenchType::TPCH, 5);
         const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
         const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
         query = toDecimal + "\n" + toDecimalMax + "\n" +
@@ -3166,6 +3166,122 @@ PRAGMA ydb.OptimizerHints = '
             const auto ast = *run(query, NYdb::NQuery::EExecMode::Explain).GetStats()->GetAst();
             UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "ItemsLimit"), testCase.ReadLimits, query << " AST: " << ast);
             CompareYson(testCase.Expected, FormatResultSetYson(run(query, NYdb::NQuery::EExecMode::Execute).GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(RemoveRedundantSorts) {
+        // Column-shard schema caches are process-wide and keyed by path ID, which every new runner reuses,
+        // and earlier tests have these columns in a different primary key.
+        NOlap::TSchemaCachesManager::DropCaches();
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        const auto schemaResult = dbSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/olap` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64 NOT NULL,
+                primary key(a, b)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/row` (
+                a Int64 NOT NULL,
+                d Int64 NOT NULL,
+                primary key(a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder olapRows;
+        olapRows.BeginList();
+        for (const auto& [a, b, c] : std::vector<std::tuple<i64, i64, i64>>{{0, 9, 1}, {1, 1, 7}, {1, 2, 5}, {2, 1, 3}, {2, 2, 4}}) {
+            olapRows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("b").Int64(b).AddMember("c").Int64(c).EndStruct();
+        }
+        olapRows.EndList();
+        const auto olapResult = db.BulkUpsert("/Root/olap", olapRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(olapResult.IsSuccess(), olapResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rowRows;
+        rowRows.BeginList();
+        for (const auto& [a, d] : std::vector<std::pair<i64, i64>>{{1, 100}, {2, 200}}) {
+            rowRows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("d").Int64(d).EndStruct();
+        }
+        rowRows.EndList();
+        const auto rowResult = db.BulkUpsert("/Root/row", rowRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowResult.IsSuccess(), rowResult.GetIssues().ToString());
+
+        const auto run = [&](const TString& query, NYdb::NQuery::EExecMode execMode) {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(execMode)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << " Query: " << query);
+            return result;
+        };
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // Whether the result rows come in a defined order.
+            bool Ordered;
+            // How many sorts without a limit the plan has.
+            ui32 Sorts;
+            // How many aggregates reach the read.
+            std::optional<ui32> OlapAggregates;
+            // How many filters reach the read.
+            std::optional<ui32> OlapFilters;
+        };
+
+        const TString sorted = "(select a, b, c from `/Root/olap` order by c)";
+        const std::vector<TCase> cases = {
+            // The order of a subquery is lost in an aggregate, a join or a union all, so its sort goes.
+            {"select count(*) from " + sorted, "[[5u]]", true, 0, 1, std::nullopt},
+            {"select a, count(*) as n from " + sorted + " group by a order by a", "[[0;1u];[1;2u];[2;2u]]", true, 1, 1, std::nullopt},
+            {"select o.a, r.d from " + sorted + " as o join `/Root/row` as r on o.a = r.a order by o.a, r.d", "[[1;100];[1;100];[2;200];[2;200]]", true, 1, std::nullopt, std::nullopt},
+            {"select count(*) from (select a from " + sorted + " union all select a from `/Root/row`)", "[[7u]]", true, 0, std::nullopt, std::nullopt},
+            // An outer sort replaces the order of the subquery.
+            {"select a, b from " + sorted + " order by a, b limit 2", "[[0;9];[1;1]]", true, 0, std::nullopt, std::nullopt},
+            // A result without ORDER BY does not keep the order of a subquery, so its filters reach the read.
+            {"select a, b from " + sorted, "[[0;9];[1;1];[1;2];[2;1];[2;2]]", false, 0, std::nullopt, std::nullopt},
+            {"select a, b from " + sorted + " where c > 3", "[[1;1];[1;2];[2;2]]", false, 0, std::nullopt, 1},
+            {"select a, b from " + sorted + " where a = 1", "[[1;1];[1;2]]", false, 0, std::nullopt, std::nullopt},
+            // Nor does a limit of an outer select, so any rows are an answer.
+            {"select count(*) from (select a, b from " + sorted + " limit 2)", "[[2u]]", true, 0, std::nullopt, std::nullopt},
+            {"select count(*) from (select a, b from " + sorted + " where c > 3 limit 2)", "[[2u]]", true, 0, std::nullopt, 1},
+            // The sort stays for the ORDER BY of the result and of a limit in the same select.
+            {"select a, b from `/Root/olap` order by c", "[[0;9];[2;1];[2;2];[1;2];[1;1]]", true, 1, std::nullopt, std::nullopt},
+            {"select a, b from `/Root/olap` order by c limit 2", "[[0;9];[2;1]]", true, 0, std::nullopt, std::nullopt},
+            {"select sum(c) from (select c from `/Root/olap` order by c limit 2)", "[[[4]]]", true, 0, std::nullopt, std::nullopt},
+            {"select sum(c) from (select c from (select c from `/Root/olap` order by c limit 3) limit 3)", "[[[8]]]", true, 0, std::nullopt, std::nullopt},
+            {"select a, b from (select a, b, c from `/Root/olap` order by c limit 3) where c > 3", "[[2;2]]", true, 0, std::nullopt, 0},
+        };
+
+        for (const auto& testCase : cases) {
+            const TString query = TStringBuilder() << "PRAGMA YqlSelect = \"force\"; PRAGMA Kikimr.OptEnableOlapPushdownAggregate = \"true\"; "
+                                                   << testCase.Query << ";";
+            const auto explain = run(query, NYdb::NQuery::EExecMode::Explain);
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &plan, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(CountPlanNodesByKv(plan, "Name", "Sort"), testCase.Sorts, query << " Plan: " << *explain.GetStats()->GetPlan());
+            const auto ast = *explain.GetStats()->GetAst();
+            if (testCase.OlapAggregates) {
+                UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "KqpOlapAgg"), *testCase.OlapAggregates, query << " AST: " << ast);
+            }
+            if (testCase.OlapFilters) {
+                UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "KqpOlapFilter"), *testCase.OlapFilters, query << " AST: " << ast);
+            }
+            const auto rows = FormatResultSetYson(run(query, NYdb::NQuery::EExecMode::Execute).GetResultSet(0));
+            if (testCase.Ordered) {
+                CompareYson(testCase.Expected, rows);
+            } else {
+                CompareYsonUnordered(testCase.Expected, rows, query);
+            }
         }
     }
 

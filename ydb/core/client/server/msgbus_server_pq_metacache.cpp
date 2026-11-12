@@ -1,6 +1,8 @@
 #include "msgbus_server_persqueue.h"
 #include "msgbus_server_pq_metacache.h"
 
+#include <ydb/library/persqueue/topic_parser/describe_retry.h>
+
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
@@ -217,29 +219,13 @@ private:
             Y_ABORT_UNLESS(Topics.size() == result->ResultSet.size());
             Y_ABORT_UNLESS(Result == nullptr);
             FirstRequestDone = true;
-            ui64 index = 0;
             Result = std::move(result);
-            for (const auto& entry : Result->ResultSet) {
-                if (DbRoot.empty()) {
-                    continue;
-                }
-                if (entry.Status == TSchemeCacheNavigate::EStatus::PathErrorUnknown ||
-                    entry.Status == TSchemeCacheNavigate::EStatus::RootUnknown
-                ) {
-                    auto account = Topics[index]->GetAccount_();
-                    if (!account.Defined() || account->empty()) {
-                        continue;
-                    }
-                    Topics[index]->SetDatabase(NKikimr::JoinPath({DbRoot, *account}));
-                    if (!Topics[index]->GetSecondaryPath("").Defined()) {
-                        continue;
-                    }
-                    SecondTryTopics.push_back(index);
-                }
-                index++;
-            }
-            //return true;
-            return SecondTryTopics.empty(); //ToDo - second try topics
+            SecondTryTopics = SelectSecondTryTopics(DbRoot, Topics, [&](size_t index) {
+                const auto status = Result->ResultSet[index].Status;
+                return status == TSchemeCacheNavigate::EStatus::PathErrorUnknown
+                    || status == TSchemeCacheNavigate::EStatus::RootUnknown;
+            });
+            return SecondTryTopics.empty();
         }
         std::shared_ptr<TSchemeCacheNavigate>& GetResult() {
             Y_ABORT_UNLESS(Result != nullptr);
@@ -249,19 +235,12 @@ private:
         TVector<std::pair<TString, TString>> GetTopics() const {
             TVector<std::pair<TString, TString>> ret;
             if (FirstRequestDone) {
-                for (auto i: SecondTryTopics) {
-                    auto account = Topics[i]->GetAccount_();
-                    if (!account.Defined() || account->empty()) {
-                        continue;
-                    } else if (DbRoot.empty()) {
-                        continue;
-                    }
-                    Topics[i]->SetDatabase(NKikimr::JoinPath({DbRoot, *account}));
-                    auto second = Topics[i]->GetSecondaryPath("");
-                    if (!second.Defined()) {
-                        continue;
-                    }
-                    ret.push_back(std::make_pair(*second, Topics[i]->GetDatabase().GetOrElse("")));
+                // Same indexes SelectSecondTryTopics already accepted. Skipping here would make
+                // the scheme-cache request shorter than SecondTryTopics and abort in ApplyResult.
+                ret.reserve(SecondTryTopics.size());
+                for (auto i : SecondTryTopics) {
+                    const auto& second = Topics[i]->GetSecondaryPath("");
+                    ret.emplace_back(*second, Topics[i]->GetDatabase().GetOrElse(""));
                 }
             } else {
                 for (auto& t : Topics) {

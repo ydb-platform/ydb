@@ -1,11 +1,12 @@
 UNITTEST_FOR(ydb/core/tx/cdc_aggregator/service)
 
-SRCS(
-    heartbeat_queue_ut.cpp
+PEERDIR(
+    ydb/core/testlib/default
 )
 
-PEERDIR(
-    library/cpp/testing/unittest
+SRCS(
+    heartbeat_queue_ut.cpp
+    service_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

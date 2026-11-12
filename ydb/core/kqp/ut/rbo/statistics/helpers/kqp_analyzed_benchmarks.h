@@ -13,6 +13,9 @@ class TAnalyzedBenchmark {
 public:
     TAnalyzedBenchmark(const TString& workload, double scale, bool columnStore);
 
+    // Switch compilation pipelines and invalidate cached plans on every node.
+    void SetEnableNewRbo(bool enabled);
+
     NYdb::NQuery::TSession& GetSession() { return Session; }
     TTestActorRuntime& GetRuntime() { return *Env.GetServer().GetRuntime(); }
     const TString& GetTablesPath() const { return TablesPath; }

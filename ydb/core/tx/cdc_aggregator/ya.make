@@ -1,4 +1,5 @@
 RECURSE(
     public
     service
+    tablet
 )

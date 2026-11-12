@@ -1,5 +1,7 @@
 #include "kqp_analyzed_benchmarks.h"
 
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <yql/essentials/public/langver/yql_langver.h>
@@ -147,6 +149,23 @@ TAnalyzedBenchmark::TAnalyzedBenchmark(const TString& workload, double scale, bo
         // statistics remain those just computed from the generated dataset.
         UNIT_ASSERT_VALUES_EQUAL_C(BaseStatistics.GetMapSafe().at(path).GetMapSafe().at("n_rows").GetDoubleSafe(),
             GetRowCount(table), path);
+    }
+}
+
+void TAnalyzedBenchmark::SetEnableNewRbo(bool enabled) {
+    auto& runtime = GetRuntime();
+    const auto edge = runtime.AllocateEdgeActor();
+    auto config = Env.GetSettings()->AppConfig->GetTableServiceConfig();
+    config.SetEnableNewRBO(enabled);
+    // EnableNewRBO is marked InvalidateCompileCache in TableServiceConfig.
+    // Wait for each compiler to apply the update before submitting a query,
+    // so the second execution cannot reuse the other optimizer's cached plan.
+    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *request->Record.MutableConfig()->MutableTableServiceConfig() = config;
+        runtime.Send(MakeKqpCompileServiceID(runtime.GetNodeId(node)), edge, request.Release());
+        UNIT_ASSERT_C(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+            edge, TDuration::Seconds(30)), "Compiler did not acknowledge EnableNewRBO update");
     }
 }
 

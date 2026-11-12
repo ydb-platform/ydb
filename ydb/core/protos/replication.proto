@@ -40,6 +40,9 @@ message TReplicationDefaults {
     // Enable on the destination only after all source clusters support __omit_backup.
     // Keep false until the minimum supported source version supports the attribute.
     optional bool EnableOmitBackupAttribute = 9 [default = false];
+    // Enable only after all source servers preserve read-response/status ordering.
+    // Requires EnableDataLossDetection; read when a worker is created.
+    optional bool EnableStatusBasedDataLossDetection = 10 [default = false];
 }
 
 message TStaticCredentials {
@@ -535,6 +538,7 @@ message TSchemaChange {
             COMPRESSION_UNSPECIFIED = 0;
             COMPRESSION_OFF = 1;
             COMPRESSION_LZ4 = 2;
+            COMPRESSION_ZSTD = 3;
         }
 
         enum ECacheMode {
@@ -547,6 +551,7 @@ message TSchemaChange {
         optional string Media = 2;
         optional ECompression Compression = 3;
         optional ECacheMode CacheMode = 4;
+        optional uint32 CompressionLevel = 5 [default = 1];
     }
 
     message TIndex {

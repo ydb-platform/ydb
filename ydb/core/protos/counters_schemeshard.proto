@@ -752,7 +752,7 @@ enum ETxTypes {
 
     TXTYPE_FILESTORE_CONFIG_RESULT = 46                   [(TxTypeOpts) = {Name: "TxFileStoreConfigResult"}];
 
-    TXTYPE_MAKEBILL_INDEX_BUILD_DEPRECATED = 47           [deprecated = true];
+    TXTYPE_MAKEBILL_INDEX_BUILD = 47                      [(TxTypeOpts) = {Name: "TxBillingIndexBuild"}];
 
     TXTYPE_CREATE_IMPORT = 48                             [(TxTypeOpts) = {Name: "TxCreateImport"}];
     TXTYPE_GET_IMPORT = 49                                [(TxTypeOpts) = {Name: "TxGetImport"}];

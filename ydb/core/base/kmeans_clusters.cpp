@@ -999,12 +999,9 @@ bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataS
         settings.set_levels(1);
     }
     if (!settings.has_clusters() || !settings.clusters()) {
-        const ui64 clusters = dataSizeBytes / 1_GB + 1;
-        // Validate before narrowing to the protobuf's uint32 field. Keep the
-        // routing-table bounds enforced for explicit settings as well.
-        if (!ValidateSettingInRange("clusters", clusters, 1, MaxClusters, error)) {
-            return false;
-        }
+        // Cap the default before narrowing to the protobuf's uint32 field.
+        // Explicit cluster counts are validated below without clamping.
+        const ui64 clusters = Min<ui64>(dataSizeBytes / 1_GB + 1, MaxClusters);
         settings.set_clusters(clusters);
     }
     return ValidateHnswSettingsPartial(settings, error);

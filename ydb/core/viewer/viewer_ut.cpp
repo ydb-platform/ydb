@@ -4382,6 +4382,125 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckStorageGroupsNotAppliedCase(runtime, "&sort=GroupId", false, false, false);
     }
 
+    // An empty list can be neither unfiltered nor ungrouped nor unsorted. The flags of the operations stay set,
+    // but none of them is reported as not applied, the same as in /viewer/nodes.
+    Y_UNIT_TEST(StorageGroupsReportsNoNotAppliedOperationsForEmptyList) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            // the whiteboard, the only source of the groups here, knows none of them
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
+                auto* event = reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                (*event)->Get()->Record.ClearBSGroupStateInfo();
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse) {
+                auto* event = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                (*event)->Get()->Record.ClearVDiskStateInfo();
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // the operations on Kind can not be applied without BSC, see StorageGroupsReportsNotAppliedOperations
+        for (const TString& query : {TString("&filter_group_by=Kind&filter_group=ssd"), TString("&group=Kind"), TString("&sort=Kind")}) {
+            const TActorId sender = runtime.AllocateEdgeActor();
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /storage/groups?whiteboard_only=true" << query << " HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            const TString context = TStringBuilder() << query << ": " << response->Response->Body;
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(response->Response->Body, &json), context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["TotalGroups"].GetUIntegerRobust(), 0, context);
+            UNIT_ASSERT_C(json["NeedFilter"].GetBoolean() || json["NeedGroup"].GetBoolean() || json["NeedSort"].GetBoolean(), context);
+            UNIT_ASSERT_C(!HasProblem(json, "filter-not-applied"), context);
+            UNIT_ASSERT_C(!HasProblem(json, "group-not-applied"), context);
+            UNIT_ASSERT_C(!HasProblem(json, "sort-not-applied"), context);
+        }
+    }
+
+    // The groups of a database are the groups of its storage pools, and the pools are known from the description
+    // of the database. Without the description the groups of the whole cluster are returned, and the reply says so.
+    Y_UNIT_TEST(StorageGroupsReportsDatabaseWithoutDescription) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TNodeId nodeId = runtime.GetNodeId(0);
+        bool descriptionAvailable = true;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
+                SetWhiteboardGroupsForTest(reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev), nodeId);
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse) {
+                SetWhiteboardVDisksForTest(reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev));
+            } else if (ev->GetTypeRewrite() == TEvStateStorage::EvBoardInfo) {
+                // A request with a database first resolves the endpoints board of the database and is
+                // rejected when the board is not available, which it is not for the root in this test.
+                auto* event = reinterpret_cast<TEvStateStorage::TEvBoardInfo::TPtr*>(&ev);
+                auto* record = (*event)->Get();
+                if (record->Path == "gpc+/Root") {
+                    using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
+                    const_cast<EStatus&>(record->Status) = EStatus::Ok;
+                }
+            } else if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySetResult) {
+                auto* event = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                auto& resultSet = (*event)->Get()->Request->ResultSet;
+                if (!resultSet.empty() && CanonizePath(resultSet.front().Path) == "/Root") {
+                    TSchemeCacheNavigate::TEntry& entry(resultSet.front());
+                    if (descriptionAvailable) {
+                        // the database owns the pool of the groups from SetWhiteboardGroupsForTest
+                        auto description = MakeIntrusive<TSchemeCacheNavigate::TDomainDescription>();
+                        if (entry.DomainDescription) {
+                            description->Kind = entry.DomainDescription->Kind;
+                            description->Description = entry.DomainDescription->Description;
+                        }
+                        description->Description.ClearStoragePools();
+                        description->Description.AddStoragePools()->SetName("whiteboard-pool");
+                        entry.DomainDescription = description;
+                    } else {
+                        // the database is resolved, but nothing is known about its storage pools
+                        entry.DomainDescription = TIntrusiveConstPtr<TSchemeCacheNavigate::TDomainDescription>();
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto checkRequest = [&](bool expectDatabaseInfo) {
+            const TActorId sender = runtime.AllocateEdgeActor();
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                "GET /storage/groups?whiteboard_only=true&database=/Root&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            const TString context = TStringBuilder() << (expectDatabaseInfo ? "with" : "without")
+                << " the description: " << response->Response->Body;
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(response->Response->Body, &json), context);
+            // both groups are returned in both cases: with the description they belong to the pool of the database
+            UNIT_ASSERT_VALUES_EQUAL_C(json["TotalGroups"].GetUIntegerRobust(), 2, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "no-database-info"), !expectDatabaseInfo, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "filter-not-applied"), !expectDatabaseInfo, context);
+        };
+
+        checkRequest(true);
+        descriptionAvailable = false;
+        checkRequest(false);
+    }
+
     void CheckPDiskControllerStatuses(bool groups, bool whiteboardAvailable = true, TStringBuf pdisksSort = {}) {
         // Controller statuses are joined by NodeId/PDiskId even when GUIDs differ.
         // The response keeps the Whiteboard disk identity and the BSC statuses.

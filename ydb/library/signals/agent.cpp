@@ -11,13 +11,17 @@ TValueAggregationAgent::TValueAggregationAgent(const TString& signalName, const 
 
 }
 
-bool TValueAggregationAgent::HasWrittenClient() const {
-    for (auto&& i : Values) {
-        if (i->IsWritten()) {
-            return true;
+bool TValueAggregationAgent::HasWrittenClientAndClean() const {
+    bool written = false;
+    for (auto it = Values.begin(); it != Values.end();) {
+        written |= (*it)->IsWritten();
+        if (it->use_count() == 1) {
+            it = Values.erase(it);
+        } else {
+            ++it;
         }
     }
-    return false;
+    return written;
 }
 
 bool TValueAggregationAgent::CalcAggregationsAndClean(i64& sum, i64& minValue, i64& maxValue) const {
@@ -67,9 +71,9 @@ std::optional<NKikimr::NColumnShard::TSignalAggregations> TValueAggregationAgent
 
 void TValueAggregationAgent::ResendStatus() const {
     TGuard<TMutex> g(Mutex);
-    // Checked before GetAggregations drops released clients, so a client written and released within one period still counts
+    // A client written and released within one period still counts: Written is read before the drop
     if (!Exported) {
-        if (!HasWrittenClient()) {
+        if (!HasWrittenClientAndClean()) {
             return;
         }
         Exported = true;

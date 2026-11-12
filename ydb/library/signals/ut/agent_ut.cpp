@@ -55,6 +55,15 @@ TEST(TValueAggregationAgentTest, RegistersAfterClientReleasedBeforeStatus) {
     EXPECT_EQ(root->FindSubgroup("module_id", "test")->FindCounter("Aggregation/SUM/Value")->Val(), 0);
 }
 
+TEST(TValueAggregationAgentTest, DropsReleasedClientsBeforeExport) {
+    auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    TCommonCountersOwner owner("test", root);
+    TValueAggregationAgent agent("Value", owner);
+    std::weak_ptr<TValueAggregationClient> released = agent.GetClient();
+    agent.ResendStatus();
+    EXPECT_TRUE(released.expired());
+}
+
 TEST(TIncrementalHistogramTest, RegistersOnFirstAdd) {
     auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
     TIncrementalHistogram histogram("test", "Sizes", "", std::set<i64>{1, 10}, root);

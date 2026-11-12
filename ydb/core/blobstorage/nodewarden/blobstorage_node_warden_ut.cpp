@@ -1210,6 +1210,64 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         return nodeWardenId;
     }
 
+    CUSTOM_UNIT_TEST(TestVDiskGoneAfterRepeatedPoisonOrSlotReuse) {
+        using TWarden = NStorage::TNodeWarden;
+
+        for (const bool recreateSlot : {false, true}) {
+            TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+            const TActorId wardenId = SetupNodeWardenForMetadataTest(runtime);
+            const TActorId oldActorId = runtime.AllocateEdgeActor(1);
+            const TWarden::TVSlotId slot(1, 2093, 1);
+            runtime.WrapInActorContext(wardenId, [&](IActor* actor) {
+                TWarden& warden = *static_cast<TWarden*>(actor);
+                TWarden::TVDiskRecord& record = warden.LocalVDisks[slot];
+                auto* location = record.Config.MutableVDiskLocation();
+                location->SetNodeID(slot.NodeId);
+                location->SetPDiskID(slot.PDiskId);
+                location->SetVDiskSlotID(slot.VDiskSlotId);
+                record.RuntimeData.emplace(TWarden::TVDiskRecord::TRuntimeData{
+                    .GroupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone),
+                    .ActorId = oldActorId,
+                    .OrderNumber = 0,
+                    .DonorMode = false,
+                    .ReadOnly = false,
+                    .DDisk = false,
+                });
+                warden.VDiskIdByActor.emplace(oldActorId, slot);
+                warden.PoisonLocalVDisk(record);
+
+                if (recreateSlot) {
+                    const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk config = record.Config;
+                    warden.LocalVDisks.erase(slot);
+                    TWarden::TVDiskRecord& replacement = warden.LocalVDisks[slot];
+                    replacement.Config = config;
+                    warden.StartLocalVDiskActor(replacement);
+                    UNIT_ASSERT(replacement.RestartAfterShutdown);
+                    UNIT_ASSERT(!replacement.RuntimeData);
+
+                    // Keep the replacement stopped while its PDisk restarts.
+                    warden.PDiskRestartInFlight.emplace(slot.PDiskId, false);
+                } else {
+                    warden.PoisonLocalVDisk(record);
+                }
+                UNIT_ASSERT(warden.LocalVDisks.at(slot).ShutdownPending);
+                UNIT_ASSERT_VALUES_EQUAL(warden.LocalVDisks.at(slot).ShutdownActorId, oldActorId);
+            });
+
+            runtime.WaitForEdgeActorEvent<TEvents::TEvPoison>(oldActorId);
+            runtime.Send(new IEventHandle(wardenId, oldActorId, new TEvents::TEvGone()), 1);
+            runtime.Sim([&] { return runtime.HasImmediateEvents(); });
+            runtime.WrapInActorContext(wardenId, [&](IActor* actor) {
+                const TWarden& warden = *static_cast<TWarden*>(actor);
+                const TWarden::TVDiskRecord& record = warden.LocalVDisks.at(slot);
+                UNIT_ASSERT(!warden.VDiskIdByActor.contains(oldActorId));
+                UNIT_ASSERT(!record.ShutdownActorId);
+                UNIT_ASSERT(!record.ShutdownPending);
+                UNIT_ASSERT(!record.RestartAfterShutdown);
+            });
+        }
+    }
+
     void AddMetadataTestPDisk(TTestActorSystem& runtime, TActorId wardenId, ui32 pdiskId, const TString& path) {
         runtime.WrapInActorContext(wardenId, [&](IActor* actor) {
             auto& warden = *dynamic_cast<NStorage::TNodeWarden*>(actor);

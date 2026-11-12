@@ -493,6 +493,7 @@ namespace NKikimr::NStorage {
             // Runtime configuration of VDisk.
             struct TRuntimeData {
                 TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
+                TActorId ActorId;
                 ui32 OrderNumber;
                 bool DonorMode;
                 bool ReadOnly;
@@ -500,6 +501,7 @@ namespace NKikimr::NStorage {
             };
             std::optional<TRuntimeData> RuntimeData;
             bool ShutdownPending = false;
+            TActorId ShutdownActorId;
             bool RestartAfterShutdown = false;
 
             // Last VDiskId reported to Node Whiteboard.

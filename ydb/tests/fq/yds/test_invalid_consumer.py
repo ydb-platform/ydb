@@ -12,7 +12,7 @@ import ydb as ydb_sdk
 class TestConsumer(TestYdsBase):
     def test_invalid(self, ydb_topics):
         io = ydb_topics('invalid_consumer')
-        with pytest.raises(ydb_sdk.issues.Error) as error:
+        with pytest.raises(ydb_sdk.issues.GenericError) as error:
             io.kikimr.ydb_client.query(
                 f"""
                 PRAGMA pq.Consumer = 'InvalidConsumerName';

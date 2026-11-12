@@ -44,6 +44,8 @@ class TestRecoveryMatchRecognize(StreamingTestBase):
         io.write(messages_after_restart)
         assert io.read(len(expected)) == expected
         io.stop(query)
+        io.wait_actor_count('KQP_COMPUTE_ACTOR', 0)
+        io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 0)
 
     def test_time_order_recoverer(self, ydb_topics, request):
         sql = R'''

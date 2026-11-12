@@ -12,7 +12,8 @@ KeyLen = 900000  # State size ~ 12*KeyLen
 
 class TestBigState(TestYdsBase):
     @pytest.mark.parametrize('ydb_cluster', [{'aggregation_compute_threads': 1}], indirect=True)
-    def test_gt_8mb(self, ydb_topics):
+    @pytest.mark.parametrize('restart_coordinator', [False, True], ids=['compute', 'coordinator'])
+    def test_gt_8mb(self, ydb_topics, restart_coordinator):
         io = ydb_topics('select_hop_8mb')
         query = io.start(f"""
             $raw_stream = SELECT Yson::Parse(Data) AS yson_data FROM {io.input}
@@ -37,7 +38,17 @@ class TestBigState(TestYdsBase):
             return get_checkpoint_coordinator_metric(io.kikimr.cluster, query, 'LastSuccessfulCheckpointSizeBytes')
 
         assert wait_for(lambda: state_size() > 8 * 1024 * 1024, timeout_seconds=60, step_seconds=0.5), state_size()
-        io.restart_compute_node()
+        if restart_coordinator:
+            nodes = [
+                node_id
+                for node_id in io.kikimr.cluster.slots
+                if io.get_actor_count(io.kikimr, node_id, 'YQ_CHECKPOINT_COORDINATOR') > 0
+            ]
+            assert len(nodes) == 1, nodes
+            io.restart_node(io.kikimr, nodes[0])
+            io.kikimr.wait_kqp_node_count(len(io.kikimr.cluster.slots))
+        else:
+            io.restart_compute_node()
         io.checkpoint(query, count=3)
         io.write(['{"time" = 2000000; "key" = "M";}'])
         expected = sorted(f'{{"cnt" = 1u; "key" = "{c * KeyLen}"}}' for c in symbols)

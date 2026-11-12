@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 
-from test_base import YdbTopics
+from ydb.tests.fq.yds.test_base import YdbTopics
 from ydb.tests.fq.streaming_common.common import Kikimr, get_ydb_config
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
@@ -97,6 +97,12 @@ def ydb_cluster(request):
             config.yaml_config['table_service_config'].setdefault('aggregation_config', {})[
                 'aggregation_compute_threads'
             ] = param['aggregation_compute_threads']
+        if param.get('distributed_compute'):
+            # Match the distributed aggregation setup in KQP's unit tests.
+            # Small recovery queries must have workers outside the coordinator node.
+            resources = config.yaml_config['table_service_config'].setdefault('resource_manager', {})
+            resources['max_non_parallel_tasks_execution_limit'] = 0
+            resources['max_non_parallel_top_stage_execution_limit'] = 0
         compute_nodes = getattr(request, 'param', {}).get('compute_nodes', 2)
         cluster = Kikimr(config)
         # Negative SQL tests must expose the original error, even if it retires

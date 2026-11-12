@@ -63,7 +63,28 @@ class TestSelect1(object):
         issues = str(error.value)
         assert any(text in issues for text in ('Unexpected token', 'extraneous input', 'no viable alternative')), issues
 
-    def test_ast_in_failed_query_runtime(self, ydb_cluster):
-        with pytest.raises(ydb_sdk.issues.PreconditionFailed) as error:
-            ydb_cluster.ydb_client.query('SELECT unwrap(42 / 0) AS error_column;')
-        assert 'Failed to unwrap empty optional' in str(error.value), str(error.value)
+    def test_ast_in_failed_query_runtime(self, ydb_topics):
+        io = ydb_topics('ast_in_failed_query_runtime')
+        query = io.start(f"""
+            INSERT INTO {io.output}
+            SELECT CAST(Unwrap(42 / CAST(Data AS Int32)) AS String) AS error_column FROM {io.input};
+        """)
+        # Fail at execution, after compilation and checkpoint creation have succeeded.
+        io.write(['0'])
+        last_state = None
+
+        def runtime_failed_with_ast():
+            nonlocal last_state
+            rows = io.kikimr.ydb_client.query(f"""
+                SELECT Status, Issues, Ast, Plan, RetryCount
+                FROM `.sys/streaming_queries` WHERE Path = '{query}';
+            """)[0].rows
+            assert len(rows) == 1, rows
+            last_state = rows[0]
+            return 'Failed to unwrap empty optional' in last_state['Issues'] and bool(last_state['Ast'])
+
+        assert wait_for(runtime_failed_with_ast, timeout_seconds=120, step_seconds=0.5), last_state
+        assert last_state['Plan'], last_state
+        ast = last_state['Ast']
+        assert 'error_column' in ast and 'Unwrap' in ast and '42' in ast, ast
+        io.stop(query)

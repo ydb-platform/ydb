@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import time
+
 from ydb.tests.fq.streaming_common.common import StreamingTestBase
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.common.wait_for import wait_for
@@ -35,9 +37,16 @@ class TestStop(StreamingTestBase):
             timeout_seconds=plain_or_under_sanitizer(120, 500),
             step_seconds=0.5,
         ), output_size()
-        assert io.state(query)['Status'] == 'RUNNING', io.state(query)
+        # The partial result must not complete the query before LIMIT is reached.
+        deadline = time.monotonic() + plain_or_under_sanitizer(30, 150)
+        while time.monotonic() < deadline:
+            assert io.state(query)['Status'] == 'RUNNING', io.state(query)
+            time.sleep(0.5)
 
         io.stop(query)
+        io.wait_actor_count('KQP_COMPUTE_ACTOR', 0)
+        io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 0)
+        io.wait_read_session_closed(io.input_topic, consumer)
         assert io.read(len(messages)) == messages
 
         # Reaching the original LIMIT after STOP must not resume processing.

@@ -126,3 +126,14 @@ class TestContinueMode(StreamingTestBase):
         finally:
             # Both helpers must keep their topics and data sources until the query is dropped.
             client.query(f'DROP STREAMING QUERY IF EXISTS `{query}`;')
+
+    @pytest.mark.parametrize('disposition', ['FROM_CHECKPOINT', 'FROM_CHECKPOINT_FORCE'])
+    def test_disposition_from_checkpoint_in_create_query(self, ydb_topics, disposition):
+        io = ydb_topics('create_from_checkpoint')
+        io.write(['before_create'])
+        # KQP accepts checkpoint disposition on CREATE; without a previous
+        # execution it starts from fresh offsets. YQ rejected this API request.
+        query = io.start(f'INSERT INTO {io.output} SELECT Data FROM {io.input};', disposition=disposition)
+        io.write(['after_create'])
+        assert io.read(1) == ['after_create']
+        io.stop(query)

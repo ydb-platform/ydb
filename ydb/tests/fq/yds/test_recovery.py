@@ -53,15 +53,32 @@ class TestRecovery(TestYdsBase):
             INSERT INTO {io.output} SELECT Data FROM {io.input};
         """)
         assert io.state(query)['Status'] == 'RUNNING', io.state(query)
+        assert wait_for(
+            lambda: any(
+                io.get_actor_count(io.kikimr, node_id, 'KQP_COMPUTE_ACTOR') > 0 for node_id in io.kikimr.cluster.slots
+            ),
+            timeout_seconds=120,
+            step_seconds=0.5,
+        ), 'The query did not create compute actors'
+        io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 1)
         io.stop(query)
         assert io.state(query)['Status'] == 'STOPPED', io.state(query)
+        for activity in (
+            'KQP_COMPUTE_ACTOR',
+            'YQ_CHECKPOINT_COORDINATOR',
+            'DQ_PQ_READ_ACTOR',
+            'DQ_MESSAGE_STREAM_READ_ACTOR',
+        ):
+            io.wait_actor_count(activity, 0)
 
+    @pytest.mark.parametrize('ydb_cluster', [{'distributed_compute': True}], indirect=True)
     def test_program_state_recovery(self, ydb_topics):
         # Keep the original windows and input split: the second window must
         # combine values saved before the restart with values arriving after it.
-        io = ydb_topics('program_state_recovery')
+        # Two readers permit a non-coordinator failure; a fixed key preserves the original input order.
+        io = ydb_topics('program_state_recovery', partitions=2)
         query = io.start(f'''
-            PRAGMA ydb.MaxTasksPerStage="1";
+            PRAGMA ydb.MaxTasksPerStage="2";
             INSERT INTO {io.output}
             SELECT Yson::SerializeText(Yson::From(TableRow()))
             FROM (
@@ -74,11 +91,11 @@ class TestRecovery(TestYdsBase):
                 GROUP BY
                     HOP(DateTime::FromMilliseconds(CAST(Unwrap(t) as Uint32)), "PT0.01S", "PT0.01S", "PT0.01S"));
         ''')
-        io.write([f'{{"time" = {i};}}' for i in range(100, 115, 2)])
+        io.write([f'{{"time" = {i};}}' for i in range(100, 115, 2)], partition_key='stateful')
         io.checkpoint(query, count=3)
-        io.restart_compute_node()
+        io.restart_compute_node(with_coordinator=False)
         io.checkpoint(query, count=3)
-        io.write([f'{{"time" = {i};}}' for i in range(116, 144, 2)])
+        io.write([f'{{"time" = {i};}}' for i in range(116, 144, 2)], partition_key='stateful')
 
         expected = [
             '{"sum" = 520u}',
@@ -88,19 +105,29 @@ class TestRecovery(TestYdsBase):
         assert io.read(3) == expected
         assert get_checkpoint_coordinator_metric(io.kikimr.cluster, query, 'RestoredFromSavedCheckpoint') >= 1
         io.stop(query)
+        io.wait_actor_count('KQP_COMPUTE_ACTOR', 0)
+        io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 0)
 
+    @pytest.mark.parametrize('ydb_cluster', [{'distributed_compute': True}], indirect=True)
     def test_recovery(self, ydb_topics):
         io = ydb_topics('recovery', partitions=2)
         query = io.start(f"""
             PRAGMA ydb.MaxTasksPerStage = '2';
             INSERT INTO {io.output} SELECT Data FROM {io.input};
         """)
+        expected_compute_actors = sum(
+            io.get_actor_count(io.kikimr, node_id, 'KQP_COMPUTE_ACTOR') for node_id in io.kikimr.cluster.slots
+        )
+        assert expected_compute_actors > 0
+        io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 1)
         seen = set()
         for batch in range(3):
             if batch:
-                # Re-evaluate placement before each of the two restarts.
-                io.restart_compute_node()
+                # Lose a worker outside the coordinator, then the current coordinator itself.
+                io.restart_compute_node(with_coordinator=(batch == 2))
                 io.checkpoint(query, count=3)
+            io.wait_actor_count('KQP_COMPUTE_ACTOR', expected_compute_actors)
+            io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 1)
             expected = list(range(batch * 10 + 1, batch * 10 + 11))
             io.write([str(value) for value in expected])
             received = [int(value) for value in io.read(len(expected))]
@@ -114,6 +141,8 @@ class TestRecovery(TestYdsBase):
         assert restored >= 1, (restored, started_empty)
         assert io.state(query)['Status'] == 'RUNNING', io.state(query)
         io.stop(query)
+        io.wait_actor_count('KQP_COMPUTE_ACTOR', 0)
+        io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 0)
 
     def close_ic_session_args(self, node1, node2):
         s1 = self.kikimr.control_plane.kikimr_cluster.nodes[node1]

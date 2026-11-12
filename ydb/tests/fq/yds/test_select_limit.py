@@ -20,3 +20,4 @@ class TestSelectLimit(StreamingTestBase):
         assert len(result.rows) == 2
         assert len(result.columns) == 1
         assert [row['Data'] for row in result.rows] == messages[:2]
+        io.wait_read_session_closed(io.input_topic, io.name + '_select_consumer')

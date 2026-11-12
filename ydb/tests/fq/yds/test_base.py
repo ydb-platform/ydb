@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 
-from ydb.tests.fq.streaming_common.common import StreamingTestBase, counter_nodes
+from ydb.tests.fq.streaming_common.common import StreamingTestBase, counter_nodes, get_sensors
 from ydb.tests.library.common.wait_for import wait_for
 
 
@@ -84,18 +84,49 @@ class YdbTopics(StreamingTestBase):
             expected,
         )
 
-    def restart_compute_node(self, timeout=120):
+    def wait_read_session_closed(self, topic, consumer):
+        description = None
+
+        def closed():
+            nonlocal description
+            description = self.kikimr.external_ydb_client.driver.topic_client.describe_consumer(
+                topic, consumer, include_stats=True
+            )
+            partitions = [item for item in description.partitions if item.active]
+            return bool(partitions) and all(
+                item.partition_consumer_stats is not None and not item.partition_consumer_stats.read_session_id
+                for item in partitions
+            )
+
+        assert wait_for(closed, timeout_seconds=120, step_seconds=0.5), description
+
+    def metrics(self, query):
+        result = {}
+        for node_id in counter_nodes(self.kikimr.cluster):
+            metrics = get_sensors(self.kikimr.cluster, node_id, 'kqp').find_sensors(
+                {'subsystem': 'streaming_queries', 'path': query}, key_label='sensor'
+            )
+            for name, value in metrics.items():
+                result[name] = result.get(name, 0) + value
+        return result
+
+    def restart_compute_node(self, timeout=120, *, with_coordinator=None):
         """Restart a dynamic node hosting a live KQP_COMPUTE_ACTOR."""
 
         def find_node():
             for node_id in self.kikimr.cluster.slots:
+                if with_coordinator is not None:
+                    has_coordinator = self.get_actor_count(self.kikimr, node_id, 'YQ_CHECKPOINT_COORDINATOR') > 0
+                    if has_coordinator != with_coordinator:
+                        continue
                 if self.get_actor_count(self.kikimr, node_id, 'KQP_COMPUTE_ACTOR') > 0:
                     return node_id
             return None
 
-        assert wait_for(
-            lambda: find_node() is not None, timeout_seconds=timeout, step_seconds=0.5
-        ), 'No node hosting KQP_COMPUTE_ACTOR found'
+        assert wait_for(lambda: find_node() is not None, timeout_seconds=timeout, step_seconds=0.5), (
+            'No matching node hosting KQP_COMPUTE_ACTOR found',
+            with_coordinator,
+        )
         node_id = find_node()
         assert node_id is not None, 'KQP_COMPUTE_ACTOR disappeared before restart'
         self.restart_node(self.kikimr, node_id)

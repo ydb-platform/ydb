@@ -6,9 +6,14 @@ import logging
 import json
 import random
 import string
+import re
+from html import unescape
+from urllib.parse import parse_qs, urlsplit
+
+import requests
 
 from ydb.tests.library.common.wait_for import wait_for
-from ydb.tests.fq.streaming_common.common import counter_nodes, get_sensors
+from ydb.tests.fq.streaming_common.common import counter_nodes, get_sensors, monitoring_endpoint
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
 
@@ -46,6 +51,27 @@ def query_issues(io, query):
     return '\n'.join(messages(json.loads(query_state(io, query)['Issues'])))
 
 
+def assert_row_dispatcher_predicate(io, query, expected=''):
+    rows = io.kikimr.ydb_client.query(f"""
+        SELECT Plan FROM `.sys/streaming_queries` WHERE Path = '{query}';
+    """)[0].rows
+    assert len(rows) == 1, rows
+    plan = json.loads(rows[0]['Plan'])
+
+    def predicates(node):
+        if isinstance(node, dict):
+            if node.get('SourceType') == 'pq' and 'Filter (shared reading)' in node:
+                yield node['Filter (shared reading)']
+            for value in node.values():
+                yield from predicates(value)
+        elif isinstance(node, list):
+            for value in node:
+                yield from predicates(value)
+
+    actual = list(predicates(plan))
+    assert any(predicate and expected in predicate for predicate in actual), (expected, actual, plan)
+
+
 def wait_ydb_row_dispatcher_sensor(io, labels, expected, exact_match=True):
     counts = {}
 
@@ -65,13 +91,39 @@ def wait_ydb_row_dispatcher_sensor(io, labels, expected, exact_match=True):
     assert wait_for(matches, timeout_seconds=60, step_seconds=0.5), (labels, counts, expected)
 
 
+def read_compute_ingress_stats(io):
+    # These four values exist in DQ but are not exported by KQP's six streaming
+    # query counters or its JSON plan serializer. The compute actor's diagnostic
+    # page exposes the actual source statistics, without parsing server logs.
+    result = {}
+    for node_id in counter_nodes(io.kikimr.cluster):
+        url = monitoring_endpoint(io.kikimr.cluster, node_id) + '/actors/kqp_node'
+        response = requests.get(url, headers={'Authorization': 'root@builtin'}, timeout=5)
+        response.raise_for_status()
+        actors = set()
+        for link in re.findall(r'href=["\']?([^"\'\s>]+)', response.text, re.IGNORECASE):
+            actors.update(parse_qs(urlsplit(unescape(link)).query).get('ca', []))
+        for actor in actors:
+            response = requests.get(
+                url, params={'ca': actor, 'view': 'dump'}, headers={'Authorization': 'root@builtin'}, timeout=5
+            )
+            response.raise_for_status()
+            for name, value in re.findall(
+                r'AsyncInput\.IngressStats\.(FilteredBytes|FilteredRows|QueuedBytes|QueuedRows):\s*(\d+)',
+                response.text,
+            ):
+                result[name] = result.get(name, 0) + int(value)
+    return result
+
+
 class TestPqRowDispatcher(TestYdsBase):
 
-    def run_and_check(self, io, sql, input, output):
+    def run_and_check(self, io, sql, input, output, expected_predicate):
         query_id = io.start(sql)
         io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 1)
         io.write(input)
         assert io.read(len(output)) == output
+        assert_row_dispatcher_predicate(io, query_id, expected_predicate)
         io.stop(query_id)
         io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 0)
 
@@ -129,6 +181,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         io.stop(query_id)
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
+        io.wait_read_session_closed(io.input_topic, ROW_DISPATCHER_CONSUMER)
 
     @pytest.mark.skip(reason="YDB bug: MATCH_RECOGNIZE metadata crashes compute with Value is not a dict")
     def test_metadatafields(self, ydb_topics):
@@ -184,6 +237,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         io.stop(query_id)
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
+        io.wait_read_session_closed(io.input_topic, ROW_DISPATCHER_CONSUMER)
 
     def test_scheme_error(self, ydb_topics):
         io = ydb_topics('test_scheme_error', shared=True)
@@ -248,6 +302,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert io.read(len(expected), topic_path=io.output_topic) == expected
 
         io.wait_actor_count("DQ_PQ_READ_ACTOR", 1)
+        assert_row_dispatcher_predicate(io, query_id, '')
         io.stop(query_id)
 
     def test_nested_structured_types(self, ydb_topics):
@@ -292,6 +347,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert io.read(len(expected), topic_path=io.output_topic) == expected
 
         io.wait_actor_count("DQ_PQ_READ_ACTOR", 1)
+        assert_row_dispatcher_predicate(io, query_id, 'second_key')
         io.stop(query_id)
 
     def test_nested_types_without_predicate(self, ydb_topics):
@@ -339,51 +395,73 @@ class TestPqRowDispatcher(TestYdsBase):
         ]
         expected = ['102']
         filter = "time > 101;"
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`time` > 101)')
         filter = 'data = "hello2"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`data` = "hello2")')
         filter = ' event IS NOT DISTINCT FROM "event2"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`event` IS NOT DISTINCT FROM "event2")')
         filter = ' event IS DISTINCT FROM "event1"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`event` IS DISTINCT FROM "event1")')
         filter = 'event IN ("event2")'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`event` IN ("event2"))')
         filter = 'event NOT IN ("event1", "event3")'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(NOT (`event` IN ("event1", "event3")))')
         filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`event` IN ("1"')
         filter = ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '((`event` IS DISTINCT FROM `data`) AND (`event` IN ("1"')
         filter = ' IF(event = "event2", event IS DISTINCT FROM data, FALSE)'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(
+            io, sql + filter, data, expected, 'IF((`event` = "event2"), (`event` IS DISTINCT FROM `data`), FALSE)'
+        )
         filter = ' nested REGEXP ".*abc.*"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(CAST(`nested` AS String) REGEXP ".*abc.*")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(CAST(`nested` AS String) REGEXP ".*abc.*")')
         filter = 'event LIKE "event2%"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, 'StartsWith(`event`, "event2")')
         filter = 'event LIKE "%event2"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, 'EndsWith(`event`, "event2")')
         filter = 'event LIKE "%event2%"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, 'String::Contains(`event`, "event2")')
         filter = ' (data = "hello2") IS NOT DISTINCT FROM true'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '((`data` = "hello2") IS NOT DISTINCT FROM TRUE)')
         filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '((`data` REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)')
         filter = ' (CAST(data AS Utf8) REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
-        self.run_and_check(io, sql + filter, data, expected)  # YQ-5727
+        self.run_and_check(
+            io,
+            sql + filter,
+            data,
+            expected,
+            '((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
+        )  # YQ-5727
         filter = ' CAST(`time` AS Date) > Date("1970-04-12")'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(CAST(`time` AS Date?) > Date("1970-04-12"))')
         filter = ' CAST(`time` AS Timestamp) > Timestamp("1970-01-01T00:00:00.000101Z")'
-        self.run_and_check(io, sql + filter, data, expected)  # YQ-5738
+        self.run_and_check(
+            io, sql + filter, data, expected, '(CAST(`time` AS Timestamp?) > Timestamp("1970-01-01T00:00:00.000101Z"))'
+        )  # YQ-5738
         filter = ' MIN_OF(`time`, `time` + 5) >= 102 AND MAX_OF(`time`, `time` - 5) < 103'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(
+            io,
+            sql + filter,
+            data,
+            expected,
+            '((MIN_OF(`time`, (`time` + 5)) >= 102) AND (MAX_OF(`time`, (`time` - 5)) < 103))',
+        )
         filter = ' `time` IN (102, 103, 104)'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`time` IN (102, 103, 104))')
         filter = ' CAST(`time` AS Interval) > Interval("PT0.000101S")'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(CAST(`time` AS Interval?) > Interval("PT0.000101S"))')
         filter = ' CAST(`time` AS Timestamp) - Interval("-PT0.000001S") > Timestamp("1970-01-01T00:00:00.000102Z")'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(
+            io,
+            sql + filter,
+            data,
+            expected,
+            '((CAST(`time` AS Timestamp?) - Interval("-PT0.000001S")) > Timestamp("1970-01-01T00:00:00.000102Z"))',
+        )
 
     def test_filters_optional_field(self, ydb_topics):
         io = ydb_topics("test_filters_optional_field", shared=True)
@@ -403,64 +481,98 @@ class TestPqRowDispatcher(TestYdsBase):
         ]
         expected = ['102']
         filter = 'data = "hello2"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`data` = "hello2")')
         filter = 'flag'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '`flag`')
         filter = 'time * (field2 - field1) != 0'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '((`time` * (`field2` - `field1`)) <> 0)')
         filter = '(field1 % field2) / 5 = 1'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(((`field1` % `field2`) / 5) = 1)')
         filter = ' event IS NOT DISTINCT FROM "event2"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`event` IS NOT DISTINCT FROM "event2")')
         filter = ' event IS DISTINCT FROM "event1"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`event` IS DISTINCT FROM "event1")')
         filter = ' field1 IS DISTINCT FROM field2'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`field1` IS DISTINCT FROM `field2`)')
         filter = 'time == 102 OR (field2 IS NOT DISTINCT FROM 1005 AND Random(field1) < 10.0)'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '((`time` = 102) OR (`field2` IS NOT DISTINCT FROM 1005))')
         filter = 'event IN ("event2")'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`event` IN ("event2"))')
         filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(`event` IN ("1"')
         filter = ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(
+            io, sql + filter, data, expected, '((`event` IS DISTINCT FROM `data`) AND COALESCE((`event` IN ("1"'
+        )
         filter = ' IF(event == "event2", event IS DISTINCT FROM data, FALSE)'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(
+            io,
+            sql + filter,
+            data,
+            expected,
+            'IF(COALESCE((`event` = "event2"), FALSE), (`event` IS DISTINCT FROM `data`), FALSE)',
+        )
         filter = ' COALESCE(event = "event2", TRUE)'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, 'COALESCE((`event` = "event2"), TRUE)')
         filter = ' COALESCE(event = "event2", data = "hello2", TRUE)'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(
+            io, sql + filter, data, expected, 'COALESCE((`event` = "event2"), (`data` = "hello2"), TRUE)'
+        )
         filter = " event ?? '' REGEXP @@e.*e.*t2@@"
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(COALESCE(`event`, "") REGEXP "e.*e.*t2")')
         filter = " event ?? '' NOT REGEXP @@e.*e.*t1@@"
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(NOT (COALESCE(`event`, "") REGEXP "e.*e.*t1"))')
         filter = " event ?? '' REGEXP data ?? '' OR time = 102"
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(
+            io, sql + filter, data, expected, '((COALESCE(`event`, "") REGEXP COALESCE(`data`, "")) OR (`time` = 102))'
+        )
         filter = ' nested REGEXP ".*abc.*"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(
+            io,
+            sql + filter,
+            data,
+            expected,
+            '(IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP ".*abc.*")',
+        )
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(CAST(`nested` AS String?) REGEXP ".*abc.*")')
         filter = 'event LIKE "event2%"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, 'StartsWith(`event`, "event2")')
         filter = 'event LIKE "%event2"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, 'EndsWith(`event`, "event2")')
         filter = 'event LIKE "%event2%"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, 'String::Contains(`event`, "event2")')
         filter = ' (data = "hello2") IS NOT DISTINCT FROM true'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '((`data` = "hello2") IS NOT DISTINCT FROM TRUE)')
         filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '((`data` REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)')
         filter = ' (data in ("hello2", "hello3")) IS NOT DISTINCT FROM true'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(
+            io, sql + filter, data, expected, '((`data` IN ("hello2", "hello3")) IS NOT DISTINCT FROM TRUE)'
+        )
         # YQ-5708
         filter = ' COALESCE(event, data) IS DISTINCT FROM "event1"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(io, sql + filter, data, expected, '(COALESCE(`event`, `data`) IS DISTINCT FROM "event1")')
         filter = ' UNWRAP(coalesce(event, data)) IS distinct FROM "event1"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(
+            io, sql + filter, data, expected, '(Unwrap(COALESCE(`event`, `data`)) IS DISTINCT FROM "event1")'
+        )
         filter = ' tobytes(coalesce(cast(event as Utf8), cast(data as utf8))) IS distinct FROM "event1"'
-        self.run_and_check(io, sql + filter, data, expected)
+        self.run_and_check(
+            io,
+            sql + filter,
+            data,
+            expected,
+            '(CAST(COALESCE(CAST(`event` AS Utf8?), CAST(`data` AS Utf8?)) AS String) IS DISTINCT FROM "event1")',
+        )
         filter = ' (CAST(data AS Utf8) REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
-        self.run_and_check(io, sql + filter, data, expected)  # YQ-5727
+        self.run_and_check(
+            io,
+            sql + filter,
+            data,
+            expected,
+            '((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
+        )  # YQ-5727
 
     def test_filter_missing_fields(self, ydb_topics):
         io = ydb_topics("test_filter_missing_fields", shared=True)
@@ -487,6 +599,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert io.read(len(expected), topic_path=io.output_topic) == expected
 
         io.wait_actor_count("DQ_PQ_READ_ACTOR", 1)
+        assert_row_dispatcher_predicate(io, query_id, '')
         io.stop(query_id)
 
     def test_filter_use_unsupported_predicate(self, ydb_topics):
@@ -556,6 +669,7 @@ class TestPqRowDispatcher(TestYdsBase):
         expected = ['{"event_type":2}']
         assert io.read(len(expected), topic_path=io.output_topic) == expected
 
+        assert_row_dispatcher_predicate(io, query_id, '(`event_class` =')
         io.stop(query_id)
 
     def test_start_new_query(self, ydb_topics):
@@ -619,6 +733,7 @@ class TestPqRowDispatcher(TestYdsBase):
             io.stop(query_id2)
             io.stop(query_id3)
             io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 0)
+            io.wait_read_session_closed(io.input_topic, ROW_DISPATCHER_CONSUMER)
         finally:
             for query in reversed(io.queries):
                 io.kikimr.ydb_client.query(f'DROP STREAMING QUERY IF EXISTS `{query}`;')
@@ -971,13 +1086,26 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_ydb_row_dispatcher_sensor(io, {'sensor': 'ClientsCount'}, 1)
         wait_ydb_row_dispatcher_sensor(io, {'sensor': 'RowsSent'}, 1, exact_match=False)
         wait_ydb_row_dispatcher_sensor(io, {'sensor': 'IncomingRequests'}, 1, exact_match=False)
+        last_stats = {}
+
+        def source_statistics_reported():
+            nonlocal last_stats
+            last_stats = read_compute_ingress_stats(io)
+            return (
+                {'FilteredBytes', 'FilteredRows', 'QueuedBytes', 'QueuedRows'} <= last_stats.keys()
+                and last_stats['FilteredBytes'] > 1
+                and last_stats['FilteredRows'] > 0
+                and last_stats['QueuedBytes'] >= 0
+                and last_stats['QueuedRows'] >= 0
+            )
+
+        assert wait_for(source_statistics_reported, timeout_seconds=120, step_seconds=0.5), last_stats
 
         io.stop(query)
         io.wait_actor_count('DQ_PQ_READ_ACTOR', 0)
         io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 0)
         wait_ydb_row_dispatcher_sensor(io, {'sensor': 'ClientsCount'}, 0)
 
-    @pytest.mark.skip(reason="Is not implemented")
     def test_group_by_hop_restart_query(self, ydb_topics):
         io = ydb_topics("test_group_by_hop_restart", shared=True)
         create_input_consumer(io)
@@ -1010,7 +1138,7 @@ class TestPqRowDispatcher(TestYdsBase):
         expected = ['{"count":5,"time":"2025-04-23T09:00:10Z"}']
         assert io.read(len(expected), topic_path=io.output_topic) == expected
 
-        io.checkpoint(query_id, count=2)
+        io.checkpoint(query_id, count=15)
         io.stop(query_id)
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
@@ -1141,6 +1269,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         issues = query_issues(io, query_id)
         assert "Failed to parse json message for offset" not in issues, "Incorrect Issues: " + issues
+        assert_row_dispatcher_predicate(io, query_id, '')
         io.stop(query_id)
         assert received == expected
 

@@ -37,6 +37,8 @@ TEST_SRCS(
     test_invalid_consumer.py
     test_metrics_cleanup.py
     test_pq_read_write.py
+    test_public_metrics.py
+    test_read_rules_deletion.py
     test_recovery.py
     test_recovery_match_recognize.py
     test_recovery_mz.py

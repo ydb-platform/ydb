@@ -75,6 +75,40 @@ class TestYqStreaming(TestYdsBase):
         assert io.state(query)['Status'] == 'RUNNING', io.state(query)
         io.stop(query)
 
+    def test_state_load_mode(self, ydb_topics):
+        first = ydb_topics('state_load_mode')
+        second = ydb_topics('state_load_mode_new')
+        query = first.start(f"""
+            INSERT INTO {first.output} SELECT (Data || Data) ?? '' AS Data FROM {first.input};
+        """)
+        try:
+            first.write(['hello'])
+            assert first.read(1) == ['hellohello']
+            first.checkpoint(query, count=3)
+            first.stop(query)
+            # FORCE with a new query text and FRESH disposition discards the
+            # incompatible old state, like YQ's StateLoadMode.EMPTY.
+            first.kikimr.ydb_client.query(f"""
+                ALTER STREAMING QUERY `{query}` SET (
+                    RUN = TRUE, FORCE = TRUE, STREAMING_DISPOSITION = FRESH
+                ) AS DO BEGIN
+                    INSERT INTO {second.output}
+                    SELECT Unwrap(data || CAST(COUNT(*) AS String)) AS Data
+                    FROM {second.input} WITH (
+                        FORMAT = json_each_row, SCHEMA = (time Int64 NOT NULL, data String NOT NULL)
+                    )
+                    GROUP BY data, HOP(CAST(time AS Timestamp), 'PT1S', 'PT1S', 'PT1S');
+                END DO;
+            """)
+            first.checkpoint(query, count=3)
+            assert first.state(query)['Status'] == 'RUNNING', first.state(query)
+            second.write(['{"time":1,"data":"hello new query"}', '{"time":2000000,"data":"close"}'])
+            assert second.read(1) == ['hello new query1']
+            first.stop(query)
+        finally:
+            # The query refers to the second helper's source and must be dropped first.
+            first.kikimr.ydb_client.query(f'DROP STREAMING QUERY IF EXISTS `{query}`;')
+
     @pytest.mark.skip(reason="Join of two streaming inputs is not supported in YDB")
     def test_early_finish_case1(self, ydb_topics):
         io = ydb_topics('pq_test_early_finish_case1')
@@ -193,7 +227,10 @@ class TestYqStreaming(TestYdsBase):
             PRAGMA FeatureR010="prototype";
             PRAGMA config.flags("TimeOrderRecoverAhead", "20000000");
             PRAGMA config.flags("TimeOrderRecoverDelay", "-20000000");
-            $parsed = SELECT JSON_VALUE(Cast(Data as Json), "$.event_class") as event_class, JSON_VALUE(Cast(Data as Json), "$.time") as time FROM {input_topic} WITH (FORMAT = raw, SCHEMA = (Data String NOT NULL));
+            $parsed = SELECT
+                JSON_VALUE(Cast(Data as Json), "$.event_class") as event_class,
+                JSON_VALUE(Cast(Data as Json), "$.time") as time
+            FROM {input_topic} WITH (FORMAT = raw, SCHEMA = (Data String NOT NULL));
 
             $tojson = ($data) -> (ToBytes(Unwrap(Yson2::SerializeJson(Yson::From($data)))));
 

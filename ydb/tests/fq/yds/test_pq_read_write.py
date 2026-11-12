@@ -75,6 +75,7 @@ class TestPqReadWrite(TestYdsBase):
         assert io.read(len(expected)) == expected
 
         io.stop(query)
+        io.wait_read_session_closed(io.input_topic, consumer)
 
     @pytest.mark.parametrize('with_checkpoints', [True, False], ids=['with_checkpoints', 'without_checkpoints'])
     def test_pq_read_schema_metadata(self, ydb_topics, with_checkpoints):

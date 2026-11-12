@@ -1,18 +1,26 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import pytest
+
 from ydb.tests.fq.streaming_common.common import StreamingTestBase, get_checkpoint_coordinator_metric
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.common.wait_for import wait_for
 
 
 class TestRecovery(StreamingTestBase):
+    @pytest.mark.parametrize('ydb_cluster', [{'distributed_compute': True}], indirect=True)
     def test_recovery(self, ydb_topics):
         io = ydb_topics('pq_kikimr_streaming_mz', partitions=2)
         query = io.start(f"""
             PRAGMA ydb.MaxTasksPerStage = '2';
             INSERT INTO {io.output} SELECT Data FROM {io.input};
         """)
+        expected_compute_actors = sum(
+            io.get_actor_count(io.kikimr, node_id, 'KQP_COMPUTE_ACTOR') for node_id in io.kikimr.cluster.slots
+        )
+        assert expected_compute_actors > 0
+        io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 1)
         timeout = plain_or_under_sanitizer(120, 500)
 
         def coordinator_node():
@@ -34,6 +42,8 @@ class TestRecovery(StreamingTestBase):
             return coordinator_node()
 
         def check_batch(start, end):
+            io.wait_actor_count('KQP_COMPUTE_ACTOR', expected_compute_actors)
+            io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 1)
             expected = list(range(start, end))
             io.write([str(value) for value in expected])
             actual = [int(value) for value in io.read(len(expected))]
@@ -41,7 +51,11 @@ class TestRecovery(StreamingTestBase):
             io.checkpoint(query, count=3)
 
         coordinator = find_coordinator()
-        other_node = next(node_id for node_id in io.kikimr.cluster.slots if node_id != coordinator)
+        other_node = next(
+            node_id
+            for node_id in io.kikimr.cluster.slots
+            if node_id != coordinator and self.get_actor_count(io.kikimr, node_id, 'KQP_COMPUTE_ACTOR') > 0
+        )
         check_batch(1, 11)
 
         # First lose a compute node outside the coordinator, then the current
@@ -62,3 +76,5 @@ class TestRecovery(StreamingTestBase):
         assert restored >= 1, (restored, started_empty)
         assert io.state(query)['Status'] == 'RUNNING', io.state(query)
         io.stop(query)
+        io.wait_actor_count('KQP_COMPUTE_ACTOR', 0)
+        io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 0)

@@ -23,6 +23,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -435,6 +437,9 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
 {
     TExprBase input = write.Input();
     std::optional<TCoAtomList> inputCols;
+    const auto isKeyColumn = [&](TStringBuf name) {
+        return Find(table.Metadata->KeyColumnNames, name) != table.Metadata->KeyColumnNames.end();
+    };
 
     // Split autoIncrement into sequence columns (handled at runtime by TKqlSequencer) and
     // literal defaults (inlined at compile time into the row struct via TCoMap/TCoAsStruct).
@@ -444,7 +449,10 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
 
         for (const auto& colAtom : autoIncrement) {
             const auto* colMeta = table.Metadata->Columns.FindPtr(TString(colAtom.Value()));
-            const bool olapLiteral = table.Metadata->Kind == EKikimrTableKind::Olap && colMeta && colMeta->IsDefaultFromLiteral();
+            // An omitted OLAP data column stays absent and is filled on read. A key is the row
+            // identity and the shard hash, so its literal must be in the row before routing.
+            const bool olapLiteral = table.Metadata->Kind == EKikimrTableKind::Olap && colMeta && colMeta->IsDefaultFromLiteral()
+                && !isKeyColumn(colAtom.Value());
             if (olapLiteral) {
                 continue;
             }
@@ -470,7 +478,8 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
         TVector<TExprNode::TPtr> columnsToGenerate;
         for (const auto& colAtom : autoIncrement) {
             const auto* colMeta = table.Metadata->Columns.FindPtr(TString(colAtom.Value()));
-            if (table.Metadata->Kind == EKikimrTableKind::Olap && colMeta && colMeta->IsDefaultFromLiteral()) {
+            if (table.Metadata->Kind == EKikimrTableKind::Olap && colMeta && colMeta->IsDefaultFromLiteral()
+                && !isKeyColumn(colAtom.Value())) {
                 continue;
             }
             columnsToGenerate.push_back(colAtom.Ptr());

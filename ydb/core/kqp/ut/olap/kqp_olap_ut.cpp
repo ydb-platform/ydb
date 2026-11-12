@@ -5404,9 +5404,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     STORE = COLUMN
                 );
             )", NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                "Default value is not supported for primary key columns in column tables");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                INSERT INTO `/Root/PkDef` (Value) VALUES ('v');
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT Id FROM `/Root/PkDef`;
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[7u]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 

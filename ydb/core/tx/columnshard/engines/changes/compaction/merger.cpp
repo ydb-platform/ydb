@@ -4,6 +4,7 @@
 #include "plain/logic.h"
 #include "sparsed/logic.h"
 
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
@@ -365,7 +366,12 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             }
             const auto fill = ISnapshotSchema::GetAbsentColumnFill(*PortionSchemas[batchIdx], *resultFiltered, columnId);
             const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
-            if (NArrow::ScalarCompareNullable(fill, resultFill) == 0) {
+            // Plain and sparsed mergers fill an empty input themselves. Dictionary and sub-columns
+            // mergers write NULL for an empty input, so a non-null fill has to be passed as data.
+            const TString& mergerClass = commonContext.GetLoader()->GetAccessorConstructor().GetClassName();
+            const bool mergerFillsEmptyInput = mergerClass == NArrow::NAccessor::TGlobalConst::PlainDataAccessorName ||
+                                               mergerClass == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
+            if (NArrow::ScalarCompareNullable(fill, resultFill) == 0 && (mergerFillsEmptyInput || !fill)) {
                 continue;
             }
             const ui32 rows = Batches[batchIdx]->num_rows();

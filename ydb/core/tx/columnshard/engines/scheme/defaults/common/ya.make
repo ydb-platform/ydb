@@ -13,6 +13,8 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/formats/arrow
     ydb/public/api/protos
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
 )
 
 END()

@@ -46,6 +46,10 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+IF (OS_LINUX)
+    LINKER_SCRIPT(ydb/apps/ydbd/strip_debug.ld)
+ENDIF()
+
 GENERATE_ENUM_SERIALIZATION(tiering_test_enums.h)
 
 END()

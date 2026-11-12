@@ -8,6 +8,9 @@
 #include <util/generic/ylimits.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <cstring>
 
@@ -335,6 +338,29 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
                 }
                 scalar = std::make_shared<arrow::TimestampScalar>(value.uint64_value(), arrow::timestamp(arrow::TimeUnit::MICRO));
                 break;
+            case Ydb::Type::JSON_DOCUMENT: {
+                if (valueCase != Ydb::Value::kTextValue) {
+                    return invalidLiteral;
+                }
+                const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value());
+                if (std::holds_alternative<TString>(binaryJson)) {
+                    return TConclusionStatus::Fail("Invalid JSON for JsonDocument default: " + std::get<TString>(binaryJson));
+                }
+                const auto& encoded = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+                scalar = std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(encoded.Data(), encoded.Size())));
+                break;
+            }
+            case Ydb::Type::DYNUMBER: {
+                if (valueCase != Ydb::Value::kTextValue) {
+                    return invalidLiteral;
+                }
+                const auto encoded = NDyNumber::ParseDyNumberString(value.text_value());
+                if (!encoded.Defined()) {
+                    return TConclusionStatus::Fail("Invalid DyNumber default");
+                }
+                scalar = std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(encoded->data(), encoded->size())));
+                break;
+            }
             default:
                 return TConclusionStatus::Fail("Default value is not supported for type " + ::ToString(type.GetTypeId()) + " in column tables");
         }
@@ -433,6 +459,20 @@ TConclusion<Ydb::TypedValue> TColumnDefaultScalarValue::SerializeToTypedValue(co
             break;
         case arrow::Type::BINARY: {
             const TString bytes = static_cast<const arrow::BinaryScalar&>(*Value).value->ToString();
+            if (type.GetTypeId() == NScheme::NTypeIds::JsonDocument) {
+                outType->set_type_id(Ydb::Type::JSON_DOCUMENT);
+                value->set_text_value(NBinaryJson::SerializeToJson(bytes));
+                break;
+            }
+            if (type.GetTypeId() == NScheme::NTypeIds::DyNumber) {
+                const auto text = NDyNumber::DyNumberToString(bytes);
+                if (!text.Defined()) {
+                    return TConclusionStatus::Fail("Invalid DyNumber default");
+                }
+                outType->set_type_id(Ydb::Type::DYNUMBER);
+                value->set_text_value(*text);
+                break;
+            }
             outType->set_type_id(typeIdOr(Ydb::Type::STRING));
             value->set_bytes_value(bytes);
             break;

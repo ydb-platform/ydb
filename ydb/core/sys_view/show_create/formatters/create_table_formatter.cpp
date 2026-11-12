@@ -266,6 +266,12 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             Stream << ")";
             break;
         }
+        case NYdb::EPrimitiveType::JsonDocument: {
+            Stream << "JsonDocument(";
+            EscapeString(TString(parser.GetJsonDocument()), Stream);
+            Stream << ")";
+            break;
+        }
         case NYdb::EPrimitiveType::Uuid: {
             Stream << "UUID(";
             EscapeString(TString(parser.GetUuid().ToString()), Stream);

@@ -187,10 +187,6 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
                 "incompatible types for default write: def" + DefaultValue.DebugString() + ", col:" + (*arrowTypeResult)->ToString());
             return false;
         }
-        if (IsKeyColumn()) {
-            errors.AddError("Default value is not supported for primary key columns in column tables");
-            return false;
-        }
         CreatedDefaultValue = DefaultValue;
     } else {
         // Present and empty: this column was born without a default. A later SET DEFAULT must not
@@ -300,11 +296,9 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         errors.AddError("Changing default value of a sparsed column is not supported");
         return false;
     }
-    if (diffColumn.GetDefaultScalar() || diffColumn.GetDefaultValue() || sqlDefaultChange) {
-        if (IsKeyColumn()) {
-            errors.AddError("Default value is not supported for primary key columns in column tables");
-            return false;
-        }
+    if (diffColumn.GetDefaultValue() && IsKeyColumn()) {
+        errors.AddError("Default value is not supported for primary key columns in column tables");
+        return false;
     }
     if (sqlDefaultChange && !AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
         errors.AddError("column table defaults are disabled");

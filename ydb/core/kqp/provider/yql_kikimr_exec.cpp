@@ -2225,10 +2225,15 @@ public:
                             return SyncError();
                         }
 
-                        if (hasNotNull && hasDefaultValue && columnBuild->default_from_literal().value().has_null_flag_value()) {
-                            ctx.AddError(YqlIssue(ctx.GetPosition(columnTuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
-                                "Cannot add not null column with NULL default value"));
-                            return SyncError();
+                        if (hasNotNull && hasDefaultValue) {
+                            const Ydb::TypedValue& literal = columnBuild
+                                ? columnBuild->default_from_literal()
+                                : add_column->GetDefaultFromLiteral();
+                            if (literal.value().has_null_flag_value()) {
+                                ctx.AddError(YqlIssue(ctx.GetPosition(columnTuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                                    "Cannot add not null column with NULL default value"));
+                                return SyncError();
+                            }
                         }
 
                         for (size_t itemIdx = 3; itemIdx < columnTuple.Size(); ++itemIdx) {

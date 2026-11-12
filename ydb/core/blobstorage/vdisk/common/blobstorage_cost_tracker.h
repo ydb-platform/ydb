@@ -348,7 +348,7 @@ private:
     std::atomic<ui64> DiskTimeAvailable = 1'000'000'000;
 
     TLockFreeBucket<TAppDataTimerMs<TInstantTimerMs>> Bucket;
-    TLight BurstDetector;
+    TLight64 BurstDetector;
     std::atomic<ui64> SeqnoBurstDetector = 0;
 
     TControlWrapper BurstThresholdNs;

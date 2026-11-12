@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <optional>
+#include <type_traits>
 
 #include <ydb/core/mon/mon.h>
 
@@ -14,6 +16,7 @@ public:
     std::optional<TString> CountName;
     std::optional<TString> RedMsName;
     std::optional<TString> GreenMsName;
+    std::optional<TString> ResyncCountName;
 
     static TLightCounterConfig Create() {
         return {};
@@ -39,6 +42,11 @@ public:
         return *this;
     }
 
+    TLightCounterConfig& WithResyncCount(const TString& name) {
+        ResyncCountName = name;
+        return *this;
+    }
+
     static TLightCounterConfig WithDefaultLightSet(const TString& baseName) {
         TLightCounterConfig config;
         config.StateName = baseName + "_state";
@@ -56,6 +64,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr Count; // Number of switches to ON state
     ::NMonitoring::TDynamicCounters::TCounterPtr RedMs; // Time elapsed in ON state
     ::NMonitoring::TDynamicCounters::TCounterPtr GreenMs; // Time elapsed in OFF state
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResyncCount;
 private:
     ui64 RedCycles = 0;
     ui64 GreenCycles = 0;
@@ -75,6 +84,9 @@ public:
         }
         if (config.GreenMsName) {
             GreenMs = counters->GetCounter(*config.GreenMsName, true);
+        }
+        if (config.ResyncCountName) {
+            ResyncCount = counters->GetCounter(*config.ResyncCountName, true);
         }
         UpdateThreshold = HPCyclesMs(100);
         AdvancedTill = Now();
@@ -150,109 +162,124 @@ private:
     }
 };
 
-// Thread-safe light
-class TLight : public TLightBase {
-private:
+// Diagnostic state/time accounting with bounded reordering. A missing sequence
+// number is tolerated for at most 255 subsequent positions or one second (checked
+// on Set/Update). Beyond that, discard pending history and adopt the newest sample.
+// Count and durations are approximate across such a resynchronization.
+// Prefer ui64 producers: a ui16 producer cannot distinguish a long delay from wrap.
+template <typename TSeqno>
+class TBasicLight : public TLightBase {
+    static_assert(std::is_same_v<TSeqno, ui16> || std::is_same_v<TSeqno, ui64>);
+
     struct TItem {
-        bool State;
-        bool Filled;
-        TItem(bool state = false, bool filled = false)
-            : State(state)
-            , Filled(filled)
-        {}
+        bool State = false;
+        bool Filled = false;
     };
 
-    // Cyclic buffer to enforce event ordering by seqno
+    static constexpr size_t Capacity = 256;
     TSpinLock Lock;
-    size_t HeadIdx = 0; // Index of current state
+    std::array<TItem, Capacity> Data{};
+    size_t HeadIdx = 0;
     size_t FilledCount = 0;
-    ui16 Seqno = 0; // Current seqno
-    TStackVec<TItem, 32> Data; // In theory should have not more than thread count items
-public:
-    TLight() {
-        InitData();
-    }
+    TSeqno Seqno = 0;
+    TSeqno NewestSeqno = 0;
+    bool NewestState = false;
+    NHPTimer::STime PendingSince = 0;
 
-    void Set(bool state, ui16 seqno) {
+public:
+    void Set(bool state, TSeqno seqno) {
         TGuard<TSpinLock> g(Lock);
-        Push(state, seqno);
-        bool prevState;
-        // Note that 'state' variable is being reused
-        NHPTimer::STime now = Now();
-        while (Pop(state, prevState)) {
-            Modify(state, prevState);
+        const auto now = Now();
+        RecoverExpiredGap(now);
+        if (!FilledCount) {
+            Reset(state, seqno, now, false);
+            return;
+        }
+
+        const TSeqno diff = seqno - Seqno;
+        if (!diff) {
+            return; // Duplicate observation must not crash the process.
+        }
+        if (diff > Max<TSeqno>() / 2) {
+            // Nearby late samples, and old samples with a full-width sequence,
+            // must not roll the state back after initialization or recovery.
+            const TSeqno backwards = Seqno - seqno;
+            if constexpr (std::is_same_v<TSeqno, ui64>) {
+                return;
+            } else if (backwards < Capacity) {
+                return;
+            }
+            // For ui16 a large backwards distance is ambiguous. Recover rather
+            // than wait for half a sequence cycle with a potentially stale state.
+            Reset(state, seqno, now, true);
+            return;
+        }
+        if (diff >= Capacity) {
+            Reset(state, seqno, now, true);
+            return;
+        }
+
+        auto& item = Data[(HeadIdx + diff) % Capacity];
+        if (item.Filled) {
+            return; // Duplicate pending observation.
+        }
+        item = {state, true};
+        if (FilledCount++ == 1) {
+            PendingSince = now;
+        }
+        if (diff > TSeqno(NewestSeqno - Seqno)) {
+            NewestSeqno = seqno;
+            NewestState = state;
+        }
+
+        while (Data[(HeadIdx + 1) % Capacity].Filled) {
+            const bool prevState = Data[HeadIdx].State;
+            Data[HeadIdx].Filled = false;
+            HeadIdx = (HeadIdx + 1) % Capacity;
+            ++Seqno;
+            --FilledCount;
             Advance(prevState, now);
+            Modify(Data[HeadIdx].State, prevState);
+        }
+        if (FilledCount == 1) {
+            PendingSince = 0;
         }
     }
 
     void Update() {
         TGuard<TSpinLock> g(Lock);
-        Advance(Data[HeadIdx].State, Now());
+        const auto now = Now();
+        RecoverExpiredGap(now);
+        Advance(Data[HeadIdx].State, now);
     }
 
 private:
-    void InitData(bool state = false, bool filled = false) {
-        Data.clear();
-        Data.emplace_back(state, filled);
-        Data.resize(32);
+    void RecoverExpiredGap(NHPTimer::STime now) {
+        if (FilledCount > 1 && ui64(now - PendingSince) >= HPCyclesMs(1000)) {
+            Reset(NewestState, NewestSeqno, now, true);
+        }
+    }
+
+    void Reset(bool state, TSeqno seqno, NHPTimer::STime now, bool resync) {
+        const bool prevState = Data[HeadIdx].State;
+        // Charge the unknown interval to the previously observed state. Never
+        // rewrite published time backwards or invent durations for lost edges.
+        Advance(prevState, now);
+        Modify(state, prevState);
+        Data.fill({});
         HeadIdx = 0;
-    }
-
-    void Push(bool state, ui16 seqno) {
-        FilledCount++;
-        if (FilledCount == 1) { // First event must initialize seqno
-            Seqno = seqno;
-            InitData(state, true);
-            if (state) {
-                Modify(true, false);
-            }
-            return;
+        Data[0] = {state, true};
+        FilledCount = 1;
+        Seqno = NewestSeqno = seqno;
+        NewestState = state;
+        PendingSince = 0;
+        if (resync && ResyncCount) {
+            ++*ResyncCount;
         }
-        Y_ABORT_UNLESS(seqno != Seqno, "ordering overflow or duplicate event headSeqno# %d seqno# %d state# %d filled# %d",
-                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
-        ui16 diff = seqno;
-        diff -= Seqno; // Underflow is fine
-        size_t size = Data.size();
-        if (size <= diff) { // Buffer is full -- extend and move wrapped part
-            Data.resize(size * 2);
-            for (size_t i = 0; i < HeadIdx; i++) {
-                Data[size + i] = Data[i];
-                Data[i].Filled = false;
-            }
-        }
-        TItem& item = Data[(HeadIdx + diff) % Data.size()];
-        Y_ABORT_UNLESS(!item.Filled, "ordering overflow or duplicate event headSeqno# %d seqno# %d state# %d filled# %d",
-                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
-        item.Filled = true;
-        item.State = state;
-    }
-
-    bool Pop(bool& state, bool& prevState) {
-        size_t nextIdx = (HeadIdx + 1) % Data.size();
-        TItem& head = Data[HeadIdx];
-        TItem& next = Data[nextIdx];
-        if (!head.Filled || !next.Filled) {
-            return false;
-        }
-        state = next.State;
-        prevState = head.State;
-        head.Filled = false;
-        HeadIdx = nextIdx;
-        Seqno++; // Overflow is fine
-        FilledCount--;
-        if (FilledCount == 1 && Data.size() > 32) {
-            InitData(state, true);
-        }
-        return true;
-    }
-
-    size_t CountFilled() const {
-        size_t ret = 0;
-        for (const TItem& item : Data) {
-            ret += item.Filled;
-        }
-        return ret;
     }
 };
+
+using TLight = TBasicLight<ui16>;
+using TLight64 = TBasicLight<ui64>;
 
 } // namespace NKikimr

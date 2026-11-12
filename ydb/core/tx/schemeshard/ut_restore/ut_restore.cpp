@@ -3983,7 +3983,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 }
 
 Y_UNIT_TEST_SUITE(TImportTests) {
-    void TestTablePermissions(bool enableDataShardDirectPartImport, bool interruptInheritance) {
+    void TestTablePermissions(bool enableDataShardDirectPartImport, TMaybe<bool> interruptInheritance) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -4012,7 +4012,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
             %s
-        )", interruptInheritance ? "interrupt_inheritance: true" : "");
+        )", interruptInheritance
+            ? (*interruptInheritance ? "interrupt_inheritance: true" : "interrupt_inheritance: false")
+            : "");
 
         const auto data = GenerateTestData(R"(
             columns {
@@ -4054,7 +4056,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
         const NACLib::TACL acl(describeResult.GetPathDescription().GetSelf().GetACL());
-        UNIT_ASSERT_VALUES_EQUAL(acl.GetInterruptInheritance(), interruptInheritance);
+        UNIT_ASSERT_VALUES_EQUAL(acl.GetInterruptInheritance(), interruptInheritance.GetOrElse(false));
     }
 
     ui64 Run(TTestBasicRuntime& runtime, TTestEnv& env,
@@ -6906,6 +6908,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST_FLAG(TablePermissions, EnableDataShardDirectPartImport) {
+        TestTablePermissions(EnableDataShardDirectPartImport, /* interruptInheritance */ Nothing());
+    }
+
+    Y_UNIT_TEST_FLAG(TablePermissionsWithExplicitInheritance, EnableDataShardDirectPartImport) {
         TestTablePermissions(EnableDataShardDirectPartImport, /* interruptInheritance */ false);
     }
 

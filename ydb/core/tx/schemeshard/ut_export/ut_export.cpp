@@ -2234,7 +2234,7 @@ namespace {
             FinalizeColumnTableSlowS3Export(ctx);
         }
 
-        void TestTablePermissions(bool interruptInheritance) {
+        void TestTablePermissions(TMaybe<bool> interruptInheritance) {
             EnvOptions().EnablePermissionsExport(true);
             Env(); // Init test env
             ui64 txId = 100;
@@ -2250,7 +2250,7 @@ namespace {
             NACLib::TDiffACL diffACL;
             diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
             if (interruptInheritance) {
-                diffACL.SetInterruptInheritance(true);
+                diffACL.SetInterruptInheritance(*interruptInheritance);
             }
             TestModifyACL(Runtime(), ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
             Env().TestWaitNotification(Runtime(), txId);
@@ -2280,8 +2280,8 @@ namespace {
                     permission_names: "ydb.generic.use"
                   }
                 }
-                %s
-            )", interruptInheritance ? "interrupt_inheritance: true" : "")));
+                interrupt_inheritance: %s
+            )", interruptInheritance.GetOrElse(false) ? "true" : "false")));
         }
 
         void TestSystemViewPermissions(TMaybe<bool> interruptInheritance) {
@@ -5005,6 +5005,10 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(TablePermissions) {
+        TestTablePermissions(/* interruptInheritance */ Nothing());
+    }
+
+    Y_UNIT_TEST(TablePermissionsWithExplicitInheritance) {
         TestTablePermissions(/* interruptInheritance */ false);
     }
 

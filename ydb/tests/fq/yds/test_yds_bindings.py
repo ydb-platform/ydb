@@ -1,79 +1,50 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
 import pytest
+import ydb as ydb_sdk
+import ydb.public.api.protos.ydb_value_pb2 as ydb_value
 
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-
-import ydb.public.api.protos.ydb_value_pb2 as ydb
-import ydb.public.api.protos.draft.fq_pb2 as fq
+from ydb.tests.fq.streaming_common.common import StreamingTestBase
 
 
-class TestBindings(TestYdsBase):
-    @yq_v1
-    @pytest.mark.skip(reason="Is not implemented in YDS yet")
-    def test_yds_insert(self, client):
-        self.init_topics("yds_insert")
+class TestBindings(StreamingTestBase):
+    def test_yds_insert(self, ydb_topics):
+        io = ydb_topics('yds_insert')
+        client = io.kikimr.ydb_client
+        consumer = io.name + '_input_consumer'
+        io.kikimr.external_ydb_client.query(f'ALTER TOPIC `{io.input_topic}` ADD CONSUMER `{consumer}`;')
 
-        connection_id = client.create_yds_connection(
-            "ydsconnection", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT")
-        ).result.connection_id
+        # Topic sinks accept one serialized payload field. Keep the typed fields
+        # in JSON and declare their schema explicitly when reading them back.
+        client.query(f"""
+            INSERT INTO {io.input}
+            SELECT Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) AS Data
+            FROM AS_TABLE([<|foo:123, bar:"xxx"u|>, <|foo:456, bar:"yyy"u|>]);
+        """)
+        result_sets = client.query(f"""
+            PRAGMA pq.Consumer = '{consumer}';
+            SELECT foo, bar FROM {io.input} WITH (
+                STREAMING = 'FALSE',
+                FORMAT = json_each_row,
+                SCHEMA = (foo Int32 NOT NULL, bar Utf8 NOT NULL)
+            ) LIMIT 2;
+        """)
 
-        foo_type = ydb.Column(name="foo", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
-        bar_type = ydb.Column(name="bar", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))
-        client.create_yds_binding(
-            name="ydsbinding",
-            stream=self.input_topic,
-            format="json_each_row",
-            connection_id=connection_id,
-            columns=[foo_type, bar_type],
-        )
+        assert len(result_sets) == 1
+        result = result_sets[0]
+        assert len(result.columns) == 2
+        assert result.columns[0].name == 'foo'
+        assert result.columns[0].type.type_id == ydb_value.Type.INT32
+        assert result.columns[1].name == 'bar'
+        assert result.columns[1].type.type_id == ydb_value.Type.UTF8
+        assert len(result.rows) == 2
+        assert [(row['foo'], row['bar']) for row in result.rows] == [(123, 'xxx'), (456, 'yyy')]
 
-        sql = R'''
-            insert into bindings.`ydsbinding`
-            select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
-            '''
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-
-        sql = R'''
-            select foo, bar from bindings.`ydsbinding` limit 2;
-            '''
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
-        assert len(result_set.columns) == 2
-        assert result_set.columns[0].name == "foo"
-        assert result_set.columns[0].type.type_id == ydb.Type.INT32
-        assert result_set.columns[1].name == "bar"
-        assert result_set.columns[1].type.type_id == ydb.Type.UTF8
-        assert len(result_set.rows) == 2
-        assert result_set.rows[0].items[0].int32_value == 123
-        assert result_set.rows[0].items[1].text_value == 'xxx'
-        assert result_set.rows[1].items[0].int32_value == 456
-        assert result_set.rows[1].items[1].text_value == 'yyy'
-
-    @yq_v1
-    def test_raw_empty_schema_binding(self, kikimr, client, yq_version):
-        self.init_topics(f"pq_test_raw_empty_schema_binding_{yq_version}")
-        connection_response = client.create_yds_connection(
-            "myyds2", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT")
-        )
-        assert not connection_response.issues, str(connection_response.issues)
-        binding_response = client.create_yds_binding(
-            name="my_binding",
-            stream=self.input_topic,
-            format="raw",
-            connection_id=connection_response.result.connection_id,
-            columns=[],
-            check_issues=False,
-        )
-        assert "Only one column in schema supported in raw format" in str(binding_response.issues), str(
-            binding_response.issues
-        )
+    def test_raw_empty_schema_binding(self, ydb_topics):
+        io = ydb_topics('pq_test_raw_empty_schema_binding')
+        with pytest.raises(ydb_sdk.issues.Error) as error:
+            io.kikimr.ydb_client.query(f"""
+                SELECT * FROM {io.input} WITH SCHEMA() LIMIT 1;
+            """)
+        assert 'Only one column in schema supported in raw format' in str(error.value), str(error.value)

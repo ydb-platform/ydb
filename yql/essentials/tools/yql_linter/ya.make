@@ -5,7 +5,6 @@ PROGRAM()
 PEERDIR(
     library/cpp/getopt
     yql/essentials/public/fastcheck
-    yql/essentials/public/udf_meta
     library/cpp/colorizer
 )
 

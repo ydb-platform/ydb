@@ -3551,6 +3551,8 @@ void TExprContext::UnFreeze() {
 void TExprContext::Reset() {
     YQL_ENSURE(!Frozen);
 
+    LazyBindings.clear();
+    LazyBindingClones.clear();
     IssueManager.Reset();
     Step.Reset();
     RepeatTransformCounter = 0;

@@ -14,7 +14,8 @@ class TRBOContext;
 class TPhysicalQueryBuilder : public NNonCopyable::TNonCopyable {
 public:
     TPhysicalQueryBuilder(const TVector<TIntrusivePtr<TOpRoot>>& roots, TVector<TStageGraph>&& graph, TVector<THashMap<ui32, NYql::TExprNode::TPtr>>&& stages, TVector<THashMap<ui32, TVector<NYql::TExprNode::TPtr>>>&& stageArgs,
-                          TVector<THashMap<ui32, NYql::TPositionHandle>>&& stagePos, TVector<TPhysicalNames>&& names, TRBOContext& rboCtx);
+                          TVector<THashMap<ui32, NYql::TExprNode::TPtr>>&& stageSources, TVector<THashMap<ui32, NYql::TPositionHandle>>&& stagePos,
+                          TVector<TPhysicalNames>&& names, TRBOContext& rboCtx);
 
     NYql::TExprNode::TPtr BuildPhysicalQuery();
     TPhysicalQueryBuilder() = delete;
@@ -48,13 +49,17 @@ private:
     bool NeedFinalNarrowing(int rootIdx);
     NYql::TExprNode::TPtr BuildFinalNarrowStage(int rootIdx, const NYql::TExprNode::TPtr& stage) const;
     TVector<NYql::NNodes::TKqpParamBinding> CollectParamBindings(int rootIdx, const NYql::TExprNode::TPtr& rootStage);
-    NYql::TExprNode::TPtr BuildMaterialize(int rootIdx, NYql::TExprNode::TPtr ranges);
+    // Computes `node` in a separate transaction and returns the parameter holding its result:
+    // read ranges are bound as a tuple, a scalar as a plain value.
+    NYql::TExprNode::TPtr BuildMaterialize(int rootIdx, NYql::TExprNode::TPtr node, bool asTuple = true);
     bool IsSingleTaskConnection(const NYql::NNodes::TExprBase& input) const;
 
     const TVector<TIntrusivePtr<TOpRoot>>& Roots;
     TVector<TStageGraph> Graphs;
     TVector<THashMap<ui32, NYql::TExprNode::TPtr>> Stages;
     TVector<THashMap<ui32, TVector<NYql::TExprNode::TPtr>>> StageArgs;
+    // By row read stage, its source input, which the first stage argument reads.
+    TVector<THashMap<ui32, NYql::TExprNode::TPtr>> StageSources;
     TVector<THashMap<ui32, NYql::TPositionHandle>> StagePos;
     TVector<TPhysicalNames> Names;
     ui32 UniqueParamsId{0};

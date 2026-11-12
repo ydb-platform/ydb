@@ -1,6 +1,7 @@
 #include "schemeshard_export_uploaders.h"
 
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -67,7 +68,7 @@ private:
 
 template <typename TSettings>
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const TSettings& settings, const TString& databaseRoot, const TString& metadata,
+    const TSettings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
     Y_UNUSED(sourcePathId, settings, databaseRoot, metadata, enablePermissions, enableChecksums, iv);
@@ -127,13 +128,13 @@ NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui6
 
 template IActor* CreateSchemeUploader<Ydb::Export::ExportToS3Settings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
 template IActor* CreateSchemeUploader<Ydb::Export::ExportToFsSettings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToFsSettings& settings, const TString& databaseRoot, const TString& metadata,
+    const Ydb::Export::ExportToFsSettings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 

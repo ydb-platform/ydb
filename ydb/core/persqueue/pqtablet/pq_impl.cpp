@@ -1720,6 +1720,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "empty SourceId";
         } else if (cmd.GetPartitionKey().size() > 256) {
             errorStr = "too long partition key";
+        } else if (cmd.GetExplicitHash().size() > Max<ui8>()) {
+            errorStr = "too long explicit hash";
         } else if (cmd.GetSeqNo() < 0) {
             errorStr = "SeqNo must be >= 0";
         } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
@@ -2007,6 +2009,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::T
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
     THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
             req.GetCmdGetOwnership().GetForce(), req.GetCmdGetOwnership().GetRegisterIfNotExists());
+    event->WriteSessionQuotaWaitTime = TDuration::MilliSeconds(Max<i64>(0, req.GetCmdGetOwnership().GetQuotaWaitTimeMs()));
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -2668,7 +2671,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     if (IsTopicMutateDisabled(ctx)
         && (req.CmdWriteSize() > 0 || req.HasCmdSetClientOffset()))
     {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::OVERLOAD,
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
                    "Topic mutations are temporarily disabled");
         return;
     }

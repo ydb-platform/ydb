@@ -437,6 +437,7 @@ struct TYtConfiguration : public NCommon::TDispatcherAndSettings<TYtSettings> {
         for (auto& cluster: config.GetClusterMapping()) {
             this->DispatchWithActivationPolicy(cluster.GetName(), cluster.GetSettings(), activationPolicy);
         }
+        this->ApplyProjectSettings(typeCtx.ProjectSettings);
         this->FreezeDefaults();
     }
 

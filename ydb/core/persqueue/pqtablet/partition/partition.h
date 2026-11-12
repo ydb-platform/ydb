@@ -163,6 +163,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
     friend TInitFieldsStep;
+    friend TNotifyWriteSessionsQuoterStep;
 
     friend TPartitionSourceManager;
 
@@ -171,6 +172,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
 
 public:
     const TString& TopicName() const;
+    void PassAway() override;
 
     ui64 GetUsedStorage(const TInstant& ctx);
 
@@ -206,6 +208,7 @@ private:
 
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
     void SendInfoToAutopartitioningManager(const TWriteMsg& p);
+    static ECumulativeCounters UserActCounter(TEvPQ::TEvSetClientInfo::ESetClientInfoType type, bool ok);
 
     TActorId ReplyTo(const ui64 destination, const TActorId& replyTo) const;
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo = {});
@@ -232,6 +235,7 @@ private:
                                NPersQueue::NErrorCode::EErrorCode errorCode);
     void CreateMirrorerActor();
     void DestroyMirrorer();
+    void NotifyMirrorerPersistDone();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
@@ -810,6 +814,7 @@ private:
 
 private:
     ui32 TabletGeneration;
+    bool WriteSessionsQuoterNotified = false;
     const TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;
@@ -1118,6 +1123,7 @@ private:
     TInstant WriteTimestampEstimate;
     bool ManageWriteTimestampEstimate = true;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteInitThrottledMs;
     //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
     THolder<TMultiBucketCounter> SupportivePartitionTimeLag;
@@ -1290,6 +1296,7 @@ private:
 
     ui64 GetStartOffset() const;
     ui64 GetEndOffset() const;
+    ui64 GetMirroredOffset() const;
     // EndOffset is the last persisted offset. Accepted writes can sit in NewHead
     // before persist; ResetOffset must be able to commit up to that exclusive end.
     ui64 GetAcceptedEndOffset() const;
@@ -1444,6 +1451,10 @@ inline ui64 TPartition::GetStartOffset() const {
 
 inline ui64 TPartition::GetEndOffset() const {
     return BlobEncoder.EndOffset;
+}
+
+inline ui64 TPartition::GetMirroredOffset() const {
+    return BlobEncoder.MirroredOffset;
 }
 
 bool IsImportant(const NKikimrPQ::TPQTabletConfig::TConsumer& consumer);

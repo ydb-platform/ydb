@@ -22,9 +22,8 @@ def windows_normalize_path(arg):
 
 def is_policy_global(arg):
     path = '/' + windows_normalize_path(arg)
-    if '/' + POLICY_ROOT + '/' not in path:
-        return False
-    return os.path.basename(path).endswith(GLOBAL_SUFFIXES)
+    basename = os.path.basename(path)
+    return '/' + POLICY_ROOT + '/' in path and basename.endswith(GLOBAL_SUFFIXES)
 
 
 def remove_policy_globals(args):

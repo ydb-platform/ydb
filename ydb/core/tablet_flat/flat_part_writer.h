@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flat_abi_evol.h"
+#include "flat_page_codec.h"
 #include "flat_page_btree_index_writer.h"
 #include "flat_page_conf.h"
 #include "flat_page_gstat.h"
@@ -24,7 +25,6 @@ namespace NTable {
 
     class TPartWriter final : public TAtomicRefCount<TPartWriter>, protected ISaver {
         using ECodec = NPage::ECodec;
-        using ICodec = NBlockCodecs::ICodec;
 
         enum : size_t {
             GarbageStatsMaxSize = 100,
@@ -729,6 +729,9 @@ namespace NTable {
                 if (Slots.GetLayout().SeparateDescriptorCollection)
                     head = Max(head, ui32(31) /* Separate descriptor page collection */);
 
+                if (Current.ZstdCompressed)
+                    head = Max(head, ui32(32) /* ZSTD compressed data pages */);
+
                 abi->SetTail(head);
                 abi->SetHead(ui32(NTable::ECompatibility::Edge));
             }
@@ -911,10 +914,12 @@ namespace NTable {
 
                 Current.Bytes += raw.size(); /* before encoding */
 
-                if (g.Codec == NPage::ECodec::Plain) {
-                    /* Encoding was not enabled, keep as is */
-                } else if (keep = Encode(raw, g.Codec, g.ForceCompression)) {
-                    std::swap(raw, keep);
+                if (g.Codec != ECodec::Plain) {
+                    keep = Encode(raw, g.Codec, g.CodecLevel, g.ForceCompression);
+                    if (keep) {
+                        std::swap(raw, keep);
+                        Current.ZstdCompressed |= g.Codec == ECodec::ZSTD;
+                    }
                 }
 
                 Current.Coded += raw.size(); /* after encoding */
@@ -1058,23 +1063,25 @@ namespace NTable {
             return { ELargeObj::Extern, ref };
         }
 
-        TSharedData Encode(TArrayRef<const char> page, ECodec codec, bool force)
+        TSharedData Encode(TArrayRef<const char> page, ECodec codec, ui32 codecLevel, bool force)
         {
-            Y_ENSURE(codec == ECodec::LZ4, "Only LZ4 encoding allowed");
-
             auto got = NPage::TLabelWrapper().Read(page, EPage::DataPage);
 
             Y_ENSURE(got == ECodec::Plain, "Page is already encoded");
             Y_ENSURE(got.Page.data() - page.data() == 16, "Page compression would change page header size");
 
-            if (!CodecImpl) {
-                CodecImpl = NBlockCodecs::Codec("lz4fast");
+            const NBlockCodecs::ICodec* codecImpl;
+            if (codec == ECodec::ZSTD) {
+                ZstdCodec.SetCompressionLevel(codecLevel);
+                codecImpl = &ZstdCodec;
+            } else {
+                codecImpl = NPage::GetBlockCodec(codec);
             }
-            auto size = CodecImpl->MaxCompressedLength(got.Page);
+            auto size = codecImpl->MaxCompressedLength(got.Page);
 
             TSharedData out = TSharedData::Uninitialized(size + 16 /* label */);
 
-            size = CodecImpl->Compress(got.Page, out.mutable_begin() + 16);
+            size = codecImpl->Compress(got.Page, out.mutable_begin() + 16);
 
             auto trimmed = out.TrimBack(size + 16 /* label */);
             if (trimmed >= out.size()) {
@@ -1091,7 +1098,7 @@ namespace NTable {
 
                 auto ext = ReadUnaligned<NPage::TLabelExt>(page.begin() + 8);
 
-                ext.Codec = ECodec::LZ4;
+                ext.Codec = codec;
 
                 WriteUnaligned<NPage::TLabel>(out.mutable_begin(), NPage::TLabel::Encode(label.Type, label.Format, out.size()));
                 WriteUnaligned<NPage::TLabelExt>(out.mutable_begin() + 8, ext);
@@ -1213,7 +1220,7 @@ namespace NTable {
         const TPartSlots Slots;
         const TIntrusiveConstPtr<TPartScheme> Scheme;
 
-        const ICodec *CodecImpl = nullptr;
+        NPage::TZstdPageCodec ZstdCodec;
         IPageWriter& Pager;
         NPage::TFrameWriter FrameL; /* Large blobs inverted index   */
         NPage::TFrameWriter FrameS; /* Packed blobs inverted index */
@@ -1236,6 +1243,7 @@ namespace NTable {
         struct TGroupState {
             const bool ForceCompression;
             const ECodec Codec;
+            const ui32 CodecLevel;
             const ui32 DataSlot;
             const ui32 IndexSlot;
 
@@ -1261,6 +1269,7 @@ namespace NTable {
                         NPage::TGroupId groupId, const TPartSlots& slots)
                 : ForceCompression(conf.Groups[groupId.Index].ForceCompression)
                 , Codec(conf.Groups[groupId.Index].Codec)
+                , CodecLevel(conf.Groups[groupId.Index].CodecLevel)
                 , DataSlot(slots.DataSlot(groupId))
                 , IndexSlot(slots.IndexSlot(groupId))
                 , Data(scheme, conf, tags, groupId)
@@ -1334,6 +1343,7 @@ namespace NTable {
 
             bool Versioned = false;
             bool RowLocks = false;
+            bool ZstdCompressed = false;
         } Current;
 
         TIntrusivePtr<TSlices> Slices;

@@ -12,6 +12,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/public/pqdata_transaction_compat.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
 #include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
@@ -385,6 +386,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , NumChannels(numChannels)
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
+    , WriteInitThrottledMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
     , LastEmittedSchemaChange(TRowVersion::Min())
     , SamplingControl(samplingControl)
@@ -731,7 +733,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     AutopartitioningManager->CleanUp();
 
-    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob()) {
+    // HandlePendingRequests does not run retention while the database is out of space.
+    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob() || WaitingForSubDomainQuota()) {
         ProcessTxsAndUserActs(ctx);
     }
 }
@@ -990,6 +993,14 @@ void TPartition::DestroyActor(const TActorContext& ctx)
     Die(ctx);
 }
 
+void TPartition::PassAway() {
+    if (WriteSessionsQuoterNotified) {
+        Send(MakeWriteSessionsQuoterId(), new TEvWriteSessionsQuoter::TEvRemove(
+            TopicName(), Partition.OriginalPartitionId, TabletGeneration));
+    }
+    TBaseTabletActor<TPartition>::PassAway();
+}
+
 void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
 {
     DestroyActor(ctx);
@@ -1000,6 +1011,13 @@ bool CheckDiskStatus(const TStorageStatusFlags status) {
 }
 
 void TPartition::InitComplete(const TActorContext& ctx) {
+    if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
+        && BlobEncoder.IsEmpty() && CompactionBlobEncoder.IsEmpty()) {
+        // Restore the position of an empty mirror before starting consumers and the mirrorer.
+        BlobEncoder.StartOffset = BlobEncoder.EndOffset = BlobEncoder.MirroredOffset;
+        BlobEncoder.Head.Offset = BlobEncoder.NewHead.Offset = BlobEncoder.MirroredOffset;
+    }
+
     if (BlobEncoder.StartOffset == BlobEncoder.EndOffset && BlobEncoder.EndOffset == 0) {
         for (auto&& [user, info] : UsersInfoStorage->ViewAll()) {
             if (info.Offset > 0 && BlobEncoder.StartOffset < (ui64)info.Offset) {
@@ -2601,6 +2619,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES, TotalPartitionWriteSpeed);
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES, TotalPartitionWriteSpeedInMessages);
+    const ui64 initThrottledMs = WriteInitThrottledMs.Update(now);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_THROTTLED_MS, initThrottledMs);
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {
@@ -3271,6 +3291,23 @@ void TPartition::RunPersist() {
         && PersistRequest->Record.CmdRenameSize() == 0;
 
     if (haveChanges || !requestEmpty) {
+        // EndOffset still describes the previous KV state: accepted messages may
+        // already be buffered, including an incomplete multipart message at offset 0.
+        const auto hasNoBufferedMessages = [](const TPartitionBlobEncoder& encoder) {
+            return encoder.IsEmpty()
+                && encoder.Head.GetBatches().empty()
+                && encoder.NewHead.GetBatches().empty()
+                && !encoder.PartitionedBlob.IsInited();
+        };
+        if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
+            && PendingRequests.empty() && QuotaWaitingRequests.empty()
+            && UserActionAndTransactionEvents.empty() && UserActionAndTxPendingWrite.empty()
+            && WriteInflightSize == 0 && WriteInfosApplied.empty()
+            && hasNoBufferedMessages(BlobEncoder) && hasNoBufferedMessages(CompactionBlobEncoder)) {
+            BlobEncoder.StartOffset = BlobEncoder.EndOffset = GetMirroredOffset();
+            BlobEncoder.Head.Offset = BlobEncoder.NewHead.Offset = GetMirroredOffset();
+        }
+
         AddMessageDeduplicatorKeys(PersistRequest.Get());
         AddMetaKey(PersistRequest.Get());
 
@@ -4125,7 +4162,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
     for (auto& user : AffectedUsers) {
         if (auto* actual = GetPendingUserIfExists(user)) {
             TUserInfo& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-            bool offsetHasChanged = (userInfo.Offset != actual->Offset);
+            const auto previousOffset = userInfo.Offset;
             if (userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
                 && !actual->Session.empty() && actual->ReadSessionActor
                 && (userInfo.Session != actual->Session || userInfo.Generation != actual->Generation
@@ -4158,6 +4195,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 userInfo.Offset = GetStartOffset();
             }
 
+            const bool offsetHasChanged = userInfo.Offset != previousOffset;
             if (offsetHasChanged && !userInfo.UpdateTimestampFromCache()) {
                 userInfo.ActualTimestamps = false;
                 ReadTimestampForOffset(user, userInfo, ctx);
@@ -4556,6 +4594,17 @@ TPartition::EProcessResult TPartition::PreProcessUserAct(TEvPQ::TEvSetClientInfo
     return EProcessResult::Continue;
 }
 
+ECumulativeCounters TPartition::UserActCounter(TEvPQ::TEvSetClientInfo::ESetClientInfoType type, bool ok) {
+    switch (type) {
+    case TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION:
+        return ok ? COUNTER_PQ_CREATE_SESSION_OK : COUNTER_PQ_CREATE_SESSION_ERROR;
+    case TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION:
+        return ok ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_DELETE_SESSION_ERROR;
+    default:
+        return ok ? COUNTER_PQ_SET_CLIENT_OFFSET_OK : COUNTER_PQ_SET_CLIENT_OFFSET_ERROR;
+    }
+}
+
 void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
     const TString& user = act.ClientId;
@@ -4612,7 +4661,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
             && (act.Type != TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION || !userInfo.Session.empty()) //but allow DropSession request when session is already dropped - for idempotence
             || (act.ClientId != CLIENTID_WITHOUT_CONSUMER && act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && !userInfo.Session.empty()
                  && (act.Generation < userInfo.Generation || act.Generation == userInfo.Generation && act.Step <= userInfo.Step))) { //old generation request
-        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+        TabletCounters.Cumulative()[UserActCounter(act.Type, false)].Increment(1);
 
         ScheduleReplyError(act,
                            NPersQueue::NErrorCode::WRONG_COOKIE,
@@ -4799,8 +4848,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             SendReadingFinished(user);
         }
 
-        auto counter = createSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
-        TabletCounters.Cumulative()[counter].Increment(1);
+        TabletCounters.Cumulative()[UserActCounter(act.Type, true)].Increment(1);
         auto *userInfoFull = UsersInfoStorage->GetIfExists(userInfo.User);
         if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET &&
                 userInfoFull && userInfo.Offset > userInfoFull->GetReadOffset() &&
@@ -5248,6 +5296,12 @@ void TPartition::DestroyMirrorer() {
     if (Mirrorer) {
         Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
         Mirrorer.Reset();
+    }
+}
+
+void TPartition::NotifyMirrorerPersistDone() {
+    if (Mirrorer) {
+        Send(Mirrorer->Actor, new TEvPQ::TEvPersistDone(GetEndOffset()));
     }
 }
 

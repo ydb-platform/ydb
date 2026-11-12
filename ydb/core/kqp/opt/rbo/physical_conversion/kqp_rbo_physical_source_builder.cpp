@@ -41,9 +41,10 @@ TExprNode::TPtr TPhysicalSourceBuilder::AddOlapAggregate(TExprNode::TPtr process
 
         // Column shards return AVG as its sum and count. Cast the input to Double
         // before SUM, so integer sums cannot overflow and Float sums are Double.
+        // Without scalar apply the sum keeps the stored type, see BuildOlapAverageState.
         TString sumColumn = column;
         const auto& columnType = *Read.GetIUType(*aggregation.Column, Ctx);
-        if (IsOlapAverageCast(columnType)) {
+        if (OlapAggregate->CastAverageInput && IsOlapAverageCast(columnType)) {
             const auto [it, inserted] = averageInputs.emplace(column, GetOlapAggregateField(aggregation.Output, "avg_input"));
             if (inserted) {
                 projections.push_back(BuildOlapDoubleCast(column, columnType, it->second));
@@ -153,10 +154,21 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildOlapAggregateRow(const TProgramFiel
 
 TExprNode::TPtr TPhysicalSourceBuilder::BuildOlapAverageState(const TOlapAggregation& aggregation, const TProgramFields& fields) const {
     // The AVG state of TPhysicalAggregationBuilder is (sum as Double, count).
-    // AddOlapAggregate already sums Double values.
+    // AddOlapAggregate sums Double values, unless the read program cannot cast the input:
+    // then, as in the old optimizer, the sum of the stored type is converted here.
+    const auto& columnType = *Read.GetIUType(*aggregation.Column, Ctx);
     auto sum = fields.at(GetOlapAggregateField(aggregation.Output, "sum"));
+    if (!OlapAggregate->CastAverageInput && IsOlapAverageCast(columnType)) {
+        // clang-format off
+        sum = Ctx.Builder(Pos)
+            .Callable("Convert")
+                .Add(0, std::move(sum))
+                .Atom(1, "Double")
+            .Seal().Build();
+        // clang-format on
+    }
     auto count = fields.at(GetOlapAggregateField(aggregation.Output, "count"));
-    if (!Read.GetIUType(*aggregation.Column, Ctx)->IsOptionalOrNull()) {
+    if (!columnType.IsOptionalOrNull()) {
         return Ctx.NewList(Pos, {std::move(sum), std::move(count)});
     }
 
@@ -261,20 +273,10 @@ NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
             .Done().Ptr();
             // clang-format on
 
-            const auto programArg = Build<TCoArgument>(Ctx, Pos).Name("program_arg").Done().Ptr();
-            const auto renameMap = NPhysicalConvertionUtils::BuildRenameMap(programArg, renames, Ctx);
-            // clang-format off
-            source = Build<TDqPhyStage>(Ctx, Pos)
-                .Inputs()
-                    .Add({source})
-                .Build()
-                .Program()
-                    .Args({programArg})
-                    .Body(renameMap)
-                .Build()
-                .Settings(NYql::NDq::TDqStageSettings::New(StageGUID).BuildNode(Ctx, Pos))
-            .Done().Ptr();
-            // clang-format on
+            // The stage program reads the source through an argument.
+            auto programArg = Build<TCoArgument>(Ctx, Pos).Name("program_arg").Done().Ptr();
+            StageSource = TStageSource{std::move(source), programArg};
+            source = NPhysicalConvertionUtils::BuildRenameMap(std::move(programArg), renames, Ctx);
             break;
         }
         case NYql::EStorageType::ColumnStorage: {
@@ -316,6 +318,7 @@ NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
                 // clang-format on
             }
 
+            settings.RequireSortedRead = Read.RequireSortedRead;
             if (Read.SortDir != ESortDir::None) {
                 const auto sortDirection = Read.SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC;
                 settings.SetSorting(sortDirection);

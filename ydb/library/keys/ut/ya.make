@@ -1,5 +1,4 @@
 UNITTEST_FOR(ydb/library/keys)
-FORK_SUBTESTS()
 
 SIZE(SMALL)
 

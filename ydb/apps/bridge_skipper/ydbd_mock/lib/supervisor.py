@@ -164,7 +164,6 @@ class Cluster:
         os.makedirs(self.path("logs"), exist_ok=True)
         os.makedirs(self.path("pids"), exist_ok=True)
         mode = "w" if truncate_logs else "a"
-        log = open(self.path("logs", "%s.log" % pile), mode)
         argv = list(config["argv_prefix"]) + [
             "run",
             "--topology", self.path("topology.yaml"),
@@ -175,11 +174,20 @@ class Cluster:
         ]
         env = dict(os.environ)
         env["PYTHONDONTWRITEBYTECODE"] = "1"
-        proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                start_new_session=True, env=env)
-        log.close()
-        with open(self.path("pids", "%s.pid" % pile), "w") as f:
-            f.write("%d\n" % proc.pid)
+        proc = None
+        try:
+            with open(self.path("logs", "%s.log" % pile), mode) as log:
+                proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                        start_new_session=True, env=env)
+            with open(self.path("pids", "%s.pid" % pile), "w") as f:
+                f.write("%d\n" % proc.pid)
+        except BaseException:
+            if proc is not None:
+                if proc.poll() is None:
+                    proc.kill()
+                proc.wait()
+                _remove_pid_file(self, pile)
+            raise
         return proc
 
     def wait_responsive(self, piles: typing.Sequence[str], procs: typing.Dict[str, subprocess.Popen],
@@ -296,6 +304,7 @@ def _print(obj) -> None:
 
 
 def cmd_up(cluster: Cluster, args) -> int:
+    """Start a cluster, rolling back only this invocation's children on any startup failure."""
     run = cluster.run
     if args.topology:
         topology = Topology.load(args.topology)
@@ -344,21 +353,21 @@ def cmd_up(cluster: Cluster, args) -> int:
         for name in topology.pile_names:
             procs[name] = cluster.spawn(name, truncate_logs=True)
         cluster.wait_responsive(topology.pile_names, procs)
-    except SupervisorError:
+        _print({
+            "ready": True,
+            "cluster": topology.cluster_name,
+            "instances": [{
+                "pile": p.name, "pid": procs[p.name].pid, "control": p.control_endpoint,
+                "nodes": [{"id": n.node_id, "label": n.label, "endpoint": n.endpoint} for n in p.nodes],
+            } for p in topology.piles],
+        })
+    except BaseException:
         for name, proc in procs.items():
             if proc.poll() is None:
                 proc.kill()
             proc.wait()
             _remove_pid_file(cluster, name)
         raise
-    _print({
-        "ready": True,
-        "cluster": topology.cluster_name,
-        "instances": [{
-            "pile": p.name, "pid": procs[p.name].pid, "control": p.control_endpoint,
-            "nodes": [{"id": n.node_id, "label": n.label, "endpoint": n.endpoint} for n in p.nodes],
-        } for p in topology.piles],
-    })
     return 0
 
 
@@ -943,6 +952,10 @@ def build_http_app(cluster: Cluster, supervisor_id: typing.Optional[str] = None)
 
     app = web.Application(middlewares=[errors], client_max_size=1024 * 1024)
 
+    async def index(request):
+        from ydb.apps.bridge_skipper.ydbd_mock.lib.control_ui import PAGE
+        return web.Response(text=PAGE, content_type="text/html")
+
     async def manifest(request):
         return web.json_response(cluster.manifest(identity))
 
@@ -979,6 +992,7 @@ def build_http_app(cluster: Cluster, supervisor_id: typing.Optional[str] = None)
                 raise asyncio.CancelledError
         return web.json_response(out, status=200 if out.get("ok", True) else 207)
 
+    app.router.add_get("/", index)
     app.router.add_get("/api/v1/manifest", manifest)
     app.router.add_get("/api/v1/state", state)
     app.router.add_get("/api/v1/events", events)
@@ -997,6 +1011,30 @@ def cmd_serve(cluster: Cluster, args) -> int:
             raise SupervisorError("supervisor control has no authentication; use a loopback host or --allow-remote")
     cluster.topology   # validate before starting the HTTP server
     web.run_app(build_http_app(cluster), host=args.host, port=args.port, access_log=None)
+    return 0
+
+
+def cmd_skipper(cluster: Cluster, args) -> int:
+    """Launch the C++ controller with direct node addresses and a state directory per mock session."""
+    topo = cluster.topology
+    if topo.tls:
+        raise SupervisorError("skipper launcher supports plaintext mock topology; use a custom skipper config for TLS")
+    manifest = cluster.manifest()
+    config = {
+        "cluster_id": manifest["cluster_id"],
+        "endpoints": {pile.name: ["grpc://" + node.endpoint for node in pile.nodes] for pile in topo.piles},
+        "http": {"listen": args.listen},
+    }
+    config_dir = cluster.path("bridge_skipper", manifest["cluster_id"])
+    os.makedirs(config_dir, exist_ok=True)
+    config_path = os.path.join(config_dir, "config.json")
+    with open(config_path, "w") as output:
+        json.dump(config, output, indent=2)
+    state_dir = args.state_dir or config_dir
+    try:
+        os.execv(args.binary, [args.binary, "--config", config_path, "--state-dir", state_dir])
+    except OSError as error:
+        raise SupervisorError("cannot launch bridge_skipper: %s" % error) from error
     return 0
 
 
@@ -1086,11 +1124,32 @@ def build_parser() -> argparse.ArgumentParser:
                    ).set_defaults(fn=cmd_reset)
     sub.add_parser("endpoints", help="print the label -> endpoint map").set_defaults(fn=cmd_endpoints)
     sub.add_parser("manifest", help="print versioned logical identities and dial endpoints").set_defaults(fn=cmd_manifest)
+    skipper = sub.add_parser("skipper", help="launch the C++ bridge_skipper against this mock cluster")
+    skipper.add_argument("--binary", required=True, help="path to the built bridge_skipper executable")
+    skipper.add_argument("--listen", default="127.0.0.1:8080")
+    skipper.add_argument("--state-dir", default=None, help="override the state directory per mock session")
+    skipper.set_defaults(fn=cmd_skipper)
     serve = sub.add_parser("serve", help="serve the cluster Lab HTTP API in the foreground")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=21999)
     serve.add_argument("--allow-remote", action="store_true")
     serve.set_defaults(fn=cmd_serve)
+    lab = sub.add_parser("lab", help="run mocks, bridge_skipper and the mock-control UI; Ctrl-C stops all")
+    lab.add_argument("--binary", required=True, help="path to the built bridge_skipper executable")
+    lab.add_argument("--skipper-port", type=int, default=8080)
+    lab.add_argument("--control-port", type=int, default=21999)
+    lab.add_argument("--topology", default=None)
+    lab.add_argument("--piles", default="pile1,pile2")
+    lab.add_argument("--nodes-per-pile", type=int, default=3)
+    lab.add_argument("--control-base-port", type=int, default=22000)
+    lab.add_argument("--grpc-base-port", type=int, default=22100)
+    lab.add_argument("--fresh", action="store_true", help="start with fresh mock replicas")
+
+    def run_lab(cluster, args):
+        from ydb.apps.bridge_skipper.ydbd_mock.lib import lab
+        return lab.main(cluster, args)
+
+    lab.set_defaults(fn=run_lab)
     return parser
 
 

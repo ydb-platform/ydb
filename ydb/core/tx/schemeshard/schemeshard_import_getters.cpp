@@ -8,6 +8,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/table_index.h>
@@ -22,6 +23,7 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <util/generic/hash_set.h>
 #include <util/stream/file.h>
 #include <util/system/fs.h>
 #include <util/folder/path.h>
@@ -773,12 +775,9 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         item.MaterializedIndexes.emplace_back(indexImplTablePrefix, std::move(request));
 
         auto nextStep = [this]() {
-            if (++IndexCheckedMaterializedIndexImplTable >= IndexImplTablePrefixes.size()) {
-                StartDownloadingChangefeeds();
-            } else {
-                Become(&TThis::StateCheckIndexes);
-                HeadObject(CurrentMaterializedIndexSchemeKey());
-            }
+            ++IndexCheckedMaterializedIndexImplTable;
+            Become(&TThis::StateCheckIndexes);
+            DownloadMaterializedIndexes();
         };
 
         if (NeedValidateChecksums) {
@@ -869,6 +868,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         auto nextStep = [this]() {
             if (++IndexDownloadedChangefeed >= ChangefeedsPrefixes.size()) {
+                DropOmittedChangefeeds();
                 Reply();
             } else {
                 Become(&TThis::StateDownloadChangefeeds);
@@ -886,6 +886,28 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     template <typename T>
     static void Resize(::google::protobuf::RepeatedPtrField<T>* repeatedField, ui64 size) {
         while (size--) repeatedField->Add();
+    }
+
+    // Backups made before export learned to skip them may still carry the
+    // changefeed that async replication installed on the source table.
+    void DropOmittedChangefeeds() {
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& changefeeds = *ImportInfo->Items.at(ItemIdx).Changefeeds.MutableChangefeeds();
+
+        for (int i = 0; i < changefeeds.size();) {
+            if (!::NKikimr::NBackup::IsChangefeedOmittedFromBackup(changefeeds.Get(i).GetChangefeed())) {
+                ++i;
+                continue;
+            }
+
+            YDB_LOG_INFO("Skip changefeed omitted from export",
+                {"self", SelfId()},
+                {"importId", ImportInfo->Id},
+                {"itemIdx", ItemIdx},
+                {"changefeed", changefeeds.Get(i).GetChangefeed().name()},
+            );
+            changefeeds.DeleteSubrange(i, 1);
+        }
     }
 
     void HandleChangefeeds(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {
@@ -962,6 +984,17 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         IndexCheckedMaterializedIndexImplTable = 0;
         item.MaterializedIndexes.clear();
 
+        // Older backups may contain async index data inconsistent with the base table.
+        // Leave these indexes out of the materialized items so import builds them instead.
+        AsyncIndexes.clear();
+        if (item.Table) {
+            for (const auto& index : item.Table->indexes()) {
+                if (index.has_global_async_index()) {
+                    AsyncIndexes.insert(index.name());
+                }
+            }
+        }
+
         if (const auto& indexes = item.Metadata.GetIndexes()) {
             IndexImplTablePrefixes.reserve(indexes->size());
             for (const auto& index : *indexes) {
@@ -975,6 +1008,9 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                     IndexImplTablePrefixes.reserve(item.Table->indexes_size());
 
                     for (const auto& index : item.Table->indexes()) {
+                        if (index.has_global_async_index()) {
+                            continue;
+                        }
                         const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
                         if (!indexType) {
                             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << MetadataKey << ": unsupported index"
@@ -999,7 +1035,15 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     }
 
     void DownloadMaterializedIndexes() {
-        if (!IndexImplTablePrefixes.empty()) {
+        // Preserve metadata positions: encrypted index schemes use them to derive their IVs.
+        while (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
+            const auto& prefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ImplTablePrefix;
+            if (!AsyncIndexes.contains(prefix.substr(0, prefix.find('/')))) {
+                break;
+            }
+            ++IndexCheckedMaterializedIndexImplTable;
+        }
+        if (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
             HeadObject(CurrentMaterializedIndexSchemeKey());
         } else {
             StartDownloadingChangefeeds();
@@ -1159,6 +1203,7 @@ private:
     ui64 IndexDownloadedChangefeed = 0;
 
     TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
+    THashSet<TString> AsyncIndexes;
     ui64 IndexCheckedMaterializedIndexImplTable = 0;
     Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode;
 

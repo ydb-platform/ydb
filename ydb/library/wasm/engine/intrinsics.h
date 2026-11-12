@@ -83,7 +83,6 @@ WAVM_DECLARE_INTRINSIC_MODULE(standard);
     macro(args_get, i32, i64, i64);                                                          \
     macro(bind, i32, i32, i64, i32);                                                         \
     macro(clock_res_get, i32, i32, i64);                                                     \
-    macro(clock_time_get, i32, i32, i64, i64);                                               \
     macro(connect, i32, i32, i64, i32);                                                      \
     macro(__cxa_thread_atexit_impl, i32, i64, i64, i64);                                     \
     macro(_dlopen_js, i64, i64);                                                             \

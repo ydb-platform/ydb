@@ -172,7 +172,14 @@ namespace NKikimr::NStorage {
             OTHER,
             ADD_BRIDGE_PILE, // BSC validates addition of the pile, then ProposedStorageConfig gets proposed
             REMOVE_BRIDGE_PILE, // BSC validates removal of the pile, then ProposedStorageConfig gets proposed
+            BRIDGE_ROLLBACK, // BSC validates the rollback of the bridged cluster, then ProposedStorageConfig gets proposed
         } ControllerOp = EControllerOp::UNSET;
+
+        // for the operations BSC validates before ProposedStorageConfig gets proposed: the interface version BSC needs,
+        // the validation request, and what is being done (for the error message)
+        using TBridgePileControllerOp = std::tuple<ui32, NKikimrBlobStorage::TEvControllerDistconfRequest::EOperation,
+            const char*>;
+        std::optional<TBridgePileControllerOp> GetBridgePileControllerOp() const;
 
         void FetchStorageConfig(const TQuery::TFetchStorageConfig& request);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
@@ -209,6 +216,7 @@ namespace NKikimr::NStorage {
         void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
 
         void ConvertToBridge(const TQuery::TConvertToBridge& cmd);
+        void RollbackBridge(const TQuery::TRollbackBridge& cmd);
 
         // check that every node runs with BridgeConfig (and supports bridge features of minFeatureLevel, when it is set),
         // then invoke the callback; every static node listed in requiredNodeIds must report it, while nodes listed in

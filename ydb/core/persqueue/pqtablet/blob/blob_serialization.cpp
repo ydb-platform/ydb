@@ -337,6 +337,9 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
     AFL_ENSURE(Batch.PackedData.size());
 
     ui32 totalBlobs = GetBatchClientBlobCount(Batch.Header);
+    // The compressed Data chunk stores one ui32 cumulative offset per client
+    // blob, so the payload of any well-formed batch is at least
+    // totalBlobs * sizeof(ui32) bytes.
     AFL_ENSURE(static_cast<ui64>(totalBlobs) * sizeof(ui32) <= Batch.PackedData.size())
         ("description", "Batch header blob count is inconsistent with the payload size")
         ("totalBlobs", totalBlobs)("payloadSize", Batch.PackedData.size());

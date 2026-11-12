@@ -2488,14 +2488,19 @@ NKikimrDataEvents::TEvWriteResult WaitForWriteCompleted(TTestActorRuntime& runti
 
 void UploadRows(TTestActorRuntime& runtime, const TString& database, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values)
 {
-    auto txTypes = std::make_shared<NTxProxy::TUploadTypes>();
-    std::transform(types.cbegin(), types.cend(), std::back_inserter(*txTypes), [](const auto& iter) {
+    TVector<std::pair<TString, Ydb::Type>> txTypes;
+    std::transform(types.cbegin(), types.cend(), std::back_inserter(txTypes), [](const auto& iter) {
         const TString& columnName = iter.first;
         Ydb::Type columnType;
         columnType.set_type_id(iter.second);
         return std::make_pair(columnName, columnType);
     });
+    UploadRows(runtime, database, tablePath, txTypes, keys, values);
+}
 
+void UploadRows(TTestActorRuntime& runtime, const TString& database, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type>>& types, const TVector<TCell>& keys, const TVector<TCell>& values)
+{
+    auto txTypes = std::make_shared<NTxProxy::TUploadTypes>(types);
     auto txRows = std::make_shared<NTxProxy::TUploadRows>();
     TSerializedCellVec serializedKey(keys);
     TString serializedValues(TSerializedCellVec::Serialize(values));

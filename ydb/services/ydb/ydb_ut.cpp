@@ -3290,7 +3290,6 @@ tx_meta {
 
         std::shared_ptr<grpc::Channel> Channel_;
         Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
-        TString sessionId;
 
         TVector<std::tuple<ui64, TString>> data = {
             {42, "data42"},
@@ -3305,7 +3304,6 @@ tx_meta {
             {51, "data51"},
             {52, "data52"}
         };
-        TString id;
         {
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
@@ -3325,44 +3323,24 @@ tx_meta {
             UNIT_ASSERT(deferred.ready() == true); // Not finished yet
         }
         {
-            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
-            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
-            Ydb::Table::CreateSessionRequest request;
-            Ydb::Table::CreateSessionResponse response;
-
-            auto status = Stub_->CreateSession(&context, request, &response);
-            auto deferred = response.operation();
-            UNIT_ASSERT(status.ok());
-            UNIT_ASSERT(deferred.ready() == true);
-            Ydb::Table::CreateSessionResult result;
-
-            deferred.result().UnpackTo(&result);
-            sessionId = result.session_id();
-        }
-        {
-            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
-            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
-            Ydb::Table::ExecuteDataQueryRequest request;
-            request.set_session_id(sessionId);
-            TStringBuilder requestBuilder;
-            requestBuilder << "UPSERT INTO `Root/TheTable` (Key, Value) VALUES";
-            for (auto pair : data) {
-                requestBuilder << "(" << std::get<0>(pair) << "pi, \"" << std::get<1>(pair) << "\"pt),";
+            const auto connection = NYdb::TDriver(
+                TDriverConfig()
+                    .SetEndpoint("localhost:" + ToString(grpc))
+                    .SetDatabase("/Root"));
+            auto tableClient = NYdb::NTable::TTableClient(connection);
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [key, value] : data) {
+                rows.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key").Pg(TPgValue(TPgValue::VK_TEXT, ToString(key), TPgType("pgint8")))
+                    .AddMember("Value").Pg(TPgValue(TPgValue::VK_TEXT, value, TPgType("pgtext")))
+                    .EndStruct();
             }
-            TString req(requestBuilder);
-            req.back() = ';';
-            request.mutable_query()->set_yql_text(req);
+            rows.EndList();
 
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
-            Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
-            auto deferred = response.operation();
-            UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::SUCCESS);
+            const auto upsert = tableClient.BulkUpsert("/Root/TheTable", rows.Build()).ExtractValueSync();
+            UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
         }
         {
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;

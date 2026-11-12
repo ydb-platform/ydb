@@ -30,6 +30,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -1600,12 +1602,16 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<std::pair<TJsonString, TMessageMeta>>& records,
-                TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
+                TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr,
+                std::function<void(TTestTopicEnv&)> upload = {})
         {
             TTestTopicEnv env(tableDesc, streamDesc);
 
             for (const auto& query : queries) {
                 ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userCtx);
+            }
+            if (upload) {
+                upload(env);
             }
 
             auto& client = env.GetClient();
@@ -1636,7 +1642,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<TJsonString>& records, bool checkKey = true,
-                TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
+                TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr,
+                std::function<void(TTestTopicEnv&)> upload = {})
         {
             Y_UNUSED(checkKey);
 
@@ -1645,7 +1652,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 recordsWithMetadata.emplace_back(record, TMessageMeta());
             }
 
-            Read(tableDesc, streamDesc, queries, recordsWithMetadata, userCtx);
+            Read(tableDesc, streamDesc, queries, recordsWithMetadata, userCtx, std::move(upload));
         }
 
         static void Write(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
@@ -2609,15 +2616,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"(UPSERT INTO `/Root/Table` (key, datetime64_value) VALUES (21, CAST(1597235696 AS Datetime64));)",
             R"(UPSERT INTO `/Root/Table` (key, timestamp64_value) VALUES (22, CAST(1597235696123456 AS Timestamp64));)",
             R"(UPSERT INTO `/Root/Table` (key, interval64_value) VALUES (23, CAST(-300500 AS Interval64));)",
-            R"(UPSERT INTO `/Root/Table` (key, pgint2_value) VALUES (24, -42ps);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgint4_value) VALUES (25, -420p);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgint8_value) VALUES (26, -4200pb);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgfloat4_value) VALUES (27, 3.1415pf4);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgfloat8_value) VALUES (28, 2.718pf8);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgbytea_value) VALUES (29, 'lorem "ipsum"'pb);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgtext_value) VALUES (30, 'lorem "ipsum"'p);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgtimestamp_value) VALUES (31, pgtimestamp('2020-01-01T23:30:10Z'));)",
-            R"(UPSERT INTO `/Root/Table` (key, pgdate_value) VALUES (32, pgdate('2020-03-01T20:30:10Z'));)",
         }, {
             R"({"key":[1],"update":{"int32_value":-100500}})",
             R"({"key":[2],"update":{"uint32_value":100500}})",
@@ -2652,6 +2650,34 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"key":[30],"update":{"pgtext_value":"lorem \"ipsum\""}})",
             R"({"key":[31],"update":{"pgtimestamp_value":"2020-01-01 23:30:10"}})",
             R"({"key":[32],"update":{"pgdate_value":"2020-03-01"}})",
+        }, true, nullptr, [](TTestTopicEnv& env) {
+            const std::pair<const char*, const char*> pgValues[] = {
+                {"pgint2", "-42"},
+                {"pgint4", "-420"},
+                {"pgint8", "-4200"},
+                {"pgfloat4", "3.1415"},
+                {"pgfloat8", "2.718"},
+                {"pgbytea", R"(lorem "ipsum")"},
+                {"pgtext", R"(lorem "ipsum")"},
+                {"pgtimestamp", "2020-01-01T23:30:10Z"},
+                {"pgdate", "2020-03-01T20:30:10Z"},
+            };
+            ui32 key = 23;
+            for (const auto& [typeName, value] : pgValues) {
+                ++key;
+                const auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+                UNIT_ASSERT(typeDesc);
+                auto binary = NPg::PgNativeBinaryFromNativeText(value, typeDesc);
+                UNIT_ASSERT_C(!binary.Error, binary.Error.GetOrElse(TString()));
+                Ydb::Type keyType;
+                keyType.set_type_id(Ydb::Type::UINT32);
+                Ydb::Type valueType;
+                valueType.mutable_pg_type()->set_type_name(typeName);
+                valueType.mutable_pg_type()->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+                TVector<std::pair<TString, Ydb::Type>> types = {{"key", keyType}, {TString(typeName) + "_value", valueType}};
+                UploadRows(*env.GetServer()->GetRuntime(), "/Root", "/Root/Table", types,
+                    {TCell::Make(key)}, {TCell(binary.Str.data(), binary.Str.size())});
+            }
         });
     }
 

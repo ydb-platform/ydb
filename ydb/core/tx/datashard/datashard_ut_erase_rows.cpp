@@ -10,6 +10,8 @@
 #include <ydb/core/tx/tx.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+
 #include <util/generic/bitmap.h>
 #include <util/string/printf.h>
 #include <util/string/strip.h>
@@ -551,7 +553,8 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
             TProto::TEvEraseResponse::SCHEME_ERROR, "Cell count doesn't match row scheme");
     }
 
-    void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase, const bool enableDatetime64 = false) {
+    void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase,
+            const bool enableDatetime64 = false, const TVector<const char*>& pgValues = {}) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         NKikimrConfig::TFeatureFlags featureFlags;
@@ -573,7 +576,33 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         InitRoot(server, sender);
 
         CreateTable(server, sender, "/Root", "table-1", ttlColType);
-        ExecSQL(server, sender, toUpload);
+        if (pgValues.empty()) {
+            ExecSQL(server, sender, toUpload);
+        } else {
+            const auto* typeDesc = NPg::TypeDescFromPgTypeName(ttlColType);
+            UNIT_ASSERT(typeDesc);
+            TVector<std::pair<TString, Ydb::Type>> types;
+            Ydb::Type keyType;
+            keyType.set_type_id(Ydb::Type::UINT32);
+            types.emplace_back("key", keyType);
+            Ydb::Type valueType;
+            valueType.mutable_pg_type()->set_type_name(ttlColType);
+            valueType.mutable_pg_type()->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+            types.emplace_back("value", valueType);
+
+            ui32 key = 0;
+            for (const auto* value : pgValues) {
+                ++key;
+                TString binary;
+                if (value) {
+                    auto converted = NPg::PgNativeBinaryFromNativeText(value, typeDesc);
+                    UNIT_ASSERT_C(!converted.Error, converted.Error.GetOrElse(TString()));
+                    binary = std::move(converted.Str);
+                }
+                UploadRows(runtime, "/Root", "/Root/table-1", types, {TCell::Make(key)},
+                    {value ? TCell(binary.data(), binary.size()) : TCell()});
+            }
+        }
 
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 2, currentTime, unit);
@@ -786,83 +815,45 @@ key = 5, value = (empty maybe)
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt4Seconds) {
-        ConditionalEraseShouldSuccess("pgint4", TUnit::SECONDS, R"(
-UPSERT INTO `/Root/table-1` (key, value) VALUES
-(1, 0p),
-(2, 636249600p),
-(3, 1902441600p),
-(4, NULL);
-        )", R"(
+        ConditionalEraseShouldSuccess("pgint4", TUnit::SECONDS, "", R"(
 key = 3, value = "1902441600"
 key = 4, value = (pg null)
-        )");
+        )", false, {"0", "636249600", "1902441600", nullptr});
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt8Seconds) {
-        ConditionalEraseShouldSuccess("pgint8", TUnit::SECONDS, R"(
-UPSERT INTO `/Root/table-1` (key, value) VALUES
-(1, 0pb),
-(2, 636249600pb),
-(3, 1902441600pb),
-(4, NULL);
-        )", R"(
+        ConditionalEraseShouldSuccess("pgint8", TUnit::SECONDS, "", R"(
 key = 3, value = "1902441600"
 key = 4, value = (pg null)
-        )");
+        )", false, {"0", "636249600", "1902441600", nullptr});
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt8Milliseconds) {
-        ConditionalEraseShouldSuccess("pgint8", TUnit::MILLISECONDS, R"(
-UPSERT INTO `/Root/table-1` (key, value) VALUES
-(1, 0pb),
-(2, 636249600000pb),
-(3, 1902441600000pb),
-(4, NULL);
-        )", R"(
+        ConditionalEraseShouldSuccess("pgint8", TUnit::MILLISECONDS, "", R"(
 key = 3, value = "1902441600000"
 key = 4, value = (pg null)
-        )");
+        )", false, {"0", "636249600000", "1902441600000", nullptr});
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt8Microseconds) {
-        ConditionalEraseShouldSuccess("pgint8", TUnit::MICROSECONDS, R"(
-UPSERT INTO `/Root/table-1` (key, value) VALUES
-(1, 0pb),
-(2, 636249600000000pb),
-(3, 1902441600000000pb),
-(4, NULL);
-        )", R"(
+        ConditionalEraseShouldSuccess("pgint8", TUnit::MICROSECONDS, "", R"(
 key = 3, value = "1902441600000000"
 key = 4, value = (pg null)
-        )");
+        )", false, {"0", "636249600000000", "1902441600000000", nullptr});
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgDate) {
-        ConditionalEraseShouldSuccess("pgdate", TUnit::AUTO, R"(
-UPSERT INTO `/Root/table-1` (key, value) VALUES
-(1, pgdate("1960-01-01")),
-(2, pgdate("1970-01-01")),
-(3, pgdate("1990-03-01")),
-(4, pgdate("2030-04-15")),
-(5, NULL);
-        )", R"(
+        ConditionalEraseShouldSuccess("pgdate", TUnit::AUTO, "", R"(
 key = 4, value = "2030-04-15"
 key = 5, value = (pg null)
-        )");
+        )", false, {"1960-01-01", "1970-01-01", "1990-03-01", "2030-04-15", nullptr});
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgTimestamp) {
-        ConditionalEraseShouldSuccess("pgtimestamp", TUnit::AUTO, R"(
-UPSERT INTO `/Root/table-1` (key, value) VALUES
-(1, pgtimestamp("1960-01-01 00:00:00")),
-(2, pgtimestamp("1970-01-01 00:00:00")),
-(3, pgtimestamp("1990-03-01 00:00:00")),
-(4, pgtimestamp("2030-04-15 00:00:00")),
-(5, NULL);
-        )", R"(
+        ConditionalEraseShouldSuccess("pgtimestamp", TUnit::AUTO, "", R"(
 key = 4, value = "2030-04-15 00:00:00"
 key = 5, value = (pg null)
-        )");
+        )", false, {"1960-01-01 00:00:00", "1970-01-01 00:00:00", "1990-03-01 00:00:00", "2030-04-15 00:00:00", nullptr});
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldFailOnVariousErrors) {

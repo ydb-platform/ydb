@@ -27,7 +27,8 @@
 #include <util/system/byteorder.h>
 
 #define VERIFY_RESULT_BLOB(blob, pos) \
-    AFL_ENSURE(blob.SeqNo <= (ui64)Max<i64>())("SeqNo is too big", blob.SeqNo);
+    YDB_LOG_ENSURE(blob.SeqNo <= (ui64)Max<i64>(),
+        {"seqNoIsTooBig", blob.SeqNo});
 
 namespace NKikimr::NPQ {
 
@@ -437,7 +438,7 @@ static void AddResultDebugInfo(const TEvPQ::TEvBlobResponse* response, T* readRe
 ui64 GetFirstHeaderOffset(const TKey& key, const TString& blob)
 {
     TBlobIterator it(key, blob);
-    AFL_ENSURE(it.IsValid());
+    YDB_LOG_ENSURE(it.IsValid());
     return it.GetBatch().GetOffset();
 }
 
@@ -481,12 +482,16 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                                                 ui32& cnt, ui32& size, ui32& lastBlobSize,
                                                 const TActorContext& ctx)
 {
-    AFL_ENSURE(begin <= end);
-    AFL_ENSURE(end <= blobs.size());
+    YDB_LOG_ENSURE(begin <= end);
+    YDB_LOG_ENSURE(end <= blobs.size());
 
     for (ui32 blobIdx = begin; blobIdx < end; ++blobIdx) {
-        AFL_ENSURE(Blobs[blobIdx].Offset == blobs[blobIdx].Offset)("l", Blobs[blobIdx].Offset)("r", blobs[blobIdx].Offset);
-        AFL_ENSURE(Blobs[blobIdx].Count == blobs[blobIdx].Count)("l", Blobs[blobIdx].Count)("r", blobs[blobIdx].Count);
+        YDB_LOG_ENSURE(Blobs[blobIdx].Offset == blobs[blobIdx].Offset,
+            {"l", Blobs[blobIdx].Offset},
+            {"r", blobs[blobIdx].Offset});
+        YDB_LOG_ENSURE(Blobs[blobIdx].Count == blobs[blobIdx].Count,
+            {"l", Blobs[blobIdx].Count},
+            {"r", blobs[blobIdx].Count});
 
         ui64 offset = blobs[blobIdx].Offset;
         const ui32 count = blobs[blobIdx].Count;
@@ -516,16 +521,19 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             };
         }
 
-        AFL_ENSURE(blobs[blobIdx].RawValue.size() <= blobs[blobIdx].Size)("value for offset", offset)("count", count)
-            ("size must be",  blobs[blobIdx].Size)("got", blobs[blobIdx].RawValue.size());
+        YDB_LOG_ENSURE(blobs[blobIdx].RawValue.size() <= blobs[blobIdx].Size,
+            {"valueForOffset", offset},
+            {"count", count},
+            {"sizeMustBe", blobs[blobIdx].Size},
+            {"got", blobs[blobIdx].RawValue.size()});
 
         const auto blobBatches = blobs[blobIdx].GetBatches();
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
             Offset = offset;
             PartNo = partNo;
         }
-        AFL_ENSURE(offset <= Offset);
-        AFL_ENSURE(offset < Offset || partNo <= PartNo);
+        YDB_LOG_ENSURE(offset <= Offset);
+        YDB_LOG_ENSURE(offset < Offset || partNo <= PartNo);
         const ui64 blobKeyOffset = blobs[blobIdx].Key.GetOffset();
         const ui64 firstHeaderOffset = blobBatches->front().GetOffset();
 
@@ -573,7 +581,13 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 const TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
-                AFL_ENSURE(PartNo == res.GetPartNo())("batchStartIdx", batchStartIdx)("i", i)("Offset", Offset)("PartNo", PartNo)("offset", offset)("partNo", res.GetPartNo());
+                YDB_LOG_ENSURE(PartNo == res.GetPartNo(),
+                    {"batchStartIdx", batchStartIdx},
+                    {"i", i},
+                    {"offset", Offset},
+                    {"partNo", PartNo},
+                    {"offset", offset},
+                    {"partNo", res.GetPartNo()});
 
                 if (userInfo) {
                     userInfo->AddTimestampToCache(
@@ -647,7 +661,8 @@ TReadAnswer TReadInfo::FormAnswer(
     ui64 realReadOffset = Offset;
     readResult->SetReadFromTimestampMs(ReadTimestampMs);
 
-    AFL_ENSURE(endOffset <= (ui64)Max<i64>())("Max offset is too big", endOffset);
+    YDB_LOG_ENSURE(endOffset <= (ui64)Max<i64>(),
+        {"maxOffsetIsTooBig", endOffset});
     LOG_D("FormAnswer for blobs",
         {"blobsSize", Blobs.size()});
 
@@ -682,7 +697,7 @@ TReadAnswer TReadInfo::FormAnswer(
         return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (cnt >= Count || (size >= Size && !ReadToBlobEnd));
     };
 
-    AFL_ENSURE(blobs.size() == Blobs.size());
+    YDB_LOG_ENSURE(blobs.size() == Blobs.size());
     response->Check();
     bool needStop = false;
 
@@ -764,7 +779,8 @@ TReadAnswer TReadInfo::FormAnswer(
         }
     }
 
-    AFL_ENSURE(Offset <= (ui64)Max<i64>())("Offset is too big", Offset);
+    YDB_LOG_ENSURE(Offset <= (ui64)Max<i64>(),
+        {"offsetIsTooBig", Offset});
     ui64 answerSize = answer->Response->ByteSize();
     if (userInfo && Destination != 0) {
         userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC,
@@ -817,7 +833,7 @@ void CollectReadRequestFromBody(ui64 startOffset, const ui16 partNo, const ui32 
                                 TPartitionBlobEncoder& zone,
                                 TVector<TRequestedBlob>& result)
 {
-    AFL_ENSURE(rcount && rsize);
+    YDB_LOG_ENSURE(rcount && rsize);
     startOffset = Max(startOffset, zone.DataKeysBody.empty() ? zone.StartOffset : zone.DataKeysBody.front().Key.GetOffset());
     auto blobs = zone.GetBlobsFromBody(startOffset,
                                        partNo,

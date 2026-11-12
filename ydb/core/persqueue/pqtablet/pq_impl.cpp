@@ -103,7 +103,9 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
 
     if (graph) {
         auto* node = graph.GetPartition(partitionId);
-        AFL_ENSURE(node)("partition_id", partitionId)("graph", graph.DebugString());
+        YDB_LOG_ENSURE(node,
+            {"partitionId", partitionId},
+            {"graph", graph.DebugString()});
         for (const auto& p : partitionsData.GetPartition()) {
             if (node->IsParent(p.GetPartitionId())) {
                 for (const auto& g : p.GetMessageGroup()) {
@@ -169,8 +171,8 @@ public:
 
     bool HandleProxyResponse(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx)
     {
-        AFL_ENSURE(Waiting);
-        AFL_ENSURE(Response);
+        YDB_LOG_ENSURE(Waiting);
+        YDB_LOG_ENSURE(Response);
         --Waiting;
         bool skip = false;
         if (WasSplit && ev->Get()->Response->GetPartitionResponse().CmdWriteResultSize() == 1) { //megaqc - remove this
@@ -1254,8 +1256,9 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
                                                                   "",
                                                                   config.GetLocalDC());
     topicConverter = converterFactory->MakeTopicConverter(config);
-    AFL_ENSURE(topicConverter);
-    AFL_ENSURE(topicConverter->IsValid())("reason", topicConverter->GetReason());
+    YDB_LOG_ENSURE(topicConverter);
+    YDB_LOG_ENSURE(topicConverter->IsValid(),
+        {"reason", topicConverter->GetReason()});
 }
 
 void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
@@ -3621,7 +3624,8 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
 void TPersQueue::MovePendingDeferredReadSetAcks()
 {
-    AFL_ENSURE(DeferredReadSetAcks.empty())("DeferredReadSetAcks", DeferredReadSetAcks.size());
+    YDB_LOG_ENSURE(DeferredReadSetAcks.empty(),
+        {"deferredReadSetAcks", DeferredReadSetAcks.size()});
     DeferredReadSetAcks = std::move(PendingDeferredReadSetAcks);
     PendingDeferredReadSetAcks.clear();
 }

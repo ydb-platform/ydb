@@ -3583,7 +3583,11 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         t->State = ECommitState::Committed;
         return EProcessResult::Break;
     }
-    AFL_ENSURE(false)("reason", "unreachable transaction kind")("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
+    YDB_LOG_ENSURE(false,
+        {"reason", "unreachable transaction kind"},
+        {"tabletId", TabletId},
+        {"partitionId", Partition},
+        {"topic", TopicName()});
     return result;
 }
 
@@ -5508,10 +5512,14 @@ void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
 }
 
 void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request) {
-    AFL_ENSURE(!CompacterKvRequestInflight)
-        ("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
-    AFL_ENSURE(!CompacterKvRequest)
-        ("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
+    YDB_LOG_ENSURE(!CompacterKvRequestInflight,
+        {"tabletId", TabletId},
+        {"partitionId", Partition},
+        {"topic", TopicName()});
+    YDB_LOG_ENSURE(!CompacterKvRequest,
+        {"tabletId", TabletId},
+        {"partitionId", Partition},
+        {"topic", TopicName()});
     LOG_D(
         "Topic partition Acquire RW Lock",
         {"clientSideName", TopicConverter->GetClientsideName()});

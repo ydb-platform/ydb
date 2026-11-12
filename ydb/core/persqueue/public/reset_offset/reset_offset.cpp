@@ -38,12 +38,13 @@ void TResetOffsetActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) 
     ChildActorId = {};
 
     auto& topics = ev->Get()->Topics;
-    AFL_ENSURE(topics.size() == 1)("s", topics.size());
+    YDB_LOG_ENSURE(topics.size() == 1,
+        {"s", topics.size()});
 
     auto& topic = topics.begin()->second;
     switch (topic.Status) {
         case NDescriber::EStatus::Success: {
-            AFL_ENSURE(topic.Info);
+            YDB_LOG_ENSURE(topic.Info);
             TopicInfo = topic;
             const auto& config = TopicInfo.Info->Description.GetPQTabletConfig();
             auto consumerConfig = GetConsumer(config, Settings.Consumer);

@@ -48,9 +48,9 @@ public:
         , CanReadBatches(request.GetPartitionRequest().GetCmdRead().GetCanReadBatches())
         , BatchProcessorActor(batchProcessorActor)
     {
-        AFL_ENSURE(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead());
-        AFL_ENSURE(Request.GetPartitionRequest().GetCmdRead().GetPartNo() == 0); //partial request are not allowed, otherwise remove ReadProxy
-        AFL_ENSURE(!Response->Record.HasPartitionResponse());
+        YDB_LOG_ENSURE(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead());
+        YDB_LOG_ENSURE(Request.GetPartitionRequest().GetCmdRead().GetPartNo() == 0); //partial request are not allowed, otherwise remove ReadProxy
+        YDB_LOG_ENSURE(!Response->Record.HasPartitionResponse());
         if (!directReadKey.SessionId.empty()) {
             DirectReadKey.ReadId = Request.GetPartitionRequest().GetCmdRead().GetDirectReadId();
         }
@@ -107,7 +107,7 @@ private:
                                        const NKikimrClient::TPersQueuePartitionResponse& partitionResponse)
     {
         const auto& responseRecord = isDirectRead ? *PreparedResponse : Response->Record;
-        AFL_ENSURE(responseRecord.HasPartitionResponse() && responseRecord.GetPartitionResponse().HasCmdReadResult());
+        YDB_LOG_ENSURE(responseRecord.HasPartitionResponse() && responseRecord.GetPartitionResponse().HasCmdReadResult());
         const auto& cmdReadResult = responseRecord.GetPartitionResponse().GetCmdReadResult();
 
         if (!CanReadBatches && HasBatchMessages(cmdReadResult)) {
@@ -134,7 +134,7 @@ private:
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx)
     {
-        AFL_ENSURE(Response);
+        YDB_LOG_ENSURE(Response);
         const auto& record = ev->Get()->Record;
         auto isDirectRead = DirectReadKey.ReadId != 0;
         if (!record.HasPartitionResponse()
@@ -149,7 +149,7 @@ private:
             PassAway();
             return;
         }
-        AFL_ENSURE(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult());
+        YDB_LOG_ENSURE(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult());
         const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
         if (isDirectRead) {
             if (!PreparedResponse) {
@@ -161,7 +161,7 @@ private:
         responseRecord.SetStatus(NMsgBusProxy::MSTATUS_OK);
         responseRecord.SetErrorCode(NPersQueue::NErrorCode::OK);
 
-        AFL_ENSURE(readResult.ResultSize() > 0 || isDirectRead);
+        YDB_LOG_ENSURE(readResult.ResultSize() > 0 || isDirectRead);
 
         ui64 readFromTimestampMs = PreciseReadFromTimestampBehaviourEnabled(*AppData(ctx))
                                    ? (responseRecord.HasPartitionResponse()
@@ -300,7 +300,7 @@ private:
                     makeErrorResponse("Internal error - got message with wrong SeqNo/PartNo when expecting");
                     break;
                 }
-                AFL_ENSURE(rr->GetSeqNo() == currentReadResult.GetSeqNo());
+                YDB_LOG_ENSURE(rr->GetSeqNo() == currentReadResult.GetSeqNo());
                 (*rr->MutableData()) += currentReadResult.GetData();
                 rr->SetPartitionKey(currentReadResult.GetPartitionKey());
                 rr->SetExplicitHash(currentReadResult.GetExplicitHash());
@@ -308,7 +308,7 @@ private:
                 rr->SetUncompressedSize(rr->GetUncompressedSize() + currentReadResult.GetUncompressedSize());
                 if (currentReadResult.GetPartNo() + 1 == currentReadResult.GetTotalParts()) {
                     // This is the last part, validate data size;
-                    AFL_ENSURE((ui32)rr->GetTotalSize() == (ui32)rr->GetData().size());
+                    YDB_LOG_ENSURE((ui32)rr->GetTotalSize() == (ui32)rr->GetData().size());
                 }
             }
         }
@@ -367,7 +367,7 @@ private:
     {
         auto context = std::move(ev->Get()->Context);
         auto* proxyResponse = static_cast<TEvPQ::TEvProxyResponse*>(context.Event.Get());
-        AFL_ENSURE(proxyResponse);
+        YDB_LOG_ENSURE(proxyResponse);
 
         if (PendingDirectRead) {
             PreparedResponse = proxyResponse->Response;
